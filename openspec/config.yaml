@@ -1,0 +1,24 @@
+schema: spec-driven
+
+context: |
+  Prometheus Agent (CyberdyneCorp): a personal/team AI agent harness in Rust — one signed binary
+  (`prometheus`, alias `pmt`) providing CLI, TUI, messaging gateway, dashboard backend, ACP and MCP
+  servers; a Tauri desktop shell over it. Functional parity target: Hermes Agent (Nous Research);
+  self-improvement layer adapted from Harness² (Propose–Probe–Compose harness evolution,
+  experience library, blind answer-free selection).
+  Invariants every change is reviewed against:
+  - Prompt-cache invariant: never mutate the system prompt, tool set or memory snapshot mid-session;
+    only context compression rewrites history; state-changing commands apply next session (opt-in --now).
+  - Profile scope is an explicit value (ProfileScope), never ambient process state.
+  - Environment variables carry secrets only (plus PROMETHEUS_HOME and log level); behaviour is typed config.toml.
+  - Extensions run under explicit capability grants (WASM components, MCP, out-of-process Python bridge).
+  - Security defaults fail closed; hardening is never downgraded silently.
+  - Answer-free self-improvement: no rubric, reference answer or grader verdict reaches improvers/selectors.
+  Requirements carry a milestone tag: M1 core agent, M2 multi-surface + extensibility, M3 desktop/dashboard/self-improvement.
+
+rules:
+  specs:
+    - Every requirement has a `**Milestone:** M1|M2|M3` line and at least one WHEN/THEN scenario
+    - Specs state observable behavior (commands, config keys, RPC methods, limits, errors), not crate choices
+  tasks:
+    - Each task names its verification (test, command or observable behavior); tests and docs land with the task group that needs them
