@@ -20,7 +20,10 @@ It also fails when a measurement grows more than 15% over the entry for the
 current platform (`<os>-<arch>`) in `perf/baseline.json`. Startup uses the
 median for that comparison, and growth under 1 ms (startup) or 1 MiB (RSS)
 never counts, because a millisecond-scale run jitters by more than 15% on a
-shared runner. The chat and daemon budgets join when those commands land (M1).
+shared runner. Binary growth under 4 MiB (5% of the size budget) never counts
+either: size does not jitter, but against a near-empty binary any real
+dependency is a large percentage (M1's first runtime crates took 0.62 MiB to
+1.21 MiB, +94%), so a pure percentage gate would fail on every addition. The chat and daemon budgets join when those commands land (M1).
 
 ```sh
 cargo xtask perf                          # check against perf/baseline.json

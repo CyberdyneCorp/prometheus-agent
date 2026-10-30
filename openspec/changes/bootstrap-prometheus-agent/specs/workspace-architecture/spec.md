@@ -241,7 +241,7 @@ The system SHALL stop a running turn within 500 ms of an interrupt (Ctrl-C, `/st
 - **THEN** the turn SHALL end within 500 ms and the `sleep` process group SHALL receive SIGTERM
 
 ### Requirement: Startup time budget
-On the reference CI runner (GitHub-hosted `ubuntu-latest`, x86_64) the system SHALL meet these p95 budgets measured over 30 runs: `prometheus version` ≤ 20 ms; `prometheus chat` with a mock provider until the input prompt accepts keystrokes ≤ 150 ms with no plugins or MCP servers configured; daemon start until `/readyz` returns 200 ≤ 400 ms with one profile. Plugins, MCP servers and managed runtimes SHALL load in the background and SHALL never delay the first prompt. CI SHALL fail when any budget is exceeded or regresses by more than 15% against the main branch baseline.
+On the reference CI runner (GitHub-hosted `ubuntu-latest`, x86_64) the system SHALL meet these p95 budgets measured over 30 runs: `prometheus version` ≤ 20 ms; `prometheus chat` with a mock provider until the input prompt accepts keystrokes ≤ 150 ms with no plugins or MCP servers configured; daemon start until `/readyz` returns 200 ≤ 400 ms with one profile. Plugins, MCP servers and managed runtimes SHALL load in the background and SHALL never delay the first prompt. CI SHALL fail when any budget is exceeded or regresses by more than 15% against the main branch baseline; growth under 1 ms (startup median) never counts as a regression, because millisecond-scale runs jitter by more than 15% on a shared runner.
 **Milestone:** M1
 
 #### Scenario: Slow MCP server
@@ -250,12 +250,16 @@ On the reference CI runner (GitHub-hosted `ubuntu-latest`, x86_64) the system SH
 - **THEN** the prompt SHALL be ready within the 150 ms budget and the MCP tools SHALL become available for the next session snapshot or by `/reload-mcp --now`
 
 ### Requirement: Memory and size budgets
-On the reference runner the system SHALL stay within: idle daemon with one profile and no sessions ≤ 60 MiB RSS; each additional idle session ≤ 8 MiB RSS excluding model context buffers; `prometheus chat -z` peak ≤ 120 MiB RSS excluding child processes; stripped release binary ≤ 80 MiB including the embedded dashboard assets. CI SHALL enforce these as gates with the same 15% regression rule as startup.
+On the reference runner the system SHALL stay within: idle daemon with one profile and no sessions ≤ 60 MiB RSS; each additional idle session ≤ 8 MiB RSS excluding model context buffers; `prometheus chat -z` peak ≤ 120 MiB RSS excluding child processes; stripped release binary ≤ 80 MiB including the embedded dashboard assets. CI SHALL enforce these as gates with the same 15% regression rule as startup, where growth under 1 MiB (RSS) or 4 MiB (binary size, 5% of its budget) never counts as a regression.
 **Milestone:** M1
 
 #### Scenario: Binary too large
 - **WHEN** a change grows the stripped Linux x86_64 binary to 82 MiB
 - **THEN** the size gate SHALL fail
+
+#### Scenario: Small binary growth from a near-empty baseline
+- **WHEN** a change grows the stripped binary from 0.62 MiB on main to 1.21 MiB
+- **THEN** the size gate SHALL pass, because the growth is under the 4 MiB floor even though it exceeds 15%
 
 ### Requirement: Repository health gates
 The repository SHALL provide one command, `scripts/check`, that runs every blocking CI gate locally with CI's pinned tool versions: formatting, lints with warnings denied, the full test suite, `openspec validate --all --strict`, generated-artifact freshness (config schema, CLI reference, error catalog, and from M2 the RPC schema `schema/rpc.json` and its bindings), dependency license allowlist (MIT, Apache-2.0, BSD-2/3-Clause, ISC, MPL-2.0, Zlib, Unicode-3.0) and known-advisory check, and the startup/memory/size budgets. CI SHALL run exactly the same command.

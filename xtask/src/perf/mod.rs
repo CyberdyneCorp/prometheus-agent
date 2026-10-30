@@ -5,7 +5,8 @@
 //! It builds the release binary, runs `prometheus --version` repeatedly from
 //! the small `perf-sampler` binary, and fails when a measurement exceeds its
 //! absolute budget or regresses more than 15% against the entry for this
-//! platform in the baseline file. The chat and daemon budgets join when
+//! platform in the baseline file (growth under small noise/size floors never
+//! counts). The chat and daemon budgets join when
 //! those commands exist (M1).
 //!
 //! `scripts/check` runs it against `perf/baseline.json`; CI's `perf` job
