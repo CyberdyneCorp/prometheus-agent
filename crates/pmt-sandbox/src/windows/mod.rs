@@ -12,6 +12,7 @@
 //! a port or host list is `partial`. Listening is never granted (loopback
 //! needs a per-container exemption), which is narrower than any grant.
 
+mod acl;
 mod args;
 mod container;
 pub(crate) mod launch;

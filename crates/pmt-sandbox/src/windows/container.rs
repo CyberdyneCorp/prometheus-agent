@@ -16,20 +16,14 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, ERROR_SUCCESS, LocalFree};
-use windows_sys::Win32::Security::Authorization::{
-    EXPLICIT_ACCESS_W, GRANT_ACCESS, GetNamedSecurityInfoW, NO_MULTIPLE_TRUSTEE, REVOKE_ACCESS,
-    SE_FILE_OBJECT, SetEntriesInAclW, SetNamedSecurityInfoW, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN,
-    TRUSTEE_W,
-};
+use super::acl;
+
+use windows_sys::Win32::Foundation::ERROR_ALREADY_EXISTS;
 use windows_sys::Win32::Security::Isolation::{
     CreateAppContainerProfile, DeleteAppContainerProfile, DeriveAppContainerSidFromAppContainerName,
 };
 use windows_sys::Win32::Security::{
-    ACE_FLAGS, ACL, DACL_SECURITY_INFORMATION, FreeSid, GetSecurityDescriptorControl,
-    NO_INHERITANCE, OBJECT_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
-    PSECURITY_DESCRIPTOR, PSID, SE_DACL_PROTECTED, SECURITY_DESCRIPTOR_CONTROL,
-    SUB_CONTAINERS_AND_OBJECTS_INHERIT, UNPROTECTED_DACL_SECURITY_INFORMATION,
+    FreeSid, NO_INHERITANCE, PSID, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     DELETE, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
@@ -126,7 +120,7 @@ impl AppContainer {
             NO_INHERITANCE
         };
         self.touched.push(path.to_path_buf());
-        set_entry(path, self.sid, GRANT_ACCESS, mask, inheritance)
+        acl::grant(path, self.sid, mask, inheritance)
             .map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))
     }
 }
@@ -135,7 +129,7 @@ impl Drop for AppContainer {
     fn drop(&mut self) {
         for path in &self.touched {
             // Best effort: a path removed since keeps no entry to revoke.
-            let _ = set_entry(path, self.sid, REVOKE_ACCESS, 0, NO_INHERITANCE);
+            let _ = acl::revoke(path, self.sid);
         }
         let name = wide(OsStr::new(&self.name));
         // SAFETY: `name` is NUL-terminated; `sid` came from the profile APIs
@@ -144,98 +138,6 @@ impl Drop for AppContainer {
             DeleteAppContainerProfile(name.as_ptr());
             FreeSid(self.sid);
         }
-    }
-}
-
-/// Merges one explicit entry for `sid` into `path`'s DACL.
-fn set_entry(
-    path: &Path,
-    sid: PSID,
-    mode: i32,
-    mask: u32,
-    inheritance: ACE_FLAGS,
-) -> Result<(), u32> {
-    let wide_path = wide(path.as_os_str());
-    let mut old_dacl: *mut ACL = ptr::null_mut();
-    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
-    // SAFETY: the path is NUL-terminated; the out pointers are valid; the
-    // returned descriptor (which owns `old_dacl`) is freed with LocalFree.
-    let status = unsafe {
-        GetNamedSecurityInfoW(
-            wide_path.as_ptr(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            ptr::null_mut(),
-            ptr::null_mut(),
-            &raw mut old_dacl,
-            ptr::null_mut(),
-            &raw mut descriptor,
-        )
-    };
-    if status != ERROR_SUCCESS {
-        return Err(status);
-    }
-    let entry = EXPLICIT_ACCESS_W {
-        grfAccessPermissions: mask,
-        grfAccessMode: mode,
-        grfInheritance: inheritance,
-        Trustee: TRUSTEE_W {
-            pMultipleTrustee: ptr::null_mut(),
-            MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
-            TrusteeForm: TRUSTEE_IS_SID,
-            TrusteeType: TRUSTEE_IS_UNKNOWN,
-            ptstrName: sid.cast(),
-        },
-    };
-    let mut new_dacl: *mut ACL = ptr::null_mut();
-    // SAFETY: one valid entry; `old_dacl` stays alive inside `descriptor`
-    // until freed below; `new_dacl` is a LocalAlloc'd ACL we free.
-    let status = unsafe { SetEntriesInAclW(1, &raw const entry, old_dacl, &raw mut new_dacl) };
-    let status = if status == ERROR_SUCCESS {
-        let info = DACL_SECURITY_INFORMATION | protection(descriptor);
-        // SAFETY: path and the new DACL are valid for the call.
-        unsafe {
-            SetNamedSecurityInfoW(
-                wide_path.as_ptr(),
-                SE_FILE_OBJECT,
-                info,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                new_dacl,
-                ptr::null(),
-            )
-        }
-    } else {
-        status
-    };
-    // SAFETY: both blocks were allocated by the security APIs above (or are
-    // null, which LocalFree accepts).
-    unsafe {
-        LocalFree(new_dacl.cast());
-        LocalFree(descriptor);
-    }
-    if status == ERROR_SUCCESS {
-        Ok(())
-    } else {
-        Err(status)
-    }
-}
-
-/// Keeps the object's inheritance state: without an explicit flag
-/// `SetNamedSecurityInfoW` turns the inherited entries of the DACL it is
-/// given into explicit copies (seen on the Windows ARM runners), so an
-/// unprotected DACL is re-set as unprotected (the system then re-inherits
-/// from the parent) and a protected one stays protected.
-fn protection(descriptor: PSECURITY_DESCRIPTOR) -> OBJECT_SECURITY_INFORMATION {
-    let mut control: SECURITY_DESCRIPTOR_CONTROL = 0;
-    let mut rev = 0u32;
-    // SAFETY: `descriptor` came from GetNamedSecurityInfoW and is still
-    // alive; both out pointers are valid.
-    let ok = unsafe { GetSecurityDescriptorControl(descriptor, &raw mut control, &raw mut rev) };
-    if ok != 0 && control & SE_DACL_PROTECTED != 0 {
-        PROTECTED_DACL_SECURITY_INFORMATION
-    } else {
-        UNPROTECTED_DACL_SECURITY_INFORMATION
     }
 }
 

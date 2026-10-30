@@ -17,6 +17,7 @@ unsafe_modules = [
     # pre_exec hook applying Landlock and seccomp between fork and exec.
     "crates/pmt-sandbox/src/linux/exec.rs",
     # AppContainer profiles, file ACLs, CreateProcessW and Job Objects.
+    "crates/pmt-sandbox/src/windows/acl.rs",
     "crates/pmt-sandbox/src/windows/container.rs",
     "crates/pmt-sandbox/src/windows/launch.rs",
 ]
