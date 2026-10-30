@@ -85,13 +85,17 @@ fn acl(path: &Path) -> String {
 fn acl_entries_are_revoked_when_the_sandbox_ends() {
     let fixture = Fixture::new();
     let before = acl(&fixture.work);
+    let parent_before = acl(&fixture.home);
     let sandbox = confine(fixture.policy(&[]));
+    let during = acl(&fixture.work);
     // AppContainer SIDs start with S-1-15-2-.
-    assert!(
-        acl(&fixture.work).contains("S-1-15-2-"),
-        "{}",
-        acl(&fixture.work)
-    );
+    assert!(during.contains("S-1-15-2-"), "{during}");
     drop(sandbox);
-    assert_eq!(acl(&fixture.work), before);
+    let after = acl(&fixture.work);
+    assert_eq!(
+        after,
+        before,
+        "during:\n{during}\nparent before:\n{parent_before}\nparent after:\n{}",
+        acl(&fixture.home)
+    );
 }
