@@ -14,12 +14,42 @@ use crate::context::Context;
 use crate::output::print;
 use crate::prompt::{stdin_is_tty, stdout_is_tty};
 
-/// `prometheus model`: the picker, then `model set` with the choice.
+/// The picker's subscription choice (spec: model-providers, Picker
+/// offers ChatGPT sign-in).
+pub(crate) const CHATGPT_CHOICE: &str = "ChatGPT or Codex subscription (sign in)";
+
+/// What the picker returned.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Picked {
+    /// `<provider>/<model>`.
+    Model(String),
+    /// Sign in to this provider, then make it the profile's provider.
+    SignIn(&'static str),
+}
+
+/// `prometheus model`: the picker, then `model set` with the choice; the
+/// ChatGPT choice signs in to `openai-codex` and sets `model.provider`.
 pub(super) fn run(ctx: &Context<'_>) -> Result<u8, Error> {
-    let Some(reference) = choose(ctx, REQUIRES_TERMINAL)? else {
-        return print(&"no model chosen; nothing changed");
-    };
-    set::run(ctx, &reference, None, None)
+    if !(stdin_is_tty() && stdout_is_tty()) {
+        return Err(Error::new(
+            &codes::MODEL_REQUIRES_TERMINAL,
+            REQUIRES_TERMINAL,
+        ));
+    }
+    let models = Models::open(ctx)?;
+    match pick(&models, &mut io::stdin().lock(), &mut io::stderr(), true)? {
+        None => print(&"no model chosen; nothing changed"),
+        Some(Picked::Model(reference)) => set::run(ctx, &reference, None, None),
+        Some(Picked::SignIn(provider)) => {
+            crate::auth_cmd::sign_in_default(ctx, provider)?;
+            models
+                .scope
+                .profile()
+                .config_file()
+                .set_all(&[("model.provider", provider)])?;
+            print(&format!("signed in; model.provider = \"{provider}\""))
+        }
+    }
 }
 
 /// Runs the picker on the terminal and returns `<provider>/<model>`, or
@@ -34,10 +64,16 @@ pub(crate) fn choose(ctx: &Context<'_>, refusal: &str) -> Result<Option<String>,
         return Err(Error::new(&codes::MODEL_REQUIRES_TERMINAL, refusal));
     }
     let models = Models::open(ctx)?;
-    pick(&models, &mut io::stdin().lock(), &mut io::stderr())
+    Ok(
+        match pick(&models, &mut io::stdin().lock(), &mut io::stderr(), false)? {
+            Some(Picked::Model(reference)) => Some(reference),
+            _ => None,
+        },
+    )
 }
 
-/// The picker over any input and output.
+/// The picker over any input and output; `offer_sign_in` adds the
+/// subscription sign-in choice first.
 ///
 /// # Errors
 ///
@@ -46,41 +82,54 @@ pub(crate) fn pick(
     models: &Models,
     input: &mut impl BufRead,
     out: &mut impl Write,
-) -> Result<Option<String>, Error> {
+    offer_sign_in: bool,
+) -> Result<Option<Picked>, Error> {
     let providers: Vec<&Provider> = models
         .registry
         .iter()
         .filter(|p| !p.descriptor().hidden && p.enabled())
         .collect();
-    let names: Vec<String> = providers
-        .iter()
-        .map(|p| {
-            let ready = if connected(models, p) {
-                "  (connected)"
-            } else {
-                ""
-            };
-            format!("{}{ready}", p.id())
-        })
-        .collect();
-    let Some(index) = ask(input, out, "provider", &names)? else {
+    let mut names: Vec<String> = Vec::new();
+    if offer_sign_in {
+        names.push(CHATGPT_CHOICE.to_owned());
+    }
+    names.extend(providers.iter().map(|p| {
+        let ready = if connected(models, p) {
+            "  (connected)"
+        } else {
+            ""
+        };
+        format!("{}{ready}", p.id())
+    }));
+    let Some(mut index) = ask(input, out, "provider", &names)? else {
         return Ok(None);
     };
+    if offer_sign_in {
+        if index == 0 {
+            return Ok(Some(Picked::SignIn("openai-codex")));
+        }
+        index -= 1;
+    }
     let provider = providers[index];
     let choices = models.catalog.picker_models(provider);
     let Some(model) = ask_or_type(input, out, "model", &choices)? else {
         return Ok(None);
     };
-    Ok(Some(format!("{}/{model}", provider.id())))
+    Ok(Some(Picked::Model(format!("{}/{model}", provider.id()))))
 }
 
-/// Whether `provider` needs no key or one of its secrets is stored.
+/// Whether `provider` needs no key, one of its secrets is stored or it
+/// has a usable sign-in.
 fn connected(models: &Models, provider: &Provider) -> bool {
     provider.auth() == pmt_config::schema::ProviderAuth::None
         || provider
             .secret_names()
             .iter()
             .any(|name| models.scope.secrets().resolve(name).is_ok())
+        || models
+            .credentials
+            .usable(provider.id())
+            .is_ok_and(|s| s.is_some())
 }
 
 /// Lists `items` numbered and reads a number or an item; `None` on an
@@ -168,23 +217,47 @@ mod tests {
         let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
         let models = Models::for_config(scope.clone(), scope.config()).unwrap();
         let mut out = Vec::new();
-        let picked = pick(&models, &mut "anthropic\n1\n".as_bytes(), &mut out).unwrap();
-        assert_eq!(picked.as_deref(), Some("anthropic/claude-opus-4-1"));
+        let picked = pick(&models, &mut "anthropic\n1\n".as_bytes(), &mut out, false).unwrap();
+        assert_eq!(
+            picked,
+            Some(Picked::Model("anthropic/claude-opus-4-1".to_owned()))
+        );
         let typed = pick(
             &models,
             &mut "nope\ndeepseek\nmy-model\n".as_bytes(),
             &mut out,
+            false,
         )
         .unwrap();
-        assert_eq!(typed.as_deref(), Some("deepseek/my-model"));
+        assert_eq!(typed, Some(Picked::Model("deepseek/my-model".to_owned())));
         assert!(
             String::from_utf8(out)
                 .unwrap()
                 .contains("no provider 'nope'")
         );
         assert_eq!(
-            pick(&models, &mut "\n".as_bytes(), &mut Vec::new()).unwrap(),
+            pick(&models, &mut "\n".as_bytes(), &mut Vec::new(), false).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn picker_offers_the_chatgpt_sign_in_first() {
+        let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
+        let dir = tempfile::tempdir_in(target).unwrap();
+        let home = Home::open(dir.path()).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
+        let models = Models::for_config(scope.clone(), scope.config()).unwrap();
+        let mut out = Vec::new();
+        let picked = pick(&models, &mut "1\n".as_bytes(), &mut out, true).unwrap();
+        assert_eq!(picked, Some(Picked::SignIn("openai-codex")));
+        assert!(
+            String::from_utf8(out)
+                .unwrap()
+                .starts_with(&format!("  1) {CHATGPT_CHOICE}"))
+        );
+        let second = pick(&models, &mut "2\n1\n".as_bytes(), &mut Vec::new(), true).unwrap();
+        assert!(matches!(second, Some(Picked::Model(_))));
     }
 }

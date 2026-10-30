@@ -21,7 +21,7 @@ use serde::Serialize;
 
 pub use auto::NOT_CONNECTED;
 pub use credential::{
-    Credential, CredentialExtras, CredentialSource, NoExtras, Pooled, SecretSource,
+    Credential, CredentialExtras, CredentialSource, NoExtras, Pooled, SecretSource, SignedIn,
 };
 pub use probe::{BoxFuture, EndpointProbe, TcpProbe};
 

@@ -39,6 +39,7 @@ struct Row {
     need: Need,
     auth: ProviderAuth,
     flows: &'static [LoginFlow],
+    notes: &'static [&'static str],
     extra_hosts: &'static [&'static str],
     local: bool,
     keyless_on_loopback: bool,
@@ -62,6 +63,7 @@ const BASE: Row = Row {
     need: Need::Native,
     auth: ApiKey,
     flows: &[],
+    notes: &[],
     extra_hosts: &[],
     local: false,
     keyless_on_loopback: false,
@@ -141,6 +143,11 @@ const fn flows(mut row: Row, flows: &'static [LoginFlow]) -> Row {
     row
 }
 
+const fn notes(mut row: Row, notes: &'static [&'static str]) -> Row {
+    row.notes = notes;
+    row
+}
+
 const fn hosts(mut row: Row, extra: &'static [&'static str]) -> Row {
     row.extra_hosts = extra;
     row
@@ -154,6 +161,19 @@ const fn need(mut row: Row, need: Need) -> Row {
 const GEMINI_HINT: &str = "until the bundled plugin ships, use Gemini's OpenAI-compatible endpoint: prometheus config set providers.gemini.base_url https://generativelanguage.googleapis.com/v1beta/openai";
 const COPILOT_HINT: &str = "prometheus plugins install github-copilot";
 
+/// Claude subscription caveats (spec: model-providers, Plan caveats shown
+/// before sign-in).
+const ANTHROPIC_NOTES: &[&str] = &[
+    "Claude Pro plans are not eligible for use outside Anthropic's own apps; sign in with a Claude Max plan, or use an API key: prometheus auth add anthropic --type api_key",
+    "Claude Max usage through Prometheus bills the account's extra-usage credits, not the plan's included usage; an account without extra-usage credits is refused.",
+];
+
+/// ChatGPT plan caveats.
+const CODEX_NOTES: &[&str] = &[
+    "Needs a ChatGPT Plus, Pro, Business, Edu or Enterprise plan; requests count against the plan's Codex usage limits.",
+    "Signing in here starts a separate session; importing a Codex CLI sign-in (prometheus auth import codex-cli) shares one rotating refresh token with that CLI.",
+];
+
 const ROWS: &[Row] = &[
     cached(model(
         key(
@@ -165,18 +185,21 @@ const ROWS: &[Row] = &[
         ),
         "anthropic/claude-sonnet-4.5",
     )),
-    flows(
-        model(
-            key(
-                "anthropic",
-                &["claude", "claude-oauth", "claude-code"],
-                &["ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"],
-                "https://api.anthropic.com",
-                AnthropicMessages,
+    notes(
+        flows(
+            model(
+                key(
+                    "anthropic",
+                    &["claude", "claude-oauth", "claude-code"],
+                    &["ANTHROPIC_API_KEY", "ANTHROPIC_TOKEN"],
+                    "https://api.anthropic.com",
+                    AnthropicMessages,
+                ),
+                "claude-sonnet-4-5",
             ),
-            "claude-sonnet-4-5",
+            &[Browser],
         ),
-        &[Browser],
+        ANTHROPIC_NOTES,
     ),
     cached(model(
         key(
@@ -188,12 +211,15 @@ const ROWS: &[Row] = &[
         ),
         "gpt-5",
     )),
-    signin(
-        "openai-codex",
-        &["codex", "chatgpt", "chatgpt-codex"],
-        "https://chatgpt.com/backend-api/codex",
-        Responses,
-        &[Device, Browser],
+    notes(
+        signin(
+            "openai-codex",
+            &["codex", "chatgpt", "chatgpt-codex"],
+            "https://chatgpt.com/backend-api/codex",
+            Responses,
+            &[Device, Browser],
+        ),
+        CODEX_NOTES,
     ),
     flows(
         model(
@@ -665,6 +691,7 @@ fn descriptor(row: &Row) -> Descriptor {
     d.key_hosts.extend(owned(row.extra_hosts));
     d.auth = row.auth;
     d.login_flows = row.flows.to_vec();
+    d.plan_notes = owned(row.notes);
     d.local = row.local;
     d.keyless_on_loopback = row.keyless_on_loopback;
     d.hidden = row.hidden;

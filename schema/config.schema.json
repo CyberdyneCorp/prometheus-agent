@@ -1630,6 +1630,99 @@
       "type": "object",
       "x-apply": "restart"
     },
+    "OAuthEndpoints": {
+      "additionalProperties": false,
+      "description": "A `[providers.<id>.oauth]` table: sign-in endpoints. Endpoints must be\n`https://` (plain `http://` only on a loopback address) and their hosts\nmust be in `allowed_hosts`.",
+      "properties": {
+        "allowed_hosts": {
+          "description": "Hosts the sign-in endpoints may be on (exact, or a leading `*.`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "authorize_url": {
+          "description": "Authorization endpoint of the browser (PKCE) flow.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client_id": {
+          "description": "The OAuth client id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "device_authorization_url": {
+          "description": "Device authorization endpoint of the device-code flow.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "device_poll_url": {
+          "description": "Polling endpoint of a device flow that polls somewhere other than\nthe token endpoint (OpenAI's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "redirect_path": {
+          "description": "Path of the loopback redirect.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "redirect_port": {
+          "description": "Loopback redirect port of the browser flow; 0 lets the OS assign\none (only for providers that accept any port).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "revoke_url": {
+          "description": "Token revocation endpoint (`auth remove` revokes the refresh token).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scopes": {
+          "description": "Requested scopes.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "token_url": {
+          "description": "Token endpoint (code exchange and refresh).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification_url": {
+          "description": "Page where the user enters the device code, when the device\nendpoint does not name one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ObservabilityConfig": {
       "additionalProperties": false,
       "description": "The `[observability]` section.",
@@ -1918,10 +2011,24 @@
             "null"
           ]
         },
+        "oauth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OAuthEndpoints"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sign-in endpoints replacing (field by field) the built-in ones, or\nconfiguring a sign-in for a custom `auth = \"oauth\"` provider."
+        },
         "plan_notes": {
-          "description": "Eligibility and billing notes shown before sign-in.",
+          "description": "Eligibility and billing notes shown before sign-in and by `auth\nstatus`; replaces the provider's built-in notes.",
+          "items": {
+            "type": "string"
+          },
           "type": [
-            "string",
+            "array",
             "null"
           ]
         },

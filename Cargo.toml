@@ -84,6 +84,10 @@ dunce = "1.0"
 windows-sys = "0.61"
 # Full jitter of provider retry backoff.
 fastrand = "2.3"
+# OS randomness for sign-in secrets (PKCE verifier, OAuth state).
+getrandom = "0.4"
+# URL parsing and form encoding of sign-in requests and callbacks.
+url = "2.5"
 # Test-only HTTP mock server (recorded provider stream fixtures).
 wiremock = "0.6"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }

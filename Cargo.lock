@@ -1655,7 +1655,9 @@ version = "0.1.0"
 name = "pmt-providers"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "fastrand",
+ "getrandom 0.4.3",
  "jiff",
  "pmt-config",
  "pmt-core",
@@ -1672,6 +1674,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "url",
  "wiremock",
 ]
 
@@ -1813,6 +1816,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "url",
  "wiremock",
 ]
 

@@ -127,7 +127,7 @@ impl AuxCaller {
                 }
                 Err(error) => {
                     let Some(delay) = policy.delay(retry, &error) else {
-                        return Err(error.to_error(&aux.route.provider));
+                        return Err(error.to_route_error(&aux.route));
                     };
                     tokio::time::sleep(delay).await;
                     retry += 1;

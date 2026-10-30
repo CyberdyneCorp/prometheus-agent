@@ -2,9 +2,11 @@
 //! fixtures per wire format, prompt caching markers and ledger rows, and
 //! fault injection for retries and the fallback chain.
 
+mod auth;
 mod auxiliary;
 mod caching;
 mod faults;
+mod idp;
 mod local;
 mod session;
 mod support;

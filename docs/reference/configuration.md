@@ -180,7 +180,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.login_flow` | one of "device", "browser" | unset | `"device"`, `"browser"` | `next_session` | Sign-in flow for OAuth providers; unset uses the provider default. |
 | `providers.<name>.max_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable failure. |
 | `providers.<name>.models_url` | string | unset | any | `next_session` | Model listing URL; unset is `<base_url>/models`. |
-| `providers.<name>.plan_notes` | string | unset | any | `next_session` | Eligibility and billing notes shown before sign-in. |
+| `providers.<name>.oauth.allowed_hosts` | array | unset | any | `next_session` | Hosts the sign-in endpoints may be on (exact, or a leading `*.`). |
+| `providers.<name>.oauth.authorize_url` | string | unset | any | `next_session` | Authorization endpoint of the browser (PKCE) flow. |
+| `providers.<name>.oauth.client_id` | string | unset | any | `next_session` | The OAuth client id. |
+| `providers.<name>.oauth.device_authorization_url` | string | unset | any | `next_session` | Device authorization endpoint of the device-code flow. |
+| `providers.<name>.oauth.device_poll_url` | string | unset | any | `next_session` | Polling endpoint of a device flow that polls somewhere other than the token endpoint (OpenAI's). |
+| `providers.<name>.oauth.redirect_path` | string | unset | any | `next_session` | Path of the loopback redirect. |
+| `providers.<name>.oauth.redirect_port` | integer | unset | 0 to 65535 | `next_session` | Loopback redirect port of the browser flow; 0 lets the OS assign one (only for providers that accept any port). |
+| `providers.<name>.oauth.revoke_url` | string | unset | any | `next_session` | Token revocation endpoint (`auth remove` revokes the refresh token). |
+| `providers.<name>.oauth.scopes` | array | unset | any | `next_session` | Requested scopes. |
+| `providers.<name>.oauth.token_url` | string | unset | any | `next_session` | Token endpoint (code exchange and refresh). |
+| `providers.<name>.oauth.verification_url` | string | unset | any | `next_session` | Page where the user enters the device code, when the device endpoint does not name one. |
+| `providers.<name>.plan_notes` | array | unset | any | `next_session` | Eligibility and billing notes shown before sign-in and by `auth status`; replaces the provider's built-in notes. |
 | `providers.<name>.pool_strategy` | one of "fill_first", "round_robin", "random", "least_used" | `"fill_first"` | `"fill_first"`, `"round_robin"`, `"random"`, `"least_used"` | `next_session` | Credential pool selection. |
 | `providers.<name>.prefer_credential` | one of "subscription", "api_key" | `"subscription"` | `"subscription"`, `"api_key"` | `next_session` | Which credential wins when both exist. |
 | `providers.<name>.request_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Per-request timeout. |

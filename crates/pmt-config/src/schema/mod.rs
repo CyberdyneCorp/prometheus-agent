@@ -38,8 +38,8 @@ pub use interface::{
 };
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
-    LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, PoolStrategy,
-    PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
+    LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
+    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
     BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, LogLevel, LoggingConfig,

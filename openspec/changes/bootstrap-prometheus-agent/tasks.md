@@ -113,10 +113,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 11. M1 Provider credentials and subscription sign-in
 
-- [ ] 11.1 Implement credentials bound to their authoritative hosts and `prometheus auth add|list|rm|status` for `api_key`; verify that a key for provider A is never sent to provider B's host (spec: model-providers)
-- [ ] 11.2 Implement the subscription/OAuth sign-in registry with device-code and browser PKCE flows (loopback redirect, state check) behind a test IdP; verify with an end-to-end test against a mock OAuth server (spec: model-providers)
-- [ ] 11.3 Implement Anthropic Claude Max sign-in (`auth add anthropic --type oauth`, required request identity, `auth.plan_not_eligible` mapping); verify with recorded fixtures for an eligible and an ineligible plan (spec: model-providers)
-- [ ] 11.4 Implement OpenAI Codex ChatGPT sign-in (device code by default, PKCE on `localhost:1455` with fallback when the port is busy, `responses` wire with the account id) and `auth import codex-cli`; verify with mock-server tests, including the busy-port fallback (spec: model-providers)
+- [x] 11.1 Implement credentials bound to their authoritative hosts and `prometheus auth add|list|rm|status` for `api_key`; verify that a key for provider A is never sent to provider B's host (spec: model-providers)
+- [x] 11.2 Implement the subscription/OAuth sign-in registry with device-code and browser PKCE flows (loopback redirect, state check) behind a test IdP; verify with an end-to-end test against a mock OAuth server (spec: model-providers)
+- [x] 11.3 Implement Anthropic Claude Max sign-in (`auth add anthropic --type oauth`, required request identity, `auth.plan_not_eligible` mapping); verify with recorded fixtures for an eligible and an ineligible plan (spec: model-providers)
+- [x] 11.4 Implement OpenAI Codex ChatGPT sign-in (device code by default, PKCE on `localhost:1455` with fallback when the port is busy, `responses` wire with the account id) and `auth import codex-cli`; verify with mock-server tests, including the busy-port fallback (spec: model-providers)
 - [ ] 11.5 Implement borrowed CLI logins (Claude Code, Codex CLI) read and refreshed in place, gated by `auth.adopt_external_logins`; verify that `false` ignores them and that refresh rewrites only the original file (spec: model-providers)
 - [ ] 11.6 Implement subscription tokens kept only in the secrets store, token refresh under a cross-process lock, and dead-token quarantine; verify with a two-process test that a single-use refresh token is used exactly once (spec: model-providers)
 - [ ] 11.7 Implement credential pools (selection strategies) and exhausted-credential cooldowns; verify with tests that a 429'd key is skipped until its cooldown ends (spec: model-providers)

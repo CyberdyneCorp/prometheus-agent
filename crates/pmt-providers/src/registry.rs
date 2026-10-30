@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 
 use pmt_config::Config;
 use pmt_config::provider_urls;
-use pmt_config::schema::{ProviderAuth, ProviderConfig, WireFormat};
+use pmt_config::schema::{LoginFlow, ProviderAuth, ProviderConfig, WireFormat};
 use pmt_core::error::{Error, codes};
 
 use crate::builtin;
@@ -119,6 +119,28 @@ impl Provider {
         }
         self.base_url()
             .map(|base| self.descriptor.models_url_for(base))
+    }
+
+    /// Eligibility and billing notes shown before a sign-in and by `auth
+    /// status`: `providers.<id>.plan_notes`, else the descriptor's.
+    #[must_use]
+    pub fn plan_notes(&self) -> &[String] {
+        self.settings
+            .plan_notes
+            .as_deref()
+            .unwrap_or(&self.descriptor.plan_notes)
+    }
+
+    /// Sign-in flows, the default first: `providers.<id>.login_flow` leads
+    /// when the provider offers it.
+    #[must_use]
+    pub fn login_flows(&self) -> Vec<LoginFlow> {
+        let mut flows = self.descriptor.login_flows.clone();
+        if let Some(chosen) = self.settings.login_flow.filter(|f| flows.contains(f)) {
+            flows.retain(|f| *f != chosen);
+            flows.insert(0, chosen);
+        }
+        flows
     }
 
     /// Hosts this provider's secrets may be sent to: the descriptor's and
@@ -338,6 +360,14 @@ fn custom_descriptor(id: &str, settings: &ProviderConfig) -> Result<Descriptor, 
     d.local = provider_urls::host_of(base_url).is_some_and(|h| provider_urls::is_local_host(&h));
     if let Some(login) = settings.login_flow {
         d.login_flows = vec![login];
+    } else if let Some(oauth) = &settings.oauth {
+        // A custom sign-in offers the flows whose endpoints it configures.
+        if oauth.device_authorization_url.is_some() {
+            d.login_flows.push(LoginFlow::Device);
+        }
+        if oauth.authorize_url.is_some() {
+            d.login_flows.push(LoginFlow::Browser);
+        }
     }
     Ok(d)
 }

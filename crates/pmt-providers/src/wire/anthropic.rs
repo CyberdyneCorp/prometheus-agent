@@ -12,6 +12,9 @@ use crate::sse::SseEvent;
 
 /// The API version every request names.
 pub(crate) const API_VERSION: &str = "2023-06-01";
+/// The `anthropic-beta` flag a request authenticated with a Claude
+/// subscription's OAuth token must carry.
+pub(crate) const OAUTH_BETA: &str = "oauth-2025-04-20";
 /// Anthropic accepts at most four cache breakpoints per request.
 const MAX_BREAKPOINTS: usize = 4;
 /// `max_tokens` is required; used when the request sets no cap.

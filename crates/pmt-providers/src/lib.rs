@@ -5,9 +5,11 @@
 //! retries, the [`fallback`] chain with turn-scoped restore, the model
 //! [`metadata`] catalog with capability checks, per-call cost accounting
 //! ([`cost`]), [`auxiliary`] task routing, [`reasoning`] effort, model
-//! references and aliases ([`target`]), the `/model` [`switch`] and local
-//! inference servers ([`local`]).
+//! references and aliases ([`target`]), the `/model` [`switch`], local
+//! inference servers ([`local`]) and credentials and subscription sign-in
+//! ([`auth`]).
 
+pub mod auth;
 pub mod auxiliary;
 pub mod builtin;
 pub mod caller;

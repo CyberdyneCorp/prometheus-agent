@@ -23,6 +23,7 @@ Commands:
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth        Add, list and remove provider API keys and subscription sign-ins
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -3023,6 +3024,284 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus fallback help help
 ```
 
+## `prometheus auth`
+
+```text
+Add, list and remove provider API keys and subscription sign-ins
+
+Usage: prometheus auth [OPTIONS] <COMMAND>
+
+Commands:
+  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list    List every credential: provider, label, kind, source and status (never key or token material)
+  status  One provider's credentials, sign-in flows and plan notes
+  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation) [alias: rm]
+  import  Copy another tool's sign-in into the secrets store
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth add`
+
+```text
+Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+
+Usage: prometheus auth add [OPTIONS] <PROVIDER>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --type <TYPE>
+          Credential type (default: `oauth` for sign-in-only providers, else `api_key`)
+
+          Possible values:
+          - api_key: An API key
+          - oauth:   A subscription or OAuth sign-in
+
+      --label <LABEL>
+          Label of this credential (default `default`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --browser
+          Sign in through the browser (PKCE on a loopback redirect)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --device
+          Sign in with a device code
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus auth list`
+
+```text
+List every credential: provider, label, kind, source and status (never key or token material)
+
+Usage: prometheus auth list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth status`
+
+```text
+One provider's credentials, sign-in flows and plan notes
+
+Usage: prometheus auth status [OPTIONS] <PROVIDER>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth remove`
+
+```text
+Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+
+Usage: prometheus auth remove [OPTIONS] <PROVIDER> <LABEL|INDEX>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+  <LABEL|INDEX>
+          Label, or 1-based position in `auth status <provider>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth import`
+
+```text
+Copy another tool's sign-in into the secrets store
+
+Usage: prometheus auth import [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          Where the sign-in comes from
+
+          Possible values:
+          - codex-cli: The Codex CLI's `auth.json` (provider `openai-codex`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --path <PATH>
+          The sign-in file (default `~/.codex/auth.json`); only read
+
+      --label <LABEL>
+          Label of the imported sign-in (default `default`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus auth help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus auth help [COMMAND]
+
+Commands:
+  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list    List every credential: provider, label, kind, source and status (never key or token material)
+  status  One provider's credentials, sign-in flows and plan notes
+  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+  import  Copy another tool's sign-in into the secrets store
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus auth help add`
+
+```text
+Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+
+Usage: prometheus auth help add
+```
+
+## `prometheus auth help list`
+
+```text
+List every credential: provider, label, kind, source and status (never key or token material)
+
+Usage: prometheus auth help list
+```
+
+## `prometheus auth help status`
+
+```text
+One provider's credentials, sign-in flows and plan notes
+
+Usage: prometheus auth help status
+```
+
+## `prometheus auth help remove`
+
+```text
+Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+
+Usage: prometheus auth help remove
+```
+
+## `prometheus auth help import`
+
+```text
+Copy another tool's sign-in into the secrets store
+
+Usage: prometheus auth help import
+```
+
+## `prometheus auth help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus auth help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -3044,6 +3323,7 @@ Commands:
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth        Add, list and remove provider API keys and subscription sign-ins
   help        Print this message or the help of the given subcommand(s)
 ```
 
@@ -3657,6 +3937,61 @@ Remove every entry
 Usage: prometheus help fallback clear
 ```
 
+## `prometheus help auth`
+
+```text
+Add, list and remove provider API keys and subscription sign-ins
+
+Usage: prometheus help auth [COMMAND]
+
+Commands:
+  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list    List every credential: provider, label, kind, source and status (never key or token material)
+  status  One provider's credentials, sign-in flows and plan notes
+  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+  import  Copy another tool's sign-in into the secrets store
+```
+
+## `prometheus help auth add`
+
+```text
+Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+
+Usage: prometheus help auth add
+```
+
+## `prometheus help auth list`
+
+```text
+List every credential: provider, label, kind, source and status (never key or token material)
+
+Usage: prometheus help auth list
+```
+
+## `prometheus help auth status`
+
+```text
+One provider's credentials, sign-in flows and plan notes
+
+Usage: prometheus help auth status
+```
+
+## `prometheus help auth remove`
+
+```text
+Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+
+Usage: prometheus help auth remove
+```
+
+## `prometheus help auth import`
+
+```text
+Copy another tool's sign-in into the secrets store
+
+Usage: prometheus help auth import
+```
+
 ## `prometheus help help`
 
 ```text
@@ -3697,3 +4032,5 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.model_info.v1` | `prometheus model info` |
 | `prometheus.model_set.v1` | `prometheus model set` |
 | `prometheus.fallback.v1` | `prometheus fallback list` |
+| `prometheus.auth.v1` | `prometheus auth list` |
+| `prometheus.auth_status.v1` | `prometheus auth status` |

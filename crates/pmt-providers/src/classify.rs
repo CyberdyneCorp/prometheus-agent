@@ -8,6 +8,8 @@ use pmt_core::error::{Error, codes};
 use reqwest::header::HeaderMap;
 use serde::Serialize;
 
+use crate::resolve::CredentialSource;
+
 /// The class of a failed provider call; exactly one per failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -127,6 +129,43 @@ impl ProviderError {
             _ => Error::new(&codes::PROVIDER_CALL_FAILED, message),
         }
     }
+}
+
+impl ProviderError {
+    /// The user-facing error for a call on `route`: a refusal of a valid
+    /// subscription sign-in's plan (HTTP 403, an entitlement or an
+    /// extra-usage refusal) is `auth.plan_not_eligible`, never a stale
+    /// token (spec: model-providers, Anthropic Claude Max sign-in).
+    #[must_use]
+    pub fn to_route_error(&self, route: &crate::resolve::Route) -> Error {
+        match &route.credential.source {
+            CredentialSource::Subscription { label, .. } if self.refuses_plan() => {
+                plan_not_eligible(&route.provider, label, &self.message)
+            }
+            _ => self.to_error(&route.provider),
+        }
+    }
+
+    /// Whether this failure of a subscription request refuses the plan
+    /// rather than the token (a 401 means the token itself is bad).
+    fn refuses_plan(&self) -> bool {
+        self.status == Some(403)
+            || self.class == ErrorClass::Entitlement
+            || self.message.to_ascii_lowercase().contains("extra usage")
+    }
+}
+
+/// `auth.plan_not_eligible` for sign-in `label` of `provider`.
+#[must_use]
+pub fn plan_not_eligible(provider: &str, label: &str, detail: &str) -> Error {
+    let command = format!("prometheus auth add {provider} --type api_key");
+    Error::new(
+        &codes::AUTH_PLAN_NOT_ELIGIBLE,
+        format!(
+            "{provider} refused the plan of sign-in '{label}' for this use ({detail}); the sign-in stays valid. Use an API key instead: {command}"
+        ),
+    )
+    .with_hint(command)
 }
 
 const ENTITLEMENT: &[&str] = &[

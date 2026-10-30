@@ -510,6 +510,42 @@ error_codes! {
     /// A local inference server answered unexpectedly.
     LOCAL_SERVER_PROBE = ("local.server_probe", Unavailable,
         "A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`.");
+    /// An API key was given as a command-line argument.
+    AUTH_KEY_ON_ARGV = ("auth.key_on_argv", Usage,
+        "`prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings.");
+    /// The provider does not take the requested credential type.
+    AUTH_UNSUPPORTED = ("auth.unsupported", Usage,
+        "`prometheus auth add` asked for a credential type the provider does not take (an API key for a sign-in-only provider, a sign-in for a provider without sign-in flows, or a flow it does not offer).");
+    /// A credential label is malformed.
+    AUTH_INVALID_LABEL = ("auth.invalid_label", Usage,
+        "A credential label must be 1-32 characters a-z, 0-9 or '-', starting with a letter or digit.");
+    /// No credential matches the label or index.
+    AUTH_NOT_FOUND = ("auth.not_found", NotFound,
+        "`prometheus auth remove` named a label or 1-based index that `prometheus auth list` does not show for the provider.");
+    /// The provider's sign-in is not available in this build.
+    AUTH_SIGNIN_UNAVAILABLE = ("auth.signin_unavailable", Unavailable,
+        "The provider declares a sign-in, but this build ships no endpoints for it and `[providers.<id>.oauth]` does not configure them.");
+    /// A sign-in endpoint is not HTTPS (or plain HTTP on loopback).
+    AUTH_INSECURE_ENDPOINT = ("auth.insecure_endpoint", Config,
+        "A sign-in authorize, device or token endpoint is not an `https://` URL; plain `http://` is accepted only for an identity provider on a loopback address.");
+    /// A sign-in endpoint host is not one the provider allows.
+    AUTH_HOST_NOT_ALLOWED = ("auth.host_not_allowed", Config,
+        "A sign-in endpoint's host is not in the provider's allowed sign-in hosts (`[providers.<id>.oauth] allowed_hosts`); nothing was sent to it.");
+    /// The device code expired before the user approved it.
+    AUTH_LOGIN_EXPIRED = ("auth.login_expired", Auth,
+        "The device-code sign-in expired before it was approved in the browser; run `prometheus auth add <provider>` again.");
+    /// The sign-in did not complete.
+    AUTH_LOGIN_FAILED = ("auth.login_failed", Unavailable,
+        "The identity provider refused or did not answer the sign-in (denied consent, an error response, repeated network failures or no callback before the timeout); nothing was stored.");
+    /// The fixed loopback redirect port of a browser sign-in is in use.
+    AUTH_PORT_BUSY = ("auth.port_busy", Conflict,
+        "A browser sign-in needs a fixed loopback redirect port that another process is using, and the provider offers no device-code flow to fall back to.");
+    /// The subscription's plan may not be used this way.
+    AUTH_PLAN_NOT_ELIGIBLE = ("auth.plan_not_eligible", Auth,
+        "The provider refused a request made with a valid subscription sign-in because the plan is not eligible for this use (for example Claude Pro, or Claude Max without extra-usage credits); the sign-in stays valid. Use an API key: `prometheus auth add <provider> --type api_key`.");
+    /// An external sign-in file lacks a token.
+    AUTH_IMPORT_INCOMPLETE = ("auth.import_incomplete", Tool,
+        "The external sign-in file (`prometheus auth import`) is missing, unreadable or does not hold both an access token and a refresh token; nothing was imported.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

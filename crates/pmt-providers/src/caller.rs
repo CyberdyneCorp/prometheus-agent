@@ -52,7 +52,7 @@ impl Failed {
     /// The user-facing error.
     #[must_use]
     pub fn to_error(&self) -> Error {
-        self.error.to_error(&self.route.provider)
+        self.error.to_route_error(&self.route)
     }
 }
 

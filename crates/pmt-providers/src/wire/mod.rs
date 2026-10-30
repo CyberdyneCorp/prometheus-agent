@@ -7,6 +7,7 @@ mod chat;
 mod responses;
 
 pub(crate) use anthropic::API_VERSION as ANTHROPIC_VERSION;
+pub(crate) use anthropic::OAUTH_BETA as ANTHROPIC_OAUTH_BETA;
 
 use pmt_config::provider_urls::host_of;
 use pmt_config::schema::WireFormat;

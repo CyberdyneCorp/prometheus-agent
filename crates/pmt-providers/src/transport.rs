@@ -129,10 +129,30 @@ fn authenticate(builder: reqwest::RequestBuilder, route: &Route) -> reqwest::Req
         .unwrap_or_else(|_| HeaderValue::from_static(""));
     value.set_sensitive(true);
     if route.wire_format == WireFormat::AnthropicMessages && !route.credential.is_bearer() {
-        builder.header("x-api-key", value)
-    } else {
-        builder.header(reqwest::header::AUTHORIZATION, value)
+        return builder.header("x-api-key", value);
     }
+    let builder = builder.header(reqwest::header::AUTHORIZATION, value);
+    subscription_identity(builder, route)
+}
+
+/// What a subscription request must carry besides its bearer token
+/// (spec: model-providers, Anthropic Claude Max sign-in; OpenAI Codex
+/// ChatGPT plan sign-in): Anthropic's OAuth beta flag, and the ChatGPT
+/// account the token belongs to.
+fn subscription_identity(
+    mut builder: reqwest::RequestBuilder,
+    route: &Route,
+) -> reqwest::RequestBuilder {
+    if !route.credential.is_subscription() {
+        return builder;
+    }
+    if route.wire_format == WireFormat::AnthropicMessages {
+        builder = builder.header("anthropic-beta", wire::ANTHROPIC_OAUTH_BETA);
+    }
+    if let Some(account) = route.credential.account_id() {
+        builder = builder.header("ChatGPT-Account-ID", account);
+    }
+    builder
 }
 
 fn timed_out(message: &str) -> ProviderError {

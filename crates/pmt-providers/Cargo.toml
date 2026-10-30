@@ -8,7 +8,9 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 fastrand.workspace = true
+getrandom.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
@@ -19,9 +21,10 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-tokio = { workspace = true, features = ["net", "time"] }
+tokio = { workspace = true, features = ["net", "time", "io-util"] }
 tracing.workspace = true
 ulid.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

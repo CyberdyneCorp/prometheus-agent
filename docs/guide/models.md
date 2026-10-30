@@ -35,7 +35,7 @@ $ prometheus model explain  # exits 78
 each resolution step (requested provider, provider lookup, the
 `enabled` guard, endpoint, wire format, credential, model, context window
 check) without calling the model. Credentials are shown by source
-(`secret:<NAME>`, `pool:<provider>#<n>`, `oauth:<provider>`, `none`),
+(`secret:<NAME>`, `pool:<provider>#<n>`, `subscription:<provider>/<label>`, `none`),
 never by value:
 
 ```console

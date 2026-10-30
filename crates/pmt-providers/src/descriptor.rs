@@ -111,7 +111,7 @@ pub struct Descriptor {
     /// Sign-in flows (required when `auth` is `oauth`).
     pub login_flows: Vec<LoginFlow>,
     /// Eligibility and billing notes shown before sign-in.
-    pub plan_notes: String,
+    pub plan_notes: Vec<String>,
     /// Secret names, in resolution order (plan-specific before shared).
     pub secret_names: Vec<String>,
     /// Hosts the provider's secrets may be sent to (exact, or `*.` prefix).
@@ -158,7 +158,7 @@ impl Descriptor {
             base_url: base_url.map(str::to_owned),
             auth: ProviderAuth::ApiKey,
             login_flows: Vec::new(),
-            plan_notes: String::new(),
+            plan_notes: Vec::new(),
             secret_names: Vec::new(),
             key_hosts,
             models_url: None,

@@ -2,7 +2,7 @@
 //! explainable resolution): runs the route resolution of a new session in
 //! the selected profile and prints every step, without a model call and
 //! without any secret value (credentials are named by source:
-//! `secret:<NAME>`, `pool:<provider>#<n>`, `oauth:<provider>`, `flag`,
+//! `secret:<NAME>`, `pool:<provider>#<n>`, `subscription:<provider>/<label>`, `flag`,
 //! `none`).
 
 use std::fmt::Write as _;

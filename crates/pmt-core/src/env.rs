@@ -13,7 +13,9 @@
 //! verbatim as [`LaunchEnv::inherited`] values. Prometheus never reads them
 //! for its own behaviour; they are the only source a child environment may
 //! copy from (its fixed allowlist and `terminal.env_passthrough`), so a
-//! child never sees a secret or the parent's whole environment.
+//! child never sees a secret or the parent's whole environment. The one
+//! exception is two machine facts sign-in flows need: whether this is an
+//! SSH session and whether a graphical display exists.
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
@@ -253,6 +255,26 @@ impl LaunchEnv {
                 .map(|(_, v)| v.as_os_str());
         }
         None
+    }
+
+    /// Whether this process runs inside an SSH session (`SSH_CONNECTION`,
+    /// `SSH_CLIENT` or `SSH_TTY` set): a machine fact sign-in flows use to
+    /// print a port-forwarding hint instead of opening a browser.
+    #[must_use]
+    pub fn is_ssh_session(&self) -> bool {
+        ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"]
+            .iter()
+            .any(|name| self.inherited(name).is_some_and(|v| !v.is_empty()))
+    }
+
+    /// Whether a graphical browser can be opened: always on macOS and
+    /// Windows, elsewhere only with `DISPLAY` or `WAYLAND_DISPLAY` set.
+    #[must_use]
+    pub fn has_graphical_display(&self) -> bool {
+        cfg!(any(target_os = "macos", windows))
+            || ["DISPLAY", "WAYLAND_DISPLAY"]
+                .iter()
+                .any(|name| self.inherited(name).is_some_and(|v| !v.is_empty()))
     }
 
     /// Every [`LaunchEnv::inherited`] variable, sorted by name.

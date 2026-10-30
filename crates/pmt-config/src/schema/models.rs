@@ -126,9 +126,14 @@ pub struct ProviderConfig {
     /// Sign-in flow for OAuth providers; unset uses the provider default.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub login_flow: Option<LoginFlow>,
-    /// Eligibility and billing notes shown before sign-in.
+    /// Eligibility and billing notes shown before sign-in and by `auth
+    /// status`; replaces the provider's built-in notes.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub plan_notes: Option<String>,
+    pub plan_notes: Option<Vec<String>>,
+    /// Sign-in endpoints replacing (field by field) the built-in ones, or
+    /// configuring a sign-in for a custom `auth = "oauth"` provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<OAuthEndpoints>,
     /// Script file of the built-in `mock` provider.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
@@ -156,6 +161,7 @@ impl Default for ProviderConfig {
             catalog_ttl_secs: 86_400,
             login_flow: None,
             plan_notes: None,
+            oauth: None,
             script: None,
         }
     }
@@ -241,6 +247,50 @@ pub enum PoolStrategy {
     Random,
     /// Pick the least used.
     LeastUsed,
+}
+
+/// A `[providers.<id>.oauth]` table: sign-in endpoints. Endpoints must be
+/// `https://` (plain `http://` only on a loopback address) and their hosts
+/// must be in `allowed_hosts`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct OAuthEndpoints {
+    /// The OAuth client id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+    /// Authorization endpoint of the browser (PKCE) flow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authorize_url: Option<String>,
+    /// Token endpoint (code exchange and refresh).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_url: Option<String>,
+    /// Device authorization endpoint of the device-code flow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_authorization_url: Option<String>,
+    /// Polling endpoint of a device flow that polls somewhere other than
+    /// the token endpoint (OpenAI's).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_poll_url: Option<String>,
+    /// Page where the user enters the device code, when the device
+    /// endpoint does not name one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification_url: Option<String>,
+    /// Token revocation endpoint (`auth remove` revokes the refresh token).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revoke_url: Option<String>,
+    /// Requested scopes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scopes: Option<Vec<String>>,
+    /// Loopback redirect port of the browser flow; 0 lets the OS assign
+    /// one (only for providers that accept any port).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_port: Option<u16>,
+    /// Path of the loopback redirect.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_path: Option<String>,
+    /// Hosts the sign-in endpoints may be on (exact, or a leading `*.`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_hosts: Option<Vec<String>>,
 }
 
 /// OAuth sign-in flows.

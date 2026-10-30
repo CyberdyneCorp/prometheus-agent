@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 
 use pmt_config::SecretsHandle;
 use pmt_config::provider_urls::{host_of, is_local_host};
-use pmt_config::schema::ProviderAuth;
+use pmt_config::schema::{PreferCredential, ProviderAuth};
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::SecretString;
 
@@ -59,6 +59,21 @@ pub struct Pooled {
     pub value: SecretString,
 }
 
+/// A subscription sign-in a request may use.
+#[derive(Debug, Clone)]
+pub struct SignedIn {
+    /// The sign-in's label.
+    pub label: String,
+    /// The access token.
+    pub token: SecretString,
+    /// The account the token belongs to, when the provider routes by it
+    /// (ChatGPT plans).
+    pub account_id: Option<String>,
+    /// The provider refused the plan for this use (`auth.plan_not_eligible`);
+    /// an API key then wins whatever `prefer_credential` says.
+    pub ineligible: bool,
+}
+
 /// Credentials beyond plain secrets: pools and sign-in tokens.
 pub trait CredentialExtras: Send + Sync {
     /// The next pooled credential of `provider`, if it has a pool.
@@ -66,9 +81,13 @@ pub trait CredentialExtras: Send + Sync {
         None
     }
 
-    /// The sign-in access token of `provider`, if signed in.
-    fn oauth(&self, _provider: &str) -> Option<SecretString> {
-        None
+    /// The usable subscription sign-in of `provider`, if any.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    fn subscription(&self, _provider: &str) -> Result<Option<SignedIn>, Error> {
+        Ok(None)
     }
 
     /// Providers with a sign-in, in sign-in order.
@@ -97,10 +116,12 @@ pub enum CredentialSource {
         /// Label, if any.
         label: Option<String>,
     },
-    /// A sign-in token.
-    OAuth {
+    /// A subscription sign-in.
+    Subscription {
         /// Provider id.
         provider: String,
+        /// The sign-in's label.
+        label: String,
     },
     /// A stored secret.
     Secret {
@@ -118,6 +139,7 @@ pub struct Credential {
     /// Where it came from.
     pub source: CredentialSource,
     value: Option<SecretString>,
+    account_id: Option<String>,
 }
 
 impl PartialEq for Credential {
@@ -130,7 +152,39 @@ impl Credential {
     /// A credential from `source` with `value`.
     #[must_use]
     pub fn new(source: CredentialSource, value: Option<SecretString>) -> Self {
-        Self { source, value }
+        Self {
+            source,
+            value,
+            account_id: None,
+        }
+    }
+
+    /// The credential of subscription sign-in `signed_in` of `provider`.
+    #[must_use]
+    pub fn subscription(provider: &str, signed_in: SignedIn) -> Self {
+        let source = CredentialSource::Subscription {
+            provider: provider.to_owned(),
+            label: signed_in.label,
+        };
+        Self {
+            source,
+            value: Some(signed_in.token),
+            account_id: signed_in.account_id,
+        }
+    }
+
+    /// The account a subscription token belongs to (sent as
+    /// `ChatGPT-Account-ID` on ChatGPT plans).
+    #[must_use]
+    pub fn account_id(&self) -> Option<&str> {
+        self.account_id.as_deref()
+    }
+
+    /// A subscription sign-in (sent as a bearer token, with the
+    /// provider's subscription request identity).
+    #[must_use]
+    pub fn is_subscription(&self) -> bool {
+        matches!(self.source, CredentialSource::Subscription { .. })
     }
 
     /// No credential.
@@ -148,11 +202,11 @@ impl Credential {
     /// Sent as a bearer token even on Anthropic Messages (sign-ins).
     #[must_use]
     pub fn is_bearer(&self) -> bool {
-        matches!(self.source, CredentialSource::OAuth { .. })
+        self.is_subscription()
     }
 
-    /// `flag`, `pool:<provider>#<n>`, `oauth:<provider>`, `secret:<NAME>`
-    /// or `none`.
+    /// `flag`, `pool:<provider>#<n>`, `subscription:<provider>/<label>`,
+    /// `secret:<NAME>` or `none`.
     #[must_use]
     pub fn describe(&self) -> String {
         match &self.source {
@@ -160,20 +214,24 @@ impl Credential {
             CredentialSource::Pool {
                 provider, index, ..
             } => format!("pool:{provider}#{index}"),
-            CredentialSource::OAuth { provider } => format!("oauth:{provider}"),
+            CredentialSource::Subscription { provider, label } => {
+                format!("subscription:{provider}/{label}")
+            }
             CredentialSource::Secret { name } => format!("secret:{name}"),
             CredentialSource::None => "none".to_owned(),
         }
     }
 
-    /// The ledger's `billing_source` (design D16): sign-ins are
-    /// `subscription:<provider>`, keys `api_key:<provider>[/<label>]`,
-    /// keyless calls `local` on a local server and `keyless:<provider>`
-    /// elsewhere.
+    /// The ledger's `billing_source` (design D16, Billing labels):
+    /// sign-ins are `subscription:<provider>/<label>`, keys
+    /// `api_key:<provider>[/<label>]`, keyless calls `local` on a local
+    /// server and `keyless:<provider>` elsewhere.
     #[must_use]
     pub fn billing_source(&self, provider: &str, local: bool) -> String {
         match &self.source {
-            CredentialSource::OAuth { .. } => format!("subscription:{provider}"),
+            CredentialSource::Subscription { label, .. } => {
+                format!("subscription:{provider}/{label}")
+            }
             CredentialSource::Pool {
                 label: Some(label), ..
             } => format!("api_key:{provider}/{label}"),
@@ -189,7 +247,10 @@ impl Credential {
 }
 
 /// Resolves the credential of `provider` for a request to `base_url`;
-/// `explicit` names a secret replacing the provider's own names.
+/// `explicit` names a secret replacing the provider's own names. Between
+/// a subscription sign-in and an API key, `providers.<id>.prefer_credential`
+/// decides (subscription by default) unless the sign-in's plan was found
+/// ineligible; either is used alone when it is the only one.
 pub(super) fn resolve(
     resolver: &Resolver<'_>,
     provider: &Provider,
@@ -200,6 +261,9 @@ pub(super) fn resolve(
     if let Some(key) = resolver.ad_hoc.as_ref().and_then(|a| a.key_for(base_url)) {
         return Ok(Credential::new(CredentialSource::Flag, Some(key.clone())));
     }
+    let host = host_of(base_url).unwrap_or_default();
+    let mut unbound = Vec::new();
+    let mut subscription = None;
     if explicit.is_none() {
         if let Some(pooled) = resolver.extras.pooled(id) {
             let source = CredentialSource::Pool {
@@ -209,27 +273,20 @@ pub(super) fn resolve(
             };
             return Ok(Credential::new(source, Some(pooled.value)));
         }
-        if let Some(token) = resolver.extras.oauth(id) {
-            let source = CredentialSource::OAuth {
-                provider: id.to_owned(),
-            };
-            return Ok(Credential::new(source, Some(token)));
-        }
+        subscription = bound_subscription(resolver, provider, &host, &mut unbound)?;
     }
-    let host = host_of(base_url).unwrap_or_default();
+    let prefer_subscription =
+        provider.settings().prefer_credential == PreferCredential::Subscription;
+    if let Some(signed_in) = subscription.take_if(|s| prefer_subscription && !s.ineligible) {
+        return Ok(Credential::subscription(id, signed_in));
+    }
     let names: Vec<String> =
         explicit.map_or_else(|| provider.secret_names(), |n| vec![n.to_owned()]);
-    let mut unbound = Vec::new();
-    for name in &names {
-        let Some(value) = resolver.secrets.secret(name)? else {
-            continue;
-        };
-        let hosts = bound_hosts(resolver, provider, name);
-        if hosts.iter().any(|pattern| host_matches(pattern, &host)) {
-            let source = CredentialSource::Secret { name: name.clone() };
-            return Ok(Credential::new(source, Some(value)));
-        }
-        unbound.push(format!("{name} is bound to {}", hosts.join(", ")));
+    if let Some(key) = bound_secret(resolver, provider, &host, &names, &mut unbound)? {
+        return Ok(key);
+    }
+    if let Some(signed_in) = subscription {
+        return Ok(Credential::subscription(id, signed_in));
     }
     let loopback_keyless = provider.descriptor().local || provider.descriptor().keyless_on_loopback;
     let keyless = provider.auth() == ProviderAuth::None
@@ -238,6 +295,51 @@ pub(super) fn resolve(
         return Ok(Credential::none());
     }
     Err(missing(id, &host, &names, &unbound))
+}
+
+/// The first of `names` that is stored and bound to `host`.
+fn bound_secret(
+    resolver: &Resolver<'_>,
+    provider: &Provider,
+    host: &str,
+    names: &[String],
+    unbound: &mut Vec<String>,
+) -> Result<Option<Credential>, Error> {
+    for name in names {
+        let Some(value) = resolver.secrets.secret(name)? else {
+            continue;
+        };
+        let hosts = bound_hosts(resolver, provider, name);
+        if hosts.iter().any(|pattern| host_matches(pattern, host)) {
+            let source = CredentialSource::Secret { name: name.clone() };
+            return Ok(Some(Credential::new(source, Some(value))));
+        }
+        unbound.push(format!("{name} is bound to {}", hosts.join(", ")));
+    }
+    Ok(None)
+}
+
+/// The provider's subscription sign-in when `host` is one of the
+/// provider's own key hosts (a sign-in token is bound like a key).
+fn bound_subscription(
+    resolver: &Resolver<'_>,
+    provider: &Provider,
+    host: &str,
+    unbound: &mut Vec<String>,
+) -> Result<Option<SignedIn>, Error> {
+    let Some(signed_in) = resolver.extras.subscription(provider.id())? else {
+        return Ok(None);
+    };
+    let hosts = provider.key_hosts();
+    if hosts.iter().any(|pattern| host_matches(pattern, host)) {
+        return Ok(Some(signed_in));
+    }
+    unbound.push(format!(
+        "sign-in '{}' is bound to {}",
+        signed_in.label,
+        hosts.join(", ")
+    ));
+    Ok(None)
 }
 
 /// The hosts secret `name` may be sent to on behalf of `provider`.

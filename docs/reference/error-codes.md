@@ -169,3 +169,15 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `fallback.not_found` | `not_found` | 66 | `prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain. |
 | `reasoning.invalid` | `config` | 78 | An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`. |
 | `local.server_probe` | `unavailable` | 69 | A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`. |
+| `auth.key_on_argv` | `usage` | 2 | `prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings. |
+| `auth.unsupported` | `usage` | 2 | `prometheus auth add` asked for a credential type the provider does not take (an API key for a sign-in-only provider, a sign-in for a provider without sign-in flows, or a flow it does not offer). |
+| `auth.invalid_label` | `usage` | 2 | A credential label must be 1-32 characters a-z, 0-9 or '-', starting with a letter or digit. |
+| `auth.not_found` | `not_found` | 66 | `prometheus auth remove` named a label or 1-based index that `prometheus auth list` does not show for the provider. |
+| `auth.signin_unavailable` | `unavailable` | 69 | The provider declares a sign-in, but this build ships no endpoints for it and `[providers.<id>.oauth]` does not configure them. |
+| `auth.insecure_endpoint` | `config` | 78 | A sign-in authorize, device or token endpoint is not an `https://` URL; plain `http://` is accepted only for an identity provider on a loopback address. |
+| `auth.host_not_allowed` | `config` | 78 | A sign-in endpoint's host is not in the provider's allowed sign-in hosts (`[providers.<id>.oauth] allowed_hosts`); nothing was sent to it. |
+| `auth.login_expired` | `auth` | 78 | The device-code sign-in expired before it was approved in the browser; run `prometheus auth add <provider>` again. |
+| `auth.login_failed` | `unavailable` | 69 | The identity provider refused or did not answer the sign-in (denied consent, an error response, repeated network failures or no callback before the timeout); nothing was stored. |
+| `auth.port_busy` | `conflict` | 75 | A browser sign-in needs a fixed loopback redirect port that another process is using, and the provider offers no device-code flow to fall back to. |
+| `auth.plan_not_eligible` | `auth` | 78 | The provider refused a request made with a valid subscription sign-in because the plan is not eligible for this use (for example Claude Pro, or Claude Max without extra-usage credits); the sign-in stays valid. Use an API key: `prometheus auth add <provider> --type api_key`. |
+| `auth.import_incomplete` | `tool` | 1 | The external sign-in file (`prometheus auth import`) is missing, unreadable or does not hold both an access token and a refresh token; nothing was imported. |
