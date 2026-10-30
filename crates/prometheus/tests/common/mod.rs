@@ -52,12 +52,12 @@ pub fn run_cmd_with_stdin(cmd: &mut Command, input: &str) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    let written = child.stdin.take().unwrap().write_all(input.as_bytes());
+    // A command that refuses its arguments exits before reading stdin; the
+    // pipe is then closed, which is not a test failure.
+    if let Err(err) = written {
+        assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe, "{err}");
+    }
     child.wait_with_output().unwrap()
 }
 
