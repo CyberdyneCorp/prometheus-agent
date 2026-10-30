@@ -1,0 +1,26 @@
+# Code-health policy read by `cargo xtask health` (run by scripts/check).
+#
+# The limits are fixed in xtask/src/health/mod.rs, per the spec
+# (workspace-architecture, Complexity and unsafe-code ratchet): per function
+# cognitive complexity <= 15 (<= 30 in parser_modules), <= 120 lines and
+# nesting <= 5; per file <= 1,500 lines. This file only lists what differs.
+#
+# Module entries are paths relative to the repository root: a file, or a
+# directory covering everything below it.
+
+# Parser and protocol-codec modules, held to cognitive complexity <= 30.
+parser_modules = []
+
+# The only modules where `unsafe` may appear (OS sandbox and FFI). Every
+# `unsafe` block and `unsafe impl` also needs a `// SAFETY:` comment.
+unsafe_modules = []
+
+# Existing items over budget. Exceptions may only shrink: an item that grows
+# past its `max`, a new entry, or a raised `max` fails the gate, and a `max`
+# looser than the code must be lowered. Format:
+#
+# [[exception]]
+# item = "crates/pmt-foo/src/lib.rs::Parser::next_token"  # or a file path for file_lines
+# metric = "complexity"  # complexity | lines | nesting | file_lines
+# max = 18
+# reason = "why it cannot be split yet"

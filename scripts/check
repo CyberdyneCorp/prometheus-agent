@@ -6,8 +6,8 @@
 # usage: scripts/check                       run every gate, stop at the first failure
 #        scripts/check --install-hook pre-push  run the gates before every `git push`
 #
-# The complexity/unsafe ratchet (tasks 2.3) and the startup, memory and size
-# budgets (tasks 2.4) join the gate list when those harnesses land.
+# The startup, memory and size budgets (tasks 2.4) join the gate list when
+# that harness lands.
 set -euo pipefail
 
 # Pinned tool versions. CI installs exactly these; a local mismatch fails up
@@ -56,6 +56,21 @@ step() {
     "$@" || die "failed: $*"
 }
 
+# The complexity and unsafe-code ratchet. health.toml exceptions may only
+# shrink, so the merge base's copy is passed in for comparison; a missing
+# file there means no exceptions existed yet.
+health_gate() {
+    local base_ref base_file=target/health-base.toml
+    if ! base_ref=$(git merge-base HEAD origin/main 2>/dev/null); then
+        echo "check: origin/main not found; health.toml is not compared with a base" >&2
+        step cargo xtask health
+        return
+    fi
+    mkdir -p target
+    git show "$base_ref:health.toml" >"$base_file" 2>/dev/null || : >"$base_file"
+    step cargo xtask health --base "$base_file"
+}
+
 run_gates() {
     check_tools
     step cargo fmt --all --check
@@ -66,6 +81,7 @@ run_gates() {
     step cargo deny check
     step openspec validate --all --strict --no-interactive
     step cargo xtask gen --check
+    health_gate
     echo "check: all gates passed"
 }
 

@@ -1,0 +1,5 @@
+[[exception]]
+item = "crates/demo/src/lib.rs::tangled"
+metric = "complexity"
+max = 17
+reason = "fixture: legacy function awaiting a split"

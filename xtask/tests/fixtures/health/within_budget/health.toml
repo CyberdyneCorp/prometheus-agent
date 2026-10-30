@@ -1,0 +1,8 @@
+parser_modules = ["crates/demo/src/parse"]
+unsafe_modules = ["crates/demo/src/ffi.rs"]
+
+[[exception]]
+item = "crates/demo/src/lib.rs::tangled"
+metric = "complexity"
+max = 17
+reason = "fixture: legacy function awaiting a split"

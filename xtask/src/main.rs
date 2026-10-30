@@ -11,8 +11,12 @@
 //! `cargo xtask gen --check` writes nothing and exits 1 naming every stale
 //! file. The RPC schema `schema/rpc.json` and its TypeScript bindings join
 //! this list when the RPC catalog lands in M2 (tasks group 22).
+//!
+//! `cargo xtask health` enforces the complexity and unsafe-code ratchet
+//! described in `health.toml`.
 
 mod artifacts;
+mod health;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -36,16 +40,25 @@ enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Check functions and files against the complexity, size and unsafe
+    /// budgets and the exceptions in `health.toml`.
+    Health {
+        /// Repository root to check (default: this workspace).
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// The `health.toml` of the merge base; exceptions added or raised
+        /// since then fail.
+        #[arg(long)]
+        base: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
-    let Command::Gen { check } = Args::parse().command;
-    let root = repo_root();
-    let artifacts = artifacts::all();
-    let result = if check {
-        check_all(&root, &artifacts)
-    } else {
-        write_all(&root, &artifacts)
+    let result = match Args::parse().command {
+        Command::Gen { check } => generate(check),
+        Command::Health { root, base } => {
+            health::run(&root.unwrap_or_else(repo_root), base.as_deref())
+        }
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -53,6 +66,16 @@ fn main() -> ExitCode {
             eprintln!("error: {message}");
             ExitCode::FAILURE
         }
+    }
+}
+
+fn generate(check: bool) -> Result<(), String> {
+    let root = repo_root();
+    let artifacts = artifacts::all();
+    if check {
+        check_all(&root, &artifacts)
+    } else {
+        write_all(&root, &artifacts)
     }
 }
 
