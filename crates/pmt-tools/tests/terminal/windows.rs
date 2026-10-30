@@ -159,7 +159,7 @@ async fn commands_run_in_the_fallback_shell() {
         .await;
     assert_eq!(here.output.trim(), session.cwd().to_string_lossy());
     let failed = session.run(TerminalArgs::new("cmd /c exit 3")).await;
-    assert_eq!(failed.exit_code, Some(3));
+    assert_eq!(failed.exit_code, Some(3), "{failed:?}");
 }
 
 /// Git Bash (installed on the CI runners) tracks the cwd too: MSYS paths
