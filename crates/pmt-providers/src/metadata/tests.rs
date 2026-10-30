@@ -127,3 +127,31 @@ async fn live_listing_is_cached_for_its_ttl_and_feeds_metadata() {
     assert!(again.refresh(&client(), vllm, None, later).await.unwrap());
     assert_eq!(hits.load(Ordering::SeqCst), 2);
 }
+
+#[tokio::test]
+async fn models_dev_refresh_is_cached_for_later_catalogs() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "acme": {"id": "acme", "models": {"rocket-1": {"id": "rocket-1", "limit": {"context": 333_333, "output": 1000}}}}
+        })))
+        .mount(&server)
+        .await;
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config::default();
+    let catalog = Catalog::new(&config, Some(dir.path().join("models")));
+    // Before the refresh the bundled snapshot does not know the model.
+    assert_eq!(
+        catalog.metadata("acme", "rocket-1").0.context_source,
+        ContextSource::Default
+    );
+    catalog
+        .refresh_models_dev(&client(), &format!("{}/api.json", server.uri()))
+        .await
+        .unwrap();
+    let again = Catalog::new(&config, Some(dir.path().join("models")));
+    let (meta, _) = again.metadata("acme", "rocket-1");
+    assert_eq!(meta.context_window, 333_333);
+    assert_eq!(meta.context_source, ContextSource::ModelsDev);
+}

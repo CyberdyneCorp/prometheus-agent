@@ -30,6 +30,9 @@ pub(super) fn encode(request: &Request, options: &EncodeOptions<'_>) -> Value {
     if let Some(max) = request.max_output_tokens {
         body.insert("max_output_tokens".into(), json!(max));
     }
+    if let Some(level) = request.reasoning {
+        body.insert("reasoning".into(), json!({"effort": level.as_str()}));
+    }
     body.insert("stream".into(), json!(true));
     body.insert("store".into(), json!(false));
     if let Some(key) = options.cache_key {

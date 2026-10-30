@@ -15,6 +15,7 @@ use toml_edit::DocumentMut;
 
 use crate::layers::{Layered, Overrides, typed_value};
 use crate::migrate::{self, Migrated};
+use crate::schema::FallbackEntry;
 use crate::{backups, catalog, edit, parse};
 
 /// A profile's `config.toml` with its backup directory.
@@ -89,6 +90,38 @@ impl ConfigFile {
         self.modify(|doc| {
             edit::set(doc, key, value)
                 .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))
+        })
+    }
+
+    /// Sets every `(key, raw)` pair in one validated write (all or none).
+    ///
+    /// # Errors
+    ///
+    /// As [`set`](Self::set), for the first failing pair.
+    pub fn set_all(&self, pairs: &[(&str, &str)]) -> Result<(), Error> {
+        let typed = pairs
+            .iter()
+            .map(|(key, raw)| typed_value(key, raw).map(|value| (*key, value)))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.modify(|doc| {
+            for (key, value) in typed {
+                edit::set(doc, key, value)
+                    .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Replaces `[[fallback.chain]]` with `chain` (an empty chain removes
+    /// the array), keeping the rest of the file as it is.
+    ///
+    /// # Errors
+    ///
+    /// The file's own errors and validation of the result.
+    pub fn set_fallback_chain(&self, chain: &[FallbackEntry]) -> Result<(), Error> {
+        self.modify(|doc| {
+            edit::set_fallback_chain(doc, chain);
+            Ok(())
         })
     }
 

@@ -489,6 +489,27 @@ error_codes! {
     /// The model's context window is below `model.min_context_window`.
     MODEL_CONTEXT_TOO_SMALL = ("model.context_too_small", Config,
         "The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models.\"<provider>/<model>\"] context_window`.");
+    /// The provider's wire format is implemented by a plugin that is not installed.
+    PROVIDER_PLUGIN_UNAVAILABLE = ("provider.plugin_unavailable", Config,
+        "The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");
+    /// A `/model`, `model set` or `fallback` argument is not a model reference.
+    MODEL_INVALID_REF = ("model.invalid_ref", Usage,
+        "A model argument is neither a `[model.aliases]` name nor `<provider>/<model>` (or a model id of the current provider).");
+    /// The interactive model picker needs a terminal.
+    MODEL_REQUIRES_TERMINAL = ("model.requires_terminal", Usage,
+        "`prometheus model` (the picker) or `prometheus fallback add` without an argument ran without a terminal on stdin and stdout; use `prometheus model set <provider>/<model>` instead.");
+    /// The fallback chain already holds the entry.
+    FALLBACK_DUPLICATE = ("fallback.duplicate", Conflict,
+        "`prometheus fallback add` named a route (canonical provider, model, base URL) the chain already holds; the chain is unchanged.");
+    /// No fallback entry matches.
+    FALLBACK_NOT_FOUND = ("fallback.not_found", NotFound,
+        "`prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain.");
+    /// A reasoning setting names an unknown level or tier.
+    REASONING_INVALID = ("reasoning.invalid", Config,
+        "An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`.");
+    /// A local inference server answered unexpectedly.
+    LOCAL_SERVER_PROBE = ("local.server_probe", Unavailable,
+        "A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

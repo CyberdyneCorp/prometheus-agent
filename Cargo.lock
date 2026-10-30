@@ -1671,6 +1671,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "ulid",
  "wiremock",
 ]
 
@@ -1801,6 +1802,7 @@ dependencies = [
  "pmt-sandbox",
  "pmt-store",
  "pmt-tools",
+ "reqwest",
  "rpassword",
  "rusqlite",
  "serde",
@@ -1811,6 +1813,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]

@@ -197,7 +197,7 @@ pub(super) fn resolve(
     explicit: Option<&str>,
 ) -> Result<Credential, Error> {
     let id = provider.id();
-    if let Some(key) = &resolver.flag_key {
+    if let Some(key) = resolver.ad_hoc.as_ref().and_then(|a| a.key_for(base_url)) {
         return Ok(Credential::new(CredentialSource::Flag, Some(key.clone())));
     }
     if explicit.is_none() {
@@ -231,8 +231,9 @@ pub(super) fn resolve(
         }
         unbound.push(format!("{name} is bound to {}", hosts.join(", ")));
     }
+    let loopback_keyless = provider.descriptor().local || provider.descriptor().keyless_on_loopback;
     let keyless = provider.auth() == ProviderAuth::None
-        || (provider.descriptor().local && explicit.is_none() && is_local_host(&host));
+        || (loopback_keyless && explicit.is_none() && is_local_host(&host));
     if keyless {
         return Ok(Credential::none());
     }
@@ -267,7 +268,7 @@ fn missing(provider: &str, host: &str, names: &[String], unbound: &[String]) -> 
     }
     let hint = names.first().map_or_else(
         || format!("prometheus config set providers.{provider}.key_secret <NAME>"),
-        |name| format!("prometheus secrets set {name}"),
+        |name| format!("prometheus auth add {provider} (or: prometheus secrets set {name})"),
     );
     Error::new(&codes::PROVIDER_MISSING_CREDENTIAL, message).with_hint(hint)
 }

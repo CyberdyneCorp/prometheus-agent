@@ -7,7 +7,7 @@ use std::net::IpAddr;
 
 use pmt_core::error::{Error, codes};
 
-use crate::schema::{Config, ModelEntry};
+use crate::schema::{Config, ModelAlias, ModelEntry};
 
 /// Why a base URL is refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +118,14 @@ pub fn check(config: &Config) -> Result<(), Error> {
             && let (Some(url), Some(provider)) = (&route.base_url, &route.provider)
         {
             urls.push((format!("models.{name}.base_url"), provider.clone(), url));
+        }
+    }
+    for (name, alias) in &config.model.aliases {
+        if let ModelAlias::Route(route) = alias
+            && let Some(url) = &route.base_url
+        {
+            let key = format!("model.aliases.{name}.base_url");
+            urls.push((key, route.provider.clone(), url));
         }
     }
     for (key, provider, url) in urls {

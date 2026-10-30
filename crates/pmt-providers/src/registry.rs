@@ -80,10 +80,19 @@ impl Provider {
             .or(self.descriptor.base_url.as_deref())
     }
 
-    /// Credential kind.
+    /// Credential kind: the configured one, else `api_key` for a keyless
+    /// provider given a `key_secret`, else the descriptor's.
     #[must_use]
     pub fn auth(&self) -> ProviderAuth {
-        self.settings.auth.unwrap_or(self.descriptor.auth)
+        match self.settings.auth {
+            Some(auth) => auth,
+            None if self.descriptor.auth == ProviderAuth::None
+                && self.settings.key_secret.is_some() =>
+            {
+                ProviderAuth::ApiKey
+            }
+            None => self.descriptor.auth,
+        }
     }
 
     /// Whether the provider honours a prompt cache key.

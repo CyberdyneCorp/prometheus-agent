@@ -21,7 +21,8 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   trajectory  Render the recorded trajectory of a session
-  model       Inspect model and provider resolution
+  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2587,12 +2588,15 @@ Usage: prometheus trajectory help help
 ## `prometheus model`
 
 ```text
-Inspect model and provider resolution
+Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
 
-Usage: prometheus model [OPTIONS] <COMMAND>
+Usage: prometheus model [OPTIONS] [COMMAND]
 
 Commands:
   explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  set      Validate a route (credential, tool support, context window) and make it the profile's model
+  list     List models with their context window and capabilities
+  info     Show the profile's current route, context window and reasoning effort
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2635,6 +2639,117 @@ Options:
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model set`
+
+```text
+Validate a route (credential, tool support, context window) and make it the profile's model
+
+Usage: prometheus model set [OPTIONS] <PROVIDER/MODEL>
+
+Arguments:
+  <PROVIDER/MODEL>
+          `<provider>/<model>` or a `[model.aliases]` name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --wire-format <FORMAT>
+          Also set `providers.<id>.wire_format`
+
+          Possible values:
+          - chat-completions:   OpenAI Chat Completions
+          - responses:          OpenAI Responses
+          - anthropic-messages: Anthropic Messages
+
+      --base-url <URL>
+          Also set `providers.<id>.base_url` (a local server root is normalised to the prefix that serves its model listing)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus model list`
+
+```text
+List models with their context window and capabilities
+
+Usage: prometheus model list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <ID>
+          Only this provider's models
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --providers
+          List providers (ids, aliases, wire format, endpoint, secret names) instead of models
+
+      --refresh
+          Fetch live listings and the models.dev catalog first
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model info`
+
+```text
+Show the profile's current route, context window and reasoning effort
+
+Usage: prometheus model info [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
 
@@ -2657,6 +2772,9 @@ Usage: prometheus model help [COMMAND]
 
 Commands:
   explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  set      Validate a route (credential, tool support, context window) and make it the profile's model
+  list     List models with their context window and capabilities
+  info     Show the profile's current route, context window and reasoning effort
   help     Print this message or the help of the given subcommand(s)
 ```
 
@@ -2668,12 +2786,241 @@ Show each step resolving the provider, endpoint, wire format, credential and mod
 Usage: prometheus model help explain
 ```
 
+## `prometheus model help set`
+
+```text
+Validate a route (credential, tool support, context window) and make it the profile's model
+
+Usage: prometheus model help set
+```
+
+## `prometheus model help list`
+
+```text
+List models with their context window and capabilities
+
+Usage: prometheus model help list
+```
+
+## `prometheus model help info`
+
+```text
+Show the profile's current route, context window and reasoning effort
+
+Usage: prometheus model help info
+```
+
 ## `prometheus model help help`
 
 ```text
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus model help help
+```
+
+## `prometheus fallback`
+
+```text
+List and edit the profile's fallback chain (`[[fallback.chain]]`)
+
+Usage: prometheus fallback [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the chain in order
+  add     Validate a route and append it (no argument: the model picker)
+  remove  Remove an entry by its 1-based position or `<provider>/<model>`
+  clear   Remove every entry
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback list`
+
+```text
+List the chain in order
+
+Usage: prometheus fallback list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback add`
+
+```text
+Validate a route and append it (no argument: the model picker)
+
+Usage: prometheus fallback add [OPTIONS] [PROVIDER/MODEL]
+
+Arguments:
+  [PROVIDER/MODEL]
+          `<provider>/<model>` or a `[model.aliases]` name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback remove`
+
+```text
+Remove an entry by its 1-based position or `<provider>/<model>`
+
+Usage: prometheus fallback remove [OPTIONS] <INDEX|PROVIDER/MODEL>
+
+Arguments:
+  <INDEX|PROVIDER/MODEL>
+          Position or `<provider>/<model>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback clear`
+
+```text
+Remove every entry
+
+Usage: prometheus fallback clear [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus fallback help [COMMAND]
+
+Commands:
+  list    List the chain in order
+  add     Validate a route and append it (no argument: the model picker)
+  remove  Remove an entry by its 1-based position or `<provider>/<model>`
+  clear   Remove every entry
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus fallback help list`
+
+```text
+List the chain in order
+
+Usage: prometheus fallback help list
+```
+
+## `prometheus fallback help add`
+
+```text
+Validate a route and append it (no argument: the model picker)
+
+Usage: prometheus fallback help add
+```
+
+## `prometheus fallback help remove`
+
+```text
+Remove an entry by its 1-based position or `<provider>/<model>`
+
+Usage: prometheus fallback help remove
+```
+
+## `prometheus fallback help clear`
+
+```text
+Remove every entry
+
+Usage: prometheus fallback help clear
+```
+
+## `prometheus fallback help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus fallback help help
 ```
 
 ## `prometheus help`
@@ -2695,7 +3042,8 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   trajectory  Render the recorded trajectory of a session
-  model       Inspect model and provider resolution
+  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
   help        Print this message or the help of the given subcommand(s)
 ```
 
@@ -3220,12 +3568,15 @@ Usage: prometheus help trajectory show
 ## `prometheus help model`
 
 ```text
-Inspect model and provider resolution
+Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
 
 Usage: prometheus help model [COMMAND]
 
 Commands:
   explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  set      Validate a route (credential, tool support, context window) and make it the profile's model
+  list     List models with their context window and capabilities
+  info     Show the profile's current route, context window and reasoning effort
 ```
 
 ## `prometheus help model explain`
@@ -3234,6 +3585,76 @@ Commands:
 Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
 
 Usage: prometheus help model explain
+```
+
+## `prometheus help model set`
+
+```text
+Validate a route (credential, tool support, context window) and make it the profile's model
+
+Usage: prometheus help model set
+```
+
+## `prometheus help model list`
+
+```text
+List models with their context window and capabilities
+
+Usage: prometheus help model list
+```
+
+## `prometheus help model info`
+
+```text
+Show the profile's current route, context window and reasoning effort
+
+Usage: prometheus help model info
+```
+
+## `prometheus help fallback`
+
+```text
+List and edit the profile's fallback chain (`[[fallback.chain]]`)
+
+Usage: prometheus help fallback [COMMAND]
+
+Commands:
+  list    List the chain in order
+  add     Validate a route and append it (no argument: the model picker)
+  remove  Remove an entry by its 1-based position or `<provider>/<model>`
+  clear   Remove every entry
+```
+
+## `prometheus help fallback list`
+
+```text
+List the chain in order
+
+Usage: prometheus help fallback list
+```
+
+## `prometheus help fallback add`
+
+```text
+Validate a route and append it (no argument: the model picker)
+
+Usage: prometheus help fallback add
+```
+
+## `prometheus help fallback remove`
+
+```text
+Remove an entry by its 1-based position or `<provider>/<model>`
+
+Usage: prometheus help fallback remove
+```
+
+## `prometheus help fallback clear`
+
+```text
+Remove every entry
+
+Usage: prometheus help fallback clear
 ```
 
 ## `prometheus help help`
@@ -3271,3 +3692,8 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.log_components.v1` | `prometheus logs list` |
 | `prometheus.trajectory.v1` | `prometheus trajectory show` |
 | `prometheus.model_explain.v1` | `prometheus model explain` |
+| `prometheus.models.v1` | `prometheus model list` |
+| `prometheus.providers.v1` | `prometheus model list --providers` |
+| `prometheus.model_info.v1` | `prometheus model info` |
+| `prometheus.model_set.v1` | `prometheus model set` |
+| `prometheus.fallback.v1` | `prometheus fallback list` |

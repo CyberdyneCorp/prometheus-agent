@@ -62,6 +62,13 @@ impl Pending {
         Self { recorder, call }
     }
 
+    /// Uses `call_id` for the row (events emitted before the call ends
+    /// name it).
+    pub(crate) fn with_call_id(mut self, call_id: &str) -> Self {
+        self.call.call_id = Some(call_id.to_owned());
+        self
+    }
+
     /// Prices and appends the row for `usage`.
     pub(crate) fn record(self, usage: &Usage) -> Result<UsageEvent, Error> {
         let mut call = self.call;

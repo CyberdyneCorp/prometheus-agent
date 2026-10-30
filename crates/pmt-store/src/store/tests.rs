@@ -14,19 +14,16 @@ fn scope(root: &std::path::Path) -> ProfileScope {
     ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
 }
 
-/// The real v1 to v3 plus two trivial steps.
+/// The real v1 to v4 plus one trivial step.
 fn five_versions() -> Vec<Migration> {
-    const EXTRA: [&str; 2] = [
-        "CREATE TABLE t4 (x INTEGER) STRICT;",
-        "CREATE TABLE t5 (x INTEGER) STRICT;",
-    ];
+    const EXTRA: [&str; 1] = ["CREATE TABLE t5 (x INTEGER) STRICT;"];
     let mut all = MIGRATIONS.to_vec();
     assert_eq!(
         all.len(),
-        3,
+        4,
         "update the synthetic steps with new migrations"
     );
-    for (version, sql) in (4..).zip(EXTRA) {
+    for (version, sql) in (5..).zip(EXTRA) {
         all.push(Migration {
             version,
             min_read_version: 1,
@@ -79,7 +76,7 @@ fn older_store_is_upgraded_with_a_backup() {
         .query_row("SELECT count(*) FROM sessions", [], |r| r.get(0))
         .unwrap();
     assert_eq!(kept, 1, "the backup holds the pre-migration data");
-    for table in ["t4", "t5"] {
+    for table in ["model_context", "t5"] {
         let exists: bool = Connection::open(&db)
             .unwrap()
             .query_row(

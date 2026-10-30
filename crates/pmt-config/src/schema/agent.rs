@@ -70,8 +70,10 @@ impl Default for AgentConfig {
     }
 }
 
-/// Reasoning effort levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// Reasoning effort levels, in increasing order.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ReasoningLevel {
     /// No reasoning.
@@ -90,6 +92,43 @@ pub enum ReasoningLevel {
     Max,
     /// Beyond maximum where a route supports it.
     Ultra,
+}
+
+impl ReasoningLevel {
+    /// Every level, lowest first.
+    pub const ALL: [Self; 8] = [
+        Self::None,
+        Self::Minimal,
+        Self::Low,
+        Self::Medium,
+        Self::High,
+        Self::Xhigh,
+        Self::Max,
+        Self::Ultra,
+    ];
+
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Minimal => "minimal",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+            Self::Ultra => "ultra",
+        }
+    }
+
+    /// The level spelled `text` (case-insensitive).
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|level| level.as_str().eq_ignore_ascii_case(text.trim()))
+    }
 }
 
 /// `agent.intent_continuation`: a mode, a switch or model-name substrings.

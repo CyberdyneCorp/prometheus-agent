@@ -253,3 +253,71 @@ fn unknown_wire_format_value_lists_the_accepted_values() {
         assert!(err.message().contains(value), "{}", err.message());
     }
 }
+
+#[tokio::test]
+async fn requests_carry_the_clamped_reasoning_effort_per_wire_format() {
+    use pmt_config::schema::ReasoningLevel;
+    use pmt_providers::metadata::ModelMetadata;
+    use pmt_providers::transport::body;
+
+    let env = Env::new(&config("http://127.0.0.1:9"), KEYS);
+    let agent: pmt_config::Config =
+        toml::from_str("[agent.reasoning_overrides]\n\"gpt-5.5\" = \"high\"\n").unwrap();
+    let meta = ModelMetadata {
+        supports_reasoning: true,
+        max_reasoning_effort: Some(ReasoningLevel::Xhigh),
+        ..ModelMetadata::default()
+    };
+    // Override matched despite spelling: the request carries `high`.
+    let effort =
+        pmt_providers::reasoning::effort(&agent.agent, None, "openai/gpt_5_5", &meta).unwrap();
+    let mut req = request("hi");
+    req.reasoning = effort.sent;
+    let chat = body(&env.route("chat", "openai/gpt_5_5").await, &req);
+    assert_eq!(chat["reasoning_effort"], "high");
+    let resp = body(&env.route("resp", "gpt_5_5").await, &req);
+    assert_eq!(resp["reasoning"]["effort"], "high");
+    let ant = body(&env.route("ant", "m").await, &req);
+    assert_eq!(ant["thinking"]["type"], "enabled");
+    assert!(
+        ant["thinking"]["budget_tokens"].as_u64().unwrap() < ant["max_tokens"].as_u64().unwrap()
+    );
+    // `/reasoning ultra` on a route that stops at `high` sends `high`.
+    let capped = ModelMetadata {
+        max_reasoning_effort: Some(ReasoningLevel::High),
+        ..meta.clone()
+    };
+    let clamped =
+        pmt_providers::reasoning::effort(&agent.agent, Some(ReasoningLevel::Ultra), "m", &capped)
+            .unwrap();
+    req.reasoning = clamped.sent;
+    assert_eq!(
+        body(&env.route("chat", "m").await, &req)["reasoning_effort"],
+        "high"
+    );
+    // A model without reasoning gets no control at all.
+    req.reasoning = pmt_providers::reasoning::effort(
+        &agent.agent,
+        Some(ReasoningLevel::High),
+        "m",
+        &ModelMetadata::default(),
+    )
+    .unwrap()
+    .sent;
+    let plain = body(&env.route("chat", "m").await, &req);
+    assert!(plain.get("reasoning_effort").is_none());
+    assert!(
+        body(&env.route("ant", "m").await, &req)
+            .get("thinking")
+            .is_none()
+    );
+    // The effort is part of the request identity, not of the system prompt.
+    let mut high = request("hi");
+    high.reasoning = Some(ReasoningLevel::High);
+    let low = pmt_providers::request::Request {
+        reasoning: Some(ReasoningLevel::Low),
+        ..high.clone()
+    };
+    assert_eq!(high.system, low.system);
+    assert_ne!(high.hash("chat", "m"), low.hash("chat", "m"));
+}

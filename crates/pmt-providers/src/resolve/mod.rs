@@ -30,8 +30,9 @@ use crate::registry::{Provider, ProviderRegistry};
 use crate::transport::Timeouts;
 use crate::wire::{self, WireSource};
 
-/// Where a requested value came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Where a requested value came from, strongest first (the order is the
+/// precedence).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestSource {
     /// `--provider` / `--model` or an API argument.
@@ -182,7 +183,7 @@ pub enum Outcome {
 /// One recorded step (never holds a secret value).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Step {
-    /// `requested`, `auto`, `provider`, `enabled`, `endpoint`,
+    /// `requested`, `alias`, `auto`, `provider`, `enabled`, `endpoint`,
     /// `wire_format`, `credential`, `model`, `capability`.
     pub step: &'static str,
     /// Outcome.
@@ -249,8 +250,65 @@ pub struct Resolver<'a> {
     pub extras: &'a dyn CredentialExtras,
     /// Local endpoint reachability.
     pub probe: &'a dyn EndpointProbe,
-    /// A key given on the command line for this launch only.
-    pub flag_key: Option<SecretString>,
+    /// A launch-only endpoint (`--base-url`, `--api-key-stdin`).
+    pub ad_hoc: Option<AdHoc>,
+}
+
+/// A launch-only endpoint (spec: model-providers, Launch-only ad-hoc
+/// endpoint): the base URL replaces the requested provider's endpoint for
+/// this launch, and the key (read from stdin, held in memory only) is sent
+/// to that URL's host and nowhere else, so fallback routes never get it.
+#[derive(Debug, Clone)]
+pub struct AdHoc {
+    base_url: String,
+    host: String,
+    key: Option<SecretString>,
+}
+
+impl AdHoc {
+    /// An ad-hoc endpoint at `base_url` with an optional key.
+    ///
+    /// # Errors
+    ///
+    /// `config.invalid_argument` (exit 2) for a URL that is not `http(s)`,
+    /// or plain HTTP to a host that is neither loopback nor private.
+    pub fn new(base_url: &str, key: Option<SecretString>) -> Result<Self, Error> {
+        use pmt_config::provider_urls::UrlProblem;
+        let problem = |p| {
+            let why = match p {
+                UrlProblem::Malformed => "is not an http:// or https:// URL".to_owned(),
+                UrlProblem::InsecurePublic { host } => {
+                    format!("sends plain HTTP to the public host {host}; use https://")
+                }
+            };
+            Error::new(
+                &codes::CONFIG_INVALID_ARGUMENT,
+                format!("--base-url '{base_url}' {why}"),
+            )
+        };
+        pmt_config::provider_urls::check_url(base_url, false).map_err(problem)?;
+        let host = pmt_config::provider_urls::host_of(base_url).unwrap_or_default();
+        Ok(Self {
+            base_url: base_url.to_owned(),
+            host,
+            key,
+        })
+    }
+
+    /// The endpoint.
+    #[must_use]
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// The key, when `base_url`'s host is the ad-hoc endpoint's host.
+    #[must_use]
+    pub fn key_for(&self, base_url: &str) -> Option<&SecretString> {
+        let host = pmt_config::provider_urls::host_of(base_url)?;
+        self.key
+            .as_ref()
+            .filter(|_| host.eq_ignore_ascii_case(&self.host))
+    }
 }
 
 impl std::fmt::Debug for Resolver<'_> {
@@ -282,7 +340,23 @@ impl Resolver<'_> {
                 source_name(requested.model_source),
             ),
         );
-        let provider = if requested.provider == "auto" {
+        if let Some(target) = self.alias_target(requested) {
+            trace.ok(
+                "alias",
+                format!(
+                    "'{}' -> {}/{}",
+                    requested.model.as_deref().unwrap_or_default(),
+                    target.provider,
+                    target.model.as_deref().unwrap_or_default()
+                ),
+            );
+            return self.resolve_target(&self.with_ad_hoc(target), trace).await;
+        }
+        let provider = if self.ad_hoc.is_some() && requested.provider_source != RequestSource::Flag
+        {
+            // `--base-url` without `--provider` names a custom endpoint.
+            "custom".to_owned()
+        } else if requested.provider == "auto" {
             let chosen = auto::detect(self).await;
             let chosen = trace.check("auto", chosen)?;
             trace.ok("auto", format!("selected '{}': {}", chosen.0, chosen.1));
@@ -295,7 +369,23 @@ impl Resolver<'_> {
             model: requested.model.clone(),
             ..Target::default()
         };
-        self.resolve_target(&target, trace).await
+        self.resolve_target(&self.with_ad_hoc(target), trace).await
+    }
+
+    /// The `[model.aliases]` route `requested.model` names, unless a
+    /// provider was requested at a stronger level than the model (then the
+    /// model id is taken literally).
+    fn alias_target(&self, requested: &Requested) -> Option<Target> {
+        let target = crate::target::alias(&self.config.model, requested.model.as_deref()?)?;
+        (requested.provider_source >= requested.model_source).then_some(target)
+    }
+
+    /// `target` with the launch-only endpoint, when one was given.
+    fn with_ad_hoc(&self, mut target: Target) -> Target {
+        if let Some(ad_hoc) = &self.ad_hoc {
+            target.base_url = Some(ad_hoc.base_url.clone());
+        }
+        target
     }
 
     /// Resolves one explicit target (fallback entries use this too).
@@ -316,6 +406,9 @@ impl Resolver<'_> {
             "enabled",
             format!("providers.{}.enabled = true", provider.id()),
         );
+        if let Some(err) = wire::virtual_unavailable(provider) {
+            return trace.check("endpoint", Err(err));
+        }
         let base_url = trace.check(
             "endpoint",
             self.endpoint(provider, target.base_url.as_deref()).await,
@@ -330,6 +423,10 @@ impl Resolver<'_> {
                 wire_source_name(wire_source)
             ),
         );
+        trace.check(
+            "wire_format",
+            wire::available(provider, wire_source).map_or(Ok(()), Err),
+        )?;
         let credential =
             credential::resolve(self, provider, &base_url, target.credential.as_deref());
         let credential = trace.check("credential", credential)?;

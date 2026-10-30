@@ -13,7 +13,10 @@ use pmt_config::schema::WireFormat;
 use serde::Serialize;
 use serde_json::Value;
 
+use pmt_core::error::{Error, codes};
+
 use crate::classify::ProviderError;
+use crate::descriptor::WireNeed;
 use crate::event::Normalizer;
 use crate::registry::Provider;
 use crate::request::Request;
@@ -54,6 +57,57 @@ pub fn select(provider: &Provider, base_url: &str) -> (WireFormat, WireSource) {
     } else {
         (WireFormat::ChatCompletions, WireSource::Default)
     }
+}
+
+/// Why `provider` cannot be routed with the format `select` chose: its
+/// declared format is a plugin's and neither config nor a host rule chose
+/// a native one (`provider.plugin_unavailable`).
+#[must_use]
+pub fn available(provider: &Provider, source: WireSource) -> Option<Error> {
+    let WireNeed::Plugin { wire, plugin, hint } = &provider.descriptor().wire_need else {
+        return None;
+    };
+    if matches!(source, WireSource::Config | WireSource::HostRule) {
+        return None;
+    }
+    Some(
+        Error::new(
+            &codes::PROVIDER_PLUGIN_UNAVAILABLE,
+            format!(
+                "provider '{}' speaks {wire}, which the provider plugin '{plugin}' implements; that plugin is not installed",
+                provider.id()
+            ),
+        )
+        .with_hint(hint.clone()),
+    )
+}
+
+/// Why a virtual provider (served in-process by another capability)
+/// cannot be routed in this build.
+#[must_use]
+pub fn virtual_unavailable(provider: &Provider) -> Option<Error> {
+    let WireNeed::Virtual { owner, .. } = &provider.descriptor().wire_need else {
+        return None;
+    };
+    Some(Error::new(
+        &codes::PROVIDER_PLUGIN_UNAVAILABLE,
+        format!(
+            "provider '{}' is the virtual provider of {owner}, which this build does not include yet",
+            provider.id()
+        ),
+    ))
+}
+
+/// Whether `provider` can be routed at its effective endpoint (auto
+/// detection passes over the ones that cannot).
+#[must_use]
+pub fn routable(provider: &Provider) -> bool {
+    if virtual_unavailable(provider).is_some() {
+        return false;
+    }
+    provider
+        .base_url()
+        .is_none_or(|url| available(provider, select(provider, url).1).is_none())
 }
 
 /// Per-request encoding settings that are not part of the request.

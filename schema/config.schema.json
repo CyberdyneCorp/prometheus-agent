@@ -107,6 +107,43 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "AliasRoute": {
+      "additionalProperties": false,
+      "description": "A `[model.aliases.<name>]` table.",
+      "properties": {
+        "base_url": {
+          "description": "Base URL replacing the provider's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the secret this alias uses instead of the provider's."
+        },
+        "model": {
+          "description": "Model id at that provider.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider id or alias.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    },
     "ApprovalMode": {
       "description": "Interactive approval modes. In TOML they are strings: `mode = \"off\"`;\nthe YAML habit `mode = off` does not parse and `mode = false` is not a\nmode.",
       "oneOf": [
@@ -1338,10 +1375,31 @@
         }
       ]
     },
+    "ModelAlias": {
+      "anyOf": [
+        {
+          "description": "`\"<provider>/<model>\"`.",
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/AliasRoute",
+          "description": "A route with its own endpoint or secret."
+        }
+      ],
+      "description": "One `[model.aliases.<name>]` entry."
+    },
     "ModelConfig": {
       "additionalProperties": false,
       "description": "The `[model]` section.",
       "properties": {
+        "aliases": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ModelAlias"
+          },
+          "default": {},
+          "description": "User model aliases: a name (matched case-insensitively) for a\n`\"<provider>/<model>\"` string or a route table. Usable wherever a\nmodel is named (`/model`, `prometheus model set`, fallback and\nauxiliary slots).",
+          "type": "object"
+        },
         "auto_order": {
           "default": [
             "anthropic",
@@ -1357,7 +1415,7 @@
           "type": "array"
         },
         "default": {
-          "description": "Default model id (or a `[models]` alias).",
+          "description": "Default model id (or a `[model.aliases]` name).",
           "type": [
             "string",
             "null"
@@ -1477,6 +1535,17 @@
             "integer",
             "null"
           ]
+        },
+        "max_reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Highest reasoning effort the model accepts; higher requested\nlevels are clamped down to it."
         },
         "model": {
           "description": "Model id at the provider.",
@@ -1916,7 +1985,7 @@
       "type": "object"
     },
     "ReasoningLevel": {
-      "description": "Reasoning effort levels.",
+      "description": "Reasoning effort levels, in increasing order.",
       "oneOf": [
         {
           "const": "none",
@@ -3026,6 +3095,7 @@
     "model": {
       "$ref": "#/$defs/ModelConfig",
       "default": {
+        "aliases": {},
         "auto_order": [
           "anthropic",
           "openai",

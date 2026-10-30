@@ -162,3 +162,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `model.not_selected` | `config` | 78 | No model id was given (`--model`, `model.default`) and the provider has no default model. |
 | `model.capability_missing` | `config` | 78 | The route's model lacks a capability the request needs (tool calling, image input, or a context window large enough for the request). |
 | `model.context_too_small` | `config` | 78 | The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models."<provider>/<model>"] context_window`. |
+| `provider.plugin_unavailable` | `config` | 78 | The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing. |
+| `model.invalid_ref` | `usage` | 2 | A model argument is neither a `[model.aliases]` name nor `<provider>/<model>` (or a model id of the current provider). |
+| `model.requires_terminal` | `usage` | 2 | `prometheus model` (the picker) or `prometheus fallback add` without an argument ran without a terminal on stdin and stdout; use `prometheus model set <provider>/<model>` instead. |
+| `fallback.duplicate` | `conflict` | 75 | `prometheus fallback add` named a route (canonical provider, model, base URL) the chain already holds; the chain is unchanged. |
+| `fallback.not_found` | `not_found` | 66 | `prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain. |
+| `reasoning.invalid` | `config` | 78 | An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`. |
+| `local.server_probe` | `unavailable` | 69 | A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`. |

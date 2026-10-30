@@ -78,7 +78,7 @@ impl Case {
             secrets: &secrets,
             extras,
             probe,
-            flag_key: None,
+            ad_hoc: None,
         };
         let requested = requested(&self.selection, &config.model);
         let mut trace = Trace::default();
@@ -320,4 +320,77 @@ fn precedence_is_flag_then_session_then_config_then_auto() {
         (r.provider.as_str(), r.provider_source),
         ("auto", RequestSource::Auto)
     );
+}
+
+#[tokio::test]
+async fn ad_hoc_key_is_sent_to_its_own_host_only() {
+    let config: Config =
+        toml::from_str("[[fallback.chain]]\nprovider = \"openrouter\"\nmodel = \"x\"\n").unwrap();
+    let registry = ProviderRegistry::for_profile(&config, Vec::new()).unwrap();
+    let secrets: BTreeMap<String, SecretString> = BTreeMap::new();
+    let probe = FakeProbe::default();
+    let key = SecretString::new("sk-adhoc-0123456789abcdef");
+    let resolver = Resolver {
+        registry: &registry,
+        config: &config,
+        secrets: &secrets,
+        extras: &NoExtras,
+        probe: &probe,
+        ad_hoc: Some(AdHoc::new("https://llm.example.com/v1", Some(key)).unwrap()),
+    };
+    // `--base-url` without `--provider` is the custom provider there.
+    let selection = Selection {
+        flag: Layer {
+            provider: None,
+            model: Some("m".to_owned()),
+        },
+        ..Selection::default()
+    };
+    let requested = requested(&selection, &config.model);
+    let route = resolver
+        .resolve(&requested, &mut Trace::default())
+        .await
+        .unwrap();
+    assert_eq!(route.provider, "custom");
+    assert_eq!(route.base_url, "https://llm.example.com/v1");
+    assert_eq!(route.credential.describe(), "flag");
+    // A fallback entry on another host never gets the key.
+    let fallback = Target {
+        provider: "openrouter".to_owned(),
+        model: Some("x".to_owned()),
+        ..Target::default()
+    };
+    let err = resolver
+        .resolve_target(&fallback, &mut Trace::default())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code().code, "provider.missing_credential");
+    // Plain HTTP to a public host is refused as an argument error.
+    let err = AdHoc::new("http://llm.example.com/v1", None).unwrap_err();
+    assert_eq!(err.exit_code(), 2);
+    AdHoc::new("http://127.0.0.1:8080/v1", None).unwrap();
+}
+
+#[tokio::test]
+async fn plugin_wire_formats_fail_typed_unless_a_native_format_is_chosen() {
+    let case = Case::new("", &["GOOGLE_API_KEY"]).flag("gemini");
+    let err = case.run().await.unwrap_err();
+    assert_eq!(err.code().code, "provider.plugin_unavailable");
+    assert!(err.message().contains("gemini_native"));
+    // Auto passes over it rather than failing.
+    let auto = Case::new(
+        "[model]\nauto_order = [\"google\", \"deepseek\"]\n",
+        &["GOOGLE_API_KEY", "DEEPSEEK_API_KEY"],
+    );
+    assert_eq!(auto.run().await.unwrap().provider, "deepseek");
+    // Gemini's OpenAI-compatible endpoint is routable natively.
+    let openai = Case::new(
+        "[providers.gemini]\nbase_url = \"https://generativelanguage.googleapis.com/v1beta/openai\"\n",
+        &["GOOGLE_API_KEY"],
+    )
+    .flag("gemini");
+    // It gets past the wire format (gemini has no default model).
+    assert_eq!(code(&openai.run().await), "model.not_selected");
+    let moa = Case::new("", &[]).flag("moa").run().await.unwrap_err();
+    assert_eq!(moa.code().code, "provider.plugin_unavailable");
 }

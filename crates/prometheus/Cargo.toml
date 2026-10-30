@@ -33,11 +33,13 @@ jiff.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-providers.workspace = true
 pmt-sandbox.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true
+reqwest.workspace = true
 rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -52,10 +54,10 @@ sha2.workspace = true
 
 [dev-dependencies]
 base64.workspace = true
-pmt-net.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
 tracing-subscriber.workspace = true
+wiremock.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
 # SIGINT for the `logs --follow` exit-130 test.

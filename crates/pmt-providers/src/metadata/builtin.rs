@@ -2,6 +2,8 @@
 //! catalog, after config overrides and live listings). Prices are USD per
 //! million tokens: input, output, cache read, cache write.
 
+use pmt_config::schema::ReasoningLevel;
+
 use super::ModelMetadata;
 use pmt_obs::usage::Price;
 
@@ -163,6 +165,8 @@ fn metadata(e: &Entry) -> ModelMetadata {
         supports_vision: e.vision,
         supports_video: false,
         supports_reasoning: e.reasoning,
+        max_reasoning_effort: e.reasoning.then(|| max_effort(e.provider)),
+        context_source: super::ContextSource::Builtin,
         price: Some(Price {
             input,
             output,
@@ -170,5 +174,14 @@ fn metadata(e: &Entry) -> ModelMetadata {
             cache_write,
             reasoning: None,
         }),
+    }
+}
+
+/// The highest effort a reasoning model of `provider` accepts: Anthropic
+/// thinking budgets scale to `max`; OpenAI-style effort stops at `high`.
+fn max_effort(provider: &str) -> ReasoningLevel {
+    match provider {
+        "anthropic" | "openrouter" => ReasoningLevel::Max,
+        _ => ReasoningLevel::High,
     }
 }

@@ -164,7 +164,9 @@ impl ModelCaller {
         ctx: Option<&CallContext>,
     ) -> Result<Called, CallError> {
         let current = state.current();
-        let (meta, _) = walk.catalog.metadata(&current.provider, &current.model);
+        let (meta, _) =
+            walk.catalog
+                .metadata_at(&current.provider, &current.model, Some(&current.base_url));
         capability::check(&current.label(), &meta, &walk.needs).map_err(CallError::Refused)?;
         let mut fallbacks = Vec::new();
         let mut first: Option<(ProviderError, Route)> = None;

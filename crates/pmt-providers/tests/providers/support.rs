@@ -49,7 +49,7 @@ impl Env {
             secrets: &self.secrets,
             extras: &EXTRAS,
             probe: &PROBE,
-            flag_key: None,
+            ad_hoc: None,
         }
     }
 
@@ -116,6 +116,7 @@ pub(crate) fn request(user: &str) -> Request {
         }],
         max_output_tokens: Some(1024),
         cache: pmt_providers::request::CacheControl::default(),
+        reasoning: None,
     }
 }
 

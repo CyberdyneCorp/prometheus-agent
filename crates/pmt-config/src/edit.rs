@@ -3,7 +3,9 @@
 //! tables are created as implicit tables (`[providers.acme]` without an
 //! empty `[providers]`).
 
-use toml_edit::{DocumentMut, InlineTable, Item, Table, Value};
+use toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, Value};
+
+use crate::schema::FallbackEntry;
 
 /// Sets `key` to `value`, creating missing parent tables.
 ///
@@ -61,6 +63,37 @@ pub(crate) fn remove(doc: &mut DocumentMut, key: &str) -> bool {
     item.as_table_like_mut()
         .and_then(|t| t.remove(leaf))
         .is_some()
+}
+
+/// Replaces `fallback.chain` with `chain` as an array of tables
+/// (`[[fallback.chain]]`), or removes it when `chain` is empty.
+pub(crate) fn set_fallback_chain(doc: &mut DocumentMut, chain: &[FallbackEntry]) {
+    if chain.is_empty() {
+        remove(doc, "fallback.chain");
+        return;
+    }
+    let mut tables = ArrayOfTables::new();
+    for entry in chain {
+        let mut table = Table::new();
+        table.insert("provider", toml_edit::value(entry.provider.as_str()));
+        table.insert("model", toml_edit::value(entry.model.as_str()));
+        if let Some(url) = &entry.base_url {
+            table.insert("base_url", toml_edit::value(url.as_str()));
+        }
+        if let Some(secret) = &entry.credential {
+            table.insert("credential", toml_edit::value(secret.0.as_str()));
+        }
+        tables.push(table);
+    }
+    let root = doc.as_table_mut();
+    if !root.contains_key("fallback") {
+        let mut table = Table::new();
+        table.set_implicit(true);
+        root.insert("fallback", Item::Table(table));
+    }
+    if let Some(fallback) = root.get_mut("fallback").and_then(Item::as_table_like_mut) {
+        fallback.insert("chain", Item::ArrayOfTables(tables));
+    }
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@
 //! replays a byte-identical prefix (spec: Prompt caching and stable prefix
 //! across route changes).
 
+use pmt_config::schema::ReasoningLevel;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -182,6 +183,9 @@ pub struct Request {
     pub max_output_tokens: Option<u64>,
     /// Prompt-cache settings.
     pub cache: CacheControl,
+    /// Reasoning effort to send (already clamped to the route; `None`
+    /// sends no reasoning control). See [`crate::reasoning`].
+    pub reasoning: Option<ReasoningLevel>,
 }
 
 impl Request {
@@ -228,6 +232,8 @@ impl Request {
             messages: &'a [Message],
             tools: &'a [Tool],
             max_output_tokens: Option<u64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            reasoning: Option<&'static str>,
         }
         let canonical = Canonical {
             provider,
@@ -236,6 +242,7 @@ impl Request {
             messages: &self.messages,
             tools: &self.tools,
             max_output_tokens: self.max_output_tokens,
+            reasoning: self.reasoning.map(ReasoningLevel::as_str),
         };
         let bytes = serde_json::to_vec(&canonical).expect("plain data serializes");
         format!("sha256:{}", hex(&Sha256::digest(bytes)))

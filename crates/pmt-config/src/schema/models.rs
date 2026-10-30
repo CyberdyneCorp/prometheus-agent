@@ -1,9 +1,11 @@
 //! Model, provider and auxiliary routing sections (spec: model-providers).
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::SecretName;
+use super::{ReasoningLevel, SecretName};
 
 /// The `[model]` section.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -13,9 +15,14 @@ pub struct ModelConfig {
     /// Provider id or alias; unset means `auto`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
-    /// Default model id (or a `[models]` alias).
+    /// Default model id (or a `[model.aliases]` name).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
+    /// User model aliases: a name (matched case-insensitively) for a
+    /// `"<provider>/<model>"` string or a route table. Usable wherever a
+    /// model is named (`/model`, `prometheus model set`, fallback and
+    /// auxiliary slots).
+    pub aliases: BTreeMap<String, ModelAlias>,
     /// Provider order tried by `auto` among providers with a stored secret.
     pub auto_order: Vec<String>,
     /// Smallest context window (tokens) a session may start with.
@@ -28,12 +35,39 @@ impl Default for ModelConfig {
         Self {
             provider: None,
             default: None,
+            aliases: BTreeMap::new(),
             auto_order: ["anthropic", "openai", "openrouter", "google", "nous"]
                 .map(str::to_owned)
                 .to_vec(),
             min_context_window: 64_000,
         }
     }
+}
+
+/// One `[model.aliases.<name>]` entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ModelAlias {
+    /// `"<provider>/<model>"`.
+    Ref(String),
+    /// A route with its own endpoint or secret.
+    Route(AliasRoute),
+}
+
+/// A `[model.aliases.<name>]` table.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AliasRoute {
+    /// Provider id or alias.
+    pub provider: String,
+    /// Model id at that provider.
+    pub model: String,
+    /// Base URL replacing the provider's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Name of the secret this alias uses instead of the provider's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_secret: Option<SecretName>,
 }
 
 /// One `[providers.<id>]` override of a built-in or custom provider.
@@ -264,6 +298,10 @@ pub struct ModelRoute {
     /// Whether the model reasons (thinking tokens).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supports_reasoning: Option<bool>,
+    /// Highest reasoning effort the model accepts; higher requested
+    /// levels are clamped down to it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_reasoning_effort: Option<ReasoningLevel>,
     /// Prices per million tokens (USD).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<ModelPrice>,

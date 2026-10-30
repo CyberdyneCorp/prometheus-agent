@@ -149,8 +149,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `memory.user_char_limit` | integer | `1375` | ≥ 0 | `next_session` | Character budget of core user-profile entries. |
 | `memory.user_profile_enabled` | boolean | `true` | any | `next_session` | The user profile store. |
 | `memory.write_approval` | boolean | `false` | any | `next_session` | Approve every memory write. |
+| `model.aliases` | table | `{}` | any | `next_session` | User model aliases: a name (matched case-insensitively) for a `"<provider>/<model>"` string or a route table. Usable wherever a model is named (`/model`, `prometheus model set`, fallback and auxiliary slots). |
 | `model.auto_order` | array of string | `["anthropic","openai","openrouter","google","nous"]` | any | `next_session` | Provider order tried by `auto` among providers with a stored secret. |
-| `model.default` | string | unset | any | `next_session` | Default model id (or a `[models]` alias). |
+| `model.default` | string | unset | any | `next_session` | Default model id (or a `[model.aliases]` name). |
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
 | `models` | table | `{}` | any | `next_session` | Model aliases and metadata overrides, keyed by name or `"<provider>/<model>"`. |

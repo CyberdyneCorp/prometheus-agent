@@ -62,6 +62,37 @@ pub fn default_host_rules() -> Vec<HostRule> {
     }]
 }
 
+/// What a descriptor's wire format needs beyond the three native adapters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WireNeed {
+    /// A native adapter: `wire_format`.
+    Native,
+    /// The format varies per model (`model_wire_formats`); `wire_format`
+    /// is used until a model maps elsewhere.
+    PerModel,
+    /// Detected from the endpoint's deployment metadata; `wire_format`
+    /// until detected.
+    Detected,
+    /// A non-native format only a provider plugin implements. Routing
+    /// fails with `provider.plugin_unavailable` unless config or a host
+    /// rule selects a native format.
+    Plugin {
+        /// The format (`gemini_native`, `bedrock_converse`...).
+        wire: String,
+        /// The plugin that implements it.
+        plugin: String,
+        /// What the user can do meanwhile.
+        hint: String,
+    },
+    /// A virtual provider served in-process by another capability.
+    Virtual {
+        /// The listed wire format (`aggregator's`).
+        wire: String,
+        /// The owning capability (`mixture-of-agents`).
+        owner: String,
+    },
+}
+
 /// One provider's static description. The flags are the descriptor
 /// contract's own fields, hence the bools.
 #[allow(clippy::struct_excessive_bools)]
@@ -102,6 +133,14 @@ pub struct Descriptor {
     pub allow_insecure_http: bool,
     /// Host rules checked before the declared format.
     pub host_rules: Vec<HostRule>,
+    /// What the wire format needs beyond the native adapters.
+    pub wire_need: WireNeed,
+    /// How the endpoint is found when there is no default `base_url`
+    /// (listings show it).
+    pub endpoint_note: Option<String>,
+    /// No credential is needed when the configured endpoint is loopback
+    /// (a hosted service with a local daemon).
+    pub keyless_on_loopback: bool,
 }
 
 impl Descriptor {
@@ -130,6 +169,21 @@ impl Descriptor {
             default_model: None,
             allow_insecure_http: false,
             host_rules: Vec::new(),
+            wire_need: WireNeed::Native,
+            endpoint_note: None,
+            keyless_on_loopback: false,
+        }
+    }
+
+    /// The wire format as listings show it: the native format, or
+    /// `per-model`, `auto-detected`, or the plugin/virtual format.
+    #[must_use]
+    pub fn wire_label(&self) -> &str {
+        match &self.wire_need {
+            WireNeed::Native => self.wire_format.as_str(),
+            WireNeed::PerModel => "per-model",
+            WireNeed::Detected => "auto-detected",
+            WireNeed::Plugin { wire, .. } | WireNeed::Virtual { wire, .. } => wire,
         }
     }
 

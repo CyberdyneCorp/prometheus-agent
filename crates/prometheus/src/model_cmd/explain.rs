@@ -2,32 +2,35 @@
 //! explainable resolution): runs the route resolution of a new session in
 //! the selected profile and prints every step, without a model call and
 //! without any secret value (credentials are named by source:
-//! `secret:<NAME>`, `pool:<provider>#<n>`, `oauth:<provider>`, `none`).
+//! `secret:<NAME>`, `pool:<provider>#<n>`, `oauth:<provider>`, `flag`,
+//! `none`).
 
 use std::fmt::Write as _;
 
-use pmt_core::error::{Error, codes};
+use pmt_core::error::Error;
+use pmt_providers::Route;
 use pmt_providers::capability;
-use pmt_providers::metadata::Catalog;
-use pmt_providers::resolve::{
-    Layer, NoExtras, Outcome, Requested, Resolver, Selection, Step, TcpProbe, Trace, requested,
-};
-use pmt_providers::{ProviderRegistry, Route};
+use pmt_providers::metadata::{Catalog, ModelMetadata};
+use pmt_providers::resolve::{AdHoc, Layer, Outcome, Requested, Selection, Step, Trace, requested};
 use serde::Serialize;
 
-use crate::cli::ModelCommand;
+use super::{Models, block_on};
+use crate::cli::EndpointArgs;
 use crate::context::Context;
 use crate::output::{document, print_error, print_raw};
 
-/// Runs one `model` subcommand and returns its exit code.
-///
-/// # Errors
-///
-/// The command's failure; the caller prints it and exits with its code.
-pub fn run(command: &ModelCommand, ctx: &Context<'_>) -> Result<u8, Error> {
-    match command {
-        ModelCommand::Explain { provider, model } => explain(ctx, provider.clone(), model.clone()),
-    }
+/// The launch-only endpoint of `--base-url` / `--api-key-stdin`; the key
+/// is read from stdin into memory and never written anywhere.
+pub(crate) fn ad_hoc(endpoint: &EndpointArgs) -> Result<Option<AdHoc>, Error> {
+    let Some(base_url) = &endpoint.base_url else {
+        return Ok(None);
+    };
+    let key = if endpoint.api_key_stdin {
+        Some(crate::prompt::read_secret("the --base-url API key")?)
+    } else {
+        None
+    };
+    AdHoc::new(base_url, key).map(Some)
 }
 
 #[derive(Serialize)]
@@ -39,6 +42,7 @@ struct RouteView {
     credential: String,
     billing_source: String,
     context_window: u64,
+    context_source: &'static str,
 }
 
 #[derive(Serialize)]
@@ -49,47 +53,40 @@ struct Explained<'a> {
     route: Option<RouteView>,
 }
 
-fn explain(
+pub(super) fn run(
     ctx: &Context<'_>,
     provider: Option<String>,
     model: Option<String>,
+    endpoint: &EndpointArgs,
 ) -> Result<u8, Error> {
-    let scope = ctx.scope()?;
+    let ad_hoc = ad_hoc(endpoint)?;
+    let models = Models::open(ctx)?;
+    let scope = &models.scope;
     let config = scope.config();
-    let registry = ProviderRegistry::for_profile(config, Vec::new())?;
     let selection = Selection {
         flag: Layer { provider, model },
         session: Layer::default(),
     };
     let requested = requested(&selection, &config.model);
-    let catalog = Catalog::new(config, Some(scope.path("cache/models")));
-    let probe = TcpProbe::default();
-    let resolver = Resolver {
-        registry: &registry,
-        config,
-        secrets: scope.secrets(),
-        extras: &NoExtras,
-        probe: &probe,
-        flag_key: None,
-    };
+    let resolver = models.resolver(config, ad_hoc);
     let mut trace = Trace::default();
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| Error::new(&codes::OUTPUT_IO, format!("cannot start the resolver: {e}")))?;
-    let outcome = runtime
-        .block_on(resolver.resolve(&requested, &mut trace))
-        .and_then(|route| {
-            check_capability(&catalog, route, config.model.min_context_window, &mut trace)
-        });
-    let view = outcome.as_ref().ok().map(|(route, window)| RouteView {
+    let outcome = block_on(resolver.resolve(&requested, &mut trace))?.and_then(|route| {
+        check_capability(
+            &models.catalog,
+            route,
+            config.model.min_context_window,
+            &mut trace,
+        )
+    });
+    let view = outcome.as_ref().ok().map(|(route, meta)| RouteView {
         provider: route.provider.clone(),
         model: route.model.clone(),
         wire_format: route.wire_format.as_str(),
         base_url: route.base_url.clone(),
         credential: route.credential.describe(),
         billing_source: route.billing_source(),
-        context_window: *window,
+        context_window: meta.context_window,
+        context_source: meta.context_source.as_str(),
     });
     let body = Explained {
         profile: scope.name().as_str(),
@@ -120,24 +117,21 @@ fn check_capability(
     route: Route,
     min: u64,
     trace: &mut Trace,
-) -> Result<(Route, u64), Error> {
-    let (meta, sources) = catalog.metadata(&route.provider, &route.model);
+) -> Result<(Route, ModelMetadata), Error> {
+    let (meta, _) = catalog.metadata_at(&route.provider, &route.model, Some(&route.base_url));
     trace.check(
         "capability",
         capability::check_min_context(&route.label(), &meta, min),
     )?;
-    let source = serde_json::to_value(sources[0])
-        .ok()
-        .and_then(|v| v.as_str().map(str::to_owned));
     trace.ok(
         "capability",
         format!(
-            "{}-token context window ({}) >= model.min_context_window {min}",
+            "{}-token context window (from {}) >= model.min_context_window {min}",
             meta.context_window,
-            source.unwrap_or_default()
+            meta.context_source.as_str()
         ),
     );
-    Ok((route, meta.context_window))
+    Ok((route, meta))
 }
 
 fn render(body: &Explained<'_>) -> String {

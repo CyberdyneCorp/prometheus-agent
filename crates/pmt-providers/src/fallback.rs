@@ -284,7 +284,10 @@ impl Fallback {
             || walk.health.score(&route.provider, &route.model) < self.min_health
             || capability::check(
                 &route.label(),
-                &walk.catalog.metadata(&route.provider, &route.model).0,
+                &walk
+                    .catalog
+                    .metadata_at(&route.provider, &route.model, Some(&route.base_url))
+                    .0,
                 &walk.needs,
             )
             .is_err();

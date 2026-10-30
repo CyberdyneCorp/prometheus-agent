@@ -132,7 +132,7 @@ async fn cache_key_is_stable_across_turns_and_only_sent_where_supported() {
     );
 }
 
-fn store(dir: &std::path::Path) -> Arc<Store> {
+pub(crate) fn store(dir: &std::path::Path) -> Arc<Store> {
     let home = Home::open(dir).unwrap();
     let profile = home.profile(&ProfileName::default_profile()).unwrap();
     let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();

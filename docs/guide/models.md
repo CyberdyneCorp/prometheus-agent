@@ -141,18 +141,25 @@ recorded for every call in the usage ledger (see
 
 ## Model metadata and the minimum context window
 
-A model's context window, output cap, capabilities and prices come from
+A model's output cap, capabilities and prices come from
 `[models."<provider>/<model>"]` in `config.toml`, then the provider's
 model listing (cached for `providers.<id>.catalog_ttl_secs`, a day by
-default), then the catalog built into Prometheus, then defaults (128000
-tokens, tools, no images, no price). A session refuses to start on a model
-whose window is below `model.min_context_window` (64000 tokens by
-default):
+default), then the catalog built into Prometheus, then defaults (tools,
+no images, no price). The context window has a longer chain: the
+`context_window` pin of `[models."<provider>/<model>"]` (shown as
+`200000 (pinned)`), the provider's listing, a local server probe, a window
+discovered earlier for the same provider, model and endpoint (kept in the
+profile's `state.db` and reused while the provider is unreachable), the
+built-in catalog, a models.dev snapshot (`prometheus model list --refresh`
+downloads a fresh one), a family default by model-name prefix (`claude-`,
+`gpt-5`, `qwen3`...) and finally 128000 tokens. `prometheus model explain`
+names the winning source. A session refuses to start on a model whose
+window is below `model.min_context_window` (64000 tokens by default):
 
 ```console
 $ prometheus config set model.min_context_window 200000
 $ prometheus model explain --provider ollama --model qwen3  # exits 78
-<>model 'ollama/qwen3' has a 128000-token context window, below the minimum of 200000 tokens<>
+<>model 'ollama/qwen3' has a 32768-token context window, below the minimum of 200000 tokens<>
 ```
 
 If the model's real window is larger than Prometheus knows, say so:
@@ -160,4 +167,183 @@ If the model's real window is larger than Prometheus knows, say so:
 ```toml
 [models."ollama/qwen3"]
 context_window = 262144
+```
+
+```console
+$ prometheus config unset model.min_context_window
+```
+
+## Local servers
+
+For `ollama`, `lmstudio`, `llamacpp`, `vllm` and `sglang`, Prometheus asks
+the server itself. A `base_url` without `/v1` (`http://127.0.0.1:1234`) is
+tried as `<root>/v1` and as given when you run `prometheus model set`; the
+one that serves the model listing is saved and used for every request.
+Models are listed through the server's own API when it has one (LM Studio
+`/api/v1/models`, Ollama `/api/tags`), and the window the model actually
+runs with is read from Ollama `/api/show` (its `num_ctx`), llama.cpp
+`/props` (`n_ctx`), LM Studio's loaded context, or vLLM/SGLang
+`max_model_len`. A session warns once when an Ollama model runs with
+`num_ctx` of 2048 or less (raise it with `PARAMETER num_ctx 65536` in a
+Modelfile or `OLLAMA_CONTEXT_LENGTH`), and when the local model reports no
+tool-calling support, before the minimum-window check applies.
+
+## Choosing a model
+
+`prometheus model` is an interactive picker: choose a provider (those you
+can already use are marked `connected`), then one of its models or type a
+model id. It needs a terminal; in a script use `prometheus model set`:
+
+```console
+$ prometheus model  # exits 2
+<>prometheus model requires a terminal; use 'prometheus model set <provider>/<model>'
+```
+
+`prometheus model set <provider>/<model> [--wire-format F] [--base-url
+URL]` checks the route first (a usable credential, tool support and the
+minimum context window) and only then writes `model.provider` and
+`model.default` (and the provider's `wire_format` / `base_url` when given).
+A route that cannot be used leaves `config.toml` untouched:
+
+```console
+$ prometheus model set deepseek/deepseek-chat  # exits 78
+<>no credential for provider 'deepseek'<>
+<>prometheus auth add deepseek<>
+$ prometheus model set openrouter/anthropic/claude-sonnet-4.5
+model set: openrouter/anthropic/claude-sonnet-4.5 (context window 1000000; wrote model.provider, model.default)
+```
+
+`prometheus model info` shows the route a new session would use, its
+context window and where it came from, and the reasoning effort that
+would be sent; its first line is the status-line segment:
+
+```console
+$ prometheus model info
+openrouter/anthropic/claude-sonnet-4.5 · ctx 1000000 · reasoning medium · api_key:openrouter
+```
+
+`prometheus model list [--provider ID] [--refresh] [--json]` lists models
+with their window and capabilities (`--refresh` fetches live listings and
+the models.dev catalog first). `prometheus model list --providers [--json]`
+lists every provider of the profile with its aliases, wire format,
+endpoint and secret names, in resolution order (a plan-specific key such
+as `ALIBABA_CODING_PLAN_API_KEY` is tried before the shared
+`DASHSCOPE_API_KEY`). It never shows a secret value:
+
+```console
+$ prometheus model list --providers
+openrouter (or)
+alibaba-coding-plan (alibaba-coding, dashscope-coding)
+<>chat_completions at https://coding-intl.dashscope.aliyuncs.com/v1; ALIBABA_CODING_PLAN_API_KEY, DASHSCOPE_API_KEY
+```
+
+Providers whose own wire format is implemented by a provider plugin
+(`gemini` speaks `gemini_native`, `bedrock` `bedrock_converse`, `copilot`
+comes from the `github-copilot` plugin) fail with
+`provider.plugin_unavailable` until that plugin is installed; `auto`
+passes over them. Gemini also answers OpenAI-style requests: set
+`providers.gemini.base_url` to its `.../v1beta/openai` endpoint.
+
+### Switching in a session
+
+`/model [<provider>/]<model> [--provider ID] [--reasoning LEVEL]
+[--once|--session|--global]` switches the model of a running session from
+its next turn: `--once` for one turn, `--session` (the default once a model
+is configured) until the session ends, `--global` also saves it as the
+profile default (the default on a profile without a model). The target is
+checked first; if it cannot be used the session keeps its route. Moving to
+another model restarts the provider's prompt cache, which the notice says.
+
+### Aliases
+
+`[model.aliases]` names routes you use often. An alias is matched without
+regard to case, wins over any other reading of the name, and works
+wherever a model is named (`/model`, `prometheus model set`,
+`prometheus fallback add`, auxiliary fallback chains). It brings its own
+provider, endpoint and secret, so switching to it never reuses the
+previous provider's key:
+
+```toml
+[model.aliases]
+quick = "deepseek/deepseek-chat"
+
+[model.aliases.fav]
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4.5"
+key_secret = "OPENROUTER_PERSONAL_KEY"
+```
+
+### A one-off endpoint
+
+`--base-url URL` with `--api-key-stdin` uses an endpoint for one
+invocation only (without `--provider` it is the `custom` provider). The
+key is read from stdin, kept in memory, sent only to that URL's host and
+never written to the secrets store, `config.toml`, trajectories or logs:
+
+```console
+$ echo -n "$TOKEN" | prometheus model explain --base-url https://llm.example.com/v1 --api-key-stdin --model my-model
+credential ok flag
+```
+
+## Editing the fallback chain
+
+`prometheus fallback list`, `add [<provider>/<model>]` (the picker when no
+model is given), `remove <position|provider/model>` and `clear` edit
+`[[fallback.chain]]`; new sessions use the result. `add` checks the route
+like `model set` and refuses an entry the chain already has (the same
+provider, under any alias, model and endpoint):
+
+```console
+$ prometheus fallback add openrouter/openai/gpt-5
+added openrouter/openai/gpt-5 as fallback entry 1; new sessions use it
+$ prometheus fallback add or/openai/gpt-5  # exits 75
+<>openrouter/openai/gpt-5 is already in the fallback chain (entry 1); the chain is unchanged
+$ prometheus fallback list
+1. openrouter/openai/gpt-5
+$ prometheus fallback clear
+cleared the fallback chain (1 entries)
+```
+
+## Auxiliary models
+
+Side tasks (`compression`, `title`, `vision`, `approval`, `memory`,
+`curator`, `web_extract`, `skill_review`, `evolution`, `goal_judge`,
+`side_question`, `voice_chat`) run on the session's own route unless
+`[auxiliary.<task>]` pins one. When the main route is unavailable they
+try the task's `fallback_chain` and then the profile's fallback chain;
+they never pick some other provider just because a key for it is stored.
+With nothing usable the task is skipped with a warning. Each attempt is
+limited by `timeout_secs` (120 s for `vision` and `compression`, 30 s for
+`approval` and `title`, 600 s for `curator` and `evolution`), retried on
+the same route `auxiliary.transient_retries` times (default 2), and
+recorded in the usage ledger as `auxiliary.<task>`:
+
+```toml
+[auxiliary.title]
+provider = "openrouter"
+model = "google/gemini-2.5-flash"
+fallback_chain = ["quick"]   # an alias or <provider>/<model>; [] disables
+```
+
+## Reasoning effort
+
+`agent.reasoning_effort` (`none`, `minimal`, `low`, `medium` (default),
+`high`, `xhigh`, `max`, `ultra`) sets how hard reasoning models think.
+`[agent.reasoning_overrides]` sets it per model; keys match model ids
+without regard to case, `-`, `_`, `.` or a `provider/` prefix, so
+`"gpt-5.5"` also matches `openrouter/openai/gpt_5_5`. A value can be a
+level or a name from `[agent.reasoning_tiers]`. The level sent is lowered
+to the most the model supports (never raised), and models that do not
+reason get no reasoning setting at all. In a session,
+`/reasoning <level> [--global]` changes it from the next request,
+`/reasoning show|hide` toggles showing the reasoning and
+`/reasoning full|clamp` shows it in full or clamped.
+
+```toml
+[agent.reasoning_tiers]
+ultra = "max"
+
+[agent.reasoning_overrides]
+"gpt-5.5" = "high"
+"claude-opus-4-1" = "ultra"
 ```

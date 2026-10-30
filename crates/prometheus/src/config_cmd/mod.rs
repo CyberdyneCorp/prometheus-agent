@@ -127,10 +127,32 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     // (custom blocks need a base URL; chain entries a known provider).
     let providers = pmt_providers::ProviderRegistry::for_profile(scope.config(), Vec::new())?;
     pmt_providers::fallback::chain(scope.config(), &providers)?;
+    // Model aliases name registry providers; reasoning overrides name
+    // levels or tiers.
+    for (name, alias) in &scope.config().model.aliases {
+        let target = pmt_providers::target::alias(&scope.config().model, name);
+        let provider = target.map_or_else(|| alias_ref(alias), |t| t.provider);
+        providers.lookup(&provider).map_err(|err| {
+            Error::new(
+                err.code(),
+                format!("model.aliases.{name}: {}", err.message()),
+            )
+        })?;
+    }
+    pmt_providers::reasoning::check(&scope.config().agent)?;
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }
     Ok(0)
+}
+
+/// The text of an alias that is not `<provider>/<model>` (reported as an
+/// unknown provider).
+fn alias_ref(alias: &pmt_config::schema::ModelAlias) -> String {
+    match alias {
+        pmt_config::schema::ModelAlias::Ref(text) => text.clone(),
+        pmt_config::schema::ModelAlias::Route(route) => route.provider.clone(),
+    }
 }
 
 /// The catalog entry of `key`, or a usage error with suggestions.

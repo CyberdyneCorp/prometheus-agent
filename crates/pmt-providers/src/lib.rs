@@ -3,9 +3,12 @@
 //! an explainable trace, the three native [`wire`] formats normalised into
 //! one [`event`] stream, error [`classify`]-cation with same-route
 //! retries, the [`fallback`] chain with turn-scoped restore, the model
-//! [`metadata`] catalog with capability checks, and per-call cost
-//! accounting ([`cost`]).
+//! [`metadata`] catalog with capability checks, per-call cost accounting
+//! ([`cost`]), [`auxiliary`] task routing, [`reasoning`] effort, model
+//! references and aliases ([`target`]), the `/model` [`switch`] and local
+//! inference servers ([`local`]).
 
+pub mod auxiliary;
 pub mod builtin;
 pub mod caller;
 pub mod capability;
@@ -14,11 +17,16 @@ pub mod cost;
 pub mod descriptor;
 pub mod event;
 pub mod fallback;
+pub mod local;
 pub mod metadata;
+pub mod reasoning;
 pub mod registry;
 pub mod request;
 pub mod resolve;
 mod sse;
+pub mod status;
+pub mod switch;
+pub mod target;
 pub mod transport;
 pub mod wire;
 

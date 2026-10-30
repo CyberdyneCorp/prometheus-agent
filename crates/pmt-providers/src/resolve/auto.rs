@@ -1,6 +1,7 @@
 //! Automatic provider detection for requested provider `auto` (spec:
 //! model-providers, Auto provider detection): the configured provider,
-//! then the first provider of `model.auto_order` with a stored secret,
+//! then the first routable provider of `model.auto_order` with a stored
+//! secret (one whose wire format needs a missing plugin is passed over),
 //! then a sign-in, then a reachable configured local endpoint.
 
 use pmt_config::provider_urls::{host_of, is_local_host};
@@ -38,6 +39,9 @@ fn with_stored_secret(resolver: &Resolver<'_>) -> Result<Option<(String, String)
         let Ok(provider) = resolver.registry.enabled(name) else {
             continue;
         };
+        if !crate::wire::routable(provider) {
+            continue;
+        }
         for secret in provider.secret_names() {
             if resolver.secrets.secret(&secret)?.is_some() {
                 let why = format!("secret {secret} is stored (model.auto_order)");

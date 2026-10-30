@@ -1,6 +1,7 @@
 //! Anthropic Messages (`/v1/messages`, streamed) with explicit
 //! `cache_control` breakpoints.
 
+use pmt_config::schema::ReasoningLevel;
 use serde_json::{Map, Value, json};
 
 use super::{count, json, truncated};
@@ -50,10 +51,17 @@ pub(super) fn encode(request: &Request) -> Value {
         .collect();
     let mut body = Map::new();
     body.insert("model".into(), json!(request.model));
-    body.insert(
-        "max_tokens".into(),
-        json!(request.max_output_tokens.unwrap_or(DEFAULT_MAX_TOKENS)),
-    );
+    let max_tokens = request.max_output_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+    let budget = request.reasoning.and_then(thinking_budget);
+    // Thinking tokens count against `max_tokens`: the budget is added so
+    // the visible answer keeps its own cap.
+    body.insert("max_tokens".into(), json!(max_tokens + budget.unwrap_or(0)));
+    if let Some(budget) = budget {
+        body.insert(
+            "thinking".into(),
+            json!({"type": "enabled", "budget_tokens": budget}),
+        );
+    }
     if !system.is_empty() {
         body.insert("system".into(), Value::Array(system));
     }
@@ -63,6 +71,20 @@ pub(super) fn encode(request: &Request) -> Value {
     }
     body.insert("stream".into(), json!(true));
     Value::Object(body)
+}
+
+/// Extended-thinking budget of `level` (at least the API's 1024); `None`
+/// sends no thinking block.
+const fn thinking_budget(level: ReasoningLevel) -> Option<u64> {
+    match level {
+        ReasoningLevel::None => None,
+        ReasoningLevel::Minimal => Some(1_024),
+        ReasoningLevel::Low => Some(4_096),
+        ReasoningLevel::Medium => Some(8_192),
+        ReasoningLevel::High => Some(16_384),
+        ReasoningLevel::Xhigh => Some(32_768),
+        ReasoningLevel::Max | ReasoningLevel::Ultra => Some(64_000),
+    }
 }
 
 /// Which requested breakpoints get a marker: system and tool breakpoints
