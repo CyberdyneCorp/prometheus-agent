@@ -12,8 +12,9 @@ use pmt_core::error::{Error, codes};
 use pmt_core::{exit, panic};
 use prometheus::output::print_error;
 use prometheus::{
-    Cli, Command, Context, auth_cmd, backup_cmd, config_cmd, fallback_cmd, grants_cmd, logs_cmd,
-    model_cmd, profile_cmd, secrets_cmd, sessions_cmd, startup, trajectory_cmd, usage_cmd, version,
+    Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, config_cmd, fallback_cmd,
+    grants_cmd, logs_cmd, model_cmd, profile_cmd, secrets_cmd, sessions_cmd, startup, tools_cmd,
+    trajectory_cmd, usage_cmd, version,
 };
 
 fn main() -> ExitCode {
@@ -71,6 +72,9 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Model { command }) => model_cmd::run(command.as_ref(), &ctx),
         Some(Command::Fallback { command }) => fallback_cmd::run(command, &ctx),
         Some(Command::Auth { command }) => auth_cmd::run(command, &ctx),
+        Some(Command::Tools { command }) => tools_cmd::run(command, &ctx),
+        Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
+        Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         // `chat`, the default command, arrives with the CLI chat group.
         None => Ok(exit::SUCCESS),
     };

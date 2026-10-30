@@ -117,6 +117,115 @@ pub enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+    /// List the profile's tools and explain one (exposure, capabilities, approvals).
+    Tools {
+        /// The tools subcommand.
+        #[command(subcommand)]
+        command: ToolsCommand,
+    },
+    /// List toolsets and show the tools a toolset resolves to.
+    Toolsets {
+        /// The toolsets subcommand.
+        #[command(subcommand)]
+        command: ToolsetsCommand,
+    },
+    /// Check how the approval gate treats a command, without running it.
+    Approvals {
+        /// The approvals subcommand.
+        #[command(subcommand)]
+        command: ApprovalsCommand,
+    },
+}
+
+/// `prometheus tools` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ToolsCommand {
+    /// Every registered tool with its toolset and exposure verdict (`exposed`
+    /// or a reason code) for the profile's configured toolsets.
+    List,
+    /// A tool's schema, owner, capabilities, effect, claims, timeout, result
+    /// budget and the approval rules that apply to it.
+    #[command(visible_alias = "show")]
+    Explain {
+        /// The tool name.
+        name: String,
+    },
+    /// The toolsets, as `prometheus toolsets list`.
+    Toolsets(ToolsetsListArgs),
+}
+
+/// `prometheus toolsets` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ToolsetsCommand {
+    /// Every toolset: description, direct tools, includes, resolved tool
+    /// count, default-off and posture flags, and whether it is active.
+    List(ToolsetsListArgs),
+    /// The tools a toolset resolves to, in order, with their availability.
+    Show {
+        /// The toolset name.
+        name: String,
+    },
+}
+
+/// Arguments of `toolsets list`.
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct ToolsetsListArgs {
+    /// Mark the toolsets active on this surface (`toolsets.surfaces.<s>`,
+    /// else `tools.enabled_toolsets`).
+    #[arg(long, value_name = "SURFACE")]
+    pub surface: Option<String>,
+}
+
+/// `prometheus approvals` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ApprovalsCommand {
+    /// Run a command line through the approval gate order (hardline, deny
+    /// rules, bypass, allowlist, dangerous-pattern and content detectors)
+    /// without executing it, asking anyone or saving anything.
+    Test(ApprovalsTestArgs),
+}
+
+/// Arguments of `approvals test`.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ApprovalsTestArgs {
+    /// Execution backend to assume (default: `terminal.backend`); hardline
+    /// and deny rules apply on every backend.
+    #[arg(long, value_name = "NAME")]
+    pub backend: Option<String>,
+    /// Approval mode to assume (default: `approvals.mode`).
+    #[arg(long, value_enum)]
+    pub mode: Option<ApprovalModeArg>,
+    /// Context to assume; unattended contexts answer from their typed mode.
+    #[arg(long, value_enum, default_value_t = ApprovalContextArg::Interactive)]
+    pub context: ApprovalContextArg,
+    /// The command line, after `--`.
+    #[arg(required = true, num_args = 1.., trailing_var_arg = true, allow_hyphen_values = true)]
+    pub command: Vec<String>,
+}
+
+/// `approvals test --mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ApprovalModeArg {
+    /// Ask for every dangerous call.
+    Manual,
+    /// Pre-screen with the guardian model (asks like manual in M1).
+    Smart,
+    /// Bypass prompts; hardline and deny rules still block.
+    Off,
+}
+
+/// `approvals test --context`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ApprovalContextArg {
+    /// A human can answer.
+    Interactive,
+    /// A cron job (`approvals.cron_mode`).
+    Cron,
+    /// `chat -z` (`approvals.single_query_mode`).
+    #[value(name = "single_query")]
+    SingleQuery,
+    /// Webhook/API surfaces (`approvals.unattended_mode`).
+    Unattended,
 }
 
 /// `prometheus auth` subcommands.

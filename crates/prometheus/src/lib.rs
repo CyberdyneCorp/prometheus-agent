@@ -6,6 +6,7 @@
 //! the exact parser the binary uses, and so tests can drive each step.
 
 pub mod accounts;
+pub mod approvals_cmd;
 pub mod auth_cmd;
 pub mod backup_cmd;
 pub mod build_info;
@@ -26,13 +27,14 @@ pub mod sessions_cmd;
 pub mod slash_handlers;
 pub mod startup;
 pub mod surface;
+pub mod tools_cmd;
 pub mod trajectory_cmd;
 pub mod usage_cmd;
 pub mod version;
 
 pub use cli::{
-    AuthCommand, BackupCommand, Cli, Command, ConfigCommand, GrantsCommand, LogsArgs,
-    ProfileCommand, SecretsCommand, SessionsCommand, SnapshotsCommand, TrajectoryCommand,
-    UsageArgs, command,
+    ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, GrantsCommand,
+    LogsArgs, ProfileCommand, SecretsCommand, SessionsCommand, SnapshotsCommand, ToolsCommand,
+    ToolsetsCommand, TrajectoryCommand, UsageArgs, command,
 };
 pub use context::Context;

@@ -190,3 +190,5 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `tool.shadowed` | `config` | 78 | A tool name is already registered by another owner (a built-in, plugin or MCP server); the first registration is kept. A plugin replaces a built-in tool only with the grant `tools.override:<tool>`. `prometheus doctor` lists rejected registrations. |
 | `tool.unknown` | `usage` | 2 | No tool of that name is registered in this profile (`unknown tool: <name>`); `prometheus tools list` shows the registered tools. |
 | `toolset.cycle` | `config` | 78 | Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected. |
+| `toolset.unknown` | `usage` | 2 | A command named a toolset that does not exist (`unknown toolset '<name>' (did you mean ...?)`); `prometheus toolsets list` shows them. In configuration the same mistake is `registry.unknown_name` (exit 78). |
+| `approvals.unparsable` | `usage` | 2 | `prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting. |

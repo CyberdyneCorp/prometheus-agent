@@ -46,8 +46,15 @@ pub(crate) fn all() -> Vec<Artifact> {
             path: "docs/reference/error-codes.md",
             contents: error_catalog(),
         },
+        Artifact {
+            path: TOOLS_REFERENCE,
+            contents: tools_reference(),
+        },
     ]
 }
+
+/// The generated list of tool names that documentation links to.
+pub(crate) const TOOLS_REFERENCE: &str = "docs/reference/tools.md";
 
 /// Directory whose every file is generated: hand-written reference pages
 /// would restate defaults and drift (`cargo xtask gen --check` rejects them).
@@ -163,6 +170,53 @@ fn error_catalog() -> String {
             e.kind.exit_code(),
             e.summary
         );
+    }
+    out
+}
+
+/// Every shipped toolset and every tool name they refer to, one heading
+/// (and so one link anchor) per tool.
+fn tools_reference() -> String {
+    let toolsets = pmt_tools::toolset::builtin();
+    let mut out = format!(
+        "{HEADER}# Tools\n\n\
+         Every tool name the shipped toolsets refer to, and every shipped \
+         toolset. Pages name a tool by linking to its entry here, for example \
+         `` [`todo`](../reference/tools.md#todo) ``; `cargo xtask gen` refuses a \
+         link to a name that is not listed or whose text differs from its \
+         target, so documentation and the tool registry cannot name a tool \
+         differently. `prometheus toolsets show <name>` prints what a \
+         toolset resolves to in a profile, with each tool's availability.\n\n\
+         ## Toolsets\n\n\
+         | Toolset | Tools | Includes | Flags | Description |\n|---|---|---|---|---|\n"
+    );
+    let code = |names: &[String]| -> String {
+        let quoted: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
+        quoted.join(", ")
+    };
+    for t in &toolsets {
+        let flags: Vec<&str> = [(t.default_off, "default-off"), (t.posture, "posture")]
+            .iter()
+            .filter_map(|&(on, flag)| on.then_some(flag))
+            .collect();
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} | {} |",
+            t.name,
+            code(&t.tools),
+            code(&t.includes),
+            flags.join(", "),
+            t.description
+        );
+    }
+    out.push_str("\n## Tool names\n");
+    for name in pmt_tools::toolset::builtin_tool_names() {
+        let homes: Vec<String> = toolsets
+            .iter()
+            .filter(|t| t.tools.contains(&name))
+            .map(|t| t.name.clone())
+            .collect();
+        let _ = write!(out, "\n### `{name}`\n\nToolsets: {}.\n", code(&homes));
     }
     out
 }

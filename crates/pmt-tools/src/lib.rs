@@ -7,11 +7,12 @@
 //! [`probe`] and [`surface`] (what a session exposes, frozen at start),
 //! [`dispatch`] (the call pipeline and batches), [`args`], [`sanitize`],
 //! [`budget`] and [`spillover`] (pipeline steps) and [`result`] (the typed
-//! result). Also [`protected`], the instruction files whose agent writes
+//! result). Also [`approval`], the command approval gate, [`protected`], the instruction files whose agent writes
 //! always need human approval, [`grants`], the capability grant gate, and
 //! [`terminal`], the execution environment behind the `terminal` and
 //! `process` tools.
 
+pub mod approval;
 pub mod args;
 pub mod budget;
 pub mod descriptor;

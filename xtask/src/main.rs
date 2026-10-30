@@ -12,6 +12,9 @@
 //!   the registered `--json` output shapes)
 //! - `docs/reference/error-codes.md`: exit codes, error kinds and error codes
 //!   (`pmt-core`)
+//! - `docs/reference/tools.md`: the shipped toolsets and every tool name they
+//!   refer to (`pmt-tools`); links to it from any page under `docs/` must
+//!   name a listed tool (both `gen` and `gen --check` refuse others)
 //!
 //! `cargo xtask gen --check` writes nothing and exits 1 naming every stale
 //! file, and also fails on any file in `docs/reference/` it does not
@@ -28,6 +31,7 @@
 mod artifacts;
 mod health;
 mod perf;
+mod tool_refs;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -107,6 +111,7 @@ fn generate(check: bool) -> Result<(), String> {
     let root = repo_root();
     let artifacts = artifacts::all();
     reject_unowned(&root, artifacts::REFERENCE_DIR, &artifacts)?;
+    tool_refs::check(&root)?;
     if check {
         check_all(&root, &artifacts)
     } else {

@@ -524,6 +524,14 @@ mod tests {
             messages("[approvals]\nmode = false\n"),
             ["approvals.mode: expected one of \"manual\", \"smart\", \"off\", found boolean"]
         );
+        for key in ["cron_mode", "single_query_mode", "unattended_mode"] {
+            assert_eq!(
+                messages(&format!("[approvals]\n{key} = false\n")),
+                [format!(
+                    "approvals.{key}: expected one of \"deny\", \"approve\", found boolean"
+                )]
+            );
+        }
     }
 
     #[test]

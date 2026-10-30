@@ -24,6 +24,9 @@ Commands:
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth        Add, list and remove provider API keys and subscription sign-ins
+  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets    List toolsets and show the tools a toolset resolves to
+  approvals   Check how the approval gate treats a command, without running it
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -3302,6 +3305,415 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus auth help help
 ```
 
+## `prometheus tools`
+
+```text
+List the profile's tools and explain one (exposure, capabilities, approvals)
+
+Usage: prometheus tools [OPTIONS] <COMMAND>
+
+Commands:
+  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+  explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
+  toolsets  The toolsets, as `prometheus toolsets list`
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools list`
+
+```text
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+
+Usage: prometheus tools list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools explain`
+
+```text
+A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+
+Usage: prometheus tools explain [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The tool name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools toolsets`
+
+```text
+The toolsets, as `prometheus toolsets list`
+
+Usage: prometheus tools toolsets [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus tools help [COMMAND]
+
+Commands:
+  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+  explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets  The toolsets, as `prometheus toolsets list`
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus tools help list`
+
+```text
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+
+Usage: prometheus tools help list
+```
+
+## `prometheus tools help explain`
+
+```text
+A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+
+Usage: prometheus tools help explain
+```
+
+## `prometheus tools help toolsets`
+
+```text
+The toolsets, as `prometheus toolsets list`
+
+Usage: prometheus tools help toolsets
+```
+
+## `prometheus tools help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus tools help help
+```
+
+## `prometheus toolsets`
+
+```text
+List toolsets and show the tools a toolset resolves to
+
+Usage: prometheus toolsets [OPTIONS] <COMMAND>
+
+Commands:
+  list  Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+  show  The tools a toolset resolves to, in order, with their availability
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus toolsets list`
+
+```text
+Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+
+Usage: prometheus toolsets list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus toolsets show`
+
+```text
+The tools a toolset resolves to, in order, with their availability
+
+Usage: prometheus toolsets show [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The toolset name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus toolsets help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus toolsets help [COMMAND]
+
+Commands:
+  list  Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+  show  The tools a toolset resolves to, in order, with their availability
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus toolsets help list`
+
+```text
+Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+
+Usage: prometheus toolsets help list
+```
+
+## `prometheus toolsets help show`
+
+```text
+The tools a toolset resolves to, in order, with their availability
+
+Usage: prometheus toolsets help show
+```
+
+## `prometheus toolsets help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus toolsets help help
+```
+
+## `prometheus approvals`
+
+```text
+Check how the approval gate treats a command, without running it
+
+Usage: prometheus approvals [OPTIONS] <COMMAND>
+
+Commands:
+  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus approvals test`
+
+```text
+Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+
+Usage: prometheus approvals test [OPTIONS] <COMMAND>...
+
+Arguments:
+  <COMMAND>...
+          The command line, after `--`
+
+Options:
+      --backend <NAME>
+          Execution backend to assume (default: `terminal.backend`); hardline and deny rules apply on every backend
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --mode <MODE>
+          Approval mode to assume (default: `approvals.mode`)
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with the guardian model (asks like manual in M1)
+          - off:    Bypass prompts; hardline and deny rules still block
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --context <CONTEXT>
+          Context to assume; unattended contexts answer from their typed mode
+
+          Possible values:
+          - interactive:  A human can answer
+          - cron:         A cron job (`approvals.cron_mode`)
+          - single_query: `chat -z` (`approvals.single_query_mode`)
+          - unattended:   Webhook/API surfaces (`approvals.unattended_mode`)
+
+          [default: interactive]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus approvals help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus approvals help [COMMAND]
+
+Commands:
+  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus approvals help test`
+
+```text
+Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+
+Usage: prometheus approvals help test
+```
+
+## `prometheus approvals help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus approvals help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -3324,6 +3736,9 @@ Commands:
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
   auth        Add, list and remove provider API keys and subscription sign-ins
+  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets    List toolsets and show the tools a toolset resolves to
+  approvals   Check how the approval gate treats a command, without running it
   help        Print this message or the help of the given subcommand(s)
 ```
 
@@ -3992,6 +4407,90 @@ Copy another tool's sign-in into the secrets store
 Usage: prometheus help auth import
 ```
 
+## `prometheus help tools`
+
+```text
+List the profile's tools and explain one (exposure, capabilities, approvals)
+
+Usage: prometheus help tools [COMMAND]
+
+Commands:
+  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+  explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets  The toolsets, as `prometheus toolsets list`
+```
+
+## `prometheus help tools list`
+
+```text
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+
+Usage: prometheus help tools list
+```
+
+## `prometheus help tools explain`
+
+```text
+A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+
+Usage: prometheus help tools explain
+```
+
+## `prometheus help tools toolsets`
+
+```text
+The toolsets, as `prometheus toolsets list`
+
+Usage: prometheus help tools toolsets
+```
+
+## `prometheus help toolsets`
+
+```text
+List toolsets and show the tools a toolset resolves to
+
+Usage: prometheus help toolsets [COMMAND]
+
+Commands:
+  list  Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+  show  The tools a toolset resolves to, in order, with their availability
+```
+
+## `prometheus help toolsets list`
+
+```text
+Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+
+Usage: prometheus help toolsets list
+```
+
+## `prometheus help toolsets show`
+
+```text
+The tools a toolset resolves to, in order, with their availability
+
+Usage: prometheus help toolsets show
+```
+
+## `prometheus help approvals`
+
+```text
+Check how the approval gate treats a command, without running it
+
+Usage: prometheus help approvals [COMMAND]
+
+Commands:
+  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+```
+
+## `prometheus help approvals test`
+
+```text
+Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+
+Usage: prometheus help approvals test
+```
+
 ## `prometheus help help`
 
 ```text
@@ -4034,3 +4533,8 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.fallback.v1` | `prometheus fallback list` |
 | `prometheus.auth.v1` | `prometheus auth list` |
 | `prometheus.auth_status.v1` | `prometheus auth status` |
+| `prometheus.tools.v1` | `prometheus tools list` |
+| `prometheus.tool.v1` | `prometheus tools explain` |
+| `prometheus.toolsets.v1` | `prometheus toolsets list` |
+| `prometheus.toolset.v1` | `prometheus toolsets show` |
+| `prometheus.approvals_test.v1` | `prometheus approvals test` |

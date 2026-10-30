@@ -15,6 +15,9 @@ pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-obs.workspace = true
 prometheus.workspace = true
+pmt-tools.workspace = true
+# Tool-name links in documentation.
+regex.workspace = true
 # Line numbers of syntax nodes, needed to measure function length.
 proc-macro2 = { version = "1.0", features = ["span-locations"] }
 serde.workspace = true

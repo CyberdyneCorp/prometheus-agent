@@ -1,7 +1,7 @@
 //! What the dispatcher calls out to: hooks, the approval gate, the
 //! session's capability set and the trajectory observer. Each has a no-op
 //! (or pass-through) implementation until its owner wires the real one:
-//! plugin hooks (plugin-system), the command approval gate (13.6), live
+//! plugin hooks (plugin-system), the command approval gate ([`crate::approval`]), live
 //! session grants (security-boundaries) and trajectory recording (the
 //! turn loop).
 
@@ -39,6 +39,18 @@ pub enum PreDecision {
     Continue,
     /// Do not run it; the message becomes the result.
     Block(String),
+    /// Run it only after a human approval (the approval gate asks; with no
+    /// channel the call is denied naming the rule).
+    Escalate(Escalation),
+}
+
+/// A plugin rule asking for human approval of one call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Escalation {
+    /// The plugin's rule key; approvals record it as `plugin_rule:<key>`.
+    pub rule_key: String,
+    /// Why the rule wants a human to look.
+    pub reason: String,
 }
 
 /// Tool-call hooks (`pre_tool_call`, `post_tool_call`,
@@ -89,6 +101,8 @@ pub struct GateRequest<'a> {
     pub tool: &'a RegisteredTool,
     /// Validated arguments.
     pub arguments: &'a Value,
+    /// A `pre_tool_call` hook's escalation, when one asked for approval.
+    pub escalation: Option<&'a Escalation>,
 }
 
 /// The approval gate's answer.
@@ -108,7 +122,8 @@ pub trait ApprovalGate: Send + Sync {
     fn check<'a>(&'a self, request: GateRequest<'a>) -> SeamFuture<'a, GateVerdict>;
 }
 
-/// Allows every call (until the command approval gate is wired).
+/// Allows every call, escalations included (tests and tools-only setups;
+/// sessions use [`crate::approval::CommandGate`]).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AllowAll;
 

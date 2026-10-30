@@ -1,0 +1,5 @@
+verdict: hardline
+rule: recursive delete of root filesystem
+outcome: blocked: BLOCKED (hardline): recursive delete of root filesystem
+mode: off, context: interactive, backend: local
+nothing was executed

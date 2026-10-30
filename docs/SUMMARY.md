@@ -21,6 +21,7 @@
 - [Daemon configuration](reference/daemon-configuration.md)
 - [CLI](reference/cli.md)
 - [Error codes](reference/error-codes.md)
+- [Tools](reference/tools.md)
 
 # Project
 

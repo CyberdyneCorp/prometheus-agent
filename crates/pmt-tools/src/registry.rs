@@ -159,8 +159,10 @@ impl ToolRegistry {
         all.into_values()
     }
 
-    /// `unknown toolset '<name>' (did you mean ...?)`.
-    pub(crate) fn unknown_toolset(&self, name: &str) -> Error {
+    /// `unknown toolset '<name>' (did you mean ...?)` (configuration
+    /// error, exit 78; commands map it to `toolset.unknown`).
+    #[must_use]
+    pub fn unknown_toolset(&self, name: &str) -> Error {
         toolset::unknown(name, self.toolsets().map(|t| t.name.clone()))
     }
 

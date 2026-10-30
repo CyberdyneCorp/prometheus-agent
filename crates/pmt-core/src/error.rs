@@ -573,6 +573,12 @@ error_codes! {
     /// Toolsets include each other in a cycle.
     TOOLSET_CYCLE = ("toolset.cycle", Config,
         "Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected.");
+    /// A command named a toolset that does not exist.
+    TOOLSET_UNKNOWN = ("toolset.unknown", Usage,
+        "A command named a toolset that does not exist (`unknown toolset '<name>' (did you mean ...?)`); `prometheus toolsets list` shows them. In configuration the same mistake is `registry.unknown_name` (exit 78).");
+    /// `approvals test` was given a command line it cannot read.
+    APPROVALS_UNPARSABLE = ("approvals.unparsable", Usage,
+        "`prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

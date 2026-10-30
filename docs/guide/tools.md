@@ -20,8 +20,11 @@ disabled_toolsets = ["browser"]
 - A toolset can include other toolsets: `debugging` is `terminal` and
   `process` plus `web` and `file`; `safe` is `web`, `vision` and
   `image_gen` and never anything that executes.
-- `coding` is a posture: every `core` tool except `image_generate`,
-  `text_to_speech`, `cronjob` and `computer_use`. Naming it also selects
+- `coding` is a posture: every `core` tool except
+  [`image_generate`](../reference/tools.md#image_generate),
+  [`text_to_speech`](../reference/tools.md#text_to_speech),
+  [`cronjob`](../reference/tools.md#cronjob) and
+  [`computer_use`](../reference/tools.md#computer_use). Naming it also selects
   the coding prompt posture.
 - `x_search`, `video`, `video_gen` and `kanban` are default-off: they are
   never part of a default and appear only when named explicitly.
@@ -39,6 +42,29 @@ $ prometheus config set tools.enabled_toolsets '["core", "x_search"]'
 $ prometheus config validate
 <...>config.toml is valid
 ```
+
+The [tools reference](../reference/tools.md) lists every shipped toolset
+and tool name. To see them in your profile:
+
+```console
+$ prometheus toolsets list
+$ prometheus toolsets show core
+$ prometheus tools list
+$ prometheus toolsets show brwser   # exits 2
+error: unknown toolset 'brwser' (did you mean 'browser'?)
+```
+
+`toolsets list` marks the active toolsets with `*` (`--surface cron` marks
+those of `toolsets.surfaces.cron` instead) and shows each toolset's tools,
+includes, resolved tool count and `default-off`/`posture` flags.
+`toolsets show <name>` prints the tools a toolset resolves to, in order,
+each `exposed` or with the reason it would not be. `tools list` prints every
+registered tool with its toolset and the same verdict, and `tools explain
+<name>` its schema, owner, capabilities, `effect`, `idempotent`, resource
+claims, timeout, result budget, the active approval mode and the approval
+rules that apply to its calls. In a session, `/toolsets` prints the same
+listing with that session's toolsets marked. An unknown toolset or tool
+name exits 2 and suggests the closest names.
 
 ## What a session exposes
 
@@ -94,7 +120,7 @@ size, the file path and a 1,500-character preview instead.
 | `tools.result_budget.default_chars` | 100,000 |
 | all results of one response | 200,000 |
 
-`read_file` is never spilled; it pages through files itself. With a model
+[`read_file`](../reference/tools.md#read_file) is never spilled; it pages through files itself. With a model
 whose context window is known, one result may use at most 15% of the window
 and one response 30% (4 characters per token, at least 8,000 and 16,000
 characters). If the file cannot be written the result is cut inline and
@@ -104,3 +130,64 @@ saved]`.
 Spilled files are deleted after `sessions.retention_secs`, or after 24
 hours when that is 0, and with their session (`prometheus sessions delete
 <id>`).
+
+## Approvals
+
+Commands the model runs (the [`terminal`](../reference/tools.md#terminal)
+and [`execute_code`](../reference/tools.md#execute_code) tools) pass an
+approval gate first, always in this order:
+
+1. **Hardline commands are blocked**, in every mode, backend and context:
+   recursive deletes of `/`, your home or a system directory, `mkfs`,
+   writes to raw disks, fork bombs, `kill -1`, shutdown and reboot, and
+   deleting Prometheus itself or its home. The model gets
+   `BLOCKED (hardline): <reason>`.
+2. **Your deny rules are blocked** the same way: `approvals.deny` holds
+   command globs (`*` any text, `?` one character) matched against the
+   whole command and each command in it (`BLOCKED (deny rule '<rule>')`).
+3. **`approvals.mode = "off"`** (or `--yolo`, or `/yolo` for one session)
+   runs everything else without asking; the status line shows `YOLO`.
+4. **Allow rules** in `grants.toml` (`[approvals] allow = [...]`) run
+   without asking; a command line is allowed when it matches a rule as a
+   whole or every command in it does.
+5. **Dangerous commands ask**: recursive deletes, `git reset --hard`,
+   force pushes, `chmod -R`, `sudo`, a download piped into a shell,
+   destructive SQL and similar, plus two content checks: a `curl`/`wget`
+   request body or upload that sends a secret-named variable (`$..._KEY`,
+   `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`) or a credential file
+   (`.env`, `~/.ssh/*`, `*.pem`...), and invisible Unicode characters
+   that can disguise a command. Sending a token in a header (`-H
+   "Authorization: Bearer $TOKEN"`) is normal and does not ask.
+
+You answer a prompt with `once`, `session` (until the session ends),
+`always` (added to `[approvals].allow` in `grants.toml`; an entry you delete
+by hand is never written back) or `deny`. No answer within
+`approvals.timeout_secs` (300 s), a closed interface or a session without
+any way to ask all mean deny, and the model is told not to retry.
+
+Cron jobs, `chat -z` runs and webhook/API sessions never wait: they answer
+from `approvals.cron_mode`, `approvals.single_query_mode` and
+`approvals.unattended_mode` (`deny` by default, or `approve`); a denial
+says which key to set. These are strings: `cron_mode = false` is a
+configuration error (exit 78). `smart` mode asks like `manual` until the
+guardian model arrives.
+
+Writes to protected instruction files (`AGENTS.md`, `CLAUDE.md`, ...) ask
+every time, in every mode including `off`, and a plugin rule that escalates
+a call asks too (remembered as `plugin_rule:<rule>`).
+
+Try a command against the gate without running it:
+
+```console
+$ prometheus approvals test --mode off -- rm -rf /
+verdict: hardline
+rule: recursive delete of root filesystem
+outcome: blocked: BLOCKED (hardline): recursive delete of root filesystem
+mode: off, context: interactive, backend: local
+nothing was executed
+$ prometheus approvals test --context cron -- git reset --hard
+```
+
+The verdict is one of `hardline`, `deny rule`, `bypass`, `allowlisted`,
+`would prompt` or `allowed`; the command always exits 0, or 2 when the
+command line cannot be read (an unterminated quote).

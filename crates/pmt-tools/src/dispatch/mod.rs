@@ -24,8 +24,8 @@ use serde_json::Value;
 use tokio::time::Instant;
 
 pub use self::seams::{
-    AllowAll, ApprovalGate, Capabilities, DispatchObserver, GateRequest, GateVerdict, HookCall,
-    NoHooks, NoObserver, PreDecision, SeamFuture, ToolHooks,
+    AllowAll, ApprovalGate, Capabilities, DispatchObserver, Escalation, GateRequest, GateVerdict,
+    HookCall, NoHooks, NoObserver, PreDecision, SeamFuture, ToolHooks,
 };
 use crate::args;
 use crate::budget::ResultBudget;
@@ -200,9 +200,11 @@ impl Dispatcher {
             tool: &call.name,
             arguments,
         };
-        if let PreDecision::Block(message) = setup.hooks.pre_tool_call(hook_call).await {
-            return Err(ToolResult::text(Status::Blocked, message));
-        }
+        let escalation = match setup.hooks.pre_tool_call(hook_call).await {
+            PreDecision::Continue => None,
+            PreDecision::Block(message) => return Err(ToolResult::text(Status::Blocked, message)),
+            PreDecision::Escalate(escalation) => Some(escalation),
+        };
         let held = setup
             .capabilities
             .current()
@@ -221,6 +223,7 @@ impl Dispatcher {
             call_id: &call.call_id,
             tool,
             arguments,
+            escalation: escalation.as_ref(),
         };
         match setup.gate.check(request).await {
             GateVerdict::Allow => Ok(()),

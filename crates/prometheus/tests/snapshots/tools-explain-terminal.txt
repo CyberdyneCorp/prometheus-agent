@@ -1,0 +1,30 @@
+terminal
+  Run a shell command.
+toolset = terminal
+owner = built-in
+capabilities = process.spawn:*
+effect = external
+idempotent = false
+claims = reads: -; writes: -; exclusive: -; interactive: false
+timeout = 300 s
+result_budget = 100000 chars
+exposure = exposed
+approval_mode = smart
+approval rules:
+  - hardline commands (recursive delete of / or the home, mkfs, raw device writes, fork bombs, kill -1, shutdown) are always blocked
+  - 0 deny rule(s) in approvals.deny always block
+  - approvals.mode = "off" or --yolo skips the remaining checks
+  - allow rules in grants.toml [approvals].allow skip the prompt
+  - dangerous patterns and the secret-upload and invisible-characters detectors ask; cron, single-query and unattended runs answer from approvals.<context>_mode
+schema:
+{
+  "properties": {
+    "command": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "command"
+  ],
+  "type": "object"
+}

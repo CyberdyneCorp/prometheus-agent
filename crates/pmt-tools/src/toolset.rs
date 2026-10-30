@@ -205,6 +205,23 @@ pub fn builtin() -> Vec<Toolset> {
     ]
 }
 
+/// Every tool name the shipped toolsets refer to, each once, in toolset
+/// order (`core` first). This is the vocabulary documentation and prompts
+/// may name; the generated tools reference lists it and `cargo xtask gen`
+/// refuses references to any other name.
+#[must_use]
+pub fn builtin_tool_names() -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for toolset in builtin() {
+        for tool in toolset.tools {
+            if !names.contains(&tool) {
+                names.push(tool);
+            }
+        }
+    }
+    names
+}
+
 /// The toolsets known to one registry, keyed by name.
 pub type Toolsets = BTreeMap<String, Toolset>;
 
