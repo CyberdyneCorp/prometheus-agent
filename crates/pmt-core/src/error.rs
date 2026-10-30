@@ -218,8 +218,9 @@ error_codes! {
     /// A profile name does not match the profile name rules.
     PROFILE_INVALID_NAME = ("profile.invalid_name", Usage,
         "A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing.");
-    /// The named profile does not exist in this home.
-    PROFILE_NOT_FOUND = ("profile.not_found", NotFound,
+    /// The profile selected at launch does not exist in this home (a usage
+    /// error, exit 2, per the profile-selection spec).
+    PROFILE_NOT_FOUND = ("profile.not_found", Usage,
         "The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`.");
     /// Writing a command's output or reading an answer failed.
     OUTPUT_IO = ("output.io", Io,

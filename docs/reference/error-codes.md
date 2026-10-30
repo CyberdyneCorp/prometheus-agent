@@ -72,7 +72,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
 | `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
 | `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
-| `profile.not_found` | `not_found` | 66 | The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`. |
+| `profile.not_found` | `usage` | 2 | The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`. |
 | `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
 | `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

@@ -170,16 +170,17 @@ impl Home {
     ///
     /// # Errors
     ///
-    /// `profile.not_found` (exit 66) when the profile was never created;
+    /// `profile.not_found` (usage, exit 2) when the profile was never created;
     /// `home.io`.
     pub fn existing_profile(&self, name: &ProfileName) -> Result<ProfileDir, Error> {
         let exists = self.root.join("profiles").join(name.as_str()).is_dir();
         if !exists && name.as_str() != DEFAULT_PROFILE {
             return Err(Error::new(
                 &codes::PROFILE_NOT_FOUND,
-                format!("profile '{name}' does not exist"),
-            )
-            .with_hint(format!("create it with: prometheus profile create {name}")));
+                format!(
+                    "profile '{name}' does not exist; create it with: prometheus profile create {name}"
+                ),
+            ));
         }
         self.profile(name)
     }
@@ -425,13 +426,13 @@ mod tests {
     }
 
     #[test]
-    fn selecting_a_missing_profile_is_not_found() {
+    fn selecting_a_missing_profile_is_a_usage_error() {
         let temp = tempfile::tempdir().unwrap();
         let home = Home::open(&temp.path().join("h")).unwrap();
         let err = home
             .existing_profile(&ProfileName::parse("nope").unwrap())
             .unwrap_err();
-        assert_eq!(err.exit_code(), 66);
+        assert_eq!(err.exit_code(), 2);
         assert!(
             home.existing_profile(&ProfileName::default_profile())
                 .is_ok()

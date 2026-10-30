@@ -334,10 +334,96 @@ fn migration_on_load_keeps_a_backup_and_newer_files_are_refused() {
 }
 
 #[test]
-fn missing_profile_is_not_found() {
+fn unknown_launch_profile_is_a_usage_error() {
     let home = temp_home();
     let out = run(home.path(), &["-p", "work", "config", "path"]);
-    assert_eq!(out.status.code(), Some(66));
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        stderr(&out).contains(
+            "profile 'work' does not exist; create it with: prometheus profile create work"
+        ),
+        "{}",
+        stderr(&out)
+    );
+    let out = run(home.path(), &["--json", "-p", "work", "config", "path"]);
+    let doc: serde_json::Value = serde_json::from_str(stderr(&out).trim()).unwrap();
+    assert_eq!(doc["error"]["kind"], "usage");
+    assert_eq!(doc["error"]["code"], "profile.not_found");
+    assert!(!home.path().join("profiles").join("work").exists());
+}
+
+const SECRET_KEY_CREDENTIALS: &[&str] = &[
+    "sk-live-1234567abc",
+    "ghp_abcdefghijklmnop",
+    "xoxb-123456789012-abcdef",
+    "AKIAIOSFODNN7EXAMPLE",
+];
+
+/// The refusal names the key; the value appears nowhere in the output.
+fn assert_refused_without_value(out: &Output, value: &str, exit: i32, json: bool) {
+    let err = stderr(out);
+    assert_eq!(out.status.code(), Some(exit), "{value}: {err}");
+    assert!(
+        err.contains("providers.y.key_secret: this looks like a credential"),
+        "{value}: {err}"
+    );
+    assert!(
+        !err.contains(value) && !stdout(out).contains(value),
+        "{err}"
+    );
+    if json {
+        let doc: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+        assert!(
+            doc["error"]["code"]
+                .as_str()
+                .unwrap()
+                .starts_with("config.credential")
+        );
+    }
+}
+
+#[test]
+fn credential_in_a_secret_reference_key_is_refused_without_echoing_it() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    let key = "providers.y.key_secret";
+    for &value in SECRET_KEY_CREDENTIALS {
+        for json in [false, true] {
+            let flag = if json { "--json" } else { "-v" };
+            let out = run(home.path(), &[flag, "config", "set", key, value]);
+            assert_refused_without_value(&out, value, 2, json);
+            let set = format!("{key}={value}");
+            let out = run(home.path(), &[flag, "--set", &set, "config", "get", key]);
+            assert_refused_without_value(&out, value, 2, json);
+        }
+        let written = std::fs::read_to_string(config_path(home.path())).unwrap();
+        assert!(!written.contains(value), "{written}");
+    }
+    for &value in SECRET_KEY_CREDENTIALS {
+        let text = format!("[providers.y]\nkey_secret = \"{value}\"\n");
+        std::fs::write(config_path(home.path()), text).unwrap();
+        for json in [false, true] {
+            let flag = if json { "--json" } else { "-v" };
+            let out = run(home.path(), &[flag, "config", "validate"]);
+            assert_refused_without_value(&out, value, 78, json);
+        }
+    }
+}
+
+#[test]
+fn bad_secret_name_error_does_not_repeat_the_value() {
+    let home = temp_home();
+    let out = run(
+        home.path(),
+        &["config", "set", "providers.y.key_secret", "my-token-value"],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    let err = stderr(&out);
+    assert!(
+        err.contains("providers.y.key_secret: not a secret name"),
+        "{err}"
+    );
+    assert!(!err.contains("my-token-value"), "{err}");
 }
 
 #[cfg(unix)]

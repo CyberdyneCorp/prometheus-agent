@@ -268,6 +268,11 @@ impl Checker<'_> {
                 return self.invalid(key, node, message);
             }
         };
+        if let Some(text) = value.as_str()
+            && self.refuse_credential(node, text, key)
+        {
+            return;
+        }
         if !allowed.contains(value) {
             let message = format!("{key}: unknown value {value} (allowed: {})", list(allowed));
             self.invalid(key, node, message);
@@ -306,7 +311,9 @@ impl Checker<'_> {
     /// check, but a credential is still refused anywhere inside it.
     fn scan_free_form(&mut self, node: &Node, key: &str) {
         match &node.kind {
-            Kind::Scalar(Value::String(text), _) => self.refuse_credential(node, text, key),
+            Kind::Scalar(Value::String(text), _) => {
+                self.refuse_credential(node, text, key);
+            }
             Kind::Scalar(..) => {}
             Kind::Array(items) => items.iter().for_each(|item| self.scan_free_form(item, key)),
             Kind::Table(entries) => {
@@ -317,8 +324,11 @@ impl Checker<'_> {
         }
     }
 
-    fn refuse_credential(&mut self, node: &Node, text: &str, key: &str) {
-        if credential::looks_like_credential(text) {
+    /// Pushes the credential refusal when `text` looks like one. The
+    /// message names the key only: a rejected value is never echoed.
+    fn refuse_credential(&mut self, node: &Node, text: &str, key: &str) -> bool {
+        let refused = credential::looks_like_credential(text);
+        if refused {
             self.issues.push(Issue {
                 code: &codes::CONFIG_CREDENTIAL_IN_FILE,
                 key: key.to_owned(),
@@ -326,21 +336,24 @@ impl Checker<'_> {
                 message: credential::message(key),
             });
         }
+        refused
     }
 
+    /// Secret-reference keys get the credential check too: a pasted value
+    /// that happens to fit the name pattern (an AWS key id) is still a
+    /// credential, and the not-a-name error never repeats the value.
     fn check_scalar(&mut self, node: &Node, value: &Value, schema: &Value, key: &str) {
         if let Some(message) = range_error(value, schema) {
             return self.invalid(key, node, format!("{key}: {message}"));
         }
-        let is_secret_ref = schema.get("x-secret-ref") == Some(&Value::Bool(true));
-        if let (false, Some(text)) = (is_secret_ref, value.as_str()) {
-            self.refuse_credential(node, text, key);
+        let Some(text) = value.as_str() else { return };
+        if self.refuse_credential(node, text, key) {
+            return;
         }
-        if let (true, Some(name)) = (is_secret_ref, value.as_str())
-            && !is_secret_name(name)
-        {
+        let is_secret_ref = schema.get("x-secret-ref") == Some(&Value::Bool(true));
+        if is_secret_ref && !is_secret_name(text) {
             let message = format!(
-                "{key}: '{name}' is not a secret name (expected ^[A-Z][A-Z0-9_]{{0,127}}$)"
+                "{key}: not a secret name (expected the name of a stored secret matching ^[A-Z][A-Z0-9_]{{0,127}}$)"
             );
             self.invalid(key, node, message);
         }
@@ -455,6 +468,31 @@ mod tests {
     }
 
     #[test]
+    fn credentials_in_secret_and_enum_keys_are_refused_without_the_value() {
+        let text = "[approvals]\nmode = \"sk-live-123456789\"\n\
+                    [providers.x]\nkey_secret = \"AKIAIOSFODNN7EXAMPLE\"\n\
+                    [providers.y]\nkey_secret = \"xoxb-123456789012-abcdef\"\n";
+        let found = issues(text);
+        let found: Vec<(&str, &str)> = found
+            .iter()
+            .map(|i| (i.code.code, i.key.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("config.credential_in_file", "approvals.mode"),
+                ("config.credential_in_file", "providers.x.key_secret"),
+                ("config.credential_in_file", "providers.y.key_secret"),
+            ]
+        );
+        for message in messages(text) {
+            for value in ["sk-live", "AKIAIOSFODNN7", "xoxb-1234"] {
+                assert!(!message.contains(value), "{message}");
+            }
+        }
+    }
+
+    #[test]
     fn misspelled_key_suggests_the_closest_key() {
         assert_eq!(
             messages("[agent]\nmax_iteration = 40\n"),
@@ -513,7 +551,7 @@ mod tests {
             messages("[display]\ntheme = 3\n[providers.x]\nkey_secret = \"lower\"\n"),
             [
                 "display.theme: expected string, found integer",
-                "providers.x.key_secret: 'lower' is not a secret name (expected ^[A-Z][A-Z0-9_]{0,127}$)",
+                "providers.x.key_secret: not a secret name (expected the name of a stored secret matching ^[A-Z][A-Z0-9_]{0,127}$)",
             ]
         );
     }
