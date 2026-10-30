@@ -233,7 +233,9 @@ fn activity_write_gives_up_fast_with_store_busy() {
     assert_eq!(err.exit_code(), 75);
     assert!(err.message().contains("activity"), "{err}");
     assert!(waited >= Duration::from_millis(400), "{waited:?}");
-    assert!(waited < Duration::from_millis(1500), "{waited:?}");
+    // Well before the 3 s hold ends: the write gave up instead of waiting
+    // (loaded CI runners add scheduling delay on top of the 0.5 s budget).
+    assert!(waited < Duration::from_millis(2500), "{waited:?}");
     holder.join().unwrap();
 }
 
