@@ -81,41 +81,40 @@ impl Redactor {
     /// What an anonymous value or a credential-shaped token is replaced with.
     pub const MARKER: &'static str = "[REDACTED]";
 
-    /// Values shorter than this are not redacted: replacing every occurrence
-    /// of a 2-character string would destroy the report while protecting
-    /// nothing a real credential looks like.
+    /// Anonymous values ([`Redactor::new`]) shorter than this are not
+    /// redacted: replacing every occurrence of a 2-character string would
+    /// destroy the report while protecting nothing a real credential looks
+    /// like. Named values (a stored or launch secret) are redacted at any
+    /// length, because the spec promises every loaded secret value.
     pub const MIN_LEN: usize = 6;
 
     /// A redactor for the given anonymous secret values.
     #[must_use]
     pub fn new<'a>(secrets: impl IntoIterator<Item = &'a SecretString>) -> Self {
-        Self::build(
+        Self::from_forms(
             secrets
                 .into_iter()
-                .map(|s| (s.clone(), Self::MARKER.to_owned())),
+                .filter(|s| s.expose().len() >= Self::MIN_LEN)
+                .flat_map(|s| with_forms(s.expose(), Self::MARKER)),
         )
     }
 
-    /// A redactor that replaces each value with `[REDACTED:<name>]`
-    /// (spec: security-boundaries, Known-secret redaction everywhere).
+    /// A redactor that replaces each non-empty value, whatever its length,
+    /// with `[REDACTED:<name>]` (spec: security-boundaries, Known-secret
+    /// redaction everywhere).
     #[must_use]
     pub fn named<'a>(secrets: impl IntoIterator<Item = (&'a str, &'a SecretString)>) -> Self {
-        Self::build(
+        Self::from_forms(
             secrets
                 .into_iter()
-                .map(|(name, s)| (s.clone(), format!("[REDACTED:{name}]"))),
+                .filter(|(_, s)| !s.expose().is_empty())
+                .flat_map(|(name, s)| with_forms(s.expose(), &format!("[REDACTED:{name}]"))),
         )
     }
 
-    fn build(values: impl Iterator<Item = (SecretString, String)>) -> Self {
-        let mut values: Vec<(SecretString, String)> = values
-            .filter(|(s, _)| s.expose().len() >= Self::MIN_LEN)
-            .flat_map(|(secret, marker)| {
-                encoded_forms(secret.expose())
-                    .into_iter()
-                    .map(move |form| (SecretString::new(form), marker.clone()))
-            })
-            .collect();
+    /// Orders already-expanded `(form, marker)` pairs longest first.
+    fn from_forms(values: impl Iterator<Item = (SecretString, String)>) -> Self {
+        let mut values: Vec<(SecretString, String)> = values.collect();
         values.sort_by(|a, b| {
             b.0.expose()
                 .len()
@@ -130,7 +129,7 @@ impl Redactor {
     /// environment's values plus a profile's store).
     #[must_use]
     pub fn merged(&self, other: &Self) -> Self {
-        Self::build(self.values.iter().chain(&other.values).cloned())
+        Self::from_forms(self.values.iter().chain(&other.values).cloned())
     }
 
     /// Whether no value is known (pattern redaction still applies).
@@ -156,12 +155,41 @@ impl Redactor {
     pub fn redact_all(&self, text: &str) -> String {
         redact_patterns(&redact_pem(&self.redact(text)))
     }
+
+    /// `value` with [`Redactor::redact_all`] applied to every string inside
+    /// it, object keys included (a model can put anything in a key).
+    #[must_use]
+    pub fn redact_json(&self, value: serde_json::Value) -> serde_json::Value {
+        use serde_json::Value;
+        match value {
+            Value::String(text) => Value::String(self.redact_all(&text)),
+            Value::Array(items) => {
+                Value::Array(items.into_iter().map(|v| self.redact_json(v)).collect())
+            }
+            Value::Object(map) => Value::Object(
+                map.into_iter()
+                    .map(|(key, v)| (self.redact_all(&key), self.redact_json(v)))
+                    .collect(),
+            ),
+            other => other,
+        }
+    }
 }
 
 /// The value plus the encodings it is commonly leaked in: percent-encoded
 /// (URLs, form bodies) and base64 (standard and URL-safe, padded or not;
 /// plus the encoding of its longest 3-byte-aligned prefix, which is how it
-/// starts inside `echo $KEY | base64` or any longer encoded blob).
+/// starts inside `echo $KEY | base64` or any longer encoded blob, kept only
+/// when that prefix is at least [`Redactor::MIN_LEN`] bytes: the encoding of
+/// a 3-byte fragment would match unrelated text).
+/// Every form of `value`, each paired with `marker`.
+fn with_forms(value: &str, marker: &str) -> Vec<(SecretString, String)> {
+    encoded_forms(value)
+        .into_iter()
+        .map(|form| (SecretString::new(form), marker.to_owned()))
+        .collect()
+}
+
 fn encoded_forms(value: &str) -> Vec<String> {
     use base64::Engine as _;
     use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
@@ -175,10 +203,11 @@ fn encoded_forms(value: &str) -> Vec<String> {
         STANDARD_NO_PAD.encode(bytes),
         URL_SAFE.encode(bytes),
         URL_SAFE_NO_PAD.encode(bytes),
-        STANDARD.encode(aligned),
-        URL_SAFE.encode(aligned),
     ];
-    forms.retain(|form| form.len() >= Redactor::MIN_LEN);
+    if aligned.len() >= Redactor::MIN_LEN {
+        forms.extend([STANDARD.encode(aligned), URL_SAFE.encode(aligned)]);
+    }
+    forms.retain(|form| !form.is_empty());
     forms.sort();
     forms.dedup();
     forms
@@ -342,8 +371,37 @@ mod tests {
     }
 
     #[test]
-    fn very_short_values_are_left_alone() {
+    fn very_short_anonymous_values_are_left_alone() {
         let redactor = Redactor::new([&SecretString::new("ab")]);
         assert_eq!(redactor.redact("about"), "about");
+    }
+
+    /// Spec: "every loaded secret value" - a short stored secret is still
+    /// redacted, and an empty one never matches everywhere.
+    #[test]
+    fn short_named_values_are_redacted_and_empty_ones_ignored() {
+        let pin = SecretString::new("4821");
+        let empty = SecretString::new("");
+        let redactor = Redactor::named([("PIN", &pin), ("EMPTY", &empty)]);
+        assert_eq!(redactor.redact("pin=4821 ok"), "pin=[REDACTED:PIN] ok");
+        assert_eq!(redactor.redact("b64=NDgyMQ== ok"), "b64=[REDACTED:PIN] ok");
+        assert_eq!(redactor.redact("nothing here"), "nothing here");
+    }
+
+    #[test]
+    fn every_string_inside_json_is_redacted() {
+        let key = SecretString::new("value-of-the-key");
+        let redactor = Redactor::named([("API_KEY", &key)]);
+        let value = serde_json::json!({
+            "value-of-the-key": [{"arguments": "{\"k\":\"value-of-the-key\"}"}, 3, null],
+            "text": "sk-live-abcdef1234567890",
+        });
+        assert_eq!(
+            redactor.redact_json(value),
+            serde_json::json!({
+                "[REDACTED:API_KEY]": [{"arguments": "{\"k\":\"[REDACTED:API_KEY]\"}"}, 3, null],
+                "text": "[REDACTED]",
+            })
+        );
     }
 }

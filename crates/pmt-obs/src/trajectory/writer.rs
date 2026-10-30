@@ -286,7 +286,7 @@ impl Worker {
     fn write(&mut self, emit: &Emit) -> io::Result<()> {
         let kind = emit.event.kind();
         let payload = match &self.redactor {
-            Some(redactor) => redact(emit.event.payload(), redactor),
+            Some(redactor) => redactor.redact_json(emit.event.payload()),
             None => emit.event.payload(),
         };
         let full = self.line(emit, kind, payload.clone());
@@ -357,23 +357,6 @@ fn existing(path: &Path) -> io::Result<(u64, u64)> {
         }
     }
     Ok((last, size))
-}
-
-/// `value` with every string redacted (secret values become
-/// `[REDACTED:<NAME>]`, credential-shaped tokens `[REDACTED]`).
-fn redact(value: Value, redactor: &Redactor) -> Value {
-    match value {
-        Value::String(text) => Value::String(redactor.redact_all(&text)),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(|v| redact(v, redactor)).collect())
-        }
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, v)| (key, redact(v, redactor)))
-                .collect(),
-        ),
-        other => other,
-    }
 }
 
 fn io_error(err: &io::Error) -> Error {

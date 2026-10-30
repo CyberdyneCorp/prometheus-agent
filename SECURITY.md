@@ -75,7 +75,8 @@ issue:
 - **Output redaction**: replacing known secret values (and their
   URL-encoded and base64 forms) and credential-shaped strings with
   `[REDACTED:<NAME>]` / `[REDACTED]` in tool results, logs, trajectories,
-  session storage and errors.
+  session storage (text and every string of the JSON columns) and errors.
+  Every stored or launch secret is covered whatever its length.
 - **Skill scanning**: static checks of skills before they are installed.
 - **Provenance markers**: labels that mark tool output and fetched content
   as untrusted data in the model's context.

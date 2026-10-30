@@ -174,10 +174,11 @@ fn place(blob_dir: &Path, text: Option<String>) -> Result<Option<Stored>, Error>
     .transpose()
 }
 
-/// Spills large payloads; runs before the write transaction.
-/// A row ready to insert. Text content passes through `redactor` first
+/// A row ready to insert: large payloads are spilled (this runs before the
+/// write transaction) and every stored text passes through `redactor` first
 /// (spec: security-boundaries, Known-secret redaction everywhere: session
-/// storage), so the stored row and its hash never hold a known secret.
+/// storage), so the stored row, its blobs and its hash never hold a known
+/// secret.
 pub(crate) fn prepare(
     blob_dir: &Path,
     message: &NewMessage,
@@ -185,15 +186,12 @@ pub(crate) fn prepare(
 ) -> Result<Prepared, Error> {
     let json = |value: &Option<Value>| value.as_ref().map(Value::to_string);
     let redacted;
-    let message = match (redactor, &message.content) {
-        (Some(redactor), Some(content)) => {
-            redacted = NewMessage {
-                content: Some(redactor.redact_all(content)),
-                ..message.clone()
-            };
+    let message = match redactor {
+        Some(redactor) => {
+            redacted = redact(message, redactor);
             &redacted
         }
-        _ => message,
+        None => message,
     };
     Ok(Prepared {
         content: place(blob_dir, message.content.clone())?,
@@ -203,6 +201,21 @@ pub(crate) fn prepare(
         hash: message.content_hash(),
         message: message.clone(),
     })
+}
+
+/// `message` with every stored text redacted: the content and every string
+/// in the JSON columns, since a model can echo a secret in tool-call
+/// arguments or reasoning as easily as in its text. Ids and names are ours.
+fn redact(message: &NewMessage, redactor: &Redactor) -> NewMessage {
+    let json = |value: &Option<Value>| value.clone().map(|v| redactor.redact_json(v));
+    NewMessage {
+        content: message.content.as_deref().map(|c| redactor.redact_all(c)),
+        tool_calls: json(&message.tool_calls),
+        reasoning: json(&message.reasoning),
+        provider_payload: json(&message.provider_payload),
+        metadata: json(&message.metadata),
+        ..message.clone()
+    }
 }
 
 /// The next free `seq` of a session.

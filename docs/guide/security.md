@@ -73,4 +73,10 @@ URL-encoded and base64 forms, is replaced with `[REDACTED:<NAME>]`, and
 credential-shaped tokens (`sk-…`, `ghp_…`, `AKIA…`, `xoxb-…`, PEM private
 keys, …) with `[REDACTED]`, before anything is written or shown: tool
 results sent to the model, spill files, logs, trajectories, session storage
-and printed errors. Setting it to `false` logs a WARN on every start.
+(message text and every string in a message's tool calls, reasoning,
+provider payload and metadata, inline or spilled to a blob) and printed
+errors. Setting it to `false` logs a WARN on every start.
+
+A stored secret is redacted whatever its length, so a very short value
+(`1234`) is replaced everywhere that text appears: keep only real secrets in
+the store.

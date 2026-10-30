@@ -122,6 +122,64 @@ async fn a_command_printing_the_key_reaches_the_model_redacted() {
     terminal.close().await;
 }
 
+/// An assistant row carrying the key in every JSON column.
+fn echoing_assistant() -> NewMessage {
+    let mut message = NewMessage::new(Role::Assistant, "calling a tool");
+    let arguments = serde_json::json!({ "command": format!("curl -H 'Bearer {KEY}'") });
+    message.tool_calls = Some(serde_json::json!([{
+        "id": "tc_1",
+        "name": "terminal",
+        "arguments": arguments.to_string(),
+    }]));
+    let padding = "thinking about it ".repeat(pmt_store::blobs::SPILL_BYTES / 16);
+    message.reasoning = Some(serde_json::json!([{ "text": format!("{}{padding}", leaked()) }]));
+    message.provider_payload = Some(serde_json::json!({ "echo": { KEY: url_encoded() } }));
+    message.metadata = Some(serde_json::json!({ "note": base64() }));
+    message
+}
+
+/// Every message column in state.db and every blob file: no form of the
+/// key, and the marker in each place the key was.
+fn assert_store_files_clean(location: &pmt_store::StoreLocation) {
+    let db = rusqlite::Connection::open(location.database()).unwrap();
+    let mut stmt = db
+        .prepare(
+            "SELECT COALESCE(content, ''), COALESCE(tool_calls, ''), COALESCE(reasoning, ''), \
+             COALESCE(provider_payload, ''), COALESCE(metadata, ''), reasoning_ref FROM messages",
+        )
+        .unwrap();
+    let mut columns = String::new();
+    let mut spilled = false;
+    let rows = stmt
+        .query_map([], |row| {
+            let text: Vec<String> = (0..5).map(|i| row.get(i)).collect::<Result<_, _>>()?;
+            Ok((text.join("\n"), row.get::<_, Option<String>>(5)?.is_some()))
+        })
+        .unwrap();
+    for row in rows {
+        let (text, reasoning_spilled) = row.unwrap();
+        columns.push_str(&text);
+        spilled |= reasoning_spilled;
+    }
+    assert!(spilled, "the large reasoning should have spilled to a blob");
+    let mut blobs = String::new();
+    for dir in std::fs::read_dir(location.blobs()).unwrap() {
+        for file in std::fs::read_dir(dir.unwrap().path()).unwrap() {
+            blobs.push_str(&std::fs::read_to_string(file.unwrap().path()).unwrap());
+        }
+    }
+    let everything = format!("{columns}\n{blobs}");
+    for form in [KEY.to_owned(), url_encoded(), base64()] {
+        assert!(
+            !everything.contains(&form),
+            "state.db or a blob leaks {form}"
+        );
+    }
+    // content: 3, tool call: 1, reasoning blob: 3, payload key + value: 2,
+    // metadata: 1.
+    assert_eq!(everything.matches(MARKER).count(), 10);
+}
+
 /// The session store, the log and the trajectory get the same treatment
 /// before anything is written.
 #[test]
@@ -145,6 +203,11 @@ fn store_log_and_trajectory_hold_the_marker() {
         .unwrap();
     let stored = store.messages(session, Visibility::All).unwrap();
     assert_clean("session store", stored[0].content.as_deref().unwrap());
+    // The model echoes the key in tool-call arguments, reasoning (large
+    // enough to spill to the blob store), its opaque payload and metadata:
+    // none of it may reach state.db or a blob.
+    store.append_message(session, &echoing_assistant()).unwrap();
+    assert_store_files_clean(store.location());
 
     let (layer, handle) = logs::layer(LogSetup {
         home: Some(root.path().to_owned()),
