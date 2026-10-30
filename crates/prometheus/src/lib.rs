@@ -21,10 +21,11 @@ pub mod slash_handlers;
 pub mod startup;
 pub mod surface;
 pub mod trajectory_cmd;
+pub mod usage_cmd;
 pub mod version;
 
 pub use cli::{
     BackupCommand, Cli, Command, ConfigCommand, LogsArgs, ProfileCommand, SecretsCommand,
-    SessionsCommand, SnapshotsCommand, TrajectoryCommand, command,
+    SessionsCommand, SnapshotsCommand, TrajectoryCommand, UsageArgs, command,
 };
 pub use context::Context;

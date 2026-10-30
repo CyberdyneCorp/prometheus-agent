@@ -6,7 +6,6 @@ use std::collections::{BTreeSet, VecDeque};
 use std::fs::File;
 use std::io::{self, BufRead as _, BufReader, Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use jiff::Timestamp;
 use pmt_core::error::{Error, codes};
@@ -83,22 +82,7 @@ pub fn parse_since(value: &str, now: Timestamp) -> Result<Timestamp, Error> {
             format!("invalid --since value '{value}': use 30m, 2h, 1d or an RFC 3339 time"),
         )
     };
-    if let Ok(ts) = value.parse::<Timestamp>() {
-        return Ok(ts);
-    }
-    let split = value.len().checked_sub(1).ok_or_else(invalid)?;
-    let (number, unit) = value.split_at(split);
-    let number: u64 = number.parse().map_err(|_| invalid())?;
-    let seconds = match unit {
-        "s" => Some(number),
-        "m" => number.checked_mul(60),
-        "h" => number.checked_mul(3_600),
-        "d" => number.checked_mul(86_400),
-        _ => None,
-    }
-    .ok_or_else(invalid)?;
-    now.checked_sub(Duration::from_secs(seconds))
-        .map_err(|_| invalid())
+    crate::time::parse_point(value, now).ok_or_else(invalid)
 }
 
 /// The last `limit` records (`0` = all) of the log at `current` and its
@@ -273,7 +257,7 @@ mod tests {
             parse_since("2026-05-01T08:00:00Z", now).unwrap(),
             "2026-05-01T08:00:00Z".parse::<Timestamp>().unwrap()
         );
-        for bad in ["yesterday", "", "5w", "m", "-3h"] {
+        for bad in ["yesterday", "", "5w", "m", "-3h", "5é", "é", "3日"] {
             let err = parse_since(bad, now).unwrap_err();
             assert_eq!(
                 err.message(),

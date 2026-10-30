@@ -705,6 +705,21 @@
         }
       ]
     },
+    "CronConfig": {
+      "additionalProperties": false,
+      "description": "The `[cron]` section. Only the profile time zone exists in M1; it is\nalso the zone daily and monthly budgets and `prometheus usage --by day`\nuse (the scheduler's keys arrive with M2).",
+      "properties": {
+        "timezone": {
+          "description": "IANA time zone of this profile (`Europe/Lisbon`); unset uses the\nhost's zone.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "DegradedFeature": {
       "description": "Sandbox hardening features.",
       "oneOf": [
@@ -1360,6 +1375,15 @@
           "format": "double",
           "minimum": 0.0,
           "type": "number"
+        },
+        "reasoning": {
+          "description": "Reasoning tokens (a part of the output tokens); unset bills them at\nthe output price.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -2736,6 +2760,11 @@
         "engine": "builtin"
       },
       "description": "Context engine selection."
+    },
+    "cron": {
+      "$ref": "#/$defs/CronConfig",
+      "default": {},
+      "description": "Profile time zone (scheduler keys arrive with M2)."
     },
     "display": {
       "$ref": "#/$defs/DisplayConfig",

@@ -41,9 +41,9 @@ pub use models::{
     ModelPrice, ModelRoute, PoolStrategy, PreferCredential, ProviderConfig,
 };
 pub use operations::{
-    BudgetsConfig, DegradedFeature, EgressConfig, LogLevel, LoggingConfig, NetworkConfig,
-    ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig,
+    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, LogLevel, LoggingConfig,
+    NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend, SecretsConfig,
+    SecurityConfig, TelemetryConfig, TrajectoriesConfig,
 };
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
@@ -85,6 +85,8 @@ pub struct Config {
     pub compression: CompressionConfig,
     /// Context engine selection.
     pub context: ContextConfig,
+    /// Profile time zone (scheduler keys arrive with M2).
+    pub cron: CronConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
     /// Provider fallback.
@@ -157,6 +159,7 @@ impl Default for Config {
             cli: CliConfig::default(),
             compression: CompressionConfig::default(),
             context: ContextConfig::default(),
+            cron: CronConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),

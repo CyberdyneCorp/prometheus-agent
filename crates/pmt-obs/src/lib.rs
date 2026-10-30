@@ -4,10 +4,18 @@
 //! - [`trajectory`]: the one JSONL grammar every surface records, its
 //!   canonical text rendering, the redacted writer and retention;
 //! - [`logs`]: structured JSON logs (the `tracing` subscriber) and the
-//!   reading side of `prometheus logs`.
+//!   reading side of `prometheus logs`;
+//! - [`usage`]: pricing, the ledger writer and grouped reports;
+//! - [`budget`]: pre-call budget checks, warnings and the agent-write
+//!   guard on `budgets.*`;
+//! - [`telemetry`]: the opt-in telemetry gate (nothing is sent by default).
 
+pub mod budget;
 pub mod logs;
+pub mod telemetry;
+pub mod time;
 pub mod trajectory;
+pub mod usage;
 
 /// Major version of the trajectory event grammar this build writes
 /// (`grammar_version`); readers skip event types they do not know and

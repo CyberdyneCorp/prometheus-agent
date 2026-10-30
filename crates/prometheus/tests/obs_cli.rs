@@ -95,6 +95,33 @@ fn the_header_names_the_home_level_file_of_update() {
 }
 
 #[test]
+fn the_header_path_is_absolute_under_a_relative_home() {
+    let home = temp_home();
+    init(home.path());
+    let parent = home.path().parent().unwrap();
+    let name = home.path().file_name().unwrap().to_str().unwrap();
+    let out = std::process::Command::new(common::BIN)
+        .current_dir(parent)
+        .args(["--home", name, "logs"])
+        .env_remove("PMT_LOG")
+        .env_remove("RUST_LOG")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let text = ok(&out);
+    let header = text.lines().next().unwrap();
+    let path = header.trim_start_matches("==> ").trim_end_matches(" <==");
+    assert!(Path::new(path).is_absolute(), "{header}");
+    let expected = profile_log(home.path());
+    assert_eq!(Path::new(path).file_name(), expected.file_name());
+    assert_eq!(
+        Path::new(path).parent().unwrap().canonicalize().unwrap(),
+        expected.parent().unwrap().canonicalize().unwrap(),
+        "{header}"
+    );
+}
+
+#[test]
 fn level_since_and_errors_filter_records() {
     let home = temp_home();
     init(home.path());
@@ -153,6 +180,16 @@ fn invalid_since_unknown_component_and_unknown_level_exit_2() {
         "error: invalid --since value 'yesterday': use 30m, 2h, 1d or an RFC 3339 time\n"
     );
     assert!(stdout(&out).is_empty());
+
+    // A multibyte suffix is an invalid value, not a crash.
+    for bad in ["5é", "3日"] {
+        let out = run(home.path(), &["logs", "--since", bad]);
+        assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+        assert_eq!(
+            stderr(&out),
+            format!("error: invalid --since value '{bad}': use 30m, 2h, 1d or an RFC 3339 time\n")
+        );
+    }
 
     let out = run(home.path(), &["logs", "chat"]);
     assert_eq!(out.status.code(), Some(2));
@@ -348,7 +385,9 @@ fn following_a_session_prints_old_and_new_records_until_interrupted_then_exits_1
     assert!(lines.next().unwrap().unwrap().starts_with("==> "));
     assert!(lines.next().unwrap().unwrap().ends_with("existing n=1"));
 
-    let mut appended = std::fs::read_to_string(&log).unwrap();
+    // Appended in place (never rewritten), as the log writer does: a
+    // rewrite truncates first and the follower would rightly re-read it.
+    let mut appended = String::new();
     appended.push_str(&record(
         ts,
         "info",
@@ -357,7 +396,11 @@ fn following_a_session_prints_old_and_new_records_until_interrupted_then_exits_1
         "other new",
     ));
     appended.push_str(&record(ts, "warn", "agent", Some(session), "new"));
-    std::fs::write(&log, appended).unwrap();
+    {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new().append(true).open(&log).unwrap();
+        file.write_all(appended.as_bytes()).unwrap();
+    }
     let started = Instant::now();
     let next = lines.next().unwrap().unwrap();
     assert!(next.ends_with(": new n=1"), "{next}");

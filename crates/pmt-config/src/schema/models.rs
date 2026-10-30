@@ -184,6 +184,11 @@ pub struct ModelPrice {
     /// Cache-write tokens.
     #[schemars(range(min = 0.0))]
     pub cache_write: f64,
+    /// Reasoning tokens (a part of the output tokens); unset bills them at
+    /// the output price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub reasoning: Option<f64>,
 }
 
 /// The `[auxiliary]` section: one optional table per auxiliary task.

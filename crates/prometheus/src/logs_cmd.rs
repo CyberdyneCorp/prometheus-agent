@@ -45,7 +45,8 @@ pub fn run(args: &LogsArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         since,
         sessions: sessions(args, ctx)?,
     };
-    let current = view::current_file(home.root(), profile.path(), component);
+    // The header names absolute paths even under a relative `--home`.
+    let current = absolute(&view::current_file(home.root(), profile.path(), component));
     // Taken before printing so records written meanwhile are followed.
     let follower = args.follow.then(|| Follower::from_end(&current));
     let (records, mut read) = view::tail(&current, &filter, args.lines)?;
@@ -114,7 +115,7 @@ fn list(home: &Path, profile: &Path, json: bool) -> Result<u8, Error> {
         .iter()
         .map(|name| Component {
             name,
-            file: view::current_file(home, profile, name),
+            file: absolute(&view::current_file(home, profile, name)),
         })
         .collect();
     if json {
@@ -129,6 +130,10 @@ fn list(home: &Path, profile: &Path, json: bool) -> Result<u8, Error> {
         let _ = writeln!(text, "{:<10} {}", c.name, c.file.display());
     }
     print_raw(&text)
+}
+
+fn absolute(path: &Path) -> PathBuf {
+    std::path::absolute(path).unwrap_or_else(|_| path.to_owned())
 }
 
 fn print_header(files: &[PathBuf], json: bool) -> Result<u8, Error> {

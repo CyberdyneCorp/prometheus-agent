@@ -36,6 +36,7 @@ mod store;
 pub mod titles;
 pub mod trajectories;
 pub mod usage;
+pub mod usage_query;
 
 pub use blobs::{BlobRef, GcReport};
 pub use compaction::{Compacted, Compaction};
@@ -57,6 +58,7 @@ pub use sessions::{
 pub use store::{CHECKPOINT_EVERY, MAX_READERS, Store};
 pub use titles::TitleWrite;
 pub use usage::{Tokens, UsageEvent, UsageScope, UsageTotals};
+pub use usage_query::UsageFilter;
 
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a

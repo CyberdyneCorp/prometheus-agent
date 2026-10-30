@@ -112,6 +112,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `compression.threshold` | number | `0.5` | > 0.0, < 1.0 | `next_session` | Fraction of the input budget at which compaction triggers. |
 | `compression.threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Lower absolute trigger in tokens; `0` is off. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
+| `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
 | `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
 | `display.compact` | boolean | `false` | any | `live` | Compact layout. |

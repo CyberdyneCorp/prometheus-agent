@@ -123,6 +123,12 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `trajectory.size_limit` | `io` | 74 | The session's trajectory reached `observability.trajectories.max_bytes_per_session`; later events are recorded without their payload. Recorded as an `error` event, not returned. |
 | `logs.invalid_since` | `usage` | 2 | `prometheus logs --since` takes `<N>[smhd]` (30m, 2h, 1d) or an RFC 3339 time. |
 | `logs.io` | `io` | 74 | A log file under `logs/` could not be read. |
+| `usage.invalid_time` | `usage` | 2 | `prometheus usage --since/--until` take `<N>[smhd]` (30m, 2h, 7d) or an RFC 3339 time. |
+| `budget.exceeded` | `budget_exceeded` | 3 | A model call was not sent because its worst-case cost or tokens would exceed a `budgets.*` limit; raise it with `prometheus config set budgets.<key>` or `/budget set`. |
+| `budget.unpriced_model` | `budget_exceeded` | 3 | A USD budget is set but the model has no price; set `models.<model>.price` or `budgets.allow_unpriced = true` (then only token budgets apply to it). |
+| `budget.agent_write` | `permission_denied` | 77 | Budgets are changed only by the user (`prometheus config set`, `/budget set`); agent tools may not write `budgets.*` keys, including through file writes to `config.toml`. |
+| `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |
+| `telemetry.refused` | `config` | 78 | `telemetry.enabled = true` needs an `https://` `telemetry.endpoint` (plain HTTP only to loopback); nothing is sent otherwise. Logged, not returned. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |
 | `net.destination_blocked` | `permission_denied` | 77 | A URL resolved to a private or cloud-metadata address, or did not resolve; private destinations need `security.egress.allow_private` or a session grant, metadata endpoints are always refused. |
 | `net.too_many_redirects` | `unavailable` | 69 | A fetched URL redirected more than 10 times. |

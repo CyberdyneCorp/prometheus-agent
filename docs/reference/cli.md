@@ -18,6 +18,7 @@ Commands:
   profile     List, create, select, rename and delete profiles
   sessions    List, search, export and manage the profile's sessions
   logs        Show structured log records of a component (`list` names them)
+  usage       Totals of model and metered tool calls from the usage ledger
   trajectory  Render the recorded trajectory of a session
   help        Print this message or the help of the given subcommand(s)
 
@@ -2284,6 +2285,61 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus usage`
+
+```text
+Totals of model and metered tool calls from the usage ledger
+
+Usage: prometheus usage [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --since <S>
+          Calls since `<N>[smhd]` ago or an RFC 3339 time
+
+          [default: 30d]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --until <S>
+          Calls before `<N>[smhd]` ago or an RFC 3339 time (default: now)
+
+      --by <BY>
+          One row per group
+
+          Possible values:
+          - root:     Root session of the lineage
+          - session:  Session that made the call
+          - model:    Provider and model
+          - provider: Provider
+          - purpose:  Purpose (`main`, `auxiliary.title`, `compression`...)
+          - day:      Calendar day in the profile's time zone
+          - profile:  Profile
+
+          [default: day]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --session <ID>
+          Only this session and its descendants (a root: its whole lineage)
+
+      --all-profiles
+          Every profile, each through its own scope, with a grand total
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus trajectory`
 
 ```text
@@ -2412,6 +2468,7 @@ Commands:
   profile     List, create, select, rename and delete profiles
   sessions    List, search, export and manage the profile's sessions
   logs        Show structured log records of a component (`list` names them)
+  usage       Totals of model and metered tool calls from the usage ledger
   trajectory  Render the recorded trajectory of a session
   help        Print this message or the help of the given subcommand(s)
 ```
@@ -2879,6 +2936,14 @@ Show structured log records of a component (`list` names them)
 Usage: prometheus help logs
 ```
 
+## `prometheus help usage`
+
+```text
+Totals of model and metered tool calls from the usage ledger
+
+Usage: prometheus help usage
+```
+
 ## `prometheus help trajectory`
 
 ```text
@@ -2912,6 +2977,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.config.v1` | `prometheus config show` |
 | `prometheus.config_value.v1` | `prometheus config get` |
 | `prometheus.config_explain.v1` | `prometheus config explain` |

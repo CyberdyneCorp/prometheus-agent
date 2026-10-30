@@ -30,6 +30,18 @@ pub struct Tokens {
     pub reasoning: u64,
 }
 
+impl From<pmt_store::Tokens> for Tokens {
+    fn from(t: pmt_store::Tokens) -> Self {
+        Self {
+            input: t.input,
+            output: t.output,
+            cache_read: t.cache_read,
+            cache_write: t.cache_write,
+            reasoning: t.reasoning,
+        }
+    }
+}
+
 /// Cumulative usage carried by step and progress events.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Usage {

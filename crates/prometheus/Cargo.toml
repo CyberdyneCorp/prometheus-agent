@@ -50,6 +50,7 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+pmt-net.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
 

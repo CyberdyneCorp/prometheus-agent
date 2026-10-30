@@ -84,6 +84,8 @@ pub enum Command {
     },
     /// Show structured log records of a component (`list` names them).
     Logs(LogsArgs),
+    /// Totals of model and metered tool calls from the usage ledger.
+    Usage(UsageArgs),
     /// Render the recorded trajectory of a session.
     Trajectory {
         /// The trajectory subcommand.
@@ -117,6 +119,45 @@ pub struct LogsArgs {
     /// Only records of the sessions of this root lineage.
     #[arg(long, value_name = "ID")]
     pub root: Option<String>,
+}
+
+/// `prometheus usage` arguments.
+#[derive(Debug, Clone, clap::Args)]
+pub struct UsageArgs {
+    /// Calls since `<N>[smhd]` ago or an RFC 3339 time.
+    #[arg(long, value_name = "S", default_value = "30d")]
+    pub since: String,
+    /// Calls before `<N>[smhd]` ago or an RFC 3339 time (default: now).
+    #[arg(long, value_name = "S")]
+    pub until: Option<String>,
+    /// One row per group.
+    #[arg(long, value_enum, default_value_t = UsageBy::Day)]
+    pub by: UsageBy,
+    /// Only this session and its descendants (a root: its whole lineage).
+    #[arg(long, value_name = "ID", conflicts_with = "all_profiles")]
+    pub session: Option<String>,
+    /// Every profile, each through its own scope, with a grand total.
+    #[arg(long)]
+    pub all_profiles: bool,
+}
+
+/// `usage --by` values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum UsageBy {
+    /// Root session of the lineage.
+    Root,
+    /// Session that made the call.
+    Session,
+    /// Provider and model.
+    Model,
+    /// Provider.
+    Provider,
+    /// Purpose (`main`, `auxiliary.title`, `compression`...).
+    Purpose,
+    /// Calendar day in the profile's time zone.
+    Day,
+    /// Profile.
+    Profile,
 }
 
 fn component_values() -> clap::builder::PossibleValuesParser {

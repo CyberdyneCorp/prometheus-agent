@@ -119,6 +119,19 @@ impl Default for BudgetsConfig {
     }
 }
 
+/// The `[cron]` section. Only the profile time zone exists in M1; it is
+/// also the zone daily and monthly budgets and `prometheus usage --by day`
+/// use (the scheduler's keys arrive with M2).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "live"))]
+pub struct CronConfig {
+    /// IANA time zone of this profile (`Europe/Lisbon`); unset uses the
+    /// host's zone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+}
+
 /// The `[telemetry]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]

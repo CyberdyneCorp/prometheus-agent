@@ -275,11 +275,7 @@ fn totals_json(totals: &UsageTotals) -> Value {
 }
 
 fn render_totals(label: &str, totals: &UsageTotals) -> String {
-    let cost = if totals.calls > 0 && totals.unpriced_calls == totals.calls {
-        "—".to_owned()
-    } else {
-        format!("${:.4}", totals.cost_usd)
-    };
+    let cost = pmt_obs::usage::format_total_cost(totals);
     format!(
         "{label:<9}{} calls  in {}  out {}  cache r/w {}/{}  reasoning {}  cost {cost} ({} unpriced)\n",
         totals.calls,

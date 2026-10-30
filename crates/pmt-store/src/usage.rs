@@ -95,16 +95,67 @@ pub struct UsageTotals {
     pub unpriced_calls: u64,
 }
 
+impl Tokens {
+    /// Tokens a token budget counts: input, output and both cache classes
+    /// (reasoning tokens are a part of the output tokens).
+    #[must_use]
+    pub const fn billed(&self) -> u64 {
+        self.input
+            .saturating_add(self.output)
+            .saturating_add(self.cache_read)
+            .saturating_add(self.cache_write)
+    }
+
+    fn add(&mut self, other: &Self) {
+        self.input = self.input.saturating_add(other.input);
+        self.output = self.output.saturating_add(other.output);
+        self.cache_read = self.cache_read.saturating_add(other.cache_read);
+        self.cache_write = self.cache_write.saturating_add(other.cache_write);
+        self.reasoning = self.reasoning.saturating_add(other.reasoning);
+    }
+}
+
+impl UsageTotals {
+    /// Adds one ledger row.
+    pub fn add(&mut self, event: &UsageEvent) {
+        self.calls += 1;
+        self.tokens.add(&event.tokens);
+        match event.cost_usd {
+            Some(cost) => self.cost_usd += cost,
+            None => self.unpriced_calls += 1,
+        }
+    }
+
+    /// Adds another total.
+    pub fn merge(&mut self, other: &Self) {
+        self.calls += other.calls;
+        self.tokens.add(&other.tokens);
+        self.cost_usd += other.cost_usd;
+        self.unpriced_calls += other.unpriced_calls;
+    }
+}
+
 fn count(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
 
-fn totals(conn: &Connection, filter: &str, param: Option<String>) -> Result<UsageTotals, Error> {
+/// The columns `event_from_row` reads, in its order.
+pub(crate) const SELECT_COLUMNS: &str = "SELECT call_id, ts, session_id, turn_id, \
+    parent_call_id, purpose, purpose_detail, provider, model, service_tier, input_tokens, \
+    output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens, cost_usd, \
+    cost_status, billing_source, request_hash, cache_hit";
+
+/// Sums the rows a `WHERE` clause (possibly empty) selects.
+pub(crate) fn totals_with(
+    conn: &Connection,
+    clause: &str,
+    params: &[rusqlite::types::Value],
+) -> Result<UsageTotals, Error> {
     let sql_text = format!(
         "SELECT count(*), COALESCE(sum(input_tokens), 0), COALESCE(sum(output_tokens), 0), \
          COALESCE(sum(cache_read_tokens), 0), COALESCE(sum(cache_write_tokens), 0), \
          COALESCE(sum(reasoning_tokens), 0), COALESCE(sum(cost_usd), 0.0), \
-         count(*) - count(cost_usd) FROM usage_ledger {filter}"
+         count(*) - count(cost_usd) FROM usage_ledger {clause}"
     );
     let read = |row: &rusqlite::Row<'_>| -> rusqlite::Result<UsageTotals> {
         let n = |i: usize| -> rusqlite::Result<u64> {
@@ -123,14 +174,19 @@ fn totals(conn: &Connection, filter: &str, param: Option<String>) -> Result<Usag
             unpriced_calls: n(7)?,
         })
     };
-    match param {
-        Some(param) => conn.query_row(&sql_text, [param], read),
-        None => conn.query_row(&sql_text, [], read),
-    }
-    .map_err(sql)
+    conn.query_row(&sql_text, rusqlite::params_from_iter(params.iter()), read)
+        .map_err(sql)
 }
 
-fn event_from_row(row: &rusqlite::Row<'_>) -> Result<UsageEvent, Error> {
+fn totals(conn: &Connection, filter: &str, param: Option<String>) -> Result<UsageTotals, Error> {
+    let params: Vec<rusqlite::types::Value> = param
+        .into_iter()
+        .map(rusqlite::types::Value::Text)
+        .collect();
+    totals_with(conn, filter, &params)
+}
+
+pub(crate) fn event_from_row(row: &rusqlite::Row<'_>) -> Result<UsageEvent, Error> {
     let n = |i: usize| -> Result<u64, Error> {
         Ok(u64::try_from(row.get::<_, i64>(i).map_err(sql)?).unwrap_or(0))
     };
@@ -170,13 +226,9 @@ impl Store {
     pub fn usage_events(&self, session: SessionId) -> Result<Vec<UsageEvent>, Error> {
         self.read(|conn| {
             let mut stmt = conn
-                .prepare(
-                    "SELECT call_id, ts, session_id, turn_id, parent_call_id, purpose, \
-                     purpose_detail, provider, model, service_tier, input_tokens, output_tokens, \
-                     cache_read_tokens, cache_write_tokens, reasoning_tokens, cost_usd, \
-                     cost_status, billing_source, request_hash, cache_hit FROM usage_ledger \
-                     WHERE session_id = ?1 ORDER BY ts, call_id",
-                )
+                .prepare(&format!(
+                    "{SELECT_COLUMNS} FROM usage_ledger WHERE session_id = ?1 ORDER BY ts, call_id"
+                ))
                 .map_err(sql)?;
             let mut rows = stmt.query([session.to_string()]).map_err(sql)?;
             let mut events = Vec::new();

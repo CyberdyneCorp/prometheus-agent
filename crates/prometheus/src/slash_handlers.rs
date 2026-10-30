@@ -3,13 +3,16 @@
 //! registry (cli group) registers them by name; each takes the session's
 //! [`ProfileScope`] (and store) and returns the text to show.
 
+use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use pmt_backup::snapshot;
 use pmt_config::ProfileScope;
+use pmt_config::schema::BudgetsConfig;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
+use pmt_obs::budget::{self, Budgets, Place, Scope};
 use pmt_store::Store;
 
 use crate::backup_cmd::{manual_snapshot, render_list};
@@ -191,4 +194,79 @@ fn slug(title: &str) -> String {
     } else {
         slug.chars().take(60).collect()
     }
+}
+
+/// Usage of `/budget`.
+pub const BUDGET_USAGE: &str = "/budget [set <turn|session|root|daily|monthly|unattended> <usd>]";
+
+/// `/budget` (spec: observability, Budget warnings and overrides): without
+/// arguments, every configured limit with its spend for this session;
+/// `set <scope> <usd>` writes `budgets.<scope>_usd` to the profile's
+/// config (validated, backed up) and returns the session's new budgets,
+/// which apply to the very next model call (budgets are not part of the
+/// system prompt). This is the user's command; agent tools are refused by
+/// `pmt_obs::budget::guard`.
+///
+/// # Errors
+///
+/// `cli.usage` for malformed arguments; config write and store errors.
+pub fn budget(
+    scope: &ProfileScope,
+    store: &Store,
+    session: SessionId,
+    current: &BudgetsConfig,
+    args: &str,
+) -> Result<(String, Option<BudgetsConfig>), Error> {
+    let words: Vec<&str> = args.split_whitespace().collect();
+    match words.as_slice() {
+        [] => Ok((budget_status(scope, store, session, current)?, None)),
+        ["set", name, usd] => {
+            let budget_scope = Scope::parse(name).ok_or_else(budget_usage)?;
+            let value: f64 = usd
+                .trim_start_matches('$')
+                .parse()
+                .map_err(|_| budget_usage())?;
+            let key = format!("budgets.{}", budget_scope.usd_key());
+            scope
+                .profile()
+                .config_file()
+                .set(&key, &value.to_string())?;
+            let mut updated = current.clone();
+            budget::set_usd(&mut updated, budget_scope, value);
+            Ok((
+                format!("{key} = {value} (applies to the next call)"),
+                Some(updated),
+            ))
+        }
+        _ => Err(budget_usage()),
+    }
+}
+
+fn budget_status(
+    scope: &ProfileScope,
+    store: &Store,
+    session: SessionId,
+    current: &BudgetsConfig,
+) -> Result<String, Error> {
+    let zone = pmt_obs::time::profile_zone(&scope.config().cron)?;
+    let place = Place::of(store, session, None)?;
+    let rows = Budgets::new(zone).status(store, current, &place, false, jiff::Timestamp::now())?;
+    if rows.is_empty() {
+        return Ok("no budgets set".to_owned());
+    }
+    let mut text = format!("budgets (warning at {:.0}%):", current.warn_ratio * 100.0);
+    for (limit, spent) in rows {
+        let _ = write!(
+            text,
+            "\n  {:<10} {} of {}",
+            limit.scope.as_str(),
+            budget::format_amount(limit.unit, spent),
+            budget::format_amount(limit.unit, limit.limit)
+        );
+    }
+    Ok(text)
+}
+
+fn budget_usage() -> Error {
+    Error::new(&codes::CLI_USAGE, format!("usage: {BUDGET_USAGE}"))
 }

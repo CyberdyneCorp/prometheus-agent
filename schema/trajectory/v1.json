@@ -499,7 +499,7 @@
                 "type": "string"
               },
               "cost_status": {
-                "description": "How the cost was obtained (`provider`, `pricing_table`, `unpriced`).",
+                "description": "The ledger's cost status: `exact` (provider-reported), `estimated`\n(price table), `subscription` or `unknown` (unpriced).",
                 "type": "string"
               },
               "cost_usd": {
@@ -525,7 +525,7 @@
                 "type": "string"
               },
               "purpose": {
-                "description": "Why the call was made (`turn`...).",
+                "description": "The ledger purpose (`main`, `moa.reference`...).",
                 "type": "string"
               },
               "request_hash": {
@@ -586,7 +586,7 @@
                 "type": "string"
               },
               "purpose": {
-                "description": "The auxiliary task (`compression`, `title`, `vision`...).",
+                "description": "The ledger purpose (`auxiliary.title`, `compression`,\n`auxiliary.vision`...).",
                 "type": "string"
               }
             },

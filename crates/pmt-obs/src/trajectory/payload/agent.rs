@@ -114,7 +114,7 @@ pub struct ModelCall {
     pub provider: String,
     /// Model id.
     pub model: String,
-    /// Why the call was made (`turn`...).
+    /// The ledger purpose (`main`, `moa.reference`...).
     pub purpose: String,
     /// Hash of the canonical request.
     pub request_hash: String,
@@ -126,7 +126,8 @@ pub struct ModelCall {
     pub tokens: Tokens,
     /// Cost in USD, `null` when unpriced.
     pub cost_usd: Option<f64>,
-    /// How the cost was obtained (`provider`, `pricing_table`, `unpriced`).
+    /// The ledger's cost status: `exact` (provider-reported), `estimated`
+    /// (price table), `subscription` or `unknown` (unpriced).
     pub cost_status: String,
     /// The billing source of the credential used.
     pub billing_source: String,
@@ -137,7 +138,8 @@ pub struct ModelCall {
 pub struct AuxCallStart {
     /// The ledger's call id.
     pub call_id: String,
-    /// The auxiliary task (`compression`, `title`, `vision`...).
+    /// The ledger purpose (`auxiliary.title`, `compression`,
+    /// `auxiliary.vision`...).
     pub purpose: String,
     /// Provider name.
     pub provider: String,

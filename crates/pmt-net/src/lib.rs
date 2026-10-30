@@ -25,4 +25,4 @@ pub mod tls;
 
 pub use destination::{DestinationPolicy, PrivateGrant};
 pub use fetch::Fetcher;
-pub use http::{OutboundPolicy, client, client_builder};
+pub use http::{OutboundPolicy, client, client_builder, clients_built};

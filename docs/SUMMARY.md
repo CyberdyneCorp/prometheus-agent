@@ -7,6 +7,7 @@
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
 - [Sessions](guide/sessions.md)
 - [Logs and trajectories](guide/observability.md)
+- [Usage, costs and budgets](guide/usage-and-budgets.md)
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)
 

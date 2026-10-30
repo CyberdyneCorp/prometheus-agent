@@ -372,6 +372,24 @@ error_codes! {
     /// A log file could not be read.
     LOGS_IO = ("logs.io", Io,
         "A log file under `logs/` could not be read.");
+    /// A `prometheus usage --since/--until` value does not parse.
+    USAGE_INVALID_TIME = ("usage.invalid_time", Usage,
+        "`prometheus usage --since/--until` take `<N>[smhd]` (30m, 2h, 7d) or an RFC 3339 time.");
+    /// A model call would exceed a configured budget.
+    BUDGET_EXCEEDED = ("budget.exceeded", BudgetExceeded,
+        "A model call was not sent because its worst-case cost or tokens would exceed a `budgets.*` limit; raise it with `prometheus config set budgets.<key>` or `/budget set`.");
+    /// A USD budget applies but the model has no known price.
+    BUDGET_UNPRICED_MODEL = ("budget.unpriced_model", BudgetExceeded,
+        "A USD budget is set but the model has no price; set `models.<model>.price` or `budgets.allow_unpriced = true` (then only token budgets apply to it).");
+    /// An agent tool tried to change a budget.
+    BUDGET_AGENT_WRITE = ("budget.agent_write", PermissionDenied,
+        "Budgets are changed only by the user (`prometheus config set`, `/budget set`); agent tools may not write `budgets.*` keys, including through file writes to `config.toml`.");
+    /// The configured profile time zone is unknown.
+    CONFIG_TIMEZONE = ("config.timezone", Config,
+        "`cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`.");
+    /// Telemetry was refused for an unsafe endpoint.
+    TELEMETRY_REFUSED = ("telemetry.refused", Config,
+        "`telemetry.enabled = true` needs an `https://` `telemetry.endpoint` (plain HTTP only to loopback); nothing is sent otherwise. Logged, not returned.");
     /// The shared outbound HTTP client could not be built.
     NET_CLIENT_INIT = ("net.client_init", Internal,
         "The shared outbound HTTP client could not be initialised.");

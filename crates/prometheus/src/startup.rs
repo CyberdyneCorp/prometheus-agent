@@ -76,20 +76,22 @@ pub fn install_logging(home: Option<&PathBuf>, launch: &LaunchEnv) {
 /// Binds the command's logging to the profile it works on: records carry
 /// `profile` (so they go to that profile's `logs/`), its `logging.level`
 /// applies unless the environment set a filter, and its stored secrets are
-/// redacted. A disabled `security.protected_instruction_files` is logged at
-/// WARN here, on every start.
+/// redacted. A disabled `security.protected_instruction_files` and a
+/// refused telemetry endpoint are logged at WARN here, on every start.
 pub fn bind_profile(scope: &pmt_config::ProfileScope) {
     let name = scope.name().to_string();
     tracing::Span::current().record("profile", name.as_str());
     pmt_tools::protected::warn_if_disabled(&scope.config().security);
-    let Some(handle) = pmt_obs::logs::handle() else {
-        return;
-    };
-    handle.set_level(scope.config().logging.level);
-    match scope.secrets().redactor() {
-        Ok(redactor) => handle.register_profile(&name, redactor),
-        Err(err) => tracing::warn!("log redaction without the secret store: {err}"),
+    if let Some(handle) = pmt_obs::logs::handle() {
+        handle.set_level(scope.config().logging.level);
+        match scope.secrets().redactor() {
+            Ok(redactor) => handle.register_profile(&name, redactor),
+            Err(err) => tracing::warn!("log redaction without the secret store: {err}"),
+        }
     }
+    // Logs a refused telemetry endpoint on every start; telemetry is off
+    // (no client exists) unless enabled with an acceptable endpoint.
+    let _ = pmt_obs::telemetry::Telemetry::resolve(&scope.config().telemetry);
 }
 
 /// The launch environment's secrets, named (`PMT_SECRET_X` is `X`).
