@@ -1,0 +1,30 @@
+[package]
+name = "xtask"
+description = "Repository automation: generated contracts, reference docs, the code-health ratchet and the performance gate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+# `cargo xtask` runs this; src/bin/perf-sampler.rs is a helper `perf` builds.
+default-run = "xtask"
+
+[dependencies]
+clap.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+prometheus.workspace = true
+# Line numbers of syntax nodes, needed to measure function length.
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+syn = { version = "3.0", default-features = false, features = ["full", "parsing", "visit"] }
+toml = "1.1"
+
+# Peak RSS of the measured binary in perf-sampler (getrusage of reaped children).
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false, features = ["resource"] }
+
+[lints]
+workspace = true

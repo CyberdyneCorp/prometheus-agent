@@ -1,0 +1,1 @@
+unsafe_modules = ["crates/demo/src/ffi.rs"]

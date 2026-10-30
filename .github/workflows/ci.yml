@@ -1,0 +1,177 @@
+# CI runs scripts/check and nothing else on Tier 1 (`--no-perf`: the budgets
+# only apply to the reference runner), so a green local `scripts/check`
+# predicts a green check job (spec: workspace-architecture,
+# Repository health gates; Supported targets and support tiers). Tier 2 targets
+# are build-only until the offline smoke suite lands in M1. The perf job runs
+# `scripts/check --perf` on one fixed reference runner, where the regression
+# check compares with main's baseline (perf/README.md).
+#
+# Every action is pinned to a full commit SHA; the comment names its tag.
+
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: check (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, target: aarch64-apple-darwin }
+          # The last Intel macOS image GitHub hosts; macos-13 is retired.
+          - { os: macos-15-intel, target: x86_64-apple-darwin }
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-musl }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+    env:
+      # Cargo, nextest and the doctests all honour this, so scripts/check
+      # itself needs no target flag and stays the same command as locally.
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+    steps:
+      # Full history: the health ratchet compares health.toml with the merge
+      # base on origin/main.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Read pinned tool versions from scripts/check
+        run: sed -n 's/^readonly \([A-Z_]*_VERSION\)=\(.*\)$/\1=\2/p' scripts/check >>"$GITHUB_ENV"
+
+      # The toolchain comes from rust-toolchain.toml; an empty build-warnings
+      # keeps CI's cargo environment identical to a developer's.
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          target: ${{ matrix.target }}
+          build-warnings: ""
+          cache-key: ${{ matrix.target }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # musl-gcc for build scripts that compile C (the cc crate looks for it).
+      - name: Install musl-tools
+        if: endsWith(matrix.target, '-musl')
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }},cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }},mdbook@${{ env.MDBOOK_VERSION }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Install OpenSpec CLI
+        run: npm install -g "@fission-ai/openspec@$OPENSPEC_VERSION"
+
+      - name: scripts/check
+        # The budgets apply to the reference runner only; the perf job runs them.
+        run: scripts/check --no-perf
+
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc }
+          - { os: ubuntu-24.04, target: aarch64-linux-android }
+    env:
+      # Termux's minimum Android API level.
+      ANDROID_API: 24
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          target: ${{ matrix.target }}
+          build-warnings: ""
+          cache-key: ${{ matrix.target }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # The runner image ships the NDK; cargo needs its clang as the linker
+      # and cc-based build scripts need its compiler and archiver.
+      - name: Point cargo at the Android NDK
+        if: matrix.target == 'aarch64-linux-android'
+        run: |
+          bin="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          {
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android$ANDROID_API-clang"
+            echo "CC_aarch64_linux_android=$bin/aarch64-linux-android$ANDROID_API-clang"
+            echo "AR_aarch64_linux_android=$bin/llvm-ar"
+          } >>"$GITHUB_ENV"
+
+      - name: cargo build
+        run: cargo build --workspace --all-targets --all-features --locked --target "${{ matrix.target }}"
+
+  perf:
+    name: perf (startup, memory, size)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Downloading the baseline artifact of another workflow run.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          cache-key: perf
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Record the main-branch baseline
+        if: github.event_name == 'push'
+        run: scripts/check --perf --update-baseline --baseline target/perf-main.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'push'
+        with:
+          name: perf-baseline
+          path: target/perf-main.json
+          retention-days: 90
+          if-no-files-found: error
+
+      # Without an artifact from main the absolute budgets still apply, and
+      # the checked-in perf/baseline.json is the fallback.
+      - name: Fetch the main-branch baseline
+        if: github.event_name != 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
+            --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ] &&
+            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name perf-baseline --dir target; then
+            echo "PERF_BASELINE=target/perf-main.json" >>"$GITHUB_ENV"
+          else
+            echo "no perf-baseline artifact from main; using perf/baseline.json"
+            echo "PERF_BASELINE=perf/baseline.json" >>"$GITHUB_ENV"
+          fi
+
+      - name: Check the budgets
+        if: github.event_name != 'push'
+        run: scripts/check --perf --baseline "$PERF_BASELINE"

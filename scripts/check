@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# The single entry point for every blocking repository gate. CI runs exactly
+# this command, so a green local run means a green CI run
+# (spec: workspace-architecture, Repository health gates).
+#
+# usage: scripts/check                       run every gate, stop at the first failure
+#        scripts/check --no-perf               every gate except the budgets
+#        scripts/check --perf [ARGS...]        run only the startup, memory and size
+#                                              budgets (`cargo xtask perf ARGS...`)
+#        scripts/check --install-hook pre-push  run the gates before every `git push`
+#
+# The full run checks the budgets against perf/baseline.json. The budgets are
+# defined for the reference runner only (spec: Startup time budget), so CI's
+# platform jobs use `--no-perf` and its perf job uses `--perf` on that runner;
+# timing on shared macOS/Linux matrix runners is too noisy to gate on.
+set -euo pipefail
+
+# Pinned tool versions. CI installs exactly these; a local mismatch fails up
+# front instead of producing results CI would not reproduce. The Rust
+# toolchain itself is pinned by rust-toolchain.toml.
+readonly CARGO_DENY_VERSION=0.20.2
+readonly CARGO_NEXTEST_VERSION=0.9.148
+readonly OPENSPEC_VERSION=1.13.2
+readonly MDBOOK_VERSION=0.5.4
+
+readonly HOOK_MARKER="installed by scripts/check"
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+die() {
+    echo "check: $*" >&2
+    exit 1
+}
+
+# First token of a command's output that looks like a version number.
+version_of() {
+    "$@" 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1
+}
+
+require_version() {
+    local name=$1 want=$2 install=$3
+    shift 3
+    local have
+    have=$(version_of "$@" || true)
+    if [ "$have" != "$want" ]; then
+        die "$name ${have:-not found}, need $want (install: $install)"
+    fi
+}
+
+check_tools() {
+    require_version cargo-deny "$CARGO_DENY_VERSION" \
+        "cargo install --locked cargo-deny@$CARGO_DENY_VERSION" cargo deny --version
+    require_version cargo-nextest "$CARGO_NEXTEST_VERSION" \
+        "cargo install --locked cargo-nextest@$CARGO_NEXTEST_VERSION" cargo nextest --version
+    require_version openspec "$OPENSPEC_VERSION" \
+        "npm install -g @fission-ai/openspec@$OPENSPEC_VERSION" openspec --version
+    require_version mdbook "$MDBOOK_VERSION" \
+        "cargo install --locked mdbook@$MDBOOK_VERSION" mdbook --version
+}
+
+step() {
+    echo "==> $*"
+    "$@" || die "failed: $*"
+}
+
+# The complexity and unsafe-code ratchet. health.toml exceptions may only
+# shrink, so the merge base's copy is passed in for comparison; a missing
+# file there means no exceptions existed yet.
+health_gate() {
+    local base_ref base_file=target/health-base.toml
+    if ! base_ref=$(git merge-base HEAD origin/main 2>/dev/null); then
+        echo "check: origin/main not found; health.toml is not compared with a base" >&2
+        step cargo xtask health
+        return
+    fi
+    mkdir -p target
+    git show "$base_ref:health.toml" >"$base_file" 2>/dev/null || : >"$base_file"
+    step cargo xtask health --base "$base_file"
+}
+
+# The documentation site. mdBook only warns on markup it cannot render (an
+# unescaped `<id>` silently disappears from the page), so any warning fails.
+docs_gate() {
+    echo "==> mdbook build docs"
+    local log=target/mdbook.log
+    mkdir -p target
+    mdbook build docs >"$log" 2>&1 || { cat "$log" >&2; die "failed: mdbook build docs"; }
+    if grep -E 'WARN|ERROR' "$log" >&2; then
+        die "failed: mdbook build docs (warnings above)"
+    fi
+}
+
+run_gates() {
+    local with_perf=$1
+    check_tools
+    step cargo fmt --all --check
+    step cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+    step cargo nextest run --workspace --all-features --locked --no-tests=fail
+    # nextest does not run doctests.
+    step cargo test --workspace --all-features --locked --doc
+    step cargo deny check
+    step openspec validate --all --strict --no-interactive
+    step cargo xtask gen --check
+    docs_gate
+    health_gate
+    if [ "$with_perf" = yes ]; then
+        step cargo xtask perf
+    fi
+    echo "check: all gates passed"
+}
+
+# Writes a git hook that runs this script. A hook that someone else wrote is
+# left alone rather than silently replaced.
+install_hook() {
+    local name=$1 hooks_dir hook
+    hooks_dir=$(git rev-parse --git-path hooks)
+    hook="$hooks_dir/$name"
+    if [ -e "$hook" ] && ! grep -q "$HOOK_MARKER" "$hook"; then
+        die "$hook exists and was not written by scripts/check; remove it first"
+    fi
+    mkdir -p "$hooks_dir"
+    cat >"$hook" <<EOF
+#!/bin/sh
+# $HOOK_MARKER; rerun \`scripts/check --install-hook $name\` to refresh.
+exec "\$(git rev-parse --show-toplevel)/scripts/check"
+EOF
+    chmod +x "$hook"
+    echo "check: installed $hook"
+}
+
+case "${1:-}" in
+"") run_gates yes ;;
+--no-perf) run_gates no ;;
+--perf)
+    shift
+    step cargo xtask perf "$@"
+    ;;
+--install-hook)
+    [ $# -eq 2 ] || die "usage: scripts/check --install-hook <hook-name>"
+    install_hook "$2"
+    ;;
+*) die "unknown argument: $1 (usage: scripts/check [--no-perf | --perf [ARGS...] | --install-hook pre-push])" ;;
+esac
