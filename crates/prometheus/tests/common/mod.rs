@@ -30,8 +30,23 @@ pub fn command(home: &Path) -> Command {
     for var in pmt_providers::builtin::secret_names() {
         cmd.env_remove(var);
     }
+    isolate_user_home(&mut cmd, home);
     cmd.arg("--home").arg(home);
     cmd
+}
+
+/// The user home every test process sees: a directory inside the test's
+/// Prometheus home, so no test reads the developer's own agent CLI
+/// logins (`~/.claude`, `~/.codex`) or other dotfiles.
+pub fn user_home(home: &Path) -> std::path::PathBuf {
+    home.join("user-home")
+}
+
+/// Points `HOME` (and `USERPROFILE`) of `cmd` at [`user_home`].
+pub fn isolate_user_home(cmd: &mut Command, home: &Path) {
+    let user = user_home(home);
+    std::fs::create_dir_all(&user).unwrap();
+    cmd.env("HOME", &user).env("USERPROFILE", &user);
 }
 
 /// Runs `args` with stdin closed.

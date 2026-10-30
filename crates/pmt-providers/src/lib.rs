@@ -21,6 +21,7 @@ pub mod event;
 pub mod fallback;
 pub mod local;
 pub mod metadata;
+pub mod pool;
 pub mod reasoning;
 pub mod registry;
 pub mod request;

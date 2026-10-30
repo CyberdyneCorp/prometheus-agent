@@ -20,8 +20,9 @@ use pmt_core::secret::SecretString;
 use serde::Serialize;
 
 pub use auto::NOT_CONNECTED;
+pub(crate) use credential::request_key;
 pub use credential::{
-    Credential, CredentialExtras, CredentialSource, NoExtras, Pooled, SecretSource, SignedIn,
+    Credential, CredentialExtras, CredentialSource, NoExtras, SecretSource, SignedIn, benched,
 };
 pub use probe::{BoxFuture, EndpointProbe, TcpProbe};
 

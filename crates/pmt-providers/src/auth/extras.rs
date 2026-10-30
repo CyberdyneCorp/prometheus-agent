@@ -59,7 +59,16 @@ impl CredentialExtras for Credentials {
             token,
             account_id: sub.account_id,
             ineligible: sub.ineligible,
+            borrowed: None,
         }))
+    }
+
+    fn dead_sign_in(&self, provider: &str) -> Result<Option<String>, Error> {
+        Ok(self
+            .subscriptions()?
+            .into_iter()
+            .find(|s| s.provider == provider && s.status == Status::Dead)
+            .map(|s| s.label))
     }
 
     fn signed_in(&self) -> Vec<String> {

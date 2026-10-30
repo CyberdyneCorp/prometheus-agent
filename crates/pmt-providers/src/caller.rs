@@ -15,15 +15,92 @@ use crate::classify::ProviderError;
 use crate::cost::{CallContext, Pending};
 use crate::fallback::{Activated, Fallback, Walk};
 use crate::request::Request;
-use crate::resolve::Route;
+use crate::resolve::{BoxFuture, Route};
 use crate::transport::{self, ModelStream};
 
+/// Per-request credential work (spec: model-providers, Credential pool
+/// selection strategies; Exhausted credential cooldowns; Token refresh and
+/// dead-token quarantine; Borrowed CLI logins), implemented by
+/// [`crate::auth::Accounts`].
+pub trait CredentialHooks: Send + Sync {
+    /// The route one request goes out on: its pool key picked, its sign-in
+    /// token re-read (refreshed when about to expire), the request
+    /// counted. An error refuses the request unsent (a dead sign-in, every
+    /// credential benched).
+    fn prepare<'a>(&'a self, route: &'a Route) -> BoxFuture<'a, Result<Route, ProviderError>>;
+
+    /// After `route`'s request failed with `error`: benches its credential
+    /// or, when `may_recover` and a sign-in token was refused, refreshes
+    /// it.
+    fn failed<'a>(
+        &'a self,
+        route: &'a Route,
+        error: &'a ProviderError,
+        may_recover: bool,
+    ) -> BoxFuture<'a, Recovery>;
+}
+
+/// What a failed request's credential work decided.
+#[derive(Debug)]
+pub enum Recovery {
+    /// Nothing changes; the usual retry policy applies.
+    Continue,
+    /// The credential was refreshed; send again now.
+    RetryNow,
+    /// Fail with this error instead (the sign-in is dead).
+    Fail(ProviderError),
+}
+
+/// Sends `request` on `route` once, running `hooks` around it: prepared,
+/// and sent once more at once when a refused sign-in token was refreshed.
+/// Returns the stream and the route it went out on.
+///
+/// # Errors
+///
+/// The classified failure, or the hooks' refusal.
+pub(crate) async fn send_once(
+    client: &reqwest::Client,
+    hooks: Option<&dyn CredentialHooks>,
+    route: &Route,
+    request: &Request,
+) -> Result<(ModelStream, Route), ProviderError> {
+    let Some(hooks) = hooks else {
+        return Ok((
+            transport::send(client, route, request).await?,
+            route.clone(),
+        ));
+    };
+    let mut may_recover = true;
+    loop {
+        let prepared = hooks.prepare(route).await?;
+        let error = match transport::send(client, &prepared, request).await {
+            Ok(stream) => return Ok((stream, prepared)),
+            Err(error) => error,
+        };
+        match hooks.failed(&prepared, &error, may_recover).await {
+            Recovery::RetryNow if may_recover => may_recover = false,
+            Recovery::Fail(error) => return Err(error),
+            Recovery::RetryNow | Recovery::Continue => return Err(error),
+        }
+    }
+}
+
 /// Sends model requests for one session.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ModelCaller {
     client: reqwest::Client,
     attempt_cap: Option<u32>,
     recorder: Option<Arc<UsageRecorder>>,
+    hooks: Option<Arc<dyn CredentialHooks>>,
+}
+
+impl std::fmt::Debug for ModelCaller {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModelCaller")
+            .field("attempt_cap", &self.attempt_cap)
+            .field("hooks", &self.hooks.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 /// A started call.
@@ -91,7 +168,15 @@ impl ModelCaller {
             client,
             attempt_cap: None,
             recorder: None,
+            hooks: None,
         }
+    }
+
+    /// Runs `hooks` around every request (pools, benches, refresh).
+    #[must_use]
+    pub fn with_credentials(mut self, hooks: Arc<dyn CredentialHooks>) -> Self {
+        self.hooks = Some(hooks);
+        self
     }
 
     /// Caps attempts per route (`agent.api_max_retries`, the turn loop's
@@ -110,11 +195,14 @@ impl ModelCaller {
     }
 
     /// Sends `request` on `route`, retrying retryable failures that
-    /// happen before anything was streamed.
+    /// happen before anything was streamed. With credential hooks each
+    /// attempt is prepared (pool key, token), and a refused sign-in token
+    /// is refreshed and sent again at once; a request the hooks refuse
+    /// (dead sign-in, every credential benched) is not retried.
     ///
     /// # Errors
     ///
-    /// The last attempt's classified failure.
+    /// The last attempt's classified failure, or the hooks' refusal.
     pub async fn send(
         &self,
         route: &Route,
@@ -127,22 +215,22 @@ impl ModelCaller {
         }
         let mut retry = 0;
         loop {
-            match transport::send(&self.client, route, request).await {
-                Ok(mut stream) => {
+            let error = match send_once(&self.client, self.hooks.as_deref(), route, request).await {
+                Ok((mut stream, prepared)) => {
                     if let (Some(recorder), Some(ctx)) = (&self.recorder, ctx) {
-                        stream.record_with(Pending::new(recorder.clone(), route, request, ctx));
+                        stream.record_with(Pending::new(recorder.clone(), &prepared, request, ctx));
                     }
                     return Ok(stream);
                 }
-                Err(error) => {
-                    let Some(delay) = retries.delay(retry, &error) else {
-                        return Err(error);
-                    };
-                    tracing::debug!(provider = %route.provider, class = error.class.as_str(), ?delay, "retrying model call");
-                    tokio::time::sleep(delay).await;
-                    retry += 1;
-                }
-            }
+                Err(error) if error.refusal.is_some() => return Err(error),
+                Err(error) => error,
+            };
+            let Some(delay) = retries.delay(retry, &error) else {
+                return Err(error);
+            };
+            tracing::debug!(provider = %route.provider, class = error.class.as_str(), ?delay, "retrying model call");
+            tokio::time::sleep(delay).await;
+            retry += 1;
         }
     }
 

@@ -23,15 +23,28 @@ impl EndpointProbe for FakeProbe {
     }
 }
 
-struct Pool;
+/// Pool state with the first `openrouter` key benched.
+struct Pool(crate::pool::MemoryState);
+
+impl Pool {
+    fn first_benched() -> Self {
+        let state = crate::pool::MemoryState::default();
+        let until = jiff::Timestamp::now() + jiff::SignedDuration::from_mins(30);
+        crate::pool::PoolState::bench(
+            &state,
+            "openrouter",
+            "secret:OPENROUTER_API_KEY",
+            Some(until),
+            Some("rate_limit"),
+        )
+        .unwrap();
+        Self(state)
+    }
+}
 
 impl CredentialExtras for Pool {
-    fn pooled(&self, provider: &str) -> Option<Pooled> {
-        (provider == "openrouter").then(|| Pooled {
-            index: 2,
-            label: None,
-            value: SecretString::new("sk-or-pooled-value-123456"),
-        })
+    fn pool_state(&self) -> Option<&dyn crate::pool::PoolState> {
+        Some(&self.0)
     }
 }
 
@@ -285,14 +298,14 @@ async fn openai_key_never_reaches_an_aggregator() {
 
 #[tokio::test]
 async fn explain_names_the_pool_credential_and_no_key_material() {
-    let (route, trace) = Case::new("", &["OPENROUTER_API_KEY"])
+    let (route, trace) = Case::new("", &["OPENROUTER_API_KEY", "OPENROUTER_API_KEY_WORK"])
         .flag("openrouter")
-        .run_with(&Pool, &FakeProbe::default())
+        .run_with(&Pool::first_benched(), &FakeProbe::default())
         .await;
     assert_eq!(route.unwrap().credential.describe(), "pool:openrouter#2");
     let text = serde_json::to_string(&trace).unwrap();
     assert!(text.contains("pool:openrouter#2"));
-    assert!(!text.contains("value-of") && !text.contains("sk-or-pooled"));
+    assert!(!text.contains("value-of"));
 }
 
 #[test]

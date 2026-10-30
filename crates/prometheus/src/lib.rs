@@ -5,6 +5,7 @@
 //! It lives in a library so `cargo xtask gen` renders the CLI reference from
 //! the exact parser the binary uses, and so tests can drive each step.
 
+pub mod accounts;
 pub mod auth_cmd;
 pub mod backup_cmd;
 pub mod build_info;

@@ -71,6 +71,23 @@ pub fn api_key_secret(provider: &Provider, label: &str) -> Option<String> {
     })
 }
 
+/// `auth.reauth_required` for sign-in `label` of `provider` (spec:
+/// model-providers, Token refresh and dead-token quarantine).
+#[must_use]
+pub fn reauth_required(provider: &str, label: &str) -> Error {
+    Error::new(
+        &codes::AUTH_REAUTH_REQUIRED,
+        format!(
+            "Sign-in for {provider} ({label}) expired or was revoked. Run 'prometheus auth add {provider}' to sign in again."
+        ),
+    )
+    .with_hint(if label == DEFAULT_LABEL {
+        format!("prometheus auth add {provider}")
+    } else {
+        format!("prometheus auth add {provider} --label {label}")
+    })
+}
+
 /// Whether a subscription may be used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -264,6 +281,57 @@ impl Credentials {
     /// Store errors.
     pub fn refresh_token(&self, sub: &Subscription) -> Result<Option<SecretString>, Error> {
         self.store.get(&sub.names().refresh)
+    }
+
+    /// Replaces the tokens of `sub` after a refresh: the access token, the
+    /// refresh token when a new one was issued (a provider that rotates
+    /// nothing keeps the old one), the expiry, and the account and plan
+    /// when the new tokens name them. Returns the updated record.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn update_tokens(
+        &self,
+        sub: &Subscription,
+        tokens: &TokenSet,
+    ) -> Result<Subscription, Error> {
+        let names = sub.names();
+        let mut record = sub.clone();
+        record.expires_at = tokens.expires_at.map(|t| t.to_string());
+        let id_token = tokens
+            .id_token
+            .as_ref()
+            .map(SecretString::expose)
+            .unwrap_or_default();
+        let account = super::jwt::account(&[id_token, tokens.access_token.expose()]);
+        if account.account_id.is_some() {
+            record.account_id = account.account_id;
+        }
+        if account.plan.is_some() {
+            record.plan = account.plan;
+        }
+        self.store.set(&names.access, &tokens.access_token)?;
+        if let Some(refresh) = &tokens.refresh_token {
+            self.store.set(&names.refresh, refresh)?;
+        }
+        self.write_meta(&record)?;
+        Ok(record)
+    }
+
+    /// Quarantines `sub`: its refresh token was refused for good, so it is
+    /// deleted (never presented again) and the record turns `dead` until
+    /// a new sign-in with the same label.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn mark_dead(&self, sub: &Subscription) -> Result<(), Error> {
+        let mut record = sub.clone();
+        record.status = Status::Dead;
+        self.write_meta(&record)?;
+        self.store.remove(&sub.names().refresh)?;
+        Ok(())
     }
 
     /// Flags `sub` as refused for its plan (it stays `ok`).

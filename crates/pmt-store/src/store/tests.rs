@@ -14,16 +14,16 @@ fn scope(root: &std::path::Path) -> ProfileScope {
     ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
 }
 
-/// The real v1 to v4 plus one trivial step.
-fn five_versions() -> Vec<Migration> {
-    const EXTRA: [&str; 1] = ["CREATE TABLE t5 (x INTEGER) STRICT;"];
+/// The real v1 to v5 plus one trivial step.
+fn six_versions() -> Vec<Migration> {
+    const EXTRA: [&str; 1] = ["CREATE TABLE t6 (x INTEGER) STRICT;"];
     let mut all = MIGRATIONS.to_vec();
     assert_eq!(
         all.len(),
-        4,
+        5,
         "update the synthetic steps with new migrations"
     );
-    for (version, sql) in (5..).zip(EXTRA) {
+    for (version, sql) in (6..).zip(EXTRA) {
         all.push(Migration {
             version,
             min_read_version: 1,
@@ -58,7 +58,7 @@ fn backups(scope: &ProfileScope) -> Vec<String> {
 fn older_store_is_upgraded_with_a_backup() {
     let root = tempfile::tempdir().unwrap();
     let scope = scope(root.path());
-    let all = five_versions();
+    let all = six_versions();
     let store = Store::open_with(&scope, &all[..3]).unwrap();
     let session = store.create_session(&NewSession::new(Source::Cli)).unwrap();
     drop(store);
@@ -67,7 +67,7 @@ fn older_store_is_upgraded_with_a_backup() {
     assert!(backups(&scope).is_empty(), "a fresh store needs no backup");
 
     let store = Store::open_with(&scope, &all).unwrap();
-    assert_eq!(meta(&db, "schema_version"), "5");
+    assert_eq!(meta(&db, "schema_version"), "6");
     let names = backups(&scope);
     assert_eq!(names.len(), 1, "{names:?}");
     assert!(names[0].starts_with("state-v3-"), "{names:?}");
@@ -76,7 +76,7 @@ fn older_store_is_upgraded_with_a_backup() {
         .query_row("SELECT count(*) FROM sessions", [], |r| r.get(0))
         .unwrap();
     assert_eq!(kept, 1, "the backup holds the pre-migration data");
-    for table in ["model_context", "t5"] {
+    for table in ["model_context", "credential_state", "t6"] {
         let exists: bool = Connection::open(&db)
             .unwrap()
             .query_row(
@@ -94,13 +94,13 @@ fn older_store_is_upgraded_with_a_backup() {
 fn only_the_newest_three_backups_are_kept() {
     let root = tempfile::tempdir().unwrap();
     let scope = scope(root.path());
-    let all = five_versions();
-    for end in 1..=5 {
+    let all = six_versions();
+    for end in 1..=6 {
         drop(Store::open_with(&scope, &all[..end]).unwrap());
     }
     let names = backups(&scope);
     let versions: Vec<&str> = names.iter().map(|n| &n[..8]).collect();
-    assert_eq!(versions, ["state-v2", "state-v3", "state-v4"], "{names:?}");
+    assert_eq!(versions, ["state-v3", "state-v4", "state-v5"], "{names:?}");
 }
 
 #[test]

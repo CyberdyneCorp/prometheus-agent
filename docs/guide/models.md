@@ -36,7 +36,8 @@ each resolution step (requested provider, provider lookup, the
 `enabled` guard, endpoint, wire format, credential, model, context window
 check) without calling the model. Credentials are shown by source
 (`secret:<NAME>`, `pool:<provider>#<n>`, `subscription:<provider>/<label>`, `none`),
-never by value:
+never by value (setting up keys, pools and subscription sign-ins is in
+[Provider credentials and sign-ins](providers.md)):
 
 ```console
 $ echo -n "$TOKEN" | prometheus secrets set OPENROUTER_API_KEY

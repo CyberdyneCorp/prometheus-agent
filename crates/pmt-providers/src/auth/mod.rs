@@ -8,10 +8,14 @@
 //! [`browser`] the two reusable flows, [`credentials`] where API keys and
 //! sign-ins live in the profile's secrets store (and, as
 //! [`CredentialExtras`](crate::resolve::CredentialExtras), what requests
-//! use), [`codex`] the Codex CLI import. [`sign_in`] runs a provider's
+//! use), [`codex`] the Codex CLI import, [`borrowed`] other agent CLIs'
+//! logins, [`refresh`] token refresh under a cross-process lock and
+//! [`Accounts`] the per-request credential work. [`sign_in`] runs a provider's
 //! sign-in: its plan notes first, then the chosen flow, falling back from a
 //! busy fixed browser port to the device code.
 
+mod accounts;
+pub mod borrowed;
 pub mod browser;
 pub mod codex;
 pub mod credentials;
@@ -20,6 +24,7 @@ mod extras;
 pub mod jwt;
 pub mod loopback;
 pub mod pkce;
+pub mod refresh;
 pub mod spec;
 pub mod token;
 
@@ -28,7 +33,10 @@ use pmt_core::error::{Error, codes};
 use pmt_core::secret::SecretString;
 
 use crate::registry::Provider;
-pub use credentials::{Credentials, DEFAULT_LABEL, Obtained, Status, Subscription};
+pub use accounts::Accounts;
+pub use credentials::{
+    Credentials, DEFAULT_LABEL, Obtained, Status, Subscription, reauth_required,
+};
 use token::TokenSet;
 
 /// Where a sign-in talks to the user. It never receives a token, code or

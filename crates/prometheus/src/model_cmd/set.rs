@@ -37,7 +37,14 @@ pub(super) fn run(
 ) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let config = scope.config();
-    let view = block_on(set(&scope, config, reference, wire_format, base_url))??;
+    let user_home = ctx.launch.user_home().map(std::path::PathBuf::as_path);
+    let request = Request {
+        reference,
+        wire_format,
+        base_url,
+        user_home,
+    };
+    let view = block_on(set(&scope, config, &request))??;
     if ctx.json {
         return document("model set", &view);
     }
@@ -50,13 +57,26 @@ pub(super) fn run(
     ))
 }
 
+/// What `model set` was asked.
+struct Request<'a> {
+    reference: &'a str,
+    wire_format: Option<WireFormatArg>,
+    base_url: Option<&'a str>,
+    /// The user's home (borrowed logins resolve against it).
+    user_home: Option<&'a std::path::Path>,
+}
+
 async fn set(
     scope: &pmt_config::ProfileScope,
     config: &Config,
-    reference: &str,
-    wire_format: Option<WireFormatArg>,
-    base_url: Option<&str>,
+    request: &Request<'_>,
 ) -> Result<SetView, Error> {
+    let Request {
+        reference,
+        wire_format,
+        base_url,
+        user_home,
+    } = *request;
     let registry = ProviderRegistry::for_profile(config, Vec::new())?;
     let target = target::parse(
         reference,
@@ -89,7 +109,7 @@ async fn set(
         settings.base_url = Some(url);
     }
     provider_urls::check(&proposed)?;
-    let models = Models::for_config(scope.clone(), &proposed)?;
+    let models = Models::for_config(scope.clone(), &proposed, user_home)?;
     let candidate = models.registry.lookup(&id)?;
     if candidate.descriptor().local
         && let Some(model) = target.model.as_deref()

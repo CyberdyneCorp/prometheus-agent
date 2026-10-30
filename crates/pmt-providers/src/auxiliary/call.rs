@@ -14,11 +14,11 @@ use pmt_obs::trajectory::payload::{AuxCallEnd, AuxCallStart, Failure, Tokens};
 use pmt_obs::usage::UsageRecorder;
 
 use super::AuxRoute;
+use crate::caller::{CredentialHooks, send_once};
 use crate::classify::{ErrorClass, ProviderError, RetryPolicy};
 use crate::cost::{CallContext, Pending};
 use crate::event::{StreamEvent, Usage};
 use crate::request::Request;
-use crate::transport;
 
 /// Receives the `aux_call.*` events of a session (its trajectory writer).
 pub trait AuxEvents: Send + Sync {
@@ -45,6 +45,7 @@ pub struct AuxCaller {
     client: reqwest::Client,
     recorder: Option<Arc<UsageRecorder>>,
     events: Option<Arc<dyn AuxEvents>>,
+    hooks: Option<Arc<dyn CredentialHooks>>,
 }
 
 impl std::fmt::Debug for AuxCaller {
@@ -67,7 +68,16 @@ impl AuxCaller {
             client,
             recorder: None,
             events: None,
+            hooks: None,
         }
+    }
+
+    /// Runs `hooks` around every request (pools, benches, refresh), as
+    /// the main caller does.
+    #[must_use]
+    pub fn with_credentials(mut self, hooks: Arc<dyn CredentialHooks>) -> Self {
+        self.hooks = Some(hooks);
+        self
     }
 
     /// Records every attempt's usage in the ledger.
@@ -144,11 +154,12 @@ impl AuxCaller {
         call_id: &str,
     ) -> Attempt {
         let run = async {
-            let mut stream = transport::send(&self.client, &aux.route, request)
-                .await
-                .map_err(|e| (e, None))?;
+            let (mut stream, route) =
+                send_once(&self.client, self.hooks.as_deref(), &aux.route, request)
+                    .await
+                    .map_err(|e| (e, None))?;
             if let Some(recorder) = &self.recorder {
-                let pending = Pending::new(recorder.clone(), &aux.route, request, ctx);
+                let pending = Pending::new(recorder.clone(), &route, request, ctx);
                 stream.record_with(pending.with_call_id(call_id));
             }
             let events = stream.collect().await;

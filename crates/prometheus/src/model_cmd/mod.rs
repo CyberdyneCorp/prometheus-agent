@@ -16,7 +16,7 @@ use std::time::Duration;
 use pmt_config::{Config, ProfileScope};
 use pmt_core::error::{Error, codes};
 use pmt_providers::ProviderRegistry;
-use pmt_providers::auth::Credentials;
+use pmt_providers::auth::Accounts;
 use pmt_providers::capability::{self, Needs};
 use pmt_providers::metadata::{Catalog, ModelMetadata};
 use pmt_providers::resolve::{AdHoc, Resolver, Route, Target, TcpProbe, Trace};
@@ -65,28 +65,35 @@ pub(crate) struct Models {
     pub scope: ProfileScope,
     pub registry: ProviderRegistry,
     pub catalog: Catalog,
-    /// The profile's sign-ins (resolution uses them like a session would).
-    pub credentials: Credentials,
+    /// The profile's credentials (resolution uses them like a session
+    /// would).
+    pub accounts: Accounts,
 }
 
 impl Models {
     /// The selected profile's registry and catalog.
     pub(crate) fn open(ctx: &Context<'_>) -> Result<Self, Error> {
         let scope = ctx.scope()?;
-        Self::for_config(scope.clone(), scope.config())
+        let user_home = ctx.launch.user_home().map(std::path::PathBuf::as_path);
+        Self::for_config(scope.clone(), scope.config(), user_home)
     }
 
     /// The registry and catalog of `config` (a proposed config for
-    /// validating a change before it is written).
-    pub(crate) fn for_config(scope: ProfileScope, config: &Config) -> Result<Self, Error> {
+    /// validating a change before it is written) for the user whose home
+    /// is `user_home` (borrowed logins).
+    pub(crate) fn for_config(
+        scope: ProfileScope,
+        config: &Config,
+        user_home: Option<&std::path::Path>,
+    ) -> Result<Self, Error> {
         let registry = ProviderRegistry::for_profile(config, Vec::new())?;
         let catalog = Catalog::new(config, Some(scope.path("cache/models")));
-        let credentials = Credentials::new(scope.secrets().store().clone());
+        let accounts = crate::accounts::open(&scope, config, &registry, user_home)?;
         Ok(Self {
             scope,
             registry,
             catalog,
-            credentials,
+            accounts,
         })
     }
 
@@ -100,7 +107,7 @@ impl Models {
             registry: &self.registry,
             config,
             secrets: self.scope.secrets(),
-            extras: &self.credentials,
+            extras: &self.accounts,
             probe: &PROBE,
             ad_hoc,
         }

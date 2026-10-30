@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use jiff::Timestamp;
-use pmt_core::error::{Error, codes};
+use pmt_core::error::{Error, ErrorCode, codes};
 use reqwest::header::HeaderMap;
 use serde::Serialize;
 
@@ -90,6 +90,43 @@ pub struct ProviderError {
     pub retry_after: Option<Duration>,
     /// When the provider says the limit resets.
     pub reset_at: Option<Timestamp>,
+    /// Set when the request was never sent because its credential cannot
+    /// be used (a dead sign-in, every credential benched): the typed
+    /// error users see instead of a provider error.
+    pub refusal: Option<Box<Refusal>>,
+}
+
+/// A credential refusal carried by a [`ProviderError`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal {
+    /// The error code.
+    pub code: &'static ErrorCode,
+    /// The message.
+    pub message: String,
+    /// The hint.
+    pub hint: Option<String>,
+}
+
+impl Refusal {
+    /// The refusal of `error`.
+    #[must_use]
+    pub fn of(error: &Error) -> Self {
+        Self {
+            code: error.code(),
+            message: error.message().to_owned(),
+            hint: error.hint().map(str::to_owned),
+        }
+    }
+
+    /// The typed error.
+    #[must_use]
+    pub fn to_error(&self) -> Error {
+        let error = Error::new(self.code, self.message.clone());
+        match &self.hint {
+            Some(hint) => error.with_hint(hint.clone()),
+            None => error,
+        }
+    }
 }
 
 impl ProviderError {
@@ -102,12 +139,26 @@ impl ProviderError {
             message: message.into(),
             retry_after: None,
             reset_at: None,
+            refusal: None,
+        }
+    }
+
+    /// A request refused before it was sent because its credential cannot
+    /// be used; `class` decides retries and fallback.
+    #[must_use]
+    pub fn refused(class: ErrorClass, error: &Error) -> Self {
+        Self {
+            refusal: Some(Box::new(Refusal::of(error))),
+            ..Self::new(class, error.message())
         }
     }
 
     /// The user-facing error for a call to `provider`.
     #[must_use]
     pub fn to_error(&self, provider: &str) -> Error {
+        if let Some(refusal) = &self.refusal {
+            return refusal.to_error();
+        }
         let status = self
             .status
             .map(|s| format!(" (HTTP {s})"))
@@ -138,9 +189,15 @@ impl ProviderError {
     /// token (spec: model-providers, Anthropic Claude Max sign-in).
     #[must_use]
     pub fn to_route_error(&self, route: &crate::resolve::Route) -> Error {
+        if self.refusal.is_some() || !self.refuses_plan() {
+            return self.to_error(&route.provider);
+        }
         match &route.credential.source {
-            CredentialSource::Subscription { label, .. } if self.refuses_plan() => {
+            CredentialSource::Subscription { label, .. } => {
                 plan_not_eligible(&route.provider, label, &self.message)
+            }
+            CredentialSource::Borrowed { cli, .. } => {
+                plan_not_eligible(&route.provider, &format!("borrowed:{cli}"), &self.message)
             }
             _ => self.to_error(&route.provider),
         }
@@ -273,6 +330,7 @@ pub fn from_response(
         message: body_message(body),
         retry_after,
         reset_at,
+        refusal: None,
     }
 }
 

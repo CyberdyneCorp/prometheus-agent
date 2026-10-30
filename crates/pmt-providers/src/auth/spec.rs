@@ -246,6 +246,15 @@ impl OAuthSpec {
         Ok(())
     }
 
+    /// Checks only the token endpoint (a refresh contacts nothing else).
+    ///
+    /// # Errors
+    ///
+    /// As [`OAuthSpec::check`].
+    pub fn check_token_endpoint(&self) -> Result<(), Error> {
+        self.check_url(&self.token_url)
+    }
+
     fn check_url(&self, url: &str) -> Result<(), Error> {
         let id = &self.provider;
         let host = host_of(url).unwrap_or_default();

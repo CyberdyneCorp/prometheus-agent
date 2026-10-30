@@ -102,6 +102,39 @@ impl Keychain for OsKeychain {
     }
 }
 
+/// Reads the generic item `service`/`account` of the OS keychain: an item
+/// another application owns (a borrowed agent CLI login), never one of
+/// Prometheus' own entries.
+///
+/// # Errors
+///
+/// `secret.keychain_unavailable`, `secret.store`.
+pub fn read_item(service: &str, account: &str) -> Result<Option<String>, Error> {
+    let store = NATIVE.as_ref().map_err(|e| unavailable(e))?;
+    let entry = store
+        .build(service, account, None)
+        .map_err(|e| keychain_error(&e))?;
+    match entry.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring_core::Error::NoEntry) => Ok(None),
+        Err(e) => Err(keychain_error(&e)),
+    }
+}
+
+/// Replaces the value of the generic item `service`/`account` (writing a
+/// refreshed borrowed login back where its CLI reads it).
+///
+/// # Errors
+///
+/// `secret.keychain_unavailable`, `secret.store`.
+pub fn write_item(service: &str, account: &str, value: &str) -> Result<(), Error> {
+    let store = NATIVE.as_ref().map_err(|e| unavailable(e))?;
+    store
+        .build(service, account, None)
+        .and_then(|entry| entry.set_password(value))
+        .map_err(|e| keychain_error(&e))
+}
+
 fn unavailable(reason: &dyn std::fmt::Display) -> Error {
     Error::new(
         &codes::SECRET_KEYCHAIN_UNAVAILABLE,

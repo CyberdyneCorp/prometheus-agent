@@ -32,6 +32,16 @@ pub(super) fn run(ctx: &Context<'_>, name: &str, which: &str) -> Result<u8, Erro
         )
         .with_hint(format!("prometheus auth status {}", provider.id()))
     })?;
+    if row.source == "borrowed" {
+        return Err(Error::new(
+            &codes::AUTH_UNSUPPORTED,
+            format!(
+                "'{}' is another CLI's login, read in place; Prometheus never deletes it",
+                row.label
+            ),
+        )
+        .with_hint("stop borrowing it: prometheus config set auth.adopt_external_logins false"));
+    }
     let revoked = if let Some(sub) = &row.subscription {
         let revoked = revoke(&profile, provider, sub);
         profile.credentials.remove(sub)?;

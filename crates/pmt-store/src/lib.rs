@@ -12,11 +12,13 @@
 //! - [`search`] full-text search over derived indexes that fail open,
 //!   [`integrity`] the startup check and quarantine, [`rewind`] soft
 //!   deletes, [`delete`] and [`retention`] session removal, [`usage`] the
-//!   usage ledger and [`listing`] listings, pickers and size guards.
+//!   usage ledger, [`listing`] listings, pickers and size guards, and
+//!   [`credential_state`] provider credential request counts and benches.
 
 pub mod blobs;
 pub mod compaction;
 mod contention;
+pub mod credential_state;
 pub mod delete;
 mod error;
 mod files;
@@ -64,7 +66,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 #[cfg(test)]
 mod tests {

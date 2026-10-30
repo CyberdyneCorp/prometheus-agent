@@ -233,6 +233,74 @@ pub async fn revoke(
     )))
 }
 
+/// Why a refresh produced no tokens.
+#[derive(Debug)]
+pub enum RefreshError {
+    /// The token endpoint refused the refresh token for good (HTTP 400,
+    /// 401 or 403, `invalid_grant`, `invalid_token`,
+    /// `refresh_token_reused`): it must never be presented again.
+    Dead(String),
+    /// The token endpoint is rate-limiting (HTTP 429).
+    RateLimited,
+    /// A transient failure (`auth.refresh_failed`); the token is kept.
+    Failed(Error),
+}
+
+/// Terminal OAuth error codes of a refresh.
+const DEAD: &[&str] = &["invalid_grant", "invalid_token", "refresh_token_reused"];
+
+/// Exchanges `refresh_token` for new tokens (RFC 6749 section 6). Sent
+/// once, never retried: a rotating refresh token is single-use, and a
+/// retry after a lost answer would present it twice.
+///
+/// # Errors
+///
+/// [`RefreshError`].
+pub async fn refresh(
+    client: &reqwest::Client,
+    spec: &OAuthSpec,
+    refresh_token: &SecretString,
+) -> Result<TokenSet, RefreshError> {
+    // No `scope`: omitted, it means the scope originally granted.
+    let fields = [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", refresh_token.expose()),
+        ("client_id", spec.client_id.as_str()),
+    ];
+    let json = spec.token_encoding == TokenEncoding::JsonWithState;
+    let reply = post_once(client, &spec.token_url, &fields, json)
+        .await
+        .map_err(|why| {
+            RefreshError::Failed(Error::new(
+                &codes::AUTH_REFRESH_FAILED,
+                format!(
+                    "the token refresh request to {} failed: {why}",
+                    spec.token_url
+                ),
+            ))
+        })?;
+    if (200..300).contains(&reply.status) {
+        return TokenSet::from_reply(&reply, Timestamp::now()).map_err(|e| {
+            RefreshError::Failed(Error::new(&codes::AUTH_REFRESH_FAILED, e.message()))
+        });
+    }
+    let terminal = matches!(reply.status, 400 | 401 | 403)
+        || reply.field("error").is_some_and(|e| DEAD.contains(&e));
+    if terminal {
+        return Err(RefreshError::Dead(reply.describe()));
+    }
+    if reply.status == 429 {
+        return Err(RefreshError::RateLimited);
+    }
+    Err(RefreshError::Failed(Error::new(
+        &codes::AUTH_REFRESH_FAILED,
+        format!(
+            "the token endpoint did not refresh the sign-in ({})",
+            reply.describe()
+        ),
+    )))
+}
+
 fn failed(message: &str) -> Error {
     Error::new(&codes::AUTH_LOGIN_FAILED, message)
 }

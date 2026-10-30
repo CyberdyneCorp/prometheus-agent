@@ -167,6 +167,7 @@ fn run(home: &Path, snippet: &Snippet, guide: &Path) {
     for var in pmt_providers::builtin::secret_names() {
         cmd.env_remove(var);
     }
+    common::isolate_user_home(&mut cmd, home);
     cmd.env("PROMETHEUS_HOME", home).args(&args);
     let out = common::run_cmd_with_stdin(&mut cmd, stdin.as_deref().unwrap_or(""));
     let output = format!("{}{}", common::stdout(&out), common::stderr(&out));

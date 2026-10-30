@@ -546,6 +546,15 @@ error_codes! {
     /// An external sign-in file lacks a token.
     AUTH_IMPORT_INCOMPLETE = ("auth.import_incomplete", Tool,
         "The external sign-in file (`prometheus auth import`) is missing, unreadable or does not hold both an access token and a refresh token; nothing was imported.");
+    /// A sign-in was revoked or expired for good.
+    AUTH_REAUTH_REQUIRED = ("auth.reauth_required", Auth,
+        "The provider refused the sign-in's refresh token for good (revoked, expired or reused), so the sign-in is quarantined as `dead` and its refresh token is never sent again; run `prometheus auth add <provider>` to sign in again.");
+    /// Every credential of the provider is benched.
+    AUTH_CREDENTIALS_BENCHED = ("auth.credentials_benched", Unavailable,
+        "Every credential of the provider is benched after a rate-limit, billing or authentication failure; requests resume when the earliest bench ends (shown by `prometheus auth status <provider>`).");
+    /// A token refresh did not complete.
+    AUTH_REFRESH_FAILED = ("auth.refresh_failed", Unavailable,
+        "Refreshing a sign-in's access token failed for a transient reason (network failure, a server error, or a borrowed login that could not be written back); the sign-in is unchanged and the next request tries again.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

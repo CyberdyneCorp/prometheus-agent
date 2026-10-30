@@ -15,7 +15,7 @@ use pmt_config::ProfileScope;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
 use pmt_providers::ProviderRegistry;
-use pmt_providers::auth::{Credentials, SignInUi};
+use pmt_providers::auth::{Accounts, Credentials, SignInUi};
 
 pub(crate) use add::sign_in_default;
 
@@ -61,11 +61,13 @@ pub fn run(command: &AuthCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     }
 }
 
-/// The profile's registry and sign-ins.
+/// The profile's registry, sign-ins and accounts (pool state, borrowed
+/// logins).
 struct Profile {
     scope: ProfileScope,
     registry: ProviderRegistry,
     credentials: Credentials,
+    accounts: Accounts,
 }
 
 impl Profile {
@@ -73,10 +75,13 @@ impl Profile {
         let scope = ctx.scope()?;
         let registry = ProviderRegistry::for_profile(scope.config(), Vec::new())?;
         let credentials = Credentials::new(scope.secrets().store().clone());
+        let user_home = ctx.launch.user_home().map(std::path::PathBuf::as_path);
+        let accounts = crate::accounts::open(&scope, scope.config(), &registry, user_home)?;
         Ok(Self {
             scope,
             registry,
             credentials,
+            accounts,
         })
     }
 }

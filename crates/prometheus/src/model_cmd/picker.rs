@@ -127,7 +127,8 @@ fn connected(models: &Models, provider: &Provider) -> bool {
             .iter()
             .any(|name| models.scope.secrets().resolve(name).is_ok())
         || models
-            .credentials
+            .accounts
+            .credentials()
             .usable(provider.id())
             .is_ok_and(|s| s.is_some())
 }
@@ -215,7 +216,7 @@ mod tests {
         let home = Home::open(dir.path()).unwrap();
         let profile = home.profile(&ProfileName::default_profile()).unwrap();
         let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
-        let models = Models::for_config(scope.clone(), scope.config()).unwrap();
+        let models = Models::for_config(scope.clone(), scope.config(), None).unwrap();
         let mut out = Vec::new();
         let picked = pick(&models, &mut "anthropic\n1\n".as_bytes(), &mut out, false).unwrap();
         assert_eq!(
@@ -248,7 +249,7 @@ mod tests {
         let home = Home::open(dir.path()).unwrap();
         let profile = home.profile(&ProfileName::default_profile()).unwrap();
         let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
-        let models = Models::for_config(scope.clone(), scope.config()).unwrap();
+        let models = Models::for_config(scope.clone(), scope.config(), None).unwrap();
         let mut out = Vec::new();
         let picked = pick(&models, &mut "1\n".as_bytes(), &mut out, true).unwrap();
         assert_eq!(picked, Some(Picked::SignIn("openai-codex")));
