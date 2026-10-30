@@ -31,9 +31,10 @@ use windows_sys::Win32::Security::{
     CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, EqualSid, GetAce, GetFileSecurityW,
     GetLengthSid, GetSecurityDescriptorControl, GetSecurityDescriptorDacl, INHERITED_ACE,
     InitializeAcl, InitializeSecurityDescriptor, OBJECT_INHERIT_ACE, OBJECT_SECURITY_INFORMATION,
-    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_AUTO_INHERITED,
-    SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL, SetFileSecurityW,
-    SetSecurityDescriptorControl, SetSecurityDescriptorDacl, UNPROTECTED_DACL_SECURITY_INFORMATION,
+    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_AUTO_INHERIT_REQ,
+    SE_DACL_AUTO_INHERITED, SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL,
+    SetFileSecurityW, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
+    UNPROTECTED_DACL_SECURITY_INFORMATION,
 };
 
 use super::container::wide;
@@ -249,13 +250,13 @@ fn strip(path: &Path, sid: PSID) -> Result<bool, u32> {
     let mut acl = rebuild(descriptor.dacl, &kept.entries, sid, None)?;
     let mut absolute = SECURITY_DESCRIPTOR::default();
     let sd: PSECURITY_DESCRIPTOR = (&raw mut absolute).cast();
-    let control_bits = SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED;
+    let control_bits = SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ;
     // Without SE_DACL_AUTO_INHERITED the system clears every INHERITED_ACE
     // flag of the DACL it is given (seen on the Windows ARM runners, whose
     // directories carry inherited entries without that bit), turning the
     // inherited entries into explicit copies.
     let control = if kept.inherited {
-        (descriptor.control & SE_DACL_PROTECTED) | SE_DACL_AUTO_INHERITED
+        (descriptor.control & SE_DACL_PROTECTED) | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ
     } else {
         descriptor.control & control_bits
     };
