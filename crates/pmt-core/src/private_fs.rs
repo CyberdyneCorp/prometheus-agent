@@ -57,9 +57,56 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
+/// Copies the regular files and directories under `src` into `dst`
+/// (created 0700, files 0600), replacing existing files. Symbolic links
+/// and special files are skipped, never followed.
+///
+/// # Errors
+///
+/// Any I/O error.
+pub fn copy_tree(src: &Path, dst: &Path) -> io::Result<()> {
+    create_dir(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let target = dst.join(entry.file_name());
+        if kind.is_dir() {
+            copy_tree(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            copy_file(&entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies one file to `dst` with mode 0600, replacing `dst` atomically.
+///
+/// # Errors
+///
+/// Any I/O error.
+pub fn copy_file(src: &Path, dst: &Path) -> io::Result<()> {
+    write_atomic(dst, &fs::read(src)?)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{create_dir, write_atomic};
+    use super::{copy_tree, create_dir, write_atomic};
+
+    #[test]
+    fn copy_tree_copies_files_and_skips_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        create_dir(&src.join("sub")).unwrap();
+        std::fs::write(src.join("a.txt"), "a").unwrap();
+        std::fs::write(src.join("sub/b.txt"), "b").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/etc/hosts", src.join("link")).unwrap();
+        let dst = dir.path().join("dst");
+        copy_tree(&src, &dst).unwrap();
+        assert_eq!(std::fs::read_to_string(dst.join("sub/b.txt")).unwrap(), "b");
+        assert_eq!(std::fs::read_to_string(dst.join("a.txt")).unwrap(), "a");
+        assert!(!dst.join("link").exists());
+    }
 
     #[test]
     fn atomic_write_replaces_contents_privately() {

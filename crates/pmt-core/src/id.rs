@@ -131,6 +131,12 @@ prefixed_id!(
     "msg"
 );
 
+prefixed_id!(
+    /// A profile state snapshot id, `snap_<ULID>`.
+    SnapshotId,
+    "snap"
+);
+
 #[cfg(test)]
 mod tests {
     use super::{MessageId, SessionId};

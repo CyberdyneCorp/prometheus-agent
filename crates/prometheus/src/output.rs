@@ -11,6 +11,7 @@
 use std::io::{self, Write};
 
 use pmt_core::Error;
+use pmt_core::error::codes;
 use serde::Serialize;
 
 /// A versioned JSON document shape.
@@ -36,6 +37,30 @@ pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
         schema: "prometheus.config_explain.v1",
         command: "config explain",
+    },
+    JsonShape {
+        schema: "prometheus.secrets.v1",
+        command: "secrets list",
+    },
+    JsonShape {
+        schema: "prometheus.backup.v1",
+        command: "backup create",
+    },
+    JsonShape {
+        schema: "prometheus.restore.v1",
+        command: "backup restore",
+    },
+    JsonShape {
+        schema: "prometheus.snapshots.v1",
+        command: "snapshots list",
+    },
+    JsonShape {
+        schema: "prometheus.profiles.v1",
+        command: "profile list",
+    },
+    JsonShape {
+        schema: "prometheus.profile.v1",
+        command: "profile show",
     },
 ];
 
@@ -91,6 +116,62 @@ pub fn print_error(err: &Error, json: bool) {
         }
     };
     let _ = io::stderr().write_all(text.as_bytes());
+}
+
+/// Prints the listing/status document of `command` (its shape must be in
+/// [`JSON_SHAPES`]) on stdout; returns exit 0.
+///
+/// # Errors
+///
+/// `output.io` when stdout cannot be written.
+///
+/// # Panics
+///
+/// When `command` has no registered shape (a programming error).
+pub fn document(command: &str, body: &impl Serialize) -> Result<u8, Error> {
+    let shape = JSON_SHAPES
+        .iter()
+        .find(|s| s.command == command)
+        .expect("every JSON shape is registered");
+    write_document(&mut io::stdout().lock(), shape, body).map_err(|e| stdout_error(&e))?;
+    Ok(0)
+}
+
+/// Prints one plain JSON value on stdout; returns exit 0.
+///
+/// # Errors
+///
+/// `output.io`.
+pub fn json(value: &impl Serialize) -> Result<u8, Error> {
+    write_json(&mut io::stdout().lock(), value).map_err(|e| stdout_error(&e))?;
+    Ok(0)
+}
+
+/// Prints `value` and a newline on stdout; returns exit 0.
+///
+/// # Errors
+///
+/// `output.io`.
+pub fn print(value: &impl std::fmt::Display) -> Result<u8, Error> {
+    writeln!(io::stdout().lock(), "{value}").map_err(|e| stdout_error(&e))?;
+    Ok(0)
+}
+
+/// Prints `text` as is on stdout; returns exit 0.
+///
+/// # Errors
+///
+/// `output.io`.
+pub fn print_raw(text: &str) -> Result<u8, Error> {
+    io::stdout()
+        .lock()
+        .write_all(text.as_bytes())
+        .map_err(|e| stdout_error(&e))?;
+    Ok(0)
+}
+
+fn stdout_error(e: &io::Error) -> Error {
+    Error::new(&codes::OUTPUT_IO, format!("cannot write to stdout: {e}"))
 }
 
 #[cfg(test)]

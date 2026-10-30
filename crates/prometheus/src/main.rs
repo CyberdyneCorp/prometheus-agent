@@ -11,7 +11,9 @@ use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
 use pmt_core::{exit, panic};
 use prometheus::output::print_error;
-use prometheus::{Cli, Command, config_cmd, startup, version};
+use prometheus::{
+    Cli, Command, Context, backup_cmd, config_cmd, profile_cmd, secrets_cmd, startup, version,
+};
 
 fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
@@ -35,18 +37,20 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
+    let ctx = Context {
+        home_flag: cli.home.as_deref(),
+        launch,
+        profile: cli.profile.as_deref(),
+        set: &cli.set,
+        json: cli.json,
+    };
     let result = match &cli.command {
         Some(Command::Version) => Ok(version::run(cli.json, cli.verbose > 0)),
-        Some(Command::Config { command }) => {
-            let ctx = config_cmd::Context {
-                home_flag: cli.home.as_deref(),
-                launch,
-                profile: cli.profile.as_deref(),
-                set: &cli.set,
-                json: cli.json,
-            };
-            config_cmd::run(command, &ctx)
-        }
+        Some(Command::Config { command }) => config_cmd::run(command, &ctx),
+        Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
+        Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
+        Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
+        Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),
         // `chat`, the default command, arrives with the CLI chat group.
         None => Ok(exit::SUCCESS),
     };

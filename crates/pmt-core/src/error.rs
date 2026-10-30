@@ -222,6 +222,54 @@ error_codes! {
     /// error, exit 2, per the profile-selection spec).
     PROFILE_NOT_FOUND = ("profile.not_found", Usage,
         "The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`.");
+    /// A secret name does not match the secret name rules.
+    SECRET_INVALID_NAME = ("secret.invalid_name", Usage,
+        "A secret name does not match `^[A-Z][A-Z0-9_]{0,127}$`.");
+    /// A secret value was given on the command line.
+    SECRET_VALUE_ON_ARGV = ("secret.value_on_argv", Usage,
+        "A secret value was given as a command-line argument; values are read only from a no-echo prompt or stdin, so they never appear in shell history or process listings.");
+    /// The secret value read from the prompt or stdin is empty.
+    SECRET_EMPTY = ("secret.empty", InvalidInput,
+        "The secret value read from the prompt or stdin is empty.");
+    /// A secret the profile needs is not set.
+    SECRET_MISSING = ("secret.missing", Config,
+        "A secret the profile needs is not in its secrets store (nor, for the launch profile, in the environment); set it with `prometheus secrets set <NAME>`.");
+    /// The secrets store cannot be read or written.
+    SECRET_STORE = ("secret.store", Config,
+        "The profile's secrets store (`secrets.toml` or the OS keychain) cannot be read, parsed or written.");
+    /// The OS keychain backend is not available on this machine.
+    SECRET_KEYCHAIN_UNAVAILABLE = ("secret.keychain_unavailable", Unavailable,
+        "`secrets.backend = \"keychain\"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend.");
+    /// Revealing a secret was refused because stdout is not a terminal.
+    SECRET_REVEAL_REFUSED = ("secret.reveal_refused", PermissionDenied,
+        "`prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file.");
+    /// A profile name is reserved.
+    PROFILE_RESERVED = ("profile.reserved", Usage,
+        "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");
+    /// The profile to create already exists.
+    PROFILE_EXISTS = ("profile.exists", Usage,
+        "`prometheus profile create` or `rename` names a profile that already exists.");
+    /// The operation is not allowed on the default profile.
+    PROFILE_PROTECTED = ("profile.protected", Usage,
+        "The `default` profile cannot be deleted or renamed.");
+    /// A running process uses the profile.
+    PROFILE_IN_USE = ("profile.in_use", Conflict,
+        "A running daemon or interactive client uses the profile; stop it and retry.");
+    /// The profile was deleted.
+    PROFILE_DELETED = ("profile.deleted", NotFound,
+        "The profile was deleted (`profiles/.deleted/<name>` exists); nothing may write to it until it is created again.");
+    /// Another backup of this home is running.
+    BACKUP_RUNNING = ("backup.running", Conflict,
+        "Another `prometheus backup create` is running for this home.");
+    /// A backup archive is corrupt or does not match its manifest.
+    BACKUP_CORRUPT = ("backup.corrupt", InvalidInput,
+        "A backup archive or snapshot is unreadable, misses its manifest, or a member does not match its manifest size and SHA-256 hash; nothing was restored.");
+    /// A backup archive or snapshot could not be written.
+    BACKUP_IO = ("backup.io", Io,
+        "A backup archive or snapshot could not be written or read.");
+    /// No snapshot has the given id.
+    SNAPSHOT_NOT_FOUND = ("snapshot.not_found", NotFound,
+        "No snapshot of this profile has the given id; list them with `prometheus snapshots list`.");
     /// Writing a command's output or reading an answer failed.
     OUTPUT_IO = ("output.io", Io,
         "Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed.");

@@ -17,6 +17,21 @@ use crate::write::ConfigFile;
 pub const DEFAULT_PROFILE: &str = "default";
 /// `<home>/active_profile`: the name of the profile used without `-p`.
 pub const ACTIVE_PROFILE_FILE: &str = "active_profile";
+/// `<home>/profiles/.deleted/<name>`: tombstones of deleted profiles.
+pub const TOMBSTONE_DIR: &str = ".deleted";
+/// Names a new profile may not take.
+pub const RESERVED_NAMES: &[&str] = &[
+    "prometheus",
+    "pmt",
+    "test",
+    "tmp",
+    "root",
+    "all",
+    "none",
+    "run",
+    "logs",
+    "tools",
+];
 /// Directories of the home root (beside `active_profile` and `daemon.toml`).
 pub const ROOT_DIRS: &[&str] = &["run", "logs", "runtimes", "updates", "kanban", "profiles"];
 /// Directories of every profile.
@@ -79,6 +94,23 @@ impl ProfileName {
         }
     }
 
+    /// As [`ProfileName::parse`], also refusing the reserved names: the
+    /// rule for a name a new profile takes.
+    ///
+    /// # Errors
+    ///
+    /// `profile.invalid_name`, `profile.reserved` (exit 2).
+    pub fn parse_new(name: &str) -> Result<Self, Error> {
+        let name = Self::parse(name)?;
+        if RESERVED_NAMES.contains(&name.as_str()) {
+            return Err(Error::new(
+                &codes::PROFILE_RESERVED,
+                format!("profile name '{name}' is reserved"),
+            ));
+        }
+        Ok(name)
+    }
+
     /// The `default` profile.
     #[must_use]
     pub fn default_profile() -> Self {
@@ -105,8 +137,9 @@ pub struct Home {
 }
 
 impl Home {
-    /// Opens the home at `root`, creating the D13 layout, `active_profile`
-    /// (naming `default`) and the `default` profile when missing.
+    /// Opens the home at `root`, creating the D13 layout and the `default`
+    /// profile when missing. A missing `active_profile` means `default`
+    /// (`prometheus profile use default` removes the file).
     ///
     /// # Errors
     ///
@@ -116,13 +149,10 @@ impl Home {
         for dir in ROOT_DIRS {
             private_dir(&root.join(dir))?;
         }
+        tighten(&root.join(ACTIVE_PROFILE_FILE), 0o600);
         let home = Self {
             root: root.to_owned(),
         };
-        let active = root.join(ACTIVE_PROFILE_FILE);
-        if !active.exists() {
-            write_new(&active, &format!("{DEFAULT_PROFILE}\n"))?;
-        }
         home.profile(&ProfileName::default_profile())?;
         Ok(home)
     }
@@ -137,9 +167,11 @@ impl Home {
     ///
     /// # Errors
     ///
-    /// `home.io` when the layout cannot be created.
+    /// `profile.deleted` when the profile was deleted (only `profile
+    /// create` revives a name); `home.io` when the layout cannot be created.
     pub fn profile(&self, name: &ProfileName) -> Result<ProfileDir, Error> {
-        let dir = self.root.join("profiles").join(name.as_str());
+        check_not_deleted(&self.root, name)?;
+        let dir = self.profile_path(name);
         let fresh = !dir.exists();
         private_dir(&dir)?;
         for sub in PROFILE_DIRS {
@@ -173,7 +205,7 @@ impl Home {
     /// `profile.not_found` (usage, exit 2) when the profile was never created;
     /// `home.io`.
     pub fn existing_profile(&self, name: &ProfileName) -> Result<ProfileDir, Error> {
-        let exists = self.root.join("profiles").join(name.as_str()).is_dir();
+        let exists = self.profile_path(name).is_dir();
         if !exists && name.as_str() != DEFAULT_PROFILE {
             return Err(Error::new(
                 &codes::PROFILE_NOT_FOUND,
@@ -183,6 +215,18 @@ impl Home {
             ));
         }
         self.profile(name)
+    }
+
+    /// `<home>/profiles/<name>` (whether or not it exists).
+    #[must_use]
+    pub fn profile_path(&self, name: &ProfileName) -> PathBuf {
+        self.root.join("profiles").join(name.as_str())
+    }
+
+    /// `<home>/profiles/.deleted/<name>`.
+    #[must_use]
+    pub fn tombstone(&self, name: &ProfileName) -> PathBuf {
+        tombstone(&self.root, name)
     }
 
     /// The profile named by `active_profile`; `default` when the file is
@@ -244,6 +288,17 @@ impl ProfileDir {
         &self.home
     }
 
+    /// Fails when the profile was deleted after this handle was made: a
+    /// long-lived holder (a gateway route, a scheduled job) checks this
+    /// before writing so it never resurrects a deleted profile.
+    ///
+    /// # Errors
+    ///
+    /// `profile.deleted`.
+    pub fn ensure_live(&self) -> Result<(), Error> {
+        check_not_deleted(&self.home, &self.name)
+    }
+
     /// The profile's `config.toml` and its writer.
     #[must_use]
     pub fn config_file(&self) -> ConfigFile {
@@ -254,17 +309,36 @@ impl ProfileDir {
     }
 }
 
-fn io_error(path: &Path, e: &io::Error) -> Error {
+fn tombstone(root: &Path, name: &ProfileName) -> PathBuf {
+    root.join("profiles")
+        .join(TOMBSTONE_DIR)
+        .join(name.as_str())
+}
+
+fn check_not_deleted(root: &Path, name: &ProfileName) -> Result<(), Error> {
+    if tombstone(root, name).exists() {
+        return Err(Error::new(
+            &codes::PROFILE_DELETED,
+            format!("profile '{name}' was deleted"),
+        )
+        .with_hint(format!(
+            "create it again with: prometheus profile create {name}"
+        )));
+    }
+    Ok(())
+}
+
+pub(crate) fn io_error(path: &Path, e: &io::Error) -> Error {
     Error::new(&codes::HOME_IO, format!("{}: {e}", path.display()))
 }
 
-fn private_dir(dir: &Path) -> Result<(), Error> {
+pub(crate) fn private_dir(dir: &Path) -> Result<(), Error> {
     private_fs::create_dir(dir).map_err(|e| io_error(dir, &e))?;
     tighten(dir, 0o700);
     Ok(())
 }
 
-fn write_new(path: &Path, text: &str) -> Result<(), Error> {
+pub(crate) fn write_new(path: &Path, text: &str) -> Result<(), Error> {
     use std::io::Write as _;
     match private_fs::new_file_options().open(path) {
         Ok(mut file) => file
@@ -318,9 +392,9 @@ mod tests {
         for dir in ROOT_DIRS {
             assert!(root.join(dir).is_dir(), "{dir}");
         }
-        assert_eq!(
-            std::fs::read_to_string(root.join("active_profile")).unwrap(),
-            "default\n"
+        assert!(
+            !root.join("active_profile").exists(),
+            "no active_profile means default"
         );
         let profile = root.join("profiles/default");
         assert!(profile.join("config.toml").is_file());
@@ -359,7 +433,6 @@ mod tests {
         assert_eq!(mode("profiles/default"), 0o700);
         assert_eq!(mode("profiles/default/blobs"), 0o700);
         assert_eq!(mode("run"), 0o700);
-        assert_eq!(mode("active_profile"), 0o600);
         assert_eq!(mode("profiles/default/config.toml"), 0o600);
         assert_eq!(mode("profiles/default/secrets.toml"), 0o600);
         assert_eq!(mode("profiles/default/grants.toml"), 0o600);

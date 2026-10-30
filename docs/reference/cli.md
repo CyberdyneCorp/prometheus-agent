@@ -10,9 +10,13 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
-  version  Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  config   Read, change, validate and explain the profile's config.toml
-  help     Print this message or the help of the given subcommand(s)
+  version    Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  config     Read, change, validate and explain the profile's config.toml
+  secrets    Store, list and remove the profile's secrets (values never on the command line)
+  backup     Back up the whole home to a .tar.zst archive, or restore one
+  snapshots  Snapshot and restore the selected profile's critical state
+  profile    List, create, select, rename and delete profiles
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -508,6 +512,916 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus config help help
 ```
 
+## `prometheus secrets`
+
+```text
+Store, list and remove the profile's secrets (values never on the command line)
+
+Usage: prometheus secrets [OPTIONS] <COMMAND>
+
+Commands:
+  set      Store a secret; the value is read from a hidden prompt or from stdin
+  list     List secret names, their source and whether they are shadowed (never values)
+  get      Show where a secret comes from; --reveal prints the value to a terminal only
+  unset    Remove a secret from the profile's store [alias: rm]
+  migrate  Move every secret to another backend and select it in config.toml
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets set`
+
+```text
+Store a secret; the value is read from a hidden prompt or from stdin
+
+Usage: prometheus secrets set [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Secret name, for example `OPENAI_API_KEY`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets list`
+
+```text
+List secret names, their source and whether they are shadowed (never values)
+
+Usage: prometheus secrets list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets get`
+
+```text
+Show where a secret comes from; --reveal prints the value to a terminal only
+
+Usage: prometheus secrets get [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Secret name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --reveal
+          Print the value (refused unless stdout is a terminal)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets unset`
+
+```text
+Remove a secret from the profile's store
+
+Usage: prometheus secrets unset [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Secret name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets migrate`
+
+```text
+Move every secret to another backend and select it in config.toml
+
+Usage: prometheus secrets migrate [OPTIONS] --to <TO>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          Target backend
+
+          Possible values:
+          - file:     `<profile>/secrets.toml` (mode 0600)
+          - keychain: The OS keychain
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus secrets help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets help [COMMAND]
+
+Commands:
+  set      Store a secret; the value is read from a hidden prompt or from stdin
+  list     List secret names, their source and whether they are shadowed (never values)
+  get      Show where a secret comes from; --reveal prints the value to a terminal only
+  unset    Remove a secret from the profile's store
+  migrate  Move every secret to another backend and select it in config.toml
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus secrets help set`
+
+```text
+Store a secret; the value is read from a hidden prompt or from stdin
+
+Usage: prometheus secrets help set
+```
+
+## `prometheus secrets help list`
+
+```text
+List secret names, their source and whether they are shadowed (never values)
+
+Usage: prometheus secrets help list
+```
+
+## `prometheus secrets help get`
+
+```text
+Show where a secret comes from; --reveal prints the value to a terminal only
+
+Usage: prometheus secrets help get
+```
+
+## `prometheus secrets help unset`
+
+```text
+Remove a secret from the profile's store
+
+Usage: prometheus secrets help unset
+```
+
+## `prometheus secrets help migrate`
+
+```text
+Move every secret to another backend and select it in config.toml
+
+Usage: prometheus secrets help migrate
+```
+
+## `prometheus secrets help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets help help
+```
+
+## `prometheus backup`
+
+```text
+Back up the whole home to a .tar.zst archive, or restore one
+
+Usage: prometheus backup [OPTIONS] <COMMAND>
+
+Commands:
+  create   Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+  restore  Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus backup create`
+
+```text
+Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+
+Usage: prometheus backup create [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          Write the archive here instead
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --quick
+          Only critical state: config, secrets, grants, state.db, cron jobs, pairing data
+
+      --label <TEXT>
+          Label added to the default file name
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --keep <N>
+          Default-named backups to keep in <home>/backups
+
+          [default: 3]
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus backup restore`
+
+```text
+Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+
+Usage: prometheus backup restore [OPTIONS] <ARCHIVE>
+
+Arguments:
+  <ARCHIVE>
+          The .tar.zst archive
+
+Options:
+      --force
+          Replace existing data without asking
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus backup help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus backup help [COMMAND]
+
+Commands:
+  create   Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+  restore  Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus backup help create`
+
+```text
+Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+
+Usage: prometheus backup help create
+```
+
+## `prometheus backup help restore`
+
+```text
+Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+
+Usage: prometheus backup help restore
+```
+
+## `prometheus backup help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus backup help help
+```
+
+## `prometheus snapshots`
+
+```text
+Snapshot and restore the selected profile's critical state
+
+Usage: prometheus snapshots [OPTIONS] <COMMAND>
+
+Commands:
+  list     List the profile's snapshots, newest first
+  create   Snapshot the profile's critical state now
+  restore  Restore a snapshot (a pre-restore snapshot is taken first)
+  prune    Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots list`
+
+```text
+List the profile's snapshots, newest first
+
+Usage: prometheus snapshots list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots create`
+
+```text
+Snapshot the profile's critical state now
+
+Usage: prometheus snapshots create [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --label <TEXT>
+          A label for the snapshot
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots restore`
+
+```text
+Restore a snapshot (a pre-restore snapshot is taken first)
+
+Usage: prometheus snapshots restore [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          Snapshot id (`snap_...`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots prune`
+
+```text
+Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+
+Usage: prometheus snapshots prune [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --keep <N>
+          Manual snapshots to keep
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus snapshots help [COMMAND]
+
+Commands:
+  list     List the profile's snapshots, newest first
+  create   Snapshot the profile's critical state now
+  restore  Restore a snapshot (a pre-restore snapshot is taken first)
+  prune    Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus snapshots help list`
+
+```text
+List the profile's snapshots, newest first
+
+Usage: prometheus snapshots help list
+```
+
+## `prometheus snapshots help create`
+
+```text
+Snapshot the profile's critical state now
+
+Usage: prometheus snapshots help create
+```
+
+## `prometheus snapshots help restore`
+
+```text
+Restore a snapshot (a pre-restore snapshot is taken first)
+
+Usage: prometheus snapshots help restore
+```
+
+## `prometheus snapshots help prune`
+
+```text
+Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+
+Usage: prometheus snapshots help prune
+```
+
+## `prometheus snapshots help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus snapshots help help
+```
+
+## `prometheus profile`
+
+```text
+List, create, select, rename and delete profiles
+
+Usage: prometheus profile [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the profiles; the active one is marked
+  create  Create a profile, optionally copying another one once
+  use     Make a profile the one used without -p (`use default` clears the choice)
+  show    Show a profile (default: the selected one)
+  rename  Rename a profile
+  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile list`
+
+```text
+List the profiles; the active one is marked
+
+Usage: prometheus profile list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile create`
+
+```text
+Create a profile, optionally copying another one once
+
+Usage: prometheus profile create [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          New profile name (lowercase letters, digits, '_' and '-')
+
+Options:
+      --clone-from <NAME>
+          Copy config, identity, memory, skills, themes and plugins from this profile
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --clone-secrets
+          With --clone-from, also copy the secrets
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile use`
+
+```text
+Make a profile the one used without -p (`use default` clears the choice)
+
+Usage: prometheus profile use [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile show`
+
+```text
+Show a profile (default: the selected one)
+
+Usage: prometheus profile show [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile rename`
+
+```text
+Rename a profile
+
+Usage: prometheus profile rename [OPTIONS] <OLD> <NEW>
+
+Arguments:
+  <OLD>
+          Current name
+
+  <NEW>
+          New name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile delete`
+
+```text
+Delete a profile and everything in it (asks to type its name unless --yes)
+
+Usage: prometheus profile delete [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile help [COMMAND]
+
+Commands:
+  list    List the profiles; the active one is marked
+  create  Create a profile, optionally copying another one once
+  use     Make a profile the one used without -p (`use default` clears the choice)
+  show    Show a profile (default: the selected one)
+  rename  Rename a profile
+  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus profile help list`
+
+```text
+List the profiles; the active one is marked
+
+Usage: prometheus profile help list
+```
+
+## `prometheus profile help create`
+
+```text
+Create a profile, optionally copying another one once
+
+Usage: prometheus profile help create
+```
+
+## `prometheus profile help use`
+
+```text
+Make a profile the one used without -p (`use default` clears the choice)
+
+Usage: prometheus profile help use
+```
+
+## `prometheus profile help show`
+
+```text
+Show a profile (default: the selected one)
+
+Usage: prometheus profile help show
+```
+
+## `prometheus profile help rename`
+
+```text
+Rename a profile
+
+Usage: prometheus profile help rename
+```
+
+## `prometheus profile help delete`
+
+```text
+Delete a profile and everything in it (asks to type its name unless --yes)
+
+Usage: prometheus profile help delete
+```
+
+## `prometheus profile help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -516,9 +1430,13 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
-  version  Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  config   Read, change, validate and explain the profile's config.toml
-  help     Print this message or the help of the given subcommand(s)
+  version    Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  config     Read, change, validate and explain the profile's config.toml
+  secrets    Store, list and remove the profile's secrets (values never on the command line)
+  backup     Back up the whole home to a .tar.zst archive, or restore one
+  snapshots  Snapshot and restore the selected profile's critical state
+  profile    List, create, select, rename and delete profiles
+  help       Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus help version`
@@ -629,6 +1547,199 @@ Print the configuration reference (Markdown)
 Usage: prometheus help config docs
 ```
 
+## `prometheus help secrets`
+
+```text
+Store, list and remove the profile's secrets (values never on the command line)
+
+Usage: prometheus help secrets [COMMAND]
+
+Commands:
+  set      Store a secret; the value is read from a hidden prompt or from stdin
+  list     List secret names, their source and whether they are shadowed (never values)
+  get      Show where a secret comes from; --reveal prints the value to a terminal only
+  unset    Remove a secret from the profile's store
+  migrate  Move every secret to another backend and select it in config.toml
+```
+
+## `prometheus help secrets set`
+
+```text
+Store a secret; the value is read from a hidden prompt or from stdin
+
+Usage: prometheus help secrets set
+```
+
+## `prometheus help secrets list`
+
+```text
+List secret names, their source and whether they are shadowed (never values)
+
+Usage: prometheus help secrets list
+```
+
+## `prometheus help secrets get`
+
+```text
+Show where a secret comes from; --reveal prints the value to a terminal only
+
+Usage: prometheus help secrets get
+```
+
+## `prometheus help secrets unset`
+
+```text
+Remove a secret from the profile's store
+
+Usage: prometheus help secrets unset
+```
+
+## `prometheus help secrets migrate`
+
+```text
+Move every secret to another backend and select it in config.toml
+
+Usage: prometheus help secrets migrate
+```
+
+## `prometheus help backup`
+
+```text
+Back up the whole home to a .tar.zst archive, or restore one
+
+Usage: prometheus help backup [COMMAND]
+
+Commands:
+  create   Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+  restore  Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+```
+
+## `prometheus help backup create`
+
+```text
+Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+
+Usage: prometheus help backup create
+```
+
+## `prometheus help backup restore`
+
+```text
+Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+
+Usage: prometheus help backup restore
+```
+
+## `prometheus help snapshots`
+
+```text
+Snapshot and restore the selected profile's critical state
+
+Usage: prometheus help snapshots [COMMAND]
+
+Commands:
+  list     List the profile's snapshots, newest first
+  create   Snapshot the profile's critical state now
+  restore  Restore a snapshot (a pre-restore snapshot is taken first)
+  prune    Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+```
+
+## `prometheus help snapshots list`
+
+```text
+List the profile's snapshots, newest first
+
+Usage: prometheus help snapshots list
+```
+
+## `prometheus help snapshots create`
+
+```text
+Snapshot the profile's critical state now
+
+Usage: prometheus help snapshots create
+```
+
+## `prometheus help snapshots restore`
+
+```text
+Restore a snapshot (a pre-restore snapshot is taken first)
+
+Usage: prometheus help snapshots restore
+```
+
+## `prometheus help snapshots prune`
+
+```text
+Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+
+Usage: prometheus help snapshots prune
+```
+
+## `prometheus help profile`
+
+```text
+List, create, select, rename and delete profiles
+
+Usage: prometheus help profile [COMMAND]
+
+Commands:
+  list    List the profiles; the active one is marked
+  create  Create a profile, optionally copying another one once
+  use     Make a profile the one used without -p (`use default` clears the choice)
+  show    Show a profile (default: the selected one)
+  rename  Rename a profile
+  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+```
+
+## `prometheus help profile list`
+
+```text
+List the profiles; the active one is marked
+
+Usage: prometheus help profile list
+```
+
+## `prometheus help profile create`
+
+```text
+Create a profile, optionally copying another one once
+
+Usage: prometheus help profile create
+```
+
+## `prometheus help profile use`
+
+```text
+Make a profile the one used without -p (`use default` clears the choice)
+
+Usage: prometheus help profile use
+```
+
+## `prometheus help profile show`
+
+```text
+Show a profile (default: the selected one)
+
+Usage: prometheus help profile show
+```
+
+## `prometheus help profile rename`
+
+```text
+Rename a profile
+
+Usage: prometheus help profile rename
+```
+
+## `prometheus help profile delete`
+
+```text
+Delete a profile and everything in it (asks to type its name unless --yes)
+
+Usage: prometheus help profile delete
+```
+
 ## `prometheus help help`
 
 ```text
@@ -646,3 +1757,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.config.v1` | `prometheus config show` |
 | `prometheus.config_value.v1` | `prometheus config get` |
 | `prometheus.config_explain.v1` | `prometheus config explain` |
+| `prometheus.secrets.v1` | `prometheus secrets list` |
+| `prometheus.backup.v1` | `prometheus backup create` |
+| `prometheus.restore.v1` | `prometheus backup restore` |
+| `prometheus.snapshots.v1` | `prometheus snapshots list` |
+| `prometheus.profiles.v1` | `prometheus profile list` |
+| `prometheus.profile.v1` | `prometheus profile show` |

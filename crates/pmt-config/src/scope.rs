@@ -9,17 +9,16 @@
 //! the profile it was created for. The type has private fields and no
 //! `Default`, so a scope cannot be conjured without loading a profile.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
-use pmt_core::secret::SecretString;
 
 use crate::layers::{Layered, Overrides};
 use crate::layout::{ProfileDir, ProfileName};
-use crate::schema::{Config, SecretsBackend};
+use crate::schema::Config;
+use crate::secrets::{SecretStore, SecretsHandle};
 
 /// One profile's identity, paths, configuration snapshot and secrets.
 /// Cheap to clone; clones share the same snapshot.
@@ -58,18 +57,16 @@ impl ProfileScope {
         launch: Launch<'_>,
     ) -> Result<Self, Error> {
         let config = profile.config_file().load(overrides)?;
-        let secrets = SecretsHandle {
-            backend: config.config().secrets.backend,
-            store_path: profile.path().join("secrets.toml"),
-            launch_env: match launch {
-                Launch::Profile(env) => Some(
-                    env.secrets()
-                        .map(|(name, value)| (name.to_owned(), value.clone()))
-                        .collect(),
-                ),
-                Launch::Other => None,
-            },
+        let store = SecretStore::open(&profile, config.config().secrets.backend);
+        let launch_env = match launch {
+            Launch::Profile(env) => Some(
+                env.secrets()
+                    .map(|(name, value)| (name.to_owned(), value.clone()))
+                    .collect(),
+            ),
+            Launch::Other => None,
         };
+        let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env);
         Ok(Self {
             inner: Arc::new(Inner {
                 profile,
@@ -125,57 +122,6 @@ impl ProfileScope {
     #[must_use]
     pub fn secrets(&self) -> &SecretsHandle {
         &self.inner.secrets
-    }
-}
-
-/// Access to one profile's secrets: its store and, for the launch profile
-/// only, the secrets of the launch environment. Resolution and the store
-/// itself are the secrets store's (task 5.7); the handle fixes which
-/// sources a profile may ever see.
-#[derive(Clone)]
-pub struct SecretsHandle {
-    backend: SecretsBackend,
-    store_path: PathBuf,
-    launch_env: Option<BTreeMap<String, SecretString>>,
-}
-
-impl std::fmt::Debug for SecretsHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SecretsHandle")
-            .field("backend", &self.backend)
-            .field("store_path", &self.store_path)
-            .field("launch_env", &self.launch_env.as_ref().map(BTreeMap::len))
-            .finish()
-    }
-}
-
-impl SecretsHandle {
-    /// The configured backend.
-    #[must_use]
-    pub fn backend(&self) -> SecretsBackend {
-        self.backend
-    }
-
-    /// `<profile>/secrets.toml` (the `file` backend's store).
-    #[must_use]
-    pub fn store_path(&self) -> &Path {
-        &self.store_path
-    }
-
-    /// Whether this scope may read launch-environment secrets.
-    #[must_use]
-    pub fn is_launch_profile(&self) -> bool {
-        self.launch_env.is_some()
-    }
-
-    /// The launch-environment value of secret `name` (`PMT_SECRET_<name>`
-    /// first, then a provider-native variable `name`); always `None` for a
-    /// profile other than the launch profile.
-    #[must_use]
-    pub fn launch_env_secret(&self, name: &str) -> Option<&SecretString> {
-        let env = self.launch_env.as_ref()?;
-        env.get(&format!("{}{name}", pmt_core::env::SECRET_PREFIX))
-            .or_else(|| env.get(name))
     }
 }
 

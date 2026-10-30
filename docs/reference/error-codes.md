@@ -73,6 +73,22 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
 | `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
 | `profile.not_found` | `usage` | 2 | The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`. |
+| `secret.invalid_name` | `usage` | 2 | A secret name does not match `^[A-Z][A-Z0-9_]{0,127}$`. |
+| `secret.value_on_argv` | `usage` | 2 | A secret value was given as a command-line argument; values are read only from a no-echo prompt or stdin, so they never appear in shell history or process listings. |
+| `secret.empty` | `invalid_input` | 65 | The secret value read from the prompt or stdin is empty. |
+| `secret.missing` | `config` | 78 | A secret the profile needs is not in its secrets store (nor, for the launch profile, in the environment); set it with `prometheus secrets set <NAME>`. |
+| `secret.store` | `config` | 78 | The profile's secrets store (`secrets.toml` or the OS keychain) cannot be read, parsed or written. |
+| `secret.keychain_unavailable` | `unavailable` | 69 | `secrets.backend = "keychain"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend. |
+| `secret.reveal_refused` | `permission_denied` | 77 | `prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file. |
+| `profile.reserved` | `usage` | 2 | A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`). |
+| `profile.exists` | `usage` | 2 | `prometheus profile create` or `rename` names a profile that already exists. |
+| `profile.protected` | `usage` | 2 | The `default` profile cannot be deleted or renamed. |
+| `profile.in_use` | `conflict` | 75 | A running daemon or interactive client uses the profile; stop it and retry. |
+| `profile.deleted` | `not_found` | 66 | The profile was deleted (`profiles/.deleted/<name>` exists); nothing may write to it until it is created again. |
+| `backup.running` | `conflict` | 75 | Another `prometheus backup create` is running for this home. |
+| `backup.corrupt` | `invalid_input` | 65 | A backup archive or snapshot is unreadable, misses its manifest, or a member does not match its manifest size and SHA-256 hash; nothing was restored. |
+| `backup.io` | `io` | 74 | A backup archive or snapshot could not be written or read. |
+| `snapshot.not_found` | `not_found` | 66 | No snapshot of this profile has the given id; list them with `prometheus snapshots list`. |
 | `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
 | `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

@@ -9,6 +9,7 @@
 //!   [`layers`] stacks defaults, the file and `--set` overrides.
 //! - [`write::ConfigFile`] is the one format-preserving writer and
 //!   [`migrate`] brings older files forward.
+//! - [`secrets`] is the per-profile secrets store and resolver.
 //! - [`daemon`] is the machine-wide `daemon.toml`.
 
 mod backups;
@@ -21,9 +22,11 @@ pub mod layers;
 pub mod layout;
 pub mod migrate;
 mod parse;
+pub mod profiles;
 pub mod reference;
 pub mod schema;
 pub mod scope;
+pub mod secrets;
 pub mod validate;
 pub mod write;
 
@@ -31,7 +34,8 @@ pub use daemon::DaemonConfig;
 pub use layers::{Layered, Overrides, Source};
 pub use layout::{Home, ProfileDir, ProfileName};
 pub use schema::{Config, SCHEMA_VERSION};
-pub use scope::{Launch, ProfileScope, SecretsHandle};
+pub use scope::{Launch, ProfileScope};
+pub use secrets::{SecretStore, SecretsHandle};
 pub use write::ConfigFile;
 
 /// Validates `text` as a `config.toml` named `path` (current schema

@@ -29,10 +29,12 @@ eval = []
 
 [dependencies]
 clap.workspace = true
+pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-obs.workspace = true
 pmt-store.workspace = true
+rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true

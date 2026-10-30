@@ -2,6 +2,10 @@
 
 [Introduction](introduction.md)
 
+# Guides
+
+- [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
+
 # Reference
 
 - [Configuration](reference/configuration.md)
