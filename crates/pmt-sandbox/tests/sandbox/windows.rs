@@ -84,18 +84,24 @@ fn acl(path: &Path) -> String {
 #[test]
 fn acl_entries_are_revoked_when_the_sandbox_ends() {
     let fixture = Fixture::new();
-    let before = acl(&fixture.work);
-    let parent_before = acl(&fixture.home);
+    let sub = fixture.work.join("sub");
+    std::fs::create_dir(&sub).unwrap();
+    std::fs::write(sub.join("file.txt"), "x").unwrap();
+    let objects = [fixture.work.clone(), sub.clone(), sub.join("file.txt")];
+    let before: Vec<String> = objects.iter().map(|p| acl(p)).collect();
     let sandbox = confine(fixture.policy(&[]));
-    let during = acl(&fixture.work);
-    // AppContainer SIDs start with S-1-15-2-.
-    assert!(during.contains("S-1-15-2-"), "{during}");
+    let during: Vec<String> = objects.iter().map(|p| acl(p)).collect();
+    // AppContainer SIDs start with S-1-15-2-; the grant reaches children.
+    assert!(
+        during.iter().all(|a| a.contains("S-1-15-2-")),
+        "{during:#?}"
+    );
     drop(sandbox);
-    let after = acl(&fixture.work);
+    let after: Vec<String> = objects.iter().map(|p| acl(p)).collect();
     assert_eq!(
         after,
         before,
-        "during:\n{during}\nparent before:\n{parent_before}\nparent after:\n{}",
+        "during: {during:#?}\nparent: {}",
         acl(&fixture.home)
     );
 }

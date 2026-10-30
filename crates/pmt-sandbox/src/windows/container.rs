@@ -128,8 +128,7 @@ impl AppContainer {
 impl Drop for AppContainer {
     fn drop(&mut self) {
         for path in &self.touched {
-            // Best effort: a path removed since keeps no entry to revoke.
-            let _ = acl::revoke(path, self.sid);
+            acl::revoke(path, self.sid);
         }
         let name = wide(OsStr::new(&self.name));
         // SAFETY: `name` is NUL-terminated; `sid` came from the profile APIs
