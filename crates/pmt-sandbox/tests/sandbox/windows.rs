@@ -88,7 +88,7 @@ fn acl_entries_are_revoked_when_the_sandbox_ends() {
     std::fs::create_dir(&sub).unwrap();
     std::fs::write(sub.join("file.txt"), "x").unwrap();
     let objects = [fixture.work.clone(), sub.clone(), sub.join("file.txt")];
-    let before: Vec<String> = objects.iter().map(|p| acl(p)).collect();
+    let before: Vec<String> = objects.iter().map(|p| entries(&acl(p))).collect();
     let sandbox = confine(fixture.policy(&[]));
     let during: Vec<String> = objects.iter().map(|p| acl(p)).collect();
     // AppContainer SIDs start with S-1-15-2-; the grant reaches children.
@@ -97,11 +97,15 @@ fn acl_entries_are_revoked_when_the_sandbox_ends() {
         "{during:#?}"
     );
     drop(sandbox);
-    let after: Vec<String> = objects.iter().map(|p| acl(p)).collect();
-    assert_eq!(
-        after,
-        before,
-        "during: {during:#?}\nparent: {}",
-        acl(&fixture.home)
-    );
+    let after: Vec<String> = objects.iter().map(|p| entries(&acl(p))).collect();
+    assert!(after.iter().all(|a| !a.contains("S-1-15-2-")), "{after:#?}");
+    assert_eq!(after, before, "the same principals keep the same rights");
+}
+
+/// The (principal, rights) entries of an `icacls` listing, without the
+/// `(I)` inherited marker: when the parent directory's DACL is not marked
+/// auto-inherited (seen on the Windows ARM runners), Windows rewrites
+/// inherited entries as explicit copies whenever the DACL is set.
+fn entries(listing: &str) -> String {
+    listing.replace("(I)", "")
 }

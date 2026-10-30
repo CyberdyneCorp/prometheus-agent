@@ -6,14 +6,15 @@
 //! object's explicit entries plus the grant and set with the object's own
 //! protection state, so the system re-inherits the parent's entries.
 //!
-//! Revoking must leave every other entry exactly as it was, inherited flags
-//! included. Revocation walks the granted tree itself and rewrites each DACL
-//! that names the SID with `SetFileSecurityW` (no inheritance processing),
-//! dropping only that SID's entries; the descriptor is marked
-//! auto-inherited whenever it keeps inherited entries, because otherwise the
-//! system clears their `INHERITED_ACE` flags (on the Windows ARM runners,
-//! whose directories carry inherited entries without that bit, every
-//! rewrite turned them into explicit copies).
+//! Revoking must leave every other entry as it was. Revocation walks the
+//! granted tree itself and rewrites each DACL that names the SID with
+//! `SetFileSecurityW` (no inheritance re-computation), dropping only that
+//! SID's entries; the descriptor is marked auto-inherited whenever it keeps
+//! inherited entries so their `INHERITED_ACE` flags survive. Known limit:
+//! below a directory whose own DACL is not auto-inherited (seen on the
+//! Windows ARM runners), Windows writes the inherited entries back as
+//! explicit copies however the DACL is set: the same principals keep the
+//! same rights, but later changes to the parent no longer flow down.
 
 #![allow(unsafe_code)]
 
@@ -31,10 +32,9 @@ use windows_sys::Win32::Security::{
     CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, EqualSid, GetAce, GetFileSecurityW,
     GetLengthSid, GetSecurityDescriptorControl, GetSecurityDescriptorDacl, INHERITED_ACE,
     InitializeAcl, InitializeSecurityDescriptor, OBJECT_INHERIT_ACE, OBJECT_SECURITY_INFORMATION,
-    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_AUTO_INHERIT_REQ,
-    SE_DACL_AUTO_INHERITED, SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL,
-    SetFileSecurityW, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
-    UNPROTECTED_DACL_SECURITY_INFORMATION,
+    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_AUTO_INHERITED,
+    SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL, SetFileSecurityW,
+    SetSecurityDescriptorControl, SetSecurityDescriptorDacl, UNPROTECTED_DACL_SECURITY_INFORMATION,
 };
 
 use super::container::wide;
@@ -250,13 +250,13 @@ fn strip(path: &Path, sid: PSID) -> Result<bool, u32> {
     let mut acl = rebuild(descriptor.dacl, &kept.entries, sid, None)?;
     let mut absolute = SECURITY_DESCRIPTOR::default();
     let sd: PSECURITY_DESCRIPTOR = (&raw mut absolute).cast();
-    let control_bits = SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ;
+    let control_bits = SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED;
     // Without SE_DACL_AUTO_INHERITED the system clears every INHERITED_ACE
     // flag of the DACL it is given (seen on the Windows ARM runners, whose
     // directories carry inherited entries without that bit), turning the
     // inherited entries into explicit copies.
     let control = if kept.inherited {
-        (descriptor.control & SE_DACL_PROTECTED) | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ
+        (descriptor.control & SE_DACL_PROTECTED) | SE_DACL_AUTO_INHERITED
     } else {
         descriptor.control & control_bits
     };

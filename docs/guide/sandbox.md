@@ -49,7 +49,10 @@ created directly in it after the child starts are not reachable, and the
 store's name stays listable. On
 Windows, listening sockets are never granted (loopback needs a
 per-container exemption), and the session adds then revokes ACL entries for
-its container on the granted directories.
+its container on the granted directories. Below a directory whose ACL is not
+marked auto-inherited (uncommon; seen on some CI images), Windows keeps the
+other entries' rights but stores them as explicit entries after the
+revocation, so later permission changes on the parent no longer flow down.
 
 ## Downgrades are never silent
 
