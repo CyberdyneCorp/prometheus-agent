@@ -176,12 +176,6 @@ impl Redactor {
     }
 }
 
-/// The value plus the encodings it is commonly leaked in: percent-encoded
-/// (URLs, form bodies) and base64 (standard and URL-safe, padded or not;
-/// plus the encoding of its longest 3-byte-aligned prefix, which is how it
-/// starts inside `echo $KEY | base64` or any longer encoded blob, kept only
-/// when that prefix is at least [`Redactor::MIN_LEN`] bytes: the encoding of
-/// a 3-byte fragment would match unrelated text).
 /// Every form of `value`, each paired with `marker`.
 fn with_forms(value: &str, marker: &str) -> Vec<(SecretString, String)> {
     encoded_forms(value)
@@ -190,6 +184,12 @@ fn with_forms(value: &str, marker: &str) -> Vec<(SecretString, String)> {
         .collect()
 }
 
+/// The value plus the encodings it is commonly leaked in: percent-encoded
+/// (URLs, form bodies) and base64 (standard and URL-safe, padded or not;
+/// plus the encoding of its longest 3-byte-aligned prefix, which is how it
+/// starts inside `echo $KEY | base64` or any longer encoded blob, kept only
+/// when that prefix is at least [`Redactor::MIN_LEN`] bytes: the encoding of
+/// a 3-byte fragment would match unrelated text).
 fn encoded_forms(value: &str) -> Vec<String> {
     use base64::Engine as _;
     use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
