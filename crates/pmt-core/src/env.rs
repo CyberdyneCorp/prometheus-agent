@@ -98,6 +98,8 @@ pub struct LaunchEnv {
     log_filter: Option<String>,
     user_home: Option<PathBuf>,
     local_app_data: Option<PathBuf>,
+    /// `VISUAL`, else `EDITOR` (standard terminal variables).
+    editor: Option<String>,
     /// Keyed by variable name (`PMT_SECRET_X` or a provider-native name).
     secrets: BTreeMap<String, SecretString>,
     ignored: Vec<IgnoredVar>,
@@ -133,6 +135,8 @@ impl LaunchEnv {
         let mut env = Self::default();
         let mut pmt_log = None;
         let mut rust_log = None;
+        let mut visual = None;
+        let mut editor = None;
         for (name, value) in vars {
             let name = name.to_string_lossy().into_owned();
             match classify(&name, policy) {
@@ -141,6 +145,8 @@ impl LaunchEnv {
                 Var::LocalAppData => env.local_app_data = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
+                Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
+                Var::Editor => editor = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
                 Var::Secret => {
                     if let Some(value) = env.unicode(name.clone(), value) {
                         env.secrets.insert(name, SecretString::new(value));
@@ -154,6 +160,7 @@ impl LaunchEnv {
             }
         }
         env.log_filter = pmt_log.or(rust_log);
+        env.editor = visual.or(editor);
         env.ignored.sort_by(|a, b| a.name.cmp(&b.name));
         env
     }
@@ -195,6 +202,13 @@ impl LaunchEnv {
         self.local_app_data.as_ref()
     }
 
+    /// The user's editor command: `VISUAL`, else `EDITOR` (may carry
+    /// arguments, for example `code --wait`).
+    #[must_use]
+    pub fn editor(&self) -> Option<&str> {
+        self.editor.as_deref()
+    }
+
     /// The environment-supplied value of secret `name`: `PMT_SECRET_<name>`
     /// first, then a provider-native variable called `name`.
     #[must_use]
@@ -223,6 +237,8 @@ enum Var {
     LocalAppData,
     PmtLog,
     RustLog,
+    Visual,
+    Editor,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -234,6 +250,8 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         PMT_LOG => return Var::PmtLog,
         RUST_LOG => return Var::RustLog,
         "LOCALAPPDATA" => return Var::LocalAppData,
+        "VISUAL" => return Var::Visual,
+        "EDITOR" => return Var::Editor,
         _ => {}
     }
     if is_user_home_var(name) {
@@ -307,6 +325,19 @@ mod tests {
             with.ignored()[0].doctor_message(),
             "ignored environment variable PMT_FOO (configuration lives in config.toml)"
         );
+    }
+
+    #[test]
+    fn editor_is_visual_then_editor() {
+        let both = LaunchEnv::from_vars(
+            vars(&[("EDITOR", "vi"), ("VISUAL", "code --wait")]),
+            &POLICY,
+        );
+        assert_eq!(both.editor(), Some("code --wait"));
+        let editor_only =
+            LaunchEnv::from_vars(vars(&[("EDITOR", "nano"), ("VISUAL", " ")]), &POLICY);
+        assert_eq!(editor_only.editor(), Some("nano"));
+        assert_eq!(LaunchEnv::from_vars(vars(&[]), &POLICY).editor(), None);
     }
 
     #[test]

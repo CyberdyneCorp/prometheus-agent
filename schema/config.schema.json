@@ -1,37 +1,3072 @@
 {
+  "$defs": {
+    "AgentConfig": {
+      "additionalProperties": false,
+      "description": "The `[agent]` section.",
+      "properties": {
+        "api_max_retries": {
+          "default": 3,
+          "description": "Attempts per model call before the fallback chain is consulted.",
+          "format": "uint32",
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "auto_recovery_cycles": {
+          "default": 5,
+          "description": "Extra wait-and-retry cycles after retries and fallbacks are spent on\na transient failure with nothing streamed; `0` disables.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "clarify_timeout_secs": {
+          "default": 3600,
+          "description": "How long the `clarify` tool waits for an answer.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "empty_response_guard": {
+          "$ref": "#/$defs/EmptyResponseGuard",
+          "default": {
+            "cost_threshold_usd": 0.25
+          },
+          "description": "Empty-response retry guard."
+        },
+        "intent_continuation": {
+          "$ref": "#/$defs/IntentContinuation",
+          "default": "auto",
+          "description": "Nudge a model that announces an action without calling a tool:\n`\"auto\"` (Responses-wire models only), `true`, `false` or a list of\nmodel-name substrings."
+        },
+        "max_iterations": {
+          "default": 500,
+          "description": "Maximum model calls per turn; `0` means unlimited.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "personalities": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Custom or overriding personalities: name to prompt text.",
+          "type": "object"
+        },
+        "personality": {
+          "default": "none",
+          "description": "Selected personality overlay (`none`, a built-in name or a key of\n`[agent.personalities]`).",
+          "type": "string"
+        },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reasoning effort; unset means `medium`."
+        },
+        "reasoning_overrides": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Per-model reasoning overrides: model id to a level or a tier name of\n`[agent.reasoning_tiers]`.",
+          "type": "object"
+        },
+        "reasoning_tiers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Provider-specific tier names mapped to a level, for example\n`ultra = \"max\"`.",
+          "type": "object"
+        },
+        "run_budget_secs": {
+          "description": "Optional per-turn wall-clock budget; unset means no budget.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tool_concurrency": {
+          "default": 8,
+          "description": "Tool calls of one batch that may run at once.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ApprovalMode": {
+      "description": "Interactive approval modes. In TOML they are strings: `mode = \"off\"`;\nthe YAML habit `mode = off` does not parse and `mode = false` is not a\nmode.",
+      "oneOf": [
+        {
+          "const": "manual",
+          "description": "Ask for every dangerous call.",
+          "type": "string"
+        },
+        {
+          "const": "smart",
+          "description": "An auxiliary model pre-screens; uncertain calls are asked.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No prompts (deny rules and hardline blocks still apply).",
+          "type": "string"
+        }
+      ]
+    },
+    "ApprovalsConfig": {
+      "additionalProperties": false,
+      "description": "The `[approvals]` section.",
+      "properties": {
+        "cron_mode": {
+          "$ref": "#/$defs/UnattendedApproval",
+          "default": "deny",
+          "description": "Decision for approvals in cron jobs."
+        },
+        "deny": {
+          "default": [],
+          "description": "Command patterns that are always blocked.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/ApprovalMode",
+          "default": "manual",
+          "description": "Approval mode of interactive sessions."
+        },
+        "single_query_mode": {
+          "$ref": "#/$defs/UnattendedApproval",
+          "default": "deny",
+          "description": "Decision for approvals in single-query (`-q`) runs."
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "Unanswered approvals are denied after this long.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unattended_mode": {
+          "$ref": "#/$defs/UnattendedApproval",
+          "default": "deny",
+          "description": "Decision for approvals in other unattended sessions."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "AuthConfig": {
+      "additionalProperties": false,
+      "description": "The `[auth]` section.",
+      "properties": {
+        "adopt_external_logins": {
+          "default": true,
+          "description": "Use an existing Claude Code or Codex CLI sign-in when the profile\nholds no credential of its own.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "AuxiliaryConfig": {
+      "additionalProperties": false,
+      "description": "The `[auxiliary]` section: one optional table per auxiliary task.",
+      "properties": {
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Smart approvals."
+        },
+        "compression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Context compression summaries."
+        },
+        "curator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Skill curator."
+        },
+        "evolution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Harness evolution."
+        },
+        "goal_judge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Goal judging (defaults to the main model)."
+        },
+        "memory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Memory review."
+        },
+        "side_question": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Side questions (defaults to the main model)."
+        },
+        "skill_review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Skill review."
+        },
+        "title": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session titles."
+        },
+        "transient_retries": {
+          "default": 2,
+          "description": "Same-route retries of a retryable auxiliary failure.",
+          "format": "uint32",
+          "maximum": 6,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "vision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Image descriptions."
+        },
+        "voice_chat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Voice chat (defaults to the main model)."
+        },
+        "web_extract": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Web extraction summaries."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "AuxiliaryTask": {
+      "additionalProperties": false,
+      "description": "One `[auxiliary.<task>]` table.",
+      "properties": {
+        "fallback_chain": {
+          "description": "Fallback routes (`\"<provider>/<model>\"`); `[]` disables fallback.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Model id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "Provider id; unset means `auto` (the session's main route).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "description": "Timeout; unset uses the task default (120 s for `vision` and\n`compression`, 30 s for `approval` and `title`, 600 s for `curator`\nand `evolution`).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "BrowserConfig": {
+      "additionalProperties": false,
+      "description": "The `[browser]` section.",
+      "properties": {
+        "cdp_url": {
+          "description": "Explicit CDP endpoint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dialog_policy": {
+          "$ref": "#/$defs/DialogPolicy",
+          "default": "must_respond",
+          "description": "JavaScript dialog handling."
+        },
+        "dialog_timeout_secs": {
+          "default": 300,
+          "description": "Unanswered dialogs are dismissed after this long.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inactivity_timeout_secs": {
+          "default": 120,
+          "description": "Idle browser sessions are closed after this long.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer",
+          "x-apply": "live"
+        },
+        "provider": {
+          "default": "local",
+          "description": "Browser provider: `local` or a cloud browser plugin.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "BudgetsConfig": {
+      "additionalProperties": false,
+      "description": "The `[budgets]` section. Every limit defaults to `0` (off) except\n`unattended_root_usd`.",
+      "properties": {
+        "allow_unpriced": {
+          "default": false,
+          "description": "Allow models without a known price under a USD budget (token\nbudgets still apply).",
+          "type": "boolean"
+        },
+        "daily_usd": {
+          "default": 0.0,
+          "description": "USD per day.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "monthly_usd": {
+          "default": 0.0,
+          "description": "USD per month.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "root_tokens": {
+          "default": 0,
+          "description": "Tokens per root session lineage.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "root_usd": {
+          "default": 0.0,
+          "description": "USD per root session lineage.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "session_tokens": {
+          "default": 0,
+          "description": "Tokens per session.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_usd": {
+          "default": 0.0,
+          "description": "USD per session.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "turn_tokens": {
+          "default": 0,
+          "description": "Tokens per turn.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "turn_usd": {
+          "default": 0.0,
+          "description": "USD per turn.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "unattended_root_usd": {
+          "default": 5.0,
+          "description": "USD per root lineage of cron, unattended gateway sessions,\nbackground delegations and harness evolution.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "warn_ratio": {
+          "default": 0.8,
+          "description": "Fraction of a limit at which a budget warning is emitted.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "CliConfig": {
+      "additionalProperties": false,
+      "description": "The `[cli]` section.",
+      "properties": {
+        "confirm_destructive": {
+          "default": true,
+          "description": "Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and\n`/rewind`.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "CompressionConfig": {
+      "additionalProperties": false,
+      "description": "The `[compression]` section.",
+      "properties": {
+        "abort_on_summary_failure": {
+          "default": false,
+          "description": "End the turn when the summary cannot be produced.",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Compact the context automatically.",
+          "type": "boolean"
+        },
+        "max_attempts": {
+          "default": 3,
+          "description": "Compaction attempts per turn.",
+          "format": "uint32",
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "micro_compact": {
+          "default": false,
+          "description": "Compact tool results between turns.",
+          "type": "boolean"
+        },
+        "micro_compact_every_n_turns": {
+          "default": 1,
+          "description": "Turns between micro-compactions.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "min_tail_user_messages": {
+          "default": 1,
+          "description": "User messages always kept in the tail.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pinned_max_tokens": {
+          "default": 8000,
+          "description": "Token cap for pinned content carried across compactions.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prepare_ahead": {
+          "default": false,
+          "description": "Prepare the next summary ahead of the trigger.",
+          "type": "boolean"
+        },
+        "proactive_prune_tokens": {
+          "default": 0,
+          "description": "Prune old tool output above this many tokens; `0` is off.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "protect_first_n": {
+          "default": 3,
+          "description": "Non-system messages protected at the head of the first compaction.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "quality_min_coverage": {
+          "default": 0.8,
+          "description": "Minimum coverage a summary must reach.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "summary_max_tokens": {
+          "default": 10000,
+          "description": "Summary length cap in tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary_timeout_secs": {
+          "default": 120,
+          "description": "Time allowed for one summary call.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tail_mode": {
+          "$ref": "#/$defs/TailMode",
+          "default": "lean",
+          "description": "How much recent conversation is kept verbatim."
+        },
+        "target_ratio": {
+          "default": 0.2,
+          "description": "Target size after compaction as a fraction of the input budget.",
+          "format": "double",
+          "maximum": 0.8,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "threshold": {
+          "default": 0.5,
+          "description": "Fraction of the input budget at which compaction triggers.",
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "threshold_tokens": {
+          "default": 0,
+          "description": "Lower absolute trigger in tokens; `0` is off.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ContainerConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal.container]` section.",
+      "properties": {
+        "cpus": {
+          "default": 1.0,
+          "description": "CPU limit.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "disk_bytes": {
+          "default": 53687091200,
+          "description": "Disk limit.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Literal environment set in the container.",
+          "type": "object"
+        },
+        "memory_bytes": {
+          "default": 5368709120,
+          "description": "Memory limit.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "persistent": {
+          "default": true,
+          "description": "Keep the container between sessions.",
+          "type": "boolean"
+        },
+        "pids_limit": {
+          "default": 2048,
+          "description": "Process limit.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shm_size": {
+          "default": "1g",
+          "description": "`/dev/shm` size in the runtime's syntax.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ContextConfig": {
+      "additionalProperties": false,
+      "description": "The `[context]` section.",
+      "properties": {
+        "engine": {
+          "default": "builtin",
+          "description": "Context engine: `builtin` or an installed `context-engine` plugin.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ContinuationMode": {
+      "description": "The named intent-continuation mode.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Responses-wire models only.",
+          "type": "string"
+        }
+      ]
+    },
+    "DegradedFeature": {
+      "description": "Sandbox hardening features.",
+      "oneOf": [
+        {
+          "const": "landlock",
+          "description": "Linux Landlock filesystem rules.",
+          "type": "string"
+        },
+        {
+          "const": "landlock_net",
+          "description": "Linux Landlock network rules.",
+          "type": "string"
+        },
+        {
+          "const": "seccomp",
+          "description": "Linux seccomp filter.",
+          "type": "string"
+        },
+        {
+          "const": "seatbelt",
+          "description": "macOS Seatbelt.",
+          "type": "string"
+        },
+        {
+          "const": "appcontainer",
+          "description": "Windows `AppContainer`.",
+          "type": "string"
+        },
+        {
+          "const": "no_new_privileges",
+          "description": "Container `no-new-privileges`.",
+          "type": "string"
+        },
+        {
+          "const": "read_only_rootfs",
+          "description": "Container read-only root.",
+          "type": "string"
+        },
+        {
+          "const": "cap_drop",
+          "description": "Container `--cap-drop ALL`.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every feature.",
+          "type": "string"
+        }
+      ]
+    },
+    "DegradedMode": {
+      "description": "Backend failure handling.",
+      "oneOf": [
+        {
+          "const": "degrade",
+          "description": "A `degraded` result with a retry hint.",
+          "type": "string"
+        },
+        {
+          "const": "fail",
+          "description": "An `error` result.",
+          "type": "string"
+        }
+      ]
+    },
+    "DialogPolicy": {
+      "description": "Dialog policies.",
+      "oneOf": [
+        {
+          "const": "must_respond",
+          "description": "The model must answer.",
+          "type": "string"
+        },
+        {
+          "const": "auto_dismiss",
+          "description": "Dismiss automatically.",
+          "type": "string"
+        },
+        {
+          "const": "auto_accept",
+          "description": "Accept automatically.",
+          "type": "string"
+        }
+      ]
+    },
+    "DisplayConfig": {
+      "additionalProperties": false,
+      "description": "The `[display]` section.",
+      "properties": {
+        "bell_on_complete": {
+          "default": false,
+          "description": "Ring the terminal bell when a turn completes.",
+          "type": "boolean"
+        },
+        "bell_on_prompt": {
+          "default": false,
+          "description": "Ring the terminal bell when an approval or clarify prompt opens.",
+          "type": "boolean"
+        },
+        "compact": {
+          "default": false,
+          "description": "Compact layout.",
+          "type": "boolean"
+        },
+        "final_response_markdown": {
+          "$ref": "#/$defs/MarkdownMode",
+          "default": "render",
+          "description": "How the final response is printed."
+        },
+        "inline_diffs": {
+          "default": true,
+          "description": "Show file-edit diffs inline.",
+          "type": "boolean"
+        },
+        "interim_messages": {
+          "default": true,
+          "description": "Show assistant text between tool calls.",
+          "type": "boolean"
+        },
+        "reasoning_full": {
+          "default": false,
+          "description": "Show reasoning in full instead of clamped.",
+          "type": "boolean"
+        },
+        "resume_display": {
+          "$ref": "#/$defs/ResumeDisplay",
+          "default": "full",
+          "description": "Recap printed when a session is resumed."
+        },
+        "resume_exchanges": {
+          "default": 10,
+          "description": "User/assistant exchanges shown in the recap.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resume_max_assistant_chars": {
+          "default": 200,
+          "description": "Characters of non-final assistant messages shown in the recap.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resume_max_assistant_lines": {
+          "default": 3,
+          "description": "Lines of non-final assistant messages shown in the recap.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resume_max_user_chars": {
+          "default": 300,
+          "description": "User message characters shown in the recap.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "show_cost": {
+          "default": false,
+          "description": "Show the session cost in the status line.",
+          "type": "boolean"
+        },
+        "show_reasoning": {
+          "default": false,
+          "description": "Show model reasoning.",
+          "type": "boolean"
+        },
+        "theme": {
+          "default": "default",
+          "description": "Theme: a built-in (`default`, `mono`, `daylight`, `slate`) or a\nfile in `<profile>/themes/`.",
+          "type": "string"
+        },
+        "timestamp_format": {
+          "default": "%H:%M",
+          "description": "`strftime` format of message timestamps.",
+          "type": "string"
+        },
+        "timestamps": {
+          "default": false,
+          "description": "Prefix messages with timestamps.",
+          "type": "boolean"
+        },
+        "tool_preview_length": {
+          "default": 0,
+          "description": "Tool preview length in characters; `0` means no limit.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_progress": {
+          "$ref": "#/$defs/ToolProgress",
+          "default": "all",
+          "description": "Tool activity shown while a turn runs."
+        },
+        "tool_progress_grouping": {
+          "$ref": "#/$defs/ToolProgressGrouping",
+          "default": "accumulate",
+          "description": "How consecutive tool calls are grouped."
+        },
+        "turn_summary": {
+          "default": true,
+          "description": "One line with duration, tool count and tokens after each turn.",
+          "type": "boolean"
+        },
+        "vim_mode": {
+          "default": false,
+          "description": "Vim key bindings in the composer.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "EgressConfig": {
+      "additionalProperties": false,
+      "description": "The `[security.egress]` section.",
+      "properties": {
+        "allow_private": {
+          "default": false,
+          "description": "Allow private destinations without a session grant.",
+          "type": "boolean"
+        },
+        "fake_ip_ranges": {
+          "default": [],
+          "description": "CIDR ranges a local TUN proxy answers with (treated as public).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "EmptyResponseGuard": {
+      "additionalProperties": false,
+      "description": "The `[agent.empty_response_guard]` section.",
+      "properties": {
+        "cost_threshold_usd": {
+          "default": 0.25,
+          "description": "Estimated input cost (USD) of one empty attempt at which the retry\nbudget drops to one.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "FallbackConfig": {
+      "additionalProperties": false,
+      "description": "The `[fallback]` section.",
+      "properties": {
+        "min_health": {
+          "default": 0.2,
+          "description": "Fallback entries with a health score below this are skipped.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "FilesConfig": {
+      "additionalProperties": false,
+      "description": "The `[files]` section.",
+      "properties": {
+        "read_max_chars": {
+          "default": 100000,
+          "description": "Formatted characters `read_file` returns per call.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "GuardrailThresholds": {
+      "additionalProperties": false,
+      "description": "Repetition thresholds of the tool loop guardrails.",
+      "properties": {
+        "exact_failure": {
+          "description": "Same tool, same arguments, same error.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "idempotent_no_progress": {
+          "description": "Idempotent calls returning identical results.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "same_tool_failure": {
+          "description": "Failures of the same tool.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "exact_failure",
+        "same_tool_failure",
+        "idempotent_no_progress"
+      ],
+      "type": "object"
+    },
+    "ImageInputMode": {
+      "description": "Image input routing modes.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Pixels when the main route supports vision, else a description.",
+          "type": "string"
+        },
+        {
+          "const": "native",
+          "description": "Always attach pixels.",
+          "type": "string"
+        },
+        {
+          "const": "text",
+          "description": "Never attach pixels; use a `vision` auxiliary description.",
+          "type": "string"
+        }
+      ]
+    },
+    "IntentContinuation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContinuationMode",
+          "description": "`\"auto\"`."
+        },
+        {
+          "description": "Always on or always off.",
+          "type": "boolean"
+        },
+        {
+          "description": "On for models whose name contains one of these substrings.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "`agent.intent_continuation`: a mode, a switch or model-name substrings."
+    },
+    "Interface": {
+      "description": "Interactive interfaces.",
+      "oneOf": [
+        {
+          "const": "tui",
+          "description": "The full-screen terminal UI.",
+          "type": "string"
+        },
+        {
+          "const": "line",
+          "description": "The line-mode CLI.",
+          "type": "string"
+        }
+      ]
+    },
+    "JournalMode": {
+      "description": "SQLite journal modes.",
+      "oneOf": [
+        {
+          "const": "wal",
+          "description": "Write-ahead log.",
+          "type": "string"
+        },
+        {
+          "const": "delete",
+          "description": "Rollback journal (network filesystems).",
+          "type": "string"
+        }
+      ]
+    },
+    "KeylessConfig": {
+      "additionalProperties": false,
+      "description": "The `[web.keyless]` section.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Allow keyless web search as the last `auto` choice.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "LogLevel": {
+      "description": "Log levels.",
+      "oneOf": [
+        {
+          "const": "error",
+          "description": "Errors only.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Warnings and errors.",
+          "type": "string"
+        },
+        {
+          "const": "info",
+          "description": "Informational records.",
+          "type": "string"
+        },
+        {
+          "const": "debug",
+          "description": "Debug detail.",
+          "type": "string"
+        },
+        {
+          "const": "trace",
+          "description": "Everything.",
+          "type": "string"
+        }
+      ]
+    },
+    "LoggingConfig": {
+      "additionalProperties": false,
+      "description": "The `[logging]` section.",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/LogLevel",
+          "default": "info",
+          "description": "Log level; `PMT_LOG` or `RUST_LOG` override it."
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "LoginFlow": {
+      "description": "OAuth sign-in flows.",
+      "oneOf": [
+        {
+          "const": "device",
+          "description": "Device code.",
+          "type": "string"
+        },
+        {
+          "const": "browser",
+          "description": "Browser with PKCE.",
+          "type": "string"
+        }
+      ]
+    },
+    "LoopCaps": {
+      "additionalProperties": false,
+      "description": "The `[tool_loop_guardrails.loop_caps]` section.",
+      "properties": {
+        "max_subagents": {
+          "default": 50,
+          "description": "Subagents per turn; `0` is unlimited.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_web_searches": {
+          "default": 50,
+          "description": "Web searches per turn; `0` is unlimited.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "MarkdownMode": {
+      "description": "Final response rendering.",
+      "oneOf": [
+        {
+          "const": "render",
+          "description": "Render Markdown.",
+          "type": "string"
+        },
+        {
+          "const": "raw",
+          "description": "Print the raw text.",
+          "type": "string"
+        }
+      ]
+    },
+    "MemoryConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory]` section.",
+      "properties": {
+        "archival_max_entries": {
+          "default": 10000,
+          "description": "Archival entries kept per target.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memory_char_limit": {
+          "default": 2200,
+          "description": "Character budget of core memory entries.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memory_enabled": {
+          "default": true,
+          "description": "The agent memory store.",
+          "type": "boolean"
+        },
+        "nudge_interval": {
+          "default": 10,
+          "description": "User turns without a memory call before a background review; `0`\ndisables.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recall": {
+          "$ref": "#/$defs/RecallConfig",
+          "default": {
+            "max_chars": 1500,
+            "top_k": 5
+          },
+          "description": "Per-turn recall."
+        },
+        "review_mode": {
+          "$ref": "#/$defs/MemoryReviewMode",
+          "default": "summary",
+          "description": "How agent memory changes are reviewed."
+        },
+        "user_char_limit": {
+          "default": 1375,
+          "description": "Character budget of core user-profile entries.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "user_profile_enabled": {
+          "default": true,
+          "description": "The user profile store.",
+          "type": "boolean"
+        },
+        "write_approval": {
+          "default": false,
+          "description": "Approve every memory write.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "MemoryReviewMode": {
+      "description": "Memory review modes.",
+      "oneOf": [
+        {
+          "const": "summary",
+          "description": "One-line summary per session.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No summary.",
+          "type": "string"
+        },
+        {
+          "const": "require",
+          "description": "Stage every agent change as pending.",
+          "type": "string"
+        }
+      ]
+    },
+    "ModelConfig": {
+      "additionalProperties": false,
+      "description": "The `[model]` section.",
+      "properties": {
+        "auto_order": {
+          "default": [
+            "anthropic",
+            "openai",
+            "openrouter",
+            "google",
+            "nous"
+          ],
+          "description": "Provider order tried by `auto` among providers with a stored secret.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default": {
+          "description": "Default model id (or a `[models]` alias).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "min_context_window": {
+          "default": 64000,
+          "description": "Smallest context window (tokens) a session may start with.",
+          "format": "uint64",
+          "minimum": 16000,
+          "type": "integer"
+        },
+        "provider": {
+          "description": "Provider id or alias; unset means `auto`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ModelEntry": {
+      "anyOf": [
+        {
+          "description": "`\"<provider>/<model>\"`.",
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/ModelRoute",
+          "description": "A route with optional metadata overrides."
+        }
+      ],
+      "description": "One `[models]` entry: an alias string `\"<provider>/<model>\"` or a route\nand metadata table."
+    },
+    "ModelPrice": {
+      "additionalProperties": false,
+      "description": "Per-million-token prices in USD.",
+      "properties": {
+        "cache_read": {
+          "default": 0.0,
+          "description": "Cache-read tokens.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "cache_write": {
+          "default": 0.0,
+          "description": "Cache-write tokens.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "input": {
+          "default": 0.0,
+          "description": "Input tokens.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "output": {
+          "default": 0.0,
+          "description": "Output tokens.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "ModelRoute": {
+      "additionalProperties": false,
+      "description": "A `[models.<name>]` table.",
+      "properties": {
+        "base_url": {
+          "description": "Base URL override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "context_window": {
+          "description": "Context window override in tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the secret for this route."
+        },
+        "max_output_tokens": {
+          "description": "Output token cap override.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Model id at the provider.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "price": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelPrice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Prices per million tokens (USD)."
+        },
+        "provider": {
+          "description": "Provider id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "NetworkConfig": {
+      "additionalProperties": false,
+      "description": "The `[network]` section.",
+      "properties": {
+        "extra_ca_file": {
+          "description": "Extra PEM CA bundle trusted in addition to the platform store.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "force_ipv4": {
+          "default": false,
+          "description": "Resolve and connect every outbound client (providers, MCP over HTTP,\nweb tools, adapters, OTLP, downloads) over IPv4 only; loopback\nlisteners are unaffected. Set it when `prometheus doctor network\n--online` reports a blackholed IPv6 route.",
+          "type": "boolean"
+        },
+        "proxy": {
+          "description": "Outbound HTTP(S) proxy URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "ObservabilityConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability]` section.",
+      "properties": {
+        "trajectories": {
+          "$ref": "#/$defs/TrajectoriesConfig",
+          "default": {
+            "enabled": true,
+            "max_bytes_per_session": 268435456,
+            "retention_secs": 7776000
+          },
+          "description": "Session trajectories."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "PlatformHint": {
+      "additionalProperties": false,
+      "description": "One `[prompt.platform_hints.<platform>]` entry.",
+      "properties": {
+        "append": {
+          "description": "Appended after the (possibly replaced) hint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replace": {
+          "description": "Replaces the built-in hint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PoolStrategy": {
+      "description": "Credential pool strategies.",
+      "oneOf": [
+        {
+          "const": "fill_first",
+          "description": "Use the first healthy credential until it is benched.",
+          "type": "string"
+        },
+        {
+          "const": "round_robin",
+          "description": "Rotate per request.",
+          "type": "string"
+        },
+        {
+          "const": "random",
+          "description": "Pick at random.",
+          "type": "string"
+        },
+        {
+          "const": "least_used",
+          "description": "Pick the least used.",
+          "type": "string"
+        }
+      ]
+    },
+    "PreferCredential": {
+      "description": "Credential preference.",
+      "oneOf": [
+        {
+          "const": "subscription",
+          "description": "A subscription sign-in.",
+          "type": "string"
+        },
+        {
+          "const": "api_key",
+          "description": "An API key.",
+          "type": "string"
+        }
+      ]
+    },
+    "PromptCacheConfig": {
+      "additionalProperties": false,
+      "description": "The `[prompt_cache]` section.",
+      "properties": {
+        "ttl": {
+          "$ref": "#/$defs/PromptCacheTtl",
+          "default": "5m",
+          "description": "Provider prompt-cache lifetime."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "PromptCacheTtl": {
+      "description": "Prompt-cache lifetimes.",
+      "oneOf": [
+        {
+          "const": "5m",
+          "description": "Five minutes.",
+          "type": "string"
+        },
+        {
+          "const": "1h",
+          "description": "One hour.",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Chosen per route.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No cache markers.",
+          "type": "string"
+        }
+      ]
+    },
+    "PromptConfig": {
+      "additionalProperties": false,
+      "description": "The `[prompt]` section.",
+      "properties": {
+        "context_file_max_chars": {
+          "default": 0,
+          "description": "Character cap per context file; `0` derives it from the model's\ncontext window.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "context_file_read_timeout_secs": {
+          "default": 5,
+          "description": "Time allowed to read each context file.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "include_session_id": {
+          "default": false,
+          "description": "Add `Session ID: ses_<ULID>` to the session tier.",
+          "type": "boolean"
+        },
+        "load_context_files": {
+          "default": true,
+          "description": "Load project context files (`AGENTS.md` and friends).",
+          "type": "boolean"
+        },
+        "load_identity": {
+          "default": true,
+          "description": "Load the identity file `SOUL.md`.",
+          "type": "boolean"
+        },
+        "platform_hints": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformHint"
+          },
+          "default": {},
+          "description": "Per-platform hint overrides, keyed by platform.",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ProviderConfig": {
+      "additionalProperties": false,
+      "description": "One `[providers.<id>]` override of a built-in or custom provider.",
+      "properties": {
+        "base_url": {
+          "description": "API base URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "catalog_ttl_secs": {
+          "default": 86400,
+          "description": "Lifetime of the cached live model listing.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "`false` makes every request to this provider fail with\n`provider.disabled`.",
+          "type": "boolean"
+        },
+        "key_hosts": {
+          "default": [],
+          "description": "Hostnames the provider's secret may be sent to (exact, or a leading\n`*.` wildcard).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the secret holding this provider's key."
+        },
+        "login_flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoginFlow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Sign-in flow for OAuth providers; unset uses the provider default."
+        },
+        "max_retries": {
+          "default": 2,
+          "description": "Same-route retries of a retryable failure.",
+          "format": "uint32",
+          "maximum": 6,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plan_notes": {
+          "description": "Eligibility and billing notes shown before sign-in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pool_strategy": {
+          "$ref": "#/$defs/PoolStrategy",
+          "default": "fill_first",
+          "description": "Credential pool selection."
+        },
+        "prefer_credential": {
+          "$ref": "#/$defs/PreferCredential",
+          "default": "subscription",
+          "description": "Which credential wins when both exist."
+        },
+        "request_timeout_secs": {
+          "default": 600,
+          "description": "Per-request timeout.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "script": {
+          "description": "Script file of the built-in `mock` provider.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stream_idle_timeout_secs": {
+          "default": 120,
+          "description": "Longest gap between stream events.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ReasoningLevel": {
+      "description": "Reasoning effort levels.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "No reasoning.",
+          "type": "string"
+        },
+        {
+          "const": "minimal",
+          "description": "Minimal reasoning.",
+          "type": "string"
+        },
+        {
+          "const": "low",
+          "description": "Low effort.",
+          "type": "string"
+        },
+        {
+          "const": "medium",
+          "description": "Medium effort.",
+          "type": "string"
+        },
+        {
+          "const": "high",
+          "description": "High effort.",
+          "type": "string"
+        },
+        {
+          "const": "xhigh",
+          "description": "Extra-high effort.",
+          "type": "string"
+        },
+        {
+          "const": "max",
+          "description": "Maximum effort.",
+          "type": "string"
+        },
+        {
+          "const": "ultra",
+          "description": "Beyond maximum where a route supports it.",
+          "type": "string"
+        }
+      ]
+    },
+    "RecallConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.recall]` section.",
+      "properties": {
+        "max_chars": {
+          "default": 1500,
+          "description": "Character cap of recalled content per turn.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "top_k": {
+          "default": 5,
+          "description": "Archival entries recalled per turn.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ResultBudget": {
+      "additionalProperties": false,
+      "description": "The `[tools.result_budget]` section.",
+      "properties": {
+        "default_chars": {
+          "default": 100000,
+          "description": "Characters kept inline for tools without a declared cap.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mcp_chars": {
+          "default": 50000,
+          "description": "Characters kept inline for MCP tools.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "overrides": {
+          "additionalProperties": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "default": {},
+          "description": "Per-tool overrides: tool name to characters.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "ResumeDisplay": {
+      "description": "Resume recap modes.",
+      "oneOf": [
+        {
+          "const": "full",
+          "description": "Recent exchanges.",
+          "type": "string"
+        },
+        {
+          "const": "minimal",
+          "description": "Title, message count and last activity only.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No recap.",
+          "type": "string"
+        }
+      ]
+    },
+    "SandboxConfig": {
+      "additionalProperties": false,
+      "description": "The `[security.sandbox]` section.",
+      "properties": {
+        "allow_degraded": {
+          "default": [],
+          "description": "Hardening features that may be missing; anything else missing\nrefuses to run.",
+          "items": {
+            "$ref": "#/$defs/DegradedFeature"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/SandboxMode",
+          "default": "enforce",
+          "description": "Sandbox mode; `off` needs `allow_degraded` to name `all`."
+        }
+      },
+      "type": "object"
+    },
+    "SandboxMode": {
+      "description": "Sandbox modes.",
+      "oneOf": [
+        {
+          "const": "enforce",
+          "description": "Full OS enforcement.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No OS sandbox (a downgrade).",
+          "type": "string"
+        }
+      ]
+    },
+    "SecretName": {
+      "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
+      "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+      "type": "string",
+      "x-secret-ref": true
+    },
+    "SecretsBackend": {
+      "description": "Secrets store backends.",
+      "oneOf": [
+        {
+          "const": "file",
+          "description": "`<profile>/secrets.toml`, mode 0600.",
+          "type": "string"
+        },
+        {
+          "const": "keychain",
+          "description": "The OS keychain.",
+          "type": "string"
+        }
+      ]
+    },
+    "SecretsConfig": {
+      "additionalProperties": false,
+      "description": "The `[secrets]` section.",
+      "properties": {
+        "backend": {
+          "$ref": "#/$defs/SecretsBackend",
+          "default": "file",
+          "description": "Where this profile's secrets are stored."
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "SecurityConfig": {
+      "additionalProperties": false,
+      "description": "The `[security]` section.",
+      "properties": {
+        "capabilities": {
+          "description": "Profile capability baseline; unset uses the built-in baseline\n(workspace read/write, toolchain read, `process.spawn:*`, egress\npolicy, `llm.call`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "egress": {
+          "$ref": "#/$defs/EgressConfig",
+          "default": {
+            "allow_private": false,
+            "fake_ip_ranges": []
+          },
+          "description": "Outbound network policy."
+        },
+        "protected_instruction_extra_patterns": {
+          "default": [],
+          "description": "Extra instruction-file basename globs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "protected_instruction_files": {
+          "default": true,
+          "description": "Require human approval for agent writes to instruction files.",
+          "type": "boolean"
+        },
+        "redact_secrets": {
+          "default": true,
+          "description": "Redact every loaded secret value everywhere output is written.",
+          "type": "boolean"
+        },
+        "sandbox": {
+          "$ref": "#/$defs/SandboxConfig",
+          "default": {
+            "allow_degraded": [],
+            "mode": "enforce"
+          },
+          "description": "OS sandbox."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "SessionsConfig": {
+      "additionalProperties": false,
+      "description": "The `[sessions]` section.",
+      "properties": {
+        "auto_archive_secs": {
+          "default": 604800,
+          "description": "Archive lineage tips idle for this long.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_export_messages": {
+          "default": 20000,
+          "description": "Refuse in-memory exports with more messages.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_resume_messages": {
+          "default": 20000,
+          "description": "Refuse to resume a lineage with more messages; `0` disables.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retention_secs": {
+          "default": 0,
+          "description": "Prune ended sessions inactive for longer than this; `0` never prunes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminal_continue": {
+          "default": true,
+          "description": "`-c` prefers the session last used from the same terminal.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "SkillsConfig": {
+      "additionalProperties": false,
+      "description": "The `[skills]` section.",
+      "properties": {
+        "auto_load": {
+          "default": [],
+          "description": "Skills loaded into every new session.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "config": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "default": {},
+          "description": "Non-secret per-skill settings: skill to key to value.",
+          "type": "object"
+        },
+        "creation_nudge_interval": {
+          "default": 10,
+          "description": "Tool-calling iterations before a skill-creation nudge.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disabled": {
+          "default": [],
+          "description": "Disabled skill names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "external_dirs": {
+          "default": [],
+          "description": "Extra skill directories (`~` expanded; missing ones skipped).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include_bundled": {
+          "default": true,
+          "description": "Show the bundled skills tier.",
+          "type": "boolean"
+        },
+        "index_description_chars": {
+          "default": 60,
+          "description": "Description length in the skills index.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inline_shell": {
+          "default": false,
+          "description": "Expand inline shell snippets at load.",
+          "type": "boolean"
+        },
+        "inline_shell_timeout_ms": {
+          "default": 10000,
+          "description": "Deadline of one inline shell snippet.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "platform_disabled": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "description": "Disabled skill names per platform or surface.",
+          "type": "object"
+        },
+        "project_discovery": {
+          "default": true,
+          "description": "Scan for untrusted project skills and show a notice.",
+          "type": "boolean"
+        },
+        "template_vars": {
+          "default": true,
+          "description": "Substitute `${PROMETHEUS_SKILL_DIR}`-style tokens at load.",
+          "type": "boolean"
+        },
+        "trusted_project_dirs": {
+          "default": [],
+          "description": "Git roots whose project-local skills are trusted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "write_approval": {
+          "default": false,
+          "description": "Stage skill writes as pending for review.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "SnapshotsConfig": {
+      "additionalProperties": false,
+      "description": "The `[snapshots]` section.",
+      "properties": {
+        "keep": {
+          "default": 20,
+          "description": "Manual snapshots kept per profile.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "SshConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal.ssh]` section.",
+      "properties": {
+        "host": {
+          "description": "Host name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "port": {
+          "default": 22,
+          "description": "Port.",
+          "format": "uint32",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "user": {
+          "description": "User name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "StorageConfig": {
+      "additionalProperties": false,
+      "description": "The `[storage]` section.",
+      "properties": {
+        "journal_mode": {
+          "$ref": "#/$defs/JournalMode",
+          "default": "wal",
+          "description": "`state.db` journal mode; `delete` only for filesystems without WAL\nsupport."
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "TailMode": {
+      "description": "Tail retention modes.",
+      "oneOf": [
+        {
+          "const": "lean",
+          "description": "Keep the minimum recent tail.",
+          "type": "string"
+        },
+        {
+          "const": "ratio",
+          "description": "Keep a tail sized by `target_ratio`.",
+          "type": "string"
+        }
+      ]
+    },
+    "TelemetryConfig": {
+      "additionalProperties": false,
+      "description": "The `[telemetry]` section.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Send redacted aggregate counters.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "HTTPS endpoint (loopback HTTP allowed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "TerminalConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal]` section.",
+      "properties": {
+        "auto_source_bashrc": {
+          "default": true,
+          "description": "Source `~/.bashrc` once when the shell is bash.",
+          "type": "boolean"
+        },
+        "backend": {
+          "default": "local",
+          "description": "Backend: `local`, `container`, `ssh` or a plugin backend.",
+          "type": "string"
+        },
+        "container": {
+          "$ref": "#/$defs/ContainerConfig",
+          "default": {
+            "cpus": 1.0,
+            "disk_bytes": 53687091200,
+            "env": {},
+            "memory_bytes": 5368709120,
+            "persistent": true,
+            "pids_limit": 2048,
+            "shm_size": "1g"
+          },
+          "description": "Container backend."
+        },
+        "cwd": {
+          "description": "Start directory for `local`; unset is the launch directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "degraded_mode": {
+          "$ref": "#/$defs/DegradedMode",
+          "default": "degrade",
+          "description": "Backend connection failures: degraded results or errors."
+        },
+        "env_passthrough": {
+          "default": [],
+          "description": "Non-secret launch-environment variables passed to children.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idle_lifetime_secs": {
+          "default": 300,
+          "description": "Idle time before a cached environment is torn down.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_foreground_secs": {
+          "default": 600,
+          "description": "Longer foreground calls become tracked background processes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "persistent_shell": {
+          "default": true,
+          "description": "Keep one shell per session.",
+          "type": "boolean"
+        },
+        "shell_init_files": {
+          "default": [],
+          "description": "Extra files sourced at shell start (`~` expanded).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "shell_init_timeout_secs": {
+          "default": 10,
+          "description": "Bound on the whole shell init step.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ssh": {
+          "$ref": "#/$defs/SshConfig",
+          "default": {
+            "port": 22
+          },
+          "description": "SSH backend."
+        },
+        "timeout_secs": {
+          "default": 180,
+          "description": "Default foreground command timeout.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "windows_bash_path": {
+          "description": "Git Bash path tried first by `windows_shell = \"auto\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windows_shell": {
+          "$ref": "#/$defs/WindowsShell",
+          "default": "auto",
+          "description": "Windows shell."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ToolLoopGuardrails": {
+      "additionalProperties": false,
+      "description": "The `[tool_loop_guardrails]` section.",
+      "properties": {
+        "hard_stop_after": {
+          "$ref": "#/$defs/GuardrailThresholds",
+          "default": {
+            "exact_failure": 5,
+            "idempotent_no_progress": 5,
+            "same_tool_failure": 8
+          },
+          "description": "Repeats that stop the turn."
+        },
+        "hard_stop_enabled": {
+          "default": false,
+          "description": "Stop the turn (`guardrail_stop`) at `hard_stop_after` on\ninteractive surfaces.",
+          "type": "boolean"
+        },
+        "loop_caps": {
+          "$ref": "#/$defs/LoopCaps",
+          "default": {
+            "max_subagents": 50,
+            "max_web_searches": 50
+          },
+          "description": "Per-turn call caps, always enforced."
+        },
+        "non_interactive_hard_stop_enabled": {
+          "default": true,
+          "description": "Stop the turn at `hard_stop_after` on gateway, cron, API and kanban\nsessions.",
+          "type": "boolean"
+        },
+        "warn_after": {
+          "$ref": "#/$defs/GuardrailThresholds",
+          "default": {
+            "exact_failure": 2,
+            "idempotent_no_progress": 2,
+            "same_tool_failure": 3
+          },
+          "description": "Repeats that trigger a warning."
+        },
+        "warnings_enabled": {
+          "default": true,
+          "description": "Append a warning to the tool result when a `warn_after` threshold is\nreached.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ToolOutputConfig": {
+      "additionalProperties": false,
+      "description": "The `[tool_output]` section.",
+      "properties": {
+        "max_chars": {
+          "default": 50000,
+          "description": "Terminal output characters kept (40% head, 60% tail).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "ToolProgress": {
+      "description": "Tool progress modes.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Nothing.",
+          "type": "string"
+        },
+        {
+          "const": "new",
+          "description": "A line only when the tool changes.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "A line per call.",
+          "type": "string"
+        },
+        {
+          "const": "verbose",
+          "description": "Arguments and result previews too.",
+          "type": "string"
+        }
+      ]
+    },
+    "ToolProgressGrouping": {
+      "description": "Tool progress grouping.",
+      "oneOf": [
+        {
+          "const": "accumulate",
+          "description": "Consecutive calls share one updating line.",
+          "type": "string"
+        },
+        {
+          "const": "separate",
+          "description": "One line per call.",
+          "type": "string"
+        }
+      ]
+    },
+    "ToolsConfig": {
+      "additionalProperties": false,
+      "description": "The `[tools]` section.",
+      "properties": {
+        "default_timeout_secs": {
+          "default": 300,
+          "description": "Timeout of a tool call that declares none.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disabled_toolsets": {
+          "default": [],
+          "description": "Toolsets removed last, even when a composite lists them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled_toolsets": {
+          "default": [
+            "core"
+          ],
+          "description": "Toolsets exposed to sessions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kill_grace_secs": {
+          "default": 5,
+          "description": "Wait between SIGTERM and SIGKILL when cancelling tool processes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result_budget": {
+          "$ref": "#/$defs/ResultBudget",
+          "default": {
+            "default_chars": 100000,
+            "mcp_chars": 50000,
+            "overrides": {}
+          },
+          "description": "Tool result size budgets."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ToolsetsConfig": {
+      "additionalProperties": false,
+      "description": "The `[toolsets]` section.",
+      "properties": {
+        "surfaces": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "description": "Default toolsets per surface (otherwise `core`).",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "TrajectoriesConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.trajectories]` section.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Record trajectories for sessions started from now on.",
+          "type": "boolean"
+        },
+        "max_bytes_per_session": {
+          "default": 268435456,
+          "description": "Stop recording payload bodies of a session beyond this size.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retention_secs": {
+          "default": 7776000,
+          "description": "Delete unpinned trajectories older than this; `0` keeps forever.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "UiConfig": {
+      "additionalProperties": false,
+      "description": "The `[ui]` section.",
+      "properties": {
+        "interface": {
+          "$ref": "#/$defs/Interface",
+          "default": "tui",
+          "description": "Interactive interface on a TTY (M1 ships `line`; `tui` falls back\nto it until the TUI lands)."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "UnattendedApproval": {
+      "description": "Decisions for approvals nobody can answer.",
+      "oneOf": [
+        {
+          "const": "deny",
+          "description": "Deny.",
+          "type": "string"
+        },
+        {
+          "const": "approve",
+          "description": "Approve.",
+          "type": "string"
+        }
+      ]
+    },
+    "VisionConfig": {
+      "additionalProperties": false,
+      "description": "The `[vision]` section.",
+      "properties": {
+        "image_input_mode": {
+          "$ref": "#/$defs/ImageInputMode",
+          "default": "auto",
+          "description": "How images reach the model."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "WebConfig": {
+      "additionalProperties": false,
+      "description": "The `[web]` section.",
+      "properties": {
+        "backend": {
+          "default": "auto",
+          "description": "Shared backend for web search and extract (`auto` picks the first\nwith credentials).",
+          "type": "string"
+        },
+        "extract_backend": {
+          "description": "Extract backend; unset uses `backend`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extract_char_limit": {
+          "default": 15000,
+          "description": "Characters per extracted page.",
+          "format": "uint64",
+          "maximum": 500000,
+          "minimum": 2000,
+          "type": "integer"
+        },
+        "extract_timeout_secs": {
+          "default": 120,
+          "description": "Bound on one extract dispatch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyless": {
+          "$ref": "#/$defs/KeylessConfig",
+          "default": {
+            "enabled": false
+          },
+          "description": "Keyless web search."
+        },
+        "search_backend": {
+          "description": "Search backend; unset uses `backend`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "WindowsShell": {
+      "description": "Windows shells.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Git Bash, else PowerShell.",
+          "type": "string"
+        },
+        {
+          "const": "git-bash",
+          "description": "Git Bash.",
+          "type": "string"
+        },
+        {
+          "const": "pwsh",
+          "description": "PowerShell 7.",
+          "type": "string"
+        },
+        {
+          "const": "powershell",
+          "description": "Windows PowerShell.",
+          "type": "string"
+        }
+      ]
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Prometheus config.toml",
+  "additionalProperties": false,
   "description": "Root of a profile's `config.toml`.",
-  "type": "object",
   "properties": {
+    "agent": {
+      "$ref": "#/$defs/AgentConfig",
+      "default": {
+        "api_max_retries": 3,
+        "auto_recovery_cycles": 5,
+        "clarify_timeout_secs": 3600,
+        "empty_response_guard": {
+          "cost_threshold_usd": 0.25
+        },
+        "intent_continuation": "auto",
+        "max_iterations": 500,
+        "personalities": {},
+        "personality": "none",
+        "reasoning_overrides": {},
+        "reasoning_tiers": {},
+        "tool_concurrency": 8
+      },
+      "description": "Turn loop limits, retries and reasoning effort."
+    },
+    "approvals": {
+      "$ref": "#/$defs/ApprovalsConfig",
+      "default": {
+        "cron_mode": "deny",
+        "deny": [],
+        "mode": "manual",
+        "single_query_mode": "deny",
+        "timeout_secs": 300,
+        "unattended_mode": "deny"
+      },
+      "description": "Approval modes for dangerous tool calls."
+    },
+    "auth": {
+      "$ref": "#/$defs/AuthConfig",
+      "default": {
+        "adopt_external_logins": true
+      },
+      "description": "Sign-in behaviour."
+    },
+    "auxiliary": {
+      "$ref": "#/$defs/AuxiliaryConfig",
+      "default": {
+        "transient_retries": 2
+      },
+      "description": "Side-model (auxiliary) task routing."
+    },
+    "browser": {
+      "$ref": "#/$defs/BrowserConfig",
+      "default": {
+        "dialog_policy": "must_respond",
+        "dialog_timeout_secs": 300,
+        "inactivity_timeout_secs": 120,
+        "provider": "local"
+      },
+      "description": "Browser tool sessions."
+    },
+    "budgets": {
+      "$ref": "#/$defs/BudgetsConfig",
+      "default": {
+        "allow_unpriced": false,
+        "daily_usd": 0.0,
+        "monthly_usd": 0.0,
+        "root_tokens": 0,
+        "root_usd": 0.0,
+        "session_tokens": 0,
+        "session_usd": 0.0,
+        "turn_tokens": 0,
+        "turn_usd": 0.0,
+        "unattended_root_usd": 5.0,
+        "warn_ratio": 0.8
+      },
+      "description": "Hard token and cost budgets (`0` = off)."
+    },
+    "cli": {
+      "$ref": "#/$defs/CliConfig",
+      "default": {
+        "confirm_destructive": true
+      },
+      "description": "Line-mode CLI behaviour."
+    },
+    "compression": {
+      "$ref": "#/$defs/CompressionConfig",
+      "default": {
+        "abort_on_summary_failure": false,
+        "enabled": true,
+        "max_attempts": 3,
+        "micro_compact": false,
+        "micro_compact_every_n_turns": 1,
+        "min_tail_user_messages": 1,
+        "pinned_max_tokens": 8000,
+        "prepare_ahead": false,
+        "proactive_prune_tokens": 0,
+        "protect_first_n": 3,
+        "quality_min_coverage": 0.8,
+        "summary_max_tokens": 10000,
+        "summary_timeout_secs": 120,
+        "tail_mode": "lean",
+        "target_ratio": 0.2,
+        "threshold": 0.5,
+        "threshold_tokens": 0
+      },
+      "description": "Context compression."
+    },
+    "context": {
+      "$ref": "#/$defs/ContextConfig",
+      "default": {
+        "engine": "builtin"
+      },
+      "description": "Context engine selection."
+    },
+    "display": {
+      "$ref": "#/$defs/DisplayConfig",
+      "default": {
+        "bell_on_complete": false,
+        "bell_on_prompt": false,
+        "compact": false,
+        "final_response_markdown": "render",
+        "inline_diffs": true,
+        "interim_messages": true,
+        "reasoning_full": false,
+        "resume_display": "full",
+        "resume_exchanges": 10,
+        "resume_max_assistant_chars": 200,
+        "resume_max_assistant_lines": 3,
+        "resume_max_user_chars": 300,
+        "show_cost": false,
+        "show_reasoning": false,
+        "theme": "default",
+        "timestamp_format": "%H:%M",
+        "timestamps": false,
+        "tool_preview_length": 0,
+        "tool_progress": "all",
+        "tool_progress_grouping": "accumulate",
+        "turn_summary": true,
+        "vim_mode": false
+      },
+      "description": "Display preferences of interactive surfaces."
+    },
+    "fallback": {
+      "$ref": "#/$defs/FallbackConfig",
+      "default": {
+        "min_health": 0.2
+      },
+      "description": "Provider fallback."
+    },
+    "files": {
+      "$ref": "#/$defs/FilesConfig",
+      "default": {
+        "read_max_chars": 100000
+      },
+      "description": "`read_file` limits."
+    },
+    "logging": {
+      "$ref": "#/$defs/LoggingConfig",
+      "default": {
+        "level": "info"
+      },
+      "description": "Structured log files."
+    },
+    "memory": {
+      "$ref": "#/$defs/MemoryConfig",
+      "default": {
+        "archival_max_entries": 10000,
+        "memory_char_limit": 2200,
+        "memory_enabled": true,
+        "nudge_interval": 10,
+        "recall": {
+          "max_chars": 1500,
+          "top_k": 5
+        },
+        "review_mode": "summary",
+        "user_char_limit": 1375,
+        "user_profile_enabled": true,
+        "write_approval": false
+      },
+      "description": "Built-in memory."
+    },
+    "model": {
+      "$ref": "#/$defs/ModelConfig",
+      "default": {
+        "auto_order": [
+          "anthropic",
+          "openai",
+          "openrouter",
+          "google",
+          "nous"
+        ],
+        "min_context_window": 64000
+      },
+      "description": "The main model and provider."
+    },
+    "models": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ModelEntry"
+      },
+      "default": {},
+      "description": "Model aliases and metadata overrides, keyed by name or\n`\"<provider>/<model>\"`.",
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "network": {
-      "description": "Outbound networking.",
       "$ref": "#/$defs/NetworkConfig",
       "default": {
         "force_ipv4": false
-      }
+      },
+      "description": "Outbound networking."
     },
-    "schema_version": {
-      "description": "Version of this file's schema; older files are migrated forward.",
-      "type": "integer",
-      "format": "uint32",
-      "default": 1,
-      "minimum": 0
-    }
-  },
-  "additionalProperties": false,
-  "$defs": {
-    "NetworkConfig": {
-      "description": "The `[network]` section.",
-      "type": "object",
-      "properties": {
-        "force_ipv4": {
-          "description": "Resolve and connect every outbound client (providers, MCP over HTTP,\nweb tools, adapters, OTLP, downloads) over IPv4 only; loopback\nlisteners are unaffected. Set it when `prometheus doctor network\n--online` reports a blackholed IPv6 route.",
-          "type": "boolean",
-          "default": false
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig",
+      "default": {
+        "trajectories": {
+          "enabled": true,
+          "max_bytes_per_session": 268435456,
+          "retention_secs": 7776000
         }
       },
-      "additionalProperties": false
+      "description": "Trajectories."
+    },
+    "prompt": {
+      "$ref": "#/$defs/PromptConfig",
+      "default": {
+        "context_file_max_chars": 0,
+        "context_file_read_timeout_secs": 5,
+        "include_session_id": false,
+        "load_context_files": true,
+        "load_identity": true,
+        "platform_hints": {}
+      },
+      "description": "System prompt assembly."
+    },
+    "prompt_cache": {
+      "$ref": "#/$defs/PromptCacheConfig",
+      "default": {
+        "ttl": "5m"
+      },
+      "description": "Provider prompt caching."
+    },
+    "providers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ProviderConfig"
+      },
+      "default": {},
+      "description": "Per-provider overrides, keyed by provider id.",
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "schema_version": {
+      "default": 1,
+      "description": "Version of this file's schema; older files are migrated forward and\na newer one is refused.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer",
+      "x-apply": "restart"
+    },
+    "secrets": {
+      "$ref": "#/$defs/SecretsConfig",
+      "default": {
+        "backend": "file"
+      },
+      "description": "Secrets store backend."
+    },
+    "security": {
+      "$ref": "#/$defs/SecurityConfig",
+      "default": {
+        "egress": {
+          "allow_private": false,
+          "fake_ip_ranges": []
+        },
+        "protected_instruction_extra_patterns": [],
+        "protected_instruction_files": true,
+        "redact_secrets": true,
+        "sandbox": {
+          "allow_degraded": [],
+          "mode": "enforce"
+        }
+      },
+      "description": "Capabilities, sandbox, egress and redaction."
+    },
+    "sessions": {
+      "$ref": "#/$defs/SessionsConfig",
+      "default": {
+        "auto_archive_secs": 604800,
+        "max_export_messages": 20000,
+        "max_resume_messages": 20000,
+        "retention_secs": 0,
+        "terminal_continue": true
+      },
+      "description": "Session storage limits and retention."
+    },
+    "skills": {
+      "$ref": "#/$defs/SkillsConfig",
+      "default": {
+        "auto_load": [],
+        "config": {},
+        "creation_nudge_interval": 10,
+        "disabled": [],
+        "external_dirs": [],
+        "include_bundled": true,
+        "index_description_chars": 60,
+        "inline_shell": false,
+        "inline_shell_timeout_ms": 10000,
+        "platform_disabled": {},
+        "project_discovery": true,
+        "template_vars": true,
+        "trusted_project_dirs": [],
+        "write_approval": false
+      },
+      "description": "Skills discovery and authoring."
+    },
+    "snapshots": {
+      "$ref": "#/$defs/SnapshotsConfig",
+      "default": {
+        "keep": 20
+      },
+      "description": "Per-profile state snapshots."
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageConfig",
+      "default": {
+        "journal_mode": "wal"
+      },
+      "description": "Session database."
+    },
+    "telemetry": {
+      "$ref": "#/$defs/TelemetryConfig",
+      "default": {
+        "enabled": false
+      },
+      "description": "Opt-in telemetry."
+    },
+    "terminal": {
+      "$ref": "#/$defs/TerminalConfig",
+      "default": {
+        "auto_source_bashrc": true,
+        "backend": "local",
+        "container": {
+          "cpus": 1.0,
+          "disk_bytes": 53687091200,
+          "env": {},
+          "memory_bytes": 5368709120,
+          "persistent": true,
+          "pids_limit": 2048,
+          "shm_size": "1g"
+        },
+        "degraded_mode": "degrade",
+        "env_passthrough": [],
+        "idle_lifetime_secs": 300,
+        "max_foreground_secs": 600,
+        "persistent_shell": true,
+        "shell_init_files": [],
+        "shell_init_timeout_secs": 10,
+        "ssh": {
+          "port": 22
+        },
+        "timeout_secs": 180,
+        "windows_shell": "auto"
+      },
+      "description": "The terminal tool and its backends."
+    },
+    "tool_loop_guardrails": {
+      "$ref": "#/$defs/ToolLoopGuardrails",
+      "default": {
+        "hard_stop_after": {
+          "exact_failure": 5,
+          "idempotent_no_progress": 5,
+          "same_tool_failure": 8
+        },
+        "hard_stop_enabled": false,
+        "loop_caps": {
+          "max_subagents": 50,
+          "max_web_searches": 50
+        },
+        "non_interactive_hard_stop_enabled": true,
+        "warn_after": {
+          "exact_failure": 2,
+          "idempotent_no_progress": 2,
+          "same_tool_failure": 3
+        },
+        "warnings_enabled": true
+      },
+      "description": "Tool loop guardrails."
+    },
+    "tool_output": {
+      "$ref": "#/$defs/ToolOutputConfig",
+      "default": {
+        "max_chars": 50000
+      },
+      "description": "Terminal tool output shaping."
+    },
+    "tools": {
+      "$ref": "#/$defs/ToolsConfig",
+      "default": {
+        "default_timeout_secs": 300,
+        "disabled_toolsets": [],
+        "enabled_toolsets": [
+          "core"
+        ],
+        "kill_grace_secs": 5,
+        "result_budget": {
+          "default_chars": 100000,
+          "mcp_chars": 50000,
+          "overrides": {}
+        }
+      },
+      "description": "Toolset selection, timeouts and result budgets."
+    },
+    "toolsets": {
+      "$ref": "#/$defs/ToolsetsConfig",
+      "default": {
+        "surfaces": {}
+      },
+      "description": "Per-surface toolset defaults."
+    },
+    "ui": {
+      "$ref": "#/$defs/UiConfig",
+      "default": {
+        "interface": "tui"
+      },
+      "description": "Interactive interface selection."
+    },
+    "vision": {
+      "$ref": "#/$defs/VisionConfig",
+      "default": {
+        "image_input_mode": "auto"
+      },
+      "description": "Image input routing."
+    },
+    "web": {
+      "$ref": "#/$defs/WebConfig",
+      "default": {
+        "backend": "auto",
+        "extract_char_limit": 15000,
+        "extract_timeout_secs": 120,
+        "keyless": {
+          "enabled": false
+        }
+      },
+      "description": "Web tools."
     }
-  }
+  },
+  "title": "Prometheus config.toml",
+  "type": "object"
 }

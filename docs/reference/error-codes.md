@@ -64,5 +64,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `home.io` | `io` | 74 | A file or directory under the Prometheus home could not be read or written. |
 | `home.locked` | `conflict` | 75 | Another Prometheus process (the daemon or an in-process chat) holds the home's writer lock `run/gateway.lock`; retry when it exits. |
 | `config.parse` | `config` | 78 | A configuration file (`config.toml`, `daemon.toml`) is not valid TOML or does not match its schema. |
+| `config.unknown_key` | `config` | 78 | A profile `config.toml` contains a key the schema does not define (the error suggests the closest key), or a machine-wide section that belongs in `daemon.toml`. |
+| `config.invalid` | `config` | 78 | A profile `config.toml` value has the wrong type, is out of range or is not one of the allowed values; the error names the key, line and allowed values. |
+| `config.invalid_argument` | `usage` | 2 | A configuration key or value given on the command line (`config set`, `config get`, `--set`) is unknown, malformed, out of range or not allowed. |
+| `config.credential_value` | `usage` | 2 | A value that looks like a credential (API key, token, private key) was given for a non-secret configuration key; store it with `prometheus secrets set <NAME>`. |
+| `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
+| `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
+| `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
+| `profile.not_found` | `not_found` | 66 | The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`. |
+| `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
 | `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

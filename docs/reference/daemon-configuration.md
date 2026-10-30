@@ -4,6 +4,8 @@
 
 Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared by every profile of the home, never read from a profile's `config.toml`. Unknown keys are rejected.
 
-| Key | Type | Default | Allowed values | Description |
-|---|---|---|---|---|
-| `process.nofile_soft_limit` | integer | `4096` | ≥ 0 | Open-file soft limit every process raises itself to at startup on POSIX hosts, capped by the hard limit and never lowering a higher limit; children inherit it. `0` disables the raise. |
+`<name>` stands for any table name (a provider id, a model alias, a platform). Apply: `live` takes effect at once, `next_session` for sessions started afterwards, `restart` after the process restarts.
+
+| Key | Type | Default | Allowed values | Apply | Description |
+|---|---|---|---|---|---|
+| `process.nofile_soft_limit` | integer | `4096` | ≥ 0 | `restart` | Open-file soft limit every process raises itself to at startup on POSIX hosts, capped by the hard limit and never lowering a higher limit; children inherit it. `0` disables the raise. |

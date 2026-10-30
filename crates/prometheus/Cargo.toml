@@ -35,6 +35,7 @@ pmt-obs.workspace = true
 pmt-store.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 # WARN events for startup conditions; the subscriber arrives with logging.
 tracing.workspace = true
 

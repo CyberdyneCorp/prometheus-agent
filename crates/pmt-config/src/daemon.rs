@@ -4,6 +4,7 @@
 
 use std::io;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use pmt_core::error::{Error, codes};
 use schemars::JsonSchema;
@@ -12,10 +13,20 @@ use serde::{Deserialize, Serialize};
 /// File name of the machine-wide settings in the home root.
 pub const FILE_NAME: &str = "daemon.toml";
 
+static SCHEMA: LazyLock<serde_json::Value> = LazyLock::new(|| {
+    serde_json::to_value(schemars::schema_for!(DaemonConfig)).expect("the schema serializes")
+});
+
+/// The `daemon.toml` JSON Schema.
+#[must_use]
+pub fn schema() -> &'static serde_json::Value {
+    &SCHEMA
+}
+
 /// Root of `daemon.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[schemars(title = "Prometheus daemon.toml")]
+#[schemars(title = "Prometheus daemon.toml", extend("x-apply" = "restart"))]
 pub struct DaemonConfig {
     /// Limits applied to every `prometheus` process of this home.
     #[serde(default)]

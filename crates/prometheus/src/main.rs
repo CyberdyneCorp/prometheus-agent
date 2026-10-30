@@ -7,10 +7,11 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use clap::error::ErrorKind as ClapErrorKind;
+use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
 use pmt_core::{exit, panic};
 use prometheus::output::print_error;
-use prometheus::{Cli, Command, startup, version};
+use prometheus::{Cli, Command, config_cmd, startup, version};
 
 fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
@@ -27,18 +28,32 @@ fn main() -> ExitCode {
     let home = home.as_ref().ok();
     startup::raise_nofile(home.map(PathBuf::as_path));
     let reporter = startup::crash_reporter(home, &launch);
-    match panic::catch_main(&reporter, || run(&cli)) {
+    match panic::catch_main(&reporter, || run(&cli, &launch)) {
         Ok(code) => ExitCode::from(code),
         Err(err) => failure(&err, cli.json),
     }
 }
 
-fn run(cli: &Cli) -> u8 {
-    match cli.command {
-        Some(Command::Version) => version::run(cli.json, cli.verbose > 0),
+fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
+    let result = match &cli.command {
+        Some(Command::Version) => Ok(version::run(cli.json, cli.verbose > 0)),
+        Some(Command::Config { command }) => {
+            let ctx = config_cmd::Context {
+                home_flag: cli.home.as_deref(),
+                launch,
+                profile: cli.profile.as_deref(),
+                set: &cli.set,
+                json: cli.json,
+            };
+            config_cmd::run(command, &ctx)
+        }
         // `chat`, the default command, arrives with the CLI chat group.
-        None => exit::SUCCESS,
-    }
+        None => Ok(exit::SUCCESS),
+    };
+    result.unwrap_or_else(|err| {
+        print_error(&err, cli.json);
+        err.exit_code()
+    })
 }
 
 fn failure(err: &Error, json: bool) -> ExitCode {

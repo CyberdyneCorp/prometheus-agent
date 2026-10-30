@@ -1,32 +1,33 @@
 {
+  "$defs": {
+    "ProcessConfig": {
+      "additionalProperties": false,
+      "description": "The `[process]` section.",
+      "properties": {
+        "nofile_soft_limit": {
+          "default": 4096,
+          "description": "Open-file soft limit every process raises itself to at startup on\nPOSIX hosts, capped by the hard limit and never lowering a higher\nlimit; children inherit it. `0` disables the raise.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Prometheus daemon.toml",
+  "additionalProperties": false,
   "description": "Root of `daemon.toml`.",
-  "type": "object",
   "properties": {
     "process": {
-      "description": "Limits applied to every `prometheus` process of this home.",
       "$ref": "#/$defs/ProcessConfig",
       "default": {
         "nofile_soft_limit": 4096
-      }
+      },
+      "description": "Limits applied to every `prometheus` process of this home."
     }
   },
-  "additionalProperties": false,
-  "$defs": {
-    "ProcessConfig": {
-      "description": "The `[process]` section.",
-      "type": "object",
-      "properties": {
-        "nofile_soft_limit": {
-          "description": "Open-file soft limit every process raises itself to at startup on\nPOSIX hosts, capped by the hard limit and never lowering a higher\nlimit; children inherit it. `0` disables the raise.",
-          "type": "integer",
-          "format": "uint64",
-          "default": 4096,
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false
-    }
-  }
+  "title": "Prometheus daemon.toml",
+  "type": "object",
+  "x-apply": "restart"
 }

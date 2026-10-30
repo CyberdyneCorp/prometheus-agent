@@ -24,7 +24,20 @@ pub struct JsonShape {
 
 /// Every shape a listing or status command emits. A command adds its shape
 /// here when it gains `--json`.
-pub const JSON_SHAPES: &[JsonShape] = &[];
+pub const JSON_SHAPES: &[JsonShape] = &[
+    JsonShape {
+        schema: "prometheus.config.v1",
+        command: "config show",
+    },
+    JsonShape {
+        schema: "prometheus.config_value.v1",
+        command: "config get",
+    },
+    JsonShape {
+        schema: "prometheus.config_explain.v1",
+        command: "config explain",
+    },
+];
 
 /// Writes `value` as one compact JSON document and a newline.
 ///

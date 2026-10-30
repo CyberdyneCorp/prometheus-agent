@@ -120,7 +120,8 @@ impl<T> Registry<T> {
 }
 
 /// `'a'`, `'a' or 'b'`, `'a', 'b' or 'c'`.
-fn or_list(names: &[&str]) -> String {
+#[must_use]
+pub fn or_list(names: &[&str]) -> String {
     let quoted: Vec<String> = names.iter().map(|n| format!("'{n}'")).collect();
     match quoted.split_last() {
         Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
@@ -129,8 +130,10 @@ fn or_list(names: &[&str]) -> String {
 }
 
 /// Up to [`MAX_SUGGESTIONS`] registered names within [`MAX_DISTANCE`]
-/// edits of `name`, nearest first.
-fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
+/// edits of `name`, nearest first. Shared by every "did you mean"
+/// message (registries, config keys).
+#[must_use]
+pub fn closest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
     let mut scored: Vec<(usize, &str)> = candidates
         .map(|c| (edit_distance(name, c), c))
         .filter(|(d, _)| *d <= MAX_DISTANCE)

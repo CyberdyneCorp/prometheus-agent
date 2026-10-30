@@ -50,13 +50,12 @@ pub(crate) fn all() -> Vec<Artifact> {
 pub(crate) const REFERENCE_DIR: &str = "docs/reference";
 
 fn config_schema() -> String {
-    pretty_schema(&schemars::schema_for!(pmt_config::Config))
+    pretty_schema(pmt_config::catalog::schema())
 }
 
 fn config_reference() -> String {
-    let schema = schemars::schema_for!(pmt_config::Config);
-    crate::config_reference::render(
-        schema.as_value(),
+    pmt_config::reference::render(
+        pmt_config::catalog::schema(),
         HEADER,
         "Configuration reference",
         "Every key a profile's `config.toml` accepts. Unknown keys are rejected, \
@@ -66,13 +65,12 @@ fn config_reference() -> String {
 }
 
 fn daemon_schema() -> String {
-    pretty_schema(&schemars::schema_for!(pmt_config::DaemonConfig))
+    pretty_schema(pmt_config::daemon::schema())
 }
 
 fn daemon_reference() -> String {
-    let schema = schemars::schema_for!(pmt_config::DaemonConfig);
-    crate::config_reference::render(
-        schema.as_value(),
+    pmt_config::reference::render(
+        pmt_config::daemon::schema(),
         HEADER,
         "Daemon configuration reference",
         "Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings \
@@ -81,10 +79,8 @@ fn daemon_reference() -> String {
     )
 }
 
-fn pretty_schema(schema: &schemars::Schema) -> String {
-    let mut json = serde_json::to_string_pretty(schema).expect("a schema always serializes");
-    json.push('\n');
-    json
+fn pretty_schema(schema: &serde_json::Value) -> String {
+    pmt_config::catalog::pretty(schema)
 }
 
 fn cli_reference() -> String {

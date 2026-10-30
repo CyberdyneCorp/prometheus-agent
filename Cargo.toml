@@ -28,6 +28,10 @@ tokio-util = "0.7"
 tempfile = "3.27"
 ulid = "3.0"
 toml = "1.1"
+# Format-preserving config writes (comments, order, spans for line numbers).
+toml_edit = "0.25"
+# Compile-fail tests of the ProfileScope API contract.
+trybuild = "1.0"
 tracing = "0.1"
 sha2 = "0.11"
 reqwest = { version = "0.13", default-features = false }

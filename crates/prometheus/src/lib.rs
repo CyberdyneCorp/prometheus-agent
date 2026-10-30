@@ -7,9 +7,10 @@
 
 pub mod build_info;
 pub mod cli;
+pub mod config_cmd;
 pub mod output;
 pub mod startup;
 pub mod surface;
 pub mod version;
 
-pub use cli::{Cli, Command, command};
+pub use cli::{Cli, Command, ConfigCommand, command};

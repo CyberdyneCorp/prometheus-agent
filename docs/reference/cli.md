@@ -11,11 +11,18 @@ Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
   version  Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  config   Read, change, validate and explain the profile's config.toml
   help     Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
@@ -41,6 +48,12 @@ Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
@@ -49,6 +62,450 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus config`
+
+```text
+Read, change, validate and explain the profile's config.toml
+
+Usage: prometheus config [OPTIONS] <COMMAND>
+
+Commands:
+  path      Print the path of the profile's config.toml
+  show      Print config.toml, or with --effective every effective value
+  get       Print the effective value of a key
+  set       Set a key in config.toml (the value is typed by the key's schema)
+  unset     Remove a key from config.toml so its default applies
+  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate  Validate config.toml (exit 0 when valid, 78 when not)
+  explain   Explain a key: type, default, effective value, source, apply class
+  schema    Print the config.toml JSON Schema (draft 2020-12)
+  docs      Print the configuration reference (Markdown)
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config path`
+
+```text
+Print the path of the profile's config.toml
+
+Usage: prometheus config path [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config show`
+
+```text
+Print config.toml, or with --effective every effective value
+
+Usage: prometheus config show [OPTIONS]
+
+Options:
+      --effective
+          Every effective value (defaults, file and --set) instead of the file
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config get`
+
+```text
+Print the effective value of a key
+
+Usage: prometheus config get [OPTIONS] <KEY>
+
+Arguments:
+  <KEY>
+          Dotted key, for example agent.max_iterations
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config set`
+
+```text
+Set a key in config.toml (the value is typed by the key's schema)
+
+Usage: prometheus config set [OPTIONS] <KEY> <VALUE>
+
+Arguments:
+  <KEY>
+          Dotted key, for example display.theme
+
+  <VALUE>
+          New value: text for string keys, else a TOML value (10, true, ["a"])
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config unset`
+
+```text
+Remove a key from config.toml so its default applies
+
+Usage: prometheus config unset [OPTIONS] <KEY>
+
+Arguments:
+  <KEY>
+          Dotted key
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config edit`
+
+```text
+Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+
+Usage: prometheus config edit [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config validate`
+
+```text
+Validate config.toml (exit 0 when valid, 78 when not)
+
+Usage: prometheus config validate [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config explain`
+
+```text
+Explain a key: type, default, effective value, source, apply class
+
+Usage: prometheus config explain [OPTIONS] [KEY]
+
+Arguments:
+  [KEY]
+          Dotted key
+
+Options:
+      --changed
+          List every key whose effective value differs from its default
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config schema`
+
+```text
+Print the config.toml JSON Schema (draft 2020-12)
+
+Usage: prometheus config schema [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config docs`
+
+```text
+Print the configuration reference (Markdown)
+
+Usage: prometheus config docs [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus config help [COMMAND]
+
+Commands:
+  path      Print the path of the profile's config.toml
+  show      Print config.toml, or with --effective every effective value
+  get       Print the effective value of a key
+  set       Set a key in config.toml (the value is typed by the key's schema)
+  unset     Remove a key from config.toml so its default applies
+  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate  Validate config.toml (exit 0 when valid, 78 when not)
+  explain   Explain a key: type, default, effective value, source, apply class
+  schema    Print the config.toml JSON Schema (draft 2020-12)
+  docs      Print the configuration reference (Markdown)
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus config help path`
+
+```text
+Print the path of the profile's config.toml
+
+Usage: prometheus config help path
+```
+
+## `prometheus config help show`
+
+```text
+Print config.toml, or with --effective every effective value
+
+Usage: prometheus config help show
+```
+
+## `prometheus config help get`
+
+```text
+Print the effective value of a key
+
+Usage: prometheus config help get
+```
+
+## `prometheus config help set`
+
+```text
+Set a key in config.toml (the value is typed by the key's schema)
+
+Usage: prometheus config help set
+```
+
+## `prometheus config help unset`
+
+```text
+Remove a key from config.toml so its default applies
+
+Usage: prometheus config help unset
+```
+
+## `prometheus config help edit`
+
+```text
+Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+
+Usage: prometheus config help edit
+```
+
+## `prometheus config help validate`
+
+```text
+Validate config.toml (exit 0 when valid, 78 when not)
+
+Usage: prometheus config help validate
+```
+
+## `prometheus config help explain`
+
+```text
+Explain a key: type, default, effective value, source, apply class
+
+Usage: prometheus config help explain
+```
+
+## `prometheus config help schema`
+
+```text
+Print the config.toml JSON Schema (draft 2020-12)
+
+Usage: prometheus config help schema
+```
+
+## `prometheus config help docs`
+
+```text
+Print the configuration reference (Markdown)
+
+Usage: prometheus config help docs
+```
+
+## `prometheus config help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus config help help
 ```
 
 ## `prometheus help`
@@ -60,6 +517,7 @@ Usage: prometheus help [COMMAND]
 
 Commands:
   version  Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  config   Read, change, validate and explain the profile's config.toml
   help     Print this message or the help of the given subcommand(s)
 ```
 
@@ -69,6 +527,106 @@ Commands:
 Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
 
 Usage: prometheus help version
+```
+
+## `prometheus help config`
+
+```text
+Read, change, validate and explain the profile's config.toml
+
+Usage: prometheus help config [COMMAND]
+
+Commands:
+  path      Print the path of the profile's config.toml
+  show      Print config.toml, or with --effective every effective value
+  get       Print the effective value of a key
+  set       Set a key in config.toml (the value is typed by the key's schema)
+  unset     Remove a key from config.toml so its default applies
+  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate  Validate config.toml (exit 0 when valid, 78 when not)
+  explain   Explain a key: type, default, effective value, source, apply class
+  schema    Print the config.toml JSON Schema (draft 2020-12)
+  docs      Print the configuration reference (Markdown)
+```
+
+## `prometheus help config path`
+
+```text
+Print the path of the profile's config.toml
+
+Usage: prometheus help config path
+```
+
+## `prometheus help config show`
+
+```text
+Print config.toml, or with --effective every effective value
+
+Usage: prometheus help config show
+```
+
+## `prometheus help config get`
+
+```text
+Print the effective value of a key
+
+Usage: prometheus help config get
+```
+
+## `prometheus help config set`
+
+```text
+Set a key in config.toml (the value is typed by the key's schema)
+
+Usage: prometheus help config set
+```
+
+## `prometheus help config unset`
+
+```text
+Remove a key from config.toml so its default applies
+
+Usage: prometheus help config unset
+```
+
+## `prometheus help config edit`
+
+```text
+Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+
+Usage: prometheus help config edit
+```
+
+## `prometheus help config validate`
+
+```text
+Validate config.toml (exit 0 when valid, 78 when not)
+
+Usage: prometheus help config validate
+```
+
+## `prometheus help config explain`
+
+```text
+Explain a key: type, default, effective value, source, apply class
+
+Usage: prometheus help config explain
+```
+
+## `prometheus help config schema`
+
+```text
+Print the config.toml JSON Schema (draft 2020-12)
+
+Usage: prometheus help config schema
+```
+
+## `prometheus help config docs`
+
+```text
+Print the configuration reference (Markdown)
+
+Usage: prometheus help config docs
 ```
 
 ## `prometheus help help`
@@ -83,4 +641,8 @@ Usage: prometheus help help
 
 With `--json` a command prints exactly one JSON document on stdout (JSON Lines for `--follow` streams) and nothing else; diagnostics go to stderr. A failing command prints `{"error": {kind, code, message, hint}}` to stderr and exits with its [exit code](error-codes.md). Listing and status documents carry a top-level `schema` naming their versioned shape; a breaking change bumps the shape's major version. `version --json` is the fixed build-identity object and has no `schema` field.
 
-No command emits a versioned shape yet.
+| Schema | Command |
+|---|---|
+| `prometheus.config.v1` | `prometheus config show` |
+| `prometheus.config_value.v1` | `prometheus config get` |
+| `prometheus.config_explain.v1` | `prometheus config explain` |

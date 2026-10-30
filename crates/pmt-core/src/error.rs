@@ -194,6 +194,33 @@ error_codes! {
     /// A configuration file is not valid TOML or does not match its schema.
     CONFIG_PARSE = ("config.parse", Config,
         "A configuration file (`config.toml`, `daemon.toml`) is not valid TOML or does not match its schema.");
+    /// A profile `config.toml` names a key the schema does not define.
+    CONFIG_UNKNOWN_KEY = ("config.unknown_key", Config,
+        "A profile `config.toml` contains a key the schema does not define (the error suggests the closest key), or a machine-wide section that belongs in `daemon.toml`.");
+    /// A profile `config.toml` value has the wrong type, range or enum value.
+    CONFIG_INVALID = ("config.invalid", Config,
+        "A profile `config.toml` value has the wrong type, is out of range or is not one of the allowed values; the error names the key, line and allowed values.");
+    /// A key or value given on the command line is unknown or invalid.
+    CONFIG_INVALID_ARGUMENT = ("config.invalid_argument", Usage,
+        "A configuration key or value given on the command line (`config set`, `config get`, `--set`) is unknown, malformed, out of range or not allowed.");
+    /// A value that looks like a credential was given for a non-secret key.
+    CONFIG_CREDENTIAL_VALUE = ("config.credential_value", Usage,
+        "A value that looks like a credential (API key, token, private key) was given for a non-secret configuration key; store it with `prometheus secrets set <NAME>`.");
+    /// `config.toml` was written by a newer prometheus.
+    CONFIG_TOO_NEW = ("config.too_new", Config,
+        "`config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus.");
+    /// The configuration editor could not be started or failed.
+    CONFIG_EDITOR = ("config.editor", Unavailable,
+        "The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error.");
+    /// A profile name does not match the profile name rules.
+    PROFILE_INVALID_NAME = ("profile.invalid_name", Usage,
+        "A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing.");
+    /// The named profile does not exist in this home.
+    PROFILE_NOT_FOUND = ("profile.not_found", NotFound,
+        "The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`.");
+    /// Writing a command's output or reading an answer failed.
+    OUTPUT_IO = ("output.io", Io,
+        "Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed.");
     /// The invoked surface was not compiled into this build.
     SURFACE_NOT_INCLUDED = ("surface.not_included", Unavailable,
         "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build.");

@@ -26,7 +26,6 @@
 //! against `perf/baseline.json`.
 
 mod artifacts;
-mod config_reference;
 mod health;
 mod perf;
 
