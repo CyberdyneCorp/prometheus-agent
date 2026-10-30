@@ -15,10 +15,14 @@ use serde_json::Value;
 
 use common::{ok, run, stderr, stdout, temp_home};
 
+/// The profile with storage redaction off, so the seeded transcript keeps
+/// its credential-shaped text and the export's own `--redact` / `/save
+/// ... redact` is what the tests below exercise.
 fn scope(home: &Path) -> ProfileScope {
     let home = Home::open(home).unwrap();
     let profile = home.profile(&ProfileName::default_profile()).unwrap();
-    ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
+    let raw = Overrides::parse(&["security.redact_secrets=false".to_owned()]).unwrap();
+    ProfileScope::open(profile, &raw, Launch::Other).unwrap()
 }
 
 struct Seeded {

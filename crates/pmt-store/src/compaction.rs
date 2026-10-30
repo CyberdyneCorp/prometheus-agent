@@ -162,10 +162,11 @@ impl Store {
         self.ensure_writable()?;
         let session = lock.session();
         let blob_dir = self.location().blobs();
+        let redactor = self.redactor();
         let rows = compaction
             .replacements
             .iter()
-            .map(|m| messages::prepare(blob_dir, m))
+            .map(|m| messages::prepare(blob_dir, m, redactor.as_ref()))
             .collect::<Result<Vec<_>, _>>()?;
         self.write_as(WriteClass::Transcript, |tx| {
             leases::check_held(tx, lock)?;

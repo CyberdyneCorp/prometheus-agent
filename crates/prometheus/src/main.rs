@@ -12,7 +12,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::{exit, panic};
 use prometheus::output::print_error;
 use prometheus::{
-    Cli, Command, Context, backup_cmd, config_cmd, logs_cmd, profile_cmd, secrets_cmd,
+    Cli, Command, Context, backup_cmd, config_cmd, grants_cmd, logs_cmd, profile_cmd, secrets_cmd,
     sessions_cmd, startup, trajectory_cmd, usage_cmd, version,
 };
 
@@ -60,6 +60,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Version) => Ok(version::run(cli.json, cli.verbose > 0)),
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
+        Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
         Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
         Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),

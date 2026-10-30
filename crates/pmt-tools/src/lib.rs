@@ -5,5 +5,6 @@
 //! need human approval, and [`terminal`], the execution environment behind
 //! the `terminal` and `process` tools.
 
+pub mod grants;
 pub mod protected;
 pub mod terminal;

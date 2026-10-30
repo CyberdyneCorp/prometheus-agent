@@ -10,6 +10,7 @@ pub mod build_info;
 pub mod cli;
 pub mod config_cmd;
 pub mod context;
+pub mod grants_cmd;
 pub mod logs_cmd;
 pub mod output;
 pub mod profile_cmd;
@@ -25,7 +26,7 @@ pub mod usage_cmd;
 pub mod version;
 
 pub use cli::{
-    BackupCommand, Cli, Command, ConfigCommand, LogsArgs, ProfileCommand, SecretsCommand,
-    SessionsCommand, SnapshotsCommand, TrajectoryCommand, UsageArgs, command,
+    BackupCommand, Cli, Command, ConfigCommand, GrantsCommand, LogsArgs, ProfileCommand,
+    SecretsCommand, SessionsCommand, SnapshotsCommand, TrajectoryCommand, UsageArgs, command,
 };
 pub use context::Context;

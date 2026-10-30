@@ -139,6 +139,12 @@ prefixed_id!(
 );
 
 prefixed_id!(
+    /// A persistent capability grant in `grants.toml`, `grant_<ULID>`.
+    GrantId,
+    "grant"
+);
+
+prefixed_id!(
     /// A profile state snapshot id, `snap_<ULID>`.
     SnapshotId,
     "snap"

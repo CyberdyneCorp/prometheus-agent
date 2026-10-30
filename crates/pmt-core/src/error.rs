@@ -420,6 +420,21 @@ error_codes! {
     /// A capability string is not in the closed vocabulary.
     CAPABILITY_UNKNOWN = ("capability.unknown", Config,
         "A capability string (config, plugin manifest, grants file) is not in the closed vocabulary (`fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host>[:<port>]`, `process.spawn:<program>`...).");
+    /// A capability was used or requested beyond what was granted.
+    CAPABILITY_NOT_GRANTED = ("capability.not_granted", PermissionDenied,
+        "A capability was used or requested that the session, parent, plugin approval or grant does not include (`capability not granted: <capability>`); grant it when prompted, or review grants with `prometheus grants list`.");
+    /// `grants.toml` cannot be read, parsed or written.
+    GRANTS_STORE = ("grants.store", Config,
+        "A profile's `grants.toml` cannot be read, is not valid (bad TOML, unknown capability or subject) or cannot be written; fix or remove the offending entry.");
+    /// No grant has the given id.
+    GRANTS_NOT_FOUND = ("grants.not_found", NotFound,
+        "No grant in the profile's `grants.toml` has this id; list them with `prometheus grants list`.");
+    /// A grant subject does not have a recognized form.
+    GRANTS_INVALID_SUBJECT = ("grants.invalid_subject", Usage,
+        "A grant subject is not `plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>` or `profile`.");
+    /// A capability prompt was denied, dismissed, timed out or had no human to ask.
+    GRANTS_DENIED = ("grants.denied", PermissionDenied,
+        "A capability request was denied: the human answered deny, dismissed the prompt, the surface detached, `approvals.timeout_secs` passed, or the context is unattended (no prompt is possible).");
     /// The OS sandbox lacks a hardening feature that was not explicitly allowed to be missing.
     SANDBOX_UNAVAILABLE = ("sandbox.unavailable", Sandbox,
         "The OS sandbox cannot enforce a feature (Landlock, seccomp, Seatbelt, AppContainer) on this host and `security.sandbox.allow_degraded` does not name it, so the command was not run.");

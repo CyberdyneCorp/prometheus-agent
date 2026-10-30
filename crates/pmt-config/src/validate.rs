@@ -350,6 +350,11 @@ impl Checker<'_> {
         if self.refuse_credential(node, text, key) {
             return;
         }
+        if schema.get("x-capability") == Some(&Value::Bool(true))
+            && let Err(err) = pmt_core::capability::Capability::parse(text)
+        {
+            return self.invalid(key, node, format!("{key}: {}", err.message()));
+        }
         let is_secret_ref = schema.get("x-secret-ref") == Some(&Value::Bool(true));
         if is_secret_ref && !is_secret_name(text) {
             let message = format!(
@@ -542,6 +547,17 @@ mod tests {
         assert_eq!(
             messages("[compression]\ntail_mode = \"fat\"\n"),
             ["compression.tail_mode: unknown value \"fat\" (allowed: \"lean\", \"ratio\")"]
+        );
+    }
+
+    #[test]
+    fn unknown_capabilities_are_refused_naming_the_string() {
+        let messages = messages(
+            "[security]\ncapabilities = [\"fs.read:<workspace>/**\", \"filesystem.write:/tmp\"]\n",
+        );
+        assert_eq!(
+            messages,
+            ["security.capabilities: unknown capability 'filesystem.write:/tmp'"]
         );
     }
 

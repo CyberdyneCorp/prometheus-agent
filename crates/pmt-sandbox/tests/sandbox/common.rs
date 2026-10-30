@@ -58,7 +58,7 @@ impl Fixture {
 
     /// The baseline plus `extra` capabilities.
     pub(crate) fn policy(&self, extra: &[&str]) -> Policy {
-        let caps: Vec<&str> = pmt_sandbox::BASELINE
+        let caps: Vec<&str> = pmt_core::capability::BASELINE
             .iter()
             .copied()
             .chain(extra.iter().copied())

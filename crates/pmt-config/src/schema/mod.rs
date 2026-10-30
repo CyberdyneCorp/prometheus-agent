@@ -203,6 +203,13 @@ pub const MACHINE_WIDE_SECTIONS: &[&str] =
 #[schemars(extend("x-secret-ref" = true, "pattern" = "^[A-Z][A-Z0-9_]{0,127}$"))]
 pub struct SecretName(pub String);
 
+/// A capability string of the closed vocabulary (`pmt_core::capability`);
+/// validation refuses any other string with `unknown capability '<s>'`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+#[schemars(extend("x-capability" = true))]
+pub struct CapabilityText(pub String);
+
 /// Whether `name` is a valid secret name.
 #[must_use]
 pub fn is_secret_name(name: &str) -> bool {

@@ -10,6 +10,7 @@
 - [Usage, costs and budgets](guide/usage-and-budgets.md)
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)
+- [Capabilities, grants and redaction](guide/security.md)
 
 # Reference
 

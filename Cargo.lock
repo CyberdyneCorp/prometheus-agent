@@ -1427,8 +1427,11 @@ dependencies = [
 name = "pmt-core"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "glob",
  "jiff",
  "nix",
+ "proptest",
  "serde",
  "serde_json",
  "sysinfo",
@@ -1633,6 +1636,7 @@ dependencies = [
 name = "prometheus"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "clap",
  "jiff",
  "nix",
@@ -1653,6 +1657,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

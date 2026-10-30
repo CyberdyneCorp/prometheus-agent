@@ -34,12 +34,19 @@ impl fmt::Debug for SecretString {
     }
 }
 
-/// Prefixes of common credential formats (OpenAI/Anthropic `sk-`, Stripe,
-/// GitHub, Slack, AWS access keys, GitLab, Google API keys): the one list
-/// both config validation and pattern redaction use.
+/// Prefixes of common credential formats (OpenAI/Anthropic/OpenRouter
+/// `sk-`, Stripe, GitHub, Slack, AWS access keys, GitLab, Google API keys,
+/// Groq, xAI, Perplexity, Replicate): the one list both config validation
+/// and pattern redaction use.
 pub const CREDENTIAL_PREFIXES: &[&str] = &[
     "sk-",
     "sk_live_",
+    "sk_test_",
+    "rk_live_",
+    "gsk_",
+    "xai-",
+    "pplx-",
+    "r8_",
     "ghp_",
     "gho_",
     "ghu_",
@@ -103,6 +110,11 @@ impl Redactor {
     fn build(values: impl Iterator<Item = (SecretString, String)>) -> Self {
         let mut values: Vec<(SecretString, String)> = values
             .filter(|(s, _)| s.expose().len() >= Self::MIN_LEN)
+            .flat_map(|(secret, marker)| {
+                encoded_forms(secret.expose())
+                    .into_iter()
+                    .map(move |form| (SecretString::new(form), marker.clone()))
+            })
             .collect();
         values.sort_by(|a, b| {
             b.0.expose()
@@ -144,6 +156,46 @@ impl Redactor {
     pub fn redact_all(&self, text: &str) -> String {
         redact_patterns(&redact_pem(&self.redact(text)))
     }
+}
+
+/// The value plus the encodings it is commonly leaked in: percent-encoded
+/// (URLs, form bodies) and base64 (standard and URL-safe, padded or not;
+/// plus the encoding of its longest 3-byte-aligned prefix, which is how it
+/// starts inside `echo $KEY | base64` or any longer encoded blob).
+fn encoded_forms(value: &str) -> Vec<String> {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
+    let bytes = value.as_bytes();
+    let aligned = &bytes[..bytes.len() / 3 * 3];
+    let mut forms = vec![
+        value.to_owned(),
+        percent_encode(value, false),
+        percent_encode(value, true),
+        STANDARD.encode(bytes),
+        STANDARD_NO_PAD.encode(bytes),
+        URL_SAFE.encode(bytes),
+        URL_SAFE_NO_PAD.encode(bytes),
+        STANDARD.encode(aligned),
+        URL_SAFE.encode(aligned),
+    ];
+    forms.retain(|form| form.len() >= Redactor::MIN_LEN);
+    forms.sort();
+    forms.dedup();
+    forms
+}
+
+/// RFC 3986 percent-encoding of everything but unreserved characters.
+fn percent_encode(value: &str, lower: bool) -> String {
+    value
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                char::from(b).to_string()
+            }
+            _ if lower => format!("%{b:02x}"),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }
 
 fn is_token_char(c: char) -> bool {
@@ -244,6 +296,49 @@ mod tests {
             merged.redact("ghp_value_of_token value_of"),
             "[REDACTED:GITHUB_TOKEN] [REDACTED]"
         );
+    }
+
+    /// Spec: "exact match, plus URL-encoded and base64 forms".
+    #[test]
+    fn url_encoded_and_base64_forms_are_redacted_with_the_name() {
+        use base64::Engine as _;
+        use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+        let value = SecretString::new("pa$$/word+key?=1");
+        let redactor = Redactor::named([("DB_PASSWORD", &value)]);
+        let marker = "[REDACTED:DB_PASSWORD]";
+        let leaks = [
+            "pa$$/word+key?=1".to_owned(),
+            "pa%24%24%2Fword%2Bkey%3F%3D1".to_owned(),
+            "pa%24%24%2fword%2bkey%3f%3d1".to_owned(),
+            STANDARD.encode("pa$$/word+key?=1"),
+            URL_SAFE_NO_PAD.encode("pa$$/word+key?=1"),
+        ];
+        for leak in leaks {
+            let text = format!("url=https://x.test/?p={leak}&ok");
+            assert_eq!(
+                redactor.redact(&text),
+                format!("url=https://x.test/?p={marker}&ok"),
+                "{leak}"
+            );
+        }
+        // `echo $KEY | base64` encodes a trailing newline: the aligned prefix
+        // is still caught.
+        let piped = STANDARD.encode("pa$$/word+key?=1\n");
+        assert!(redactor.redact(&piped).starts_with(marker), "{piped}");
+    }
+
+    #[test]
+    fn provider_token_patterns_are_redacted() {
+        let redactor = Redactor::default();
+        for token in [
+            "gsk_abcdefghijklmnop1234",
+            "xai-abcdefghijklmnop1234",
+            "pplx-abcdefghijklmnop1234",
+            "sk-ant-api03-abcdefghijklmnop",
+            "AKIAIOSFODNN7EXAMPLE",
+        ] {
+            assert_eq!(redactor.redact_all(&format!("t={token}")), "t=[REDACTED]");
+        }
     }
 
     #[test]

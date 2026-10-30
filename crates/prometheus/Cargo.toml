@@ -50,9 +50,11 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 pmt-net.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true
+tracing-subscriber.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
 # SIGINT for the `logs --follow` exit-130 test.

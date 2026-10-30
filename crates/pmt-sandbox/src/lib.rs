@@ -43,6 +43,6 @@ mod platform;
 mod platform;
 
 pub use launcher::LAUNCH_ARG;
-pub use policy::{BASELINE, Paths, Policy, Ports};
+pub use policy::{Paths, Policy, Ports};
 pub use report::{Enforcement, Feature, FeatureReport, Gap, Level, StrengthReport};
 pub use sandbox::{Options, Sandbox};

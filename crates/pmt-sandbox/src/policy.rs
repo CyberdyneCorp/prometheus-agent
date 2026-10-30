@@ -15,7 +15,8 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use pmt_core::error::{Error, codes};
+use pmt_core::capability::{BASELINE, Capability, CapabilitySet};
+use pmt_core::error::Error;
 
 use crate::locations;
 
@@ -76,21 +77,6 @@ pub struct Policy {
     pub(crate) unrepresentable: Vec<String>,
 }
 
-/// The built-in profile baseline used when `security.capabilities` is unset:
-/// read/write on the workspace and scratch, read on the system toolchain,
-/// any program, outbound connections per the egress policy (any public
-/// host until the M2 egress proxy narrows it) and model calls.
-pub const BASELINE: &[&str] = &[
-    "fs.read:<workspace>/**",
-    "fs.write:<workspace>/**",
-    "fs.read:<scratch>/**",
-    "fs.write:<scratch>/**",
-    "fs.read:<toolchain>",
-    "process.spawn:*",
-    "net.connect:*",
-    "llm.call",
-];
-
 impl Policy {
     /// Translates `capabilities` (the child's effective set) against `paths`.
     ///
@@ -101,6 +87,13 @@ impl Policy {
         capabilities: &[S],
         paths: &Paths,
     ) -> Result<Self, Error> {
+        let set = CapabilitySet::parse(capabilities)?;
+        Ok(Self::from_set(&set, paths))
+    }
+
+    /// Translates a resolved capability set (`pmt_core::capability`).
+    #[must_use]
+    pub fn from_set(capabilities: &CapabilitySet, paths: &Paths) -> Self {
         let mut policy = Self {
             read: Vec::new(),
             write: Vec::new(),
@@ -112,13 +105,13 @@ impl Policy {
             unrepresentable: Vec::new(),
         };
         for capability in capabilities {
-            policy.apply(capability.as_ref(), paths)?;
+            policy.apply(capability, paths);
         }
         policy.read.sort();
         policy.read.dedup();
         policy.write.sort();
         policy.write.dedup();
-        Ok(policy)
+        policy
     }
 
     /// The policy of [`BASELINE`].
@@ -130,44 +123,23 @@ impl Policy {
         Self::from_capabilities(BASELINE, paths)
     }
 
-    fn apply(&mut self, capability: &str, paths: &Paths) -> Result<(), Error> {
-        let unknown = || {
-            Error::new(
-                &codes::CAPABILITY_UNKNOWN,
-                format!("unknown capability '{capability}'"),
-            )
-        };
-        let Some((name, target)) = capability.split_once(':') else {
-            return match capability {
-                "llm.call" | "browser.real_profile" => Ok(()),
-                ui if ui.strip_prefix("ui.").is_some_and(|s| !s.is_empty()) => Ok(()),
-                _ => Err(unknown()),
-            };
-        };
-        if target.is_empty() {
-            return Err(unknown());
-        }
-        match name {
-            "fs.read" => self.add_paths(target, paths, false),
-            "fs.write" => self.add_paths(target, paths, true),
-            "net.connect" => {
-                let (host, port) = split_port(target).ok_or_else(unknown)?;
+    fn apply(&mut self, capability: &Capability, paths: &Paths) {
+        match capability {
+            Capability::FsRead(glob) => self.add_paths(glob, paths, false),
+            Capability::FsWrite(glob) => self.add_paths(glob, paths, true),
+            Capability::NetConnect { host, port } => {
                 self.host_patterns |= host != "*";
-                self.connect.add(port);
+                self.connect.add(*port);
             }
-            "net.listen" => match target.strip_prefix("loopback") {
-                Some("") => self.bind.add(None),
-                Some(port) => {
-                    let port = port.strip_prefix(':').and_then(|p| p.parse().ok());
-                    self.bind.add(Some(port.ok_or_else(unknown)?));
-                }
-                None => return Err(unknown()),
-            },
-            "process.spawn" => self.spawn = true,
-            "secrets.read" | "llm.call" | "tools.call" | "tools.override" => {}
-            _ => return Err(unknown()),
+            Capability::NetListen { port } => self.bind.add(*port),
+            Capability::ProcessSpawn(_) => self.spawn = true,
+            Capability::SecretsRead(_)
+            | Capability::LlmCall(_)
+            | Capability::ToolsCall(_)
+            | Capability::ToolsOverride(_)
+            | Capability::Ui(_)
+            | Capability::BrowserRealProfile => {}
         }
-        Ok(())
     }
 
     fn add_paths(&mut self, pattern: &str, paths: &Paths, write: bool) {
@@ -242,21 +214,6 @@ impl Policy {
     #[must_use]
     pub fn unrepresentable(&self) -> &[String] {
         &self.unrepresentable
-    }
-}
-
-/// `host[:port]`, where a bracketed IPv6 literal may carry a port.
-fn split_port(target: &str) -> Option<(&str, Option<u16>)> {
-    if let Some(rest) = target.strip_prefix('[') {
-        let (host, after) = rest.split_once(']')?;
-        return match after {
-            "" => Some((host, None)),
-            port => Some((host, Some(port.strip_prefix(':')?.parse().ok()?))),
-        };
-    }
-    match target.rsplit_once(':') {
-        Some((host, port)) if !host.contains(':') => Some((host, Some(port.parse().ok()?))),
-        _ => Some((target, None)),
     }
 }
 
@@ -342,6 +299,7 @@ mod tests {
             "fs.read:",
             "ui.",
             "net.connect:host:port",
+            "fs.read:relative/**",
         ] {
             assert!(Policy::from_capabilities(&[bad], &p).is_err(), "{bad}");
         }
@@ -369,12 +327,11 @@ mod tests {
             "fs.write:<workspace>/**",
             "fs.read:~/**",
             "fs.read:/etc/*.conf",
-            "fs.read:relative/**",
         ];
         let policy = Policy::from_capabilities(&caps, &p).unwrap();
         assert_eq!(policy.write_roots(), [base().join("home/work")]);
         assert_eq!(policy.read_roots(), [base().join("home")]);
-        assert_eq!(policy.unrepresentable(), ["/etc/*.conf", "relative/**"]);
+        assert_eq!(policy.unrepresentable(), ["/etc/*.conf"]);
     }
 
     #[test]

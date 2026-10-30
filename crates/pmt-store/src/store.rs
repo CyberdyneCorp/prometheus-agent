@@ -15,9 +15,10 @@ use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use pmt_config::schema::JournalMode;
-use pmt_config::{ProfileDir, ProfileScope};
+use pmt_config::{ProfileDir, ProfileScope, SecretsHandle};
 use pmt_core::error::{Error, codes};
 use pmt_core::id::ProfileId;
+use pmt_core::secret::Redactor;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 
 use crate::contention::{self, Attempts, WriteClass};
@@ -54,6 +55,9 @@ pub struct Store {
     quarantine: Option<QuarantineReport>,
     writer: Mutex<Writer>,
     readers: ReaderPool,
+    /// The profile's secrets, read at every write to redact message text;
+    /// `None` when `security.redact_secrets = false`.
+    secrets: Option<SecretsHandle>,
 }
 
 struct Writer {
@@ -126,11 +130,28 @@ impl Store {
                 conn: conn.conn,
                 writes_since_checkpoint: 0,
             }),
+            secrets: scope
+                .config()
+                .security
+                .redact_secrets
+                .then(|| scope.secrets().clone()),
         };
         if let Some(quarantined) = quarantined {
             store.quarantine = Some(store.salvage(quarantined)?);
         }
         Ok(store)
+    }
+
+    /// The redactor for message text written now: every stored secret
+    /// value (read at this write, so a rotated secret is covered) plus
+    /// credential-shaped tokens. An unreadable secret store still redacts
+    /// tokens, with a WARN.
+    pub(crate) fn redactor(&self) -> Option<Redactor> {
+        let secrets = self.secrets.as_ref()?;
+        Some(secrets.redactor().unwrap_or_else(|err| {
+            tracing::warn!("session storage redaction without the secret store: {err}");
+            Redactor::default()
+        }))
     }
 
     /// The store's files.

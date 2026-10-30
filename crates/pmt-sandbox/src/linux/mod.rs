@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn kernel_without_landlock_names_it() {
-        let report = report(&policy(crate::BASELINE), None, true);
+        let report = report(&policy(pmt_core::capability::BASELINE), None, true);
         let gaps = report.gaps();
         assert_eq!(gaps[0].reason, "landlock not supported by kernel");
         assert_eq!(gaps[0].hardening, DegradedFeature::Landlock);
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn old_landlock_lacks_tcp_rules() {
-        let report = report(&policy(crate::BASELINE), Some(ABI::V3), true);
+        let report = report(&policy(pmt_core::capability::BASELINE), Some(ABI::V3), true);
         assert_eq!(report.level(Feature::Fs), Level::Enforced);
         assert_eq!(report.level(Feature::Net), Level::Unavailable);
         assert_eq!(report.enforcement().to_string(), "partial:landlock_net");
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn full_on_a_current_kernel() {
-        let report = report(&policy(crate::BASELINE), Some(ABI::V6), true);
+        let report = report(&policy(pmt_core::capability::BASELINE), Some(ABI::V6), true);
         assert_eq!(report.enforcement().to_string(), "full");
         let hosts = super::report(
             &policy(&["net.connect:example.com:443"]),
@@ -194,7 +194,11 @@ mod tests {
             true,
         );
         assert_eq!(hosts.level(Feature::Net), Level::Partial);
-        let no_seccomp = super::report(&policy(crate::BASELINE), Some(ABI::V6), false);
+        let no_seccomp = super::report(
+            &policy(pmt_core::capability::BASELINE),
+            Some(ABI::V6),
+            false,
+        );
         assert_eq!(no_seccomp.enforcement().to_string(), "partial:seccomp");
     }
 }

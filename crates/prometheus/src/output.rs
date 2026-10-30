@@ -27,6 +27,10 @@ pub struct JsonShape {
 /// here when it gains `--json`.
 pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
+        schema: "prometheus.grants.v1",
+        command: "grants list",
+    },
+    JsonShape {
         schema: "prometheus.usage.v1",
         command: "usage",
     },
@@ -147,6 +151,14 @@ pub fn write_document(
 /// Prints a failure to stderr: the JSON error document with `--json`,
 /// otherwise `error: <message>` and an optional `hint: <hint>` line.
 pub fn print_error(err: &Error, json: bool) {
+    let _ = io::stderr().write_all(render_error(err, json).as_bytes());
+}
+
+/// The error as printed: the `--json` document or `error:`/`hint:` lines,
+/// with every known secret value and credential-shaped token redacted
+/// (spec: security-boundaries, Known-secret redaction everywhere).
+#[must_use]
+pub fn render_error(err: &Error, json: bool) -> String {
     let text = if json {
         format!("{}\n", err.to_json())
     } else {
@@ -155,7 +167,10 @@ pub fn print_error(err: &Error, json: bool) {
             None => format!("error: {err}\n"),
         }
     };
-    let _ = io::stderr().write_all(text.as_bytes());
+    match pmt_obs::logs::handle() {
+        Some(logs) => logs.redact(&text),
+        None => pmt_core::secret::Redactor::default().redact_all(&text),
+    }
 }
 
 /// Prints the listing/status document of `command` (its shape must be in

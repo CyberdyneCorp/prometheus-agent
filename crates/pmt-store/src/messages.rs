@@ -11,6 +11,7 @@ use std::path::Path;
 use jiff::Timestamp;
 use pmt_core::error::Error;
 use pmt_core::id::{MessageId, SessionId};
+use pmt_core::secret::Redactor;
 use rusqlite::{Connection, Row, Transaction, params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -174,8 +175,26 @@ fn place(blob_dir: &Path, text: Option<String>) -> Result<Option<Stored>, Error>
 }
 
 /// Spills large payloads; runs before the write transaction.
-pub(crate) fn prepare(blob_dir: &Path, message: &NewMessage) -> Result<Prepared, Error> {
+/// A row ready to insert. Text content passes through `redactor` first
+/// (spec: security-boundaries, Known-secret redaction everywhere: session
+/// storage), so the stored row and its hash never hold a known secret.
+pub(crate) fn prepare(
+    blob_dir: &Path,
+    message: &NewMessage,
+    redactor: Option<&Redactor>,
+) -> Result<Prepared, Error> {
     let json = |value: &Option<Value>| value.as_ref().map(Value::to_string);
+    let redacted;
+    let message = match (redactor, &message.content) {
+        (Some(redactor), Some(content)) => {
+            redacted = NewMessage {
+                content: Some(redactor.redact_all(content)),
+                ..message.clone()
+            };
+            &redacted
+        }
+        _ => message,
+    };
     Ok(Prepared {
         content: place(blob_dir, message.content.clone())?,
         tool_calls: place(blob_dir, json(&message.tool_calls))?,
@@ -381,9 +400,10 @@ impl Store {
     ) -> Result<Vec<u64>, Error> {
         self.ensure_writable()?;
         let blob_dir = self.location().blobs();
+        let redactor = self.redactor();
         let rows = messages
             .iter()
-            .map(|m| prepare(blob_dir, m))
+            .map(|m| prepare(blob_dir, m, redactor.as_ref()))
             .collect::<Result<Vec<_>, _>>()?;
         self.write_as(WriteClass::Transcript, |tx| {
             if sessions::load(tx, session)?.is_none() {

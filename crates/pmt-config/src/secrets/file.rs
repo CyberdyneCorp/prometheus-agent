@@ -39,7 +39,7 @@ impl FileStore {
 
     /// Every stored secret. A missing file is an empty store.
     pub(crate) fn load(&self) -> Result<BTreeMap<String, SecretString>, Error> {
-        let text = match read_no_follow(&self.path) {
+        let text = match private_fs::read_no_follow(&self.path) {
             Ok(text) => text,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
             Err(e) => return Err(store_error(&self.path, &e.to_string())),
@@ -62,34 +62,8 @@ impl FileStore {
     }
 
     fn lock(&self) -> Result<File, Error> {
-        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
-        name.push(".lock");
-        let path = self.path.with_file_name(name);
-        let file = match private_fs::new_file_options().open(&path) {
-            Ok(file) => file,
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => File::options()
-                .write(true)
-                .open(&path)
-                .map_err(|e| store_error(&path, &e.to_string()))?,
-            Err(e) => return Err(store_error(&path, &e.to_string())),
-        };
-        file.lock()
-            .map_err(|e| store_error(&path, &e.to_string()))?;
-        Ok(file)
+        private_fs::lock_beside(&self.path).map_err(|e| store_error(&self.path, &e.to_string()))
     }
-}
-
-/// Reads `path`, refusing a symlink: a link planted at `secrets.toml`
-/// must not redirect secrets to or from another file.
-fn read_no_follow(path: &Path) -> io::Result<String> {
-    let meta = std::fs::symlink_metadata(path)?;
-    if meta.file_type().is_symlink() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "is a symbolic link; refusing to follow it",
-        ));
-    }
-    std::fs::read_to_string(path)
 }
 
 fn parse(path: &Path, text: &str) -> Result<BTreeMap<String, SecretString>, Error> {

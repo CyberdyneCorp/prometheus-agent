@@ -58,6 +58,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SecretsCommand,
     },
+    /// List and revoke the profile's permanent capability grants and approvals.
+    Grants {
+        /// The grants subcommand.
+        #[command(subcommand)]
+        command: GrantsCommand,
+    },
     /// Back up the whole home to a .tar.zst archive, or restore one.
     Backup {
         /// The backup subcommand.
@@ -445,6 +451,22 @@ fn parse_time(text: &str) -> Result<jiff::Timestamp, String> {
         .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC))
         .map(|zoned| zoned.timestamp())
         .map_err(|_| format!("'{text}' is not an RFC 3339 time or a YYYY-MM-DD date"))
+}
+
+/// `prometheus grants` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum GrantsCommand {
+    /// List grants (id, subject, capability, surface, time) and approved command patterns.
+    List {
+        /// Only grants of this subject (`plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>`, `profile`).
+        #[arg(long, value_name = "SUBJECT")]
+        subject: Option<String>,
+    },
+    /// Remove a grant; running sessions lose it at their next tool call.
+    Revoke {
+        /// The grant id (`grant_<ULID>`) shown by `grants list`.
+        id: String,
+    },
 }
 
 /// `prometheus secrets` subcommands.

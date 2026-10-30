@@ -104,6 +104,46 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     written
 }
 
+/// Takes an exclusive lock on `<path>.lock` (created 0600 when missing),
+/// held until the returned file is dropped: the read-modify-write of a
+/// private file (secrets, grants) runs under it so concurrent writers never
+/// lose each other's change.
+///
+/// # Errors
+///
+/// Any I/O error opening or locking the lock file.
+pub fn lock_beside(path: &Path) -> io::Result<File> {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".lock");
+    let lock = path.with_file_name(name);
+    let file = match new_file_options().open(&lock) {
+        Ok(file) => file,
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            File::options().write(true).open(&lock)?
+        }
+        Err(e) => return Err(e),
+    };
+    file.lock()?;
+    Ok(file)
+}
+
+/// Reads `path`, refusing a symbolic link: a link planted at a private
+/// file must not redirect its contents to or from another file.
+///
+/// # Errors
+///
+/// `NotFound` when missing, `InvalidInput` for a symlink, other I/O errors.
+pub fn read_no_follow(path: &Path) -> io::Result<String> {
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "is a symbolic link; refusing to follow it",
+        ));
+    }
+    fs::read_to_string(path)
+}
+
 /// Copies the regular files and directories under `src` into `dst`
 /// (created 0700, files 0600), replacing existing files. Symbolic links
 /// and special files are skipped, never followed.

@@ -13,6 +13,7 @@ Commands:
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
+  grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
   profile     List, create, select, rename and delete profiles
@@ -770,6 +771,136 @@ Usage: prometheus secrets help migrate
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus secrets help help
+```
+
+## `prometheus grants`
+
+```text
+List and revoke the profile's permanent capability grants and approvals
+
+Usage: prometheus grants [OPTIONS] <COMMAND>
+
+Commands:
+  list    List grants (id, subject, capability, surface, time) and approved command patterns
+  revoke  Remove a grant; running sessions lose it at their next tool call
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants list`
+
+```text
+List grants (id, subject, capability, surface, time) and approved command patterns
+
+Usage: prometheus grants list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --subject <SUBJECT>
+          Only grants of this subject (`plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>`, `profile`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants revoke`
+
+```text
+Remove a grant; running sessions lose it at their next tool call
+
+Usage: prometheus grants revoke [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The grant id (`grant_<ULID>`) shown by `grants list`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus grants help [COMMAND]
+
+Commands:
+  list    List grants (id, subject, capability, surface, time) and approved command patterns
+  revoke  Remove a grant; running sessions lose it at their next tool call
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus grants help list`
+
+```text
+List grants (id, subject, capability, surface, time) and approved command patterns
+
+Usage: prometheus grants help list
+```
+
+## `prometheus grants help revoke`
+
+```text
+Remove a grant; running sessions lose it at their next tool call
+
+Usage: prometheus grants help revoke
+```
+
+## `prometheus grants help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus grants help help
 ```
 
 ## `prometheus backup`
@@ -2463,6 +2594,7 @@ Commands:
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
+  grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
   profile     List, create, select, rename and delete profiles
@@ -2634,6 +2766,34 @@ Usage: prometheus help secrets unset
 Move every secret to another backend and select it in config.toml
 
 Usage: prometheus help secrets migrate
+```
+
+## `prometheus help grants`
+
+```text
+List and revoke the profile's permanent capability grants and approvals
+
+Usage: prometheus help grants [COMMAND]
+
+Commands:
+  list    List grants (id, subject, capability, surface, time) and approved command patterns
+  revoke  Remove a grant; running sessions lose it at their next tool call
+```
+
+## `prometheus help grants list`
+
+```text
+List grants (id, subject, capability, surface, time) and approved command patterns
+
+Usage: prometheus help grants list
+```
+
+## `prometheus help grants revoke`
+
+```text
+Remove a grant; running sessions lose it at their next tool call
+
+Usage: prometheus help grants revoke
 ```
 
 ## `prometheus help backup`
@@ -2977,6 +3137,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.grants.v1` | `prometheus grants list` |
 | `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.config.v1` | `prometheus config show` |
 | `prometheus.config_value.v1` | `prometheus config get` |

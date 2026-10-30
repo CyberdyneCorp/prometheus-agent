@@ -175,7 +175,7 @@ pub struct SecurityConfig {
     /// (workspace read/write, toolchain read, `process.spawn:*`, egress
     /// policy, `llm.call`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub capabilities: Option<Vec<String>>,
+    pub capabilities: Option<Vec<super::CapabilityText>>,
     /// OS sandbox.
     pub sandbox: SandboxConfig,
     /// Outbound network policy.

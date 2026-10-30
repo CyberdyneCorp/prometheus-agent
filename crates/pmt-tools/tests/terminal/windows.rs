@@ -94,7 +94,7 @@ fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> LocalTerminal
         workspace: work.clone(),
         scratch: vec![scratch.clone()],
     };
-    let policy = Policy::from_capabilities(pmt_sandbox::BASELINE, &paths).unwrap();
+    let policy = Policy::from_capabilities(pmt_core::capability::BASELINE, &paths).unwrap();
     let config = SandboxConfig {
         mode: SandboxMode::Off,
         allow_degraded: vec![DegradedFeature::All],

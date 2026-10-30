@@ -139,6 +139,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `net.listen` | `io` | 74 | A listener could not bind its address (in use or not permitted). |
 | `security.invalid_pattern` | `config` | 78 | An entry of `security.protected_instruction_extra_patterns` is not a valid basename glob. |
 | `capability.unknown` | `config` | 78 | A capability string (config, plugin manifest, grants file) is not in the closed vocabulary (`fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host>[:<port>]`, `process.spawn:<program>`...). |
+| `capability.not_granted` | `permission_denied` | 77 | A capability was used or requested that the session, parent, plugin approval or grant does not include (`capability not granted: <capability>`); grant it when prompted, or review grants with `prometheus grants list`. |
+| `grants.store` | `config` | 78 | A profile's `grants.toml` cannot be read, is not valid (bad TOML, unknown capability or subject) or cannot be written; fix or remove the offending entry. |
+| `grants.not_found` | `not_found` | 66 | No grant in the profile's `grants.toml` has this id; list them with `prometheus grants list`. |
+| `grants.invalid_subject` | `usage` | 2 | A grant subject is not `plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>` or `profile`. |
+| `grants.denied` | `permission_denied` | 77 | A capability request was denied: the human answered deny, dismissed the prompt, the surface detached, `approvals.timeout_secs` passed, or the context is unattended (no prompt is possible). |
 | `sandbox.unavailable` | `sandbox` | 77 | The OS sandbox cannot enforce a feature (Landlock, seccomp, Seatbelt, AppContainer) on this host and `security.sandbox.allow_degraded` does not name it, so the command was not run. |
 | `sandbox.setup` | `sandbox` | 77 | The OS sandbox profile for a child process could not be built or applied; the child was not started. |
 | `terminal.unknown_backend` | `config` | 78 | `terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends. |

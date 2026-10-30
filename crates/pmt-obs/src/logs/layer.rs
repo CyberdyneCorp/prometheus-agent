@@ -81,6 +81,23 @@ impl LogHandle {
             .unwrap_or_else(PoisonError::into_inner)
             .insert(profile.to_owned(), redactor);
     }
+
+    /// `text` with every secret this process knows (the launch environment
+    /// and each registered profile) and every credential-shaped token
+    /// redacted: for output that belongs to no single profile record, such
+    /// as the error a command prints.
+    #[must_use]
+    pub fn redact(&self, text: &str) -> String {
+        let profiles = self
+            .shared
+            .profile_redactors
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        let all = profiles
+            .values()
+            .fold(self.shared.redactor.clone(), |all, extra| all.merged(extra));
+        all.redact_all(text)
+    }
 }
 
 static HANDLE: OnceLock<LogHandle> = OnceLock::new();
