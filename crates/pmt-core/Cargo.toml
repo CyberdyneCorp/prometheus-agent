@@ -7,5 +7,18 @@ rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[dependencies]
+# UTC timestamps in crash-report file names.
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Panic isolation spawns tasks; cancellation is a tokio-util token tree.
+tokio.workspace = true
+tokio-util.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

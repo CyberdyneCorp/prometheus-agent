@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use pmt_core::error::{ERROR_CODES, ERROR_KINDS};
+use pmt_core::error::{ERROR_CODES, ErrorKind};
 use pmt_core::exit::EXIT_CODES;
 
 /// One generated file: its path relative to the repository root and the
@@ -85,17 +85,40 @@ fn error_catalog() -> String {
         let _ = writeln!(out, "| {} | `{}` | {} |", e.code, e.name, e.meaning);
     }
     out.push_str("\n## Error kinds\n\n");
-    for kind in ERROR_KINDS {
-        let _ = writeln!(out, "- `{kind}`");
+    out.push_str("Every error has exactly one kind; the kind fixes the exit code.\n\n");
+    out.push_str("| Kind | Exit code |\n|---|---:|\n");
+    for kind in ErrorKind::ALL {
+        let _ = writeln!(out, "| `{kind}` | {} |", kind.exit_code());
     }
     out.push_str("\n## Error codes\n\n");
-    if ERROR_CODES.is_empty() {
-        out.push_str("No error codes are registered yet.\n");
-        return out;
-    }
-    out.push_str("| Code | Kind | Meaning |\n|---|---|---|\n");
+    out.push_str("| Code | Kind | Exit code | Meaning |\n|---|---|---:|---|\n");
     for e in ERROR_CODES {
-        let _ = writeln!(out, "| `{}` | `{}` | {} |", e.code, e.kind, e.summary);
+        let _ = writeln!(
+            out,
+            "| `{}` | `{}` | {} | {} |",
+            e.code,
+            e.kind,
+            e.kind.exit_code(),
+            e.summary
+        );
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_core::error::{ERROR_CODES, ErrorKind};
+
+    #[test]
+    fn error_catalog_lists_every_kind_and_code() {
+        let catalog = super::error_catalog();
+        for kind in ErrorKind::ALL {
+            let row = format!("| `{kind}` | {} |", kind.exit_code());
+            assert!(catalog.contains(&row), "missing kind row {row}");
+        }
+        for e in ERROR_CODES {
+            let row = format!("| `{}` | `{}` | {} |", e.code, e.kind, e.kind.exit_code());
+            assert!(catalog.contains(&row), "missing code row {row}");
+        }
+    }
 }

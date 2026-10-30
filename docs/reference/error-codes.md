@@ -28,23 +28,34 @@
 
 ## Error kinds
 
-- `usage`
-- `invalid_input`
-- `not_found`
-- `config`
-- `auth`
-- `permission_denied`
-- `budget_exceeded`
-- `provider`
-- `tool`
-- `sandbox`
-- `conflict`
-- `unavailable`
-- `protocol`
-- `cancelled`
-- `io`
-- `internal`
+Every error has exactly one kind; the kind fixes the exit code.
+
+| Kind | Exit code |
+|---|---:|
+| `usage` | 2 |
+| `invalid_input` | 65 |
+| `not_found` | 66 |
+| `config` | 78 |
+| `auth` | 78 |
+| `permission_denied` | 77 |
+| `budget_exceeded` | 3 |
+| `provider` | 69 |
+| `tool` | 1 |
+| `sandbox` | 77 |
+| `conflict` | 75 |
+| `unavailable` | 69 |
+| `protocol` | 76 |
+| `cancelled` | 130 |
+| `io` | 74 |
+| `internal` | 70 |
 
 ## Error codes
 
-No error codes are registered yet.
+| Code | Kind | Exit code | Meaning |
+|---|---|---:|---|
+| `id.malformed` | `invalid_input` | 65 | An id does not have the expected `<prefix>_<ULID>` shape. |
+| `registry.unknown_name` | `config` | 78 | A configured name (provider, backend, toolset, engine, hook...) is not registered; the error lists the registered names. |
+| `registry.duplicate_name` | `config` | 78 | Two entries (for example two plugins) register the same name in one registry. |
+| `task.panicked` | `internal` | 70 | A task panicked. It was isolated and a crash report was written under `logs/crash/`. |
+| `task.cancelled` | `cancelled` | 130 | The operation was cancelled (interrupt, `/stop` or shutdown). |
+| `launch_env.reread` | `internal` | 70 | The process environment was read a second time; it may only be read once at startup. |
