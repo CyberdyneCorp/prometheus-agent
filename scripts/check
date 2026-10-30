@@ -17,6 +17,7 @@ set -euo pipefail
 readonly CARGO_DENY_VERSION=0.20.2
 readonly CARGO_NEXTEST_VERSION=0.9.148
 readonly OPENSPEC_VERSION=1.13.2
+readonly MDBOOK_VERSION=0.5.4
 
 readonly HOOK_MARKER="installed by scripts/check"
 
@@ -50,6 +51,8 @@ check_tools() {
         "cargo install --locked cargo-nextest@$CARGO_NEXTEST_VERSION" cargo nextest --version
     require_version openspec "$OPENSPEC_VERSION" \
         "npm install -g @fission-ai/openspec@$OPENSPEC_VERSION" openspec --version
+    require_version mdbook "$MDBOOK_VERSION" \
+        "cargo install --locked mdbook@$MDBOOK_VERSION" mdbook --version
 }
 
 step() {
@@ -72,6 +75,18 @@ health_gate() {
     step cargo xtask health --base "$base_file"
 }
 
+# The documentation site. mdBook only warns on markup it cannot render (an
+# unescaped `<id>` silently disappears from the page), so any warning fails.
+docs_gate() {
+    echo "==> mdbook build docs"
+    local log=target/mdbook.log
+    mkdir -p target
+    mdbook build docs >"$log" 2>&1 || { cat "$log" >&2; die "failed: mdbook build docs"; }
+    if grep -E 'WARN|ERROR' "$log" >&2; then
+        die "failed: mdbook build docs (warnings above)"
+    fi
+}
+
 run_gates() {
     check_tools
     step cargo fmt --all --check
@@ -82,6 +97,7 @@ run_gates() {
     step cargo deny check
     step openspec validate --all --strict --no-interactive
     step cargo xtask gen --check
+    docs_gate
     health_gate
     echo "check: all gates passed"
 }

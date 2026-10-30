@@ -23,6 +23,10 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: config_schema(),
         },
         Artifact {
+            path: "docs/reference/configuration.md",
+            contents: config_reference(),
+        },
+        Artifact {
             path: "docs/reference/cli.md",
             contents: cli_reference(),
         },
@@ -33,11 +37,20 @@ pub(crate) fn all() -> Vec<Artifact> {
     ]
 }
 
+/// Directory whose every file is generated: hand-written reference pages
+/// would restate defaults and drift (`cargo xtask gen --check` rejects them).
+pub(crate) const REFERENCE_DIR: &str = "docs/reference";
+
 fn config_schema() -> String {
     let schema = schemars::schema_for!(pmt_config::Config);
     let mut json = serde_json::to_string_pretty(&schema).expect("a schema always serializes");
     json.push('\n');
     json
+}
+
+fn config_reference() -> String {
+    let schema = schemars::schema_for!(pmt_config::Config);
+    crate::config_reference::render(schema.as_value(), HEADER)
 }
 
 fn cli_reference() -> String {

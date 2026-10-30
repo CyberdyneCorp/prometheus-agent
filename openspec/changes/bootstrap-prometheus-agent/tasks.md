@@ -21,7 +21,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 3.1 Create an `xtask` crate with `cargo xtask gen` that writes the config JSON Schema (`schemars`), the CLI reference (clap), the error-code catalog and, once it exists, `schema/rpc.json` plus its TypeScript bindings into checked-in paths; verify that running it twice yields no diff (spec: workspace-architecture)
 - [ ] 3.2 Add `cargo xtask gen --check` to `scripts/check` so CI fails whenever checked-in generated artifacts differ from a fresh generation; verify by hand-editing a generated file and seeing CI fail (spec: workspace-architecture)
-- [ ] 3.3 Set up the documentation site skeleton (`docs/`) whose configuration, CLI and error reference pages are included from generated files only; verify that the docs build and that a test default changed in code appears in the regenerated reference (spec: workspace-architecture)
+- [x] 3.3 Set up the documentation site skeleton (`docs/`) whose configuration, CLI and error reference pages are included from generated files only; verify that the docs build and that a test default changed in code appears in the regenerated reference (spec: workspace-architecture)
 
 ## 4. M1 Core types, errors and process contracts
 
