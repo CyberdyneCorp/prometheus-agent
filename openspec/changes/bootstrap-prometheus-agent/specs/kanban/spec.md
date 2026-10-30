@@ -207,7 +207,7 @@ Workers SHALL heartbeat every 60 s (renewing the claim lease), and the dispatche
 - **THEN** the task SHALL be reclaimed and that PID SHALL NOT be signalled
 
 ### Requirement: Kanban toolset and grants
-The `kanban` toolset SHALL provide `kanban_show`, `kanban_list`, `kanban_create`, `kanban_comment`, `kanban_attach`, `kanban_link`, `kanban_complete`, `kanban_block`, `kanban_schedule`, `kanban_heartbeat`, `kanban_request_review`, `kanban_request_changes` and `kanban_unblock`; a worker session SHALL receive it automatically with a capability grant scoped to its own board (without `kanban_list` and `kanban_unblock`), other sessions SHALL receive it only when `kanban` is explicitly listed in their toolsets, and delegated children SHALL receive no kanban grant; run-lifecycle tools SHALL refuse outside a worker session with `not a kanban worker session`.
+The `kanban` toolset SHALL provide `kanban_show`, `kanban_list`, `kanban_create`, `kanban_comment`, `kanban_attach`, `kanban_link`, `kanban_complete`, `kanban_block`, `kanban_schedule`, `kanban_heartbeat`, `kanban_request_review`, `kanban_request_changes`, `kanban_unblock`, `kanban_attach_url` and `kanban_attachments`; a worker session SHALL receive it automatically with a capability grant scoped to its own board (without `kanban_list` and `kanban_unblock`), other sessions SHALL receive it only when `kanban` is explicitly listed in their toolsets, and delegated children SHALL receive no kanban grant; run-lifecycle tools SHALL refuse outside a worker session with `not a kanban worker session`.
 **Milestone:** M3
 
 #### Scenario: Worker cannot touch another board
@@ -221,7 +221,7 @@ The `kanban` toolset SHALL provide `kanban_show`, `kanban_list`, `kanban_create`
 - **THEN** it SHALL contain no `kanban_*` tool
 
 ### Requirement: Workspaces
-A `scratch` workspace SHALL be created under the board's `workspaces/<task_id>/` and deleted after completion once declared artifacts were copied into the task's attachments (a missing declared artifact SHALL refuse completion); `worktree` SHALL be a git worktree on a deterministic branch `kanban/<task_id>` (or the given branch) and be preserved; `dir:<path>` SHALL be preserved; and every worker's local sandbox SHALL grant filesystem write access to its workspace only.
+A `scratch` workspace SHALL be created under the board's `workspaces/<task_id>/` and deleted after completion once declared artifacts were copied into the task's attachments (a missing declared artifact SHALL refuse completion); `worktree` SHALL be a git worktree on a deterministic branch `kanban/<task_id>` (or the given branch; on a board bound to a project the branch `<project-slug>/<task-id>[-<title-slug>]` of `projects` › Kanban board binding instead) and be preserved; `dir:<path>` SHALL be preserved; and every worker's local sandbox SHALL grant filesystem write access to its workspace only.
 **Milestone:** M3
 
 #### Scenario: Missing artifact keeps task in flight
@@ -280,7 +280,7 @@ Every task mutation SHALL append an immutable event (`id`, `task_id`, `run_id`, 
 - **THEN** the refusal event with its reason SHALL be listed
 
 ### Requirement: CLI surface
-`prometheus kanban` SHALL provide `create`, `list` (alias `ls`), `show`, `edit`, `assign`, `link`, `unlink`, `comment`, `attach`, `attachments`, `block`, `unblock`, `schedule`, `complete`, `approve`, `request-changes`, `archive`, `log`, `runs`, `tail`, `stats`, `diag`, `dispatch`, `work`, `notify subscribe|list|unsubscribe`, `gc` and `boards list|create|rename|archive|switch|export|import`; lifecycle verbs SHALL accept multiple task ids and report per-id results, exiting 1 if any id failed.
+`prometheus kanban` SHALL provide `create`, `list` (alias `ls`), `show`, `edit`, `assign`, `link`, `unlink`, `comment`, `attach`, `attachments`, `block`, `unblock`, `schedule`, `complete`, `approve`, `request-changes`, `archive`, `log`, `runs`, `tail`, `stats`, `diag`, `dispatch`, `work`, `notify subscribe|list|unsubscribe`, `gc`, the verbs listed in Additional CLI verbs and `boards list|create|rename|archive|switch|export|import`; lifecycle verbs SHALL accept multiple task ids and report per-id results, exiting 1 if any id failed.
 **Milestone:** M3
 
 #### Scenario: Bulk archive with one failure
@@ -296,3 +296,131 @@ Every task mutation SHALL append an immutable event (`id`, `task_id`, `run_id`, 
 - **GIVEN** a board exported to a file
 - **WHEN** it is imported as `copy`
 - **THEN** `copy` SHALL contain the same tasks, links and attachments
+
+### Requirement: URL attachments and attachment listing tools
+The `kanban` toolset SHALL also provide `kanban_attach_url` (`task_id` defaulting to the worker's own task, required `url`, optional `filename` defaulting to the URL path's last segment, optional `content_type` defaulting to the response's `Content-Type`) and `kanban_attachments` (`task_id` defaulting to the worker's own task) returning rows `{id, filename, content_type, size, uploader, path}` where `path` is a read-only local path the session's file tools may read; `kanban_attach_url` SHALL accept only `http` and `https` URLs, fetch server-side through the egress proxy (refusing private, loopback and link-local destinations as `security-boundaries` defines), stream with a cap of `kanban.attachment_max_bytes` (aborting and storing nothing above it), and in a worker session both tools SHALL be scoped by the worker's board grant, with attaching allowed only to the worker's own task.
+**Milestone:** M3
+
+#### Scenario: Worker attaches a report by link
+- **GIVEN** a worker for task `t_1a2b3c4d`
+- **WHEN** it calls `kanban_attach_url` with `url = "https://example.com/r/report.pdf"`
+- **THEN** `kanban_attachments` SHALL list `report.pdf` with its size and uploader set to the worker's profile
+
+#### Scenario: Internal address refused
+- **WHEN** `kanban_attach_url` is called with `url = "http://169.254.169.254/latest/meta-data"`
+- **THEN** the call SHALL be refused by the egress policy and nothing SHALL be stored
+
+### Requirement: PR completion contracts
+`create` (CLI `--completion-contract`, tool field `completion_contract`) SHALL accept `OWNER/REPO`, an exact pull-request URL `https://github.com/OWNER/REPO/pull/<n>`, or `local-only` (the default for tasks that declare none), persisted and shown by `show --json` and `kanban_show`; for a repository contract, every completion path (worker tools, CLI, review approval, dashboard) SHALL require `metadata.published_pr` naming a PR in that repository, SHALL bind the first matching PR URL permanently (a later different URL refused with `completion contract already bound to <url>`), and SHALL complete only when every required status check and ruleset context on the PR's current head commit has passed, reading branch protection, rulesets, check runs and legacy statuses with the assignee profile's own GitHub credential from its secrets store (never an ambient login; a missing credential refused with `not logged in for profile <p>`); missing, pending, failed, cancelled, timed-out, stale, skipped or neutral required evidence, a repository with no required checks, or any API failure SHALL refuse completion, keep the task and workspace, and append a `pr_acceptance` event recording PR URL, head SHA, required contexts, check ids, classification (`checks`, `auth`, `infra`, `policy`) and the next step, with no remote writes.
+**Milestone:** M3
+
+#### Scenario: Red required check blocks completion
+- **GIVEN** a task with `completion_contract = "acme/api"` and a PR whose required check `ci/test` failed
+- **WHEN** the worker calls `kanban_complete` with `metadata.published_pr` set to that PR
+- **THEN** the completion SHALL be refused, the task SHALL stay `running`, and a `pr_acceptance` event SHALL name `ci/test` with classification `checks`
+
+#### Scenario: Retry cannot substitute a sibling PR
+- **GIVEN** a contract already bound to PR 41
+- **WHEN** completion is retried with `metadata.published_pr` naming PR 42 whose checks are green
+- **THEN** the completion SHALL be refused with `completion contract already bound to`
+
+### Requirement: Goal-mode cards
+A task created with `goal_mode = true` (CLI `--goal`, optional `--goal-max-turns N`, default 20) SHALL run its worker in the goal loop engine defined by `session-automation`, using the task title and body as acceptance criteria: after each worker turn the auxiliary judge SHALL decide `done`, `continue` or `unachievable`; `continue` SHALL run another turn in the same session while turns remain; exhausting the turn budget SHALL block the task with kind `needs_input` and reason `goal budget exhausted`; `unachievable` SHALL block it immediately with the judge's reason; `complete` and `request-review` on a goal-mode task SHALL be refused only on a real `continue` or `unachievable` verdict, while a judge call that fails SHALL allow the handoff with a WARN `goal judge unreachable; allowing lifecycle handoff`; each judged turn SHALL append a log line `kanban goal loop: turn <n>/<m> verdict=<v>`.
+**Milestone:** M3
+
+#### Scenario: Judge keeps the worker going
+- **GIVEN** a goal-mode task `translate every page` whose worker stops after translating half
+- **WHEN** the judge returns `continue`
+- **THEN** the worker SHALL take another turn in the same session and the log SHALL contain `turn 2/20 verdict=continue`
+
+#### Scenario: Impossible card is never done
+- **WHEN** the judge returns `unachievable` with reason `source repo does not exist`
+- **THEN** the task SHALL be `blocked` with that reason and `kanban complete` on it SHALL be refused
+
+### Requirement: Per-task model override and pinned skills
+A task SHALL accept optional `model` and `provider` (CLI `--model`/`--provider`; `--provider` requires `--model`) and a `skills` list (CLI repeatable `--skill`, tool field `skills`), validated at create against the provider registry and the assignee profile's installed skills (`unknown skill '<s>' for profile '<p>'`); the dispatcher SHALL start the worker session with that model instead of the assignee's default and with those skills preloaded on top of the kanban worker guidance; `prometheus kanban set-model <id> <model>|none [--provider <p>]` SHALL change or clear the override, taking effect at the next dispatch; a pinned skill missing at spawn time SHALL block the task with kind `capability`.
+**Milestone:** M3
+
+#### Scenario: Hard card on a stronger model
+- **GIVEN** assignee `coder` configured with a small model and a task created with `--model big-model --provider anthropic`
+- **WHEN** the dispatcher spawns the worker
+- **THEN** the worker session SHALL use `big-model` via `anthropic`
+
+### Requirement: Respawn guard and dispatch dry run
+The dispatcher SHALL NOT spawn a worker for a `ready` task when its previous run ended on a quota, authentication or HTTP 429 error (`blocker_auth`), when it completed a run successfully within the last `kanban.respawn_success_window_secs` (default 3600, `recent_success`), or when a comment within the last `kanban.respawn_pr_window_secs` (default 86400) links a GitHub pull request (`active_pr`), recording a `respawn_guarded` event with the reason and never counting it as a failure; `recent_success` SHALL be lifted by a deliberate re-queue (drag `done → ready`, `unblock`, re-promotion), `active_pr` SHALL be lifted for a different profile named by a later reassign, request-changes or review reopen, and neither guard SHALL apply to the review lane; `prometheus kanban dispatch --dry-run [--json]` SHALL change nothing and print `Guarded (<reason>): <id>` per held task plus rate-limited, capped and locked tasks.
+**Milestone:** M3
+
+#### Scenario: Fresh PR is not re-worked
+- **GIVEN** a ready task whose worker commented a PR URL 2 hours ago
+- **WHEN** the dispatcher ticks
+- **THEN** no worker SHALL be spawned and `prometheus kanban dispatch --dry-run` SHALL print `Guarded (active_pr): <id>`
+
+### Requirement: Swarm topology helper
+`prometheus kanban swarm "<goal>" --workers <p1,p2,...> --verifier <p> --synthesizer <p> [--board B]` SHALL create in one transaction a root card in `done` holding the goal and a structured JSON blackboard as comments, one worker card per listed profile linked under the root, a verifier card gated on all worker cards and a synthesizer card gated on the verifier, so readers see either no swarm or the complete graph; unknown profiles SHALL refuse the whole swarm, and workers SHALL be able to read and append blackboard entries with `kanban_show` and `kanban_comment` on the root.
+**Milestone:** M3
+
+#### Scenario: Atomic swarm creation
+- **WHEN** `prometheus kanban swarm "failover plan" --workers researcher,architect,sre --verifier reviewer --synthesizer writer` runs
+- **THEN** exactly six cards SHALL be created with the verifier `todo` until all three worker cards are `done`
+
+#### Scenario: Unknown worker profile aborts everything
+- **WHEN** the same command names a nonexistent profile `ghost`
+- **THEN** it SHALL exit 66 with `unknown profile 'ghost'` and no card SHALL be created
+
+### Requirement: /kanban slash command
+Every `prometheus kanban` verb SHALL be available as `/kanban <verb> ...` on every chat surface (CLI, TUI, desktop, gateway) through the same parser, flags and output, registered with `busy_policy = immediate` so it runs mid-turn without interrupting or queueing behind the agent; when `/kanban create` runs from a gateway chat without `--json`, the originating chat (adapter, chat, thread, chat type, subscriber profile) SHALL be subscribed to the new task in `notify+wake` mode and the reply SHALL say so; output above 3800 characters on messaging adapters SHALL be truncated with `… (truncated; run prometheus kanban <verb> in a terminal for full output)`.
+**Milestone:** M3
+
+#### Scenario: Unblock from a phone mid-turn
+- **GIVEN** a Telegram chat whose agent is mid-turn
+- **WHEN** the user sends `/kanban unblock t_abcd1234`
+- **THEN** the task SHALL be unblocked immediately and the running turn SHALL continue undisturbed
+
+#### Scenario: Created card reports back
+- **WHEN** the user sends `/kanban create "transcribe podcast" --assignee transcriber` in Slack
+- **THEN** the chat SHALL be subscribed and SHALL receive a message when the task completes or blocks
+
+### Requirement: Subscription delivery modes and inheritance
+A notification subscription SHALL carry `delivery_mode` `notify` (default: passive message only), `notify+wake` (passive message and a turn for the subscriber profile's agent in that chat's session) or `wake` (turn only), and `chat_type` (`dm`, `group`, `channel`, `thread`) so the wake resolves the same session key the chat uses; wake turns SHALL fire only for `completed`, `blocked`, `gave_up`, `crashed`, `timed_out`, `review_requested` and `block_loop_detected` events (status, archived and unblocked events never wake), SHALL carry the event's summary, SHALL run under the subscriber profile's ProfileScope and adapter, and a wake that cannot be admitted SHALL be retried on later notifier ticks without re-sending an already checkpointed passive message; a task created by a worker (tool or CLI) SHALL copy its owning task's subscriptions with their modes unchanged; `prometheus kanban notify subscribe` SHALL accept `--delivery-mode` and `--chat-type`.
+**Milestone:** M3
+
+#### Scenario: Review feedback wakes the originating chat
+- **GIVEN** a `notify+wake` subscription from a Discord thread on task `t_1`
+- **WHEN** a reviewer requests changes and the worker later raises `review_requested`
+- **THEN** the thread SHALL receive the passive message and the subscriber profile's agent SHALL take one turn in that thread's session with the summary in context
+
+### Requirement: Orchestrator guidance, specify and decompose
+A worker session SHALL receive in its frozen system prompt the kanban worker guidance and, when the task's assignee profile has `kanban.role = "orchestrator"`, orchestrator guidance instructing it to discover existing profiles first, decompose the goal into linked tasks assigned to existing profiles with every shared decision written into each child body, and not do the implementation itself; `prometheus kanban specify <id>|--all [--tenant T]` SHALL use the auxiliary model (relay-affinity key `kanban:<task-id>`) to expand a `triage` task's one-line idea into a full body with acceptance criteria and move it to `todo`, and `prometheus kanban decompose <id>` SHALL produce a validated child-task graph (assignees must exist, no cycles) created in one transaction under the task, promoting children with no open parents to `ready` when `kanban.auto_promote_children = true` (default) and leaving them `todo` otherwise; `kanban.auto_decompose` (default `false`, the dashboard's Orchestration Auto/Manual control) SHALL, when true, make the dispatcher run `specify` on a `triage` task and `decompose` on a task assigned to an orchestrator profile before dispatching it, and when false leave both to explicit commands.
+**Milestone:** M3
+
+#### Scenario: Specify promotes a triage idea
+- **GIVEN** a `triage` task titled `add rate limiting`
+- **WHEN** `prometheus kanban specify <id>` runs
+- **THEN** the task body SHALL contain acceptance criteria and its status SHALL be `todo`
+
+#### Scenario: Decompose rejects unknown assignees
+- **GIVEN** the auxiliary model proposes a child assigned to profile `nobody`
+- **WHEN** `prometheus kanban decompose <id>` validates the graph
+- **THEN** no child SHALL be created and the command SHALL exit 65 naming `nobody`
+
+### Requirement: Additional CLI verbs
+`prometheus kanban` SHALL additionally provide `init` (create the default board and print the dispatcher status), `claim <id> [--ttl <secs>]` (manual claim for an external worker, returning the run id and ticket), `context <id>` (print exactly the context a worker would receive), `request-review <id> [--summary S] [--metadata JSON] [--reviewer P]` (accepted from `running` or `ready`), `reopen-review <id>... [--reason R]` (move `review` back to `ready`/`todo`), `set-model`, `swarm`, `specify`, `decompose`, `promote <id>...`, `reassign <id>... <profile>`, `heartbeat <id> [--note N]`, `watch [--assignee P] [--kinds K]` and `assignees [--json]`, each routed through the typed workflow table and recorded in the event log.
+**Milestone:** M3
+
+#### Scenario: Inspect worker context
+- **WHEN** `prometheus kanban context t_abcd1234` runs
+- **THEN** it SHALL print the task, parent results, comments and attachments exactly as the worker's first message would contain them, without claiming the task
+
+### Requirement: Worker lanes
+The dispatcher SHALL resolve a task's assignee to a worker lane: a Prometheus profile (spawned as defined by Worker spawn by run ticket) or an external lane declared by an enabled plugin in `plugin.toml` under `[[kanban_lanes]]` with `name`, a `command` run under the local sandbox in the task's workspace with the run ticket on stdin, and the capability grants the plugin was approved for; an external lane's process SHALL report only through the `prometheus kanban` CLI or the kanban RPC methods authenticated by its run ticket, and every claim SHALL end in exactly one terminator (`complete`, `request-review`, `block`) or be reclaimed as a failure by the liveness rules; an assignee matching neither SHALL leave the task `ready` with a `skipped_nonspawnable` event, and a lane name colliding with a profile name SHALL fail plugin load.
+**Milestone:** M3
+
+#### Scenario: External CLI lane completes a task
+- **GIVEN** an enabled plugin declaring lane `codex-cli` and a ready task assigned to `codex-cli`
+- **WHEN** the dispatcher ticks
+- **THEN** the lane command SHALL start in the task workspace with a run ticket and its `prometheus kanban complete` call SHALL move the task to `done`
+
+#### Scenario: Unknown assignee is surfaced
+- **GIVEN** a ready task assigned to `nonexistent-lane`
+- **WHEN** the dispatcher ticks
+- **THEN** the task SHALL stay `ready` with a `skipped_nonspawnable` event

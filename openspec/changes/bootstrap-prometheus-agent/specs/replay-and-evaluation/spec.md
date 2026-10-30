@@ -197,3 +197,54 @@ The binary SHALL bundle an eval suite named `smoke` of at least 12 offline tasks
 - **GIVEN** a session in which the agent mis-summed a ledger
 - **WHEN** the user runs `prometheus eval capture ses_01JB7Z3Q5X8V2K4M6N8P0R2T42 --suite ./evals/accounting --expect "Total: 85.15"`
 - **THEN** a new task directory SHALL be created with the session's prompt and an `exact` grader expecting `Total: 85.15`
+
+### Requirement: Batch prompt datasets
+`prometheus eval batch <dataset.jsonl> [--run-id ID] [--parallel N] [--max-turns N] [--max-samples N] [--provider P] [--model M] [--reasoning-effort E] [--toolsets a,b | --toolset-distribution NAME|FILE] [--ephemeral-system-prompt TEXT|@FILE] [--prefill FILE] [--budget-usd X]` SHALL run every line of a JSON-lines dataset (`prompt` required; optional `id`, `image`, `toolsets`, `files`) as an ungraded task with the same isolated per-task sessions, run layout, caching, budget behaviour and resumability by `--run-id` as `prometheus eval run`, defaulting to `--parallel 4` and `--max-turns 10`; `--max-samples` SHALL take the first N lines; a line's `image` SHALL select the container image of that task's terminal backend and be pulled or verified before any model call, failing only that task with `image not available: <image>`; `--prefill` SHALL insert its JSON list of messages as few-shot history before the prompt; and the ephemeral system prompt SHALL be applied to every model call but SHALL NOT be stored in trajectories, exports or `result.json`. An invalid line SHALL fail validation with exit 65 naming the line number before any task runs.
+**Milestone:** M3
+
+#### Scenario: Resume after interruption
+- **GIVEN** a batch of 1,000 prompts interrupted after 600 completed tasks
+- **WHEN** the same command is re-run with the same `--run-id`
+- **THEN** only the remaining 400 tasks SHALL execute
+
+#### Scenario: Ephemeral prompt not recorded
+- **GIVEN** `--ephemeral-system-prompt "Answer tersely."`
+- **WHEN** the batch completes and is exported with `prometheus trajectory export --format sharegpt --eval-run <id>`
+- **THEN** no output file SHALL contain `Answer tersely.`
+
+### Requirement: Batch statistics and quality filtering
+Every batch run SHALL write `statistics.json` with task counts (`completed`, `failed`, `skipped`, `filtered`), total and per-model tokens and cost with `unpriced_calls`, per-tool `count`, `success` and `failure` over every tool in the enabled toolsets (zero-filled so the schema is the same for every task), the fraction of assistant turns carrying reasoning, and the distribution of turns per task; tasks with no assistant reply, a final turn that hit `--max-turns`, or only failed tool calls SHALL be marked `filtered` with the reason and excluded from exports unless `--include-filtered` is given.
+**Milestone:** M3
+
+#### Scenario: Zero-filled tool stats
+- **GIVEN** a batch with toolsets `terminal` and `web` where no task used `web_search`
+- **WHEN** `statistics.json` is written
+- **THEN** it SHALL contain `web_search` with `count`, `success` and `failure` equal to 0
+
+### Requirement: Toolset distributions
+Batch and eval runs SHALL accept `--toolset-distribution <name|file>`, where a distribution maps toolset names (or `+`-joined compound keys such as `browser+web`) to inclusion probabilities in 0–1, and SHALL for each task roll every key independently with a seed derived from the run seed (`--seed`, default 0) and the task id, enabling all members of a compound key on one roll; when a roll yields no toolset the task SHALL get the key with the highest probability, an unknown toolset name SHALL fail validation with exit 65, and the sampled toolsets SHALL be recorded in the task's `result.json` and `run.json`. The binary SHALL ship the named distributions `default`, `image_gen`, `research`, `science`, `development`, `safe`, `balanced`, `minimal`, `terminal_only`, `terminal_web`, `creative`, `reasoning`, `browser_use`, `browser_only`, `browser_tasks`, `terminal_tasks` and `mixed_tasks`, listed with their probabilities by `prometheus eval distributions`, and a TOML file `[toolsets] web = 0.9` SHALL define a custom one.
+**Milestone:** M3
+
+#### Scenario: Reproducible sampling
+- **GIVEN** the distribution `research` and `--seed 7`
+- **WHEN** the same batch is run twice
+- **THEN** every task SHALL receive the same toolset set in both runs
+
+#### Scenario: Compound key rolls once
+- **GIVEN** a distribution `{"browser+web" = 0.97}`
+- **WHEN** a task is sampled
+- **THEN** `browser` and `web` SHALL be either both enabled or both disabled
+
+### Requirement: Trajectory compressor
+`prometheus trajectory compress <input.jsonl> [-o FILE] [--target-max-tokens N] [--summary-target-tokens N] [--protect-last-turns N] [--sample-percent P] [--model M] [--parallel N]` SHALL rewrite ShareGPT-format trajectories that exceed `--target-max-tokens` (default 15250, counted with the named model's tokenizer or a 4-characters-per-token estimate when none is available) by keeping the first system, human, gpt and tool turns and the last `--protect-last-turns` turns (default 4) and replacing the smallest contiguous middle span that brings the trajectory under the target with one `human` turn holding a summary of at most `--summary-target-tokens` (default 750) produced by an auxiliary model call recorded with `purpose = trajectory.compress`; trajectories already under the target SHALL be copied unchanged, `--sample-percent` SHALL process a deterministic sample, a trajectory still over the target after compression SHALL be written to `<output>.over_limit.jsonl` instead, and a `compress-stats.json` SHALL report counts, token totals before and after, and cost.
+**Milestone:** M3
+
+#### Scenario: Head and tail preserved
+- **GIVEN** a 40-turn trajectory of 30,000 tokens
+- **WHEN** it is compressed with defaults
+- **THEN** the output SHALL keep the first system, human, gpt and tool turns and the last 4 turns verbatim, contain one summary turn in between, and be at most 15,250 tokens
+
+#### Scenario: Short trajectory untouched
+- **GIVEN** a trajectory of 8,000 tokens
+- **WHEN** it is compressed
+- **THEN** it SHALL be written unchanged and no model call SHALL be made for it

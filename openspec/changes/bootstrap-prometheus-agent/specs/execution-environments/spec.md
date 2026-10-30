@@ -55,7 +55,7 @@ The system SHALL check the selected backend's requirements (container runtime re
 - **THEN** it SHALL print `ssh backend requires terminal.ssh.host and terminal.ssh.user` and exit 1
 
 ### Requirement: Terminal configuration defaults
-The system SHALL resolve terminal settings only from the session's ProfileScope config with these defaults: `terminal.timeout_secs` 180, `terminal.max_foreground_secs` 600, `terminal.idle_lifetime_secs` 300, `terminal.persistent_shell` true, `terminal.container.cpus` 1, `terminal.container.memory_mb` 5120, `terminal.container.disk_mb` 51200, `terminal.container.persistent` true, `terminal.container.shm_size` `"1g"`, `terminal.container.pids_limit` 2048, `terminal.ssh.port` 22; settings for an unselected backend SHALL be validated for type only and SHALL NOT prevent the selected backend from working; no terminal setting SHALL be read from environment variables.
+The system SHALL resolve terminal settings only from the session's ProfileScope config with these defaults: `terminal.timeout_secs` 180, `terminal.max_foreground_secs` 600, `terminal.idle_lifetime_secs` 300, `terminal.persistent_shell` true, `terminal.container.cpus` 1, `terminal.container.memory_bytes` 5368709120, `terminal.container.disk_bytes` 53687091200, `terminal.container.persistent` true, `terminal.container.shm_size` `"1g"`, `terminal.container.pids_limit` 2048, `terminal.ssh.port` 22; settings for an unselected backend SHALL be validated for type only and SHALL NOT prevent the selected backend from working; no terminal setting SHALL be read from environment variables.
 **Milestone:** M1
 
 #### Scenario: Two profiles, two backends
@@ -255,7 +255,7 @@ The `handoff` action SHALL be available only to subagent sessions, SHALL transfe
 - **THEN** the write SHALL be refused and `a.rs` SHALL keep the external edit
 
 ### Requirement: File snapshots and undo (upgrade)
-Before any `write_file`, `patch`, delete or rename performed by a file tool, the system SHALL store the file's prior content (or its absence) in the content-addressed store with a record keyed by session, turn and call id; `/undo [n]` (default 1 turn), `prometheus files undo --session <id> [--turn <n>] [--dry-run]` and the RPC method `files.undo` SHALL restore every file changed in the last `n` turns, SHALL refuse a file whose current content differs from what the session wrote (`conflict: <path> changed since turn <n>; use --force to overwrite`) unless `--force` is given, and SHALL append (never rewrite) a note to the conversation recording the undo; snapshots SHALL be pruned after `files.snapshot.retention_secs` (default 604800) or when the profile's snapshot store exceeds `files.snapshot.max_mb` (default 1024), oldest first.
+Before any `write_file`, `patch`, delete or rename performed by a file tool, the system SHALL store the file's prior content (or its absence) in the content-addressed store with a record keyed by session, turn and call id; `/undo [n]` (default 1 turn), `prometheus files undo --session <id> [--turn <n>] [--dry-run]` and the RPC method `files.undo` SHALL restore every file changed in the last `n` turns, SHALL refuse a file whose current content differs from what the session wrote (`conflict: <path> changed since turn <n>; use --force to overwrite`) unless `--force` is given, and SHALL append (never rewrite) a note to the conversation recording the undo; snapshots SHALL be pruned after `files.snapshot.retention_secs` (default 604800) or when the profile's snapshot store exceeds `files.snapshot.max_bytes` (default 1073741824), oldest first.
 **Milestone:** M2
 
 #### Scenario: Undo last turn
@@ -269,7 +269,7 @@ Before any `write_file`, `patch`, delete or rename performed by a file tool, the
 - **THEN** `src/lib.rs` SHALL be left unchanged and the conflict SHALL be reported
 
 ### Requirement: Terminal workspace checkpoints (upgrade)
-When `files.snapshot.terminal = "workspace"` (default `off`), the system SHALL record a manifest of the session workspace (path, size, mtime, content hash, at most `files.snapshot.max_workspace_mb`, default 512) before each `exec`-class terminal command and store changed files' prior contents afterwards, so that `/undo` also reverts file changes made by terminal commands inside the workspace; a workspace over the limit SHALL skip checkpointing with a one-time notice rather than fail the command.
+When `files.snapshot.terminal = "workspace"` (default `off`), the system SHALL record a manifest of the session workspace (path, size, mtime, content hash, at most `files.snapshot.max_workspace_bytes`, default 536870912) before each `exec`-class terminal command and store changed files' prior contents afterwards, so that `/undo` also reverts file changes made by terminal commands inside the workspace; a workspace over the limit SHALL skip checkpointing with a one-time notice rather than fail the command.
 **Milestone:** M3
 
 #### Scenario: Undo a sed edit
@@ -283,7 +283,7 @@ The system SHALL reuse a live session for the same session key and otherwise cre
 
 #### Scenario: Cloud quota exhausted
 - **GIVEN** `browser.provider = "browserbase"` whose session creation fails
-- **WHEN** `browser_navigate` needs a session
+- **WHEN** `browser_exec` needs a session
 - **THEN** the system SHALL use a local session flagged `fallback_from_cloud: true`
 
 ### Requirement: Local browser isolation
@@ -312,3 +312,350 @@ The system SHALL supervise each browser session over CDP, replacing a supervisor
 - **GIVEN** a cached local session whose browser process died
 - **WHEN** the next browser call arrives
 - **THEN** the dead record SHALL be removed and a fresh browser launched
+
+### Requirement: read_file document extraction
+`read_file` SHALL convert documents to paginated Markdown instead of refusing them as binary: `.ipynb`, `.docx`, `.xlsx` and SQLite files (`.db`, `.sqlite`, `.sqlite3`) with a built-in converter, and `.pdf`, legacy Office (`.doc`, `.xls`, `.ppt`, `.pptx`), OpenDocument (`.odt`, `.ods`, `.odp`), `.rtf` and `.epub` with a managed `doc-converter` runtime installed under the `runtimes.allow_lazy_install` policy (when it is unavailable those formats SHALL keep the binary-file refusal plus `install the doc-converter runtime to read <ext> files`); SQLite files SHALL be opened read-only and immutable and rendered as each table's `CREATE` statement, row count and first 5 rows plus the lists of indexes, views and triggers; notebook cell outputs longer than 20,000 characters SHALL be truncated with a marker naming a command that extracts the full output; a PDF in which more than 20% of pages, or at least 10 pages, yield no text SHALL be prefixed with `[EXTRACTION COVERAGE WARNING: <n> of <total> pages in this PDF yielded no text ...]` listing each empty page range labelled with the last text extracted before it; files inside a non-host backend SHALL be downloaded through the backend and converted on the host.
+**Milestone:** M2
+
+#### Scenario: SQLite schema overview
+- **GIVEN** a live `app.db` with tables `users` and `orders`
+- **WHEN** the model calls `read_file(path="app.db")`
+- **THEN** the result SHALL contain both `CREATE TABLE` statements, row counts and at most 5 rows per table, and `app.db` SHALL NOT be modified
+
+#### Scenario: Scanned PDF
+- **GIVEN** a 311-page PDF where pages 42-77 have no text layer
+- **WHEN** the model reads it
+- **THEN** the result SHALL begin with the coverage warning listing `pages 42-77 (36 pages)` and the text preceding page 42
+
+### Requirement: read_file encoding, conflict markers and path suggestions
+`read_file` SHALL decode a file starting with a UTF-16 byte-order mark, or detected as UTF-16 by a NUL-byte-pattern heuristic, as text instead of refusing it as binary; SHALL add `conflict_blocks: <n>` and the hint `resolve the merge conflicts before editing around them` when the returned range contains `n` balanced `<<<<<<< `/`>>>>>>> ` marker pairs at line start; and on a missing path SHALL return `File not found: <path>` followed by up to 5 `Did you mean` suggestions of existing paths in the same or parent directory ranked by name similarity.
+**Milestone:** M1
+
+#### Scenario: UTF-16 log file
+- **GIVEN** a Windows-generated `install.log` encoded as UTF-16LE with a BOM
+- **WHEN** the model reads it
+- **THEN** the result SHALL contain the decoded text, not the binary-file refusal
+
+#### Scenario: Typo in path
+- **GIVEN** `src/config.rs` exists
+- **WHEN** the model reads `src/conifg.rs`
+- **THEN** the result SHALL suggest `src/config.rs`
+
+### Requirement: Protected secret files and device-namespace paths
+File tools SHALL refuse to read (but SHALL allow writing and creating) project-local `.env`, `.env.*` (except `.env.example`, `.env.sample` and `.env.template`) and `.envrc` files with `Refusing to read '<path>': it typically holds secrets; ask the user to share the specific value you need`; SHALL require approval for writes to `~/.ssh/config`; and SHALL reject, for reads and writes on every platform, paths using the Windows NT or device namespace (`\??\`, `\\.\`, `\\?\UNC\`, `\\?\GLOBALROOT`) or a UNC host (`\\host\share`) with `Refusing device-namespace or UNC path '<path>'`, so a crafted path cannot trigger outbound authentication.
+**Milestone:** M1
+
+#### Scenario: Read project .env
+- **WHEN** the model calls `read_file(path=".env.local")`
+- **THEN** the call SHALL be refused and no content SHALL be returned
+
+#### Scenario: UNC path
+- **WHEN** the model calls `read_file(path="\\\\attacker.example\\share\\x")`
+- **THEN** the call SHALL be refused without any network access
+
+### Requirement: patch tool contract
+`patch` SHALL accept `mode = "replace"` (default) with `path`, `old_string`, `new_string` and `replace_all` (default false), and `mode = "v4a"` with a `patch` string in the `*** Begin Patch` / `*** End Patch` format supporting `Add File`, `Update File` (with `Move to`) and `Delete File`; in replace mode it SHALL try, in order, exact, line-trimmed, trailing-whitespace-normalized, indentation-flexible, unicode-normalized (quotes, dashes, NBSP), escape-normalized, whitespace-collapsed, block-anchor (first and last line) and context-similarity matching, stopping at the first strategy with any match; more than one match without `replace_all` SHALL fail with `old_string matches <n> locations; add context or set replace_all=true`, no match SHALL fail with the closest candidate region shown; a V4A patch SHALL be applied atomically (all files or none); the result SHALL contain a unified diff of the change, `match_strategy` when not exact, and the post-write diagnostics; handlers SHALL accept both argument shapes regardless of which schema variant was advertised.
+**Milestone:** M1
+
+#### Scenario: Ambiguous match
+- **GIVEN** a file containing `let x = 1;` on two lines
+- **WHEN** the model patches `old_string = "let x = 1;"` without `replace_all`
+- **THEN** the patch SHALL fail naming 2 locations and the file SHALL be unchanged
+
+#### Scenario: V4A with one failing hunk
+- **GIVEN** a V4A patch updating `a.rs` and `b.rs` where the `b.rs` hunk does not apply
+- **WHEN** it is applied
+- **THEN** neither file SHALL be modified and the error SHALL name `b.rs`
+
+### Requirement: search_files contract
+`search_files` SHALL accept `pattern` (regex), `target` (`content` default, or `files` for glob matching names), `path` (default session cwd), `file_glob`, `limit` (default 50, maximum 500), `offset` (default 0), `order` (`discovery` default, or `modified` newest first), `output_mode` (`content` default, `files_only`, `count`) and `context` (lines, default 0, maximum 10); it SHALL respect `.gitignore` and skip binary files and VCS directories, SHALL return content matches as `<path>:<line>:<text>` with lines truncated to 500 characters, SHALL report `total_matches` and `truncated` with the next `offset` when more remain, SHALL use the built-in regex engine on host-filesystem backends and the backend's `rg` (falling back to `grep -rn`) on other backends, and SHALL reject an invalid regex with `invalid pattern: <reason>` before searching.
+**Milestone:** M1
+
+#### Scenario: Count mode
+- **WHEN** the model calls `search_files(pattern="TODO", output_mode="count")`
+- **THEN** the result SHALL list per-file match counts and no line content
+
+### Requirement: Post-write diagnostics
+After every successful `write_file` and `patch` the system SHALL run an in-process syntax check for the file's language (at least Rust, Python, JavaScript/TypeScript, JSON, TOML, YAML) and report it as `lint: {status: ok|error|skipped, output}`, and when the syntax is clean SHALL request semantic diagnostics from `lsp-diagnostics`, reporting only diagnostics introduced by this edit as `lsp_diagnostics`; neither check SHALL ever fail, delay beyond its budget or roll back the write, and any checker failure SHALL degrade to `status = "skipped"`.
+**Milestone:** M1
+
+#### Scenario: Syntax error introduced
+- **WHEN** the model writes a JSON file with a trailing comma
+- **THEN** the file SHALL be written and the result SHALL carry `lint.status = "error"` with the parser message and line
+
+#### Scenario: Checker crashes
+- **GIVEN** the YAML checker panics on a file
+- **WHEN** the model writes that file
+- **THEN** the write SHALL succeed with `lint.status = "skipped"`
+
+### Requirement: Quiet-wait auto-notify
+When `terminal.process_wait_auto_notify = true` (default) and the model issues two consecutive `process` `wait` or `poll` calls on a running process that produced no new output in between, the system SHALL enable completion notification for that process and append `No new output; you will be notified when it exits. Do other work or end your turn instead of polling.`; new output, process exit or any other action on that process SHALL reset the count; the switch SHALL NOT apply in contexts that cannot receive a later completion (single-query `chat -z`, cron, kanban workers, stateless API requests, subagents), when background notifications are disabled for the profile, or for a process whose completion is delivered to another session.
+**Milestone:** M2
+
+#### Scenario: Second unchanged poll
+- **GIVEN** an interactive session and a silent running build
+- **WHEN** the model polls it twice with no new output
+- **THEN** the second result SHALL announce completion notification and the exit SHALL later arrive as its own message
+
+#### Scenario: Cron job
+- **GIVEN** a cron run
+- **WHEN** the model polls a silent process twice
+- **THEN** plain polling SHALL continue with no notification switch
+
+### Requirement: Retained process receipts
+When a tracked process leaves the live registry, the system SHALL keep a receipt (command, exit code, start and end time, last 200,000 characters of redacted output) in `state.db` for the newest 64 receipts per profile for at most 7 days, readable through `process` `poll` and `log` with the original `process_id` only from the owning session's lineage (the session, its resumptions and its compression continuations, matched by `root_session_id`); `process` `list` SHALL include the lineage's receipts marked `retained`, and a request from any other session SHALL get `unknown process id` even with an exact id.
+**Milestone:** M2
+
+#### Scenario: Read after compression
+- **GIVEN** a process that finished 3 hours ago in a session since compressed into a continuation
+- **WHEN** the continuation calls `process(action="log", process_id=<id>)`
+- **THEN** the retained output SHALL be returned
+
+#### Scenario: Other conversation
+- **WHEN** an unrelated session calls `process(action="poll", process_id=<id>)`
+- **THEN** it SHALL get `unknown process id`
+
+### Requirement: Sudo password handling
+For a terminal command whose executable, after optional `env` options and assignments, is literally `sudo` (bare, absolute or quoted path) the system SHALL run sudo with `-S` and supply the password from, in order, the session's cached password, the secret `SUDO_PASSWORD` when the session holds `secrets.read:SUDO_PASSWORD`, or a masked `sudo.request` prompt to the session's interactive surface whose answer is cached in memory for the session only; shell payloads (`bash -c '...'`, `env -S`, dynamic paths) SHALL NOT be rewritten; subagents, cron, single-query and surfaces without a secure prompt SHALL NOT prompt, and on failure in a messaging session the result SHALL add the hint to store `SUDO_PASSWORD` with `prometheus secrets set`; the password SHALL never appear in tool results, logs, trajectories or the session store.
+**Milestone:** M2
+
+#### Scenario: Interactive sudo
+- **GIVEN** an interactive CLI session
+- **WHEN** the model runs `sudo apt-get update` twice
+- **THEN** the user SHALL be prompted once and the second command SHALL reuse the cached password
+
+#### Scenario: Subagent sudo
+- **GIVEN** a subagent without `SUDO_PASSWORD`
+- **WHEN** it runs `sudo id`
+- **THEN** no prompt SHALL be shown and the result SHALL explain that subagents cannot prompt for sudo
+
+### Requirement: Shell startup files
+Terminal commands SHALL run in a non-interactive, non-login shell; when `terminal.auto_source_bashrc = true` (default) and the shell is bash, the persistent shell SHALL source `~/.bashrc` once at shell start, and it SHALL then source each path in `terminal.shell_init_files` (default empty, `~` expanded, missing files skipped with a one-time notice); the whole init step SHALL be bounded by `terminal.shell_init_timeout_secs` (default 10), after which the shell SHALL be restarted without init files and the first result SHALL carry the hint `shell init timed out; guard interactive-only code in your rc file with: case $- in *i*) ;; *) return;; esac`.
+**Milestone:** M1
+
+#### Scenario: rc file blocks on read
+- **GIVEN** a `~/.bashrc` that calls `read`
+- **WHEN** the model runs `git status`
+- **THEN** after at most 10 seconds the command SHALL run in a shell without init files and the result SHALL carry the shell-init hint
+
+### Requirement: Non-secret environment passthrough
+The system SHALL add to every child environment the variables named in `terminal.env_passthrough` (default empty) with values taken from the launch environment, and for container backends SHALL additionally set the literal `terminal.container.env` map (default empty); a name or value that matches a stored secret name, a registered provider-native secret name or the `PMT_SECRET_*` pattern SHALL be rejected at config validation with `terminal.env_passthrough: '<NAME>' is a secret; grant it with secrets.read instead` (exit 78).
+**Milestone:** M1
+
+#### Scenario: Pass a toolchain variable
+- **GIVEN** `terminal.env_passthrough = ["JAVA_HOME"]` and `JAVA_HOME` set at launch
+- **WHEN** the model runs `echo $JAVA_HOME`
+- **THEN** the launch value SHALL be printed
+
+#### Scenario: Secret in passthrough
+- **GIVEN** `terminal.env_passthrough = ["OPENAI_API_KEY"]`
+- **WHEN** config is validated
+- **THEN** validation SHALL fail with exit code 78
+
+### Requirement: Container backend options
+The `container` backend SHALL accept `terminal.container.image` (default the published `prometheus-sandbox` image pinned by digest for the running release), `terminal.container.volumes` (`host:container[:ro]` entries; a host path under `PROMETHEUS_HOME` or a credential directory denied by `security-boundaries` SHALL be rejected), `terminal.container.mount_workspace` (default true: the session workspace at `/workspace`), `terminal.container.network` (default true; false runs with no network), `terminal.container.run_as_host_user` (default false: `--user <uid>:<gid>`), `terminal.container.shared_key` (default empty: when set, sessions with the same key in the profile share one container) and `terminal.container.extra_args` (default empty); an extra argument that would weaken hardening (`--privileged`, `--cap-add`, `--security-opt` other than adding restrictions, `--pid=host`, `--network=host`, `--userns=host`, a `-v` of the runtime socket) SHALL be rejected unless covered by `security.sandbox.allow_degraded`.
+**Milestone:** M2
+
+#### Scenario: Network off
+- **GIVEN** `terminal.container.network = false`
+- **WHEN** the model runs `curl https://example.com` in the container
+- **THEN** the command SHALL fail to resolve or connect
+
+#### Scenario: Privileged extra arg
+- **GIVEN** `terminal.container.extra_args = ["--privileged"]` and no matching `allow_degraded`
+- **WHEN** the container is created
+- **THEN** creation SHALL fail naming `--privileged`
+
+### Requirement: Remote file sync and sync-back
+For backends whose descriptor has `uses_host_filesystem = false`, the system SHALL upload granted host inputs (attached files, skill scripts, `read_file`/`write_file` payloads) on demand, and when `terminal.sync_back = true` (default true for `ssh`, false otherwise) SHALL copy files changed under the remote workspace back to the host workspace at session end and on `/sync`, skipping files larger than `terminal.sync_back_max_bytes` (default 2147483648 in total per sync) with a notice listing what was skipped, and never overwriting a host file modified after the last sync without reporting a conflict.
+**Milestone:** M2
+
+#### Scenario: Sync-back cap
+- **GIVEN** an SSH session that produced 3 GiB of build output in the workspace
+- **WHEN** the session ends
+- **THEN** sync-back SHALL stop at the 2 GiB budget and list the skipped files
+
+### Requirement: First-party backend plugins
+The project SHALL publish signed first-party `terminal-backend` plugins `singularity` (Singularity/Apptainer, config `terminal.singularity.image` as a SIF path or `docker://` reference, persistent overlay per profile, `--containall`), `modal`, `daytona` and `vercel`; the `modal` plugin SHALL accept `terminal.modal.mode` `direct` (the user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets), `managed` (a subscription gateway credential, recorded as `billing_source = subscription:<provider>`) or `auto` (default: `direct` when Modal secrets exist, else `managed` when a subscription is signed in, else unavailable with the reason), and the chosen mode SHALL be shown by `prometheus doctor terminal`.
+**Milestone:** M2
+
+#### Scenario: Modal auto without credentials
+- **GIVEN** `terminal.backend = "modal"`, `terminal.modal.mode = "auto"`, no Modal secrets and no subscription
+- **WHEN** `prometheus doctor terminal` runs
+- **THEN** it SHALL report the backend unavailable naming both missing options and exit 1
+
+### Requirement: Windows local shell
+On Windows the `local` backend SHALL run commands through the shell chosen by `terminal.windows_shell` (`auto` default, `git-bash`, `pwsh`, `powershell`): `auto` SHALL use Git Bash resolved from `terminal.windows_bash_path`, then the Git for Windows install location, then `bash.exe` on `PATH` excluding the WSL launcher (`System32\bash.exe`) and `WindowsApps` aliases, and otherwise fall back to `pwsh`, then Windows PowerShell, with a one-time notice that POSIX shell syntax is unavailable; an explicitly selected shell that is absent SHALL make the terminal tool unavailable with `<shell> not found` and the install hint; the CLI SHALL switch its console and child consoles to UTF-8 (code page 65001) and restore the original code pages on exit; `prometheus doctor terminal` SHALL report the chosen shell and which POSIX-only features (persistent shell, `pty`, signals) are degraded.
+**Milestone:** M1
+
+#### Scenario: Only WSL bash on PATH
+- **GIVEN** Windows with no Git for Windows and `C:\Windows\System32\bash.exe` on PATH
+- **WHEN** a session starts with `terminal.windows_shell = "auto"`
+- **THEN** the backend SHALL use `pwsh` or Windows PowerShell and SHALL NOT use the WSL launcher
+
+### Requirement: browser_exec tool
+The browser surface exposed to models SHALL be `browser_exec(code, session?, timeout_secs?, local?)`, which runs model-written Python 3 on the managed CPython runtime under the OS sandbox with helpers pre-imported (`new_tab`, `goto_url`, `wait_for_load`, `page_info`, `js`, `fill_input`, `click_at_xy`, `capture_screenshot`, `cdp`, `ensure_real_tab`) bound to the resolved browser session and returns what the code prints; the browser state (tabs, cookies, page) SHALL persist across calls while interpreter variables SHALL NOT; a per-session workspace directory SHALL persist across calls and be returned as `workspace`; `timeout_secs` SHALL default to 300 and be clamped to 1..1800; a named `session` SHALL get its own driver and browser; screenshots SHALL be attached as images only when the active model accepts image input and otherwise returned as paths; the tool SHALL be offered only in sessions that also have the `terminal` toolset, and `local` SHALL appear only when real-profile browsing is enabled.
+**Milestone:** M1
+
+#### Scenario: Batched sub-procedure
+- **WHEN** the model calls `browser_exec(code="new_tab('https://example.com'); wait_for_load(); print(page_info())")`
+- **THEN** the result SHALL contain the page summary and a later call SHALL see the same open tab
+
+#### Scenario: No terminal toolset
+- **GIVEN** a session whose toolsets exclude `terminal`
+- **WHEN** the tool array is built
+- **THEN** `browser_exec` SHALL NOT be present
+
+### Requirement: browser_cdp and browser_dialog tools
+`browser_cdp(method, params?, target_id?, frame_id?, timeout_secs?)` and `browser_dialog(action, prompt_text?, dialog_id?)` SHALL be offered only while an explicit CDP endpoint is configured (`/browser connect` or `browser.cdp_url`); `browser_cdp` SHALL require `target_id` for page-level domains (`Page`, `Runtime`, `DOM`, `Emulation`, `Input`, `Network` per-target), route `frame_id` calls through the supervisor's session for that out-of-process frame, default `timeout_secs` to 30 (max 300), and refuse `Browser.close`, `Browser.crash`, `Target.closeTarget` of a target it did not open, and any URL parameter blocked by browser URL safety; `browser_dialog` SHALL accept `accept` or `dismiss`, pass `prompt_text` to `prompt()` dialogs, target the oldest pending dialog when `dialog_id` is omitted, and return `no pending dialog` when none is open.
+**Milestone:** M2
+
+#### Scenario: Dialog answered
+- **GIVEN** a connected browser with a pending `confirm()` dialog under `dialog_policy = "must_respond"`
+- **WHEN** the model calls `browser_dialog(action="accept")`
+- **THEN** the dialog SHALL be accepted and page scripts SHALL resume
+
+#### Scenario: Closing the browser
+- **WHEN** the model calls `browser_cdp(method="Browser.close")`
+- **THEN** the call SHALL be refused
+
+### Requirement: Local browser options and headed mode
+The local browser SHALL honour `browser.executable_path` (default empty: managed `chromium` runtime, then a system Chromium-family binary), `browser.user_data_dir` (default empty: throwaway profile; a relative path resolves under `<profile>`), `browser.chromium_args` (default empty), `browser.launch_timeout_secs` (default 30) and `browser.headed` (default false); with `headed = true` the browser SHALL open a visible window and SHALL NOT be cleaned up between turns (idle reaping still applies); on a host without a display the browser SHALL run headless with a one-time notice; headed mode SHALL not affect cloud sessions, and `chromium_args` that disable the Chromium sandbox or web security SHALL require the matching `security.sandbox.allow_degraded` entry.
+**Milestone:** M2
+
+#### Scenario: Headless server
+- **GIVEN** `browser.headed = true` on Linux with no display
+- **WHEN** a browser session starts
+- **THEN** it SHALL run headless and notify once that no display is available
+
+### Requirement: First-party cloud browser providers
+The project SHALL ship first-party `browser.provider` plugins `browserbase`, `browser-use` and `firecrawl`, plus a `subscription` provider served by a signed-in provider subscription; `browser.provider` SHALL default to `local` and SHALL never be auto-selected from the presence of provider API keys (setup MAY suggest a provider when it detects one); each provider SHALL declare its secrets and network hosts in its manifest and its sessions SHALL carry `provider` in `prometheus browser status`.
+**Milestone:** M2
+
+#### Scenario: Key present, not configured
+- **GIVEN** `BROWSERBASE_API_KEY` in the secrets store and no `browser.provider` set
+- **WHEN** a browser session is created
+- **THEN** a local session SHALL be used
+
+### Requirement: Private URLs route to a local browser
+When a cloud browser provider is active and `browser.auto_local_for_private_urls = true` (default), a `browser_exec` call whose code navigates to a private, loopback or LAN destination (per `security-boundaries` private ranges, plus `*.local`, `*.lan`, `*.internal`, `localhost`) SHALL run against a local sidecar browser for that session while public URLs stay on the cloud provider, so the cloud provider never receives the private URL; with the switch off such navigation SHALL be refused with `Blocked: URL targets a private or internal address` unless the egress policy allows the address; cloud metadata endpoints SHALL be refused on every route.
+**Milestone:** M2
+
+#### Scenario: Localhost under Browserbase
+- **GIVEN** `browser.provider = "browserbase"`
+- **WHEN** the model opens `http://localhost:3000`
+- **THEN** the page SHALL load in a local sidecar and no request for it SHALL reach Browserbase
+
+### Requirement: Real-profile browsing
+When `browser.use_real_profile = true` (default false) and the session holds the `browser.real_profile` grant, the system SHALL copy the user's default Chromium-family browser's active profile (or the directory named by `browser.real_profile_pin`) into a managed snapshot under `<profile>/cache/browser/real-profile/<browser>/` using SQLite online backup for databases, re-sync it when a new browser session launches, launch the user's real browser binary on the snapshot (never the live profile directory), and run it headless unless `browser.headed`; if the copy is impossible (locked database, unsupported default browser, missing pin) the session SHALL get a throwaway profile and its first result SHALL carry `real_profile_unavailable: <reason>`; with `browser.real_profile_autoclose = true` the agent MAY offer, and only after user approval run, `prometheus browser close-profile`, which terminates the browser process tree bound to that profile; turning the setting off SHALL delete the snapshot on next browser use; unattended contexts SHALL use the snapshot without prompting.
+**Milestone:** M2
+
+#### Scenario: Missing pin
+- **GIVEN** `browser.real_profile_pin = "Profile 9"` that does not exist
+- **WHEN** a browser session starts
+- **THEN** the session SHALL use a throwaway profile and report `real_profile_unavailable` naming the pin
+
+#### Scenario: Revoking consent
+- **GIVEN** an existing snapshot and `browser.use_real_profile` changed to false
+- **WHEN** the next browser session starts
+- **THEN** the snapshot directory SHALL be deleted
+
+### Requirement: Lightpanda engine
+`browser.engine` SHALL accept `auto` (default, Chromium) or `lightpanda`; with `lightpanda` and a `lightpanda` binary available (managed runtime or `PATH`) the system SHALL launch one `lightpanda serve --host 127.0.0.1 --port <free>` process per browser session, reap it with the same idle and crash rules as Chromium, and tell the model in the `browser_exec` description that screenshots are unavailable and only one page is supported; the engine setting SHALL have the lowest precedence (an explicit CDP endpoint, a cloud provider or real-profile browsing shadow it), and `prometheus browser status` and `prometheus doctor` SHALL report when it is shadowed.
+**Milestone:** M3
+
+#### Scenario: Shadowed by a cloud provider
+- **GIVEN** `browser.engine = "lightpanda"` and `browser.provider = "browserbase"`
+- **WHEN** `prometheus doctor` runs
+- **THEN** it SHALL report that `browser.engine` is shadowed by `browser.provider`
+
+### Requirement: Connecting to the user's browser
+The interactive CLI and TUI SHALL provide `/browser connect [<ws-or-http-url>]`, `/browser status` and `/browser disconnect`; `connect` without a URL SHALL use `http://127.0.0.1:9222` and, if nothing listens there, SHALL launch a detected Chromium-family browser (Chrome, Brave, Edge, Chromium) with `--remote-debugging-port=9222` and a dedicated `--user-data-dir` under `<profile>/cache/browser/connect/` (required by Chrome 136+ for debugging); `status` SHALL show the endpoint, browser version and open targets; `disconnect` SHALL detach without closing the user's browser and return to the configured provider; gateway surfaces SHALL treat `/browser` as unavailable with a message rather than sending it to the model, and `prometheus browser status|close-profile` SHALL exist on the command line.
+**Milestone:** M2
+
+#### Scenario: Disconnect keeps the browser
+- **GIVEN** a session connected to the user's running Chrome
+- **WHEN** the user runs `/browser disconnect`
+- **THEN** Chrome SHALL keep running and the next `browser_exec` SHALL use the configured provider
+
+### Requirement: Bot screen
+On Linux hosts without a physical display the system SHALL provide a per-profile virtual desktop (Xvnc plus a minimal Xfce session, geometry `bot_desktop.geometry` default `1440x900`) on which `computer_use` and headed browsers act, managed by `prometheus computer-use screen status|start|stop [--force]|install [-y]` and streamed to the desktop app over the RFB protocol through a gateway WebSocket that requires a single-use 30-second display ticket; it SHALL start only on explicit start or, when `bot_desktop.auto_start = true` (default false), on the first `computer_use` call or headed browser launch; it SHALL refuse to start with less than `bot_desktop.min_free_memory_bytes` (default 1610612736, i.e. 1536 MiB; 0 disables) free memory on the host or its cgroup, SHALL stop after `bot_desktop.idle_stop_secs` (default 1800, 0 disables) without use, and `install` SHALL run the distro package manager only after showing the exact package list (or print the command when not root and without `sudo`); `bot_desktop.placement` SHALL be `auto` (default: inside a container or SSH backend, on the gateway host for `local`, refused for backends that cannot host a display), `terminal` or `gateway` (explicit opt-in to act outside the terminal sandbox); while the screen runs, the bot's browser and the desktop's browser launcher SHALL share one persistent per-profile user-data directory.
+**Milestone:** M3
+
+#### Scenario: Low memory
+- **GIVEN** 900 MB free memory and default config
+- **WHEN** `prometheus computer-use screen start` runs
+- **THEN** it SHALL refuse naming the 1536 MB threshold and exit 69
+
+#### Scenario: Sandbox that cannot host a display
+- **GIVEN** `terminal.backend = "modal"` and `bot_desktop.placement = "auto"`
+- **WHEN** the screen is started
+- **THEN** it SHALL refuse and point to `bot_desktop.placement = "gateway"` instead of starting on the host
+
+### Requirement: Bot screen takeover lease
+A viewer SHALL be able to take over and hand back control of a bot screen through RPC `screen.takeover` and `screen.handback`; while a human holds the lease the profile's `computer_use` and browser tools SHALL be refused with `human_has_control` (captures included), the most recent takeover SHALL win, a dropped viewer connection SHALL keep the lease, `screen.handback {force: true}` and `screen stop --force` SHALL clear it, a lease unused for 4 idle windows and at least 10 minutes SHALL expire back to the agent, and results of tool calls started before a takeover SHALL be voided by the lease epoch; `SECURITY.md` SHALL document that the screen, X display and browser debugging port are reachable by any process of the gateway's OS user, so the lease is a tool-level fence, not an OS boundary.
+**Milestone:** M3
+
+#### Scenario: Agent during takeover
+- **GIVEN** a human holding the screen lease
+- **WHEN** the agent calls `computer_use(action="capture")`
+- **THEN** the call SHALL fail with `human_has_control`
+
+### Requirement: Snapshot triggers, caps and per-run toggle
+File snapshots SHALL be enabled by `files.snapshot.enabled` (default true) and overridable per invocation with `prometheus chat --checkpoints` or `--no-checkpoints`; besides file-tool writes, when `files.snapshot.terminal` is not `off` the system SHALL also checkpoint before terminal commands matching destructive shapes (`rm`, `rmdir`, `cp`, `mv`, `install`, `sed -i`, `truncate`, `dd`, `shred`, output redirection `>`, `git reset`, `git clean`, `git checkout`, `git restore`), taking at most one checkpoint per directory per turn; files larger than `files.snapshot.max_file_bytes` (default 10485760) SHALL be recorded as skipped rather than stored, each workspace SHALL keep at most `files.snapshot.max_checkpoints` (default 20) checkpoints, a nested git repository inside the workspace SHALL be checkpointed as its own project, and checkpointing SHALL never fail or block the triggering call.
+**Milestone:** M2
+
+#### Scenario: One checkpoint per directory per turn
+- **GIVEN** a turn in which the model patches three files in `src/`
+- **WHEN** the turn ends
+- **THEN** exactly one checkpoint SHALL exist for `src/`'s project for that turn
+
+#### Scenario: Large file
+- **GIVEN** a 2 GB dataset in the workspace
+- **WHEN** a destructive command triggers a checkpoint
+- **THEN** the dataset SHALL be listed as skipped and the command SHALL run
+
+### Requirement: Rollback listing, diff and selective restore
+`/rollback` SHALL list the session workspace's checkpoints numbered newest first with time, triggering tool and files/lines changed; `/rollback <N>` SHALL restore the files changed since checkpoint N while leaving files the user edited after the agent's last write untouched and listed as `kept (hand-edited)`, SHALL append a note that also marks the latest turn as undone, and SHALL never rewrite earlier messages; `/rollback <N> --all` SHALL overwrite hand-edits too; `/rollback diff <N>` SHALL show the unified diff between checkpoint N and the current state without changing anything; `/rollback <N> <file>` SHALL restore only that file; the same operations SHALL be available as `prometheus files rollback` and RPC `files.rollback`.
+**Milestone:** M2
+
+#### Scenario: Hand-edit preserved
+- **GIVEN** checkpoint 1 before the agent edited `a.rs` and `b.rs`, and the user later edited `b.rs`
+- **WHEN** the user runs `/rollback 1`
+- **THEN** `a.rs` SHALL be restored and `b.rs` SHALL keep the user's edit and be reported as kept
+
+#### Scenario: Preview only
+- **WHEN** the user runs `/rollback diff 2`
+- **THEN** a diff SHALL be shown and no file SHALL change
+
+### Requirement: Snapshot store management CLI
+`prometheus files snapshots status` (alias `list`, `--limit <n>` default 20) SHALL print the store's total size, workspace count and per-workspace size, checkpoint count and last use; `prometheus files snapshots prune [--retention-days <n>] [--max-mb <n>] [--keep-orphans]` SHALL delete workspaces unused beyond the retention (default 7 days), enforce the size cap oldest first, and delete orphans (workspace directory missing) unless `--keep-orphans`; the automatic background prune (at most once per `files.snapshot.prune_interval_secs`, default 86400, never on the startup path) SHALL never delete orphans; `prometheus files snapshots clear [-f]` SHALL delete the whole store after confirmation, exiting 4 when confirmation is required but stdin is not a TTY.
+**Milestone:** M2
+
+#### Scenario: Unmounted volume
+- **GIVEN** snapshots for a workspace on an external disk that is not mounted
+- **WHEN** the automatic prune runs
+- **THEN** that workspace's snapshots SHALL be kept
+
+### Requirement: Working-tree diff command
+`/diff [unstaged|staged|all|session] [--stat] [<path>...]` SHALL show, for the session cwd's git repository, the unstaged plus untracked diff (default), the staged diff, both, or `session`: the cumulative diff of every file the agent changed in this session from its earliest snapshot (available outside git too); `--stat` SHALL show per-file counts only; on gateway surfaces the output SHALL be fenced and truncated to the platform's message limit with a note giving the omitted line count; outside a git repository the non-session modes SHALL reply `not a git repository`.
+**Milestone:** M2
+
+#### Scenario: Session diff
+- **GIVEN** a session that patched `a.rs` and created `b.rs`
+- **WHEN** the user runs `/diff session --stat`
+- **THEN** the output SHALL list `a.rs` and `b.rs` with added and removed line counts
+
+### Requirement: Project run-recipe verification
+`prometheus verify [PATH] [--detect-only] [--save] [--phase bootstrap|build|test|start]... [--skip-start] [--port <n>] [--timeout <secs>] [--ready-timeout <secs>] [--json]` SHALL detect a project's recipe from its manifests (Cargo, package.json with its lockfile's package manager, pyproject, go.mod, Makefile), with `<project>/.prometheus/environment.json` overriding detection; SHALL run the selected phases in order on the session's backend under the sandbox with a per-phase timeout (default 600 seconds), start the `start` phase in the background and poll the port (from `--port` or the recipe) until ready or `--ready-timeout` (default 60) expires, then stop it; SHALL print per-phase status, duration and an output tail; `--detect-only` SHALL print the recipe as JSON without running anything, `--save` SHALL write it to `environment.json`; it SHALL exit 0 when every phase passes and 1 otherwise, and SHALL record the outcome as verification evidence for the current session.
+**Milestone:** M2
+
+#### Scenario: Detect only
+- **GIVEN** a Rust project with a `Cargo.toml`
+- **WHEN** `prometheus verify --detect-only` runs
+- **THEN** it SHALL print JSON containing `cargo build` and `cargo test` phases and run nothing
+
+#### Scenario: Failing tests
+- **GIVEN** a project whose test phase exits non-zero
+- **WHEN** `prometheus verify` runs
+- **THEN** it SHALL report the test phase failed with its output tail and exit 1

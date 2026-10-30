@@ -333,3 +333,49 @@ When the provider supports explicit cache breakpoints the system SHALL place at 
 - **GIVEN** `prompt_cache.ttl = "auto"` and a CLI session
 - **WHEN** the session starts
 - **THEN** the TTL SHALL be `1h`
+
+### Requirement: Idle compaction
+The system SHALL, when `compression.idle_compact_after_secs` is greater than 0 (default 0 = off), compact a session with trigger `idle` before the first model call of a turn that starts after at least that many seconds without activity, SHALL skip it when the context is already at or below `threshold * target_ratio` of the window, and SHALL apply the same lock, cooldown, backoff and attempt-budget guards as every automatic compaction.
+**Milestone:** M2
+
+#### Scenario: Return after a long pause
+- **GIVEN** `compression.idle_compact_after_secs = 1800` and a Telegram session at 40% of the window idle for 3 hours
+- **WHEN** the user sends a new message
+- **THEN** the system SHALL compact with trigger `idle` before the turn's first model call
+
+#### Scenario: Small context skipped
+- **GIVEN** the same setting and a session at 5% of the window
+- **WHEN** the user returns after 3 hours
+- **THEN** no compaction SHALL run
+
+### Requirement: Compaction progress notices and context pressure gauge
+The system SHALL emit compaction lifecycle events on every surface, SHALL show routine automatic compaction statuses (start, retry progress, completion, idle compaction) on messaging platforms only when `compression.progress_notices = true` (default false) while always showing compaction failures and manual `/compress` feedback, and SHALL show a context pressure indicator relative to the compaction trigger at info level from 60% and warning level from 85% (CLI and TUI as a gauge line such as `context ████████████░░░░░░░░ 62% to compaction`, messaging as one plain-text notice per level crossing per session); the indicator SHALL never be added to the model's context.
+**Milestone:** M2
+
+#### Scenario: Silent on chat by default
+- **GIVEN** default config and a Discord session that compacts automatically
+- **WHEN** the compaction succeeds
+- **THEN** no compaction message SHALL be posted to the Discord channel
+
+#### Scenario: Gauge crossing
+- **GIVEN** a CLI session reaching 62% of the compaction trigger
+- **WHEN** the turn's usage is reported
+- **THEN** the CLI SHALL show the info-level gauge and the next request SHALL contain no gauge text
+
+### Requirement: Server-side Responses compaction (opt-in)
+The system SHALL, when `compression.responses_native = true` (default false) and the route's provider descriptor declares server-side compaction support on the Responses wire format, send the provider's context-management compaction setting with threshold `compression.responses_compact_threshold_tokens` (default 0 = the local trigger minus 8192 tokens, or 200000 when no local trigger is known), store the returned opaque encrypted compaction item as a blob linked to the session, and replay that item in place of the history it covers on later requests while keeping the stored transcript intact; local compaction SHALL still run at its own trigger, and a route without support SHALL ignore the setting with one INFO log per session.
+**Milestone:** M2
+
+#### Scenario: Compaction item replayed
+- **GIVEN** `compression.responses_native = true` on a supporting route and a response that returned a compaction item
+- **WHEN** the next request is built
+- **THEN** it SHALL contain the stored compaction item instead of the messages it covers, and `prometheus sessions show` SHALL still list every original message
+
+### Requirement: Context window view
+Every surface SHALL provide `/context [all]` (alias `/ctx`), computed locally without a model call or any change to the prompt cache, showing window usage (a 5×20 cell grid on CLI/TUI/desktop, a text gauge on messaging), an estimated per-category breakdown (system prompt, tool definitions, project rules, skills index, MCP tools, subagents, memory, conversation, free), the compaction trigger and headroom, compaction count and last compaction time, cumulative throughput, and a per-file context listing stating for each candidate file (`PROMETHEUS.md`, the `AGENTS.md` chain, `CLAUDE.md`, `.cursorrules`, `SOUL.md`) its token estimate and whether it was loaded, truncated, shadowed, blocked by the scan, unreadable or suppressed; `/context all` SHALL add per-skill (index versus full load cost) and per-toolset schema token costs.
+**Milestone:** M2
+
+#### Scenario: Why is my file ignored
+- **GIVEN** a repo with both `.prometheus.md` and `CLAUDE.md`
+- **WHEN** the user runs `/context`
+- **THEN** the listing SHALL show `.prometheus.md` as loaded and `CLAUDE.md` as shadowed, and no model call SHALL be made

@@ -212,7 +212,7 @@ Every request that reads or writes profile data SHALL execute under an explicit 
 - **THEN** the response SHALL be `-32602` naming the missing profile and no profile's config SHALL be read
 
 ### Requirement: Slash command flow in the TUI
-The TUI SHALL handle client-local commands from its own typed registry (`/quit`, `/clear`, `/copy`, `/paste`, `/theme`, `/keys`, `/pane`, `/layout`) without a round-trip and send every other `/` input to `command.dispatch {session_id, name, args}`, which SHALL answer one of `{type: "done", notice}`, `{type: "send", message}` (submitted as a prompt) or `{type: "refused", reason}`; text whose first token is not a registered command (for example `/etc/hosts`) SHALL be sent as a prompt.
+The TUI SHALL handle client-local commands from its own typed registry (`/quit`, `/clear`, `/copy`, `/paste`, `/theme`, `/keys`, `/pane`, `/layout`, `/redraw`, `/statusbar`, `/battery`, `/indicator`, `/palette`, `/sessions`, `/terminal-setup`) without a round-trip and send every other `/` input to `command.dispatch {session_id, name, args}`, which SHALL answer one of `{type: "done", notice}`, `{type: "send", message}` (submitted as a prompt) or `{type: "refused", reason}`; text whose first token is not a registered command (for example `/etc/hosts`) SHALL be sent as a prompt.
 **Milestone:** M2
 
 #### Scenario: Skill command
@@ -308,3 +308,98 @@ When a connection drops, its attachments SHALL be released immediately but the s
 - **GIVEN** a turn running in a session attached only by one TUI
 - **WHEN** the TUI's connection drops
 - **THEN** the turn SHALL keep running and any approval it needs SHALL be denied as `no_responder`
+
+### Requirement: Client-local display commands
+Both the TUI and the `line` interface SHALL handle without a round-trip `/redraw` (clear and fully repaint the screen to recover from terminal drift; in `line` mode reprint the prompt and status), `/statusbar` (alias `/sb`) toggling `ui.status_bar` (default true; in `line` mode a single bottom status line on a TTY), and `/battery [on|off|status]` toggling `ui.status_bar_battery` (default false), which shows a colour-coded battery level as the first status item and is silently omitted on machines without a battery; toggles SHALL persist through a validated config patch.
+**Milestone:** M2
+
+#### Scenario: Battery on a desktop tower
+- **GIVEN** a machine without a battery
+- **WHEN** the user runs `/battery on`
+- **THEN** the setting SHALL be saved, no battery item SHALL render and `/battery status` SHALL print `no battery detected`
+
+#### Scenario: Hiding the status bar
+- **WHEN** the user runs `/sb`
+- **THEN** the status bar SHALL disappear and `ui.status_bar` SHALL be `false`
+
+### Requirement: Busy indicator styles
+While a turn runs the status line SHALL show a busy indicator in style `ui.tui.busy_indicator` (`kaomoji` default, `emoji`, `unicode`, `ascii`) rotating every 2.5 s with glyphs of equal display width so the rest of the line does not shift, `/indicator <style>` SHALL switch and persist the style, an unknown style SHALL be refused listing the four styles, and `ui.tui.reduced_motion = true` SHALL show a static glyph.
+**Milestone:** M2
+
+#### Scenario: Switching style
+- **WHEN** the user runs `/indicator ascii`
+- **THEN** the next busy period SHALL use ASCII glyphs and `ui.tui.busy_indicator` SHALL be `ascii`
+
+### Requirement: Fuzzy command palette
+`Ctrl+P` or `/palette` SHALL open a fuzzy palette over the `commands.catalog` entries executable on this surface and installed skills, ranked by match quality, showing each entry's description and disposition; `Enter` SHALL insert the chosen command into the composer without running it and `Esc` SHALL close the palette leaving the composer unchanged.
+**Milestone:** M2
+
+#### Scenario: Insert, not run
+- **WHEN** the user types `cmpr` in the palette and presses Enter on `/compress`
+- **THEN** the composer SHALL contain `/compress ` and no command SHALL have been dispatched
+
+### Requirement: Large pastes collapse into chips
+A paste of at least `ui.composer.paste_collapse_lines` lines (default 5) or `ui.composer.paste_collapse_chars` characters (default 2000) SHALL be shown in the composer as a chip `[Pasted text #<n>: <lines> lines]` that can be expanded or deleted as a unit, while the submitted prompt SHALL contain the full pasted text in place of the chip; `0` disables the respective threshold.
+**Milestone:** M2
+
+#### Scenario: Long log paste
+- **WHEN** the user pastes 300 lines of log output
+- **THEN** the composer SHALL show one chip and the submitted message SHALL include all 300 lines
+
+### Requirement: Clipboard image attachments
+`/paste`, and `Ctrl+V`/`Cmd+V` when the clipboard holds an image and no text, SHALL attach the clipboard image to the next prompt, storing it in the profile's blob store and showing a badge `[Image #<n>]` that `Backspace` removes, using the platform clipboard (macOS pasteboard, Windows clipboard, Wayland `wl-paste`, X11 `xclip` or `xsel`, WSL2 through the Windows clipboard); when no clipboard backend is reachable (for example over SSH) it SHALL print `clipboard image unavailable here: <reason>; attach a file path with @path instead`, and `/terminal-setup` SHALL, after showing the change and asking for confirmation, add keybindings to the VS Code, Cursor or Windsurf terminal settings so `Ctrl+V` reaches the TUI, keeping a backup of the edited settings file.
+**Milestone:** M2
+
+#### Scenario: Image in the clipboard
+- **GIVEN** a screenshot in the clipboard
+- **WHEN** the user runs `/paste`
+- **THEN** the composer SHALL show `[Image #1]` and the next prompt SHALL carry the image
+
+#### Scenario: Over SSH
+- **GIVEN** a TUI running over SSH with no display
+- **WHEN** the user runs `/paste`
+- **THEN** the TUI SHALL print the clipboard-unavailable message and attach nothing
+
+### Requirement: Live session switcher
+`Ctrl+X`, `/sessions` or `/switch`, or a click on the `<n> live` status item SHALL open an overlay listing the sessions this TUI is attached to, where `Up`/`Down` select, `Enter` switches the screen to that session without restarting, `Ctrl+D` detaches and closes the selected live session, `Ctrl+N` (or `/sessions new`) starts a new session, `Ctrl+R` refreshes and `Esc` closes; selecting `+new`, typing a prompt and pressing `Enter` SHALL create a session and submit the prompt in it, with `Tab` first choosing a model for that session only.
+**Milestone:** M2
+
+#### Scenario: Dispatching a second session
+- **GIVEN** one live session with a running turn
+- **WHEN** the user selects `+new`, types a prompt and presses Enter
+- **THEN** a second session SHALL start that turn while the first keeps running in the background
+
+### Requirement: LaTeX math rendering
+The TUI's Markdown renderer SHALL render inline `$...$` and block `$$...$$` math as Unicode-formatted text (superscripts, subscripts, fractions, Greek letters, common operators), SHALL leave currency-like dollar amounts untouched, and SHALL show unsupported syntax as the literal TeX in a code span; the `line` interface SHALL print the raw TeX.
+**Milestone:** M2
+
+#### Scenario: Unsupported macro
+- **WHEN** a reply contains `$\begin{tikzpicture}$`
+- **THEN** the TUI SHALL show the literal TeX in a code span
+
+### Requirement: Terminal background detection
+With `ui.tui.theme = "auto"` (default) the TUI SHALL choose a light or dark theme from `COLORFGBG` when present, else from an OSC 11 background-colour query answered within 100 ms, else dark; an explicit `ui.tui.theme` value SHALL skip detection, and detection SHALL never block startup longer than 100 ms.
+**Milestone:** M2
+
+#### Scenario: Light terminal without COLORFGBG
+- **GIVEN** a terminal answering OSC 11 with a white background
+- **WHEN** the TUI starts with `ui.tui.theme = "auto"`
+- **THEN** it SHALL use the light theme
+
+### Requirement: Collapsible startup banner
+The TUI startup banner SHALL group runtime information into sections Tools (open by default), Skills, System Prompt and MCP Servers (collapsed by default), each toggled by clicking its header or pressing `Enter` on it; toggle state SHALL be local to that banner and reset on the next launch.
+**Milestone:** M2
+
+#### Scenario: Many skills installed
+- **GIVEN** 80 installed skills
+- **WHEN** the TUI starts
+- **THEN** the Skills section SHALL show only its header and count until expanded
+
+### Requirement: Auto-resume of the last TUI session
+With `ui.tui.auto_resume = "recent"` (default `"off"`) a TUI launched without `--resume`, `--continue` or a prompt SHALL re-attach to the most recent session this profile last used in the TUI from the same working directory, falling back to a new session when none exists or it was deleted; an explicit `--resume <id>` SHALL always win.
+**Milestone:** M2
+
+#### Scenario: Reconnecting after a dropped SSH link
+- **GIVEN** `ui.tui.auto_resume = "recent"` and a session last used in `~/src/api`
+- **WHEN** the user launches `prometheus tui` in `~/src/api`
+- **THEN** the TUI SHALL attach to that session and show its recent transcript

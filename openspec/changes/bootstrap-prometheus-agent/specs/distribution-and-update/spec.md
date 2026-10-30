@@ -33,7 +33,7 @@ The binary SHALL embed the release signing public keys (a primary and a standby 
 - **THEN** it SHALL fail with `signature verification failed` and the installed binary SHALL be unchanged
 
 ### Requirement: Installers
-The system SHALL provide `install.sh` (POSIX) and `install.ps1` (Windows) that detect the target, download and verify the matching archive, place the binary at `~/.local/bin/prometheus` (POSIX) or `%LOCALAPPDATA%\Programs\Prometheus\prometheus.exe` (Windows) with a `pmt` alias, add that directory to PATH only with consent (`--modify-path` / `-ModifyPath` for non-interactive runs), and write the install receipt; installers SHALL accept `--channel stable|canary` (default `stable`) and `--version vX.Y.Z`, exiting 2 with `--channel must be stable or canary, not <value>` otherwise.
+The system SHALL provide `install.sh` (POSIX) and `install.ps1` (Windows) that detect the target, download and verify the matching archive, place the binary at `~/.local/bin/prometheus` (POSIX) or `%LOCALAPPDATA%\Programs\Prometheus\prometheus.exe` (Windows) with a `pmt` alias, add that directory to PATH only with consent (`--modify-path` / `-ModifyPath` for non-interactive runs) and otherwise print the exact line to add to the user's shell profile and how to use the binary in the current shell, and write the install receipt; installers SHALL accept `--channel stable|canary` (default `stable`) and `--version vX.Y.Z`, exiting 2 with `--channel must be stable or canary, not <value>` otherwise.
 **Milestone:** M1
 
 #### Scenario: Unknown channel
@@ -51,7 +51,7 @@ The system SHALL publish the same signed binaries through a Homebrew tap, a Nix 
 - **THEN** it SHALL print `owner: homebrew` and `update with: brew upgrade prometheus`
 
 ### Requirement: Install receipt
-Every installed binary SHALL have an install receipt `install.json` next to it (or, when that directory is not writable, under `<PROMETHEUS_HOME>/updates/install/<sha16 of binary path>.json`) recording `owner` (`self`, a package manager, `image`, `bundle` or `dev`), `channel`, `version`, `target`, `installed_at` and the binary path; a binary with no receipt SHALL be treated as `owner = dev`.
+Every installed binary SHALL have an install receipt `install.json` next to it (or, when that directory is not writable, under `<PROMETHEUS_HOME>/updates/install/<sha16 of binary path>.json`) recording `owner` (`self`, a package manager, `nix`, `termux`, `image`, `bundle`, `desktop`, `msix`, `msstore`, `system-package` or `dev`), `channel`, `version`, `target`, `installed_at` and the binary path; a binary with no receipt SHALL be treated as `owner = dev`.
 **Milestone:** M1
 
 #### Scenario: Built from source
@@ -128,7 +128,7 @@ An update SHALL download and verify the new archive into `<PROMETHEUS_HOME>/upda
 - **THEN** `prometheus --version` SHALL report `v1.4.0` and the receipt SHALL say `rolled_back`
 
 ### Requirement: Schema migrations around updates
-A new binary SHALL migrate each profile's `config.toml` and `state.db` forward on first open, taking a snapshot of both into `<profile>/snapshots/pre-<version>/` before migrating, keeping the newest `update.snapshot_keep` snapshots (default 3); every binary SHALL declare the maximum storage schema it can read and SHALL refuse to open a newer `state.db` with `state.db schema <n> is newer than this build supports (<m>); update prometheus or roll back with --restore-snapshots`.
+A new binary SHALL migrate each profile's `config.toml` and `state.db` forward on first open, taking a snapshot of both before migrating (a `configuration-and-profiles` › State snapshots entry with reason `pre-update` and label `pre-<version>`), keeping the newest `update.snapshot_keep` snapshots (default 3); every binary SHALL declare the maximum storage schema it can read and SHALL refuse to open a newer `state.db` with `state.db schema <n> is newer than this build supports (<m>); update prometheus or roll back with --restore-snapshots`.
 **Milestone:** M1
 
 #### Scenario: Older binary meets newer schema
@@ -178,7 +178,7 @@ Every update, check, refusal and rollback SHALL write a receipt under `<PROMETHE
 - **THEN** the command SHALL exit 1 with `bundle target aarch64-apple-darwin does not match this host (x86_64-unknown-linux-musl)`
 
 ### Requirement: Managed runtime store
-The system SHALL install external runtimes (`node`, `cpython`, `uv`, `chromium`) into a tool store shared by all profiles at `<PROMETHEUS_HOME>/runtimes/<name>/<version>-<sha12>/`, from a runtime index pinned by the binary that records per target the URL, size and SHA-256 of each artifact; a download whose digest differs SHALL be deleted and fail with `sha256 mismatch for <url>: pinned <expected>, got <actual>`, and a runtime directory SHALL become visible only by an atomic rename after verification and extraction.
+The system SHALL install external runtimes — exactly the names of the pinned runtime index: `node`, `cpython`, `uv`, `chromium`, `lightpanda` (`execution-environments`), `doc-converter` (`execution-environments`), `git-bash` (Windows only, `execution-environments`), `cua-driver` (macOS only, `computer-use`), `llamacpp` (`local-models`), `lsp` (language servers, `lsp-diagnostics`), `bws` and `op` (`configuration-and-profiles` external secret sources) and adapter bridge runtimes declared by catalog adapter plugins (`platform-adapters`) — into a tool store shared by all profiles at `<PROMETHEUS_HOME>/runtimes/<name>/<version>-<sha12>/`, from a runtime index pinned by the binary that records per target the URL, size and SHA-256 of each artifact; a download whose digest differs SHALL be deleted and fail with `sha256 mismatch for <url>: pinned <expected>, got <actual>`, and a runtime directory SHALL become visible only by an atomic rename after verification and extraction.
 **Milestone:** M1
 
 #### Scenario: Interrupted download leaves no half runtime
@@ -248,3 +248,154 @@ Release builds SHALL compile with the committed dependency lockfile in locked mo
 - **GIVEN** a self-installed binary
 - **WHEN** `prometheus uninstall` runs
 - **THEN** the binary SHALL be gone and `<PROMETHEUS_HOME>` SHALL still exist
+
+### Requirement: Persistent runtime opt-outs
+The system SHALL honour `runtimes.exclude` (a list in `<PROMETHEUS_HOME>/daemon.toml`, default `[]`, each value a runtime name from the pinned runtime index such as `node`, `cpython`, `uv` or `chromium`, unknown names failing validation) in every path that installs managed runtimes — `prometheus runtimes install`, lazy installs, the runtime pin refresh after `prometheus update`, and offline bundle installs; `install.sh --without <name>` and `install.ps1 -Without <name>` (repeatable) SHALL record their names in `runtimes.exclude`, and `prometheus runtimes exclude list|add <name>|remove <name>` SHALL edit it. A lazy install of an excluded runtime SHALL fail with `<name> is excluded by runtimes.exclude: run 'prometheus runtimes exclude remove <name>' to allow it`, the dependent tool's availability check SHALL report it unavailable with reason `excluded`, and an explicit `prometheus runtimes install <name>` of an excluded runtime SHALL exit 1 with the same message and download nothing.
+**Milestone:** M1
+
+#### Scenario: Browser opted out at install time
+- **GIVEN** an install made with `install.sh --without chromium`
+- **WHEN** a session calls the browser tool and later `prometheus update` refreshes runtime pins
+- **THEN** the tool SHALL fail with the `excluded by runtimes.exclude` message, and neither path SHALL download Chromium
+
+### Requirement: Desktop packages and signing
+Each release SHALL publish desktop packages built around the same `prometheus` binary as that version's CLI archives: a macOS universal `.dmg` plus a signed updater archive, signed with a Developer ID certificate and notarized with the ticket stapled (minimum macOS 12); a Windows `.msixbundle` (x86_64 and aarch64) with an `.appinstaller` file that checks for updates on launch, Authenticode-signed (minimum Windows 10 1809), and the same MSIX submitted to the Microsoft Store under a separate Store identity; and Linux `.AppImage` (with a detached signature verified by the embedded keys), `.deb` and `.rpm`. Every desktop package SHALL expose the bundled CLI on PATH (MSIX execution aliases `prometheus.exe` and `pmt.exe`; `/usr/bin/prometheus` for deb/rpm; an explicit "Install command-line tool" action that links `~/.local/bin/prometheus` on macOS and AppImage) and SHALL stamp its install receipt with owner `desktop` (dmg, AppImage — updated by the desktop app's updater), `msix` (App Installer), `msstore` or `system-package` (deb/rpm), so that `prometheus update` on it refuses with exit 69 naming the desktop updater, App Installer, the Microsoft Store or the system package manager. A release whose notarization, Authenticode or MSIX signing step fails SHALL publish no desktop package for that OS.
+**Milestone:** M3
+
+#### Scenario: Store install refuses self-update
+- **GIVEN** Prometheus installed from the Microsoft Store
+- **WHEN** the user runs `prometheus update` in a terminal
+- **THEN** it SHALL print `owner: msstore` and `update with: Microsoft Store`, write a `refused` receipt and exit 69
+
+#### Scenario: CLI and desktop cannot skew
+- **GIVEN** desktop package `v1.6.0` installed through App Installer
+- **WHEN** the user runs `prometheus version` through the `prometheus.exe` execution alias
+- **THEN** it SHALL report `v1.6.0`, the version of the bundled desktop binary
+
+### Requirement: NixOS and Home Manager modules
+The Nix flake SHALL export `nixosModules.default` (options under `services.prometheus`) and `homeManagerModules.default` (options under `programs.prometheus`) with at least `enable`, `package`, `home` (default `/var/lib/prometheus` for NixOS and `~/.prometheus` for Home Manager), `settings` (rendered as TOML for the `default` profile), `profiles.<name>.settings`, `daemonSettings` (rendered to `daemon.toml`), `environmentFiles` (the only way to pass secrets, compatible with sops-nix and agenix outputs, read as secret environment variables per design decision D4), `documents` (files such as `SOUL.md` placed into the profile), `mcpServers`, `plugins` (plugin packages linked read-only into the profile, still subject to signature checks and capability grants) and `container.enable` (run the OCI image instead of the native binary). The NixOS module SHALL write its settings into the managed configuration layer with every key it sets listed in `locked`, so `prometheus config set` refuses them; the Home Manager module SHALL offer `configMode = "managed"` (default; the profile `config.toml` is regenerated on activation and writers refuse with exit 77 naming the Home Manager option) or `"merged"` (Nix-set keys rewritten on activation, all other user edits preserved). Both SHALL run `prometheus daemon run` as a service (systemd unit or systemd user unit; launchd agent on macOS) with `Restart=on-failure` and no restart on exit codes 2, 65, 77 and 78, and SHALL stamp the install receipt `owner = nix`.
+**Milestone:** M2
+
+#### Scenario: Nix-owned key is read-only
+- **GIVEN** `services.prometheus.settings.model.default = "claude-sonnet-4-5"`
+- **WHEN** the user runs `prometheus config set model.default gpt-5`
+- **THEN** the write SHALL be refused because the key is locked by the managed layer, and `config.toml` SHALL be unchanged
+
+#### Scenario: Bad config does not restart-loop
+- **GIVEN** a Nix configuration that renders an invalid `config.toml`
+- **WHEN** the service starts and the daemon exits 78
+- **THEN** systemd SHALL NOT restart it and `systemctl status` SHALL show exit status 78
+
+### Requirement: Container image run modes
+The OCI image SHALL be published for linux/amd64 and linux/arm64 in a `<version>` variant (binary, CA certificates and the PulseAudio client library) and a `<version>-full` variant that additionally carries verified Node, CPython, uv and Chromium runtimes which are copied into `/data/runtimes/` on first start; its default command SHALL be `prometheus daemon run` (gateway daemon), and the documented alternative commands SHALL be `prometheus dashboard`, `prometheus chat` and `prometheus tui` (the last two with `-it`). The image SHALL set `PROMETHEUS_HOME=/data`, declare `/data` as its only volume, and run as the non-root user `prometheus` (uid and gid 10001) set with `USER`, so `docker exec` sessions run as that user by default. Each release SHALL also publish, for the same platforms and pinned by digest in the release manifest, the `prometheus-sandbox` image used as the default `terminal.container.image` (`execution-environments` › Container backend options) and its `prometheus-sandbox:<version>-desktop` variant carrying the virtual display used by `execution-environments` › Bot screen.
+**Milestone:** M2
+
+#### Scenario: Exec as the runtime user
+- **GIVEN** a running container started from the image with defaults
+- **WHEN** the operator runs `docker exec -it <c> prometheus status`
+- **THEN** the command SHALL run as uid 10001 and read the same `/data` home as the daemon
+
+### Requirement: Container filesystem, init and health
+In the image the binary and every image file SHALL be owned by root and not writable by uid 10001, the container SHALL work with `--read-only` plus a writable `/data` and tmpfs `/tmp`, and `prometheus` running as PID 1 SHALL reap orphaned child processes and forward SIGTERM and SIGINT to the daemon so no `<defunct>` processes accumulate. `/data` SHALL be on a local filesystem with working POSIX locks and shared-memory WAL; on a network filesystem the store SHALL refuse to open as defined by `session-storage` and `prometheus doctor store` SHALL name the mount type. The image SHALL declare `HEALTHCHECK CMD prometheus status --liveness` (interval 30 s, timeout 5 s, retries 3, start period 20 s), SHALL publish no port by default, and SHALL leave the dashboard on its loopback default so exposing it requires the non-loopback bind rules of `web-dashboard`. Each release SHALL attach a reference `compose.yaml` with a named volume for `/data`, `restart: unless-stopped`, the healthcheck, documented limits (`mem_limit: 2g`, `pids_limit: 512`) and `extra_hosts: ["host.docker.internal:host-gateway"]`.
+**Milestone:** M2
+
+#### Scenario: No zombie build-up
+- **GIVEN** a container whose sessions spawned 200 short-lived shell commands that each left an orphaned grandchild
+- **WHEN** all of them exit
+- **THEN** the process table SHALL contain no `<defunct>` entries
+
+#### Scenario: Unhealthy daemon detected
+- **GIVEN** a daemon whose runtime stops responding
+- **WHEN** three consecutive healthchecks run
+- **THEN** `prometheus status --liveness` SHALL exit 1 each time and the container SHALL be reported `unhealthy`
+
+### Requirement: Multiple profiles in one container
+A single container SHALL serve every profile under `/data/profiles/` through its one daemon (no per-profile process supervision), a profile created with `docker exec <c> prometheus profile create <name>` SHALL start serving after `prometheus daemon restart` (an in-place re-exec that does not restart the container), and every listener (shared `gateway.http`, API server, dashboard, A2A) SHALL be daemon-wide in `daemon.toml` and profile-addressed by path, so one published port per listener serves every profile; a listener whose port is already taken SHALL be marked `down` with reason `port <n> already in use` while the rest of the daemon and every profile keep running.
+**Milestone:** M2
+
+#### Scenario: Port collision isolated
+- **GIVEN** profiles `work` and `home` with the API server enabled and another process in the container holding port 8642
+- **WHEN** the daemon starts
+- **THEN** the API server listener SHALL be `down` with reason `port 8642 already in use`, and both profiles' adapters SHALL still run
+
+### Requirement: Container audio bridge and host services
+The reference compose file SHALL provide an opt-in `audio` profile that mounts the host PulseAudio-compatible socket (PulseAudio or PipeWire-Pulse) at `/run/pulse/native` and an ALSA default that routes to it, and voice-mode device probing in a container SHALL use that socket when it exists instead of reporting no audio devices. When a profile's provider base URL points at `localhost` or `127.0.0.1` and the process runs in a container, `prometheus doctor providers` SHALL warn `<provider> points at the container's own loopback; use http://host.docker.internal:<port> to reach a server on the host`.
+**Milestone:** M2
+
+#### Scenario: Local Ollama from a container
+- **GIVEN** a containerized profile whose custom provider uses `http://localhost:11434/v1`
+- **WHEN** the operator runs `prometheus doctor providers`
+- **THEN** the check SHALL warn and suggest `http://host.docker.internal:11434/v1`
+
+### Requirement: Network-isolated deployment recipe
+Each release SHALL attach `compose.isolated.yaml`, in which the Prometheus service is attached only to an `internal: true` network and reaches the internet solely through an egress-proxy service attached to both that network and an external one, with the image's `network.proxy` pointing at the proxy and an allowlist file of provider and tool hosts generated from the enabled profiles' configuration; `prometheus doctor network --online` SHALL report `direct egress: blocked` and per-host proxy reachability, and SHALL fail when direct egress succeeds while `network.expect_isolated = true` (default false).
+**Milestone:** M2
+
+#### Scenario: Isolation verified
+- **GIVEN** the isolated compose deployment with `network.expect_isolated = true`
+- **WHEN** the operator runs `prometheus doctor network --online` inside the container
+- **THEN** it SHALL report `direct egress: blocked`, list each configured provider host as reachable through the proxy, and exit 0
+
+#### Scenario: Misconfigured network
+- **GIVEN** the same deployment accidentally attached to the default bridge network
+- **WHEN** the doctor runs
+- **THEN** it SHALL fail with `direct egress succeeded although network.expect_isolated = true` and exit 1
+
+### Requirement: Pre-update backup
+Before swapping the binary, `prometheus update` SHALL apply `update.pre_update_backup` from `daemon.toml`: `state` (default) takes for each profile a quick snapshot with reason `pre-update` in the snapshot set owned by `configuration-and-profiles` (listed by `prometheus snapshots list`), covering at least `config.toml`, `grants.toml` and a consistent online copy of `state.db`, which holds pairing and allowlist data; `full` additionally writes a full home backup archive in the format of the home backup command owned by `configuration-and-profiles`, excluding `runtimes/` and caches, to `<PROMETHEUS_HOME>/updates/backups/pre-update-<from>-<to>.tar.zst`, keeping the newest 2; `off` skips only this step and never the pre-migration snapshot that rollback depends on. `--backup` SHALL force `full` and `--no-backup` SHALL force `off` for one run (both together exit 2), a backup that cannot be written SHALL abort before the swap with exit 73, and the receipt SHALL record the backup paths and sizes.
+**Milestone:** M1
+
+#### Scenario: Full backup requested
+- **WHEN** the user runs `prometheus update --backup`
+- **THEN** a `pre-update-<from>-<to>.tar.zst` archive SHALL exist under `updates/backups/` before the binary is swapped, and the receipt SHALL list its path
+
+#### Scenario: Disk full
+- **GIVEN** a home volume without space for the snapshot
+- **WHEN** the update runs
+- **THEN** it SHALL exit 73 before the swap and the installed binary SHALL be unchanged
+
+### Requirement: Update from chat
+The gateway command `/update [check]` SHALL be available only when `update.allow_from_chat = true` in `daemon.toml` (default false) and only to senders allowed to run admin commands under the gateway admin rules of `messaging-gateway`; it SHALL run the same code path as `prometheus update` in a detached child process holding the update lock, relay stage progress (`checking`, `downloading <n>%`, `verifying`, `self-test`, `swapping`, `restarting`) to the originating chat with at most one message or edit per 2 s, ask any required confirmation (such as restarting a busy daemon) in that chat and treat no answer within `approvals.timeout_secs` as a refusal, post refusals (another owner, lock held, signature failure) with their message, and after the daemon handover have the new daemon post `updated to <version>` to the same chat from the update receipt.
+**Milestone:** M2
+
+#### Scenario: Admin updates from Telegram
+- **GIVEN** `update.allow_from_chat = true` and an admin sender on Telegram
+- **WHEN** the admin sends `/update`
+- **THEN** the chat SHALL receive progress messages and, after the daemon re-execs, `updated to v1.4.1`
+
+#### Scenario: Disabled by default
+- **GIVEN** default configuration
+- **WHEN** any user sends `/update`
+- **THEN** the gateway SHALL reply `updates from chat are disabled (update.allow_from_chat = false)` and start no updater
+
+### Requirement: Dependency release-age gate
+The release pipeline and `scripts/check` SHALL reject any newly locked dependency version (Rust crates, the dashboard and desktop JavaScript packages, and the Python wheels pinned for the Python bridge) published less than `release_age_days` (default 3, in the repository's `deps-policy.toml`) before the lock change, unless a waiver entry with package, version, reason and expiry date exists; packages listed under `release_age_exempt` (certificate-store packages, so trust-root updates are not delayed) SHALL be exempt, and an expired waiver SHALL fail the gate.
+**Milestone:** M1
+
+#### Scenario: Day-old crate rejected
+- **GIVEN** a change that locks a crate version published 20 hours earlier with no waiver
+- **WHEN** `scripts/check` runs
+- **THEN** it SHALL fail naming the crate, the version, its publish time and the 3-day minimum
+
+### Requirement: Download mirrors
+The system SHALL accept mirror base URLs in `daemon.toml` — `update.mirror_url` for release indexes and archives, `runtimes.mirrors.runtimes` for runtime archives, `runtimes.mirrors.pypi` for the Python bridge's package index and `runtimes.mirrors.npm` for the Node registry — and SHALL use a mirror in place of the default origin while still verifying every signature and pinned digest against the embedded keys and runtime index, so that a mirror can never change what is installed; with `update.mirror_fallback = true` (default false) a mirror failure after the retry budget SHALL fall back to the default origin, otherwise the download SHALL fail naming the mirror.
+**Milestone:** M1
+
+#### Scenario: Mirror serves a tampered archive
+- **GIVEN** `runtimes.mirrors.runtimes` pointing at a mirror that serves a modified Node archive
+- **WHEN** Node is installed
+- **THEN** the install SHALL fail with the `sha256 mismatch` message and nothing SHALL be installed
+
+### Requirement: Uninstall scopes and dry run
+`prometheus uninstall` SHALL accept `--dry-run` (print every file, directory, service unit and process it would remove or stop, change nothing, exit 0), `--data-only` (keep the binary and remove the contents of `PROMETHEUS_HOME` after listing them and confirming, or with `--yes`), `--purge` (binary and home) and `--desktop-data` (remove the desktop app's per-user data directories: webview storage, window state and desktop logs); every non-dry-run uninstall of the binary SHALL also stop and remove the service units created by `prometheus daemon install-service` (systemd unit, launchd agent, Windows scheduled task) and the shell completions it installed. For installs owned elsewhere (package managers, `nix`, `termux`, `image`, `desktop`, `msix`, `msstore`, `system-package`) removing the binary SHALL exit 69 naming the owner's removal method, while `--data-only` and `--desktop-data` SHALL still be allowed.
+**Milestone:** M2
+
+#### Scenario: Dry run lists the service unit
+- **GIVEN** a self install with a systemd user unit created by `prometheus daemon install-service`
+- **WHEN** the user runs `prometheus uninstall --purge --dry-run`
+- **THEN** the output SHALL list the binary, `prometheus.prev`, the unit file and the home directory, and nothing SHALL be removed
+
+#### Scenario: Data wipe on a Homebrew install
+- **GIVEN** a Homebrew-owned install
+- **WHEN** the user runs `prometheus uninstall --data-only --yes`
+- **THEN** the home contents SHALL be removed, the binary SHALL remain, and the command SHALL exit 0
