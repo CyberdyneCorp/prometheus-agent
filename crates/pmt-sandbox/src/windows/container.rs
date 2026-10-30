@@ -3,11 +3,10 @@
 //!
 //! An `AppContainer` token reaches only objects whose ACL names its SID (or
 //! `ALL APPLICATION PACKAGES`, which covers the Windows and Program Files
-//! trees). Each sandbox creates a uniquely named profile, adds inheritable
-//! allow entries for its roots and deny entries for the credential stores
-//! below them (an explicit deny on the store wins over the allow it would
-//! inherit), and on drop revokes every entry for its SID and deletes the
-//! profile, so grants never leak to another session.
+//! trees). Each sandbox creates a uniquely named profile, adds allow
+//! entries for its carved roots (inheritable, or list-only on directories
+//! that lead to a credential store), and on drop revokes every entry for its
+//! SID and deletes the profile, so grants never leak to another session.
 
 #![allow(unsafe_code)]
 
@@ -19,9 +18,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, ERROR_SUCCESS, LocalFree};
 use windows_sys::Win32::Security::Authorization::{
-    DENY_ACCESS, EXPLICIT_ACCESS_W, GRANT_ACCESS, GetNamedSecurityInfoW, NO_MULTIPLE_TRUSTEE,
-    REVOKE_ACCESS, SE_FILE_OBJECT, SetEntriesInAclW, SetNamedSecurityInfoW, TRUSTEE_IS_SID,
-    TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
+    EXPLICIT_ACCESS_W, GRANT_ACCESS, GetNamedSecurityInfoW, NO_MULTIPLE_TRUSTEE, REVOKE_ACCESS,
+    SE_FILE_OBJECT, SetEntriesInAclW, SetNamedSecurityInfoW, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN,
+    TRUSTEE_W,
 };
 use windows_sys::Win32::Security::Isolation::{
     CreateAppContainerProfile, DeleteAppContainerProfile, DeriveAppContainerSidFromAppContainerName,
@@ -31,7 +30,7 @@ use windows_sys::Win32::Security::{
     SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    DELETE, FILE_ALL_ACCESS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+    DELETE, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
 };
 
 /// Access a root grants.
@@ -39,7 +38,8 @@ use windows_sys::Win32::Storage::FileSystem::{
 pub(super) enum Access {
     Read,
     Write,
-    Deny,
+    /// List this directory only; nothing is inherited below it.
+    List,
 }
 
 /// A created `AppContainer` profile and the ACL entries made for it.
@@ -114,21 +114,17 @@ impl AppContainer {
 
     /// Adds an entry for this container's SID to `path`'s ACL.
     pub(super) fn grant(&mut self, path: &Path, access: Access) -> Result<(), String> {
-        let (mode, mask) = match access {
-            Access::Read => (GRANT_ACCESS, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE),
-            Access::Write => (
-                GRANT_ACCESS,
-                FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE,
-            ),
-            Access::Deny => (DENY_ACCESS, FILE_ALL_ACCESS),
+        let mask = match access {
+            Access::Read | Access::List => FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+            Access::Write => FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE,
         };
-        let inheritance = if path.is_dir() {
+        let inheritance = if path.is_dir() && access != Access::List {
             SUB_CONTAINERS_AND_OBJECTS_INHERIT
         } else {
             NO_INHERITANCE
         };
         self.touched.push(path.to_path_buf());
-        set_entry(path, self.sid, mode, mask, inheritance)
+        set_entry(path, self.sid, GRANT_ACCESS, mask, inheritance)
             .map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))
     }
 }

@@ -43,9 +43,10 @@ capabilities = [
   refused only when outbound connections are restricted. `/proc` is not
   readable on Linux (other processes' environments hold secrets).
 
-Known limits: on Linux, a granted directory that contains a credential store
-is granted entry by entry, so files created directly in it after the child
-starts are not reachable (and the store's file names stay listable). On
+Known limits: on Linux and Windows the sandbox can only grant, so a granted
+directory that contains a credential store is granted entry by entry: files
+created directly in it after the child starts are not reachable, and the
+store's name stays listable. On
 Windows, listening sockets are never granted (loopback needs a
 per-container exemption), and the session adds then revokes ACL entries for
 its container on the granted directories.

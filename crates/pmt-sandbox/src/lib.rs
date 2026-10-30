@@ -16,6 +16,8 @@
 //! first thing in `main`.
 
 pub mod backend;
+#[cfg(any(target_os = "linux", windows))]
+mod carve;
 pub mod launcher;
 mod locations;
 pub mod policy;

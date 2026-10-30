@@ -1,6 +1,8 @@
 //! Windows: an `AppContainer` (filesystem through ACL entries for its SID,
 //! network through capabilities) inside a Job Object, started by the
-//! launcher process ([`crate::launcher`]).
+//! launcher process ([`crate::launcher`]). Credential stores are carved out
+//! of granted roots ([`crate::carve`]) rather than denied, so the container
+//! only ever holds allow entries.
 //!
 //! Full level on Windows: `fs`, `net` and `process` `enforced`; `syscalls`
 //! is `partial` (the `AppContainer` token gates object access, there is no
@@ -24,6 +26,7 @@ use pmt_core::error::Error;
 pub(crate) use args::LaunchSpec;
 use container::{Access, AppContainer};
 
+use crate::carve::{Reach, carve};
 use crate::policy::{Policy, Ports};
 use crate::report::{Feature, FeatureReport, Gap, Level, StrengthReport};
 use crate::sandbox::setup_error;
@@ -73,7 +76,8 @@ pub(crate) fn prepare(
 ) -> Result<Prepared, Error> {
     let launcher = launcher.ok_or_else(|| setup_error("no launcher executable"))?;
     let mut container = AppContainer::create().map_err(setup_error)?;
-    let grants = policy
+    let denied = policy.denied();
+    let roots = policy
         .read_roots()
         .iter()
         .map(|root| (root, Access::Read))
@@ -83,14 +87,16 @@ pub(crate) fn prepare(
                 .iter()
                 .map(|root| (root, Access::Write)),
         );
-    for (root, access) in grants {
-        if root.exists() {
-            container.grant(root, access).map_err(setup_error)?;
-        }
-    }
-    for store in policy.denied() {
-        if store.exists() {
-            container.grant(store, Access::Deny).map_err(setup_error)?;
+    for (root, access) in roots {
+        for (path, reach) in carve(root, &denied) {
+            let access = if reach == Reach::Subtree {
+                access
+            } else {
+                Access::List
+            };
+            if path.exists() {
+                container.grant(&path, access).map_err(setup_error)?;
+            }
         }
     }
     Ok(Prepared {

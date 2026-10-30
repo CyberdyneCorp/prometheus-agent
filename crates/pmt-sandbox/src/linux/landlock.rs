@@ -2,19 +2,18 @@
 //! credential stores carved out, TCP port rules and signal scoping.
 //!
 //! Landlock only grants, so a denied store below a granted root is carved
-//! out: the root is replaced by its entries minus the store, recursively
-//! along the path to the store, and the directories on that path keep only
-//! `ReadDir`. Entries created in those directories after the child starts
-//! are therefore not reachable; everything else below the root is.
+//! out ([`crate::carve`]); directories on the path to a store keep only
+//! `ReadDir`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use landlock::{
     ABI, Access, AccessFs, AccessNet, BitFlags, CompatLevel, Compatible, NetPort, PathBeneath,
     PathFd, Ruleset, RulesetAttr, RulesetCreated, RulesetCreatedAttr, Scope,
 };
 
-use crate::policy::{Policy, Ports, is_strictly_below};
+use crate::carve::{Reach, carve};
+use crate::policy::{Policy, Ports};
 
 /// The newest Landlock ABI this kernel fully supports, or `None` without
 /// Landlock.
@@ -111,11 +110,19 @@ fn path_rules(policy: &Policy, abi: ABI) -> Vec<PathRule> {
     let read = AccessFs::from_read(abi);
     let all = AccessFs::from_all(abi);
     let mut rules = Vec::new();
-    for root in policy.read_roots() {
-        carve(root, read, &denied, &mut rules);
-    }
-    for root in policy.write_roots() {
-        carve(root, all, &denied, &mut rules);
+    let roots = policy
+        .read_roots()
+        .iter()
+        .map(|root| (root, read))
+        .chain(policy.write_roots().iter().map(|root| (root, all)));
+    for (root, access) in roots {
+        for (path, reach) in carve(root, &denied) {
+            let access = match reach {
+                Reach::Subtree => access,
+                Reach::ListOnly => AccessFs::ReadDir.into(),
+            };
+            rules.push(PathRule { path, access });
+        }
     }
     let devices = DEVICES_RW
         .iter()
@@ -126,67 +133,4 @@ fn path_rules(policy: &Policy, abi: ABI) -> Vec<PathRule> {
         access,
     }));
     rules
-}
-
-/// Grants `access` below `root` except under every `denied` path inside it.
-fn carve(root: &Path, access: BitFlags<AccessFs>, denied: &[&Path], rules: &mut Vec<PathRule>) {
-    let inside: Vec<&Path> = denied
-        .iter()
-        .copied()
-        .filter(|d| is_strictly_below(d, root))
-        .collect();
-    if inside.is_empty() {
-        rules.push(PathRule {
-            path: root.to_path_buf(),
-            access,
-        });
-        return;
-    }
-    rules.push(PathRule {
-        path: root.to_path_buf(),
-        access: AccessFs::ReadDir.into(),
-    });
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !inside.iter().any(|d| path.starts_with(d)) {
-            carve(&path, access, &inside, rules);
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn carving_skips_the_store_and_keeps_its_siblings() {
-        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
-        std::fs::create_dir_all(&base).unwrap();
-        let dir = tempfile::tempdir_in(base).unwrap();
-        let home = dir.path();
-        for sub in [".ssh", ".config/gcloud", ".config/other", "notes"] {
-            std::fs::create_dir_all(home.join(sub)).unwrap();
-        }
-        let denied = [home.join(".ssh"), home.join(".config/gcloud")];
-        let denied: Vec<&Path> = denied.iter().map(PathBuf::as_path).collect();
-        let mut rules = Vec::new();
-        carve(home, AccessFs::from_read(ABI::V1), &denied, &mut rules);
-        let paths: Vec<&Path> = rules.iter().map(|r| r.path.as_path()).collect();
-        assert!(paths.contains(&home.join("notes").as_path()));
-        assert!(paths.contains(&home.join(".config/other").as_path()));
-        assert!(!paths.iter().any(|p| p.starts_with(home.join(".ssh"))));
-        assert!(
-            !paths
-                .iter()
-                .any(|p| p.starts_with(home.join(".config/gcloud")))
-        );
-        let config = rules
-            .iter()
-            .find(|r| r.path == home.join(".config"))
-            .unwrap();
-        assert_eq!(config.access, BitFlags::from(AccessFs::ReadDir));
-    }
 }
