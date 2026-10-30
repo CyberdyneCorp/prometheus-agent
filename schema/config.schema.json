@@ -976,6 +976,14 @@
       "additionalProperties": false,
       "description": "The `[fallback]` section.",
       "properties": {
+        "chain": {
+          "default": [],
+          "description": "Ordered fallback routes (`[[fallback.chain]]`); empty disables\nfallback.",
+          "items": {
+            "$ref": "#/$defs/FallbackEntry"
+          },
+          "type": "array"
+        },
         "min_health": {
           "default": 0.2,
           "description": "Fallback entries with a health score below this are skipped.",
@@ -987,6 +995,43 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "FallbackEntry": {
+      "additionalProperties": false,
+      "description": "One `[[fallback.chain]]` entry.",
+      "properties": {
+        "base_url": {
+          "description": "Base URL override.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Name of the secret this entry uses instead of the provider's."
+        },
+        "model": {
+          "description": "Model id at that provider.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider id or alias.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "type": "object"
     },
     "FilesConfig": {
       "additionalProperties": false,
@@ -1457,6 +1502,34 @@
             "string",
             "null"
           ]
+        },
+        "supports_reasoning": {
+          "description": "Whether the model reasons (thinking tokens).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "supports_tools": {
+          "description": "Whether the model takes tool schemas.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "supports_video": {
+          "description": "Whether the model takes video input.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "supports_vision": {
+          "description": "Whether the model takes image input.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -1649,10 +1722,69 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ProviderAuth": {
+      "description": "How a provider authenticates.",
+      "oneOf": [
+        {
+          "const": "api_key",
+          "description": "An API key from the secrets store.",
+          "type": "string"
+        },
+        {
+          "const": "oauth",
+          "description": "A subscription sign-in.",
+          "type": "string"
+        },
+        {
+          "const": "token_mint",
+          "description": "A short-lived token minted from a longer-lived credential.",
+          "type": "string"
+        },
+        {
+          "const": "external_process",
+          "description": "A credential printed by an external command.",
+          "type": "string"
+        },
+        {
+          "const": "aws_chain",
+          "description": "The AWS credential chain.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No credential (local servers).",
+          "type": "string"
+        }
+      ]
+    },
     "ProviderConfig": {
       "additionalProperties": false,
       "description": "One `[providers.<id>]` override of a built-in or custom provider.",
       "properties": {
+        "aliases": {
+          "default": [],
+          "description": "Extra names a custom provider answers to.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_insecure_http": {
+          "default": false,
+          "description": "Allow a plain `http://` base URL on a public host (plain HTTP to\nloopback and private-network hosts is always allowed).",
+          "type": "boolean"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProviderAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Credential kind of a custom provider; unset uses the built-in\nprovider's, or `api_key` when `key_secret` is set and `none`\notherwise."
+        },
         "base_url": {
           "description": "API base URL.",
           "type": [
@@ -1710,6 +1842,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "models_url": {
+          "description": "Model listing URL; unset is `<base_url>/models`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "plan_notes": {
           "description": "Eligibility and billing notes shown before sign-in.",
           "type": [
@@ -1747,6 +1886,31 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "supports_model_listing": {
+          "description": "Whether the provider lists its models; unset uses the provider\ndefault (true for custom providers).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "supports_prompt_cache": {
+          "description": "Whether the provider honours a prompt cache key; unset uses the\nprovider default (false for custom providers).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "wire_format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WireFormat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wire format; wins over host rules and the provider's own format."
         }
       },
       "type": "object"
@@ -2651,6 +2815,26 @@
           "type": "string"
         }
       ]
+    },
+    "WireFormat": {
+      "description": "Natively supported wire formats; any other format needs a provider\nplugin.",
+      "oneOf": [
+        {
+          "const": "chat_completions",
+          "description": "OpenAI Chat Completions (`/chat/completions`).",
+          "type": "string"
+        },
+        {
+          "const": "responses",
+          "description": "OpenAI Responses (`/responses`).",
+          "type": "string"
+        },
+        {
+          "const": "anthropic_messages",
+          "description": "Anthropic Messages (`/v1/messages`).",
+          "type": "string"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2802,6 +2986,7 @@
     "fallback": {
       "$ref": "#/$defs/FallbackConfig",
       "default": {
+        "chain": [],
         "min_health": 0.2
       },
       "description": "Provider fallback."

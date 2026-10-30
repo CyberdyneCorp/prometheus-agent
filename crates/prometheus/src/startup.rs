@@ -21,10 +21,22 @@ use pmt_core::secret::Redactor;
 ///
 /// `launch_env.reread` if called twice.
 pub fn launch_env() -> Result<LaunchEnv, Error> {
-    // Provider-native secret names join the policy with the provider
-    // registry; until then only `PMT_SECRET_*` names are secrets.
-    LaunchEnv::from_process(&EnvPolicy::default())
+    // Built-in providers' native credential names (`OPENAI_API_KEY`...)
+    // are secrets besides `PMT_SECRET_*`; plugin providers name theirs
+    // through `PMT_SECRET_<NAME>` or the secrets store.
+    let names = pmt_providers::builtin::secret_names();
+    LaunchEnv::from_process(&EnvPolicy {
+        provider_secret_names: &names,
+        replacements: ENV_REPLACEMENTS,
+    })
 }
+
+/// Non-secret variables people export by habit and the config key that
+/// replaces each: they are ignored with a WARN, never read.
+pub const ENV_REPLACEMENTS: &[(&str, &str)] = &[
+    ("PMT_INFERENCE_PROVIDER", "model.provider"),
+    ("PMT_MODEL", "model.default"),
+];
 
 /// Logs one WARN per ignored environment variable.
 pub fn warn_ignored_env(launch: &LaunchEnv) {

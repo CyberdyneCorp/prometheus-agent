@@ -136,7 +136,7 @@ impl ConfigFile {
         let mut doc = parse::document(&self.path, &old)?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        parse::config(&self.path, &new)?;
+        crate::provider_urls::check(&parse::config(&self.path, &new)?)?;
         if new == old {
             return Ok(());
         }
@@ -166,7 +166,7 @@ pub(crate) fn check_document(path: &Path, text: &str) -> Result<(), Error> {
             ),
         ));
     }
-    parse::config(path, text).map(drop)
+    crate::provider_urls::check(&parse::config(path, text)?)
 }
 
 fn io_error(path: &Path, e: &io::Error) -> Error {

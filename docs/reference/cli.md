@@ -21,6 +21,7 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   trajectory  Render the recorded trajectory of a session
+  model       Inspect model and provider resolution
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2583,6 +2584,98 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus trajectory help help
 ```
 
+## `prometheus model`
+
+```text
+Inspect model and provider resolution
+
+Usage: prometheus model [OPTIONS] <COMMAND>
+
+Commands:
+  explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model explain`
+
+```text
+Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+
+Usage: prometheus model explain [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <ID>
+          Provider id or alias (as `--provider` on a session)
+
+      --model <ID>
+          Model id (as `--model` on a session)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus model help [COMMAND]
+
+Commands:
+  explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus model help explain`
+
+```text
+Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+
+Usage: prometheus model help explain
+```
+
+## `prometheus model help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus model help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -2602,6 +2695,7 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   trajectory  Render the recorded trajectory of a session
+  model       Inspect model and provider resolution
   help        Print this message or the help of the given subcommand(s)
 ```
 
@@ -3123,6 +3217,25 @@ Render a session's trajectory as canonical text or its JSONL lines
 Usage: prometheus help trajectory show
 ```
 
+## `prometheus help model`
+
+```text
+Inspect model and provider resolution
+
+Usage: prometheus help model [COMMAND]
+
+Commands:
+  explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+```
+
+## `prometheus help model explain`
+
+```text
+Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+
+Usage: prometheus help model explain
+```
+
 ## `prometheus help help`
 
 ```text
@@ -3157,3 +3270,4 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.logs.v1` | `prometheus logs` |
 | `prometheus.log_components.v1` | `prometheus logs list` |
 | `prometheus.trajectory.v1` | `prometheus trajectory show` |
+| `prometheus.model_explain.v1` | `prometheus model explain` |

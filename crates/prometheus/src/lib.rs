@@ -12,6 +12,7 @@ pub mod config_cmd;
 pub mod context;
 pub mod grants_cmd;
 pub mod logs_cmd;
+pub mod model_cmd;
 pub mod output;
 pub mod profile_cmd;
 pub mod prompt;

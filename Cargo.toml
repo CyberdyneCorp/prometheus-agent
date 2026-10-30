@@ -17,6 +17,7 @@ pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
+pmt-providers = { path = "crates/pmt-providers" }
 pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
@@ -81,6 +82,10 @@ libc = "0.2"
 # Plain (non-`\\?\`) Windows paths for shells that mishandle verbatim ones.
 dunce = "1.0"
 windows-sys = "0.61"
+# Full jitter of provider retry backoff.
+fastrand = "2.3"
+# Test-only HTTP mock server (recorded provider stream fixtures).
+wiremock = "0.6"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

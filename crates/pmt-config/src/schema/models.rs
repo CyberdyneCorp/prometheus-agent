@@ -43,9 +43,33 @@ pub struct ProviderConfig {
     /// `false` makes every request to this provider fail with
     /// `provider.disabled`.
     pub enabled: bool,
+    /// Extra names a custom provider answers to.
+    pub aliases: Vec<String>,
     /// API base URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+    /// Allow a plain `http://` base URL on a public host (plain HTTP to
+    /// loopback and private-network hosts is always allowed).
+    pub allow_insecure_http: bool,
+    /// Wire format; wins over host rules and the provider's own format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wire_format: Option<WireFormat>,
+    /// Credential kind of a custom provider; unset uses the built-in
+    /// provider's, or `api_key` when `key_secret` is set and `none`
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<ProviderAuth>,
+    /// Model listing URL; unset is `<base_url>/models`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub models_url: Option<String>,
+    /// Whether the provider lists its models; unset uses the provider
+    /// default (true for custom providers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_model_listing: Option<bool>,
+    /// Whether the provider honours a prompt cache key; unset uses the
+    /// provider default (false for custom providers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_prompt_cache: Option<bool>,
     /// Name of the secret holding this provider's key.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_secret: Option<SecretName>,
@@ -80,7 +104,14 @@ impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            aliases: Vec::new(),
             base_url: None,
+            allow_insecure_http: false,
+            wire_format: None,
+            auth: None,
+            models_url: None,
+            supports_model_listing: None,
+            supports_prompt_cache: None,
             key_secret: None,
             key_hosts: Vec::new(),
             prefer_credential: PreferCredential::Subscription,
@@ -92,6 +123,64 @@ impl Default for ProviderConfig {
             login_flow: None,
             plan_notes: None,
             script: None,
+        }
+    }
+}
+
+/// Natively supported wire formats; any other format needs a provider
+/// plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WireFormat {
+    /// OpenAI Chat Completions (`/chat/completions`).
+    ChatCompletions,
+    /// OpenAI Responses (`/responses`).
+    Responses,
+    /// Anthropic Messages (`/v1/messages`).
+    AnthropicMessages,
+}
+
+impl WireFormat {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ChatCompletions => "chat_completions",
+            Self::Responses => "responses",
+            Self::AnthropicMessages => "anthropic_messages",
+        }
+    }
+}
+
+/// How a provider authenticates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAuth {
+    /// An API key from the secrets store.
+    ApiKey,
+    /// A subscription sign-in.
+    Oauth,
+    /// A short-lived token minted from a longer-lived credential.
+    TokenMint,
+    /// A credential printed by an external command.
+    ExternalProcess,
+    /// The AWS credential chain.
+    AwsChain,
+    /// No credential (local servers).
+    None,
+}
+
+impl ProviderAuth {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ApiKey => "api_key",
+            Self::Oauth => "oauth",
+            Self::TokenMint => "token_mint",
+            Self::ExternalProcess => "external_process",
+            Self::AwsChain => "aws_chain",
+            Self::None => "none",
         }
     }
 }
@@ -163,6 +252,18 @@ pub struct ModelRoute {
     /// Output token cap override.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u64>,
+    /// Whether the model takes tool schemas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_tools: Option<bool>,
+    /// Whether the model takes image input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_vision: Option<bool>,
+    /// Whether the model takes video input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_video: Option<bool>,
+    /// Whether the model reasons (thinking tokens).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_reasoning: Option<bool>,
     /// Prices per million tokens (USD).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<ModelPrice>,
@@ -285,12 +386,34 @@ pub struct FallbackConfig {
     /// Fallback entries with a health score below this are skipped.
     #[schemars(range(min = 0.0, max = 1.0))]
     pub min_health: f64,
+    /// Ordered fallback routes (`[[fallback.chain]]`); empty disables
+    /// fallback.
+    pub chain: Vec<FallbackEntry>,
 }
 
 impl Default for FallbackConfig {
     fn default() -> Self {
-        Self { min_health: 0.2 }
+        Self {
+            min_health: 0.2,
+            chain: Vec::new(),
+        }
     }
+}
+
+/// One `[[fallback.chain]]` entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FallbackEntry {
+    /// Provider id or alias.
+    pub provider: String,
+    /// Model id at that provider.
+    pub model: String,
+    /// Base URL override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Name of the secret this entry uses instead of the provider's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential: Option<SecretName>,
 }
 
 /// The `[auth]` section.

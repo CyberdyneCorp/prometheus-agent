@@ -116,12 +116,17 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     let (text, _) = file.read()?;
     pmt_config::check(file.path(), &text)?;
     // Backend names are a registry, not a schema enum (plugins add names).
-    let backend = ctx.scope()?.config().terminal.backend.clone();
+    let scope = ctx.scope()?;
+    let backend = scope.config().terminal.backend.clone();
     if let Err(err) = pmt_sandbox::backend::BackendRegistry::builtin().select(&backend)
         && err.code() == &codes::TERMINAL_UNKNOWN_BACKEND
     {
         return Err(err);
     }
+    // Provider blocks and the fallback chain name registry entries
+    // (custom blocks need a base URL; chain entries a known provider).
+    let providers = pmt_providers::ProviderRegistry::for_profile(scope.config(), Vec::new())?;
+    pmt_providers::fallback::chain(scope.config(), &providers)?;
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }

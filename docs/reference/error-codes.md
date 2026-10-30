@@ -150,3 +150,15 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `terminal.backend_unavailable` | `unavailable` | 69 | The selected terminal backend (`container`, `ssh`) is reserved but not available in this build. |
 | `terminal.env_passthrough_secret` | `config` | 78 | `terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead. |
 | `terminal.shell_not_found` | `unavailable` | 69 | The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable. |
+| `provider.unknown` | `config` | 78 | A requested or configured provider id is neither a canonical id nor an alias in this profile's registry (built-in providers, `[providers.*]` blocks and the profile's enabled provider plugins); the message suggests the closest id. |
+| `provider.disabled` | `config` | 78 | The requested or fallback provider has `providers.<id>.enabled = false`; nothing else was resolved. |
+| `provider.not_configured` | `config` | 78 | No provider is configured, no provider secret is stored, no sign-in exists and no configured local endpoint answers. Run `prometheus model` or `prometheus auth add <provider>`. |
+| `provider.missing_base_url` | `config` | 78 | A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider. |
+| `provider.missing_credential` | `auth` | 78 | The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`. |
+| `provider.invalid_descriptor` | `config` | 78 | A provider descriptor (a `[providers.<id>]` block or a plugin's) misses a required field or holds an invalid value. |
+| `provider.auth_failed` | `auth` | 78 | The provider rejected the credential (`auth`) or the account's plan is not entitled to the API (`entitlement`). |
+| `provider.invalid_request` | `invalid_input` | 65 | The provider rejected the request as malformed or misconfigured (`invalid_request`, `config`); it is never retried or rerouted. |
+| `provider.call_failed` | `provider` | 69 | A model call failed after same-route retries and fallback (`billing`, `rate_limit`, `overloaded`, `server_error`, `timeout`, `network`, `context_overflow` or `content_filter`); the message names the class. |
+| `model.not_selected` | `config` | 78 | No model id was given (`--model`, `model.default`) and the provider has no default model. |
+| `model.capability_missing` | `config` | 78 | The route's model lacks a capability the request needs (tool calling, image input, or a context window large enough for the request). |
+| `model.context_too_small` | `config` | 78 | The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models."<provider>/<model>"] context_window`. |

@@ -98,6 +98,27 @@ pub enum Command {
         #[command(subcommand)]
         command: TrajectoryCommand,
     },
+    /// Inspect model and provider resolution.
+    Model {
+        /// The model subcommand.
+        #[command(subcommand)]
+        command: ModelCommand,
+    },
+}
+
+/// `prometheus model` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ModelCommand {
+    /// Show each step resolving the provider, endpoint, wire format,
+    /// credential and model, without calling the model or printing secrets.
+    Explain {
+        /// Provider id or alias (as `--provider` on a session).
+        #[arg(long, value_name = "ID")]
+        provider: Option<String>,
+        /// Model id (as `--model` on a session).
+        #[arg(long, value_name = "ID")]
+        model: Option<String>,
+    },
 }
 
 /// `prometheus logs` arguments.

@@ -34,6 +34,7 @@ pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-obs.workspace = true
+pmt-providers.workspace = true
 pmt-sandbox.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true

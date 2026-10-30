@@ -26,6 +26,10 @@ pub fn command(home: &Path) -> Command {
     for var in ["VISUAL", "EDITOR", "RUST_LOG"] {
         cmd.env_remove(var);
     }
+    // Provider keys a developer machine may export would change routing.
+    for var in pmt_providers::builtin::secret_names() {
+        cmd.env_remove(var);
+    }
     cmd.arg("--home").arg(home);
     cmd
 }

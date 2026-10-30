@@ -37,8 +37,9 @@ pub use interface::{
     ToolProgressGrouping, UiConfig,
 };
 pub use models::{
-    AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, LoginFlow, ModelConfig, ModelEntry,
-    ModelPrice, ModelRoute, PoolStrategy, PreferCredential, ProviderConfig,
+    AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry, LoginFlow,
+    ModelConfig, ModelEntry, ModelPrice, ModelRoute, PoolStrategy, PreferCredential, ProviderAuth,
+    ProviderConfig, WireFormat,
 };
 pub use operations::{
     BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, LogLevel, LoggingConfig,

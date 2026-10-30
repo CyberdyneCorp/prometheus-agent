@@ -135,6 +135,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
 | `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
 | `display.vim_mode` | boolean | `false` | any | `live` | Vim key bindings in the composer. |
+| `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
@@ -167,6 +168,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `prompt.platform_hints.<name>.append` | string | unset | any | `next_session` | Appended after the (possibly replaced) hint. |
 | `prompt.platform_hints.<name>.replace` | string | unset | any | `next_session` | Replaces the built-in hint. |
 | `prompt_cache.ttl` | one of "5m", "1h", "auto", "off" | `"5m"` | `"5m"`, `"1h"`, `"auto"`, `"off"` | `next_session` | Provider prompt-cache lifetime. |
+| `providers.<name>.aliases` | array of string | `[]` | any | `next_session` | Extra names a custom provider answers to. |
+| `providers.<name>.allow_insecure_http` | boolean | `false` | any | `next_session` | Allow a plain `http://` base URL on a public host (plain HTTP to loopback and private-network hosts is always allowed). |
+| `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
 | `providers.<name>.base_url` | string | unset | any | `next_session` | API base URL. |
 | `providers.<name>.catalog_ttl_secs` | integer | `86400` | ≥ 0 | `next_session` | Lifetime of the cached live model listing. |
 | `providers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` makes every request to this provider fail with `provider.disabled`. |
@@ -174,12 +178,16 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding this provider's key. |
 | `providers.<name>.login_flow` | one of "device", "browser" | unset | `"device"`, `"browser"` | `next_session` | Sign-in flow for OAuth providers; unset uses the provider default. |
 | `providers.<name>.max_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable failure. |
+| `providers.<name>.models_url` | string | unset | any | `next_session` | Model listing URL; unset is `<base_url>/models`. |
 | `providers.<name>.plan_notes` | string | unset | any | `next_session` | Eligibility and billing notes shown before sign-in. |
 | `providers.<name>.pool_strategy` | one of "fill_first", "round_robin", "random", "least_used" | `"fill_first"` | `"fill_first"`, `"round_robin"`, `"random"`, `"least_used"` | `next_session` | Credential pool selection. |
 | `providers.<name>.prefer_credential` | one of "subscription", "api_key" | `"subscription"` | `"subscription"`, `"api_key"` | `next_session` | Which credential wins when both exist. |
 | `providers.<name>.request_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Per-request timeout. |
 | `providers.<name>.script` | string | unset | any | `next_session` | Script file of the built-in `mock` provider. |
 | `providers.<name>.stream_idle_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Longest gap between stream events. |
+| `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
+| `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
+| `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |

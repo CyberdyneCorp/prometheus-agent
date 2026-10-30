@@ -453,6 +453,42 @@ error_codes! {
     /// The shell the local terminal backend needs is not installed.
     TERMINAL_SHELL_NOT_FOUND = ("terminal.shell_not_found", Unavailable,
         "The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable.");
+    /// A provider id or alias is not in the profile's provider registry.
+    PROVIDER_UNKNOWN = ("provider.unknown", Config,
+        "A requested or configured provider id is neither a canonical id nor an alias in this profile's registry (built-in providers, `[providers.*]` blocks and the profile's enabled provider plugins); the message suggests the closest id.");
+    /// The provider is disabled in config.
+    PROVIDER_DISABLED = ("provider.disabled", Config,
+        "The requested or fallback provider has `providers.<id>.enabled = false`; nothing else was resolved.");
+    /// No provider could be selected automatically.
+    PROVIDER_NOT_CONFIGURED = ("provider.not_configured", Config,
+        "No provider is configured, no provider secret is stored, no sign-in exists and no configured local endpoint answers. Run `prometheus model` or `prometheus auth add <provider>`.");
+    /// A local-server provider has no endpoint.
+    PROVIDER_MISSING_BASE_URL = ("provider.missing_base_url", Config,
+        "A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider.");
+    /// No credential may be sent to the provider's host.
+    PROVIDER_MISSING_CREDENTIAL = ("provider.missing_credential", Auth,
+        "The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`.");
+    /// A provider descriptor is malformed.
+    PROVIDER_INVALID_DESCRIPTOR = ("provider.invalid_descriptor", Config,
+        "A provider descriptor (a `[providers.<id>]` block or a plugin's) misses a required field or holds an invalid value.");
+    /// The provider rejected the credential or the account's plan.
+    PROVIDER_AUTH_FAILED = ("provider.auth_failed", Auth,
+        "The provider rejected the credential (`auth`) or the account's plan is not entitled to the API (`entitlement`).");
+    /// The provider rejected the request itself.
+    PROVIDER_INVALID_REQUEST = ("provider.invalid_request", InvalidInput,
+        "The provider rejected the request as malformed or misconfigured (`invalid_request`, `config`); it is never retried or rerouted.");
+    /// A provider call failed.
+    PROVIDER_CALL_FAILED = ("provider.call_failed", Provider,
+        "A model call failed after same-route retries and fallback (`billing`, `rate_limit`, `overloaded`, `server_error`, `timeout`, `network`, `context_overflow` or `content_filter`); the message names the class.");
+    /// No model is selected for the resolved provider.
+    MODEL_NOT_SELECTED = ("model.not_selected", Config,
+        "No model id was given (`--model`, `model.default`) and the provider has no default model.");
+    /// The model lacks a capability the request needs.
+    MODEL_CAPABILITY_MISSING = ("model.capability_missing", Config,
+        "The route's model lacks a capability the request needs (tool calling, image input, or a context window large enough for the request).");
+    /// The model's context window is below `model.min_context_window`.
+    MODEL_CONTEXT_TOO_SMALL = ("model.context_too_small", Config,
+        "The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models.\"<provider>/<model>\"] context_window`.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line
