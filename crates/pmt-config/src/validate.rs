@@ -2,8 +2,9 @@
 //! configuration-and-profiles, Strict validation). It reports every problem
 //! at once with its key and position: unknown keys (with "did you mean"),
 //! machine-wide sections, wrong types, unknown enum values (with the
-//! allowed values) and out-of-range numbers. Only a document without
-//! issues is deserialized into [`crate::Config`].
+//! allowed values), out-of-range numbers and credential-looking values in
+//! non-secret keys (spec: Secrets are not configuration). Only a document
+//! without issues is deserialized into [`crate::Config`].
 
 use std::ops::Range;
 
@@ -11,12 +12,14 @@ use pmt_core::error::{ErrorCode, codes};
 use serde_json::Value;
 
 use crate::catalog::{self, allowed_values, resolve, type_label};
+use crate::credential;
 use crate::schema::{MACHINE_WIDE_SECTIONS, is_secret_name};
 
 /// One validation problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {
-    /// `config.unknown_key` or `config.invalid`.
+    /// `config.unknown_key`, `config.invalid` or
+    /// `config.credential_in_file`.
     pub code: &'static ErrorCode,
     /// The dotted key the problem is about.
     pub key: String,
@@ -242,7 +245,7 @@ impl Checker<'_> {
             match (properties.and_then(|p| p.get(name)), additional) {
                 (Some(child_schema), _) => self.check(child, child_schema, &child_key),
                 (None, Some(entry)) if entry.is_object() => self.check(child, entry, &child_key),
-                (None, Some(Value::Bool(true))) => {}
+                (None, Some(Value::Bool(true))) => self.scan_free_form(child, &child_key),
                 _ => self.issues.push(unknown_key(&child_key, key_span.clone())),
             }
         }
@@ -299,11 +302,40 @@ impl Checker<'_> {
         }
     }
 
+    /// A schema-free table (plugin or skill settings) has no types to
+    /// check, but a credential is still refused anywhere inside it.
+    fn scan_free_form(&mut self, node: &Node, key: &str) {
+        match &node.kind {
+            Kind::Scalar(Value::String(text), _) => self.refuse_credential(node, text, key),
+            Kind::Scalar(..) => {}
+            Kind::Array(items) => items.iter().for_each(|item| self.scan_free_form(item, key)),
+            Kind::Table(entries) => {
+                for (name, _, child) in entries {
+                    self.scan_free_form(child, &format!("{key}.{name}"));
+                }
+            }
+        }
+    }
+
+    fn refuse_credential(&mut self, node: &Node, text: &str, key: &str) {
+        if credential::looks_like_credential(text) {
+            self.issues.push(Issue {
+                code: &codes::CONFIG_CREDENTIAL_IN_FILE,
+                key: key.to_owned(),
+                span: node.span.clone(),
+                message: credential::message(key),
+            });
+        }
+    }
+
     fn check_scalar(&mut self, node: &Node, value: &Value, schema: &Value, key: &str) {
         if let Some(message) = range_error(value, schema) {
             return self.invalid(key, node, format!("{key}: {message}"));
         }
         let is_secret_ref = schema.get("x-secret-ref") == Some(&Value::Bool(true));
+        if let (false, Some(text)) = (is_secret_ref, value.as_str()) {
+            self.refuse_credential(node, text, key);
+        }
         if let (true, Some(name)) = (is_secret_ref, value.as_str())
             && !is_secret_name(name)
         {
@@ -400,6 +432,26 @@ mod tests {
                     [skills.config.foo]\nanything = [1, 2]\n[models]\nfast = \"openrouter/x\"\n\
                     [models.big]\nprovider = \"anthropic\"\ncontext_window = 200000\n";
         assert_eq!(issues(text), []);
+    }
+
+    #[test]
+    fn credentials_in_the_file_are_refused_except_in_secret_keys() {
+        let found = issues(
+            "[display]\ntheme = \"sk-live-123456\"\n\
+             [skills.config.foo]\nlist = [\"ok\", \"ghp_abcdefghijklmnop\"]\n\
+             [providers.acme]\nkey_secret = \"ACME_KEY\"\n",
+        );
+        let found: Vec<(&str, &str)> = found
+            .iter()
+            .map(|i| (i.code.code, i.key.as_str()))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("config.credential_in_file", "display.theme"),
+                ("config.credential_in_file", "skills.config.foo.list"),
+            ]
+        );
     }
 
     #[test]

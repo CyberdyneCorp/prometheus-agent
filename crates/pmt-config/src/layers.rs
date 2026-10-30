@@ -11,6 +11,7 @@ use pmt_core::error::{Error, codes};
 use serde_json::Value;
 
 use crate::catalog;
+use crate::credential;
 use crate::edit;
 use crate::parse;
 use crate::schema::Config;
@@ -94,7 +95,9 @@ impl Overrides {
 /// # Errors
 ///
 /// `config.invalid_argument` (exit 2): unknown key, a section instead of a
-/// value, or a value the schema rejects (type, enum, range).
+/// value, or a value the schema rejects (type, enum, range);
+/// `config.credential_value` (exit 2) for a credential-looking value in a
+/// non-secret key.
 pub fn typed_value(key: &str, raw: &str) -> Result<toml_edit::Value, Error> {
     let info =
         catalog::lookup(key).ok_or_else(|| argument_error(&[validate::unknown_key(key, None)]))?;
@@ -119,10 +122,19 @@ pub fn typed_value(key: &str, raw: &str) -> Result<toml_edit::Value, Error> {
     }
 }
 
+/// Every issue of a command-line value is a usage error (exit 2); a
+/// credential keeps its own code so scripts can tell it apart.
 fn argument_error(issues: &[validate::Issue]) -> Error {
     let lines: Vec<&str> = issues.iter().map(|i| i.message.as_str()).collect();
-    Error::new(&codes::CONFIG_INVALID_ARGUMENT, lines.join("\n"))
-        .with_hint("see the key with: prometheus config explain <key>")
+    let credential = issues
+        .iter()
+        .any(|i| i.code == &codes::CONFIG_CREDENTIAL_IN_FILE);
+    if credential {
+        Error::new(&codes::CONFIG_CREDENTIAL_VALUE, lines.join("\n")).with_hint(credential::HINT)
+    } else {
+        Error::new(&codes::CONFIG_INVALID_ARGUMENT, lines.join("\n"))
+            .with_hint("see the key with: prometheus config explain <key>")
+    }
 }
 
 /// Strings only: plain strings and string enums.

@@ -176,6 +176,43 @@ fn unset_restores_the_default() {
 }
 
 #[test]
+fn credential_in_the_file_is_invalid_for_validate_and_every_load() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    std::fs::write(
+        config_path(home.path()),
+        "[providers.acme]\nbase_url = \"sk-live-123456\"\n",
+    )
+    .unwrap();
+    for args in [
+        &["config", "validate"][..],
+        &["config", "get", "agent.max_iterations"],
+    ] {
+        let out = run(home.path(), args);
+        assert_eq!(out.status.code(), Some(78), "{args:?}");
+        let err = stderr(&out);
+        assert!(
+            err.contains("config.toml:2:12: providers.acme.base_url: this looks like a credential"),
+            "{args:?}: {err}"
+        );
+        assert!(!err.contains("sk-live"), "{args:?}: {err}");
+    }
+    std::fs::write(config_path(home.path()), "").unwrap();
+    let out = run(
+        home.path(),
+        &[
+            "--set",
+            "display.theme=ghp_abcdefghijklmnop",
+            "config",
+            "get",
+            "display.theme",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+    assert!(stderr(&out).contains("this looks like a credential"));
+}
+
+#[test]
 fn validate_reports_every_error_with_line_and_allowed_values() {
     let home = temp_home();
     run(home.path(), &["config", "path"]);
@@ -366,6 +403,30 @@ mod edit {
                 .path()
                 .join("profiles/default/config.edit.toml")
                 .exists()
+        );
+    }
+
+    #[test]
+    fn credential_in_the_edited_file_is_a_validation_error() {
+        let home = temp_home();
+        let tools = temp_home();
+        super::run(home.path(), &["config", "path"]);
+        let before = std::fs::read_to_string(config_path(home.path())).unwrap();
+        let script = editor(
+            tools.path(),
+            "[display]\ntheme = \"sk-live-123456\"\n",
+            "unused",
+        );
+        let out = edit(home.path(), &script, "n\n");
+        assert_eq!(out.status.code(), Some(78));
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("display.theme: this looks like a credential"),
+            "{err}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(config_path(home.path())).unwrap(),
+            before
         );
     }
 

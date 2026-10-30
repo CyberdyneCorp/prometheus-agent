@@ -786,6 +786,11 @@ version = "0.1.0"
 [[package]]
 name = "pmt-store"
 version = "0.1.0"
+dependencies = [
+ "pmt-config",
+ "tempfile",
+ "trybuild",
+]
 
 [[package]]
 name = "pmt-tools"

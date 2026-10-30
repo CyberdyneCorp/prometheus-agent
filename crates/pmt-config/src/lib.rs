@@ -40,7 +40,8 @@ pub use write::ConfigFile;
 ///
 /// # Errors
 ///
-/// Every problem in one error (exit 78), or a credential (exit 2).
+/// Every problem in one error (exit 78), a credential in a non-secret key
+/// included.
 pub fn check(path: &std::path::Path, text: &str) -> Result<(), pmt_core::Error> {
     write::check_document(path, text)
 }

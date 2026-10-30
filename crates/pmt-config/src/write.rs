@@ -15,8 +15,7 @@ use toml_edit::DocumentMut;
 
 use crate::layers::{Layered, Overrides, typed_value};
 use crate::migrate::{self, Migrated};
-use crate::validate::{Kind, Node};
-use crate::{backups, catalog, credential, edit, parse};
+use crate::{backups, catalog, edit, parse};
 
 /// A profile's `config.toml` with its backup directory.
 #[derive(Debug, Clone)]
@@ -77,8 +76,8 @@ impl ConfigFile {
         Layered::build(&self.path, &text, overrides)
     }
 
-    /// `config set`: types `raw` by the key's schema, refuses credentials
-    /// for non-secret keys and writes it.
+    /// `config set`: types `raw` by the key's schema (which refuses a
+    /// credential for a non-secret key) and writes it.
     ///
     /// # Errors
     ///
@@ -87,10 +86,6 @@ impl ConfigFile {
     /// error.
     pub fn set(&self, key: &str, raw: &str) -> Result<(), Error> {
         let value = typed_value(key, raw)?;
-        let is_secret_ref = catalog::lookup(key).is_some_and(|info| info.secret_ref);
-        if !is_secret_ref {
-            refuse_credentials(key, &Node::from_value(&value))?;
-        }
         self.modify(|doc| {
             edit::set(doc, key, value)
                 .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))
@@ -124,8 +119,8 @@ impl ConfigFile {
     ///
     /// # Errors
     ///
-    /// The validation errors of `text` (exit 78), a credential in a
-    /// non-secret key (exit 2), `home.io`.
+    /// The validation errors of `text`, a credential in a non-secret key
+    /// included (exit 78), `home.io`.
     pub fn replace(&self, text: &str) -> Result<(), Error> {
         check_document(&self.path, text)?;
         let old = self.raw()?;
@@ -157,8 +152,8 @@ impl ConfigFile {
     }
 }
 
-/// Everything a written file must satisfy: current schema version, a valid
-/// document, no credential in a non-secret key.
+/// Everything a written file must satisfy: current schema version and a
+/// valid document (which has no credential in a non-secret key).
 pub(crate) fn check_document(path: &Path, text: &str) -> Result<(), Error> {
     let doc = parse::document(path, text)?;
     let version = migrate::file_version(&doc.clone().into_mut())?;
@@ -171,31 +166,7 @@ pub(crate) fn check_document(path: &Path, text: &str) -> Result<(), Error> {
             ),
         ));
     }
-    parse::config(path, text)?;
-    refuse_credentials("", &Node::from_item(doc.as_item()))
-}
-
-/// Refuses credential-looking strings anywhere in `node` except under keys
-/// that name secrets.
-fn refuse_credentials(key: &str, node: &Node) -> Result<(), Error> {
-    match &node.kind {
-        Kind::Scalar(serde_json::Value::String(text), _) => credential::refuse(key, text),
-        Kind::Scalar(..) => Ok(()),
-        Kind::Array(items) => items
-            .iter()
-            .try_for_each(|item| refuse_credentials(key, item)),
-        Kind::Table(entries) => entries.iter().try_for_each(|(name, _, child)| {
-            let child_key = if key.is_empty() {
-                name.clone()
-            } else {
-                format!("{key}.{name}")
-            };
-            if catalog::lookup(&child_key).is_some_and(|info| info.secret_ref) {
-                return Ok(());
-            }
-            refuse_credentials(&child_key, child)
-        }),
-    }
+    parse::config(path, text).map(drop)
 }
 
 fn io_error(path: &Path, e: &io::Error) -> Error {
@@ -315,6 +286,7 @@ mod tests {
         let err = config
             .replace("[display]\ntheme = \"ghp_abcdefghijklmnop\"\n")
             .unwrap_err();
-        assert_eq!(err.code().code, "config.credential_value");
+        assert_eq!(err.code().code, "config.credential_in_file");
+        assert_eq!(err.exit_code(), 78);
     }
 }

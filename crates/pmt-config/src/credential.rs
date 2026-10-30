@@ -1,8 +1,8 @@
 //! Secrets are not configuration (spec: configuration-and-profiles): a
 //! value that looks like a credential is refused for every non-secret key,
-//! so a pasted API key never lands in `config.toml`.
-
-use pmt_core::error::{Error, codes};
+//! so a pasted API key never lands in `config.toml`. Keys that need a
+//! credential are typed [`crate::schema::SecretName`] (a `*_secret` key
+//! holding the secret's name) and are the only exception.
 
 /// Prefixes of common credential formats (OpenAI/Anthropic `sk-`, GitHub,
 /// Slack, AWS access keys, GitLab, Google API keys).
@@ -36,27 +36,22 @@ pub fn looks_like_credential(value: &str) -> bool {
         .any(|prefix| value.len() > prefix.len() + 3 && value.starts_with(prefix))
 }
 
-/// Refuses a credential-looking string for the non-secret key `key`.
-///
-/// # Errors
-///
-/// `config.credential_value` (exit 2) with the spec message.
-pub fn refuse(key: &str, value: &str) -> Result<(), Error> {
-    if looks_like_credential(value) {
-        return Err(Error::new(
-            &codes::CONFIG_CREDENTIAL_VALUE,
-            format!(
-                "{key}: this looks like a credential; store it with: prometheus secrets set <NAME>"
-            ),
-        )
-        .with_hint("then point the key at the secret name (for example key_secret = \"NAME\")"));
-    }
-    Ok(())
+/// The refusal for a credential-looking value in the non-secret key `key`
+/// (spec message). The validator reports it as `config.credential_in_file`
+/// (exit 78) for a file and `config.credential_value` (exit 2) for a
+/// command-line argument.
+#[must_use]
+pub fn message(key: &str) -> String {
+    format!("{key}: this looks like a credential; store it with: prometheus secrets set <NAME>")
 }
+
+/// How to fix a refused credential.
+pub const HINT: &str =
+    "then reference it by name in the key's `*_secret` field (for example key_secret = \"NAME\")";
 
 #[cfg(test)]
 mod tests {
-    use super::{looks_like_credential, refuse};
+    use super::{looks_like_credential, message};
 
     #[test]
     fn known_formats_are_credentials() {
@@ -87,10 +82,9 @@ mod tests {
 
     #[test]
     fn refusal_uses_the_spec_message() {
-        let err = refuse("providers.acme.base_url", "sk-live-123456").unwrap_err();
-        assert_eq!(err.exit_code(), 2);
-        assert!(err.message().ends_with(
-            "this looks like a credential; store it with: prometheus secrets set <NAME>"
-        ));
+        assert_eq!(
+            message("providers.acme.base_url"),
+            "providers.acme.base_url: this looks like a credential; store it with: prometheus secrets set <NAME>"
+        );
     }
 }

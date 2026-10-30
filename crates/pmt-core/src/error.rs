@@ -206,6 +206,9 @@ error_codes! {
     /// A value that looks like a credential was given for a non-secret key.
     CONFIG_CREDENTIAL_VALUE = ("config.credential_value", Usage,
         "A value that looks like a credential (API key, token, private key) was given for a non-secret configuration key; store it with `prometheus secrets set <NAME>`.");
+    /// A profile `config.toml` holds a credential in a non-secret key.
+    CONFIG_CREDENTIAL_IN_FILE = ("config.credential_in_file", Config,
+        "A profile `config.toml` holds a value that looks like a credential (API key, token, private key) in a non-secret key; move it into the secrets store with `prometheus secrets set <NAME>` and reference it by name.");
     /// `config.toml` was written by a newer prometheus.
     CONFIG_TOO_NEW = ("config.too_new", Config,
         "`config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus.");

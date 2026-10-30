@@ -68,6 +68,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `config.invalid` | `config` | 78 | A profile `config.toml` value has the wrong type, is out of range or is not one of the allowed values; the error names the key, line and allowed values. |
 | `config.invalid_argument` | `usage` | 2 | A configuration key or value given on the command line (`config set`, `config get`, `--set`) is unknown, malformed, out of range or not allowed. |
 | `config.credential_value` | `usage` | 2 | A value that looks like a credential (API key, token, private key) was given for a non-secret configuration key; store it with `prometheus secrets set <NAME>`. |
+| `config.credential_in_file` | `config` | 78 | A profile `config.toml` holds a value that looks like a credential (API key, token, private key) in a non-secret key; move it into the secrets store with `prometheus secrets set <NAME>` and reference it by name. |
 | `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
 | `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
 | `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
