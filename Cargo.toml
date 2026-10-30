@@ -15,6 +15,9 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 [workspace.dependencies]
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
+pmt-net = { path = "crates/pmt-net" }
+pmt-obs = { path = "crates/pmt-obs" }
+pmt-store = { path = "crates/pmt-store" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -24,6 +27,12 @@ tokio = { version = "1.54", features = ["rt", "rt-multi-thread", "sync", "time",
 tokio-util = "0.7"
 tempfile = "3.27"
 ulid = "3.0"
+toml = "1.1"
+tracing = "0.1"
+sha2 = "0.11"
+reqwest = { version = "0.13", default-features = false }
+nix = { version = "0.31", default-features = false, features = ["resource"] }
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

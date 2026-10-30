@@ -179,6 +179,27 @@ error_codes! {
     /// The launch environment was read a second time.
     LAUNCH_ENV_REREAD = ("launch_env.reread", Internal,
         "The process environment was read a second time; it may only be read once at startup.");
+    /// The command line did not parse.
+    CLI_USAGE = ("cli.usage", Usage,
+        "The command line names an unknown command, flag or argument, or misses a required one.");
+    /// The Prometheus home could not be determined.
+    HOME_UNRESOLVED = ("home.unresolved", Config,
+        "No Prometheus home could be determined: `--home` and `PROMETHEUS_HOME` are unset and the user home directory is unknown.");
+    /// A file under the Prometheus home could not be read or written.
+    HOME_IO = ("home.io", Io,
+        "A file or directory under the Prometheus home could not be read or written.");
+    /// Another process holds the home's single-writer lock.
+    HOME_LOCKED = ("home.locked", Conflict,
+        "Another Prometheus process (the daemon or an in-process chat) holds the home's writer lock `run/gateway.lock`; retry when it exits.");
+    /// A configuration file is not valid TOML or does not match its schema.
+    CONFIG_PARSE = ("config.parse", Config,
+        "A configuration file (`config.toml`, `daemon.toml`) is not valid TOML or does not match its schema.");
+    /// The invoked surface was not compiled into this build.
+    SURFACE_NOT_INCLUDED = ("surface.not_included", Unavailable,
+        "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build.");
+    /// The shared outbound HTTP client could not be built.
+    NET_CLIENT_INIT = ("net.client_init", Internal,
+        "The shared outbound HTTP client could not be initialised.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

@@ -7,12 +7,80 @@
 ```text
 Prometheus Agent
 
-Usage: prometheus
+Usage: prometheus [OPTIONS] [COMMAND]
+
+Commands:
+  version  Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
   -h, --help
           Print help
 
   -V, --version
           Print version
 ```
+
+## `prometheus version`
+
+```text
+Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+
+Usage: prometheus version [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus help [COMMAND]
+
+Commands:
+  version  Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus help version`
+
+```text
+Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+
+Usage: prometheus help version
+```
+
+## `prometheus help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus help help
+```
+
+## JSON output
+
+With `--json` a command prints exactly one JSON document on stdout (JSON Lines for `--follow` streams) and nothing else; diagnostics go to stderr. A failing command prints `{"error": {kind, code, message, hint}}` to stderr and exits with its [exit code](error-codes.md). Listing and status documents carry a top-level `schema` naming their versioned shape; a breaking change bumps the shape's major version. `version --json` is the fixed build-identity object and has no `schema` field.
+
+No command emits a versioned shape yet.

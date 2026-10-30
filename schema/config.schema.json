@@ -4,6 +4,13 @@
   "description": "Root of a profile's `config.toml`.",
   "type": "object",
   "properties": {
+    "network": {
+      "description": "Outbound networking.",
+      "$ref": "#/$defs/NetworkConfig",
+      "default": {
+        "force_ipv4": false
+      }
+    },
     "schema_version": {
       "description": "Version of this file's schema; older files are migrated forward.",
       "type": "integer",
@@ -12,5 +19,19 @@
       "minimum": 0
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "NetworkConfig": {
+      "description": "The `[network]` section.",
+      "type": "object",
+      "properties": {
+        "force_ipv4": {
+          "description": "Resolve and connect every outbound client (providers, MCP over HTTP,\nweb tools, adapters, OTLP, downloads) over IPv4 only; loopback\nlisteners are unaffected. Set it when `prometheus doctor network\n--online` reports a blackholed IPv6 route.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
 }

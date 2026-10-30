@@ -1,9 +1,75 @@
 //! The `prometheus` binary (alias `pmt`). Every surface is a subcommand of
-//! this one executable; M0 only provides the build identity.
+//! this one executable.
+
+use std::ffi::OsStr;
+use std::path::PathBuf;
+use std::process::ExitCode;
 
 use clap::Parser;
-use prometheus::Cli;
+use clap::error::ErrorKind as ClapErrorKind;
+use pmt_core::error::{Error, codes};
+use pmt_core::{exit, panic};
+use prometheus::output::print_error;
+use prometheus::{Cli, Command, startup, version};
 
-fn main() {
-    let _cli = Cli::parse();
+fn main() -> ExitCode {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => return usage_failure(&err),
+    };
+    let launch = match startup::launch_env() {
+        Ok(launch) => launch,
+        Err(err) => return failure(&err, cli.json),
+    };
+    startup::warn_ignored_env(&launch);
+    // Commands that need the home report the resolution error themselves.
+    let home = pmt_config::home::resolve(cli.home.as_deref(), &launch);
+    let home = home.as_ref().ok();
+    startup::raise_nofile(home.map(PathBuf::as_path));
+    let reporter = startup::crash_reporter(home, &launch);
+    match panic::catch_main(&reporter, || run(&cli)) {
+        Ok(code) => ExitCode::from(code),
+        Err(err) => failure(&err, cli.json),
+    }
+}
+
+fn run(cli: &Cli) -> u8 {
+    match cli.command {
+        Some(Command::Version) => version::run(cli.json, cli.verbose > 0),
+        // `chat`, the default command, arrives with the CLI chat group.
+        None => exit::SUCCESS,
+    }
+}
+
+fn failure(err: &Error, json: bool) -> ExitCode {
+    print_error(err, json);
+    ExitCode::from(err.exit_code())
+}
+
+/// Help and `--version` print normally. A usage error is clap's text, or
+/// with `--json` the `cli.usage` error document; both exit 2.
+fn usage_failure(err: &clap::Error) -> ExitCode {
+    let display_only = matches!(
+        err.kind(),
+        ClapErrorKind::DisplayHelp
+            | ClapErrorKind::DisplayVersion
+            | ClapErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+    );
+    if display_only || !json_requested() {
+        err.exit();
+    }
+    let rendered = err.to_string();
+    let first_line = rendered.lines().next().unwrap_or_default();
+    let message = first_line.strip_prefix("error: ").unwrap_or(first_line);
+    let usage = Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help");
+    failure(&usage, true)
+}
+
+/// Whether `--json` appears before any `--` separator. Used only when the
+/// command line did not parse, to pick the error format.
+fn json_requested() -> bool {
+    std::env::args_os()
+        .skip(1)
+        .take_while(|arg| arg != OsStr::new("--"))
+        .any(|arg| arg == OsStr::new("--json"))
 }

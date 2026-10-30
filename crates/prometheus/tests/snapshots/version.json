@@ -1,0 +1,1 @@
+{"version":"<VERSION>","build_id":"<BUILD_ID>","commit":"<COMMIT>","build_date":"<BUILD_DATE>","target":"<TARGET>","tier":<TIER>,"channel":"stable","rpc_protocol":"1.0","config_schema_version":1,"store_schema_version":1,"trajectory_grammar":1}

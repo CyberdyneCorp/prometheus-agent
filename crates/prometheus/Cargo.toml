@@ -14,8 +14,40 @@ path = "src/lib.rs"
 name = "prometheus"
 path = "src/main.rs"
 
+# Optional surfaces (`prometheus version --verbose` lists them). A build
+# without one answers its command with exit 69; each feature gains the
+# surface crate as an optional dependency when that surface lands.
+[features]
+default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
+tui = []
+gateway = []
+dashboard = []
+acp = []
+mcp = []
+evolve = []
+eval = []
+
 [dependencies]
 clap.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-obs.workspace = true
+pmt-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# WARN events for startup conditions; the subscriber arrives with logging.
+tracing.workspace = true
+
+[build-dependencies]
+jiff.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+jiff.workspace = true
+tempfile.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+nix.workspace = true
 
 [lints]
 workspace = true

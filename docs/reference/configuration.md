@@ -2,8 +2,9 @@
 
 # Configuration reference
 
-Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key missing here is a typo, not a silent default.
+Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key missing here is a typo, not a silent default. Machine-wide settings live in [`daemon.toml`](daemon-configuration.md).
 
 | Key | Type | Default | Allowed values | Description |
 |---|---|---|---|---|
+| `network.force_ipv4` | boolean | `false` | any | Resolve and connect every outbound client (providers, MCP over HTTP, web tools, adapters, OTLP, downloads) over IPv4 only; loopback listeners are unaffected. Set it when `prometheus doctor network --online` reports a blackholed IPv6 route. |
 | `schema_version` | integer | `1` | ≥ 0 | Version of this file's schema; older files are migrated forward. |

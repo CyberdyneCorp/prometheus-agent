@@ -27,6 +27,14 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: config_reference(),
         },
         Artifact {
+            path: "schema/daemon.schema.json",
+            contents: daemon_schema(),
+        },
+        Artifact {
+            path: "docs/reference/daemon-configuration.md",
+            contents: daemon_reference(),
+        },
+        Artifact {
             path: "docs/reference/cli.md",
             contents: cli_reference(),
         },
@@ -42,15 +50,41 @@ pub(crate) fn all() -> Vec<Artifact> {
 pub(crate) const REFERENCE_DIR: &str = "docs/reference";
 
 fn config_schema() -> String {
-    let schema = schemars::schema_for!(pmt_config::Config);
-    let mut json = serde_json::to_string_pretty(&schema).expect("a schema always serializes");
-    json.push('\n');
-    json
+    pretty_schema(&schemars::schema_for!(pmt_config::Config))
 }
 
 fn config_reference() -> String {
     let schema = schemars::schema_for!(pmt_config::Config);
-    crate::config_reference::render(schema.as_value(), HEADER)
+    crate::config_reference::render(
+        schema.as_value(),
+        HEADER,
+        "Configuration reference",
+        "Every key a profile's `config.toml` accepts. Unknown keys are rejected, \
+         so a key missing here is a typo, not a silent default. Machine-wide \
+         settings live in [`daemon.toml`](daemon-configuration.md).",
+    )
+}
+
+fn daemon_schema() -> String {
+    pretty_schema(&schemars::schema_for!(pmt_config::DaemonConfig))
+}
+
+fn daemon_reference() -> String {
+    let schema = schemars::schema_for!(pmt_config::DaemonConfig);
+    crate::config_reference::render(
+        schema.as_value(),
+        HEADER,
+        "Daemon configuration reference",
+        "Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings \
+         shared by every profile of the home, never read from a profile's \
+         `config.toml`. Unknown keys are rejected.",
+    )
+}
+
+fn pretty_schema(schema: &schemars::Schema) -> String {
+    let mut json = serde_json::to_string_pretty(schema).expect("a schema always serializes");
+    json.push('\n');
+    json
 }
 
 fn cli_reference() -> String {
@@ -58,7 +92,35 @@ fn cli_reference() -> String {
     command.build();
     let mut out = format!("{HEADER}# CLI reference\n");
     render_command(&mut out, &mut command, "prometheus");
+    render_json_shapes(&mut out);
     out
+}
+
+/// The machine-readable output contract and every registered JSON shape.
+fn render_json_shapes(out: &mut String) {
+    out.push_str(
+        "\n## JSON output\n\n\
+         With `--json` a command prints exactly one JSON document on stdout \
+         (JSON Lines for `--follow` streams) and nothing else; diagnostics \
+         go to stderr. A failing command prints \
+         `{\"error\": {kind, code, message, hint}}` to stderr and exits with \
+         its [exit code](error-codes.md). Listing and status documents carry \
+         a top-level `schema` naming their versioned shape; a breaking change \
+         bumps the shape's major version. `version --json` is the fixed \
+         build-identity object and has no `schema` field.\n\n",
+    );
+    if prometheus::output::JSON_SHAPES.is_empty() {
+        out.push_str("No command emits a versioned shape yet.\n");
+        return;
+    }
+    out.push_str("| Schema | Command |\n|---|---|\n");
+    for shape in prometheus::output::JSON_SHAPES {
+        let _ = writeln!(
+            out,
+            "| `{}` | `prometheus {}` |",
+            shape.schema, shape.command
+        );
+    }
 }
 
 /// Renders one command's long help, then its subcommands depth-first. The

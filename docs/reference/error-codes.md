@@ -59,3 +59,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `task.panicked` | `internal` | 70 | A task panicked. It was isolated and a crash report was written under `logs/crash/`. |
 | `task.cancelled` | `cancelled` | 130 | The operation was cancelled (interrupt, `/stop` or shutdown). |
 | `launch_env.reread` | `internal` | 70 | The process environment was read a second time; it may only be read once at startup. |
+| `cli.usage` | `usage` | 2 | The command line names an unknown command, flag or argument, or misses a required one. |
+| `home.unresolved` | `config` | 78 | No Prometheus home could be determined: `--home` and `PROMETHEUS_HOME` are unset and the user home directory is unknown. |
+| `home.io` | `io` | 74 | A file or directory under the Prometheus home could not be read or written. |
+| `home.locked` | `conflict` | 75 | Another Prometheus process (the daemon or an in-process chat) holds the home's writer lock `run/gateway.lock`; retry when it exits. |
+| `config.parse` | `config` | 78 | A configuration file (`config.toml`, `daemon.toml`) is not valid TOML or does not match its schema. |
+| `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
+| `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

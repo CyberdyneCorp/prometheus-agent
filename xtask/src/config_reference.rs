@@ -8,13 +8,10 @@ use std::fmt::Write as _;
 use serde_json::Value;
 
 /// One table row per leaf key; sections (objects with their own keys) are
-/// flattened into dotted paths so the reference reads like `config.toml`.
-pub(crate) fn render(schema: &Value, header: &str) -> String {
-    let mut out = format!("{header}# Configuration reference\n\n");
-    out.push_str(
-        "Every key a profile's `config.toml` accepts. Unknown keys are rejected, \
-         so a key missing here is a typo, not a silent default.\n\n",
-    );
+/// flattened into dotted paths so the reference reads like the TOML file.
+/// `title` heads the page and `intro` says which file it describes.
+pub(crate) fn render(schema: &Value, header: &str, title: &str, intro: &str) -> String {
+    let mut out = format!("{header}# {title}\n\n{intro}\n\n");
     out.push_str("| Key | Type | Default | Allowed values | Description |\n");
     out.push_str("|---|---|---|---|---|\n");
     let mut rows = Vec::new();
@@ -123,7 +120,7 @@ mod tests {
                                    "description": "Turn limit."}
             }}}
         });
-        let out = render(&schema, "");
+        let out = render(&schema, "", "T", "I");
         assert!(
             out.contains("| `agent.max_iterations` | integer | `90` | ≥ 1 | Turn limit. |"),
             "{out}"
@@ -137,6 +134,6 @@ mod tests {
     #[test]
     fn a_key_without_default_is_required() {
         let schema = json!({"properties": {"name": {"type": "string"}}});
-        assert!(render(&schema, "").contains("| `name` | string | required | any |  |"));
+        assert!(render(&schema, "", "T", "I").contains("| `name` | string | required | any |  |"));
     }
 }

@@ -6,7 +6,10 @@
 //! - `schema/config.schema.json`: JSON Schema of `config.toml` (`pmt-config`)
 //! - `docs/reference/configuration.md`: configuration reference (every key,
 //!   type, default and allowed values, rendered from that schema)
-//! - `docs/reference/cli.md`: CLI reference (the `prometheus` clap tree)
+//! - `schema/daemon.schema.json` and `docs/reference/daemon-configuration.md`:
+//!   the same for the machine-wide `daemon.toml`
+//! - `docs/reference/cli.md`: CLI reference (the `prometheus` clap tree and
+//!   the registered `--json` output shapes)
 //! - `docs/reference/error-codes.md`: exit codes, error kinds and error codes
 //!   (`pmt-core`)
 //!

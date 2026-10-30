@@ -15,7 +15,7 @@ use std::any::Any;
 use std::backtrace::Backtrace;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
 use std::future::Future;
 use std::io::{self, Write as _};
 use std::panic::{self, AssertUnwindSafe, PanicHookInfo};
@@ -27,6 +27,7 @@ use std::task::{Context, Poll};
 use tokio::task::JoinHandle;
 
 use crate::error::{Error, codes};
+use crate::private_fs;
 use crate::secret::Redactor;
 
 thread_local! {
@@ -88,7 +89,7 @@ impl CrashReporter {
     }
 
     fn write(&self, task: &str, panic: &Caught) -> io::Result<PathBuf> {
-        create_private_dir(&self.dir)?;
+        private_fs::create_dir(&self.dir)?;
         let now = jiff::Timestamp::now();
         let stem = format!("{}-{}", now.strftime("%Y%m%dT%H%M%S%.3fZ"), file_safe(task));
         let mut body = String::new();
@@ -248,29 +249,12 @@ fn create_unique(dir: &Path, stem: &str) -> io::Result<(PathBuf, File)> {
             format!("{stem}-{attempt}.txt")
         };
         let path = dir.join(name);
-        match private_file_options().open(&path) {
+        match private_fs::new_file_options().open(&path) {
             Ok(file) => return Ok((path, file)),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists && attempt < 1000 => attempt += 1,
             Err(e) => return Err(e),
         }
     }
-}
-
-fn private_file_options() -> OpenOptions {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options
-}
-
-/// Crash reports can hold paths and prompts, so the directory is owner-only.
-fn create_private_dir(dir: &Path) -> io::Result<()> {
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(true);
-    #[cfg(unix)]
-    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
-    builder.create(dir)
 }
 
 #[cfg(test)]

@@ -20,11 +20,11 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 syn = { version = "3.0", default-features = false, features = ["full", "parsing", "visit"] }
-toml = "1.1"
+toml.workspace = true
 
 # Peak RSS of the measured binary in perf-sampler (getrusage of reaped children).
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", default-features = false, features = ["resource"] }
+nix.workspace = true
 
 [lints]
 workspace = true
