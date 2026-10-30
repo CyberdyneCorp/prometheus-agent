@@ -20,7 +20,7 @@ The system SHALL resolve the Prometheus home once at process start as the `--hom
 - **THEN** the printed path SHALL be under `/tmp/h`
 
 ### Requirement: Home and profile layout
-The system SHALL lay out the home as in design decision D13: the root holds only `<home>/active_profile`, `<home>/daemon.toml` (daemon-wide settings: listeners, ports, relay, all-adapters-down policy), `<home>/run/` (daemon runtime records and sockets), `<home>/logs/` (daemon, update and migration logs), `<home>/runtimes/` (hash-pinned managed runtimes), `<home>/updates/` (install and update receipts), `<home>/kanban/` (boards shared across profiles) and `<home>/profiles/<name>/` for every profile including `default`; each profile directory SHALL contain `config.toml`, `secrets.toml` (when the file backend is used), `grants.toml`, `state.db`, and the directories `blobs/`, `skills/`, `harness/`, `trajectories/`, `cache/`, `scripts/`, `snapshots/`, `python/`, `memories/`, `cron/`, `logs/`, `themes/`, `plugins/`, `backups/` and `migrations/`, created on first use with mode `0700`.
+The system SHALL lay out the home as in design decision D13: the root holds only `<home>/active_profile`, `<home>/daemon.toml` (daemon-wide settings: listeners, ports, relay, all-adapters-down policy, and the machine-wide sections `runtimes.*`, `update.*`, `process.*` and `[local_runtime]`, which SHALL be refused in a profile `config.toml`), `<home>/run/` (daemon runtime records and sockets), `<home>/logs/` (daemon, update and migration logs), `<home>/runtimes/` (hash-pinned managed runtimes), `<home>/updates/` (install and update receipts), `<home>/kanban/` (boards shared across profiles) and `<home>/profiles/<name>/` for every profile including `default`; each profile directory SHALL contain `config.toml`, `secrets.toml` (when the file backend is used), `grants.toml`, `state.db`, and the directories `blobs/`, `skills/`, `harness/`, `trajectories/`, `cache/`, `scripts/`, `snapshots/`, `python/`, `memories/`, `cron/`, `logs/`, `themes/`, `plugins/`, `backups/` and `migrations/`, created on first use with mode `0700`.
 **Milestone:** M1
 
 #### Scenario: Default profile is a regular profile directory
@@ -234,3 +234,120 @@ The system SHALL export a profile as a `.tar.zst` archive containing config, ide
 #### Scenario: Default export has no secrets
 - **WHEN** the user runs `prometheus profile export work -o work.tar.zst`
 - **THEN** the archive SHALL contain no `secrets.toml`, no keychain material and no `state.db`
+
+### Requirement: Whole-home backup
+The system SHALL provide `prometheus backup create [-o <file>] [--quick] [--label <text>] [--keep <n>]` producing a `.tar.zst` archive of the whole home (every profile plus `active_profile` and `daemon.toml`) with a manifest of member paths, sizes and SHA-256 hashes, copying each `state.db` through the SQLite online backup API (never the raw file or its `-wal`/`-shm` sidecars), always excluding `runtimes/`, `run/`, `logs/`, `cache/` directories, browser profiles, sockets, lock files and previous backups, writing to `<home>/backups/prometheus-<UTC timestamp>[-<label>].tar.zst` by default, and pruning older default-named backups beyond `--keep` (default 3); `--quick` SHALL include only critical state per profile (`config.toml`, `secrets.toml`, `grants.toml`, `state.db`, cron job definitions, pairing and allowlist data, the projects store) and the home-level files; a second concurrent backup SHALL exit 75 with `another backup is running`, and a backup that had to skip unreadable members SHALL still write the archive, list the skipped members and exit 5.
+**Milestone:** M1
+
+#### Scenario: Live database captured consistently
+- **GIVEN** a running daemon writing to `profiles/default/state.db`
+- **WHEN** the user runs `prometheus backup create`
+- **THEN** the archive SHALL contain a `state.db` that passes an integrity check and no `state.db-wal` member
+
+#### Scenario: Retention
+- **GIVEN** three earlier default-named backups in `<home>/backups/`
+- **WHEN** the user runs `prometheus backup create --keep 3`
+- **THEN** `<home>/backups/` SHALL contain the three newest backups
+
+### Requirement: Home restore
+The system SHALL provide `prometheus backup restore <archive> [--profile <name>] [--force]` that verifies every member against the manifest hashes before writing anything (exit 65 and no change on any mismatch), refuses while a daemon or interactive client is running for an affected profile (exit 75 naming it), asks for confirmation when the target already holds data (exit 4 non-interactively without `--force`), warns `restoring an older backup: <n> sessions and <m> messages newer than the backup will be lost` when the replaced `state.db` has more sessions or later activity than the restored one, takes a quick snapshot of the replaced state first, restores `state.db` files through the SQLite backup API, never restores members from the exclusion list even if present, and with `--profile` restores only that profile's subtree.
+**Milestone:** M1
+
+#### Scenario: Corrupt archive writes nothing
+- **GIVEN** an archive with one member whose hash differs from its manifest entry
+- **WHEN** the user runs `prometheus backup restore b.tar.zst --force`
+- **THEN** the command SHALL exit 65 and no file in the home SHALL change
+
+### Requirement: State snapshots
+The system SHALL provide quick per-profile state snapshots under `<profile>/snapshots/<id>/` (id `snap_<ULID>`, label, creation time, reason `manual`, `pre-update`, `pre-restore` or `pre-migration`) with the `--quick` member set, through `prometheus snapshots list|create [--label <text>]|restore <id>|prune [--keep <n>]` and the slash command `/snapshot [create [label]|list|restore <id>|prune [n]]` (alias `/snap`, surfaces `cli`, `tui`, `desktop`), keeping the newest `snapshots.keep` manual snapshots (default 20) while update snapshots follow `update.snapshot_keep`; `restore` SHALL take a `pre-restore` snapshot first, drain the profile's live sessions to a turn boundary and close the profile's store handles (refusing with exit 75 when a turn does not finish within 30 s), replace the files atomically and reopen the profile.
+**Milestone:** M1
+
+#### Scenario: Restore pre-update snapshot
+- **GIVEN** a snapshot with reason `pre-update` taken before an update
+- **WHEN** the user runs `prometheus snapshots restore <id>`
+- **THEN** the profile's `config.toml` and `state.db` SHALL equal the snapshot's and a new `pre-restore` snapshot SHALL be listed
+
+### Requirement: Managed secrets and managed visibility
+The system SHALL load an administrator-managed secrets file `managed-secrets.toml` beside `managed.toml` (mode 0600 or 0640 owned by root) whose values take precedence over every profile store and environment value for the same name and cannot be unset or overwritten by `prometheus secrets` (`secret '<NAME>' is managed by your administrator`), SHALL allow relocating the managed directory only through the platform's machine-wide location (never a per-user setting or environment variable), SHALL list the managed source path and every managed or locked key in a header of `prometheus config show`, and SHALL have `prometheus doctor` report the resolved managed paths and whether they were loaded.
+**Milestone:** M2
+
+#### Scenario: Managed key shown
+- **GIVEN** `managed.toml` sets and locks `approvals.mode`
+- **WHEN** the user runs `prometheus config show`
+- **THEN** the header SHALL name `/etc/prometheus/managed.toml` and list `approvals.mode (locked)`
+
+### Requirement: Remote configuration backend
+The system SHALL support `config_backend.kind = "remote"` set only in `managed.toml` or `<home>/daemon.toml` (default `file`), with `config_backend.url`, `config_backend.instance_id` (required) and a credential read from the secret named by `config_backend.token_secret`, under which each profile's configuration is fetched at process start, layered by the remote plane (global, tenant, group, owner, agent, profile) with locked keys, retried for up to 30 s and otherwise failing closed with exit 78 (never falling back to a local file or defaults), kept only in memory, polled every `config_backend.poll_secs` (default 300) with changes applied through the live-reload apply classes, and written back by every config writer as the changed keys only at the profile level with optimistic concurrency, refusing locked keys with the name of the level that locks them; credentials SHALL never be accepted as remote values.
+**Milestone:** M3
+
+#### Scenario: Unreachable plane fails closed
+- **GIVEN** `config_backend.kind = "remote"` and an unreachable plane
+- **WHEN** the user runs `prometheus chat`
+- **THEN** the process SHALL exit 78 after about 30 s with a message naming the plane URL and SHALL NOT read `config.toml`
+
+### Requirement: Profile creation options
+`prometheus profile create` SHALL also accept `--clone-all` (copy everything from the source profile including plugins, cron definitions and themes but excluding sessions, `state.db`, logs, snapshots and backups), `--no-skills` (create without seeding bundled skills, setting `skills.include_bundled = false` in the new profile), `--sync-imports` (with a clone flag, also copy the import sync registry of `hermes-migration` › Keeping imports in sync), `--description <text>`, `--no-alias` (skip the default alias launcher), and `--clone-channels`, without which messaging adapter configuration, pairing and allowlist data SHALL never be cloned so two profiles do not answer the same bot account.
+**Milestone:** M2
+
+#### Scenario: Channels not cloned by default
+- **GIVEN** profile `work` with a Telegram adapter configured
+- **WHEN** the user runs `prometheus profile create work2 --clone-all`
+- **THEN** `work2` SHALL have no Telegram adapter configuration and no pairing data
+
+### Requirement: Profile descriptions
+The system SHALL store a per-profile description (at most 500 characters) set by `prometheus profile describe <name> --text <text>` or generated by `--auto` through the auxiliary model from the profile's name, identity file, model and installed skills (refusing to overwrite an existing description without `--overwrite`; `--all` applies to every profile lacking one), shown by `profile list` and `profile show` and available to kanban assignment routing.
+**Milestone:** M3
+
+#### Scenario: Auto description does not overwrite
+- **GIVEN** profile `research` with a user-written description
+- **WHEN** the user runs `prometheus profile describe research --auto`
+- **THEN** the description SHALL be unchanged and the command SHALL print `description exists; use --overwrite`
+
+### Requirement: Profile distributions
+The system SHALL provide `prometheus profile install <git-url|dir> [--name <n>] [--alias] [--force] [-y]` reading a `distribution.toml` manifest (`name`, `version`, `description`, `prometheus_requires` semver range, `author`, `license`, `owned` paths, `secrets_required` entries with `name`, `description`, `required`), previewing the files and required secrets and asking for confirmation, refusing an incompatible `prometheus_requires` with exit 78, prompting for missing required secrets into the secrets store, and never copying credential stores, `state.db`, sessions, memory rows, logs or snapshots even when present in the source; `profile update <name> [--force-config] [-y]` SHALL replace distribution-owned files (identity file, skills per entry, MCP definitions), merge cron jobs by id keeping the user's paused state and adding new jobs paused, and preserve the user's `config.toml` unless `--force-config`; `profile info <name>` SHALL show origin URL, commit, version and last update time, and `profile delete` SHALL show the distribution before confirming.
+**Milestone:** M3
+
+#### Scenario: Update keeps user config
+- **GIVEN** an installed distribution whose user changed `model.default`
+- **WHEN** the user runs `prometheus profile update research-bot -y`
+- **THEN** `model.default` SHALL keep the user's value and the identity file SHALL match the new commit
+
+#### Scenario: Credentials never installed
+- **GIVEN** a distribution repository that accidentally contains `secrets.toml`
+- **WHEN** it is installed
+- **THEN** the new profile SHALL NOT contain that file's contents
+
+### Requirement: Identity migration and purge
+The system SHALL provide `prometheus profile identity move <from> <to>` copying a profile's identity file and identity-bearing memory rows to another profile after confirmation, and `prometheus profile identity purge <name>` removing the identity file and identity-tier memory rows after a destructive confirmation (taking a quick snapshot first), both applying from the next session.
+**Milestone:** M3
+
+#### Scenario: Purge is snapshotted
+- **WHEN** the user runs `prometheus profile identity purge work --yes`
+- **THEN** a snapshot with reason `manual` and label `pre-identity-purge` SHALL exist and `SOUL.md` SHALL be absent
+
+### Requirement: External secret source commands
+The system SHALL provide `prometheus secrets bitwarden setup|status|token|sync [--apply]|install|disable` and `prometheus secrets onepassword setup|status|map <NAME> <op-reference>|unmap <NAME>|sync [--apply]|disable`, where `setup` installs the pinned CLI (`bws` or `op`) into `<home>/runtimes/` after confirmation, stores the access or service-account token in the secrets store under the name recorded in `access_token_secret`, selects the project or vault (`--project-id`, `--server-url`, `--vault` for non-interactive use) and enables the source; `status` reports binary version, token validity and mapped names without values; `token` rotates the token only after validating the new one; `sync` previews which secret names would be added or shadowed and writes only with `--apply`; resolved values SHALL be cached in memory for at most `secrets.<source>.cache_ttl_secs` (default 300) and never written to disk.
+**Milestone:** M3
+
+#### Scenario: Invalid rotated token refused
+- **GIVEN** an enabled Bitwarden source
+- **WHEN** the user runs `prometheus secrets bitwarden token` and enters an invalid token
+- **THEN** the command SHALL exit 78 and the stored token SHALL be unchanged
+
+### Requirement: Retired model rewrite
+The system SHALL provide `prometheus config fix-models [--apply] [--no-backup]` that scans every config key holding a model id (main, auxiliary, delegation, cron jobs, fallback chains) for ids marked retired or deprecated in the model catalog's retirement table, prints each finding with its replacement, changes nothing without `--apply`, and with `--apply` rewrites through the format-preserving config writer after copying `config.toml` to `config.toml.bak-<timestamp>` unless `--no-backup`; `prometheus doctor` SHALL report retired ids as `warn` with this command as remedy.
+**Milestone:** M2
+
+#### Scenario: Dry run by default
+- **GIVEN** `model.default = "grok-2"` marked retired with replacement `grok-4`
+- **WHEN** the user runs `prometheus config fix-models`
+- **THEN** the output SHALL list `model.default: grok-2 -> grok-4` and `config.toml` SHALL be unchanged
+
+### Requirement: Secrets are resolved per use
+The system SHALL read a secret from its store at each use (with the in-memory cache bounded by the store's change notification or a 5 s staleness limit), so a secret set or rotated with `prometheus secrets set` applies to the next provider request of running sessions without a reload command, and the registry SHALL provide `/reload-secrets` that invalidates the cache immediately for the session's profile and prints the names (never values) whose value changed; environment-supplied secrets SHALL remain fixed for the process lifetime.
+**Milestone:** M1
+
+#### Scenario: Rotated key used next request
+- **GIVEN** a running session using `OPENAI_API_KEY`
+- **WHEN** the user runs `prometheus secrets set OPENAI_API_KEY` with a new value in another terminal and then `/reload-secrets`
+- **THEN** the session's next provider request SHALL use the new value

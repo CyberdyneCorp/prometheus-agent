@@ -373,3 +373,97 @@ The system SHALL refuse `execute_code` without running anything when `code` is e
 - **GIVEN** an `execute_code` call with whitespace-only `code`
 - **WHEN** it is handled
 - **THEN** the system SHALL return `No code provided.` and run nothing
+
+### Requirement: User-launched background sessions
+The system SHALL provide `/bg <prompt>` on every surface that starts a new, independent session (own `ses_` id, no history from the current session, `source = background`, `parent_session_id` set to the launching session for lineage only) inheriting the launching session's profile, model route, toolsets, reasoning settings and fallback chain, SHALL return immediately with `Background task #<n> started` and a task id `bg-<ULID>`, SHALL deliver the final answer (or failure) to the launching surface as a labelled panel (CLI/TUI/desktop) or chat message (gateway) without inserting it into the launching session's history, SHALL count background sessions against `delegation.max_concurrent_children`, and SHALL let `/agents` list and stop them.
+**Milestone:** M2
+
+#### Scenario: Result delivered to the same chat
+- **GIVEN** a Telegram chat
+- **WHEN** the user sends `/bg summarise today's error logs` and keeps chatting
+- **THEN** the foreground replies SHALL continue and, when the background session ends, its answer SHALL be posted to the chat labelled with its task number, and the foreground session's transcript SHALL not contain it
+
+### Requirement: Agents monitor and live transcripts
+The system SHALL provide `/agents` (alias `/tasks`) listing for the current session its running and recently finished subagents as a tree grouped by parent, its `/bg` background sessions, its active goal, loop and heartbeat, and its background processes, each with status, elapsed time, model, tokens and cost; the TUI and desktop SHALL offer inspect (turn-by-turn history, available after the child returns), steer and stop per item, stopping one child SHALL not affect its siblings; every dispatched child SHALL also write an append-only human-readable transcript at `<profile>/cache/delegation/live/<delegation_id>/task-<n>.log` plus a `manifest.json`, whose paths SHALL be returned in the dispatch result as `live_transcripts`, and directories older than 7 days SHALL be pruned on later dispatches.
+**Milestone:** M2
+
+#### Scenario: Stop one child
+- **GIVEN** a background call with three running children
+- **WHEN** the user stops the second from `/agents`
+- **THEN** that child SHALL finish with `status = "interrupted"` and the other two SHALL keep running
+
+#### Scenario: Tail a live transcript
+- **WHEN** a child is dispatched
+- **THEN** its `task-<n>.log` SHALL exist before the child's first model call and SHALL gain one timestamped line per tool call
+
+### Requirement: Review command
+The system SHALL provide `/review [instructions]` on every surface that dispatches a background child on the delegation rail whose evidence is a snapshot of the last 10 user and assistant messages of the session (tool output and system messages excluded, read from storage when no agent is resident), with the child's normal toolset under the session's grant, a briefing naming the skills the session had loaded, and the instructions as focus; the reviewer's model SHALL resolve from `[delegation.review]` `provider` and `model` (default: the main route); the dispatch SHALL print `Review started. Results will return here.` and the completion SHALL re-enter the session as a normal `delegation_completed` input labelled `Review: <focus>` or `Review recent work`.
+**Milestone:** M2
+
+#### Scenario: Review returns to the session
+- **GIVEN** a session whose agent just opened a pull request
+- **WHEN** the user runs `/review focus on security`
+- **THEN** a reviewer child SHALL run in the background and its findings SHALL arrive as a `delegation_completed` input to the same session
+
+### Requirement: Independent completions
+The system SHALL, when `delegation.independent_completions = true` (default false), advertise an optional per-task `group` field in the `delegate_task` schema and deliver each ungrouped task's result as its own completion as soon as it finishes and each group's results together once all its tasks finish, with unit ids `<delegation_id>-1`, `-2`, … listed in the dispatch handle as `units[]` (`delegation_id`, `group`, `task_indexes`); grouping SHALL change delivery only, never execution order or concurrency accounting; with the setting off a `group` field SHALL be accepted and ignored, and changing the setting SHALL apply from the next session.
+**Milestone:** M2
+
+#### Scenario: Ungrouped results arrive separately
+- **GIVEN** `delegation.independent_completions = true` and a call with two ungrouped tasks and two tasks in group `bench`
+- **WHEN** all four finish at different times
+- **THEN** the session SHALL receive three completions: one per ungrouped task and one for `bench`
+
+### Requirement: Child request overrides and direct endpoints
+The system SHALL accept `delegation.base_url` with `delegation.api_key_secret` (the name of a secret in the secrets store) and `delegation.wire_format` (`chat_completions` | `responses` | `anthropic_messages`, default inferred from the URL) as a direct child endpoint alternative to `delegation.provider`, and `delegation.request_overrides` (a table whose top-level keys are request parameters and whose `extra_body` sub-table is deep-merged one level into the request body) applied to every child model call on every resolution branch, with explicit keys winning over route-derived values; an override naming a parameter the wire format does not support SHALL fail config validation with exit 78.
+**Milestone:** M2
+
+#### Scenario: Routing hint on every child call
+- **GIVEN** `[delegation.request_overrides.extra_body.provider] sort = "throughput"` and an inherited OpenRouter route
+- **WHEN** a child makes a model call
+- **THEN** the request body SHALL contain `provider.sort = "throughput"` while keeping the route's other body fields
+
+### Requirement: Gateway delegation mode and one-shot joining
+The system SHALL read `delegation.gateway_mode` (`auto` default | `inline` | `background`): `auto` makes a messaging session join its children inside the `delegate_task` call when interim assistant messages are disabled for that platform and keeps background dispatch otherwise; `inline` joins on every gateway session; `background` never joins; a joining session's `delegate_task` schema SHALL omit the live-control actions, a `/stop` or interrupting message SHALL stop its children with partial results, and the mode SHALL be fixed per session at creation (changes apply to new sessions); finite runs (`prometheus chat -z`, non-TTY stdin) SHALL always join their children before exiting, subject to the normal limits and approval policy.
+**Milestone:** M2
+
+#### Scenario: One message per turn on Telegram
+- **GIVEN** `delegation.gateway_mode = "auto"` and a Telegram platform with interim messages off
+- **WHEN** the model delegates two tasks
+- **THEN** the turn SHALL wait for both results and send one final reply
+
+### Requirement: Worktree isolation for children
+The system SHALL, when `delegation.worktree_isolation = true` (default false) and the session uses the local terminal backend inside a git repository, start each child in its own git worktree and branch and dispose of it on finish exactly as `git-worktrees` › Subagent worktree isolation specifies (that requirement owns path, branch prefix and finish disposition: a clean tree without commits removed after a successful inspection probe; a tree with commits or edits archived to a ref and removed with its branch kept for the parent to merge), instruct the child to work and commit there, and add to the child's result `worktree: {path, branch, commits, dirty, pruned, archive_ref, inspection_failed}`; outside git or on non-local backends the setting SHALL fall back to the shared workspace with a `note` in the result.
+**Milestone:** M2
+
+#### Scenario: Clean child pruned
+- **GIVEN** worktree isolation on and a research child that made no edits
+- **WHEN** the child finishes and the inspection probe succeeds
+- **THEN** its worktree and branch SHALL be removed and the result SHALL report `pruned: true`
+
+#### Scenario: Failed probe keeps work
+- **GIVEN** a child that made no edits and whose worktree inspection probe fails
+- **WHEN** the child finishes
+- **THEN** the worktree SHALL be kept in place and the result SHALL report `inspection_failed: true`
+
+### Requirement: Persistent execute_code session kernel
+The system SHALL reuse one Python kernel process per (session, execution mode, interpreter, working directory, granted tool set) across `execute_code` calls so imports and variables persist, SHALL discard it when a call passes `reset: true`, SHALL report in the result when a timeout or interrupt killed the kernel and its state was lost, SHALL fix the kernel's environment at start, SHALL re-check tool authority on every cell, SHALL reap a kernel idle for `code_execution.kernel_idle_timeout_secs` (default 1800) and evict the least recently used top-level session's kernel when more than `code_execution.max_session_kernels` (default 4) are alive (children's kernels not counted), and on remote backends SHALL run a remote kernel or fall back to one-shot scripts, saying so in the result.
+**Milestone:** M2
+
+#### Scenario: State persists between calls
+- **GIVEN** a call that runs `x = 41`
+- **WHEN** the next call runs `print(x + 1)`
+- **THEN** the output SHALL be `42`
+
+#### Scenario: Reset discards state
+- **WHEN** a call with `reset: true` runs `print(x)`
+- **THEN** the result SHALL contain a `NameError`
+
+### Requirement: execute_code execution modes
+The system SHALL read `code_execution.mode`: `project` (default) runs scripts in the session's working directory with the Python of the virtual environment active in the session's terminal environment (or a `.venv` in the working directory) when it exists and is version 3.8 or newer, falling back to the managed Python runtime; `strict` runs scripts in a fresh temporary staging directory with the managed Python runtime; both modes SHALL apply the identical sandbox, environment scrubbing, tool allow-list and limits, and a fallback SHALL be noted in the result.
+**Milestone:** M2
+
+#### Scenario: Broken venv falls back
+- **GIVEN** `code_execution.mode = "project"` and a project venv whose interpreter is missing
+- **WHEN** `execute_code` runs
+- **THEN** the script SHALL run on the managed Python runtime and the result SHALL note the fallback

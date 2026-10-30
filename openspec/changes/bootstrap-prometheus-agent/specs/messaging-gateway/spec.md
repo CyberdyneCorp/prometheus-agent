@@ -55,7 +55,7 @@ The gateway SHALL serve exactly the client protocol owned by `workspace-architec
 - **THEN** the system SHALL return JSON-RPC error `-32601` and SHALL NOT invoke any handler
 
 #### Scenario: Missing parameter
-- **WHEN** a client calls `session.send` without the required `session_id`
+- **WHEN** a client calls `prompt.submit` without the required `session_id`
 - **THEN** the system SHALL return error `-32602` whose data names `session_id`
 
 #### Scenario: Older minor client is accepted
@@ -408,7 +408,7 @@ The gateway SHALL count, per session, consecutive daemon restarts during which t
 - **THEN** the system SHALL suspend it at startup and the next message SHALL start a new session with `reset_reason = "suspended"`
 
 ### Requirement: Agent cache and eviction
-The gateway SHALL keep live agents in an LRU of at most `gateway.agent_cache.max_size` (default 128) with idle TTL `gateway.agent_cache.idle_ttl_secs` (default 3600) and SHALL shed least-recently-used agents when resident memory exceeds `gateway.agent_cache.memory_high_mb` (default `0` meaning auto at 50% of physical memory), never evicting an agent mid-turn or one whose transcript is not yet durable; eviction SHALL flush memory providers under the owning ProfileScope and SHALL NOT end the session, and a later message SHALL rebuild the agent from the stored transcript with an identical system prompt.
+The gateway SHALL keep live agents in an LRU of at most `gateway.agent_cache.max_size` (default 128) with idle TTL `gateway.agent_cache.idle_ttl_secs` (default 3600) and SHALL shed least-recently-used agents when resident memory exceeds `gateway.agent_cache.memory_high_bytes` (default `0` meaning auto at 50% of physical memory), never evicting an agent mid-turn or one whose transcript is not yet durable; eviction SHALL flush memory providers under the owning ProfileScope and SHALL NOT end the session, and a later message SHALL rebuild the agent from the stored transcript with an identical system prompt.
 **Milestone:** M2
 
 #### Scenario: Rebuilt agent preserves the cached prefix
@@ -444,7 +444,7 @@ The gateway SHALL export health metrics and lifecycle events only when `observab
 - **THEN** the system SHALL keep handling them with unchanged latency budgets and log the export failure at most once per minute
 
 ### Requirement: Gateway lifecycle hooks are typed
-The gateway SHALL emit only hooks from the closed registry owned by `plugin-system` — `on_gateway_startup`, `on_gateway_shutdown`, `on_session_start`, `on_session_end`, `on_session_reset`, `on_turn_start`, `on_turn_end`, `pre_command`, `pre_gateway_dispatch` (inbound message) and `post_gateway_delivery` (outbound message) — to plugin hooks registered for the event's profile; a plugin declaring a hook name outside that registry SHALL fail to load with an error naming it, and a hook error or timeout (`plugins.hook_timeout_ms`) SHALL be logged and SHALL NOT block the pipeline.
+The gateway SHALL emit only hooks from the closed registry owned by `plugin-system`, including at least `on_gateway_startup`, `on_gateway_shutdown`, `on_session_start`, `on_session_end`, `on_session_reset`, `on_turn_start`, `on_turn_end`, `pre_command`, `pre_gateway_dispatch` (inbound message), `post_gateway_admission`, `post_gateway_delivery` (outbound message) and `gateway_platform_event`, to plugin hooks registered for the event's profile; a plugin declaring a hook name outside that registry SHALL fail to load with an error naming it, and a hook error or timeout (`plugins.hook_timeout_ms`) SHALL be logged and SHALL NOT block the pipeline.
 **Milestone:** M2
 
 #### Scenario: Typo in hook name
@@ -455,3 +455,365 @@ The gateway SHALL emit only hooks from the closed registry owned by `plugin-syst
 - **GIVEN** a hook installed only in profile `work`
 - **WHEN** a default-profile session starts
 - **THEN** the system SHALL NOT run `work`'s hook
+
+### Requirement: Per-OS service installation without elevation
+`prometheus daemon install-service` SHALL install a per-user supervisor unit that starts the daemon at login without administrator rights: a systemd `--user` unit `prometheus-daemon.service` (enabling lingering when the user allows it, so the daemon survives logout) on Linux, a LaunchAgent `ai.prometheus.daemon` on macOS, and a Windows Scheduled Task `Prometheus Daemon` triggered `ONLOGON` with `/RL LIMITED`, falling back to a shortcut in the user's Startup folder when Task Scheduler refuses; `--system --run-as-user <user>` SHALL instead install a boot-time system unit that runs as that user (exit 77 when not run as root/administrator), `--no-start` SHALL install without starting, re-running the command SHALL rewrite the unit idempotently (exit 0, no duplicate unit), `prometheus daemon uninstall-service [--system]` SHALL stop and remove the unit it installed (exit 0 when none is installed), and a legacy unit left by an earlier Prometheus layout or an imported Hermes gateway unit SHALL be reported by `prometheus doctor` with the exact command that replaces it, never removed silently.
+**Milestone:** M2
+
+#### Scenario: Re-install is idempotent
+- **GIVEN** the LaunchAgent `ai.prometheus.daemon` is already installed
+- **WHEN** the user runs `prometheus daemon install-service` again
+- **THEN** the system SHALL rewrite the same plist, leave exactly one LaunchAgent loaded and exit 0
+
+#### Scenario: Windows fallback without Task Scheduler rights
+- **GIVEN** a Windows account whose policy forbids creating scheduled tasks
+- **WHEN** the user runs `prometheus daemon install-service`
+- **THEN** the system SHALL create a Startup-folder shortcut that runs `prometheus daemon start`, print that the fallback was used and exit 0
+
+#### Scenario: System scope needs root
+- **WHEN** a non-root user runs `prometheus daemon install-service --system --run-as-user alice`
+- **THEN** the system SHALL exit 77 with "system service install requires root"
+
+### Requirement: Daemon inventory across homes
+`prometheus gateway list [--json]` SHALL list every running Prometheus daemon on the machine for the current OS user — home path, pid, start time, build, served profiles and enabled adapters per profile — read from the machine-global runtime registry that the credential locks already use (pid plus start time verification, never argv scanning), SHALL mark an entry whose pid no longer matches its recorded start time as `stale` and prune it, and SHALL exit 0 with an empty list when no daemon runs.
+**Milestone:** M2
+
+#### Scenario: Two homes on one machine
+- **GIVEN** daemons running for `~/.prometheus` and `/srv/pmt-work`
+- **WHEN** the user runs `prometheus gateway list --json`
+- **THEN** the output SHALL contain two entries naming each home, its pid and its served profiles
+
+### Requirement: Relay enrollment
+`prometheus gateway enroll --token <one-time-token> --connector-url <url> [--gateway-id <id>] [--wake-url <url>]` SHALL exchange the one-time enrollment token with the relay connector over TLS for a long-lived gateway credential, SHALL store that credential only in the secrets store under the name referenced by `gateway.relay.token_secret` (default `PMT_RELAY_TOKEN`), SHALL write `gateway.relay.url`, `gateway.relay.gateway_id` and the optional `gateway.relay.wake_url` (an HTTPS URL the connector calls to wake a scaled-to-zero host) to `<home>/daemon.toml`, and SHALL never print or log the one-time token or the issued credential; a token the connector rejects as used or expired SHALL exit 78 without changing any file, and a running daemon SHALL pick up the enrollment on `prometheus gateway reload`.
+**Milestone:** M2
+
+#### Scenario: Token reused
+- **GIVEN** an enrollment token that was already redeemed
+- **WHEN** the user runs `prometheus gateway enroll --token T --connector-url https://relay.example`
+- **THEN** the system SHALL exit 78 with "enrollment token rejected: already used" and leave `daemon.toml` and the secrets store unchanged
+
+### Requirement: Global emergency pause
+`prometheus pause [--reason <text>]` SHALL write `<home>/run/paused` (mode 0600, containing reason, actor and UTC time) and, while it exists, the system SHALL start no new work on any profile — no scheduled-job fires (including misfire catch-up and managed webhooks), no kanban dispatch, no new turns from messaging adapters, API, A2A, CLI, TUI, desktop or dashboard clients — while turns already running finish normally and slash commands keep working; every refused submission SHALL answer "Paused: <reason>. Run `prometheus pause off` (or /pause off) to resume." and exit 69 for CLI submissions; `prometheus pause off` SHALL remove the sentinel and `prometheus pause status` SHALL print the state; the admin-tier gateway command `/pause [reason|off|status]` SHALL do the same from a chat; a pause SHALL survive daemon restarts.
+**Milestone:** M2
+
+#### Scenario: Message during pause
+- **GIVEN** `prometheus pause --reason "billing incident"` was run
+- **WHEN** an authorized Telegram user sends "summarize my inbox"
+- **THEN** the system SHALL start no turn and reply "Paused: billing incident. Run `prometheus pause off` (or /pause off) to resume."
+
+#### Scenario: In-flight turn finishes
+- **GIVEN** a Discord turn is running
+- **WHEN** an admin sends `/pause`
+- **THEN** the running turn SHALL complete and deliver its reply, and the next message SHALL be refused
+
+#### Scenario: Pause survives restart
+- **GIVEN** an active pause
+- **WHEN** the daemon restarts
+- **THEN** no scheduled job SHALL fire until `prometheus pause off` is run
+
+### Requirement: Platform start pings and paginated command browser
+The gateway SHALL answer a platform's start ping (Telegram `/start`, a Discord or Slack app-home open) with a short greeting naming `/help` without creating a session, starting a turn or counting against rate limits, and SHALL provide `/commands [page]` listing every command and skill command available to the sender on that surface (respecting access tiers), 15 entries per page on Telegram and 20 elsewhere, with next/previous buttons on adapters that support buttons and a `page <n>/<total>` footer otherwise; adapters that publish a native command menu SHALL register at most the platform's menu cap (Telegram 100, Discord 100 global commands) choosing built-ins first, then skills by recent use.
+**Milestone:** M2
+
+#### Scenario: Start ping is free
+- **WHEN** a new authorized user presses Start in Telegram
+- **THEN** the system SHALL reply with the greeting and SHALL NOT create a session row
+
+#### Scenario: Page out of range
+- **GIVEN** 37 available commands on Discord
+- **WHEN** the user sends `/commands 3`
+- **THEN** the system SHALL reply "page 3 does not exist (2 pages)"
+
+### Requirement: Home channel and /sethome
+Each platform of a profile SHALL have at most one home channel (`gateway.platforms.<name>.home_channel`, a target `chat_id[:thread_id]` plus optional display name) used as the default destination for scheduled-job deliveries, `send` targets naming only the platform, restart notices and notifications without an originating chat; the admin-tier command `/sethome` (alias `/set-home`) SHALL set the current chat (and thread, when inside one) as that platform's home channel by writing the profile's `config.toml` through the validated config-patch path and confirm "Home channel set to <name>", and a delivery that needs a home channel when none is set SHALL fail with "no home channel for <platform>; run /sethome in the target chat".
+**Milestone:** M2
+
+#### Scenario: Cron output goes home
+- **GIVEN** an admin ran `/sethome` in Telegram chat `-100123` topic `7`
+- **WHEN** a job with `deliver = "telegram"` completes
+- **THEN** the system SHALL deliver it to chat `-100123` thread `7`
+
+#### Scenario: Missing home channel
+- **GIVEN** Slack has no home channel
+- **WHEN** a delivery targets `slack`
+- **THEN** it SHALL fail with "no home channel for slack; run /sethome in the target chat"
+
+### Requirement: Text approval and busy-mode commands
+On every gateway surface the system SHALL accept `/approve [session|always]` and `/deny [all] [reason]` as text fallbacks that resolve the oldest pending approval of the sender's current session (`/deny all` denying every pending one) with the same authorization as approval cards, replying "No pending approval" when none exists, and SHALL accept `/busy [queue|steer|interrupt|status]`, where a mode argument (admin tier) persists `gateway.platforms.<name>.busy` for that platform through the validated config-patch path and applies to the next inbound message, and `status` prints the effective mode and its source (platform override or `busy.input_mode`).
+**Milestone:** M2
+
+#### Scenario: Approve by text
+- **GIVEN** a Signal session with a pending terminal approval
+- **WHEN** the requesting user sends `/approve session`
+- **THEN** the system SHALL resolve it with decision `session` and continue the tool call
+
+#### Scenario: Busy mode persisted
+- **WHEN** an admin sends `/busy steer` in Telegram
+- **THEN** `gateway.platforms.telegram.busy` SHALL equal `"steer"` in `config.toml` and `/busy status` SHALL report "steer (platform override)"
+
+### Requirement: Discarding a restart-interrupted turn
+For a session whose last turn is `resume_pending` after a crash, `/discard` SHALL mark that turn `interrupted` (its partial transcript kept, no retry offered) and immediately release the chat's FIFO so queued messages run in order, while `/retry` re-runs it; any other message SHALL stay queued behind the pending turn until one of the two is chosen or `gateway.sessions.resume_pending_ttl_secs` (default 86400) elapses, after which the turn SHALL be discarded automatically.
+**Milestone:** M2
+
+#### Scenario: Discard unblocks the queue
+- **GIVEN** a `resume_pending` turn and two queued messages
+- **WHEN** the user sends `/discard`
+- **THEN** the system SHALL mark the turn interrupted and run the two queued messages in arrival order
+
+### Requirement: Session stall watchdog and reconnect attention
+The gateway SHALL treat a running turn as stalled when it has produced no model output, tool progress or tool result for `gateway.session_stall_timeout_secs` (default 900, 0 disables) and MUST then post one notice to the chat ("No progress for <n> min; send /stop to cancel") and log a WARN naming the session, and after twice that time SHALL interrupt the turn (end reason `interrupted`, the turn's `exit_reason` `stalled`) and tell the user; separately, when an adapter instance stays outside `connected` for longer than `gateway.reconnect_attention_secs` (default 600), the daemon SHALL mark its `adapter.state` event with `attention = true`, show it in `/platforms` and `prometheus gateway status`, and post one notice per outage to the profile's other connected home channels and attached clients.
+**Milestone:** M2
+
+#### Scenario: Stalled turn interrupted
+- **GIVEN** `gateway.session_stall_timeout_secs = 300` and a provider stream that stops sending without closing
+- **WHEN** 300 seconds pass and then another 300 seconds pass
+- **THEN** the chat SHALL first receive one no-progress notice and then a message that the turn was interrupted as stalled
+
+#### Scenario: Long outage escalated once
+- **GIVEN** Discord `retrying` for 11 minutes and Telegram connected
+- **WHEN** the attention threshold of 600 seconds passes
+- **THEN** exactly one notice about Discord SHALL be posted to the Telegram home channel for that outage
+
+### Requirement: Adapter operations from chat
+`/platforms` (alias `/gateway`, available on every surface including CLI and TUI) SHALL print each adapter instance of the profile with its state, error code and pause flag, and the admin-tier `/platform pause <name>` SHALL stop dispatching new inbound messages from that adapter without disconnecting it (messages are acknowledged and dropped with admission result `paused`, outbound delivery continues), `/platform resume <name>` SHALL clear a manual pause and any tripped circuit breaker and reconnect if needed, and `/platform list` SHALL equal `/platforms`; the manual pause SHALL be stored in `state.db` and survive restarts, and the `prometheus gateway pause|resume <platform>` CLI SHALL do the same.
+**Milestone:** M2
+
+#### Scenario: Breaker cleared
+- **GIVEN** Discord is `retrying` after its circuit breaker tripped
+- **WHEN** an admin sends `/platform resume discord`
+- **THEN** the system SHALL reset the breaker, reconnect immediately and report the new state
+
+### Requirement: Restart and update from chat
+The admin-tier `/restart` SHALL drain the daemon (refusing new turns, letting running turns finish up to `gateway.shutdown.drain_timeout_secs`), restart it under its supervisor (exit 75) and, after the new daemon is serving, post "Gateway restarted (<build>)" to the requesting chat and thread; `/update [check]` SHALL behave exactly as `distribution-and-update` › Update from chat specifies (gated by `update.allow_from_chat` and the admin tier, confirmations through the approval channel, denial or timeout aborting with the updater's exit 4, rollback reasons posted after handover); when `gateway.platforms.<name>.restart_notification` is true (default true) the daemon SHALL also post one notice per platform home channel after any graceful restart or update that interrupted running turns, at most once per restart.
+**Milestone:** M2
+
+#### Scenario: Restart confirmed in the same thread
+- **GIVEN** an admin sends `/restart` inside Slack thread `T1`
+- **WHEN** the new daemon reconnects Slack
+- **THEN** the system SHALL post "Gateway restarted (<build>)" into thread `T1`
+
+#### Scenario: Update confirmation denied
+- **GIVEN** `update.allow_from_chat = true` and an admin's `/update` reaching a step that needs confirmation
+- **WHEN** the admin taps Deny
+- **THEN** the update SHALL abort, the binary SHALL be unchanged, and the chat SHALL show "update aborted: confirmation denied"
+
+### Requirement: Display policy and per-platform overrides
+The gateway SHALL read presentation settings from `[gateway.display]` with per-platform overrides in `[gateway.display.platforms.<name>]` (a platform value wins, an absent value inherits, unknown keys fail validation): `tool_progress` in `off`, `new`, `all` (default), `verbose`, `log` (Telegram default `off`), `tool_progress_grouping` in `accumulate` (default, one edited bubble) or `separate`, `tool_preview_length` (default 40 characters), `interim_assistant_messages` (default true), `long_running_notifications` (default true; one edited "Working — <n> min" bubble every 180 seconds), `busy_ack_detail` (default false), `cleanup_progress` (default false; delete progress bubbles after a successful final reply on adapters that can delete), `tool_progress_command` (default false; enables `/verbose` cycling in chats), `status_phrases` (path under the profile, `append` or `replace`, at most 80 phrases of 160 characters per surface, never interpolating tool arguments) and `runtime_footer` (default false); with `log`, no progress is sent to chat and each tool call is appended, secret-redacted, to `<home>/logs/<profile>/tool_calls.log` rotated at 5 MiB with 3 backups.
+**Milestone:** M2
+
+#### Scenario: Mobile default
+- **GIVEN** no `tool_progress` configured anywhere
+- **WHEN** a Telegram turn runs three tools
+- **THEN** the system SHALL send no progress bubbles while a Discord turn SHALL show one accumulating bubble
+
+#### Scenario: Failed run keeps breadcrumbs
+- **GIVEN** `cleanup_progress = true` for Discord
+- **WHEN** the turn fails
+- **THEN** the progress bubbles SHALL NOT be deleted
+
+### Requirement: Runtime metadata footer
+When `runtime_footer` is enabled for a platform, or toggled for the current chat with `/footer on|off|status`, the gateway SHALL append to each final reply (never to progress or interim messages) one footer line with model, context usage percent and working directory basename, formatted per adapter (italic where supported), counted against the message length limit before splitting, and never stored in the transcript or shown to the model.
+**Milestone:** M2
+
+#### Scenario: Footer not in context
+- **GIVEN** the footer enabled in a Slack chat
+- **WHEN** the next turn's request is built
+- **THEN** the prior assistant message in the request SHALL NOT contain the footer text
+
+### Requirement: Warning notification suppression
+`gateway.display.suppress_warning_notifications` (default false, overridable per platform, `null` inheriting) SHALL, when true, mute the presentation of producer-classified automatic warnings and errors (retry and fallback diagnostics, watchdog and database notices, scheduled-job and kanban failure notices, background and delegation diagnostics, adapter error notices) on that destination while logs, stored diagnostics, retry decisions, failure states and API status codes stay unchanged, and SHALL never suppress approval or clarification requests, explicitly requested results or replies to a person's message; a suppressed delivery SHALL be settled as `suppressed`, never as `sent`.
+**Milestone:** M2
+
+#### Scenario: Cron failure muted on one platform
+- **GIVEN** suppression enabled globally and disabled for Telegram
+- **WHEN** a job fails and its failure notice targets Slack and Telegram
+- **THEN** Telegram SHALL receive the notice, Slack SHALL NOT, and the run SHALL still be recorded `failed`
+
+### Requirement: Message timestamps in model context
+When `gateway.message_timestamps.enabled` is true (default false) the gateway SHALL prefix each user message as presented to the model with its send time in the profile's timezone (`[Tue 2026-04-28 13:40:53 CEST]`), never adding it to assistant messages or the system prompt; the send time SHALL always be stored as message metadata and the stored text kept clean, and the setting SHALL be resolved when a session is created and frozen for that session so toggling it never changes the rendering of an existing session's cached prefix.
+**Milestone:** M2
+
+#### Scenario: Toggle applies to new sessions only
+- **GIVEN** an active session created with timestamps disabled
+- **WHEN** the setting is enabled and the config reloaded
+- **THEN** the active session's requests SHALL stay byte-identical in their prefix and the next new session SHALL show timestamps
+
+### Requirement: Intentional silence tokens
+When a turn's final response, trimmed and case-normalized, is exactly one of `[SILENT]`, `SILENT`, `NO_REPLY`, `NO REPLY`, `[静默]`, `静默`, `[沉默]` or `沉默`, the gateway SHALL deliver nothing, SHALL keep the assistant turn in the transcript, and SHALL record delivery status `silent`; when the triggering input was a person's message that the adapter did not mark `not_addressed_to_bot`, the gateway SHALL instead send the short notice "(nothing to add)" so an addressed message never vanishes; a failed turn or prose that merely contains a token SHALL be delivered normally.
+**Milestone:** M2
+
+#### Scenario: Group chatter stays silent
+- **GIVEN** an unmentioned free-response message the Slack adapter marks `not_addressed_to_bot`
+- **WHEN** the agent answers `[SILENT]`
+- **THEN** nothing SHALL be sent and the transcript SHALL contain the `[SILENT]` turn
+
+#### Scenario: Direct question gets a notice
+- **WHEN** a DM user's message is answered with `NO_REPLY`
+- **THEN** the system SHALL send "(nothing to add)"
+
+### Requirement: Group mention gating and observe mode
+The gateway SHALL start a turn for a group, channel or thread message only when `[gateway.groups]` (per-platform overrides in `[gateway.groups.platforms.<name>]`) allows it: with `require_mention = true` (default) the message must @mention the bot, reply to a bot message, match one of `mention_patterns` (case-insensitive regexes, at most 32, invalid patterns failing validation) or be in a thread the bot already participates in unless `thread_require_mention = true` (default false); chats in `free_response_chats` SHALL skip the mention check; chats or threads in `ignored_chats` SHALL never trigger; DMs are never gated; and with `observe_unmentioned = true` (default false) unmentioned messages in authorized group chats SHALL be appended to that chat's session transcript as attributed `[name|user_id]` context without dispatching a turn, with the next triggered turn carrying a per-turn notice that observed lines are context, not instructions.
+**Milestone:** M2
+
+#### Scenario: Unmentioned message ignored
+- **GIVEN** default settings on Discord
+- **WHEN** an authorized user posts in a server channel without mentioning the bot
+- **THEN** the system SHALL start no turn
+
+#### Scenario: Observed context used later
+- **GIVEN** `observe_unmentioned = true` for a Telegram group
+- **WHEN** two members discuss a date and a third then mentions the bot asking "what date did they agree?"
+- **THEN** the turn's context SHALL include the two observed messages and the system SHALL have started exactly one turn
+
+### Requirement: Bot-authored message admission
+Messages whose `is_bot` flag is set SHALL be admitted only per `gateway.bots.allow_bots` (per-platform overrides in `[gateway.bots.platforms.<name>]`) in `none` (default), `mentions` or `all`; with `mentions` or `all` and `require_inline_mention = true` (default) a bot message SHALL start a handoff only when it carries a literal inline mention of this bot (a reply ping alone does not), and follow-up chunks from the same bot in the same chat within `burst_window_ms` (default 1500) SHALL be collected into the same turn; ids listed in `human_user_ids` (for example posts made with the owner's own user token) SHALL be treated as human; the bot-loop guard of the authorization order SHALL still apply to every admitted bot message.
+**Milestone:** M2
+
+#### Scenario: Bot ignored by default
+- **WHEN** another Discord bot mentions this bot
+- **THEN** the system SHALL ignore it unless `allow_bots` is `mentions` or `all`
+
+#### Scenario: Multipart bot message collected
+- **GIVEN** `allow_bots = "mentions"`
+- **WHEN** a bot sends a mentioning message followed 400 ms later by a second chunk
+- **THEN** the system SHALL start one turn containing both chunks
+
+### Requirement: Channel history backfill
+For adapters whose descriptor declares `can_fetch_history`, when a mention-gated group message triggers a turn the gateway SHALL, if `[gateway.groups]` `history_backfill` is true (default true for Discord and Slack, false elsewhere), fetch up to `history_backfill_limit` (default 50) prior channel messages back to the bot's own last message and prepend them to the user message as one block framed as untrusted channel context with author names, skipping DMs and free-response chats; backfilled lines SHALL be stored with the user message and SHALL NOT be fetched again on later turns.
+**Milestone:** M2
+
+#### Scenario: Backfill stops at the bot's last reply
+- **GIVEN** 12 channel messages since the bot last replied
+- **WHEN** a user mentions the bot
+- **THEN** the turn's user message SHALL include those 12 messages and none older
+
+### Requirement: Role-based access grants
+For adapters whose descriptor declares `exposes_roles` (Discord roles, Slack user groups, Matrix power levels), `gateway.platforms.<name>.allow_roles` SHALL authorize senders holding any listed role id, evaluated in the authorization order immediately after `allow_users`; role membership SHALL be resolved from the platform at admission time and cached for at most 300 seconds, a role lookup failure SHALL deny, and a role name instead of an id SHALL fail validation with the resolved id suggested when the adapter is connected.
+**Milestone:** M2
+
+#### Scenario: Role grant
+- **GIVEN** `allow_roles = ["111222333"]` on Discord
+- **WHEN** a user holding that role mentions the bot
+- **THEN** the system SHALL admit the message
+
+#### Scenario: Lookup failure denies
+- **GIVEN** the Discord API errors on member lookup
+- **WHEN** a user without another grant mentions the bot
+- **THEN** the system SHALL deny the message
+
+### Requirement: Per-chat policy thread matching and skill preload
+Each `[[gateway.chat_policies]]` entry SHALL additionally accept `thread_id` (thread or forum-topic match, more specific than `chat_id`; a channel policy also applies to its threads unless a thread policy matches) and `preload_skills` (skill names that must be enabled in the profile, unknown names failing validation), and when a session is created under a policy with `preload_skills` the system SHALL load those skills' content as the first user-side context of the session — never into the system prompt — so the cached prefix stays identical for every chat sharing the profile.
+**Milestone:** M2
+
+#### Scenario: Forum topic bound to a skill
+- **GIVEN** a policy for Telegram chat `-100555` thread `42` with `preload_skills = ["release-notes"]`
+- **WHEN** a session starts in topic 42
+- **THEN** the session's first context SHALL contain the `release-notes` skill and the system prompt hash SHALL equal that of an unbound session of the same profile
+
+### Requirement: Multi-session DM topics
+For adapters whose descriptor declares `dm_topics` (Telegram private chat topics), when `gateway.platforms.<name>.options.dm_topics.enabled` is true (default false) each DM topic SHALL map to its own session (`thread_id` in the key), the root DM SHALL act as a lobby that accepts only slash commands and answers other text with "Open or create a topic to chat (/topic new <name>)", and `/topic new <name>`, `/topic list`, `/topic rename <name>` and `/topic restore <session-id>` (open a new topic continuing an earlier session of the same chat) SHALL manage topics; `/new` inside a topic SHALL start a new session in the same topic, a topic SHALL be renamed to the session's generated title when it still has its default name, and if the platform reports topics unavailable the adapter SHALL log it once and fall back to single-session DMs.
+**Milestone:** M2
+
+#### Scenario: Lobby redirects
+- **GIVEN** DM topics enabled
+- **WHEN** the user writes "hello" in the root DM
+- **THEN** the system SHALL start no turn and reply "Open or create a topic to chat (/topic new <name>)"
+
+#### Scenario: Restore into a new topic
+- **WHEN** the user sends `/topic restore ses_01J...`
+- **THEN** the system SHALL create a topic titled with that session's title and route the topic to that session
+
+### Requirement: Interactive model picker and chat model override
+On adapters with native buttons, `/model` without arguments SHALL render a picker of configured providers and then that provider's models, at most 8 per page with paging buttons, applying the selection with the same effect and confirmation as `/model <provider>:<model>`; a chosen model SHALL be stored as the chat's override in `state.db` and used for every new session in that chat until `/model --clear`, the override being shown by `/model status`; on adapters without buttons `/model` SHALL print a numbered list answerable with `/model <n>`; `/sessions [page]` SHALL list the chat's sessions 10 per page with `/resume <n>` to switch.
+**Milestone:** M2
+
+#### Scenario: Override survives /new
+- **GIVEN** a user picked `anthropic:claude-sonnet-4.5` in a Telegram chat
+- **WHEN** the user sends `/new`
+- **THEN** the new session SHALL use `anthropic:claude-sonnet-4.5`
+
+### Requirement: Background sessions from chat
+`/background <prompt>` (alias `/bg`) SHALL start a separate session in the same profile with `origin` naming the requesting chat, the profile's and chat policy's model and toolsets, and none of the current conversation's history, SHALL reply at once with "Background task started: <prompt excerpt> (id bg_<ULID>)", SHALL deliver the result to the requesting chat and thread prefixed "✅ Background task complete" or "❌ Background task failed: <reason>", and SHALL allow at most `gateway.background.max_per_chat` (default 3) running background sessions per chat, refusing more with "Too many background tasks running (3)"; the CLI and TUI SHALL offer the same command with the result shown as a notification.
+**Milestone:** M2
+
+#### Scenario: Main chat stays responsive
+- **GIVEN** a running background task
+- **WHEN** the user sends another message in the chat
+- **THEN** the system SHALL start a normal turn in the chat's own session without waiting for the background task
+
+### Requirement: Session handoff to a messaging platform
+`/handoff <platform>[:<chat_id>[:<thread_id>]]` from a CLI, TUI or desktop session SHALL bind that session to a destination chat of the same profile (the platform's home channel when no chat is given), creating a new thread or topic where the adapter supports threads, SHALL post a role-attributed replay of the last 20 transcript messages there, SHALL append a synthetic notice turn stating the session continues on that platform, and SHALL detach the local client printing `continued on <platform>; resume locally with prometheus chat --resume <session-id>`; it SHALL be refused while a turn is running and when the destination is not an authorized chat of the profile.
+**Milestone:** M2
+
+#### Scenario: Handoff to Telegram home
+- **GIVEN** a CLI session and a Telegram home channel
+- **WHEN** the user runs `/handoff telegram`
+- **THEN** the session SHALL continue from the next Telegram message in the new topic and the CLI SHALL exit 0 with the resume hint
+
+### Requirement: Branching into a sibling thread
+`/branch [--here] [name]` (alias `/fork`) on a gateway surface SHALL fork the current session with lineage kind `fork`; on adapters that support threads it SHALL open the branch in a new sibling thread titled `name` (or the parent's title plus " (branch)") while the original chat stays bound to the original session, and with `--here` or on adapters without threads it SHALL switch the current chat to the branch; it SHALL be refused while a turn is running with "/branch is unavailable while the agent is working; use /stop first".
+**Milestone:** M2
+
+#### Scenario: Branch opens a thread
+- **WHEN** a Slack user sends `/branch try-postgres`
+- **THEN** a new thread "try-postgres" SHALL be bound to the forked session and the channel's original thread SHALL continue the parent session
+
+### Requirement: Native platform streaming and task cards
+Adapters whose descriptor declares `native_stream` (for example Slack's streaming message API) SHALL be offered transport `native` under `gateway.streaming.transport` (`auto` choosing `native` before `draft` and `edit`), and adapters declaring `task_cards` SHALL render tool progress as native task or plan cards updated in place instead of text bubbles when `tool_progress` is not `off`, and adapters declaring `status_line` (Slack assistant thread status) SHALL show "is thinking…"-style working status only while `typing_indicator` is true; a native stream that fails mid-turn SHALL fall back to `edit` for the remainder of that turn without duplicating text.
+**Milestone:** M2
+
+#### Scenario: Native stream fallback
+- **GIVEN** Slack streaming via `native`
+- **WHEN** the stream API rejects an append mid-turn
+- **THEN** the system SHALL continue by editing the same message and the final text SHALL appear exactly once
+
+### Requirement: Webhook route delivery and safe default toolset
+Each webhook route SHALL declare `deliver` as `origin` (respond to the HTTP caller, default), `log` (store only), a send target `platform[:chat_id[:thread_id]]` of the same profile, or `github_comment` (post to the pull request or issue in the payload using the route's GitHub credential secret), plus optional `deliver_extra` targets and `mirror_to_session` (default false; append the delivered text to the target chat's session as an attributed assistant message); webhook-triggered runs SHALL default to the `webhook-safe` toolset (`web_search`, `web_extract`, `vision_analyze`, `clarify` answered as unavailable) with no terminal, file, browser or code-execution tools unless the route explicitly lists toolsets within the profile's enabled set; and when `gateway.mcp_events.enabled` is true (default false, experimental) notifications from configured MCP servers that declare an `events` route SHALL be admitted as signed internal webhook events on that route with the same delivery and toolset rules.
+**Milestone:** M2
+
+#### Scenario: Default toolset is read-only
+- **GIVEN** a webhook route with no `toolsets`
+- **WHEN** a payload asks the agent to run `rm -rf build`
+- **THEN** the run SHALL have no terminal tool and SHALL not execute the command
+
+#### Scenario: Deliver to Discord
+- **GIVEN** a route with `deliver = "discord:#ops"` and `mirror_to_session = true`
+- **WHEN** the run completes
+- **THEN** the result SHALL be posted to `#ops` and appended to the `#ops` chat session as an attributed assistant message
+
+### Requirement: Shared-credential profile routes
+A profile whose adapter holds a platform credential MAY declare `[[gateway.profile_routes]]` entries (`name`, `platform`, optional `guild_id`, `chat_id`, `thread_id`, `user_id`, and target `profile`) that route matching inbound events received by that adapter to another served profile, which SHALL accept them only when its own `gateway.accept_routes_from` lists the receiving profile; matching SHALL be by additive specificity (`user_id` 16, `thread_id` 8, `chat_id` 4, `guild_id` 2, every declared field must hold, ties keep declaration order, a channel route also matching its threads), an empty `user_id` SHALL fail validation rather than widen, unmatched events SHALL stay with the receiving profile, authorization SHALL be evaluated by the receiving profile's platform policy and then the target profile's session keys, config, memory and toolsets SHALL apply, and replies SHALL be sent through the receiving adapter.
+**Milestone:** M2
+
+#### Scenario: One Discord bot, two communities
+- **GIVEN** the `default` profile's Discord bot with a route `guild_id = "123"` → `acme` and `acme` accepting routes from `default`
+- **WHEN** an authorized user in guild 123 mentions the bot
+- **THEN** the session SHALL be keyed `acme:discord@123:...`, use `acme`'s memory, and the reply SHALL be sent by the `default` profile's bot
+
+#### Scenario: Target did not opt in
+- **GIVEN** a route to profile `ops` whose `accept_routes_from` is empty
+- **WHEN** config is validated
+- **THEN** the system SHALL fail validation naming `ops` and `gateway.accept_routes_from`
+
+### Requirement: Concurrency caps across surfaces
+The daemon SHALL enforce `gateway.limits.max_concurrent_sessions` (in `<home>/daemon.toml`, default 0 meaning unbounded) as the maximum number of sessions with a running turn across all profiles and surfaces, queueing further turns FIFO with a "Waiting for a free slot (<n> ahead)" notice instead of rejecting them, and `gateway.limits.max_live_client_sessions` (default 16, 0 disabling) as a soft cap on detached TUI, desktop and dashboard sessions kept in memory, evicting the least recently active detached ones (never a session with a running turn or an attached client) and re-resuming them from storage on reopen.
+**Milestone:** M2
+
+#### Scenario: Cap queues a turn
+- **GIVEN** `max_concurrent_sessions = 2` and two running turns
+- **WHEN** a third chat sends a message
+- **THEN** the system SHALL queue its turn, notify "Waiting for a free slot (1 ahead)" and start it when a running turn completes
+
+### Requirement: Remote client attachment
+The daemon SHALL accept non-loopback client attachment (desktop or TUI connecting to a remote home, the `serve` role of a headless host) only when `daemon.remote.enabled = true` (default false, in `daemon.toml`), on `daemon.remote.listen` (default `0.0.0.0:9121`) with TLS mandatory (a configured certificate, or a self-signed certificate whose SHA-256 fingerprint is printed for pinning), authenticated by per-device tokens issued with `prometheus daemon pair-device <name>` (stored hashed in `<home>/run/devices.toml`, revocable with `prometheus daemon revoke-device <name>`) that bind each device to the profiles it may attach to; the attached client SHALL then use the same `rpc.hello` handshake and protocol as local clients, close code 4401 SHALL answer a bad or revoked token and 4403 a profile outside the device's binding; SSH-tunnelled access to the loopback endpoint SHALL remain available without enabling this listener.
+**Milestone:** M3
+
+#### Scenario: Disabled by default
+- **GIVEN** a fresh home
+- **WHEN** a client dials port 9121 from another machine
+- **THEN** the connection SHALL be refused because no remote listener is bound
+
+#### Scenario: Revoked device
+- **GIVEN** device `laptop` revoked
+- **WHEN** it reconnects with its old token
+- **THEN** the daemon SHALL close the socket with code 4401

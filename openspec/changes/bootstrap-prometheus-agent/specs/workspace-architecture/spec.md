@@ -6,7 +6,7 @@ Defines the shape of Prometheus as a product: one `prometheus` binary (alias `pm
 ## ADDED Requirements
 
 ### Requirement: Single binary with subcommand surfaces
-The system SHALL ship every surface as a subcommand of one executable named `prometheus`, and an executable invoked as `pmt` (hardlink, symlink or copy of the same build) SHALL behave identically. The top-level subcommands SHALL be exactly: `chat`, `tui`, `setup`, `daemon` (process lifecycle: `run`, `start`, `stop`, `restart`, `status`, `ensure`, `install-service`), `gateway` (messaging adapters, outbox), `dashboard`, `acp`, `mcp`, `sessions`, `config`, `secrets`, `grants`, `security`, `profile`, `model`, `auth`, `providers`, `tools`, `skills`, `curator`, `memory`, `plugins`, `bridge`, `runtimes`, `cron`, `pause`, `kanban`, `pairing`, `identity`, `usage`, `logs`, `status`, `doctor`, `trajectory`, `replay`, `cache`, `files`, `schema`, `eval`, `demo`, `evolve`, `harness`, `experience`, `migrate`, `update`, `uninstall`, `bundle`, `rpc`, `debug`, `completions`, `version`, `help`, plus the hidden `self-test` used by the updater; each capability that introduces one of these owns its arguments. Running `prometheus` with no subcommand SHALL be equivalent to `prometheus chat`.
+The system SHALL ship every surface as a subcommand of one executable named `prometheus`, and an executable invoked as `pmt` (hardlink, symlink or copy of the same build) SHALL behave identically. The top-level subcommands SHALL be exactly (with their milestone in `cli` › Top-level command tree): `chat` (the default when no subcommand is given), `setup`, `config`, `secrets`, `grants`, `profile`, `sessions`, `model`, `fallback`, `auth`, `tools`, `toolsets`, `approvals`, `skills`, `memory`, `runtimes`, `usage`, `logs`, `doctor`, `prompt`, `trajectory`, `demo`, `backup`, `snapshots`, `update`, `debug`, `version`, `help`, `daemon` (process lifecycle: `run`, `start`, `stop`, `restart`, `status`, `ensure`, `install-service`, `uninstall-service`, `ticket`, `pair-device`, `revoke-device`), `gateway` (messaging adapters and outbox: `status`, `setup`, `platforms`, `list`, `pause`, `resume`, `reload`, `restart`, `stop`, `outbox`, `send`, `peer`, `proxy`, `enroll`, `selftest`, `slack-manifest`, `whatsapp pair`, `whatsapp-cloud setup`, `photon setup|status`, `telegram logout`, `feishu comment-rules`), `tui`, `console`, `webhooks`, `pairing`, `cron`, `pause`, `curator`, `plugins`, `mcp`, `bridge`, `providers`, `portal`, `local`, `moa`, `connectors`, `browser`, `vault`, `security`, `status`, `lsp`, `verify`, `worktrees`, `projects`, `journey`, `themes`, `cache`, `files`, `schema`, `rpc`, `replay`, `eval`, `migrate`, `bundle`, `uninstall`, `completions`, `identity`, `dashboard` (`register`, `pair`, `devices`), `serve`, `webapp`, `desktop` (alias `gui`), `acp`, `computer-use`, `egress`, `codex-runtime`, `kanban`, `evolve`, `harness`, `experience`, `pets`, `achievements`, plus the hidden `self-test` used by the updater and `__complete` used by shell completions; each capability that introduces one of these owns its arguments and nested subcommands, `cli` › Top-level command tree SHALL list the same set, and `prometheus help` SHALL additionally list the commands of enabled plugins under `plugins run <plugin_id>`. Running `prometheus` with no subcommand SHALL be equivalent to `prometheus chat`.
 **Milestone:** M1
 
 #### Scenario: Alias invocation
@@ -68,7 +68,7 @@ Every name-keyed registry (subcommands, slash commands, RPC methods, RPC events,
 - **THEN** loading SHALL fail with `unknown hook 'pre_tool_cal' (did you mean 'pre_tool_call'?)` and the plugin SHALL NOT be enabled
 
 ### Requirement: One daemon per Prometheus home
-The system SHALL allow at most one gateway daemon per Prometheus home, enforced by an exclusive OS file lock on `<PROMETHEUS_HOME>/run/gateway.lock`, and SHALL read daemon-wide settings (`daemon.rpc.*`, `gateway.http.*`, `gateway.relay.*`, `gateway.on_all_adapters_down`, `daemon.autostart`, `daemon.restart_drain_secs`, `dashboard.*` listener settings) only from `<PROMETHEUS_HOME>/daemon.toml`, never from a profile's `config.toml`; a second `prometheus daemon start` for the same home SHALL exit 75 with `gateway already running (pid <pid>); attach with 'prometheus tui' or stop it with 'prometheus daemon stop'`. The daemon SHALL serve every profile of that home, each through its own ProfileScope.
+The system SHALL allow at most one gateway daemon per Prometheus home, enforced by an exclusive OS file lock on `<PROMETHEUS_HOME>/run/gateway.lock`, and SHALL read daemon-wide settings (`daemon.rpc.*`, `gateway.http.*`, `gateway.relay.*`, `gateway.on_all_adapters_down`, `daemon.autostart`, `daemon.restart_drain_secs`, `daemon.watchdog.*`, `dashboard.*` listener settings, and the machine-wide `update.*`, `runtimes.*` and `process.*` sections) only from `<PROMETHEUS_HOME>/daemon.toml`, never from a profile's `config.toml`; a second `prometheus daemon start` for the same home SHALL exit 75 with `gateway already running (pid <pid>); attach with 'prometheus tui' or stop it with 'prometheus daemon stop'`. The daemon SHALL serve every profile of that home, each through its own ProfileScope.
 **Milestone:** M2
 
 #### Scenario: Second daemon refused
@@ -138,6 +138,14 @@ Every RPC method (params and result), server-to-client request (params and resul
 - **GIVEN** a change to a method's params without regenerating
 - **WHEN** CI runs the contract freshness gate
 - **THEN** the gate SHALL fail naming each stale file
+
+### Requirement: Catalog index of capability-owned methods and events
+The typed catalog SHALL contain at least the following client-protocol methods and events, each with params, result and payload defined by the capability named in parentheses, and no capability SHALL use a different name for the same operation: methods `rpc.hello`, `rpc.ping`, `session.create`, `session.attach`, `session.detach`, `session.list`, `session.resume`, `session.compact`, `session.transcript`, `session.events.since`, `session.context_usage`, `prompt.submit`, `command.dispatch`, `daemon.update` (workspace-architecture); `commands.catalog`, `complete.slash`, `complete.path`, `model.options`, `subagent.list`, `subagent.subscribe` (tui); `approval.respond` (tool-system); `tools.list`, `tools.call` (tool-system); `system.health`, `system.metrics` (observability); `ui.prefs.get`, `ui.prefs.patch` (desktop-app); `pairing.approve` (messaging-gateway); `grants.list`, `grants.revoke`, `egress.set`, `vault.list`, `vault.add`, `vault.remove`, `vault.sources` (security-boundaries); `files.undo`, `files.rollback`, `screen.takeover`, `screen.handback` (execution-environments); `worktree.new`, `worktree.status`, `worktree.list`, `worktree.prune` (git-worktrees); `lsp.status` (lsp-diagnostics); `journey.list` (memory); `cron.blueprints.list`, `cron.blueprints.fill` (scheduled-jobs); `moa.presets.list`, `moa.presets.put`, `moa.presets.delete` (mixture-of-agents); `voice.client_config`, `wake.feed` (voice-mode); `bot.create`, `bot.chat.ensure`, `bot.roster.list`, `bot.meta.get`, `bot.meta.update`, `groups.capabilities`, `groups.log`, `groups.replicate`, `groups.replica_state` (bot-mode); `bot.relay.drain`, `bot.relay.deliver` (agent-interop); `evolve.start`, `evolve.status`, `evolve.list`, `evolve.cancel`, `evolve.choose`, `evolve.proposals.list`, `evolve.proposals.adopt`, `evolve.proposals.reject`, `harness.log`, `harness.diff`, `harness.rollback` (harness-evolution); `experience.list`, `experience.show`, `experience.pin`, `experience.forget`, `experience.restore`, `experience.domains` (experience-library); server requests `approval.request`, `clarify.request`, `secret.request`, `sudo.request` (workspace-architecture › Server-to-client requests); and events `usage.updated`, `health.changed` (observability), `message.delivery`, `adapter.state`, `session.presence` (messaging-gateway), `request.cancel`, `request.resolved` (workspace-architecture), `automation.state` (session-automation), `message.reaction` (desktop-app), `achievement.unlocked` (pets), `wake.detected` (voice-mode) and `local_model.context_grown` (local-models). The bot-screen display stream of `execution-environments` › Bot screen SHALL be a separate RFB-over-WebSocket endpoint on the same listener, authenticated by a single-use 30-second display ticket and using the shared close codes, and the Python bridge protocol (`python-bridge`) and the WIT host interface (`plugin-system`) are separate contracts that SHALL NOT be served on the client protocol.
+**Milestone:** M2
+
+#### Scenario: Catalog lists capability methods
+- **WHEN** the user runs `prometheus rpc schema`
+- **THEN** the output SHALL declare `worktree.new`, `journey.list` and the `automation.state` event with their owning capability recorded in the schema
 
 ### Requirement: Strict parameter validation and contract violations
 The daemon SHALL validate params against the method contract before invoking the handler, rejecting an undeclared key with `-32602` whose `data` is `{kind: "invalid_input", code: "rpc.unknown_field", path: "<json pointer>"}`, and a missing or mistyped field with `-32602` naming the path. A handler result or event payload that violates its contract SHALL abort the process in debug and test builds and, in release builds, SHALL be logged at ERROR and counted in the `prometheus.rpc.contract_violations` metric.
@@ -275,7 +283,7 @@ The system SHALL generate the configuration reference (every key, type, default 
 - **THEN** the documentation freshness gate SHALL fail
 
 ### Requirement: Doctor
-This capability SHALL own `prometheus doctor [<group>] [--profile NAME|--all-profiles] [--fix] [--online] [--strict] [--json]`, which SHALL run all groups, or only `<group>` when given, from exactly `home` (permissions 0700/0600), `config` (validates against schema, reports pending migrations and ignored env vars), `secrets` (store permissions, referenced-but-missing secrets), `store` (`state.db` integrity, FTS consistency, schema version), `daemon` (running, build and protocol match), `sandbox` (enforcement mechanism and strength on this OS), `terminal` (selected terminal backend configuration), `runtimes` (managed Node/CPython/browser presence and manifest hashes), `plugins` (signatures, grants), `observability` (exporter reachability when enabled), `providers` (credentials present; reachability only with `--online`) and `security` (the posture report defined by `security-boundaries`); `--strict` SHALL turn every `warn` into a failure and SHALL make the `security` group exit 77 as defined there. Each check SHALL report `ok`, `warn` or `fail` with a hint; the command SHALL exit 1 when any check fails and 0 otherwise, and SHALL make no network request without `--online`.
+This capability SHALL own `prometheus doctor [<group>] [--profile NAME|--all-profiles] [--fix] [--online] [--strict] [--json]`, which SHALL run all groups, or only `<group>` when given, from exactly `home` (permissions 0700/0600), `config` (validates against schema, reports pending migrations and ignored env vars), `secrets` (store permissions, referenced-but-missing secrets), `store` (`state.db` integrity, FTS consistency, schema version), `daemon` (running, build and protocol match), `sandbox` (enforcement mechanism and strength on this OS), `terminal` (selected terminal backend configuration), `runtimes` (managed Node/CPython/browser presence and manifest hashes), `plugins` (signatures, grants), `observability` (exporter reachability when enabled), `network` (IPv6 reachability, proxy and egress isolation), `providers` (credentials present; reachability only with `--online`) and `security` (the posture report defined by `security-boundaries`); `--strict` SHALL turn every `warn` into a failure and SHALL make the `security` group exit 77 as defined there. Each check SHALL report `ok`, `warn` or `fail` with a hint; the command SHALL exit 1 when any check fails and 0 otherwise, and SHALL make no network request without `--online`.
 **Milestone:** M1
 
 #### Scenario: Offline doctor
@@ -311,3 +319,40 @@ Every listing or status subcommand SHALL accept `--json` and emit a single JSON 
 #### Scenario: Scriptable session list
 - **WHEN** the user runs `prometheus sessions list --json`
 - **THEN** the output SHALL be one JSON object with `schema` equal to `prometheus.sessions.v1`
+
+### Requirement: IPv6 reachability check and IPv4-only outbound
+The `network` doctor group SHALL, when the host has a global IPv6 route, attempt with `--online` a dual-stack connection to the configured providers' hosts with a 2 s IPv6-only probe and a 2 s IPv4-only probe, and SHALL warn `IPv6 route present but unreachable (blackhole); set network.force_ipv4 = true` when IPv6 fails and IPv4 succeeds; without `--online` it SHALL report only whether an IPv6 route exists. `network.force_ipv4` (default false) SHALL make every outbound client of that ProfileScope (providers, MCP over HTTP, web tools, adapters, OTLP, update and runtime downloads) resolve and connect over IPv4 only, without affecting loopback listeners.
+**Milestone:** M1
+
+#### Scenario: Blackholed IPv6
+- **GIVEN** a host with a global IPv6 route that drops packets and working IPv4
+- **WHEN** the user runs `prometheus doctor network --online`
+- **THEN** the check SHALL warn and name `network.force_ipv4 = true`
+
+#### Scenario: Forced IPv4
+- **GIVEN** `network.force_ipv4 = true`
+- **WHEN** a provider host resolves to both AAAA and A records
+- **THEN** the connection SHALL be made only to the A record addresses
+
+### Requirement: Embeddable client SDKs
+The project SHALL publish client libraries over the versioned RPC protocol — a Rust crate, a Python package and a TypeScript package, all generated from or tested against `schema/rpc.json` — offering `Client.connect(home?, profile?)` (attaching to or starting the daemon through the ticketed loopback flow), `client.sessions.create(toolsets?, model?, system_prompt_overlay?, ephemeral?)`, `session.prompt(text, attachments?)` returning a stream of the protocol's events and a final result with usage, `session.interrupt()`, approval and clarify callbacks, and `session.history()` for multi-turn use; each SDK release SHALL declare the `rpc_protocol` major versions it supports and SHALL fail `connect` with a protocol-mismatch error (the `-32008` handshake error) rather than proceed against an unsupported daemon. An embedded session SHALL be subject to the same capability grants, approvals and budgets as any other client, and `ephemeral = true` SHALL keep its transcript out of the session store and trajectories.
+**Milestone:** M3
+
+#### Scenario: Python embedding
+- **GIVEN** a running daemon and the Python SDK
+- **WHEN** a script runs `Client.connect().sessions.create(toolsets=["file"]).prompt("list files")`
+- **THEN** it SHALL receive `tool.call`, `tool.result` and `assistant.message` events followed by a final result with usage totals
+
+#### Scenario: Old SDK against a new protocol
+- **GIVEN** an SDK supporting protocol major 1 and a daemon speaking major 2
+- **WHEN** `Client.connect()` runs
+- **THEN** it SHALL raise a protocol-mismatch error and send no session request
+
+### Requirement: File-descriptor soft limit
+On POSIX hosts every `prometheus` process SHALL at startup raise its open-file soft limit to `process.nofile_soft_limit` (in `daemon.toml`, default 4096; `0` disables) or to the hard limit if that is lower, never lowering an already higher soft limit, and SHALL log at WARN when the resulting limit is below the configured value; child processes SHALL inherit the raised limit.
+**Milestone:** M1
+
+#### Scenario: Low default limit raised
+- **GIVEN** a shell with `ulimit -Sn 256` and a hard limit of 65536
+- **WHEN** the daemon starts with default configuration
+- **THEN** its soft open-file limit SHALL be 4096

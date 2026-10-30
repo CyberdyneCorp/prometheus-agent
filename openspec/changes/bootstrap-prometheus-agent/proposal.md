@@ -7,7 +7,7 @@ CyberdyneCorp needs a personal/team AI agent harness that matches what Hermes Ag
 ## What Changes
 
 - New Rust project `prometheus-agent` (binary `prometheus`, short alias `pmt`) with a Cargo workspace; no code exists yet — this change defines the full target behavior.
-- Full functional parity with the 23 Hermes capability areas (agent loop, compression, providers, tools, delegation, sandboxes, session storage, CLI, config/profiles, gateway, platform adapters, TUI, desktop, web dashboard, ACP, skills, memory, plugins, cron, kanban, distribution/update, security), re-specified for Rust and with the known Hermes inconsistencies resolved by design (single config source of truth, no non-secret env vars, fail-closed approvals, typed contracts between processes).
+- Full functional parity with Hermes: every user-facing Hermes feature (1,003 inventoried items) is mapped to a Prometheus requirement in `docs/hermes-parity.md`, across the 23 Hermes capability areas (agent loop, compression, providers, tools, delegation, sandboxes, session storage, CLI, config/profiles, gateway, platform adapters, TUI, desktop, web dashboard, ACP, skills, memory, plugins, cron, kanban, distribution/update, security), re-specified for Rust and with the known Hermes inconsistencies resolved by design (single config source of truth, no non-secret env vars, fail-closed approvals, typed contracts between processes).
 - Upgrades beyond Hermes:
   - **Sandboxed plugins**: WebAssembly component plugins with explicit capability grants, plus first-class MCP (client and server), plus a Python bridge that runs existing Hermes plugins and skills out-of-process.
   - **Harness evolution**: per-task Propose–Probe–Compose refinement of the agent's own harness (prompt, guardrails, tool guidance, skills) with a fixed rollout/session budget, without ground-truth answers.
@@ -50,7 +50,22 @@ CyberdyneCorp needs a personal/team AI agent harness that matches what Hermes Ag
 - `experience-library`: per-domain library of adopted harnesses and distilled lessons.
 - `replay-and-evaluation`: model-call cache, trajectory record/replay, mock provider, eval suites and benchmark adapters.
 - `observability`: trajectory grammar, structured logs, OpenTelemetry traces/metrics, cost and token ledger.
-- `hermes-migration`: import of an existing Hermes home into Prometheus.
+- `hermes-migration`: import of an existing Hermes home into Prometheus, plus importers for OpenClaw, Claude Code, Codex CLI and Cursor.
+- `api-server`: OpenAI-compatible HTTP API (Chat Completions, Responses, models), Runs/Jobs/Sessions REST, idempotency, and the subscription proxy.
+- `agent-interop`: A2A server and outbound `a2a_*` tools, peer gateways, bot-to-bot messaging across machines, `send_message` / `gateway send`.
+- `bot-mode`: bots as profiles, the canonical Bot Chat, roster, voices, routines, group chats and hosted rooms.
+- `voice-mode`: CLI/TUI/desktop voice conversations, Discord voice channels, wake word, streaming STT/TTS with barge-in.
+- `web-and-media-tools`: web search/extract, X search, vision and video analysis, image/video generation, text-to-speech and speech-to-text tools and their providers.
+- `connectors`: hosted app connectors and connector accounts reached through tool search.
+- `computer-use`: driving the desktop (capture, pointer, keyboard) under permission modes.
+- `lsp-diagnostics`: language servers feeding post-edit diagnostics back to the agent.
+- `git-worktrees`: worktree-isolated sessions and subagents, sweeps, archive and restore.
+- `session-automation`: `/goal` with a judge loop, subgoals and completion contracts, `/loop`, `/heartbeat`.
+- `mixture-of-agents`: MoA presets as a virtual provider with reference fan-out and an aggregator.
+- `local-models`: managed local inference runtime, hardware-aware model catalog and downloads.
+- `projects`: named projects binding repositories, boards and sessions.
+- `i18n`: UI string catalogs, bundled languages and language-pack plugins.
+- `pets`: animated companion and achievements across CLI, TUI and desktop.
 
 ### Modified Capabilities
 

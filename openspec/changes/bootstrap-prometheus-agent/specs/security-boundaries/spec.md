@@ -153,7 +153,7 @@ Secrets SHALL be stored only in `<profile>/secrets.toml` (mode 0600, created wit
 - **THEN** `secrets.toml` SHALL be mode 0600 and `config.toml` SHALL NOT contain the value
 
 ### Requirement: External secret sources are opt-in
-Bitwarden Secrets Manager and 1Password sources SHALL be disabled by default (`secrets.bitwarden.enabled = false`, `secrets.onepassword.enabled = false`), SHALL never be contacted or have their CLIs installed while disabled, SHALL read their bootstrap token only from the secret named by `access_token_secret`, SHALL resolve conflicts with mapped entries beating bulk entries and the first claim winning, and SHALL fail loudly on authentication failure instead of falling back to cached values.
+Bitwarden Secrets Manager and 1Password sources SHALL be disabled by default (`secrets.bitwarden.enabled = false`, `secrets.onepassword.enabled = false`), SHALL never be contacted or have their CLIs installed while disabled, SHALL read their bootstrap token only from the secret named by `access_token_secret`, SHALL resolve conflicts with mapped entries beating bulk entries and the first claim winning, SHALL hold resolved values only in memory for at most `secrets.<source>.cache_ttl_secs` (defined by `configuration-and-profiles` › External secret source commands), and SHALL fail loudly on authentication failure instead of falling back to cached values.
 **Milestone:** M3
 
 #### Scenario: Default install
@@ -179,7 +179,7 @@ When `security.redact_secrets = true` (default) the system SHALL replace every l
 - **THEN** the model, the session store and the log SHALL contain `[REDACTED:OPENAI_API_KEY]` and never the value
 
 ### Requirement: Plugin and sidecar isolation
-WASM plugins SHALL run with only their granted capabilities, a fuel and epoch deadline per call (default 5 seconds wall time) and a memory cap (`plugins.max_memory_mb`, default 256); the Python bridge and MCP stdio servers SHALL run as separate processes under the OS sandbox with the union of capabilities granted to the plugins or server they host; a Hermes plugin that needs capabilities beyond its grants SHALL fail the specific call with `capability not granted: <capability>` rather than gaining ambient authority.
+WASM plugins SHALL run with only their granted capabilities, a fuel and epoch deadline per call and a memory cap (`plugins.wasm.call_timeout_ms` and `plugins.wasm.max_memory_bytes`, defined in `plugin-system` › WASM sandbox resource limits); the Python bridge and MCP stdio servers SHALL run as separate processes under the OS sandbox with the union of capabilities granted to the plugins or server they host; a Hermes plugin that needs capabilities beyond its grants SHALL fail the specific call with `capability not granted: <capability>` rather than gaining ambient authority.
 **Milestone:** M2
 
 #### Scenario: Runaway plugin
@@ -258,3 +258,163 @@ The `security` group of `prometheus doctor` (owned by `workspace-architecture`),
 - **GIVEN** a profile with one unsigned plugin
 - **WHEN** `prometheus doctor security --strict` runs
 - **THEN** it SHALL exit 77 and name the plugin
+
+### Requirement: Credential vault storage
+Each profile SHALL have an encrypted credential vault at `<profile>/vault/vault.enc` (authenticated encryption, mode 0600) holding logins (origin list, identifier, password, optional TOTP seed), payment cards and addresses; the key SHALL live in `<profile>/vault/vault.key` (0600, no-follow) when `vault.key_storage = "file"` (default) or in an OS keychain entry named in `<profile>/vault/vault.keyref` when `keychain`, falling back to the file with a WARN when no keychain is reachable for a new vault; `prometheus vault key migrate --to keychain|file` SHALL write the key to the target, verify it decrypts the vault, and only then remove the old copy; a vault whose key is missing SHALL fail with `vault key not found; restore it or delete vault.enc to start over` and SHALL never be re-keyed silently; labels, origins and identifiers are metadata, while passwords, card numbers, CVCs and TOTP seeds SHALL never leave the vault except into a page.
+**Milestone:** M2
+
+#### Scenario: Interrupted key migration
+- **GIVEN** a migration to the keychain interrupted after writing the keychain entry
+- **WHEN** the vault is opened
+- **THEN** it SHALL open with the file key and re-running the migration SHALL complete it
+
+### Requirement: browser_vault fills by handle
+The `browser_vault` tool SHALL offer actions `list` (handles with label, origin, kind and identifier only), `fill(handle)`, `save_login`, `enter_code` and `unlock(source)`, and SHALL act on the current page of the session's browser; a fill SHALL be refused unless the page's origin exactly matches one of the item's saved origins; secret values SHALL be injected into the page by the host and the model SHALL receive only `{filled_fields, origin}`; every value filled SHALL be registered with the redactor for the session so later page reads show `[REDACTED:vault]`; `save_login` SHALL open a masked prompt on the human's surface (identifier shown, password hidden) and the model SHALL never supply or see the password; in contexts without a human prompt (cron, webhook, API, single-query) `save_login` SHALL return `prompt_unavailable`.
+**Milestone:** M2
+
+#### Scenario: Origin mismatch
+- **GIVEN** a saved login for `https://github.com`
+- **WHEN** the model calls `fill` for it on `https://github.com.evil.example`
+- **THEN** the fill SHALL be refused and nothing SHALL be typed
+
+#### Scenario: Result shape
+- **WHEN** the model fills a login on `https://github.com`
+- **THEN** the tool result SHALL be `{filled_fields: 1, origin: "https://github.com"}` with no secret value
+
+### Requirement: Vault codes, cards and addresses
+For an item with a TOTP seed, `enter_code` SHALL generate and type the current code only on the item's origins without asking; without a seed it SHALL open a masked `Verification code for <origin>` prompt and type the answer; for passkeys or app approvals the tool SHALL tell the model to ask the user to complete the step on their device; every payment-card fill SHALL require an approval through `approval.request` (denied in cron, webhook, API and single-query contexts and on timeout), while address fills SHALL not require approval.
+**Milestone:** M2
+
+#### Scenario: Card fill from a webhook session
+- **GIVEN** a webhook-triggered session on a checkout page
+- **WHEN** the model calls `fill` with a card handle
+- **THEN** the fill SHALL be refused and no card data SHALL be entered
+
+### Requirement: Password manager login sources
+The vault SHALL offer logins from the 1Password `op` and Bitwarden `bw` CLIs as additional read-only sources when the CLI is installed and signed in, unless disabled by `vault.onepassword.enabled = false` / `vault.bitwarden.enabled = false` or `prometheus vault sources --disable <name>`; a source SHALL be unlocked per session by a masked master-password prompt passed to the CLI through its non-interactive channel (stdin or a child-only environment variable), keeping only the session token in memory and re-locking after 30 minutes idle; headless sessions SHALL see locked sources as `unavailable_in_this_session` unless a 1Password service-account token secret is configured; manager items SHALL fill only on the exact website URLs saved on the item.
+**Milestone:** M3
+
+#### Scenario: Headless session
+- **GIVEN** a cron run and a locked Bitwarden source
+- **WHEN** the model lists vault items
+- **THEN** Bitwarden items SHALL be reported as `unavailable_in_this_session` and no prompt SHALL be sent
+
+### Requirement: Vault management CLI
+`prometheus vault list [--json]` SHALL print item metadata only; `prometheus vault add [--login|--card|--address]` SHALL collect values through masked prompts (never from argv); `prometheus vault rm <handle>` SHALL delete after confirmation; `prometheus vault sources [--enable <name>|--disable <name>]` SHALL show and toggle password-manager sources; `prometheus vault key` SHALL show where the key lives and whether a keychain is reachable; RPC methods `vault.list`, `vault.add`, `vault.remove` and `vault.sources` SHALL back the desktop and dashboard settings pages, never returning secret values.
+**Milestone:** M2
+
+#### Scenario: Password on the command line
+- **WHEN** the user runs `prometheus vault add --login --password hunter2`
+- **THEN** the command SHALL exit 2 explaining that secrets are read only from a masked prompt
+
+### Requirement: Website blocklist
+The system SHALL enforce a persistent destination denylist in every egress mode: `security.egress.deny` (host patterns with `*` globs, default empty) plus the patterns in each file listed in `security.egress.deny_files` (one pattern per line, `#` comments, re-read when the file changes), checked by `web_extract`, `web_search` result fetches, `browser_exec` navigations, `vision` and media URL fetches and the egress proxy before any connection; a denied URL SHALL return `Blocked: <host> is blocked by policy` and emit `egress.denied` with reason `denylist`; a session MAY add entries with `/egress deny <pattern>` but SHALL NOT remove profile entries.
+**Milestone:** M2
+
+#### Scenario: Shared list file
+- **GIVEN** `security.egress.deny_files = ["/etc/prometheus/blocked.txt"]` containing `*.casino.example`
+- **WHEN** the model calls `web_extract` on `https://play.casino.example/`
+- **THEN** the call SHALL return `Blocked: play.casino.example is blocked by policy`
+
+### Requirement: In-process fetch SSRF protection
+Every in-process HTTP client that fetches a model-supplied or remote-supplied URL (web extraction, vision and media downloads, provider-returned media URLs, catalog and index downloads, MCP HTTP endpoints added by the model) SHALL resolve the host itself, apply the private, metadata and denylist checks to every resolved address, connect only to a checked address, re-validate each redirect hop (at most 10 hops) against the same checks, and treat a DNS resolution failure as blocked; addresses inside `security.egress.fake_ip_ranges` (default empty) SHALL be treated as public sentinel answers of a local TUN proxy rather than private hosts.
+**Milestone:** M1
+
+#### Scenario: Redirect to metadata
+- **GIVEN** a public URL that redirects to `http://169.254.169.254/latest/meta-data`
+- **WHEN** `web_extract` fetches it
+- **THEN** the redirect SHALL be refused and no request SHALL reach the metadata address
+
+#### Scenario: DNS failure
+- **WHEN** a fetched host fails to resolve
+- **THEN** the fetch SHALL be reported as blocked, not retried through another resolver
+
+### Requirement: Platform trust store for TLS
+Every outbound TLS client (providers, MCP HTTP, web tools, adapters, OTLP export, downloads, the egress proxy upstream side) SHALL verify certificates with the platform verifier (Windows certificate store, macOS trust settings, Linux system bundle paths) plus the PEM certificates in `network.extra_ca_file`, SHALL never disable verification through configuration, and sandboxed children SHALL receive the same bundle through `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE` and `NODE_EXTRA_CA_CERTS`.
+**Milestone:** M1
+
+#### Scenario: Corporate root CA
+- **GIVEN** a corporate TLS-inspecting proxy whose root is installed in the OS trust store
+- **WHEN** Prometheus calls a provider through it
+- **THEN** the TLS handshake SHALL succeed without extra configuration
+
+### Requirement: Supply-chain advisory catalog
+Each release SHALL embed a signed advisory catalog (refreshed with the signed update index) of known-compromised package versions, matched at startup against installed plugins, Python-bridge environments, pinned MCP server packages and managed runtimes; a match not listed in `security.acked_advisories` SHALL produce a one-line startup warning on every surface and gateway log naming the advisory id, and `prometheus doctor security` SHALL show its detail and remediation; `prometheus doctor --ack <advisory-id>` SHALL append the id to `security.acked_advisories` and silence the warning only, never the doctor detail; an unknown id SHALL exit 66.
+**Milestone:** M2
+
+#### Scenario: Compromised MCP package
+- **GIVEN** an MCP server pinned to a package version listed in the catalog
+- **WHEN** the gateway starts
+- **THEN** a warning naming the advisory id SHALL be logged and shown until it is acknowledged
+
+### Requirement: Dependency vulnerability scan
+`prometheus security scan [--json] [--fail-on low|moderate|high|critical] [--skip-runtimes] [--skip-plugins] [--skip-mcp]` SHALL query the OSV database for the exact versions of managed runtimes, Python-bridge environments, plugin dependency manifests and pinned `npx`/`uvx` MCP server packages, SHALL contact the network only when the user runs it, SHALL print findings grouped by component with severity and fixed version, and SHALL exit 1 when any finding is at or above `--fail-on` (default `critical`), 0 otherwise, and 69 when OSV is unreachable.
+**Milestone:** M3
+
+#### Scenario: CI gate
+- **GIVEN** a bridge environment with a dependency carrying a high-severity advisory
+- **WHEN** `prometheus security scan --fail-on high` runs
+- **THEN** it SHALL list the finding and exit 1
+
+### Requirement: Command secret source
+The system SHALL support `secrets.command = { enabled = false, argv = [], timeout_secs = 3, override_existing = false }` which, when enabled on a POSIX host, runs `argv` once per process start without a shell in its own process group, parses stdout as `NAME=VALUE` lines (capped at 1 MiB; whitespace-only values treated as unset), discards stderr, kills the group on timeout, and logs only the exit code or signal; failures SHALL never block startup and SHALL print one line (`secrets.command.argv is empty`, `helper command failed`, `helper output was not a NAME=VALUE map`) with a remediation hint; values SHALL obey secret precedence (secrets store and provider-native env win unless `override_existing`, mapped sources beat this bulk source, first claim wins); on Windows the source SHALL report itself unsupported.
+**Milestone:** M2
+
+#### Scenario: Helper times out
+- **GIVEN** a helper that waits for a PIN
+- **WHEN** Prometheus starts
+- **THEN** the helper SHALL be killed after 3 seconds, startup SHALL continue and the log SHALL contain no helper output
+
+### Requirement: Egress proxy operation and status
+The egress proxy SHALL be owned by the gateway daemon and managed with `prometheus egress status [--json] [--show-tokens]`, `start`, `stop` (graceful, forced after 5 seconds), `restart`, `reload` (apply allowlist, denylist and mapping changes without dropping connections) and `rotate [--confirm]`, and `/egress [status]` on every surface; status SHALL show the listener address and port (`security.egress.proxy_port`, default 9090 for container bridge listeners, ephemeral on loopback), mode, credential mappings with placeholder tokens redacted to prefix and suffix unless `--show-tokens`, denied-connection counts and provider secrets that are present but not covered by injection; the proxy's pid file SHALL be created exclusively with no-follow and carry a per-start nonce so a recycled pid is never signalled; a proxy that fails to bind within 5 seconds SHALL fail loudly, and with `security.egress.enforce_on_container = true` (default) container and remote backends SHALL refuse to start while injection is enabled but the proxy is down.
+**Milestone:** M3
+
+#### Scenario: Proxy down with enforcement
+- **GIVEN** credential injection enabled and the proxy not running
+- **WHEN** a container session starts
+- **THEN** the session SHALL fail with `egress proxy is not running` rather than starting with real credentials
+
+### Requirement: Egress proxy coverage of containers and remote sandboxes
+When credential injection is enabled the system SHALL route container and remote-sandbox traffic through the egress proxy (proxy env vars plus, for containers, a network that only reaches the proxy), SHALL generate a per-profile CA at `<profile>/egress/ca.crt` with its key at `ca.key` (0600, created with no-follow, never copied off the host), SHALL mount the certificate read-only into containers and upload it to remote sandboxes, set `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NODE_OPTIONS=--use-openssl-ca` to it, and SHALL by default allow injected credentials only toward the built-in provider hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.x.ai`, `api.mistral.ai`, `api.groq.com`, `api.together.xyz`, `api.deepseek.com`, `inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`; the proxy SHALL always deny the private and metadata ranges of this spec on its upstream side regardless of host allowlists.
+**Milestone:** M3
+
+#### Scenario: CA inside the container
+- **GIVEN** credential injection enabled and a container session
+- **WHEN** the model runs `python -c "import requests; requests.get('https://api.openai.com/v1/models')"` with the placeholder token
+- **THEN** TLS SHALL verify against the mounted CA and the upstream request SHALL carry the real key
+
+### Requirement: Egress credential source and placeholder rotation
+`security.egress.credential_source` SHALL be `store` (default: the profile's secrets store) or `bitwarden` (refetched from Bitwarden Secrets Manager on every proxy start); with `bitwarden`, a missing access token, missing project id or a mapped secret absent from the fetch SHALL make the proxy refuse to start listing the missing names unless `security.egress.allow_store_fallback = true`; `prometheus egress rotate` SHALL require typing `rotate` (or `--confirm`) because it invalidates placeholders in running sandboxes, SHALL back up the previous mapping file (0600), mint new placeholders for every mapped secret, and push them to running sessions' sandboxes on their next command; re-running setup without `rotate` SHALL keep existing placeholders and mint only for new mappings.
+**Milestone:** M3
+
+#### Scenario: Bitwarden missing a secret
+- **GIVEN** `credential_source = "bitwarden"` and a mapping for `OPENAI_API_KEY` absent from the project
+- **WHEN** the proxy starts
+- **THEN** it SHALL refuse to start naming `OPENAI_API_KEY`
+
+### Requirement: Optional PII redaction
+When `privacy.redact_pii = true` (default false) the system SHALL, before content is sent to a model provider or written to logs, trajectories or telemetry, replace phone numbers with `[REDACTED:phone]`, email addresses of people other than the profile owner with `[REDACTED:email]`, and messaging-platform user ids with a stable per-profile keyed hash `user_<10 hex>`, while delivering replies to the real recipient; this SHALL be independent of secret redaction, and the setting SHALL take effect at the next session (prompt-cache invariant).
+**Milestone:** M2
+
+#### Scenario: Group chat
+- **GIVEN** `privacy.redact_pii = true` and a Telegram message from user id 123456789 containing `+1 415 555 0100`
+- **WHEN** the turn is sent to the provider
+- **THEN** the request SHALL contain a `user_` hash and `[REDACTED:phone]`, and the reply SHALL still reach user 123456789
+
+### Requirement: Protected instruction files configuration
+`security.protected_instruction_files` (default true) SHALL keep the human-approval requirement for agent writes to instruction files (`AGENTS.md`, `CLAUDE.md`, `SOUL.md`, `IDENTITY.md`, `.cursorrules`, and any project-local `.prometheus/` configuration) under every approval mode including yolo, and `security.protected_instruction_extra_patterns` (basename globs, default empty, e.g. `*.mdc`) SHALL extend the set; setting it to false SHALL log at WARN on every start and appear as a downgrade in `prometheus doctor security`.
+**Milestone:** M1
+
+#### Scenario: Extra pattern under yolo
+- **GIVEN** `security.protected_instruction_extra_patterns = ["*.mdc"]` and `--yolo`
+- **WHEN** the model writes `.cursor/rules/style.mdc`
+- **THEN** the write SHALL require human approval
+
+### Requirement: Security guidance on written code
+The system SHALL ship a first-party `security-guidance` hook plugin (disabled by default) that matches content written by `write_file`, `patch` and agent skill writes against a rule set of at least 25 patterns covering unsafe deserialization, command injection, XSS sinks, weak cryptography, XXE, missing subresource integrity and CI workflow injection; with `plugins.security_guidance.mode = "warn"` (default) the write SHALL proceed and the result SHALL carry the matched rule ids and guidance, with `block` the write SHALL be refused returning the guidance as the reason, and `off` SHALL disable matching; findings SHALL be classified as heuristics under the declared trust model.
+**Milestone:** M2
+
+#### Scenario: Warn mode
+- **GIVEN** the plugin enabled in warn mode
+- **WHEN** the model writes Python containing `pickle.loads(request.data)`
+- **THEN** the file SHALL be written and the result SHALL include the unsafe-deserialization rule id and guidance

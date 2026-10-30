@@ -6,7 +6,7 @@ Defines how Prometheus makes its behaviour visible and accountable: one trajecto
 ## ADDED Requirements
 
 ### Requirement: One trajectory grammar for every surface
-The system SHALL record every session, whatever its surface (CLI, TUI, gateway adapter, cron, ACP, MCP server, subagent, eval, harness evolution), as a trajectory of JSON-lines events at `<profile home>/trajectories/<session_id>.jsonl`, where each line has exactly the top-level keys `v`, `ts` (RFC 3339 UTC with microseconds), `seq` (per-session monotonic from 1), `session_id`, `root_session_id`, `turn_id` (null outside a turn), `span_id`, `parent_span_id`, `type` and `payload`. The surface SHALL appear only as `payload.source` of the `session.start` event.
+The system SHALL record every session, whatever its surface (CLI, TUI, gateway adapter, cron, ACP, MCP server, subagent, eval, harness evolution), as a trajectory of JSON-lines events at `<profile home>/trajectories/<session_id>.jsonl`, where each line has exactly the top-level keys `v`, `ts` (RFC 3339 UTC with microseconds), `seq` (per-session monotonic from 1), `session_id`, `root_session_id`, `turn_id` (null outside a turn), `span_id`, `parent_span_id`, `type` and `payload`. The surface SHALL appear only as `payload.source` of the `session.start` event. The one-shot `--output-format stream-json` stream (`cli` › Streaming JSONL output) SHALL reuse this line shape and these event types verbatim, adding only a final line of `type = "result"`, which is never written to the trajectory file.
 **Milestone:** M1
 
 #### Scenario: Same script, different surface
@@ -15,7 +15,7 @@ The system SHALL record every session, whatever its surface (CLI, TUI, gateway a
 - **THEN** the two event sequences SHALL be identical
 
 ### Requirement: Trajectory event types
-The trajectory grammar SHALL define exactly these event types, each with a typed payload in the checked-in schema `schema/trajectory/v1.json`, and every other capability SHALL use these names verbatim: `session.start`, `session.end`, `session.tools_rebuilt`, `turn.start`, `turn.step`, `turn.end`, `user.message`, `assistant.message`, `assistant.reasoning`, `model.call`, `aux_call.start`, `aux_call.end`, `tool.call`, `tool.result`, `tool.batch_planned`, `approval.request`, `approval.decision`, `clarify.request`, `clarify.answer`, `subagent.spawned`, `subagent.progress`, `subagent.finished`, `compression.committed`, `compression.failed`, `prompt.rebuilt` (with a `reason` field such as `new_session`, `compaction`, `model_changed`, `skills --now`, `plugins --now`, `memory --now`, `harness --now`), `cache.unexpected_break`, `provider.fallback`, `provider.route_selected`, `provider.registry_reloaded`, `memory.recalled`, `budget.warning`, `budget.exceeded`, `egress.denied`, `security.downgrade`, `harness.note`, `harness.activated`, `evolve.job.started`, `evolve.job.finished`, `evolve.stage.finished`, `evolve.rollout.finished`, `evolve.selection.finished`, `evolve.proposal.ready`, `evolve.proposal.adopted`, `experience.entry.added`, `experience.entry.evicted`, `experience.entry.status_changed`, `experience.lesson.distilled`, `experience.session_lessons.injected`, `error`. The daemon-level events `usage.updated`, `health.changed`, `message.delivery`, `adapter.state`, `request.cancel`, `request.resolved` and `session.presence` SHALL be RPC events declared in the `workspace-architecture` catalog and not trajectory event types; `approval.request` SHALL be both a trajectory event and the RPC server request of the same name. `model.call` SHALL carry `call_id`, `provider`, `model`, `purpose`, `request_hash`, `cache_hit`, `latency_ms` and the token and cost fields of its ledger row; `tool.result` SHALL carry `ok`, `duration_ms` and either `output` or `error`.
+The trajectory grammar SHALL define exactly these event types, each with a typed payload in the checked-in schema `schema/trajectory/v1.json`, and every other capability SHALL use these names verbatim: `session.start`, `session.end`, `session.tools_rebuilt`, `turn.start`, `turn.step`, `turn.end`, `user.message`, `assistant.message`, `assistant.reasoning`, `model.call`, `aux_call.start`, `aux_call.end`, `tool.call`, `tool.result`, `tool.batch_planned`, `approval.request`, `approval.decision`, `clarify.request`, `clarify.answer`, `subagent.spawned`, `subagent.progress`, `subagent.finished`, `compression.committed`, `compression.failed`, `prompt.rebuilt` (with a `reason` field such as `new_session`, `compaction`, `model_changed`, `skills --now`, `plugins --now`, `memory --now`, `harness --now`), `cache.unexpected_break`, `provider.fallback`, `provider.route_selected`, `provider.registry_reloaded`, `memory.recalled`, `budget.warning`, `budget.exceeded`, `egress.denied`, `security.downgrade`, `harness.note`, `harness.activated`, `evolve.job.started`, `evolve.job.finished`, `evolve.stage.finished`, `evolve.rollout.finished`, `evolve.selection.finished`, `evolve.proposal.ready`, `evolve.proposal.adopted`, `experience.entry.added`, `experience.entry.evicted`, `experience.entry.status_changed`, `experience.lesson.distilled`, `experience.session_lessons.injected`, `error`. The daemon-level events `usage.updated`, `health.changed`, `message.delivery`, `adapter.state`, `request.cancel`, `request.resolved`, `session.presence`, `automation.state`, `message.reaction`, `achievement.unlocked`, `wake.detected` and `local_model.context_grown` SHALL be RPC events declared in the `workspace-architecture` catalog (`workspace-architecture` › Catalog index of capability-owned methods and events) and not trajectory event types; `approval.request` SHALL be both a trajectory event and the RPC server request of the same name. `model.call` SHALL carry `call_id`, `provider`, `model`, `purpose`, `request_hash`, `cache_hit`, `latency_ms` and the token and cost fields of its ledger row; `tool.result` SHALL carry `ok`, `duration_ms` and either `output` or `error`.
 **Milestone:** M1
 
 #### Scenario: Tool failure recorded
@@ -75,7 +75,7 @@ The log viewer `prometheus logs` owned by `cli` (`prometheus logs [<component>] 
 - **THEN** the system SHALL print existing and new records whose `session_id` is `ses_01JB7Z3Q5X8V2K4M6N8P0R2T4W` until interrupted, then exit 130
 
 ### Requirement: Crash and debug bundle (upgrade)
-`prometheus debug bundle [--session ID] [--since 24h] [-o PATH]` SHALL write a local `tar.zst` containing the redacted logs for the window, the config with every secret reference replaced by its name, `prometheus doctor --json` output, `prometheus version --json`, crash reports, and (with `--session`) that session's trajectory; it SHALL print the path and SHALL never upload anything.
+`prometheus debug bundle [--session ID] [--since 24h] [-o PATH]` SHALL write a local `tar.zst` containing the redacted logs for the window, the config with every secret reference replaced by its name, `prometheus doctor --json` output, `prometheus version --json`, crash reports, and (with `--session`) that session's trajectory; it SHALL print the path and SHALL never upload anything itself; uploading is possible only through the separately confirmed `prometheus debug share`.
 **Milestone:** M2
 
 #### Scenario: Bundle contains no secret values
@@ -126,7 +126,7 @@ When `observability.metrics_endpoint.enabled = true` (default false) the daemon 
 - **THEN** the daemon SHALL respond 404
 
 ### Requirement: Per-call usage ledger
-The system SHALL append exactly one row to the `usage_ledger` table of the profile's `state.db` for every model call (main, auxiliary, title, compression, memory, subagent, cron, eval, harness improver, selector and reflector), with `call_id`, `ts`, `profile`, `session_id`, `root_session_id`, `turn_id`, `parent_call_id`, `purpose`, `provider`, `model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`, `cost_usd` (nullable), `cost_status` ∈ `exact|estimated|subscription|unknown` (as defined by `model-providers`), `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>/<label>` or `local`), `request_hash` and `cache_hit`; the table SHALL be append-only and keyed by `root_session_id` (design decision D17), and this SHALL be the only usage table; rows SHALL never be updated or deleted except by session deletion. A call served from the replay cache SHALL be recorded with `cache_hit = true` and `cost_usd = 0`.
+The system SHALL append exactly one row to the `usage_ledger` table of the profile's `state.db` for every model call (main, auxiliary, title, compression, memory, subagent, cron, eval, harness improver, selector and reflector, and each mixture-of-agents reference and aggregator call) and for every paid or metered web and media tool call (`web-and-media-tools` › Media tool credentials and billing are explicit), with `call_id`, `ts`, `profile`, `session_id`, `root_session_id`, `turn_id`, `parent_call_id`, `purpose` (dotted, for example `main`, `auxiliary.title`, `moa.reference`, `moa.aggregator`, `tool.image_generate`), `purpose_detail` (nullable, for example the MoA preset name), `provider`, `model`, `service_tier` (nullable; the provider tier the call was billed at, for example `priority` or `flex`), `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`, `cost_usd` (nullable), `cost_status` ∈ `exact|estimated|subscription|unknown` (as defined by `model-providers`), `billing_source` (`subscription:<provider>/<label>`, `api_key:<provider>/<label>`, `keyless:<vendor>` or `local`, the `/<label>` part omitted for credentials without a label), `request_hash` and `cache_hit`; the table SHALL be append-only and keyed by `root_session_id` (design decision D17), and this SHALL be the only usage table; rows SHALL never be updated or deleted except by session deletion. A call served from the replay cache SHALL be recorded with `cache_hit = true` and `cost_usd = 0`.
 **Milestone:** M1
 
 #### Scenario: Auxiliary call is recorded
@@ -218,7 +218,7 @@ Each daemon component (store per profile, scheduler, each adapter, each MCP serv
 - **THEN** the system SHALL exit 1 and name the adapter
 
 ### Requirement: No outbound telemetry by default
-The system SHALL send no usage statistics, crash reports, trajectories or metrics to any host other than the user's configured model providers, tools and explicitly configured OTLP endpoint; there SHALL be no vendor telemetry endpoint compiled into the binary.
+The system SHALL send no usage statistics, crash reports, trajectories or metrics to any host other than the user's configured model providers, tools and explicitly configured OTLP endpoint, plus the paste target of a user-confirmed `prometheus debug share`; there SHALL be no vendor telemetry endpoint compiled into the binary and nothing SHALL be uploaded without an explicit user action.
 **Milestone:** M1
 
 #### Scenario: Fresh install network audit
@@ -233,3 +233,91 @@ With OpenTelemetry export disabled, trajectory recording and logging SHALL add a
 #### Scenario: Overhead gate
 - **WHEN** a change makes trajectory writing synchronous on the turn path
 - **THEN** the overhead gate SHALL fail if smoke-suite wall time rises by more than 3%
+
+### Requirement: Usage insights report
+`prometheus usage insights [--days N] [--source S] [--all-profiles] [--json]` (default `--days 30`, all sources) and the slash command `/insights [days]` on every interactive surface SHALL render, from the usage ledger, the session store and trajectories and without any model call: an overview (sessions, user messages, turns, tool calls, active days, total tokens per direction), the cost estimate with `unpriced_calls`, breakdowns by model, by provider and by source (surface or gateway platform), the top 10 tools by call count with success rate, skill invocations by skill, an activity matrix of turns by weekday × hour in the profile's timezone, and the top 5 root sessions by cost and by tokens; `--source` SHALL accept a surface or platform name (`cli`, `tui`, `desktop`, `cron`, `acp`, `telegram`, …) and an unknown name SHALL exit 2 listing the sources present in the window. All totals SHALL be grouped by root lineage like every other usage total.
+**Milestone:** M2
+
+#### Scenario: Insights for one platform
+- **GIVEN** a profile with 12 Telegram sessions and 30 CLI sessions in the last 30 days
+- **WHEN** the user runs `prometheus usage insights --source telegram`
+- **THEN** the overview SHALL count 12 sessions and every breakdown SHALL include only Telegram-sourced calls
+
+#### Scenario: Slash command in a chat
+- **WHEN** the user sends `/insights 7` in the TUI
+- **THEN** the same report for the last 7 days SHALL be shown and no ledger row SHALL be added
+
+### Requirement: Plain-text setup summary
+`prometheus debug summary [--show-key-prefixes]` SHALL print to stdout, for pasting into a support thread, a plain-text block with exactly these sections: version line (version, channel, target, commit), OS and architecture, install owner, active profile and home path, model and provider, terminal backend and sandbox enforcement, secrets present (names only, `set`/`missing`), enabled toolsets, MCP server count, memory provider, daemon state with enabled adapters, scheduled job and skill counts, and the configuration keys whose effective value differs from the schema default; credentials embedded in URLs SHALL be replaced by `***`, and secret values SHALL never appear except, with `--show-key-prefixes`, their first 4 and last 4 characters for secrets longer than 16 characters.
+**Milestone:** M1
+
+#### Scenario: URL credentials redacted
+- **GIVEN** `network.proxy = "http://bob:hunter2@proxy:3128"`
+- **WHEN** the user runs `prometheus debug summary`
+- **THEN** the output SHALL show `http://***@proxy:3128` and SHALL NOT contain `hunter2`
+
+### Requirement: Opt-in debug share upload
+`prometheus debug share [--lines N] [--expire-days D] [--target paste_rs|dpaste|custom] [--no-redact] [--yes]` and the slash command `/debug [share]` SHALL build a report from `prometheus debug summary` plus the last `--lines` log records (default 200) of the daemon and active profile, redacted with the trajectory redaction rules, SHALL show the full text (or its path when longer than one screen) and ask `Upload this report to <target host>? It will be public to anyone with the link. [y/N]`, and SHALL upload only on an explicit yes (or `--yes`); non-interactively without `--yes` it SHALL exit 4. `--expire-days` SHALL default to 7 where the target supports expiry, `custom` SHALL POST to `debug.share.endpoint` with headers from `debug.share.header_secrets` (a private support endpoint), `--no-redact` SHALL require a second confirmation, the resulting URL and its deletion token SHALL be recorded in `<PROMETHEUS_HOME>/logs/shares.json`, and `prometheus debug delete <url>` SHALL delete a recorded share where the target supports deletion. `prometheus debug share --local` SHALL write the same report to a file without network access.
+**Milestone:** M2
+
+#### Scenario: Declined upload sends nothing
+- **WHEN** the user runs `prometheus debug share` and answers `n`
+- **THEN** no network connection SHALL be made and the command SHALL exit 1
+
+#### Scenario: Unattended share refused
+- **GIVEN** stdin is not a terminal
+- **WHEN** `prometheus debug share` runs without `--yes`
+- **THEN** it SHALL upload nothing and exit 4
+
+### Requirement: Configuration-centric status
+`prometheus status --full` SHALL add to the daemon report the active profile's effective model and provider, every provider with credentials present (never values), the adapters the daemon would start for each served profile, scheduled jobs with next run time, terminal backend and sandbox enforcement, and session counts (active, today, total); `--deep` SHALL additionally run live probes (one authenticated metadata request per configured provider, adapter connectivity, MCP server initialize) with a 10 s timeout each and report latency or the error, and SHALL be the only status mode that makes outbound requests. `prometheus status --liveness` SHALL request `GET /healthz` from the running daemon and exit 0 on 200 and 1 otherwise, printing nothing on success.
+**Milestone:** M2
+
+#### Scenario: Offline full status
+- **WHEN** the user runs `prometheus status --full` without `--deep`
+- **THEN** the report SHALL list providers with credentials and SHALL make no outbound connection
+
+### Requirement: Export posture status
+`prometheus status --exports [--json]` SHALL report, for each exporter (OTLP traces, metrics and logs, the local metrics scrape endpoint, gateway health export, NeMo Relay and Langfuse integrations), whether it is enabled, the endpoint host (never credentials), the last successful export time, queued and dropped item counts, and the redaction posture (`capture_content`, `propagate_external`, whether message content, tool arguments or user identifiers can leave the host); with every exporter disabled it SHALL print `no telemetry leaves this host` and exit 0.
+**Milestone:** M2
+
+#### Scenario: Content capture is visible
+- **GIVEN** OTLP export enabled with `observability.otel.capture_content = true`
+- **WHEN** the user runs `prometheus status --exports`
+- **THEN** the output SHALL state that message content and tool arguments are exported to the collector host
+
+### Requirement: Runtime liveness watchdog and task dump
+The daemon SHALL run, outside its async runtime, a watchdog thread that probes the runtime every `daemon.watchdog.probe_interval_secs` (default 30); after `daemon.watchdog.max_strikes` (default 3) consecutive probes not answered within the interval it SHALL write a dump of every thread and async task with its current await point to `<PROMETHEUS_HOME>/logs/task-dump-<UTC timestamp>.txt`, record in the runtime record `<PROMETHEUS_HOME>/run/gateway.json` `state = "degraded"` with `exit_reason = "runtime_liveness_watchdog"`, and exit 75 so the service supervisor restarts it; `prometheus status` SHALL show that record until a new daemon replaces it, and `daemon.watchdog.enabled = false` SHALL disable the watchdog. The daemon SHALL also refresh `updated_at` in that record every 60 s and `prometheus status` SHALL warn `daemon heartbeat stale (<n>s)` when it is older than 120 s while the pid is alive. On demand, SIGUSR2 (POSIX) or `prometheus debug dump-tasks` (all platforms, over the control channel) SHALL write the same dump without stopping the daemon, and with `daemon.systemd_watchdog_secs > 0` (default 0, Linux) the generated systemd unit SHALL use `Type=notify` with that `WatchdogSec` and the daemon SHALL send heartbeats only while the watchdog probes succeed.
+**Milestone:** M2
+
+#### Scenario: Stalled runtime restarts
+- **GIVEN** a daemon whose async runtime is blocked by a task that never yields
+- **WHEN** three watchdog probes fail
+- **THEN** a task dump SHALL exist under `logs/`, the state record SHALL say `degraded` with reason `runtime_liveness_watchdog`, and the process SHALL exit 75
+
+#### Scenario: Dump without restart
+- **WHEN** the operator sends SIGUSR2 to a healthy daemon
+- **THEN** a task dump SHALL be written and the daemon SHALL keep serving
+
+### Requirement: NeMo Relay and Langfuse integrations
+The system SHALL offer `observability.otel.preset = "langfuse"`, which sets the OTLP traces endpoint to `<observability.langfuse.host>/api/public/otel` (default host `https://cloud.langfuse.com`) and builds Basic authentication from the secrets `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`, failing with exit 78 naming the missing secret; and SHALL offer a NeMo Relay integration (`observability.nemo_relay.enabled`, default false) hosted in the Python bridge and fed the session, turn, model-call and tool lifecycle from the trajectory stream, which loads the Relay user `plugins.toml` (`~/.config/nemo-relay/plugins.toml`) then the system file (`/etc/nemo-relay/plugins.toml`, `%ProgramData%\nemo-relay\plugins.toml` on Windows, highest precedence), with `observability.nemo_relay.plugins_toml` (a config key, not an environment variable) replacing the user file. The Relay policy SHALL be daemon-wide, `prometheus doctor observability` SHALL list which Relay files apply, and full payloads SHALL be sent to either integration only when `observability.otel.capture_content = true`.
+**Milestone:** M3
+
+#### Scenario: Langfuse without keys
+- **GIVEN** `observability.otel.preset = "langfuse"` and no `LANGFUSE_SECRET_KEY` secret
+- **WHEN** the daemon starts
+- **THEN** it SHALL fail configuration validation naming `LANGFUSE_SECRET_KEY` and exit 78
+
+#### Scenario: Relay files reported
+- **GIVEN** both a user and a system Relay `plugins.toml`
+- **WHEN** the user runs `prometheus doctor observability`
+- **THEN** both paths SHALL be listed with the system file marked as higher precedence
+
+### Requirement: ShareGPT trajectory export
+`prometheus trajectory export --format sharegpt|jsonl [--session ID ... | --eval-run ID | --since S] [--include-failed] -o FILE` SHALL write one JSON line per session in ShareGPT `conversations` form (`from` ∈ `system`, `human`, `gpt`, `tool`; `value` text), rendering assistant tool calls as `<tool_call>{"name": ..., "arguments": ...}</tool_call>` blocks, tool results as `<tool_response>{"tool_call_id": ..., "name": ..., "content": ...}</tool_response>`, and reasoning as a leading `<think>…</think>` block in the `gpt` value, with the tool definitions under `tools` and session metadata (`session_id`, model, `completed`, toolsets) under `meta`; it SHALL apply trajectory redaction, SHALL exclude ephemeral system-prompt overlays and grader material, SHALL by default skip sessions that ended in error, and the output SHALL load with a standard JSON-lines dataset loader.
+**Milestone:** M2
+
+#### Scenario: Tool call rendering
+- **GIVEN** a session in which the assistant called `read_file` and received its output
+- **WHEN** it is exported with `--format sharegpt`
+- **THEN** the `gpt` turn SHALL contain a `<tool_call>` block with name `read_file` followed by a `tool` turn containing a `<tool_response>` block

@@ -20,7 +20,7 @@ The system SHALL run a turn through a single entry operation `run_turn(scope, se
 - **THEN** the system SHALL reject the call with error `profile scope required` and SHALL NOT read the default profile
 
 ### Requirement: Typed exit reasons
-The system SHALL end every turn with exactly one exit reason from the closed set `completed`, `interrupted_by_user`, `interrupted_by_system`, `iteration_limit`, `token_budget_exhausted`, `cost_budget_exhausted`, `context_exhausted`, `provider_failed`, `lease_unavailable`, and `crashed` (only ever assigned on recovery of a journal left unfinished), and it SHALL emit a `turn.end` trajectory event carrying that reason.
+The system SHALL end every turn with exactly one exit reason from the closed set `completed`, `interrupted_by_user`, `interrupted_by_system`, `iteration_limit`, `token_budget_exhausted`, `cost_budget_exhausted`, `run_budget_exhausted`, `guardrail_stop`, `empty_response`, `context_exhausted`, `provider_failed`, `lease_unavailable`, and `crashed` (only ever assigned on recovery of a journal left unfinished), and it SHALL emit a `turn.end` trajectory event carrying that reason.
 **Milestone:** M1
 
 #### Scenario: Text answer
@@ -382,3 +382,195 @@ The system SHALL emit a `turn.step` trajectory event after each iteration carryi
 - **GIVEN** a plugin subscriber that fails on `turn.step`
 - **WHEN** an iteration ends
 - **THEN** the turn SHALL continue and the error SHALL be logged at DEBUG
+
+### Requirement: Context references in user input
+On the CLI, TUI, desktop and ACP surfaces the system SHALL expand `@` references in a user message before admission: `@file:<path>` with optional `:<line>` or `:<a>-<b>` (1-indexed, inclusive; an invalid range yields the whole file), `@folder:<path>` (tree listing with sizes, at most 200 entries then `- ...`), `@diff` (unstaged), `@staged`, `@git:<N>` (last N commits with patches, clamped to 1..10) and `@url:<url>` (fetched through the web extraction path), stripping trailing `,.;!?` from values and appending the content under `--- Attached Context ---`; when the expansion exceeds 25% of the main model's context window a warning SHALL be appended, and above 50% the expansion SHALL be refused and the message sent unchanged with a notice; messaging adapters SHALL pass `@` text through unexpanded.
+**Milestone:** M1
+
+#### Scenario: Line range
+- **GIVEN** `src/main.rs` with 100 lines
+- **WHEN** the user sends `explain @file:src/main.rs:10-20`
+- **THEN** the stored user message SHALL contain lines 10 through 20 under `--- Attached Context ---`
+
+#### Scenario: Hard limit
+- **GIVEN** a 128k-token model and `@folder:` content estimated at 70k tokens
+- **WHEN** the message is submitted
+- **THEN** the system SHALL send the original text without the attachment and show that the reference exceeded 50% of the context window
+
+### Requirement: Context reference safety and completion
+Context reference expansion SHALL resolve paths against the session's working directory and refuse paths outside the workspace root (`path is outside the allowed workspace`), SHALL refuse `~/.ssh/`, `~/.aws/`, `~/.gnupg/`, `~/.kube/`, shell rc and profile files, `~/.netrc`, `~/.pgpass`, `~/.npmrc`, `~/.pypirc`, and every file under the Prometheus home's `secrets.toml`, `grants.toml` and skill hub cache (`path is a sensitive credential file`), SHALL refuse binary files detected by MIME type or NUL bytes (known text extensions bypass MIME detection), SHALL turn every failure into an inline warning rather than an error, and the CLI and TUI composers SHALL complete `@` to reference kinds and `@file:`/`@folder:` to filesystem paths with sizes; plugin-registered reference kinds SHALL follow the same limits and blocklist.
+**Milestone:** M1
+
+#### Scenario: Credential file refused
+- **WHEN** the user sends `check @file:~/.aws/credentials`
+- **THEN** no file content SHALL be attached and the message SHALL carry the warning `path is a sensitive credential file`
+
+#### Scenario: Traversal refused
+- **GIVEN** a workspace root `/work/app`
+- **WHEN** the user references `@file:../../etc/passwd`
+- **THEN** the system SHALL attach nothing and warn `path is outside the allowed workspace`
+
+### Requirement: Personality overlays
+The system SHALL ship the built-in personalities `helpful`, `concise`, `technical`, `creative`, `teacher`, `kawaii`, `catgirl`, `pirate`, `shakespeare`, `surfer`, `noir`, `uwu`, `philosopher` and `hype`, SHALL accept custom or overriding entries as `[agent.personalities] <name> = "<prompt text>"`, SHALL store the selection in `agent.personality` (default `none`), and SHALL render the selected overlay as a block in the `session` tier immediately after the identity-dependent blocks so `SOUL.md` stays the baseline; `/personality` SHALL list `none` plus every personality marking the active one, `/personality <name>` SHALL select one and `/personality none|default|neutral` SHALL clear it, each as a `next_session` effect (with `--now` rebuilding the prompt as a recorded cache break), available on CLI, TUI, desktop and gateway; an unknown name SHALL be refused listing the valid names, and custom overlay text SHALL be threat-scanned like context files.
+**Milestone:** M1
+
+#### Scenario: Deferred switch
+- **GIVEN** an active session with no personality
+- **WHEN** the user runs `/personality pirate`
+- **THEN** the current session's system prompt SHALL be unchanged and the next new session SHALL contain the `pirate` overlay
+
+#### Scenario: Custom override of a built-in
+- **GIVEN** `[agent.personalities] concise = "Answer in at most two sentences."`
+- **WHEN** a session starts with `agent.personality = "concise"`
+- **THEN** the overlay text SHALL be the configured string, not the built-in one
+
+### Requirement: Side questions with /btw
+The system SHALL answer `/btw <question>` with one auxiliary call (task `side_question`, default the main model) over a read-only snapshot of the session transcript taken when the command is issued, SHALL run it even while a turn is active without interrupting that turn, SHALL never append the question or answer to the session's history or change its prompt cache, and SHALL show the answer in a side panel (CLI/TUI/desktop) or as a separate chat message (gateway) labelled as a side answer.
+**Milestone:** M2
+
+#### Scenario: Busy session
+- **GIVEN** a turn running a long tool batch
+- **WHEN** the user sends `/btw which branch are we on?`
+- **THEN** the answer SHALL be shown while the turn continues, and the stored transcript SHALL contain neither the question nor the answer
+
+### Requirement: Project instructions bootstrap with /init
+The system SHALL provide `/init [notes]` on CLI, TUI, desktop and gateway that runs a normal turn instructed to inspect the workspace with read-only tools (manifests, layout, toolchain and CI configs) and then write `AGENTS.md` at the workspace root, or, when it exists, merge-update it preserving user-written sections; the optional notes SHALL be included as emphasis, the write SHALL go through the normal file-write approval path, and the new file SHALL take effect as project context only from the next session.
+**Milestone:** M2
+
+#### Scenario: Existing file preserved
+- **GIVEN** an `AGENTS.md` with a user section `## Release rules`
+- **WHEN** the user runs `/init focus on the test commands`
+- **THEN** the updated file SHALL still contain the `## Release rules` section verbatim
+
+### Requirement: Tool loop guardrails
+The system SHALL track per turn exact repeated failures (same tool, same arguments, same error), repeated failures of the same tool, and idempotent calls returning identical results, SHALL append a warning to the tool result when `tool_loop_guardrails.warn_after` thresholds are reached (defaults `exact_failure = 2`, `same_tool_failure = 3`, `idempotent_no_progress = 2`; `warnings_enabled = true`), SHALL end the turn with exit reason `guardrail_stop` when `hard_stop_after` thresholds are reached (defaults 5, 8, 5) if `hard_stop_enabled` (default false) or, on non-interactive surfaces (gateway, cron, API, kanban workers), `non_interactive_hard_stop_enabled` (default true), and SHALL always enforce per-turn caps `loop_caps.max_web_searches = 50` and `loop_caps.max_subagents = 50` (0 = unlimited) by refusing further calls with an error result; warnings SHALL ride tool results and never change the system prompt.
+**Milestone:** M1
+
+#### Scenario: Interactive warning only
+- **GIVEN** a CLI session with default guardrails
+- **WHEN** the model calls `terminal` with identical failing arguments 6 times
+- **THEN** the second and later results SHALL carry the repeated-failure warning and the turn SHALL NOT be stopped
+
+#### Scenario: Cron hard stop
+- **GIVEN** a cron run with default guardrails
+- **WHEN** the same exact failure occurs a fifth time
+- **THEN** the turn SHALL end with exit reason `guardrail_stop`
+
+#### Scenario: Search cap
+- **WHEN** the model makes its 51st `web_search` call in one turn
+- **THEN** the call SHALL return an error naming `tool_loop_guardrails.loop_caps.max_web_searches` and no search SHALL be performed
+
+### Requirement: Empty-response and narration guards
+The system SHALL retry an empty model response (no text and no tool calls) at most 3 times per streak, reducing the budget to 1 when one empty attempt's estimated input cost is at least `agent.empty_response_guard.cost_threshold_usd` (default 0.25) and not retrying a deterministic empty (an unsignaled refusal with zero output tokens), and SHALL, when `agent.intent_continuation` (default `auto`: Responses-wire models only; `true`, `false` or a list of model-name substrings) applies, inject at most 2 cache-safe `continue now and call the tools` nudges per turn when the model announces an action without emitting a tool call.
+**Milestone:** M1
+
+#### Scenario: Expensive empty retried once
+- **GIVEN** an empty response whose input cost is estimated at 0.40 USD
+- **WHEN** the guard evaluates the retry budget
+- **THEN** at most one retry SHALL be sent before the turn ends with exit reason `empty_response`
+
+### Requirement: Image input routing
+The turn loop SHALL route every image it places in a request (user attachments and image outputs of tools) by `vision.image_input_mode` exactly as `web-and-media-tools` › Image input routing specifies (that requirement owns the key, its `auto`/`native`/`text` modes and the rasterization fallback), deciding per message when the message is first sent so the cached prompt prefix never changes for an already-sent image.
+**Milestone:** M1
+
+#### Scenario: Text-only model gets a description
+- **GIVEN** `vision.image_input_mode = "auto"` and a main model without vision support
+- **WHEN** the user attaches a screenshot
+- **THEN** the request SHALL contain a text description from the `vision` auxiliary route and no image part
+
+### Requirement: Image budgets and replay
+The turn loop SHALL apply the image embed budget, per-image cap and replay rules owned by `web-and-media-tools` › Image embed budget, per-image cap and replay (keys `vision.embed_target_bytes`, `vision.max_calls_per_image`, `vision.replay_recent_images`) whenever it builds a request, and SHALL rewrite an earlier message for image replay only in the batches that requirement allows, so the cached prompt prefix breaks only at those batch boundaries.
+**Milestone:** M2
+
+#### Scenario: Resume replays recent images
+- **GIVEN** a session where the user attached a photo, then `prometheus chat --resume` in a new process
+- **WHEN** the user asks about the photo
+- **THEN** the request SHALL contain the photo's image part in its original user message, byte-identical to the first request that carried it
+
+### Requirement: Prefill messages
+The system SHALL, when `prompt.prefill_messages_file` names a JSON file containing an array of `{role, content}` messages (roles `user` and `assistant` only), insert those messages after the system prompt at session start, freeze them with the session (the path and content hash are recorded on the session and restored with it), never persist them as user transcript rows, and fail session start with exit 78 when the file is missing, malformed or contains another role.
+**Milestone:** M2
+
+#### Scenario: Frozen at start
+- **GIVEN** a prefill file with two few-shot messages and a running session
+- **WHEN** the file is edited
+- **THEN** the running session's requests SHALL keep the original two messages and a new session SHALL use the edited file
+
+### Requirement: Session id in the system prompt
+The system SHALL add a line `Session ID: ses_<ULID>` to the `session` tier when `prompt.include_session_id = true` (default false) or the session was started with `--pass-session-id`, fixed for the session's life.
+**Milestone:** M1
+
+#### Scenario: Flag adds the id
+- **WHEN** the user runs `prometheus chat --pass-session-id`
+- **THEN** the session's system prompt SHALL contain `Session ID:` followed by the session's id
+
+### Requirement: Offline prompt size report
+The system SHALL provide `prometheus prompt size [--platform <surface>] [--toolsets <a,b>] [--model <id>] [--json]` that builds the layered system prompt and tool array exactly as a new session on that surface would, without any model call or credentials, and reports bytes and estimated tokens per layer (identity, personality, tool guidance, platform hint, skills index, project context files, memory snapshot, plugin sections, runtime block), per toolset's tool schemas, and totals; `--json` SHALL emit the same data machine-readably and exit 0.
+**Milestone:** M1
+
+#### Scenario: JSON breakdown
+- **WHEN** the user runs `prometheus prompt size --platform telegram --json`
+- **THEN** the output SHALL be JSON with a `layers` array, a `toolsets` array and a `total_tokens` field, and no network request SHALL be made
+
+### Requirement: Wall-clock run budget
+The system SHALL support an optional per-turn wall-clock budget `agent.run_budget_secs` (unset = off) overridable per invocation with `prometheus chat --run-budget <secs>`; when 80% of the budget has elapsed it SHALL inject once per turn a cache-safe notice (appended to the newest tool result like a steer) telling the model to produce the final deliverable now, SHALL cap implicit stale-call timeouts at `max(60, remaining * 0.5)` seconds without raising any timeout or overriding an explicitly configured one, and SHALL end the turn with exit reason `run_budget_exhausted` when the budget runs out; with the key unset no clock reads or injections SHALL occur.
+**Milestone:** M1
+
+#### Scenario: Wrap-up notice
+- **GIVEN** `prometheus chat -z --run-budget 100 "..."`
+- **WHEN** 80 seconds have elapsed during a tool batch
+- **THEN** the next tool result SHALL carry the one-time wrap-up notice and no second notice SHALL be injected
+
+### Requirement: Verify-on-stop
+The system SHALL, when `agent.verify_on_stop` is `true` or `auto` (on for CLI, TUI, desktop, ACP and API callers; off for messaging) and default `false`, refuse to accept a final answer in a turn that edited non-documentation files in the workspace without fresh verification evidence (a test, build, lint or type-check command run after the last edit), injecting a cache-safe nudge to verify or explain why it cannot, bounded by `agent.max_verify_nudges` (default 3) including nudges from `pre_verify` hooks; `agent.verify_guidance` (default true) SHALL append clean-diff guidance to the nudge, and the evidence ledger SHALL be stored in `state.db` only while the feature is enabled.
+**Milestone:** M2
+
+#### Scenario: Unverified edit nudged
+- **GIVEN** `agent.verify_on_stop = true` and a turn that patched `src/lib.rs` and ran no tests
+- **WHEN** the model produces a final answer
+- **THEN** the system SHALL inject a verification nudge and continue the turn
+
+#### Scenario: Docs-only edits pass
+- **GIVEN** the same setting and a turn that only edited `README.md`
+- **WHEN** the model produces a final answer
+- **THEN** the turn SHALL end normally without a nudge
+
+### Requirement: Coding posture and standing coding instructions
+The system SHALL, per `agent.coding_context` (`auto` default: on for interactive CLI, TUI, desktop and ACP sessions whose working directory is a code workspace; `on`; `off`), add a coding brief and a workspace snapshot (branch, dirty files count) to the `session` tier at session start, and SHALL append `agent.coding_instructions` (string, default empty) to that brief; changes SHALL apply from the next session.
+**Milestone:** M2
+
+#### Scenario: Messaging unaffected
+- **GIVEN** `agent.coding_context = "auto"` and a Telegram session whose cwd is a git repo
+- **WHEN** the prompt is built
+- **THEN** no coding brief SHALL be added
+
+### Requirement: Context file read timeout
+The system SHALL bound reading each project context file by `prompt.context_file_read_timeout_secs` (default 5); a file that cannot be read in time (for example on a hung network mount) SHALL be skipped with a WARN naming it and session start SHALL continue.
+**Milestone:** M1
+
+#### Scenario: Hung mount
+- **GIVEN** an `AGENTS.md` on a network mount that blocks reads
+- **WHEN** a session starts
+- **THEN** the session SHALL start within about 5 seconds of the read without that file and log a WARN naming it
+
+### Requirement: todo tool contract
+The `todo` tool SHALL take an optional `todos` array of `{id, content, status, parent?}` with `status` in `pending`, `in_progress`, `completed`, `cancelled` and an optional `merge` flag (default false); without `todos` it SHALL return the list, with `merge = false` it SHALL replace the list, with `merge = true` it SHALL update existing items by id only in the fields given and append new ones; list position SHALL be priority, items SHALL be capped at 256 and content at 4000 characters, every write SHALL bump a monotonic `revision`, every call SHALL return the full list, and state SHALL be session-scoped, persisted with the session and re-injected after compaction showing only pending and in-progress items (plus parents of active subtasks).
+**Milestone:** M1
+
+#### Scenario: Merge updates status only
+- **GIVEN** a list with item `{id: "a", content: "write tests", status: "pending"}`
+- **WHEN** the model calls `todo` with `merge = true` and `[{id: "a", status: "completed"}]`
+- **THEN** item `a` SHALL keep its content and have status `completed`, and the revision SHALL increase by 1
+
+### Requirement: clarify tool contract
+The `clarify` tool SHALL take `questions`, an array of 1 to 5 entries each with `question` text, optional `choices` (at most 4, each at most 8000 characters, the surface always adding an `Other` free-text option) and optional `multi` for multi-select; it SHALL send one `clarify.request` covering all questions to the session's surface and wait up to `agent.clarify_timeout_secs` (default 3600; 0 = unlimited), returning each answer with its status and, on expiry, `[user did not respond within <N>m]`; on surfaces with no interactive channel (cron, API, one-shot `-z`, kanban workers) `clarify` SHALL NOT be in the toolset, and a call reaching an unattended session SHALL return an error telling the model to proceed with its best judgment; messaging adapters SHALL render choices through the card model.
+**Milestone:** M1
+
+#### Scenario: Too many questions
+- **WHEN** the model calls `clarify` with 6 questions
+- **THEN** the tool SHALL return `questions supports at most 5 items.` and ask nothing
+
+#### Scenario: Timeout
+- **GIVEN** `agent.clarify_timeout_secs = 60` and a user who does not answer
+- **WHEN** 60 seconds pass
+- **THEN** the tool result SHALL contain `[user did not respond within 1m]`

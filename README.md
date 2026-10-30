@@ -14,6 +14,7 @@ Specification phase. The full target behavior is defined as an OpenSpec change:
 - `openspec/changes/bootstrap-prometheus-agent/design.md`: architecture decisions
 - `openspec/changes/bootstrap-prometheus-agent/specs/`: one behavior spec per capability, each requirement tagged with a milestone (M1 core agent, M2 multi-surface and extensibility, M3 desktop, dashboard and self-improvement)
 - `openspec/changes/bootstrap-prometheus-agent/tasks.md`: implementation plan by milestone
+- `docs/hermes-parity.md`: every Hermes Agent feature mapped to the Prometheus requirement that specifies it
 
 Validate locally:
 

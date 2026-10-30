@@ -198,7 +198,7 @@ Daemon approval requests SHALL become ACP permission requests offering only the 
 - **THEN** the approval SHALL stay pending and answerable from the desktop
 
 ### Requirement: Clarify is part of the ACP toolset
-The `acp` toolset SHALL be the `coding` toolset including `clarify` and excluding messaging-send tools, resolved by the daemon like any surface (`toolsets.surfaces.acp` replaces it, `toolsets.disabled` removes from it), and SHALL be fixed for the life of a session.
+The `acp` toolset SHALL be the `coding` toolset including `clarify` and excluding messaging-send tools, resolved by the daemon like any surface (`toolsets.surfaces.acp` replaces it, `tools.disabled_toolsets` removes from it), and SHALL be fixed for the life of a session.
 **Milestone:** M3
 
 #### Scenario: Default ACP session
@@ -260,3 +260,25 @@ When the client advertised `terminal` support and `acp.use_editor_terminal = tru
 - **GIVEN** a session whose capability set requires OS sandboxing for local commands
 - **WHEN** the agent runs a command
 - **THEN** the command SHALL run in the daemon's sandbox, not in the editor terminal
+
+### Requirement: Optional browser tools for ACP sessions
+`prometheus acp --setup-browser [--yes]` SHALL install the managed Chromium runtime (asking before the download unless `--yes`, idempotent when already installed) and exit, `--setup` SHALL offer the same step after model selection, and the browser tools SHALL be part of an ACP session's toolset only when the session's resolved toolsets include `browser` and the Chromium runtime is available at session creation; otherwise they SHALL be absent rather than failing at call time.
+**Milestone:** M3
+
+#### Scenario: Runtime not installed
+- **GIVEN** `toolsets.surfaces.acp` includes `browser` and Chromium is not installed
+- **WHEN** an editor creates a session
+- **THEN** the session's tools SHALL NOT include browser tools and `prometheus acp --check` SHALL report `browser runtime not installed; run 'prometheus acp --setup-browser'`
+
+### Requirement: Unattended ACP clients and relay bridges
+`prometheus acp --unattended` SHALL serve ACP clients that cannot show permission prompts (for example channel relay bridges such as `buzz-acp`): it SHALL never forward approval or clarify requests to the client, SHALL resolve approvals with `approvals.unattended_mode` (default `deny`) and the profile's grants, SHALL use the `toolsets.surfaces.acp_unattended` toolset (default the `acp` toolset without terminal and code-execution tools), and SHALL label its sessions with `source: "acp-unattended"`; a client permission answer received on an unattended connection SHALL be ignored and logged at WARN.
+**Milestone:** M3
+
+#### Scenario: Relay bridge auto-approves
+- **GIVEN** a relay bridge connected through `prometheus acp --unattended` that answers every permission request with `allow_once`
+- **WHEN** a channel message asks the agent to run `rm -rf build/`
+- **THEN** no permission request SHALL be sent to the bridge and the command SHALL be blocked unless a grant or `approvals.unattended_mode = "approve"` allows it
+
+#### Scenario: Default unattended toolset
+- **WHEN** an unattended session is created without overrides
+- **THEN** its tools SHALL NOT include the terminal or code-execution tools

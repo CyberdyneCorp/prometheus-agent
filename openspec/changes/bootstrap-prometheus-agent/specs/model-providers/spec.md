@@ -103,13 +103,18 @@ The system SHALL fail with code `provider.unknown` and a message beginning `Unkn
 - **THEN** the system SHALL fail with `provider.disabled` and SHALL NOT attempt credential resolution
 
 ### Requirement: Local endpoints never fall back to remote providers
-The system SHALL fail with code `provider.missing_base_url` when a local-server provider (for example `ollama`, `vllm`, `llamacpp`, `lmstudio`) has no configured `base_url`, and SHALL fail with code `provider.missing_credential` when a provider whose `auth` is not `none` has no resolvable credential, and in neither case SHALL route the request to a different provider unless that provider is an explicit entry of the fallback chain.
+The system SHALL fail with code `provider.missing_base_url` when a local-server provider (for example `ollama`, `vllm`, `sglang`, `lmstudio`) has no configured `base_url` and its descriptor's default loopback endpoint (`ollama` `http://127.0.0.1:11434/v1`, `lmstudio` `http://127.0.0.1:1234/v1`), if any, is unreachable (for `llamacpp` the `local-models` resolution applies instead and fails with `provider.local_runtime_down`), and SHALL fail with code `provider.missing_credential` when a provider whose `auth` is not `none` has no resolvable credential, and in neither case SHALL route the request to a different provider unless that provider is an explicit entry of the fallback chain.
 **Milestone:** M1
 
-#### Scenario: Ollama without an endpoint
-- **GIVEN** `--provider ollama`, no `providers.ollama.base_url`, and an `OPENROUTER_API_KEY` secret
+#### Scenario: vLLM without an endpoint
+- **GIVEN** `--provider vllm`, no `providers.vllm.base_url`, and an `OPENROUTER_API_KEY` secret
 - **WHEN** the route resolves
 - **THEN** the system SHALL fail with `provider.missing_base_url` and SHALL send no request to OpenRouter
+
+#### Scenario: Ollama default endpoint unreachable
+- **GIVEN** `--provider ollama`, no `providers.ollama.base_url`, nothing listening on `127.0.0.1:11434`, and an `OPENROUTER_API_KEY` secret
+- **WHEN** the route resolves
+- **THEN** the system SHALL fail with `provider.missing_base_url` naming the probed default endpoint and SHALL send no request to OpenRouter
 
 ### Requirement: Credentials are bound to their authoritative hosts
 The system SHALL attach a secret to a request only when the request's exact hostname (case-insensitive, no substring or suffix match except an explicit leading `*.` wildcard) appears in that secret's `key_hosts` from the provider descriptor or from `providers.<id>.key_hosts`, and SHALL send a keyless request to a provider whose `auth = "none"`.
@@ -243,7 +248,7 @@ The system SHALL sign in to `nous` through the device-code flow, preferring scop
 **Milestone:** M2
 
 #### Scenario: One sign-in serves models and tools
-- **GIVEN** a valid `nous` sign-in and `[tools.web_search] provider = "nous"`
+- **GIVEN** a valid `nous` sign-in and `web.search_backend = "nous"`
 - **WHEN** a session runs a chat turn and a web search
 - **THEN** both calls SHALL carry `billing_source = "subscription:nous/<label>"`
 
@@ -336,7 +341,7 @@ The system SHALL, for subscription providers that expose a usage endpoint or rat
 - **THEN** the system SHALL skip the credential (or activate a fallback) and report the reset time, without sending the inference request
 
 ### Requirement: Billing source transparency (upgrade)
-The system SHALL label every model call with a `billing_source` of `subscription:<provider>/<label>`, `api_key:<provider>/<label>` or `local`, recording it on the `model.call` trajectory event, the trajectory and the usage ledger, SHALL show the current session's billing source in the CLI status line, TUI, desktop and dashboard, and SHALL state the billing change in the `provider.fallback` notice (for example `now billing API key openrouter/default instead of subscription openai-codex/personal`) whenever a route change moves between a subscription and a pay-per-token credential; when `providers.<id>.confirm_metered_fallback = true`, an interactive session SHALL ask before making such a move and a non-interactive one SHALL fail the turn instead.
+The system SHALL label every model call with a `billing_source` in the grammar of `observability` › Per-call usage ledger (`subscription:<provider>/<label>`, `api_key:<provider>/<label>` or `local` for model calls; `keyless:<vendor>` only for opted-in web tools), recording it on the `model.call` trajectory event, the trajectory and the usage ledger, SHALL show the current session's billing source in the CLI status line, TUI, desktop and dashboard, and SHALL state the billing change in the `provider.fallback` notice (for example `now billing API key openrouter/default instead of subscription openai-codex/personal`) whenever a route change moves between a subscription and a pay-per-token credential; when `providers.<id>.confirm_metered_fallback = true`, an interactive session SHALL ask before making such a move and a non-interactive one SHALL fail the turn instead.
 **Milestone:** M2
 
 #### Scenario: Fallback from subscription to API key is announced
@@ -453,7 +458,7 @@ The system SHALL carry cache breakpoints on the internal request type and transl
 - **THEN** the system prompt and tool schema bytes sent SHALL be identical to those of the first turn
 
 ### Requirement: Model metadata catalog
-The system SHALL resolve a model's metadata (`context_window`, `max_output_tokens`, `supports_tools`, `supports_vision`, `supports_reasoning`, per-million-token input/output/cache prices) in order from: `[models."<provider>/<model>"]` overrides in `config.toml`; the provider's live model listing cached for `providers.<id>.catalog_ttl_secs` (default 86400); the built-in catalog shipped with the binary; and otherwise defaults of a 128000-token context window, tools supported, vision unsupported and unknown prices, logging one WARN per (provider, model) per process naming the override key.
+The system SHALL resolve a model's metadata (`context_window`, `max_output_tokens`, `supports_tools`, `supports_vision`, `supports_video` (video input), `supports_reasoning`, per-million-token input/output/cache prices) in order from: `[models."<provider>/<model>"]` overrides in `config.toml`; the provider's live model listing cached for `providers.<id>.catalog_ttl_secs` (default 86400); the built-in catalog shipped with the binary; and otherwise defaults of a 128000-token context window, tools supported, vision unsupported and unknown prices, logging one WARN per (provider, model) per process naming the override key.
 **Milestone:** M1
 
 #### Scenario: Explicit override wins without network access
@@ -527,7 +532,7 @@ The system SHALL enforce optional `providers.<id>.daily_budget_usd` and `provide
 - **THEN** the system SHALL send no request to `anthropic` and SHALL activate the `openrouter` fallback with reason `provider.budget_exhausted`
 
 ### Requirement: Auxiliary task routing
-The system SHALL route side-model calls by a typed auxiliary task enum (`compression`, `title`, `vision`, `approval`, `memory`, `curator`, `web_extract`, `skill_review`, `evolution`), reading `[auxiliary.<task>]` keys `provider`, `model`, `timeout_secs` and `fallback_chain` with precedence explicit call argument over config over `auto`, SHALL fail config validation for an unknown task name, and SHALL default timeouts to 120 seconds for `vision` and `compression`, 30 seconds for `approval` and `title`, and 600 seconds for `curator` and `evolution`. It SHALL retry a retryable auxiliary failure on the same route `auxiliary.transient_retries` times (default 2, range 0-6), SHALL emit `aux_call.start` and `aux_call.end` events once per attempt and never the main-loop `model.call` event for auxiliary calls, and SHALL record auxiliary cost in the usage ledger under the owning session with `kind = "auxiliary"` and the task name.
+The system SHALL route side-model calls by a typed auxiliary task enum (`compression`, `title`, `vision`, `approval`, `memory`, `curator`, `web_extract`, `skill_review`, `evolution`, `goal_judge` (owned by `session-automation`), `side_question` (`agent-turn-loop`) and `voice_chat` (`voice-mode`), the last three defaulting to the session's main model), reading `[auxiliary.<task>]` keys `provider`, `model`, `timeout_secs` and `fallback_chain` with precedence explicit call argument over config over `auto`, SHALL fail config validation for an unknown task name, and SHALL default timeouts to 120 seconds for `vision` and `compression`, 30 seconds for `approval` and `title`, and 600 seconds for `curator` and `evolution`. It SHALL retry a retryable auxiliary failure on the same route `auxiliary.transient_retries` times (default 2, range 0-6), SHALL emit `aux_call.start` and `aux_call.end` events once per attempt and never the main-loop `model.call` event for auxiliary calls, and SHALL record auxiliary cost in the usage ledger under the owning session with `kind = "auxiliary"` and the task name.
 **Milestone:** M1
 
 #### Scenario: Per-task model pin
@@ -581,3 +586,391 @@ The system SHALL provide `prometheus model` as an interactive picker when stdin 
 - **GIVEN** no credential for provider `groq`
 - **WHEN** the user runs `prometheus model set groq/llama-x`
 - **THEN** the system SHALL exit with status 78 naming `prometheus auth add groq` and SHALL NOT modify `config.toml`
+
+### Requirement: Model retirement table
+The built-in model catalog MUST carry a retirement table mapping each retired or deprecated `<provider>/<model>` id to its status (`deprecated` or `retired`), an optional retirement date and a replacement id, updated with each release and overridable per id by `[models."<provider>/<model>"] replacement`; resolving a `retired` id for a new session SHALL fail with exit 78 naming the replacement and `prometheus config fix-models` (`configuration-and-profiles` › Retired model rewrite), while a `deprecated` id SHALL still be used with one WARN per process, and `prometheus model list` SHALL mark both.
+**Milestone:** M2
+
+#### Scenario: Retired default model
+- **GIVEN** `model.default = "xai/grok-2"` marked `retired` with replacement `xai/grok-4`
+- **WHEN** the user starts a chat
+- **THEN** the system SHALL exit 78 with a message naming `xai/grok-4` and `prometheus config fix-models`
+
+### Requirement: Built-in provider catalog
+The system SHALL ship the following built-in provider descriptors (canonical id; aliases; secret names in resolution order; default `base_url`; `wire_format`; `auth`), each also usable as a `[providers.<id>]` override target, and SHALL treat a descriptor's `secret_names` as an ordered list in which the first name present in the secrets store supplies the credential, so a plan-specific key wins over a shared vendor key:
+
+| id | aliases | secret_names (ordered) | base_url | wire_format | auth |
+|---|---|---|---|---|---|
+| `openrouter` | or | OPENROUTER_API_KEY | https://openrouter.ai/api/v1 | chat_completions | api_key / oauth (key minting) |
+| `anthropic` | claude, claude-oauth, claude-code | ANTHROPIC_API_KEY, ANTHROPIC_TOKEN | https://api.anthropic.com | anthropic_messages | api_key / oauth |
+| `openai-api` | openai | OPENAI_API_KEY | https://api.openai.com/v1 | responses | api_key |
+| `openai-codex` | codex, chatgpt, chatgpt-codex | (sign-in) | https://chatgpt.com/backend-api/codex | responses | oauth |
+| `nous` | nous-portal, nousresearch | NOUS_API_KEY | https://inference-api.nousresearch.com/v1 | chat_completions | oauth (device) / api_key |
+| `xai` | grok, x-ai, x.ai | XAI_API_KEY | https://api.x.ai/v1 | responses (`supports_prompt_cache = true`) | api_key |
+| `xai-oauth` | grok-oauth, x-ai-oauth, xai-grok-oauth | (sign-in) | https://api.x.ai/v1 | responses | oauth |
+| `router` (Ramp Router) | ramp-router, ramp, router.com | RAMP_ROUTER_API_KEY, ROUTER_API_KEY | https://api.router.com/v1 | responses | api_key |
+| `fireworks` | fireworks-ai, fw | FIREWORKS_API_KEY | https://api.fireworks.ai/inference/v1 | chat_completions | api_key |
+| `novita` | novita-ai, novitaai | NOVITA_API_KEY | https://api.novita.ai/openai/v1 | chat_completions | api_key |
+| `ai-gateway` (Vercel) | vercel, vercel-ai-gateway, aigateway | AI_GATEWAY_API_KEY | https://ai-gateway.vercel.sh/v1 | chat_completions | api_key |
+| `zai` | glm, z-ai, z.ai, zhipu | GLM_API_KEY, ZAI_API_KEY, Z_AI_API_KEY | https://api.z.ai/api/paas/v4 (auto-detected) | chat_completions | api_key |
+| `kimi-coding` | kimi, moonshot, kimi-for-coding | KIMI_API_KEY, KIMI_CODING_API_KEY | https://api.moonshot.ai/v1 (auto-detected) | chat_completions | api_key |
+| `kimi-coding-cn` | kimi-cn, moonshot-cn | KIMI_CN_API_KEY | https://api.moonshot.cn/v1 | chat_completions | api_key |
+| `arcee` | arcee-ai, arceeai | ARCEEAI_API_KEY | https://api.arcee.ai/api/v1 | chat_completions | api_key |
+| `gmi` | gmi-cloud, gmicloud | GMI_API_KEY | https://api.gmi-serving.com/v1 | chat_completions | api_key |
+| `nebius-token-factory` | nebius, nebius-tf, token-factory, tokenfactory | NEBIUS_API_KEY, NEBIUS_TOKEN_FACTORY_API_KEY | https://api.tokenfactory.nebius.com/v1 | chat_completions | api_key |
+| `actual` | actual-computer, actualcomputer, aci | ACTUAL_API_KEY | https://api.actual.inc/v1 | chat_completions | api_key (hosted) / none (loopback daemon) |
+| `minimax` | mini-max | MINIMAX_API_KEY | https://api.minimax.io/anthropic | anthropic_messages | api_key |
+| `minimax-cn` | minimax-china | MINIMAX_CN_API_KEY | https://api.minimaxi.com/anthropic | anthropic_messages | api_key |
+| `minimax-oauth` | minimax-portal, minimax-global | (sign-in) | https://api.minimax.io/anthropic | anthropic_messages | oauth |
+| `alibaba` | dashscope, alibaba-cloud, qwen-dashscope, aliyun | DASHSCOPE_API_KEY | https://dashscope-intl.aliyuncs.com/compatible-mode/v1 | chat_completions | api_key |
+| `alibaba-cn` | dashscope-cn, alibaba-cloud-cn | DASHSCOPE_API_KEY | https://dashscope.aliyuncs.com/compatible-mode/v1 | chat_completions | api_key |
+| `alibaba-coding-plan` | alibaba-coding, dashscope-coding | ALIBABA_CODING_PLAN_API_KEY, DASHSCOPE_API_KEY | https://coding-intl.dashscope.aliyuncs.com/v1 | chat_completions | api_key |
+| `alibaba-coding-plan-cn` | alibaba-coding-cn, dashscope-coding-cn | ALIBABA_CODING_PLAN_CN_API_KEY, ALIBABA_CODING_PLAN_API_KEY, DASHSCOPE_API_KEY | https://coding.dashscope.aliyuncs.com/v1 | chat_completions | api_key |
+| `alibaba-token-plan` | dashscope-token-plan | ALIBABA_TOKEN_PLAN_API_KEY | https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1 | chat_completions | api_key |
+| `alibaba-token-plan-cn` | dashscope-token-plan-cn | ALIBABA_TOKEN_PLAN_CN_API_KEY, ALIBABA_TOKEN_PLAN_API_KEY | https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1 | chat_completions | api_key |
+| `qwen-oauth` | qwen, qwen-portal, qwen-cli | (sign-in) | https://portal.qwen.ai/v1 | chat_completions | oauth |
+| `kilocode` | kilo-code, kilo, kilo-gateway | KILOCODE_API_KEY | https://api.kilo.ai/api/gateway | chat_completions | api_key |
+| `xiaomi` | mimo, xiaomi-mimo | XIAOMI_API_KEY | https://api.xiaomimimo.com/v1 | chat_completions | api_key |
+| `tencent-tokenhub` | tokenhub | TOKENHUB_API_KEY | https://tokenhub.tencentmaas.com/v1 | chat_completions | api_key |
+| `tencent-tokenplan` | tokenplan | TOKENPLAN_API_KEY | https://api.lkeap.cloud.tencent.com/plan/anthropic | anthropic_messages | api_key |
+| `opencode-zen` | opencode, zen | OPENCODE_ZEN_API_KEY | https://opencode.ai/zen/v1 | per-model | api_key |
+| `opencode-go` | go, opencode-go-sub | OPENCODE_GO_API_KEY | https://opencode.ai/zen/go/v1 | per-model | api_key |
+| `commandcode` | commandcode-chat | COMMANDCODE_API_KEY | https://api.commandcode.ai/provider/v1 | chat_completions | api_key |
+| `commandcode-anthropic` | commandcode-claude | COMMANDCODE_API_KEY | https://api.commandcode.ai/provider/v1 | anthropic_messages | api_key |
+| `deepseek` | deepseek-chat, deep-seek | DEEPSEEK_API_KEY | https://api.deepseek.com/v1 | chat_completions | api_key |
+| `huggingface` | hf, hugging-face | HF_TOKEN | https://router.huggingface.co/v1 | chat_completions | api_key |
+| `gemini` | google, google-gemini, google-ai-studio | GOOGLE_API_KEY, GEMINI_API_KEY | https://generativelanguage.googleapis.com/v1beta | gemini_native (bundled plugin) | api_key |
+| `vertex` | google-vertex, vertex-ai, gcp-vertex | (service account / ADC) | computed from project and region | chat_completions | token_mint |
+| `bedrock` | aws, aws-bedrock, amazon-bedrock | (AWS credential chain) | https://bedrock-runtime.<region>.amazonaws.com | bedrock_converse (bundled plugin) | aws_chain |
+| `azure-foundry` | azure, azure-ai-foundry, azure-ai | AZURE_FOUNDRY_API_KEY | per-resource (required) | auto-detected | api_key / Entra ID |
+| `nvidia` | nvidia-nim, nim, nemotron | NVIDIA_API_KEY | https://integrate.api.nvidia.com/v1 | chat_completions | api_key |
+| `ollama-cloud` | ollama_cloud | OLLAMA_API_KEY | https://ollama.com/v1 | chat_completions | api_key / oauth |
+| `stepfun` | step, stepfun-coding-plan | STEPFUN_API_KEY | https://api.stepfun.ai/step_plan/v1 | chat_completions | api_key |
+| `meta-ai` | meta, muse, muse-spark, model-api | MODEL_API_KEY, META_API_KEY, META_MODEL_API_KEY | https://api.meta.ai/v1 | responses | api_key |
+| `deepinfra` | deep-infra | DEEPINFRA_API_KEY | https://api.deepinfra.com/v1/openai | chat_completions | api_key |
+| `upstage` | solar | UPSTAGE_API_KEY | https://api.upstage.ai/v1 | chat_completions | api_key |
+| `lmstudio` | lm-studio, lm_studio | LM_API_KEY (optional) | http://127.0.0.1:1234/v1 | chat_completions | none unless a key is stored |
+| `ollama` | (none) | (none) | http://127.0.0.1:11434/v1 | chat_completions | none |
+| `llamacpp` | llama.cpp, llama-cpp | (none) | resolved by `local-models` | chat_completions | none |
+| `vllm`, `sglang` | (none) | (none) | required | chat_completions | none |
+| `moa` | mixture-of-agents | (none) | `moa://local` (virtual, see `mixture-of-agents`) | aggregator's | none |
+| `custom` | local | `providers.custom.key_secret` (optional) | required (`--base-url` or config) | chat_completions | api_key or none |
+| `copilot`, `copilot-acp` (bridged `github-copilot` plugin) | github-copilot | COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN | https://api.githubcopilot.com | chat_completions / external_process | oauth (device) |
+| `solstice` (bridged plugin, hidden) | solstice-oauth | (sign-in) | https://generativelanguage.googleapis.com/v1alpha | gemini_native | oauth |
+
+Each row's `key_hosts` SHALL equal the host of its default `base_url` (plus the auto-detected alternatives for `zai` and `kimi-coding`), the `actual` provider SHALL use auth `none` only when its configured `base_url` is loopback, and providers whose descriptor sets `supports_model_listing = true` (including `router`, `fireworks` and `gmi`, whose listings are account-scoped) SHALL populate the picker from their live listing.
+**Milestone:** M1
+
+#### Scenario: Plan key preferred over shared key
+- **GIVEN** secrets `ALIBABA_CODING_PLAN_API_KEY` and `DASHSCOPE_API_KEY` both present
+- **WHEN** provider `alibaba-coding-plan` resolves its credential
+- **THEN** the system SHALL use `ALIBABA_CODING_PLAN_API_KEY` and `prometheus model explain` SHALL name it as the source
+
+#### Scenario: Shared key fallback
+- **GIVEN** only a `DASHSCOPE_API_KEY` secret
+- **WHEN** provider `alibaba-coding-plan` resolves its credential
+- **THEN** the system SHALL use `DASHSCOPE_API_KEY` against `coding-intl.dashscope.aliyuncs.com`
+
+#### Scenario: Every built-in id listed
+- **WHEN** the user runs `prometheus model list --providers --json`
+- **THEN** the output SHALL contain every canonical id of the table above with its aliases, wire format, default base URL and secret names, and no secret value
+
+### Requirement: Endpoint auto-detection for multi-region key providers
+The system SHALL, for `zai` when no `base_url` is configured and a key is present, probe in parallel the endpoints `https://api.z.ai/api/paas/v4`, `https://open.bigmodel.cn/api/paas/v4`, `https://api.z.ai/api/coding/paas/v4` and `https://open.bigmodel.cn/api/coding/paas/v4` with a 1-token chat request (8-second timeout per probe), selecting the highest-priority endpoint in that order that answered HTTP 200 once every higher-priority probe has finished, persisting the winner in profile state keyed by a SHA-256 prefix of the key (never the key), and caching a failed probe set for 300 seconds before re-probing; and for `kimi-coding` SHALL route a key beginning `sk-kimi-` to `https://api.kimi.com/coding` over `anthropic_messages` and any other key to the default Moonshot endpoint; an explicit `base_url` SHALL always win over detection.
+**Milestone:** M2
+
+#### Scenario: Coding-plan key lands on the coding endpoint
+- **GIVEN** a `GLM_API_KEY` accepted only by `https://api.z.ai/api/coding/paas/v4`
+- **WHEN** the first session on `zai` resolves its endpoint
+- **THEN** the system SHALL select the coding endpoint, persist it, and SHALL NOT probe again on the next session start
+
+#### Scenario: Failed probes are not repeated immediately
+- **GIVEN** a `zai` key rejected by all four endpoints
+- **WHEN** the model picker opens twice within 300 seconds
+- **THEN** the system SHALL run the probe set only once and use the default endpoint
+
+### Requirement: Session affinity headers and per-model wire routing
+The system SHALL support a descriptor field `session_affinity_header` naming an opaque per-conversation header (`x-opencode-session` for `opencode-zen` and `opencode-go`) whose value is a stable hash of the root session id (or of the kanban task id for kanban workers) and is sent on main and auxiliary calls of that conversation, and SHALL support a descriptor `model_wire_formats` table mapping model id patterns to wire formats (for `opencode-go`: MiniMax and Qwen models over `anthropic_messages`, others over `chat_completions`), re-applied whenever a session is resumed or switches model, with a model id ending `-vision` implying `supports_vision = true`.
+**Milestone:** M2
+
+#### Scenario: Affinity header stable within a conversation
+- **GIVEN** a session on `opencode-zen` that makes a main call and a title auxiliary call
+- **WHEN** both requests are built
+- **THEN** both SHALL carry the same `x-opencode-session` value and a different session SHALL carry a different value
+
+#### Scenario: Per-model wire format on resume
+- **GIVEN** a resumed `opencode-go` session on a MiniMax model
+- **WHEN** its next request is built
+- **THEN** the system SHALL use `anthropic_messages`
+
+### Requirement: Gemini native and AWS Bedrock providers
+The system SHALL ship first-party provider plugins, bundled and enabled by default, implementing the `gemini_native` wire (Google AI Studio `generateContent`/`streamGenerateContent`, mapping `reasoning_effort` to the model's thinking level or budget and omitting it for models without thinking) and the `bedrock_converse` wire (Converse/ConverseStream signed with SigV4 from the AWS credential chain — environment secrets, shared profile `providers.bedrock.aws_profile`, SSO, instance or container role — in region `providers.bedrock.region`, default `us-east-1`), where `bedrock` lists foundation models and inference profiles through the Bedrock control-plane API, caches each model's context window for `providers.bedrock.catalog_ttl_secs` (default 86400), and reports credential-chain and region diagnostics in `prometheus doctor`; a `gemini` `base_url` ending `/openai` SHALL select `chat_completions` instead.
+**Milestone:** M2
+
+#### Scenario: Bedrock inference profile selected
+- **GIVEN** valid AWS SSO credentials and `providers.bedrock.region = "eu-west-1"`
+- **WHEN** the user runs `prometheus model list --provider bedrock`
+- **THEN** the output SHALL include the region's inference profiles and foundation models with their context windows
+
+#### Scenario: No AWS credentials
+- **GIVEN** no AWS credentials in any chain source
+- **WHEN** a session starts on `bedrock`
+- **THEN** the system SHALL fail with `provider.missing_credential` naming the AWS credential chain and exit a non-interactive command with status 78
+
+### Requirement: Azure AI Foundry provider
+The system SHALL support `azure-foundry` with a required per-resource `providers.azure-foundry.base_url`, authenticating with `AZURE_FOUNDRY_API_KEY` (`api-key` header) or, when `providers.azure-foundry.auth = "entra_id"`, with a Microsoft Entra ID bearer token minted from the Azure CLI login or a managed identity and refreshed 60 seconds before expiry, selecting `anthropic_messages` for deployments serving Claude models and `responses` or `chat_completions` otherwise from the deployment's metadata, and listing deployments through the resource's deployment endpoint in the model picker.
+**Milestone:** M2
+
+#### Scenario: Keyless Entra ID access
+- **GIVEN** `auth = "entra_id"`, an active `az login`, and no `AZURE_FOUNDRY_API_KEY`
+- **WHEN** a request is sent
+- **THEN** the system SHALL attach a minted Entra ID bearer token and record `billing_source = "api_key:azure-foundry/minted"`
+
+#### Scenario: Claude deployment uses Anthropic wire
+- **GIVEN** a Foundry deployment serving a Claude model
+- **WHEN** the wire format is selected
+- **THEN** the system SHALL select `anthropic_messages`
+
+### Requirement: Data-use confirmation for training-flagged models
+The system SHALL support model metadata flag `trains_on_data` (set in the built-in catalog for `meta-ai` contributor-tier models such as `muse-spark-*-contributor`), and SHALL require an explicit confirmation naming the data-use terms before such a model is selected in the picker, by `/model`, by `prometheus model set`, or as a fallback, auxiliary or MoA slot, failing a non-interactive selection with exit 4 unless `[models."<provider>/<model>"] accept_data_use = true` is set.
+**Milestone:** M2
+
+#### Scenario: Non-interactive selection refused
+- **GIVEN** no `accept_data_use` for `meta-ai/muse-spark-1.2-contributor`
+- **WHEN** the user runs `prometheus model set meta-ai/muse-spark-1.2-contributor` without a terminal
+- **THEN** the system SHALL exit with status 4 naming the data-use terms and SHALL NOT modify `config.toml`
+
+### Requirement: Hermes model-provider plugins hosted by the Python bridge
+The system SHALL host Hermes model-provider plugins (for example `github-copilot` providing `copilot` and `copilot-acp`, and `solstice`) through the Python bridge as provider-kind plugins whose descriptors join the profile registry like any other plugin provider, running their OAuth sign-in through the host's common flows (Copilot: GitHub device-code sign-in, then exchange of the GitHub token for a short-lived Copilot API token refreshed before expiry; secrets `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` accepted in that order) so the bridged plugin receives only an opaque credential handle, and SHALL fail with `provider.plugin_unavailable` naming the plugin when the bridge or the plugin is not installed, offering `prometheus plugins install <name>`.
+**Milestone:** M2
+
+#### Scenario: Copilot through the bridge
+- **GIVEN** the `github-copilot` plugin installed and a completed `prometheus auth add copilot` device-code sign-in
+- **WHEN** a session runs on `copilot`
+- **THEN** the system SHALL route the call through the bridged provider with a short-lived Copilot token and label it `subscription:copilot/<label>`
+
+#### Scenario: Profile references a missing bridged provider
+- **GIVEN** `model.provider = "copilot"` and the plugin not installed
+- **WHEN** a session starts
+- **THEN** the system SHALL fail with `provider.plugin_unavailable` suggesting `prometheus plugins install github-copilot` and exit a non-interactive command with status 78
+
+### Requirement: Local server detection and context probes
+The system SHALL, for local-server providers, normalise a configured `base_url` that lacks a `/v1` path by trying both the given root and `<root>/v1` and persisting whichever served the model listing; list models through the server's native API when available (LM Studio `/api/v1/models`, Ollama `/api/tags`, OpenAI-compatible `/v1/models`); probe the served context window from Ollama `/api/show` (honouring the model's `num_ctx`), llama.cpp `/props` (`n_ctx`) and vLLM/SGLang `/v1/models` (`max_model_len`); warn once per session when an Ollama model runs with `num_ctx` of 2048 or less, naming the `num_ctx` remedy; and warn when the local model's metadata reports no tool-calling support.
+**Milestone:** M1
+
+#### Scenario: llama.cpp context from /props
+- **GIVEN** a `llamacpp` endpoint whose `/props` reports `n_ctx = 65536`
+- **WHEN** model metadata resolves without a config override
+- **THEN** the context window SHALL be 65536
+
+#### Scenario: Root URL normalised
+- **GIVEN** `providers.lmstudio.base_url = "http://127.0.0.1:1234"`
+- **WHEN** the endpoint is tested
+- **THEN** the system SHALL try `http://127.0.0.1:1234/v1`, persist it when it serves the model listing, and send chat requests to the same prefix
+
+#### Scenario: Small Ollama context warned
+- **GIVEN** an Ollama model running with `num_ctx = 2048`
+- **WHEN** a session starts on it
+- **THEN** the system SHALL warn naming `num_ctx` before the `model.min_context_window` check applies
+
+### Requirement: WSL2 local endpoint diagnostics
+The system SHALL, in `prometheus doctor` and in the `provider.missing_base_url`/network error for a loopback local provider, detect running under WSL2 with NAT networking and, when the loopback endpoint is unreachable, suggest enabling WSL mirrored networking or using the Windows host address from the default route, and SHALL report this as a WARN check rather than a failure.
+**Milestone:** M2
+
+#### Scenario: Windows-hosted Ollama unreachable from WSL2
+- **GIVEN** Prometheus running under WSL2 NAT and Ollama listening only on the Windows host
+- **WHEN** the user runs `prometheus doctor`
+- **THEN** the output SHALL contain a WARN naming mirrored networking and the detected host IP
+
+### Requirement: Context length detection chain
+The system SHALL resolve a model's context window in order from: the `[models."<provider>/<model>"] context_window` pin (shown with a `(pinned)` label in `/model`, status and picker); the provider's per-model listing; a local server probe; a persistent discovered-value cache in `state.db` (keyed by provider, model and base URL, reused across sessions for `providers.<id>.catalog_ttl_secs`); the built-in catalog; the bundled models.dev snapshot refreshed by `prometheus model list --refresh`; family defaults by model-name prefix; and finally 128000 tokens, recording the winning source in `prometheus model explain`.
+**Milestone:** M1
+
+#### Scenario: Pinned window labelled
+- **GIVEN** `[models."openrouter/x"] context_window = 200000`
+- **WHEN** the status line renders
+- **THEN** the context gauge SHALL show `200000 (pinned)`
+
+#### Scenario: Discovered value reused offline
+- **GIVEN** a model whose window was discovered from the provider listing yesterday
+- **WHEN** a session starts while the listing endpoint is unreachable
+- **THEN** the system SHALL use the cached window without warning
+
+### Requirement: Reasoning effort defaults, overrides and display
+The system SHALL accept reasoning levels `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` and `ultra` with `agent.reasoning_effort` (default empty = `medium`), SHALL apply `[agent.reasoning_overrides]` entries keyed by model id matched case-insensitively ignoring `-`, `_`, `.` and a provider prefix, each value either a level or a provider-specific tier name mapped through `[agent.reasoning_tiers]` (for example `ultra = "max"`), SHALL clamp a requested level downward to the nearest level the route's catalog metadata supports (never upward), SHALL omit reasoning controls on routes reported as without reasoning, and SHALL provide `/reasoning [<level>|show|hide|full|clamp] [--global]` where a level sets the session effort (persisted with `--global`), `show`/`hide` toggle `display.show_reasoning`, and `full`/`clamp` set `display.reasoning_full`; an effort change SHALL apply from the next request without modifying the system prompt.
+**Milestone:** M1
+
+#### Scenario: Override matched despite spelling
+- **GIVEN** `[agent.reasoning_overrides] "gpt-5.5" = "high"`
+- **WHEN** a session runs `openrouter/openai/gpt_5_5`
+- **THEN** the requests SHALL carry effort `high`
+
+#### Scenario: Clamp downward
+- **GIVEN** a route whose catalog supports efforts up to `high`
+- **WHEN** the user runs `/reasoning ultra`
+- **THEN** the system SHALL send `high` and report the clamp
+
+### Requirement: Fast mode service tier
+The system SHALL provide `/fast [normal|fast|auto|cold|ultrafast|status] [--global]` and `agent.fast_mode` (default `normal`) where `fast` requests the provider's priority tier on every request, `ultrafast` requests the provider's fastest tier where one exists (otherwise behaving as `fast`), `auto` only on requests within the first `agent.fast_auto_secs` (default 60) of each turn, and `cold` that same window on the first turn of a session only, mapping the tier to OpenAI priority processing and Anthropic fast mode and ignoring it with a one-time notice on routes without such a tier; each ledger row SHALL record `service_tier` so its price is accounted.
+**Milestone:** M2
+
+#### Scenario: Auto window
+- **GIVEN** `/fast auto` and a turn whose tool loop runs 3 minutes
+- **WHEN** requests are sent at 10 s and at 90 s into the turn
+- **THEN** only the first SHALL request the priority tier
+
+### Requirement: Credential pool maintenance commands
+The system SHALL provide `prometheus auth priority <provider> <label|index> <position>` (0-based, renumbering the remaining entries, defining `fill_first` order), `prometheus auth add ... --priority <n>`, `prometheus auth reset <provider> [<label|index>]` (clearing benches and cooldowns, picked up by running sessions on their next request), `prometheus auth refresh <provider> [<label|index>]` (forcing an OAuth refresh and returning the credential to rotation), `prometheus auth logout <provider>` (removing every subscription credential of that provider), and an interactive manager when `prometheus auth` runs with no subcommand on a terminal; `auth list` and `auth status` SHALL be peeks that never refresh, rotate, or bench a credential.
+**Milestone:** M2
+
+#### Scenario: Reset reaches a running session
+- **GIVEN** a gateway session whose only `openrouter` credential is benched for 3600 seconds
+- **WHEN** the user runs `prometheus auth reset openrouter`
+- **THEN** the session's next request SHALL use that credential without restarting the gateway
+
+#### Scenario: Status is a peek
+- **GIVEN** an OAuth credential expiring in 30 seconds
+- **WHEN** the user runs `prometheus auth status openai-codex`
+- **THEN** the system SHALL report the expiry and SHALL NOT send a refresh request
+
+### Requirement: Credential pool seeding, custom endpoint pools and child sharing
+The system SHALL seed a provider's pool from every secret named in its `secret_names` plus numbered siblings `<NAME>_<n>` (n from 2 upward, e.g. `OPENROUTER_API_KEY_2`) with source `seeded`, SHALL prune a seeded member when its secret disappears while never pruning members added by `prometheus auth add`, SHALL support pools for `[providers.<custom>]` endpoints, and SHALL let delegated children and auxiliary calls that resolve to the same provider draw from the parent's pool with shared bench and cooldown state in `state.db`.
+**Milestone:** M2
+
+#### Scenario: Numbered siblings join the pool
+- **GIVEN** secrets `OPENROUTER_API_KEY` and `OPENROUTER_API_KEY_2`
+- **WHEN** `prometheus auth list --json` runs
+- **THEN** the `openrouter` pool SHALL contain two `seeded` members
+
+#### Scenario: Child sees parent's bench
+- **GIVEN** a parent session that benched pool member #1 after HTTP 429
+- **WHEN** a delegated child on the same provider sends a request
+- **THEN** the child SHALL skip member #1
+
+### Requirement: External agent CLI executable resolution
+The system SHALL resolve the executable of an `external_process` provider (and of the Codex app-server runtime) from `providers.<id>.command_path` (or `model.codex_bin`) when set, as a single absolute executable path never parsed as a shell command, otherwise through the platform executable lookup searching, in order, `PATH`, the user-local bin directories and the vendor's documented install prefixes, so that gateway services, cron runs and desktop launches with a minimal `PATH` find the same CLI as an interactive shell.
+**Milestone:** M2
+
+#### Scenario: Service launch with bare PATH
+- **GIVEN** a gateway service whose `PATH` is `/usr/bin:/bin` and Claude Code installed in the user-local bin directory
+- **WHEN** an `external_process` provider using `claude` starts
+- **THEN** the system SHALL find and run the user-local executable
+
+### Requirement: Auxiliary concurrency and request overrides
+The system SHALL cap concurrently in-flight auxiliary calls per profile at `auxiliary.max_concurrency` (default 8, minimum 1), additionally honouring an optional per-task `[auxiliary.<task>] max_concurrency`, queueing excess calls, and SHALL merge `[auxiliary.<task>] extra_body` (a table) into that task's request body after the wire-format mapping, so an OpenRouter routing block or `plugins` entry can be set for one task only.
+**Milestone:** M2
+
+#### Scenario: Compression concurrency capped
+- **GIVEN** `[auxiliary.compression] max_concurrency = 2` and five sessions compressing at once
+- **WHEN** their compression calls are issued
+- **THEN** at most two SHALL be in flight and the rest SHALL wait
+
+### Requirement: OpenRouter provider routing preferences
+The system SHALL map an optional `[provider_routing]` table (`sort` = `price`|`throughput`|`latency`, `only`, `ignore`, `order`, `require_parameters`, `data_collection` = `allow`|`deny`) to the OpenRouter request `provider` object only for routes on `openrouter`, SHALL apply per-model overrides from `[provider_routing.models."<model>"]` matched case-insensitively ignoring separators and following the current route (including fallback entries, cron jobs and delegated children), SHALL translate the model suffixes `:nitro` (sort by throughput) and `:floor` (sort by price), and SHALL send `plugins = [{id = "pareto-router", min_coding_score = <v>}]` with `openrouter.min_coding_score` (default 0.65, range 0.0-1.0) only when the model is `openrouter/pareto-code`, omitting the block when the value is empty.
+**Milestone:** M2
+
+#### Scenario: Routing ignored for other providers
+- **GIVEN** `[provider_routing] only = ["anthropic"]` and a session on `anthropic` directly
+- **WHEN** the request is built
+- **THEN** no `provider` object SHALL be sent
+
+#### Scenario: Pareto score sent only for the router model
+- **GIVEN** `openrouter.min_coding_score = 0.8`
+- **WHEN** requests are built for `openrouter/pareto-code` and for `openrouter/anthropic/claude-x`
+- **THEN** only the first SHALL carry the `pareto-router` plugin block with `min_coding_score = 0.8`
+
+### Requirement: Codex app-server runtime
+The system SHALL support an opt-in `model.openai_runtime` (`auto` default, or `codex_app_server`) under which eligible turns on `openai-codex`, `openai-api` and custom providers also defined in the Codex config are handed to a long-lived `codex app-server` subprocess (executable from `model.codex_bin`, default `codex` via executable lookup), sending the persona once as developer instructions, mapping Prometheus approval requests to `approval.request`, and projecting Codex events (messages, tool calls, patches) into the session transcript and trajectory so memory and skill nudges still fire; `/codex-runtime [auto|codex_app_server|on|off]` and `prometheus codex-runtime migrate [--dry-run] [--json]` SHALL change the runtime effective from the next session only, refusing with an install hint when the executable is missing.
+**Milestone:** M3
+
+#### Scenario: Runtime switch deferred
+- **GIVEN** a running session on `openai-codex` with `openai_runtime = "auto"`
+- **WHEN** the user runs `/codex-runtime on`
+- **THEN** the current session SHALL keep its runtime and the next new session SHALL use the app-server
+
+#### Scenario: Codex binary missing
+- **GIVEN** no `codex` executable resolvable
+- **WHEN** the user runs `/codex-runtime on`
+- **THEN** the system SHALL refuse with an install hint naming `model.codex_bin` and leave the config unchanged
+
+### Requirement: Codex runtime migration
+The system SHALL, when enabling the Codex app-server runtime or running `prometheus codex-runtime migrate`, write a delimited managed section into `~/.codex/config.toml` (preserving all user-authored text outside it, replacing the section idempotently) that translates the profile's MCP servers (stdio command/args/env to stdio, URL/headers to streamable HTTP, timeouts to `tool_timeout_sec`/`startup_timeout_sec`, disabled flags kept, unsupported keys dropped with a per-server warning, secret values referenced rather than inlined when Codex supports env references), enables installed Codex plugins reported `installed` and available by Codex's `plugin/list`, and registers `prometheus mcp serve --stdio` exposing `web_search`, `web_extract`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view` and `text_to_speech` as a callback server; `--json` SHALL print `{migrated, preserved_user_servers, skipped_keys_per_server, errors, target_path, written}` and `--dry-run` SHALL write nothing.
+**Milestone:** M3
+
+#### Scenario: User text preserved
+- **GIVEN** a `~/.codex/config.toml` with a user-authored `[mcp_servers.mine]` block outside the managed section
+- **WHEN** migration runs twice
+- **THEN** the user block SHALL be unchanged and the managed section SHALL appear exactly once
+
+### Requirement: Launch-only ad-hoc endpoint
+The system SHALL accept `prometheus chat --provider custom --base-url <URL> [--api-key-stdin]` for one invocation, reading the key from stdin (never argv), holding it in memory only, never writing it to the secrets store, config, trajectory or logs, and binding it to the given URL's host only.
+**Milestone:** M1
+
+#### Scenario: Ad-hoc key never persisted
+- **GIVEN** `echo $KEY | prometheus chat --provider custom --base-url https://llm.example.com/v1 --api-key-stdin -z hi`
+- **WHEN** the run completes
+- **THEN** no file under the Prometheus home SHALL contain the key
+
+### Requirement: User model aliases
+The system SHALL accept `[model.aliases.<name>]` entries, either a `"<provider>/<model>"` string or a table with `provider`, `model`, optional `base_url` and optional `key_secret` (a secret name), usable wherever a model is named (`/model`, `prometheus model set`, fallback, auxiliary and MoA slots), matched case-insensitively and shadowing built-in short names, and SHALL never carry a credential from the previously active provider to an alias's route.
+**Milestone:** M1
+
+#### Scenario: Alias switches provider and key
+- **GIVEN** `[model.aliases.fav] provider = "openrouter"`, `model = "anthropic/claude-x"` and a session on `nous`
+- **WHEN** the user runs `/model FAV`
+- **THEN** the route SHALL become `openrouter/anthropic/claude-x` with an OpenRouter credential and no Nous token
+
+### Requirement: Fallback chain commands
+The system SHALL provide `prometheus fallback list [--json]`, `prometheus fallback add [<provider>/<model>]` (the same interactive picker as `prometheus model` when no argument is given, validating credentials and capabilities before writing), `prometheus fallback remove <index|provider/model>` and `prometheus fallback clear`, each editing `[[fallback.chain]]` in `config.toml` and taking effect for new sessions.
+**Milestone:** M1
+
+#### Scenario: Duplicate entry refused
+- **GIVEN** a chain containing `openrouter/x`
+- **WHEN** the user runs `prometheus fallback add or/x`
+- **THEN** the system SHALL report the entry already exists and leave the chain unchanged
+
+### Requirement: Account usage windows command
+The system SHALL provide `prometheus auth usage [--provider ID] [--json]` printing the account usage of the configured (or given) provider without starting a session, with the JSON document `{provider, source, title, plan, fetched_at, windows: [{label, used_percent, resets_at, detail}], details, unavailable_reason}` (keys stable, only extended by addition), exiting 1 with a message naming the provider when no credential, usage endpoint or fetch succeeds; `/usage` SHALL include the same account block plus session duration and current context window usage, and `/usage reset [--force]` SHALL redeem a banked limit reset offered by the provider (ChatGPT plan) after a confirmation that `--force` skips.
+**Milestone:** M2
+
+#### Scenario: JSON for scripts
+- **GIVEN** a ChatGPT sign-in with 5-hour and weekly windows
+- **WHEN** the user runs `prometheus auth usage --provider openai-codex --json`
+- **THEN** stdout SHALL be one JSON document with two `windows` entries carrying `used_percent` and `resets_at`
+
+#### Scenario: Nothing to report
+- **GIVEN** provider `deepseek` with no usage endpoint
+- **WHEN** the user runs `prometheus auth usage --provider deepseek`
+- **THEN** the system SHALL print the unavailable message to stderr and exit with status 1
+
+### Requirement: Subscription account commands
+The system SHALL provide in-chat `/login [provider]` (default `nous`) running the device-code sign-in off-turn without blocking the session and, on the gateway, only in a paired direct message (refused in groups and channels), `/subscription` (alias `/upgrade`) showing the signed-in subscription provider's plan label and opening (or printing) its plan-management URL from the descriptor's `account_urls.plan`, and `/topup` showing the prepaid balance where the provider reports one and the descriptor's `account_urls.billing`; providers without these URLs SHALL answer `not available for <provider>`.
+**Milestone:** M2
+
+#### Scenario: Login refused in a group
+- **GIVEN** a Telegram group chat
+- **WHEN** a user sends `/login`
+- **THEN** the system SHALL refuse and tell the user to DM the bot
+
+### Requirement: Subscription tool gateway routing
+The system SHALL route a tool category (web search, web extract, image generation, video generation, TTS, STT, cloud browser, managed remote sandbox) through a subscription provider's tool gateway when that category's single selection key, owned by the tool's capability (`web.search_backend` and `web.extract_backend` falling back to `web.backend`, `image_gen.provider`, `video_gen.provider`, `tts.provider`, `stt.provider`, `browser.provider`, `terminal.backend`) is set to the provider id (`nous`), SHALL always honour a stored selection regardless of which secrets exist (a missing vendor key fails with a message naming the selection, never silently rerouting), SHALL autodetect only for categories never configured, SHALL accept `[tool_gateway] domain`, `scheme` and per-label `urls.<label>` for a self-hosted gateway (with the gateway user token kept in the secrets store), and SHALL fail a gateway-routed call after subscription expiry with `auth.plan_not_eligible` naming the portal; `prometheus portal status|open|tools` and `prometheus setup --portal` (sign in, set the main provider to `nous`, offer to route every category through the gateway) SHALL show and change this routing.
+**Milestone:** M2
+
+#### Scenario: Stored selection wins over a present key
+- **GIVEN** `image_gen.provider = "nous"` and a `FAL_KEY` secret
+- **WHEN** image generation runs
+- **THEN** the call SHALL go through the Nous tool gateway with `billing_source = "subscription:nous/<label>"`
+
+#### Scenario: Selected vendor without key
+- **GIVEN** `image_gen.provider = "fal"` and no `FAL_KEY`
+- **WHEN** image generation runs
+- **THEN** the tool SHALL fail naming `image_gen.provider` and SHALL NOT use the gateway
+
+### Requirement: Outbound IPv4 preference
+The system SHALL race IPv6 and IPv4 connection attempts for every outbound connection it makes (provider calls, adapters, downloads), starting IPv4 250 ms after IPv6, except that `network.force_ipv4` and the IPv6 doctor check are defined once by `workspace-architecture` › IPv6 reachability check and IPv4-only outbound and, when that key is true, no IPv6 attempt SHALL be made.
+**Milestone:** M2
+
+#### Scenario: Blackholed IPv6 falls back quickly
+- **GIVEN** `network.force_ipv4 = false` and a dual-stack provider host whose IPv6 address never answers
+- **WHEN** a provider request is made
+- **THEN** the IPv4 attempt SHALL start 250 ms after the IPv6 attempt and the request SHALL succeed over IPv4
