@@ -16,6 +16,9 @@ use crate::titles;
 pub struct NewSession {
     /// The creating surface.
     pub source: Source,
+    /// Integration tag (`chat --source <tag>`); `oneshot` and `tool`
+    /// sessions are hidden from pickers and continue.
+    pub source_tag: Option<String>,
     /// Typed origin (gateway chat, cron job, delegating parent).
     pub origin: Origin,
     /// Model name.
@@ -49,6 +52,7 @@ impl NewSession {
     pub fn new(source: Source) -> Self {
         Self {
             source,
+            source_tag: None,
             origin: Origin::None,
             model: None,
             provider: None,
@@ -84,6 +88,8 @@ pub struct Session {
     pub profile_id: String,
     /// The creating surface.
     pub source: Source,
+    /// Integration tag.
+    pub source_tag: Option<String>,
     /// Typed origin.
     pub origin: Origin,
     /// Model name.
@@ -120,8 +126,10 @@ pub struct Session {
     pub system_prompt_hash: Option<String>,
     /// Parent session.
     pub parent_session_id: Option<SessionId>,
-    /// Relation to the parent.
+    /// Relation to the parent (kept when the parent was deleted).
     pub lineage_kind: Option<LineageKind>,
+    /// The parent was deleted (the child was re-parented to none).
+    pub parent_deleted: bool,
     /// Root of the lineage (the session itself for a root).
     pub root_session_id: SessionId,
     /// Messages stored (all rows, including inactive ones).
@@ -130,6 +138,8 @@ pub struct Session {
     pub tool_call_count: u64,
     /// Committed in-place compactions (the latest epoch).
     pub compaction_count: u32,
+    /// Rewinds so far (the latest rewind batch).
+    pub rewind_count: u32,
 }
 
 /// One descendant in [`Store::tree`].
@@ -145,10 +155,11 @@ pub struct TreeNode {
     pub depth: u32,
 }
 
-const COLUMNS: &str = "id, profile_id, source, origin, model, provider, cwd, git_repo_root, \
-    git_branch, title, title_source, started_at, last_activity_at, ended_at, end_reason, \
-    pinned, archived, hidden, bot_chat, system_prompt_hash, parent_session_id, lineage_kind, \
-    root_session_id, message_count, tool_call_count, compaction_count";
+pub(crate) const COLUMNS: &str = "id, profile_id, source, origin, model, provider, cwd, \
+    git_repo_root, git_branch, title, title_source, started_at, last_activity_at, ended_at, \
+    end_reason, pinned, archived, hidden, bot_chat, system_prompt_hash, parent_session_id, \
+    lineage_kind, root_session_id, message_count, tool_call_count, compaction_count, source_tag, \
+    parent_deleted, rewind_count";
 
 pub(crate) fn now_ms() -> i64 {
     Timestamp::now().as_millisecond()
@@ -158,7 +169,7 @@ fn timestamp(ms: i64) -> Timestamp {
     Timestamp::from_millisecond(ms).unwrap_or(Timestamp::UNIX_EPOCH)
 }
 
-fn session_from_row(row: &Row<'_>) -> Result<Session, Error> {
+pub(crate) fn session_from_row(row: &Row<'_>) -> Result<Session, Error> {
     let get_text = |i: usize| row.get::<_, Option<String>>(i).map_err(sql);
     let get_int = |i: usize| row.get::<_, i64>(i).map_err(sql);
     let get_flag = |i: usize| row.get::<_, bool>(i).map_err(sql);
@@ -191,7 +202,38 @@ fn session_from_row(row: &Row<'_>) -> Result<Session, Error> {
         message_count: u64::try_from(get_int(23)?).unwrap_or(0),
         tool_call_count: u64::try_from(get_int(24)?).unwrap_or(0),
         compaction_count: u32::try_from(get_int(25)?).unwrap_or(0),
+        source_tag: get_text(26)?,
+        parent_deleted: get_flag(27)?,
+        rewind_count: u32::try_from(get_int(28)?).unwrap_or(0),
     })
+}
+
+/// Tags whose sessions are integrations (one-shot runs, tool callers):
+/// hidden from pickers, `-c` and `--resume latest`.
+pub const HIDDEN_SOURCE_TAGS: &[&str] = &["oneshot", "tool"];
+
+/// The tag of one-shot runs (`source = cli`).
+pub const ONESHOT_TAG: &str = "oneshot";
+
+/// Checks `^[a-z][a-z0-9_-]{0,31}$`.
+///
+/// # Errors
+///
+/// `session.invalid_source_tag`.
+pub fn check_source_tag(tag: &str) -> Result<(), Error> {
+    let mut chars = tag.chars();
+    let valid = chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && tag.len() <= 32
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+    if valid {
+        return Ok(());
+    }
+    Err(Error::new(
+        &codes::SESSION_INVALID_SOURCE_TAG,
+        format!(
+            "invalid source tag '{tag}': use 1-32 of a-z, 0-9, '_' and '-', starting with a letter"
+        ),
+    ))
 }
 
 pub(crate) fn not_found(id: SessionId) -> Error {
@@ -223,6 +265,9 @@ impl Store {
     ///
     /// Never: origins always serialize.
     pub fn create_session(&self, new: &NewSession) -> Result<Session, Error> {
+        if let Some(tag) = &new.source_tag {
+            check_source_tag(tag)?;
+        }
         let given_title = new
             .title
             .as_deref()
@@ -255,8 +300,8 @@ impl Store {
                 "INSERT INTO sessions (id, profile_id, source, origin, model, provider, cwd, \
                  git_repo_root, git_branch, title, title_source, started_at, last_activity_at, \
                  hidden, bot_chat, system_prompt_hash, parent_session_id, lineage_kind, \
-                 root_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, \
-                 ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                 root_session_id, source_tag) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, \
+                 ?11, ?12, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 params![
                     id.to_string(),
                     profile_id,
@@ -276,6 +321,7 @@ impl Store {
                     parent.as_ref().map(|(p, _)| p.id.to_string()),
                     parent.as_ref().map(|(_, kind)| kind.as_str()),
                     root.to_string(),
+                    new.source_tag,
                 ],
             )
             .map_err(sql)?;

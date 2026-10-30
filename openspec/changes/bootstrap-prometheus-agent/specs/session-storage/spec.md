@@ -180,7 +180,7 @@ The system SHALL treat search indexes as derived: on index corruption it SHALL r
 - **THEN** the message SHALL be stored, `index_stale` SHALL be set, and a later search SHALL still find it through the canonical scan
 
 ### Requirement: Integrity check and quarantine
-The system SHALL run `PRAGMA quick_check` when a store is first opened writable in a process, and on failure or on a structural corruption error at any time SHALL stop writing to the file, move it and its sidecars to `<profile>/quarantine/state-<timestamp>.db`, salvage every readable canonical row into a fresh `state.db` (rebuilding indexes), and report the salvaged and lost row counts at ERROR level and in `prometheus doctor`; it SHALL NOT attempt in-place repair of the corrupt file.
+The system SHALL run `PRAGMA quick_check` when a store is first opened writable in a process; on a check failure it SHALL move the file and its sidecars to `<profile>/quarantine/state-<timestamp>.db`, salvage every readable canonical row into a fresh `state.db` (rebuilding indexes), and report the salvaged and lost row counts at ERROR level and in `prometheus doctor`. On a structural corruption error at any later time it SHALL stop writing to the file at once (writes fail with `store.corrupt`) and flag it, so that the next open quarantines and salvages it even if `quick_check` passes; the move happens at open because other processes may still hold the file open. It SHALL NOT attempt in-place repair of the corrupt file.
 **Milestone:** M1
 
 #### Scenario: Corrupt file quarantined and salvaged
@@ -289,7 +289,7 @@ The system SHALL provide `prometheus sessions` subcommands `list`, `show <ref>`,
 
 #### Scenario: JSON listing
 - **WHEN** the user runs `prometheus sessions list --json --limit 5`
-- **THEN** stdout SHALL be a JSON array of at most 5 session objects containing `id`, `title`, `source`, `started_at` and `message_count`
+- **THEN** stdout SHALL be one `prometheus.sessions.v1` document whose `sessions` array holds at most 5 session objects containing `id`, `title`, `source`, `started_at` and `message_count`
 
 ### Requirement: Hybrid semantic and full-text search (upgrade)
 The system SHALL, when `sessions.search.semantic = true` (default false), embed active user and assistant messages in the background (never inside a turn) using the profile's auxiliary embedding model into a derived `message_embeddings` index, and answer `search(..., mode = "hybrid")` by fusing full-text and vector rankings with reciprocal rank fusion (k = 60), falling back to full-text only with a `degraded: "semantic_unavailable"` marker when embeddings are missing or the embedding model is unreachable.

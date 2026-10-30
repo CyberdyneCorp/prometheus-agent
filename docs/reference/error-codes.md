@@ -107,4 +107,13 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `store.title_in_use` | `invalid_input` | 65 | Session titles are unique per profile; pick another title. |
 | `session.not_found` | `not_found` | 66 | No session of the profile matches the id, id prefix or title; list them with `prometheus sessions list`. |
 | `session.ambiguous` | `usage` | 2 | A session id prefix matches several sessions; give more characters or the full id. |
+| `store.busy` | `conflict` | 75 | Another process held `state.db`'s write lock for longer than the write's time budget (20 s metadata, 60 s transcript, 0.5 s activity); retry later. |
+| `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
+| `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
+| `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
+| `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
+| `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |
+| `session.too_large_to_resume` | `invalid_input` | 65 | The session's active lineage has more messages than `sessions.max_resume_messages`; compact it with /compress or fork it. |
+| `session.too_large_to_export` | `invalid_input` | 65 | The session has more messages than `sessions.max_export_messages` allows in memory; export it to a file with `prometheus sessions export -o FILE`. |
+| `session.invalid_source_tag` | `usage` | 2 | A session source tag is 1-32 characters: a lowercase letter, then lowercase letters, digits, '_' or '-'. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

@@ -53,6 +53,31 @@ impl TestHome {
     pub(crate) fn database(&self, name: &str) -> PathBuf {
         self.scope(name).path("state.db")
     }
+
+    /// A copy of this home at a new path: opening its stores is a first
+    /// open in this process (as after a restart).
+    pub(crate) fn copied(&self) -> Self {
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("home");
+        copy_dir(self.home.root(), &target);
+        Self {
+            _root: Some(root),
+            home: Home::open(&target).unwrap(),
+        }
+    }
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
 }
 
 pub(crate) fn session(store: &Store) -> Session {

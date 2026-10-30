@@ -40,6 +40,7 @@ It is created on first use with mode `0700`, and looks like this:
     │   ├── profile_id    the profile's stable id (state.db is bound to it)
     │   ├── state.db      sessions and memory
     │   ├── blobs/        large payloads, by SHA-256
+    │   ├── quarantine/   damaged state.db files (see the sessions guide)
     │   ├── snapshots/    state snapshots
     │   └── skills/ memories/ cron/ themes/ plugins/ ...
     └── work/

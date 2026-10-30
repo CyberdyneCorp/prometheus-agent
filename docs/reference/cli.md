@@ -16,6 +16,7 @@ Commands:
   backup     Back up the whole home to a .tar.zst archive, or restore one
   snapshots  Snapshot and restore the selected profile's critical state
   profile    List, create, select, rename and delete profiles
+  sessions   List, search, export and manage the profile's sessions
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -1422,6 +1423,805 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus profile help help
 ```
 
+## `prometheus sessions`
+
+```text
+List, search, export and manage the profile's sessions
+
+Usage: prometheus sessions [OPTIONS] <COMMAND>
+
+Commands:
+  list       List sessions, most recently active first
+  show       Show a session (id, id prefix or title)
+  search     Full-text search over the profile's messages
+  rename     Set a session's title
+  pin        Pin a session (pinned sessions are never pruned)
+  unpin      Unpin a session
+  archive    Archive a session (hidden from the default listing)
+  unarchive  Unarchive a session
+  tree       Show a session's lineage tree (forks, continuations, delegates)
+  stats      Show a session's and its lineage's message and token totals
+  export     Export sessions (jsonl, md, html, prompts or trace)
+  delete     Delete a session (asks for confirmation unless --yes)
+  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
+  repair     Rebuild the derived search indexes from the stored messages
+  vacuum     Compact state.db and truncate its write-ahead log
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions list`
+
+```text
+List sessions, most recently active first
+
+Usage: prometheus sessions list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --limit <N>
+          At most this many sessions
+
+      --all
+          Also hidden, archived and integration (oneshot, tool) sessions
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --source <SOURCE>
+          Only sessions from this source (repeatable)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --pinned
+          Only pinned sessions
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions show`
+
+```text
+Show a session (id, id prefix or title)
+
+Usage: prometheus sessions show [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix (8+ characters) or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions search`
+
+```text
+Full-text search over the profile's messages
+
+Usage: prometheus sessions search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          The query: words, "quoted phrases", prefix* and AND/OR/NOT
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --limit <N>
+          Hits to return
+
+          [default: 20]
+
+      --offset <N>
+          Hits to skip
+
+          [default: 0]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --sort <SORT>
+          Result order
+
+          Possible values:
+          - rank:   Best match first
+          - newest: Newest first
+          - oldest: Oldest first
+
+          [default: rank]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --source <SOURCE>
+          Only these sources (repeatable)
+
+      --exclude-source <SOURCE>
+          Never these sources (repeatable)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --role <ROLE>
+          Only these roles (repeatable: user, assistant, tool, system)
+
+      --after <TIME>
+          Only messages at or after this time (RFC 3339 or YYYY-MM-DD)
+
+      --before <TIME>
+          Only messages before this time (RFC 3339 or YYYY-MM-DD)
+
+      --session <SESSION>
+          Only this session (id, id prefix or title)
+
+      --pinned
+          Only pinned sessions
+
+      --no-archived
+          Leave archived sessions out
+
+      --include-inactive
+          Include rewound messages
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions rename`
+
+```text
+Set a session's title
+
+Usage: prometheus sessions rename [OPTIONS] <SESSION> <TITLE>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+  <TITLE>
+          The new title (at most 100 characters)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions pin`
+
+```text
+Pin a session (pinned sessions are never pruned)
+
+Usage: prometheus sessions pin [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions unpin`
+
+```text
+Unpin a session
+
+Usage: prometheus sessions unpin [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions archive`
+
+```text
+Archive a session (hidden from the default listing)
+
+Usage: prometheus sessions archive [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions unarchive`
+
+```text
+Unarchive a session
+
+Usage: prometheus sessions unarchive [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions tree`
+
+```text
+Show a session's lineage tree (forks, continuations, delegates)
+
+Usage: prometheus sessions tree [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions stats`
+
+```text
+Show a session's and its lineage's message and token totals
+
+Usage: prometheus sessions stats [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions export`
+
+```text
+Export sessions (jsonl, md, html, prompts or trace)
+
+Usage: prometheus sessions export [OPTIONS] [SESSIONS]...
+
+Arguments:
+  [SESSIONS]...
+          Sessions to export (id, id prefix or title)
+
+Options:
+      --all
+          Export every session
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - jsonl:   Portable JSONL (header, session, messages, usage, lineage)
+          - md:      Readable Markdown transcript, tool calls collapsed
+          - html:    Self-contained HTML page
+          - prompts: Only the user messages, one JSON line each
+          - trace:   Trajectory grammar JSONL
+
+          [default: jsonl]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --include-inactive
+          Include rewound and compacted messages
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --redact
+          Replace secrets and credential-shaped text with [REDACTED]
+
+  -o, --output <FILE>
+          Write to this file instead of stdout
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions delete`
+
+```text
+Delete a session (asks for confirmation unless --yes)
+
+Usage: prometheus sessions delete [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --with-lineage
+          Also delete its compression continuations
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask for confirmation
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions prune`
+
+```text
+Delete ended, unpinned sessions inactive for longer than --older-than days
+
+Usage: prometheus sessions prune [OPTIONS] --older-than <DAYS>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --older-than <DAYS>
+          Inactivity threshold in days
+
+      --dry-run
+          Only print what would be deleted
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --yes
+          Do not ask for confirmation
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions rewind`
+
+```text
+Rewind a session to a user message (soft delete; --restore undoes it)
+
+Usage: prometheus sessions rewind [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <MESSAGE_ID>
+          The user message to rewind to (default: the last one)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --restore <MESSAGE_ID>
+          Restore the rewind that hid this message
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions repair`
+
+```text
+Rebuild the derived search indexes from the stored messages
+
+Usage: prometheus sessions repair [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --indexes
+          Rebuild the search indexes (the only repair so far)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions vacuum`
+
+```text
+Compact state.db and truncate its write-ahead log
+
+Usage: prometheus sessions vacuum [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus sessions help [COMMAND]
+
+Commands:
+  list       List sessions, most recently active first
+  show       Show a session (id, id prefix or title)
+  search     Full-text search over the profile's messages
+  rename     Set a session's title
+  pin        Pin a session (pinned sessions are never pruned)
+  unpin      Unpin a session
+  archive    Archive a session (hidden from the default listing)
+  unarchive  Unarchive a session
+  tree       Show a session's lineage tree (forks, continuations, delegates)
+  stats      Show a session's and its lineage's message and token totals
+  export     Export sessions (jsonl, md, html, prompts or trace)
+  delete     Delete a session (asks for confirmation unless --yes)
+  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
+  repair     Rebuild the derived search indexes from the stored messages
+  vacuum     Compact state.db and truncate its write-ahead log
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus sessions help list`
+
+```text
+List sessions, most recently active first
+
+Usage: prometheus sessions help list
+```
+
+## `prometheus sessions help show`
+
+```text
+Show a session (id, id prefix or title)
+
+Usage: prometheus sessions help show
+```
+
+## `prometheus sessions help search`
+
+```text
+Full-text search over the profile's messages
+
+Usage: prometheus sessions help search
+```
+
+## `prometheus sessions help rename`
+
+```text
+Set a session's title
+
+Usage: prometheus sessions help rename
+```
+
+## `prometheus sessions help pin`
+
+```text
+Pin a session (pinned sessions are never pruned)
+
+Usage: prometheus sessions help pin
+```
+
+## `prometheus sessions help unpin`
+
+```text
+Unpin a session
+
+Usage: prometheus sessions help unpin
+```
+
+## `prometheus sessions help archive`
+
+```text
+Archive a session (hidden from the default listing)
+
+Usage: prometheus sessions help archive
+```
+
+## `prometheus sessions help unarchive`
+
+```text
+Unarchive a session
+
+Usage: prometheus sessions help unarchive
+```
+
+## `prometheus sessions help tree`
+
+```text
+Show a session's lineage tree (forks, continuations, delegates)
+
+Usage: prometheus sessions help tree
+```
+
+## `prometheus sessions help stats`
+
+```text
+Show a session's and its lineage's message and token totals
+
+Usage: prometheus sessions help stats
+```
+
+## `prometheus sessions help export`
+
+```text
+Export sessions (jsonl, md, html, prompts or trace)
+
+Usage: prometheus sessions help export
+```
+
+## `prometheus sessions help delete`
+
+```text
+Delete a session (asks for confirmation unless --yes)
+
+Usage: prometheus sessions help delete
+```
+
+## `prometheus sessions help prune`
+
+```text
+Delete ended, unpinned sessions inactive for longer than --older-than days
+
+Usage: prometheus sessions help prune
+```
+
+## `prometheus sessions help rewind`
+
+```text
+Rewind a session to a user message (soft delete; --restore undoes it)
+
+Usage: prometheus sessions help rewind
+```
+
+## `prometheus sessions help repair`
+
+```text
+Rebuild the derived search indexes from the stored messages
+
+Usage: prometheus sessions help repair
+```
+
+## `prometheus sessions help vacuum`
+
+```text
+Compact state.db and truncate its write-ahead log
+
+Usage: prometheus sessions help vacuum
+```
+
+## `prometheus sessions help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus sessions help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -1436,6 +2236,7 @@ Commands:
   backup     Back up the whole home to a .tar.zst archive, or restore one
   snapshots  Snapshot and restore the selected profile's critical state
   profile    List, create, select, rename and delete profiles
+  sessions   List, search, export and manage the profile's sessions
   help       Print this message or the help of the given subcommand(s)
 ```
 
@@ -1740,6 +2541,160 @@ Delete a profile and everything in it (asks to type its name unless --yes)
 Usage: prometheus help profile delete
 ```
 
+## `prometheus help sessions`
+
+```text
+List, search, export and manage the profile's sessions
+
+Usage: prometheus help sessions [COMMAND]
+
+Commands:
+  list       List sessions, most recently active first
+  show       Show a session (id, id prefix or title)
+  search     Full-text search over the profile's messages
+  rename     Set a session's title
+  pin        Pin a session (pinned sessions are never pruned)
+  unpin      Unpin a session
+  archive    Archive a session (hidden from the default listing)
+  unarchive  Unarchive a session
+  tree       Show a session's lineage tree (forks, continuations, delegates)
+  stats      Show a session's and its lineage's message and token totals
+  export     Export sessions (jsonl, md, html, prompts or trace)
+  delete     Delete a session (asks for confirmation unless --yes)
+  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
+  repair     Rebuild the derived search indexes from the stored messages
+  vacuum     Compact state.db and truncate its write-ahead log
+```
+
+## `prometheus help sessions list`
+
+```text
+List sessions, most recently active first
+
+Usage: prometheus help sessions list
+```
+
+## `prometheus help sessions show`
+
+```text
+Show a session (id, id prefix or title)
+
+Usage: prometheus help sessions show
+```
+
+## `prometheus help sessions search`
+
+```text
+Full-text search over the profile's messages
+
+Usage: prometheus help sessions search
+```
+
+## `prometheus help sessions rename`
+
+```text
+Set a session's title
+
+Usage: prometheus help sessions rename
+```
+
+## `prometheus help sessions pin`
+
+```text
+Pin a session (pinned sessions are never pruned)
+
+Usage: prometheus help sessions pin
+```
+
+## `prometheus help sessions unpin`
+
+```text
+Unpin a session
+
+Usage: prometheus help sessions unpin
+```
+
+## `prometheus help sessions archive`
+
+```text
+Archive a session (hidden from the default listing)
+
+Usage: prometheus help sessions archive
+```
+
+## `prometheus help sessions unarchive`
+
+```text
+Unarchive a session
+
+Usage: prometheus help sessions unarchive
+```
+
+## `prometheus help sessions tree`
+
+```text
+Show a session's lineage tree (forks, continuations, delegates)
+
+Usage: prometheus help sessions tree
+```
+
+## `prometheus help sessions stats`
+
+```text
+Show a session's and its lineage's message and token totals
+
+Usage: prometheus help sessions stats
+```
+
+## `prometheus help sessions export`
+
+```text
+Export sessions (jsonl, md, html, prompts or trace)
+
+Usage: prometheus help sessions export
+```
+
+## `prometheus help sessions delete`
+
+```text
+Delete a session (asks for confirmation unless --yes)
+
+Usage: prometheus help sessions delete
+```
+
+## `prometheus help sessions prune`
+
+```text
+Delete ended, unpinned sessions inactive for longer than --older-than days
+
+Usage: prometheus help sessions prune
+```
+
+## `prometheus help sessions rewind`
+
+```text
+Rewind a session to a user message (soft delete; --restore undoes it)
+
+Usage: prometheus help sessions rewind
+```
+
+## `prometheus help sessions repair`
+
+```text
+Rebuild the derived search indexes from the stored messages
+
+Usage: prometheus help sessions repair
+```
+
+## `prometheus help sessions vacuum`
+
+```text
+Compact state.db and truncate its write-ahead log
+
+Usage: prometheus help sessions vacuum
+```
+
 ## `prometheus help help`
 
 ```text
@@ -1763,3 +2718,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.snapshots.v1` | `prometheus snapshots list` |
 | `prometheus.profiles.v1` | `prometheus profile list` |
 | `prometheus.profile.v1` | `prometheus profile show` |
+| `prometheus.sessions.v1` | `prometheus sessions list` |
+| `prometheus.session.v1` | `prometheus sessions show` |
+| `prometheus.search.v1` | `prometheus sessions search` |
+| `prometheus.session_tree.v1` | `prometheus sessions tree` |
+| `prometheus.session_stats.v1` | `prometheus sessions stats` |
+| `prometheus.prune.v1` | `prometheus sessions prune` |

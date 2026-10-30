@@ -14,20 +14,25 @@ fn scope(root: &std::path::Path) -> ProfileScope {
     ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
 }
 
-/// The real v1 plus four trivial steps.
+/// The real v1 and v2 plus three trivial steps.
 fn five_versions() -> Vec<Migration> {
-    const EXTRA: [&str; 4] = [
-        "CREATE TABLE t2 (x INTEGER) STRICT;",
+    const EXTRA: [&str; 3] = [
         "CREATE TABLE t3 (x INTEGER) STRICT;",
         "CREATE TABLE t4 (x INTEGER) STRICT;",
         "CREATE TABLE t5 (x INTEGER) STRICT;",
     ];
     let mut all = MIGRATIONS.to_vec();
-    for (version, sql) in (2..).zip(EXTRA) {
+    assert_eq!(
+        all.len(),
+        2,
+        "update the synthetic steps with new migrations"
+    );
+    for (version, sql) in (3..).zip(EXTRA) {
         all.push(Migration {
             version,
             min_read_version: 1,
             sql,
+            rebuilds_tables: false,
         });
     }
     all
@@ -132,4 +137,45 @@ fn reader_pool_never_exceeds_its_bound() {
     });
     let open = store.readers.open_connections();
     assert!((1..=MAX_READERS).contains(&open), "{open}");
+}
+
+#[test]
+fn v1_store_upgrades_to_v2_with_indexes_and_relaxed_lineage() {
+    let root = tempfile::tempdir().unwrap();
+    let scope = scope(root.path());
+    drop(Store::open_with(&scope, &MIGRATIONS[..1]).unwrap());
+    let db = scope.path("state.db");
+    let conn = Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "INSERT INTO sessions (id, profile_id, source, origin, started_at, last_activity_at, \
+           root_session_id) VALUES ('ses_01J00000000000000000000000', 'p', 'cli', '{\"kind\":\"none\"}', 1, 1, \
+           'ses_01J00000000000000000000000');
+         INSERT INTO sessions (id, profile_id, source, origin, started_at, last_activity_at, \
+           parent_session_id, lineage_kind, root_session_id) VALUES ('ses_01J00000000000000000000001', \
+           'p', 'cli', '{\"kind\":\"none\"}', 2, 2, 'ses_01J00000000000000000000000', 'fork', \
+           'ses_01J00000000000000000000000');
+         INSERT INTO messages (id, session_id, seq, role, content, content_hash, created_at) \
+           VALUES ('msg_01J00000000000000000000000', 'ses_01J00000000000000000000000', 1, 'user', \
+           'upgrade kubernetes', 'h', 1);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(&scope).unwrap();
+
+    assert_eq!(meta(&db, "schema_version"), "2");
+    assert_eq!(meta(&db, "index_stale"), "0");
+    let hits = store
+        .search("kubernetes", &crate::SearchOptions::default())
+        .unwrap();
+    assert_eq!(hits.hits.len(), 1, "existing text indexed by the migration");
+    let parent = "ses_01J00000000000000000000000".parse().unwrap();
+    store.delete_session(parent, false).unwrap();
+    let fork = store
+        .session("ses_01J00000000000000000000001".parse().unwrap())
+        .unwrap();
+    assert!(
+        fork.parent_deleted,
+        "v2 allows a kept child without a parent"
+    );
 }

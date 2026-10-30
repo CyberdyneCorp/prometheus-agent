@@ -26,15 +26,27 @@ pub(crate) struct Migration {
     pub min_read_version: u32,
     /// The DDL/DML of the step.
     pub sql: &'static str,
+    /// The step rebuilds a table other tables reference: it runs with
+    /// foreign keys off and `foreign_key_check` must pass before commit.
+    pub rebuilds_tables: bool,
 }
 
 /// Every migration, in order; the last one's version is
 /// [`crate::SCHEMA_VERSION`].
-pub(crate) const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    min_read_version: 1,
-    sql: include_str!("schema/v1.sql"),
-}];
+pub(crate) const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        min_read_version: 1,
+        sql: include_str!("schema/v1.sql"),
+        rebuilds_tables: false,
+    },
+    Migration {
+        version: 2,
+        min_read_version: 2,
+        sql: include_str!("schema/v2.sql"),
+        rebuilds_tables: true,
+    },
+];
 
 /// Pre-migration copies kept in `<profile>/backups/state/`.
 pub(crate) const BACKUPS_KEPT: usize = 3;
@@ -119,6 +131,23 @@ pub(crate) fn run(
 }
 
 fn apply(conn: &mut Connection, step: &Migration, identity: &Identity<'_>) -> Result<(), Error> {
+    if !step.rebuilds_tables {
+        return apply_in_tx(conn, step, identity);
+    }
+    // `foreign_keys` cannot change inside a transaction.
+    conn.pragma_update(None, "foreign_keys", false)
+        .map_err(sql)?;
+    let applied = apply_in_tx(conn, step, identity);
+    conn.pragma_update(None, "foreign_keys", true)
+        .map_err(sql)?;
+    applied
+}
+
+fn apply_in_tx(
+    conn: &mut Connection,
+    step: &Migration,
+    identity: &Identity<'_>,
+) -> Result<(), Error> {
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(sql)?;
@@ -127,6 +156,9 @@ fn apply(conn: &mut Connection, step: &Migration, identity: &Identity<'_>) -> Re
         return Ok(());
     }
     tx.execute_batch(step.sql).map_err(sql)?;
+    if step.rebuilds_tables {
+        check_foreign_keys(&tx)?;
+    }
     let set = |key: &str, value: &str| {
         tx.execute(
             "INSERT INTO store_meta (key, value) VALUES (?1, ?2)
@@ -144,6 +176,20 @@ fn apply(conn: &mut Connection, step: &Migration, identity: &Identity<'_>) -> Re
     set("schema_version", &step.version.to_string())?;
     set("min_read_version", &step.min_read_version.to_string())?;
     tx.commit().map_err(sql)
+}
+
+fn check_foreign_keys(conn: &Connection) -> Result<(), Error> {
+    let violation: Option<String> = conn
+        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+        .optional()
+        .map_err(sql)?;
+    match violation {
+        None => Ok(()),
+        Some(table) => Err(error::corrupt(
+            "foreign keys",
+            format!("table {table} references a missing row"),
+        )),
+    }
 }
 
 /// `VACUUM INTO <backup_dir>/state-v<old>-<timestamp>.db` (a consistent

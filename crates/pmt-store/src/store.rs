@@ -1,7 +1,8 @@
 //! Opening a profile's store and running transactions on it (spec:
 //! session-storage, Store opened only through `ProfileScope`; Owner-only
 //! file permissions; Embedded versioned migrations; WAL mode, bounded
-//! readers and checkpoints).
+//! readers and checkpoints; Out-of-band file replacement detection; Write
+//! contention policy).
 //!
 //! One [`Store`] holds a single writer connection (writes are serialized
 //! in-process; across processes SQLite's `BEGIN IMMEDIATE` lock does it)
@@ -9,6 +10,7 @@
 //! readers never block the writer.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -16,10 +18,12 @@ use pmt_config::schema::JournalMode;
 use pmt_config::{ProfileDir, ProfileScope};
 use pmt_core::error::{Error, codes};
 use pmt_core::id::ProfileId;
-use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 
+use crate::contention::{self, Attempts, WriteClass};
 use crate::error::sql;
-use crate::files;
+use crate::files::{self, FileId};
+use crate::integrity::{self, QuarantineReport};
 use crate::location::StoreLocation;
 use crate::migrate::{self, Identity, Meta, Migration};
 
@@ -29,9 +33,8 @@ pub const MAX_READERS: usize = 8;
 /// Committed write transactions between passive checkpoints.
 pub const CHECKPOINT_EVERY: u32 = 1000;
 
-/// How long one statement waits for another process's lock. The retry
-/// policy around it (time budgets per write class) is the write-contention
-/// requirement's.
+/// How long one statement waits for another process's lock before the
+/// write's retry policy ([`WriteClass`]) takes over.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// A profile's open session store.
@@ -43,6 +46,12 @@ pub struct Store {
     /// store is then read-only.
     newer_schema: Option<u32>,
     supported: u32,
+    /// The file opened, re-checked before every write.
+    file_id: Option<FileId>,
+    uuid: Option<String>,
+    /// Set after a structural corruption error: writes stop.
+    corrupt: AtomicBool,
+    quarantine: Option<QuarantineReport>,
     writer: Mutex<Writer>,
     readers: ReaderPool,
 }
@@ -64,7 +73,9 @@ impl std::fmt::Debug for Store {
 
 impl Store {
     /// Opens (creating and migrating as needed) the store of the profile
-    /// `scope` was loaded for.
+    /// `scope` was loaded for. The first open of a database in a process
+    /// checks its integrity and quarantines and salvages a corrupt file
+    /// ([`Store::quarantine`]).
     ///
     /// # Errors
     ///
@@ -88,56 +99,50 @@ impl Store {
         if journal == JournalMode::Wal {
             files::check_wal_supported(scope.dir())?;
         }
+        let supported = migrations.last().map_or(0, |m| m.version);
+        let quarantined = if database.exists() {
+            integrity::check_at_open(&database, location.quarantine(), supported)?
+        } else {
+            None
+        };
         files::create_private(&database)?;
         for path in sidecars(&database) {
             files::tighten(&path, 0o600);
         }
-        let mut conn = Connection::open(&database).map_err(sql)?;
-        conn.busy_timeout(BUSY_TIMEOUT).map_err(sql)?;
-        conn.pragma_update(None, "foreign_keys", true)
-            .map_err(sql)?;
-        let supported = migrations.last().map_or(0, |m| m.version);
-        let meta = migrate::read_meta(&conn)?;
-        if let Some(meta) = &meta {
-            check_identity(meta, &profile_id, &profile, &database)?;
-            check_readable(meta, supported)?;
-        }
-        let newer_schema = meta
-            .as_ref()
-            .map(|m| m.schema_version)
-            .filter(|found| *found > supported);
-        if newer_schema.is_some() {
-            conn.pragma_update(None, "query_only", true).map_err(sql)?;
-        } else {
-            set_journal_mode(&conn, journal)?;
-            // Checkpoints follow CHECKPOINT_EVERY, not page counts.
-            conn.pragma_update(None, "wal_autocheckpoint", 0)
-                .map_err(sql)?;
-            let identity = Identity {
-                profile_id: &profile_id.to_string(),
-                profile_name: profile.name().as_str(),
-            };
-            let backups = profile.path().join("backups").join("state");
-            migrate::run(&mut conn, migrations, &identity, &backups)?;
-        }
-        Ok(Self {
-            readers: ReaderPool::new(database),
+        let conn = open_writer(&database, &profile_id, &profile, migrations, journal)?;
+        let newer_schema = conn.newer_schema;
+        let mut store = Self {
+            readers: ReaderPool::new(database.clone()),
+            file_id: files::file_id(&database),
+            uuid: read_store_uuid(&conn.conn)?,
             location,
             profile,
             profile_id,
             newer_schema,
             supported,
+            corrupt: AtomicBool::new(false),
+            quarantine: None,
             writer: Mutex::new(Writer {
-                conn,
+                conn: conn.conn,
                 writes_since_checkpoint: 0,
             }),
-        })
+        };
+        if let Some(quarantined) = quarantined {
+            store.quarantine = Some(store.salvage(quarantined)?);
+        }
+        Ok(store)
     }
 
     /// The store's files.
     #[must_use]
     pub fn location(&self) -> &StoreLocation {
         &self.location
+    }
+
+    /// The name of the profile the store belongs to.
+    #[must_use]
+    pub fn profile_name(&self) -> &str {
+        self.profile.name().as_str()
     }
 
     /// The id of the profile the store belongs to.
@@ -152,23 +157,95 @@ impl Store {
         self.newer_schema.is_some()
     }
 
-    /// Runs `work` in one `BEGIN IMMEDIATE` transaction, committing when
-    /// it returns `Ok` and rolling back otherwise.
+    /// What the integrity check of this open quarantined, if anything.
+    #[must_use]
+    pub fn quarantine(&self) -> Option<&QuarantineReport> {
+        self.quarantine.as_ref()
+    }
+
+    /// Runs `work` in one `BEGIN IMMEDIATE` metadata write.
     pub(crate) fn write<T>(
         &self,
-        work: impl FnOnce(&Transaction<'_>) -> Result<T, Error>,
+        work: impl FnMut(&Transaction<'_>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        self.write_as(WriteClass::Metadata, work)
+    }
+
+    /// Runs `work` in one `BEGIN IMMEDIATE` transaction, committing when it
+    /// returns `Ok` and rolling back otherwise. While another process holds
+    /// the lock the whole transaction is retried with jitter until `class`'s
+    /// budget is spent (`store.busy`). Every attempt first checks that the
+    /// file is still the one opened (`store.replaced`).
+    pub(crate) fn write_as<T>(
+        &self,
+        class: WriteClass,
+        mut work: impl FnMut(&Transaction<'_>) -> Result<T, Error>,
     ) -> Result<T, Error> {
         self.ensure_writable()?;
         self.profile.ensure_live()?;
+        let attempts = Attempts::start(class);
+        loop {
+            match self.write_once(&attempts, &mut work) {
+                Err(e) if contention::is_busy(&e) => attempts.back_off()?,
+                Err(e) if e.code().code == codes::STORE_CORRUPT.code => {
+                    self.mark_corrupt();
+                    return Err(e);
+                }
+                other => return other,
+            }
+        }
+    }
+
+    fn write_once<T>(
+        &self,
+        attempts: &Attempts,
+        work: &mut impl FnMut(&Transaction<'_>) -> Result<T, Error>,
+    ) -> Result<T, Error> {
         let mut writer = self.writer();
+        writer
+            .conn
+            .busy_timeout(attempts.remaining().min(BUSY_TIMEOUT))
+            .map_err(sql)?;
         let tx = writer
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(sql)?;
+        self.check_same_file(&tx)?;
         let value = work(&tx)?;
         tx.commit().map_err(sql)?;
         writer.committed();
         Ok(value)
+    }
+
+    /// Fails with `store.replaced` when `state.db` is no longer the file
+    /// (or the store) this handle opened.
+    fn check_same_file(&self, tx: &Transaction<'_>) -> Result<(), Error> {
+        let database = self.location.database();
+        let same_file = self.file_id.is_none() || files::file_id(database) == self.file_id;
+        if same_file && read_store_uuid(tx)? == self.uuid {
+            return Ok(());
+        }
+        Err(Error::new(
+            &codes::STORE_REPLACED,
+            format!(
+                "{} was replaced while it was open; refusing to write to it",
+                database.display()
+            ),
+        )
+        .with_hint("restart Prometheus to open the new file"))
+    }
+
+    /// Stops writing and flags the file for quarantine at the next open.
+    fn mark_corrupt(&self) {
+        self.corrupt.store(true, Ordering::SeqCst);
+        let marker = integrity::corrupt_marker(self.location.database());
+        if let Err(e) = pmt_core::private_fs::write_atomic(&marker, b"") {
+            tracing::error!("cannot flag {} as corrupt: {e}", marker.display());
+        }
+        tracing::error!(
+            "{} reported structural corruption; writes stopped until the next start quarantines it",
+            self.location.database().display()
+        );
     }
 
     /// Runs `work` on a pooled read-only connection.
@@ -196,6 +273,16 @@ impl Store {
     }
 
     pub(crate) fn ensure_writable(&self) -> Result<(), Error> {
+        if self.corrupt.load(Ordering::SeqCst) {
+            return Err(Error::new(
+                &codes::STORE_CORRUPT,
+                format!(
+                    "{} reported structural corruption; writes stopped",
+                    self.location.database().display()
+                ),
+            )
+            .with_hint("restart Prometheus to quarantine the file and salvage its rows"));
+        }
         match self.newer_schema {
             None => Ok(()),
             Some(found) => Err(Error::new(
@@ -248,6 +335,71 @@ impl Drop for Store {
             self.writer().checkpoint();
         }
     }
+}
+
+/// The writer connection after the identity, readability and migration
+/// steps of an open.
+struct Opened {
+    conn: Connection,
+    newer_schema: Option<u32>,
+}
+
+fn open_writer(
+    database: &Path,
+    profile_id: &ProfileId,
+    profile: &ProfileDir,
+    migrations: &[Migration],
+    journal: JournalMode,
+) -> Result<Opened, Error> {
+    let mut conn = Connection::open(database).map_err(sql)?;
+    conn.busy_timeout(BUSY_TIMEOUT).map_err(sql)?;
+    conn.pragma_update(None, "foreign_keys", true)
+        .map_err(sql)?;
+    let supported = migrations.last().map_or(0, |m| m.version);
+    let meta = migrate::read_meta(&conn)?;
+    if let Some(meta) = &meta {
+        check_identity(meta, profile_id, profile, database)?;
+        check_readable(meta, supported)?;
+    }
+    let newer_schema = meta
+        .as_ref()
+        .map(|m| m.schema_version)
+        .filter(|found| *found > supported);
+    if newer_schema.is_some() {
+        conn.pragma_update(None, "query_only", true).map_err(sql)?;
+    } else {
+        set_journal_mode(&conn, journal)?;
+        // Checkpoints follow CHECKPOINT_EVERY, not page counts.
+        conn.pragma_update(None, "wal_autocheckpoint", 0)
+            .map_err(sql)?;
+        let identity = Identity {
+            profile_id: &profile_id.to_string(),
+            profile_name: profile.name().as_str(),
+        };
+        let backups = profile.path().join("backups").join("state");
+        migrate::run(&mut conn, migrations, &identity, &backups)?;
+    }
+    Ok(Opened { conn, newer_schema })
+}
+
+fn read_store_uuid(conn: &Connection) -> Result<Option<String>, Error> {
+    let has_meta: bool = conn
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE name = 'store_meta')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(sql)?;
+    if !has_meta {
+        return Ok(None);
+    }
+    conn.query_row(
+        "SELECT value FROM store_meta WHERE key = 'store_uuid'",
+        [],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(sql)
 }
 
 fn sidecars(database: &Path) -> [PathBuf; 3] {

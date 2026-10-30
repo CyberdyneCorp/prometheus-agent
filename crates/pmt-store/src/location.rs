@@ -14,11 +14,15 @@ pub const DATABASE_FILE: &str = "state.db";
 /// The content-addressed blob directory inside a profile directory.
 pub const BLOBS_DIR: &str = "blobs";
 
+/// Where a corrupt `state.db` is moved, inside a profile directory.
+pub const QUARANTINE_DIR: &str = "quarantine";
+
 /// The store files of one profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreLocation {
     database: PathBuf,
     blobs: PathBuf,
+    quarantine: PathBuf,
 }
 
 impl StoreLocation {
@@ -28,6 +32,7 @@ impl StoreLocation {
         Self {
             database: scope.path(DATABASE_FILE),
             blobs: scope.path(BLOBS_DIR),
+            quarantine: scope.path(QUARANTINE_DIR),
         }
     }
 
@@ -41,6 +46,13 @@ impl StoreLocation {
     #[must_use]
     pub fn blobs(&self) -> &Path {
         &self.blobs
+    }
+
+    /// `<profile>/quarantine/`: corrupt databases and their salvage
+    /// reports.
+    #[must_use]
+    pub fn quarantine(&self) -> &Path {
+        &self.quarantine
     }
 }
 

@@ -1,13 +1,20 @@
 //! Bodies of session slash commands whose behaviour belongs to the
-//! configuration group. The typed slash-command registry (cli group)
-//! registers them by name; each takes the session's [`ProfileScope`] and
-//! returns the text to show.
+//! configuration and session-storage groups. The typed slash-command
+//! registry (cli group) registers them by name; each takes the session's
+//! [`ProfileScope`] (and store) and returns the text to show.
+
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
 
 use pmt_backup::snapshot;
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
+use pmt_core::id::SessionId;
+use pmt_store::Store;
 
 use crate::backup_cmd::{manual_snapshot, render_list};
+use crate::cli::ExportFormat;
+use crate::session_export::{self, ExportOptions};
 
 /// Usage of `/snapshot` (alias `/snap`; surfaces cli, tui, desktop).
 pub const SNAPSHOT_USAGE: &str = "/snapshot [create [label]|list|restore <id>|prune [n]]";
@@ -80,4 +87,108 @@ fn prune(profile: &pmt_config::ProfileDir, keep: usize) -> Result<String, Error>
 
 fn usage() -> Error {
     Error::new(&codes::CLI_USAGE, format!("usage: {SNAPSHOT_USAGE}"))
+}
+
+/// Usage of `/save`.
+pub const SAVE_USAGE: &str = "/save [json|md|html] [file] [redact]";
+
+/// `/save [json|md|html] [file] [redact]` (spec: session-storage, Export
+/// formats and save command): writes the current session (active
+/// messages) to `file` (relative to `cwd`) or to
+/// `<cwd>/<title-slug>-<YYYYMMDD-HHMM>.<ext>`; `redact` scrubs secrets and
+/// credential-shaped text. `json` is the portable JSONL export. A bare
+/// `/save` returns the usage.
+///
+/// # Errors
+///
+/// `cli.usage` for malformed arguments, `output.io` when the file exists
+/// or cannot be written, store errors.
+pub fn save(
+    scope: &ProfileScope,
+    store: &Store,
+    session: SessionId,
+    args: &str,
+    cwd: &Path,
+) -> Result<String, Error> {
+    let mut words: Vec<&str> = args.split_whitespace().collect();
+    if words.is_empty() {
+        return Ok(format!("usage: {SAVE_USAGE}"));
+    }
+    let redact = words.last() == Some(&"redact");
+    if redact {
+        words.pop();
+    }
+    let format = match words.first() {
+        Some(&"json") => Some(ExportFormat::Jsonl),
+        Some(&"md") => Some(ExportFormat::Md),
+        Some(&"html") => Some(ExportFormat::Html),
+        _ => None,
+    };
+    if format.is_some() {
+        words.remove(0);
+    }
+    let format = format.unwrap_or(ExportFormat::Jsonl);
+    let path = match words.as_slice() {
+        [] => default_save_path(store, session, format, cwd)?,
+        [file] => cwd.join(file),
+        _ => {
+            return Err(Error::new(
+                &codes::CLI_USAGE,
+                format!("usage: {SAVE_USAGE}"),
+            ));
+        }
+    };
+    let redactor = redact
+        .then(|| crate::sessions_cmd::redactor(scope))
+        .transpose()?;
+    let options = ExportOptions {
+        format,
+        include_inactive: false,
+        redactor: redactor.as_ref(),
+    };
+    let io_error = |e: &std::io::Error| {
+        Error::new(
+            &codes::OUTPUT_IO,
+            format!("cannot write {}: {e}", path.display()),
+        )
+    };
+    let mut file = pmt_core::private_fs::new_file_options()
+        .open(&path)
+        .map_err(|e| io_error(&e))?;
+    session_export::export(store, &[session], options, &mut file)?;
+    file.flush().map_err(|e| io_error(&e))?;
+    Ok(format!("saved {}", path.display()))
+}
+
+fn default_save_path(
+    store: &Store,
+    session: SessionId,
+    format: ExportFormat,
+    cwd: &Path,
+) -> Result<PathBuf, Error> {
+    let title = store.session(session)?.title;
+    let slug = slug(title.as_deref().unwrap_or(&session.to_string()));
+    let stamp = jiff::Zoned::now().strftime("%Y%m%d-%H%M");
+    Ok(cwd.join(format!(
+        "{slug}-{stamp}.{}",
+        session_export::extension(format)
+    )))
+}
+
+/// Lowercase ASCII letters and digits, other runs as one `-`.
+fn slug(title: &str) -> String {
+    let mut slug = String::new();
+    for c in title.chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        "session".to_owned()
+    } else {
+        slug.chars().take(60).collect()
+    }
 }

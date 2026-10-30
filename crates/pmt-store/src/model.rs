@@ -169,6 +169,20 @@ store_enum!(
     }
 );
 
+store_enum!(
+    /// How a usage row's cost is known (model-providers).
+    CostStatus, "cost_status" {
+        /// Reported by the provider.
+        Exact = "exact",
+        /// Computed from the model price table.
+        Estimated = "estimated",
+        /// Covered by a subscription.
+        Subscription = "subscription",
+        /// Not priced (`cost_usd` null).
+        Unknown = "unknown",
+    }
+);
+
 impl TitleSource {
     /// Precedence: an automatic title replaces only a strictly lower one.
     #[must_use]

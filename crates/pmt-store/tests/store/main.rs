@@ -4,7 +4,10 @@
 mod blobs;
 mod compaction;
 mod crash;
+mod integrity;
+mod lifecycle;
 mod open;
+mod search;
 mod sessions;
 mod support;
 mod titles;

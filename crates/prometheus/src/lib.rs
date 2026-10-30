@@ -14,13 +14,15 @@ pub mod output;
 pub mod profile_cmd;
 pub mod prompt;
 pub mod secrets_cmd;
+pub mod session_export;
+pub mod sessions_cmd;
 pub mod slash_handlers;
 pub mod startup;
 pub mod surface;
 pub mod version;
 
 pub use cli::{
-    BackupCommand, Cli, Command, ConfigCommand, ProfileCommand, SecretsCommand, SnapshotsCommand,
-    command,
+    BackupCommand, Cli, Command, ConfigCommand, ProfileCommand, SecretsCommand, SessionsCommand,
+    SnapshotsCommand, command,
 };
 pub use context::Context;

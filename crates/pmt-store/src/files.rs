@@ -73,6 +73,33 @@ pub(crate) fn check_wal_supported(dir: &Path) -> Result<(), Error> {
     }
 }
 
+/// What identifies a file across renames and replacements: device and
+/// inode on Unix, the creation time on Windows (std has no stable file id
+/// there; a copied or restored file gets a new creation time).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FileId(u64, u64);
+
+/// The identity of the file at `path` (following symlinks), `None` when it
+/// cannot be read.
+pub(crate) fn file_id(path: &Path) -> Option<FileId> {
+    let meta = std::fs::metadata(path).ok()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        Some(FileId(meta.dev(), meta.ino()))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        Some(FileId(meta.creation_time(), 0))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = meta;
+        None
+    }
+}
+
 /// The network or cross-VM filesystem kind of `dir`, if it is one.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn network_filesystem(dir: &Path) -> Option<&'static str> {

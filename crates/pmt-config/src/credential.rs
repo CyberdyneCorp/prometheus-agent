@@ -4,26 +4,7 @@
 //! credential are typed [`crate::schema::SecretName`] (a `*_secret` key
 //! holding the secret's name) and are the only exception.
 
-/// Prefixes of common credential formats (OpenAI/Anthropic `sk-`, GitHub,
-/// Slack, AWS access keys, GitLab, Google API keys).
-const PREFIXES: &[&str] = &[
-    "sk-",
-    "sk_live_",
-    "ghp_",
-    "gho_",
-    "ghu_",
-    "ghs_",
-    "ghr_",
-    "github_pat_",
-    "xoxb-",
-    "xoxp-",
-    "xoxa-",
-    "xapp-",
-    "AKIA",
-    "ASIA",
-    "glpat-",
-    "AIza",
-];
+use pmt_core::secret::CREDENTIAL_PREFIXES;
 
 /// Whether `value` looks like a credential: a known token prefix followed
 /// by more characters, or a PEM private key.
@@ -31,7 +12,7 @@ const PREFIXES: &[&str] = &[
 pub fn looks_like_credential(value: &str) -> bool {
     let value = value.trim();
     let pem = value.contains("-----BEGIN") && value.contains("PRIVATE KEY-----");
-    pem || PREFIXES
+    pem || CREDENTIAL_PREFIXES
         .iter()
         .any(|prefix| value.len() > prefix.len() + 3 && value.starts_with(prefix))
 }

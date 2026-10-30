@@ -62,6 +62,30 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         schema: "prometheus.profile.v1",
         command: "profile show",
     },
+    JsonShape {
+        schema: "prometheus.sessions.v1",
+        command: "sessions list",
+    },
+    JsonShape {
+        schema: "prometheus.session.v1",
+        command: "sessions show",
+    },
+    JsonShape {
+        schema: "prometheus.search.v1",
+        command: "sessions search",
+    },
+    JsonShape {
+        schema: "prometheus.session_tree.v1",
+        command: "sessions tree",
+    },
+    JsonShape {
+        schema: "prometheus.session_stats.v1",
+        command: "sessions stats",
+    },
+    JsonShape {
+        schema: "prometheus.prune.v1",
+        command: "sessions prune",
+    },
 ];
 
 /// Writes `value` as one compact JSON document and a newline.

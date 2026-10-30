@@ -324,6 +324,33 @@ error_codes! {
     /// A session reference matches several sessions.
     SESSION_AMBIGUOUS = ("session.ambiguous", Usage,
         "A session id prefix matches several sessions; give more characters or the full id.");
+    /// Another writer held the store past the write's time budget.
+    STORE_BUSY = ("store.busy", Conflict,
+        "Another process held `state.db`'s write lock for longer than the write's time budget (20 s metadata, 60 s transcript, 0.5 s activity); retry later.");
+    /// `state.db` was replaced underneath an open store.
+    STORE_REPLACED = ("store.replaced", Conflict,
+        "`state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file.");
+    /// The store hit structural corruption and stopped writing.
+    STORE_CORRUPT = ("store.corrupt", Io,
+        "`state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`).");
+    /// A rewind target is missing or not a user message.
+    STORE_REWIND_TARGET_INVALID = ("store.rewind_target_invalid", InvalidInput,
+        "Rewind targets an active user message of the session; the given message is missing, inactive or not a user message.");
+    /// The transcript changed since the rewind or restore was planned.
+    STORE_REWIND_CONFLICT = ("store.rewind_conflict", Conflict,
+        "The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry.");
+    /// A session is used by a running turn or compaction.
+    SESSION_IN_USE = ("session.in_use", Conflict,
+        "A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished.");
+    /// A lineage has too many active messages to resume.
+    SESSION_TOO_LARGE_TO_RESUME = ("session.too_large_to_resume", InvalidInput,
+        "The session's active lineage has more messages than `sessions.max_resume_messages`; compact it with /compress or fork it.");
+    /// A session has too many messages for an in-memory export.
+    SESSION_TOO_LARGE_TO_EXPORT = ("session.too_large_to_export", InvalidInput,
+        "The session has more messages than `sessions.max_export_messages` allows in memory; export it to a file with `prometheus sessions export -o FILE`.");
+    /// A session source tag does not have the allowed shape.
+    SESSION_INVALID_SOURCE_TAG = ("session.invalid_source_tag", Usage,
+        "A session source tag is 1-32 characters: a lowercase letter, then lowercase letters, digits, '_' or '-'.");
     /// The shared outbound HTTP client could not be built.
     NET_CLIENT_INIT = ("net.client_init", Internal,
         "The shared outbound HTTP client could not be initialised.");

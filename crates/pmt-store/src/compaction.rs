@@ -17,6 +17,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::{MessageId, SessionId};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
+use crate::contention::WriteClass;
 use crate::error::sql;
 use crate::leases::{self, Lease, LeaseKind};
 use crate::messages::{self, Message, NewMessage};
@@ -166,7 +167,7 @@ impl Store {
             .iter()
             .map(|m| messages::prepare(blob_dir, m))
             .collect::<Result<Vec<_>, _>>()?;
-        self.write(|tx| {
+        self.write_as(WriteClass::Transcript, |tx| {
             leases::check_held(tx, lock)?;
             verify_reads(tx, session, &compaction.read)?;
             let epoch: u32 = tx

@@ -184,6 +184,51 @@ pub(crate) fn check_held(conn: &Connection, lease: &Lease) -> Result<(), Error> 
     }
 }
 
+/// Whether a live lease of `kind` on `session` is held by someone other
+/// than the holder of `own`.
+pub(crate) fn held_by_other(
+    conn: &Connection,
+    session: SessionId,
+    kind: LeaseKind,
+    own: Option<&Lease>,
+) -> Result<Option<Holder>, Error> {
+    let Some(row) = current(conn, session, kind)? else {
+        return Ok(None);
+    };
+    let live = row.expires_at > now_ms() && !row.holder.is_dead_local(&runtime::host_id());
+    let mine = own.is_some_and(|lease| lease.kind == kind && lease.token == row.token);
+    Ok((live && !mine).then_some(row.holder))
+}
+
+/// `session.in_use` naming the holder.
+pub(crate) fn in_use(session: SessionId, kind: LeaseKind, holder: &Holder) -> Error {
+    Error::new(
+        &codes::SESSION_IN_USE,
+        format!(
+            "session {session} has a live {} lease held by pid {} on host {}",
+            kind.as_str(),
+            holder.pid,
+            holder.host_id
+        ),
+    )
+    .with_hint("retry when the running turn or compaction finished")
+}
+
+/// Fails with `session.in_use` while anyone but `own` holds a live turn
+/// lease or compaction lock on `session`.
+pub(crate) fn ensure_free(
+    conn: &Connection,
+    session: SessionId,
+    own: Option<&Lease>,
+) -> Result<(), Error> {
+    for kind in [LeaseKind::Turn, LeaseKind::Compaction] {
+        if let Some(holder) = held_by_other(conn, session, kind, own)? {
+            return Err(in_use(session, kind, &holder));
+        }
+    }
+    Ok(())
+}
+
 impl Store {
     /// Acquires `kind` on `session` for `holder` with the default lifetime.
     ///

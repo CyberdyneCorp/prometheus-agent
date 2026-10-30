@@ -16,7 +16,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::blobs::{self, BlobRef, SPILL_BYTES};
+use crate::contention::WriteClass;
 use crate::error::{corrupt, sql};
+use crate::index;
 use crate::model::Role;
 use crate::sessions::{self, now_ms};
 use crate::store::Store;
@@ -211,6 +213,7 @@ pub(crate) fn insert(
         )
         .map_err(sql)?;
     let mut seqs = Vec::with_capacity(rows.len());
+    let mut indexed = Vec::with_capacity(rows.len());
     let mut tool_calls = 0;
     for (seq, row) in (first_seq..).zip(rows) {
         let m = &row.message;
@@ -238,6 +241,9 @@ pub(crate) fn insert(
             now,
         ])
         .map_err(sql)?;
+        if let Some(text) = m.content.as_deref() {
+            indexed.push((tx.last_insert_rowid(), text));
+        }
         tool_calls += m.tool_call_count();
         seqs.push(u64::try_from(seq).unwrap_or(0));
     }
@@ -256,6 +262,7 @@ pub(crate) fn insert(
     if changed == 0 {
         return Err(sessions::not_found(session));
     }
+    index::add(tx, &indexed)?;
     Ok(seqs)
 }
 
@@ -315,6 +322,22 @@ pub(crate) fn load(
     session: SessionId,
     visibility: Visibility,
 ) -> Result<Vec<Message>, Error> {
+    let mut messages = Vec::new();
+    for_each(conn, blob_dir, session, visibility, |m| {
+        messages.push(m);
+        Ok(())
+    })?;
+    Ok(messages)
+}
+
+/// Calls `each` with every row of the transcript in `seq` order.
+pub(crate) fn for_each(
+    conn: &Connection,
+    blob_dir: &Path,
+    session: SessionId,
+    visibility: Visibility,
+    mut each: impl FnMut(Message) -> Result<(), Error>,
+) -> Result<(), Error> {
     let filter = match visibility {
         Visibility::Active => " AND active = 1",
         Visibility::All => "",
@@ -325,11 +348,10 @@ pub(crate) fn load(
         ))
         .map_err(sql)?;
     let mut rows = stmt.query([session.to_string()]).map_err(sql)?;
-    let mut messages = Vec::new();
     while let Some(row) = rows.next().map_err(sql)? {
-        messages.push(message_from_row(blob_dir, row)?);
+        each(message_from_row(blob_dir, row)?)?;
     }
-    Ok(messages)
+    Ok(())
 }
 
 impl Store {
@@ -363,7 +385,7 @@ impl Store {
             .iter()
             .map(|m| prepare(blob_dir, m))
             .collect::<Result<Vec<_>, _>>()?;
-        self.write(|tx| {
+        self.write_as(WriteClass::Transcript, |tx| {
             if sessions::load(tx, session)?.is_none() {
                 return Err(sessions::not_found(session));
             }
