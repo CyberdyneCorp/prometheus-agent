@@ -18,6 +18,10 @@ cargo install --locked mdbook@0.5.4
 npm install -g @fission-ai/openspec@1.13.2
 ```
 
+`just tools` installs the same pinned versions, and `just` (with no
+arguments) lists shortcuts for building, testing and running the gates; the
+recipes in `justfile` call the same commands as `scripts/check`.
+
 ## One command: `scripts/check`
 
 ```sh
