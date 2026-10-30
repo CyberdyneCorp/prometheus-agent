@@ -35,7 +35,7 @@ trybuild = "1.0"
 tracing = "0.1"
 sha2 = "0.11"
 reqwest = { version = "0.13", default-features = false }
-nix = { version = "0.31", default-features = false, features = ["resource"] }
+nix = { version = "0.31", default-features = false, features = ["resource", "fs"] }
 sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 # OS keychain secrets backend: keyring-core with one native store per OS
 # (macOS Keychain, Windows Credential Manager, Secret Service over libdbus
@@ -52,6 +52,10 @@ rusqlite = { version = "0.41", features = ["bundled", "backup"] }
 tar = { version = "0.4", default-features = false }
 zstd = { version = "0.14", default-features = false }
 pmt-backup = { path = "crates/pmt-backup" }
+# Property tests (store transaction atomicity).
+proptest = { version = "1.9", default-features = false, features = ["std"] }
+# Test-only capture of log events; 7.3 installs the real subscriber.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

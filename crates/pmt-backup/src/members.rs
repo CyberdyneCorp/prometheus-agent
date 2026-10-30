@@ -33,6 +33,8 @@ pub const QUICK_PROFILE_FILES: &[&str] = &[
     "secrets.toml",
     "grants.toml",
     "state.db",
+    // The id `state.db` is bound to (store_meta.profile_id).
+    "profile_id",
     "projects.toml",
 ];
 /// Directories of [`QUICK_PROFILE_FILES`]' critical state.

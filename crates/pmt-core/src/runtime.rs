@@ -101,8 +101,11 @@ impl RuntimeRecord {
     }
 }
 
-/// Start time of a running (not zombie) process, in Unix seconds.
-fn process_start_time(pid: u32) -> Option<u64> {
+/// Start time of a running (not zombie) process, in Unix seconds; `None`
+/// when no such process runs. A pid plus its start time identifies a
+/// process across pid reuse.
+#[must_use]
+pub fn process_start_time(pid: u32) -> Option<u64> {
     let pid = Pid::from_u32(pid);
     let mut system = System::new();
     system.refresh_processes_specifics(
@@ -114,6 +117,14 @@ fn process_start_time(pid: u32) -> Option<u64> {
         .process(pid)
         .filter(|process| process.status() != ProcessStatus::Zombie)
         .map(sysinfo::Process::start_time)
+}
+
+/// This machine's name, used to tell local lease holders (whose liveness
+/// can be checked) from holders on another host sharing the files; empty
+/// when the OS does not report one.
+#[must_use]
+pub fn host_id() -> String {
+    System::host_name().unwrap_or_default()
 }
 
 /// `<home>/run`.

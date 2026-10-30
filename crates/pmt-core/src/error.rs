@@ -276,6 +276,54 @@ error_codes! {
     /// The invoked surface was not compiled into this build.
     SURFACE_NOT_INCLUDED = ("surface.not_included", Unavailable,
         "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build.");
+    /// The profile's identity file is unreadable or malformed.
+    PROFILE_ID_INVALID = ("profile.id_invalid", Config,
+        "The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup.");
+    /// `state.db` belongs to another profile.
+    STORE_PROFILE_MISMATCH = ("store.profile_mismatch", Config,
+        "The profile's `state.db` records another profile's id (it was copied from another profile); nothing was written. Restore the profile's own database or move the file away.");
+    /// The store was written by a newer build.
+    STORE_SCHEMA_TOO_NEW = ("store.schema_too_new", Config,
+        "`state.db` has a newer schema than this build supports: it is read-only (or unreadable when the newer build says so). Update Prometheus.");
+    /// A typed column got a value outside its enum.
+    STORE_INVALID_ENUM = ("store.invalid_enum", InvalidInput,
+        "A session field (source, end reason, archive state, title source, lineage kind, role) got a value outside its allowed set.");
+    /// A write violated a store constraint.
+    STORE_CONSTRAINT = ("store.constraint", InvalidInput,
+        "A write violated a store constraint (duplicate id, unknown session); the whole transaction was rolled back.");
+    /// `state.db` or a blob could not be read or written.
+    STORE_IO = ("store.io", Io,
+        "`state.db` or a blob file could not be read or written (disk full, permissions, I/O error).");
+    /// SQLite reported an unexpected error.
+    STORE_SQLITE = ("store.sqlite", Internal,
+        "SQLite reported an unexpected error on `state.db`.");
+    /// WAL is not safe on the store's filesystem.
+    STORE_UNSUPPORTED_FILESYSTEM = ("store.unsupported_filesystem", Config,
+        "`state.db` is on a network or cross-VM filesystem where WAL is unsafe; set `storage.journal_mode = \"delete\"` or move the home to a local disk.");
+    /// A blob's bytes do not match its SHA-256 name.
+    STORE_BLOB_CORRUPT = ("store.blob_corrupt", Io,
+        "A blob file's contents do not match its SHA-256 name.");
+    /// A referenced blob file is missing.
+    STORE_BLOB_MISSING = ("store.blob_missing", NotFound,
+        "A row references a blob that is not in the profile's blob store.");
+    /// A message the compactor read changed before the commit.
+    STORE_COMPACTION_CONFLICT = ("store.compaction_conflict", Conflict,
+        "A message the compaction read changed (rewound, compacted or rewritten) before it committed; nothing changed. Retry the compaction.");
+    /// The caller's turn lease or compaction lock is no longer held.
+    STORE_LEASE_LOST = ("store.lease_lost", Conflict,
+        "The turn lease or compaction lock expired and was taken by another holder; nothing changed.");
+    /// A title is longer than 100 characters.
+    STORE_TITLE_TOO_LONG = ("store.title_too_long", InvalidInput,
+        "Session titles are at most 100 characters.");
+    /// Another session of the profile has the title.
+    STORE_TITLE_IN_USE = ("store.title_in_use", InvalidInput,
+        "Session titles are unique per profile; pick another title.");
+    /// No session matches a reference.
+    SESSION_NOT_FOUND = ("session.not_found", NotFound,
+        "No session of the profile matches the id, id prefix or title; list them with `prometheus sessions list`.");
+    /// A session reference matches several sessions.
+    SESSION_AMBIGUOUS = ("session.ambiguous", Usage,
+        "A session id prefix matches several sessions; give more characters or the full id.");
     /// The shared outbound HTTP client could not be built.
     NET_CLIENT_INIT = ("net.client_init", Internal,
         "The shared outbound HTTP client could not be initialised.");

@@ -132,6 +132,13 @@ prefixed_id!(
 );
 
 prefixed_id!(
+    /// A profile's stable identity, `prof_<ULID>`: survives renames and
+    /// binds the profile's `state.db` to it (design D17).
+    ProfileId,
+    "prof"
+);
+
+prefixed_id!(
     /// A profile state snapshot id, `snap_<ULID>`.
     SnapshotId,
     "snap"

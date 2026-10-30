@@ -37,7 +37,9 @@ It is created on first use with mode `0700`, and looks like this:
     │   ├── config.toml   settings (mode 0600)
     │   ├── secrets.toml  secrets, file backend (mode 0600)
     │   ├── grants.toml   permanent approvals
+    │   ├── profile_id    the profile's stable id (state.db is bound to it)
     │   ├── state.db      sessions and memory
+    │   ├── blobs/        large payloads, by SHA-256
     │   ├── snapshots/    state snapshots
     │   └── skills/ memories/ cron/ themes/ plugins/ ...
     └── work/
@@ -45,6 +47,13 @@ It is created on first use with mode `0700`, and looks like this:
 
 There is no `config.toml` at the home root: even `default` is an ordinary
 directory under `profiles/`.
+
+`state.db` records the id in `profile_id` when it is created and refuses to
+open under any other profile (`store.profile_mismatch`, exit 78), so a
+database copied from `work` into `home` is never written to. Renaming a
+profile keeps its id. Before a newer Prometheus upgrades the database it
+copies it to `<profile>/backups/state/state-v<old>-<time>.db` (the newest 3
+are kept); an older Prometheus opens a newer database read-only.
 
 ## Configuration
 
@@ -200,7 +209,8 @@ name brings it back as a new, empty profile.
 file's size and SHA-256. Databases are copied with SQLite's online backup,
 so a running daemon does not need to stop. Runtimes, runtime records, logs,
 caches, lock files and earlier backups are left out. `--quick` keeps only
-critical state (configuration, secrets, grants, `state.db`, cron jobs,
+critical state (configuration, secrets, grants, `state.db` and its
+`profile_id`, cron jobs,
 pairing data), `--label` names the archive and `--keep N` (default 3) removes
 older default-named backups.
 

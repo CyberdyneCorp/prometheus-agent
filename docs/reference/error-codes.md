@@ -91,4 +91,20 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `snapshot.not_found` | `not_found` | 66 | No snapshot of this profile has the given id; list them with `prometheus snapshots list`. |
 | `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
 | `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
+| `profile.id_invalid` | `config` | 78 | The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup. |
+| `store.profile_mismatch` | `config` | 78 | The profile's `state.db` records another profile's id (it was copied from another profile); nothing was written. Restore the profile's own database or move the file away. |
+| `store.schema_too_new` | `config` | 78 | `state.db` has a newer schema than this build supports: it is read-only (or unreadable when the newer build says so). Update Prometheus. |
+| `store.invalid_enum` | `invalid_input` | 65 | A session field (source, end reason, archive state, title source, lineage kind, role) got a value outside its allowed set. |
+| `store.constraint` | `invalid_input` | 65 | A write violated a store constraint (duplicate id, unknown session); the whole transaction was rolled back. |
+| `store.io` | `io` | 74 | `state.db` or a blob file could not be read or written (disk full, permissions, I/O error). |
+| `store.sqlite` | `internal` | 70 | SQLite reported an unexpected error on `state.db`. |
+| `store.unsupported_filesystem` | `config` | 78 | `state.db` is on a network or cross-VM filesystem where WAL is unsafe; set `storage.journal_mode = "delete"` or move the home to a local disk. |
+| `store.blob_corrupt` | `io` | 74 | A blob file's contents do not match its SHA-256 name. |
+| `store.blob_missing` | `not_found` | 66 | A row references a blob that is not in the profile's blob store. |
+| `store.compaction_conflict` | `conflict` | 75 | A message the compaction read changed (rewound, compacted or rewritten) before it committed; nothing changed. Retry the compaction. |
+| `store.lease_lost` | `conflict` | 75 | The turn lease or compaction lock expired and was taken by another holder; nothing changed. |
+| `store.title_too_long` | `invalid_input` | 65 | Session titles are at most 100 characters. |
+| `store.title_in_use` | `invalid_input` | 65 | Session titles are unique per profile; pick another title. |
+| `session.not_found` | `not_found` | 66 | No session of the profile matches the id, id prefix or title; list them with `prometheus sessions list`. |
+| `session.ambiguous` | `usage` | 2 | A session id prefix matches several sessions; give more characters or the full id. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |
