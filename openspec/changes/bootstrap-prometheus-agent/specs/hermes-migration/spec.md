@@ -1,7 +1,7 @@
 # Hermes Migration
 
 ## Purpose
-Hermes migration imports an existing Hermes Agent home (configuration, `.env`, credential files, sessions with lineage, memory, identity, skills, scheduled jobs, MCP servers and profiles) into a Prometheus home with one command. The key decisions are: the Hermes home is strictly read-only (the migrator works on a staged snapshot and never opens the live Hermes database), every Hermes key and file gets exactly one recorded disposition in a mapping report, secrets and non-secrets are re-sorted into the secrets store and `config.toml` respectively, ambiguous security-relevant values resolve to the more restrictive interpretation, and a migration ledger makes re-runs idempotent and incremental.
+Hermes migration imports an existing Hermes Agent home (configuration, `.env`, credential files, sessions with lineage, memory, identity, skills, scheduled jobs, MCP servers and profiles) into a Prometheus home with one command. The key decisions are: the Hermes home is strictly read-only (the migrator works on a staged snapshot and never opens the live Hermes database), every Hermes key and file gets exactly one recorded disposition in a mapping report, secrets and non-secrets are re-sorted into the secrets store and `config.toml` respectively, ambiguous security-relevant values resolve to the more restrictive interpretation, and a migration ledger makes re-runs idempotent and incremental. The same report, dry-run, ledger and read-only-source rules also govern importers for other agents (OpenClaw, Claude Code, Codex CLI, Cursor) and the import of their session transcripts.
 
 ## ADDED Requirements
 
@@ -69,7 +69,7 @@ The system SHALL produce a report assigning every Hermes config key, `.env` entr
 - **THEN** it SHALL contain `OPENAI_API_KEY` and SHALL NOT contain `sk-abc`
 
 ### Requirement: Config translation from user-set values only
-The system SHALL translate only keys present in the Hermes profile's own `config.yaml` (never Hermes built-in defaults or the `/etc/hermes` managed layer, which is reported), SHALL map each key through a declarative mapping table to a Prometheus `config.toml` key with an optional value transform, SHALL omit a value equal to the Hermes default as `default_omitted` so Prometheus defaults apply, SHALL move root `max_turns` to `agent.max_iterations`, SHALL map the Hermes `agent.personality` selection into the profile identity file `SOUL.md` (never a config key), and SHALL validate the resulting `config.toml` against the Prometheus schema before writing it.
+The system SHALL translate only keys present in the Hermes profile's own `config.yaml` (never Hermes built-in defaults or the `/etc/hermes` managed layer, which is reported), SHALL map each key through a declarative mapping table to a Prometheus `config.toml` key with an optional value transform, SHALL omit a value equal to the Hermes default as `default_omitted` so Prometheus defaults apply, SHALL move root `max_turns` to `agent.max_iterations`, SHALL map the Hermes `agent.personality` selection into the profile identity file `SOUL.md` (never a config key), SHALL carry the Hermes UI language setting into `display.language` when a bundled `i18n` catalog exists for it (reporting it as `unsupported` otherwise), and SHALL validate the resulting `config.toml` against the Prometheus schema before writing it.
 **Milestone:** M2
 
 #### Scenario: Model settings mapped
@@ -215,7 +215,7 @@ The system SHALL import each Hermes job from `cron/jobs.json` (id, name, prompt,
 - **THEN** jobs enabled in Hermes SHALL be enabled in Prometheus and the summary SHALL warn to stop the Hermes scheduler
 
 ### Requirement: MCP servers and plugins
-The system SHALL import Hermes `mcp_servers` definitions into Prometheus MCP server configuration with credential-bearing environment values and headers moved into the secrets store, SHALL inventory Hermes plugins and report each as `bridge-compatible` (imported disabled for the Python bridge with no capability grants) or `unsupported`, and SHALL never enable a plugin or grant it capabilities during migration.
+The system SHALL import Hermes `mcp_servers` definitions into Prometheus MCP server configuration with credential-bearing environment values and headers moved into the secrets store, SHALL inventory Hermes plugins and report each as `bridge-compatible` (imported disabled for the Python bridge with no capability grants) or `unsupported`, SHALL install (disabled, without grants) the signed catalog plugin that replaces each Hermes built-in integration the profile used — the adapters of `platform-adapters` › Catalog adapter set for enabled platforms, `homeassistant` and `camofox` per `plugin-system` › Catalog plugins for Home Assistant and Camofox — listing each with its enable command in the report, and SHALL never enable a plugin or grant it capabilities during migration.
 **Milestone:** M2
 
 #### Scenario: Plugin imported disabled
@@ -276,3 +276,91 @@ The system SHALL provide `prometheus migrate rollback --run <run-id>` that remov
 - **GIVEN** a migration run that imported 10 sessions, one of which the user continued in Prometheus
 - **WHEN** the user rolls the run back
 - **THEN** 9 sessions SHALL be removed and the continued one SHALL remain, reported `kept_modified`
+
+### Requirement: Importers for other agents
+The system SHALL provide `prometheus migrate from-openclaw`, `from-claude-code`, `from-codex` and `from-cursor`, each with `--source PATH` (defaults `~/.openclaw` falling back to the legacy `~/.clawdbot` and `~/.moltbot`, `~/.claude`, `~/.codex`, `~/.cursor`), `--profile NAME`, `--dry-run`, `--json`, `--yes`, `--overwrite` and `--no-backup`, plus `prometheus migrate detect [--json]` listing which of these sources exist and what each would import; every importer SHALL print the per-item plan before writing, follow the dispositions of the mapping report, record items in a per-source ledger `<profile>/migrations/<source>-ledger.toml`, never create, modify or lock a file under the source tree, skip an item that already exists in Prometheus as `conflict` unless `--overwrite`, turn a malformed source file into a per-item `failed` entry while the rest still imports, and exit with the codes of the Hermes migration (including 4 without `--yes` when stdin is not a terminal). Unless `--no-backup` is given, a real run SHALL first take a quick snapshot of the target profile with reason `pre-migration`.
+**Milestone:** M2
+
+#### Scenario: Detect on a machine with two agents
+- **GIVEN** `~/.claude` and `~/.cursor` exist and `~/.codex` does not
+- **WHEN** the user runs `prometheus migrate detect`
+- **THEN** it SHALL list `claude-code` and `cursor` with item counts per component and SHALL NOT list `codex`
+
+#### Scenario: Broken settings file
+- **GIVEN** a `~/.claude/settings.json` that is not valid JSON and a valid `~/.claude/CLAUDE.md`
+- **WHEN** `prometheus migrate from-claude-code --yes` runs
+- **THEN** the instructions SHALL be imported, `settings.json` SHALL be reported `failed` with the parse error, and the command SHALL exit 1
+
+### Requirement: Other agents never yield secrets by default
+Importers for other agents SHALL NOT read credential files (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.cursor/cli-config.json` and OpenClaw auth stores), SHALL strip from imported MCP server definitions every environment variable or header whose name matches a secret pattern (`*_TOKEN`, `*_KEY`, `*_SECRET`, `*PASSWORD*`, `Authorization`) and list each stripped name in the report as `secret` with the command to add it (`prometheus secrets set <NAME>`), and SHALL import secret values only for OpenClaw and only with `--migrate-secrets`, writing them to the secrets store and never to `config.toml`.
+**Milestone:** M2
+
+#### Scenario: MCP token stripped
+- **GIVEN** a Cursor `mcp.json` server with `env.GITHUB_TOKEN = "ghp_x"`
+- **WHEN** the server is imported
+- **THEN** the Prometheus server definition SHALL reference the secret name `GITHUB_TOKEN` without its value, the report SHALL list it as `secret`, and no Prometheus file SHALL contain `ghp_x`
+
+### Requirement: Claude Code, Codex CLI and Cursor mappings
+The importers SHALL map: Claude Code `CLAUDE.md`, Codex `AGENTS.md` and `memories/*.md`, and Cursor `AGENTS.md` and `rules/*.md|*.mdc` (with `.mdc` frontmatter stripped and only the body kept) to deduplicated entries of the profile's agent memory with provenance `import:<source>`; skill directories containing `SKILL.md` (Cursor at any depth under `skills/`) to `<profile>/skills/<source>-imports/<name>/` under the same security scan and quarantine as Hermes skills, reporting two source skills with the same name as `conflict`; MCP servers (Claude Code from `~/.claude.json` and `settings.json`, Codex from `config.toml` `[mcp_servers.*]`, Cursor from `mcp.json`) to Prometheus MCP server configuration; Claude Code `permissions.allow` `Bash(...)` rules to permanent command approvals in `grants.toml` (a `Bash(npm run test:*)` prefix rule becoming the pattern `npm run test*`) and `permissions.deny` `Bash(...)` rules to `approvals.deny` patterns in the profile `config.toml` (the user deny rules of `tool-system`, which always block); and SHALL report Claude Code `commands/*.md` and non-`Bash` permission rules as `unsupported` with a hint (convert commands into skills).
+**Milestone:** M2
+
+#### Scenario: Prefix rule converted
+- **GIVEN** Claude Code `permissions.allow = ["Bash(npm run test:*)", "WebFetch"]`
+- **WHEN** the import runs
+- **THEN** `grants.toml` SHALL gain an approval for `npm run test*` and `WebFetch` SHALL be reported `unsupported`
+
+#### Scenario: Memory deduplicated
+- **GIVEN** a profile memory that already holds an entry identical to a paragraph of `CLAUDE.md`
+- **WHEN** the import runs
+- **THEN** that paragraph SHALL NOT be added a second time
+
+### Requirement: OpenClaw mapping
+`prometheus migrate from-openclaw` SHALL accept `--preset full|user-data` (default `user-data`, which excludes infrastructure settings such as model providers, messaging platforms and sandbox backend), `--migrate-secrets`, `--workspace-target PATH` and `--skill-conflict skip|overwrite|rename` (default `skip`; `rename` creates `<name>-imported`), and SHALL map: `workspace/SOUL.md` to the profile identity file; `workspace/MEMORY.md`, `workspace/USER.md` and `workspace/memory/*.md` to agent and user memory entries split on `§`; `workspace/AGENTS.md` to `AGENTS.md` in `--workspace-target` only when given; skills from `workspace/skills/`, `~/.openclaw/skills/`, `~/.agents/skills/` and `workspace/.agents/skills/` to `skills/openclaw-imports/`; `agents.defaults.model` (string or `{primary, fallbacks}`) and `models.providers.*` to the model and provider registry; `agents.defaults.thinkingDefault` to reasoning effort (`always|high|xhigh` → `high`, `auto|medium|adaptive` → `medium`, `off|low|none|minimal` → `low`); `agents.defaults.timeoutSeconds` to `agent.max_iterations` as `timeoutSeconds / 10` capped at 200; compaction mode and model to context compression settings; `userTimezone`, exec timeout, Docker sandbox backend and image to their Prometheus keys; and `mcp.servers.*` including tool include/exclude filters to MCP configuration. Workspace paths SHALL also be searched at `workspace.default/`, `workspace-main/` and `workspace-<agentId>/`, and OpenClaw session lifetime settings SHALL be reported `unsupported`.
+**Milestone:** M2
+
+#### Scenario: Reasoning effort mapped
+- **GIVEN** OpenClaw `agents.defaults.thinkingDefault = "adaptive"`
+- **WHEN** the import runs with `--preset full`
+- **THEN** the profile's reasoning effort SHALL be `medium` and the report SHALL list the item as `transformed`
+
+#### Scenario: Secrets need the explicit flag
+- **GIVEN** OpenClaw provider entries carrying `apiKey` values
+- **WHEN** the import runs with `--preset full` but without `--migrate-secrets`
+- **THEN** no key SHALL be written to the secrets store and each SHALL be reported `secret` with the flag to import it
+
+### Requirement: Source archiving after import
+`prometheus migrate cleanup openclaw [--yes]` SHALL, only on explicit request and after listing the directories and asking for confirmation, rename the OpenClaw source directories to `<name>.pre-migration` so the two agents cannot act on the same state, SHALL refuse with exit 75 while an OpenClaw process holds its state, and SHALL never delete anything; no importer SHALL perform this step implicitly.
+**Milestone:** M2
+
+#### Scenario: Cleanup is explicit
+- **GIVEN** a completed `prometheus migrate from-openclaw`
+- **WHEN** the user has not run `prometheus migrate cleanup openclaw`
+- **THEN** `~/.openclaw` SHALL be unchanged
+
+### Requirement: Keeping imports in sync
+Every successful Claude Code, Codex CLI or Cursor import SHALL register its source path and a digest of everything it read (excluding credential files) in `<profile>/migrations/import-sync.toml`, and `prometheus migrate sync [--dry-run] [--json]` SHALL re-run every registered importer whose digest changed, without prompting, skipping unchanged sources by digest; a sync SHALL refresh skills it previously imported when their source changed, SHALL never overwrite an imported skill or memory entry the user modified in Prometheus (reported `conflict`), SHALL keep memory and approval merges deduplicating, and SHALL be safe to run as a scheduled job. A profile cloned with `prometheus profile create --clone-from` or `--clone-all` SHALL carry the sync registry only when `--sync-imports` is given.
+**Milestone:** M2
+
+#### Scenario: New skill pulled in
+- **GIVEN** a registered Claude Code import and a new skill directory added to `~/.claude/skills/`
+- **WHEN** `prometheus migrate sync` runs
+- **THEN** exactly that skill SHALL be imported and unchanged sources SHALL be reported `skipped: unchanged`
+
+#### Scenario: Token refresh does not trigger a sync
+- **GIVEN** only `~/.claude/.credentials.json` changed since the last sync
+- **WHEN** `prometheus migrate sync` runs
+- **THEN** no importer SHALL run
+
+### Requirement: Session transcripts from other agent CLIs
+`prometheus migrate sessions --from claude-code|codex [FILE] [--pick] [--json]` SHALL import a conversation from Claude Code session logs (`~/.claude/projects/**/*.jsonl`, or the `projects/` directory of a relocated Claude Code config directory given with `--source`) or Codex CLI rollouts (`~/.codex/sessions/**/rollout-*.jsonl`), reading them only, into a new session titled `Imported from Claude Code: <first user message>` (or `Codex CLI`) with source tag `import:claude-code` or `import:codex` and the foreign session id recorded; it SHALL carry over the ordered user and assistant messages, condensing tool activity into short `[ran tool: <name>]` notes inside assistant turns and omitting system prompts, injected context, reasoning traces and raw tool output; importing the same log again SHALL return the existing session id instead of creating a copy; without `FILE` an interactive picker SHALL list logs newest first with a read-only preview, and the command SHALL print the new session id and the resume command.
+**Milestone:** M2
+
+#### Scenario: Re-import is idempotent
+- **GIVEN** a Codex rollout already imported as session `ses_01JB7Z3Q5X8V2K4M6N8P0R2T4W`
+- **WHEN** the same file is imported again
+- **THEN** the command SHALL print `ses_01JB7Z3Q5X8V2K4M6N8P0R2T4W` and create no new session
+
+#### Scenario: Clean transcript
+- **GIVEN** a Claude Code log containing a 5,000-line `Bash` tool output
+- **WHEN** it is imported
+- **THEN** the imported assistant turn SHALL contain `[ran tool: Bash]` and none of the tool output lines

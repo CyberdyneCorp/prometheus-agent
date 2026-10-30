@@ -6,7 +6,7 @@ The python bridge runs existing Hermes-style Python plugins (`plugin.yaml` + `re
 ## ADDED Requirements
 
 ### Requirement: Scope of hosted code
-The bridge SHALL host exactly these kinds of Python code: general Hermes plugins (directory with `plugin.yaml` and a `register(ctx)` entry), Hermes memory providers (`MemoryProvider` subclasses), Hermes context engines (`ContextEngine` subclasses), Hermes provider-object plugins (image-gen, video-gen, web-search, TTS, transcription, secret-source), and the per-skill Python environments used by skill scripts; it SHALL NOT host Python code for any other purpose, and Prometheus SHALL never import Python into its own process.
+The bridge SHALL host exactly these kinds of Python code: general Hermes plugins (directory with `plugin.yaml` and a `register(ctx)` entry), Hermes memory providers (`MemoryProvider` subclasses), Hermes context engines (`ContextEngine` subclasses), Hermes provider-object plugins (image-gen, video-gen, web-search, TTS, transcription, secret-source), Hermes model-provider plugins (`plugins/model-providers/<name>/` calling `register_provider(ProviderProfile(...))`, such as Copilot or Solstice), the CLI subcommands those plugins register, the per-skill Python environments used by skill scripts and named side environments; it SHALL NOT host Python code for any other purpose, and Prometheus SHALL never import Python into its own process.
 **Milestone:** M2
 
 #### Scenario: Memory provider runs in a sidecar
@@ -54,7 +54,7 @@ Host and sidecar SHALL communicate with JSON-RPC 2.0 messages framed by a 4-byte
 - **THEN** the host SHALL reject the frame with `frame_too_large` and the tool call SHALL fail with that error
 
 ### Requirement: Supported PluginContext subset
-The shim `PluginContext` SHALL implement `register_tool`, `register_hook`, `register_middleware`, `register_command`, `register_skill`, `register_system_prompt_section`, `register_memory_provider`, `register_context_engine`, `register_context_reference`, `register_image_gen_provider`, `register_video_gen_provider`, `register_web_search_provider`, `register_tts_provider`, `register_transcription_provider`, `register_secret_source`, `register_auxiliary_task`, `register_redaction_patterns`, `register_locale_dir`, `register_automation_blueprint`, `emit`, `subscribe`, `dispatch_tool`, `llm` (`complete`, `complete_structured`, `acomplete`, `acomplete_structured`), `state`, `get_config`, `set_config`, `profile_name`, `plugin_id`, `has_plugin`, `has_capability`, `session_cwd`, `session_surface`, `on_unload` and `spawn_task`, each mapped to the equivalent plugin-system host interface and subject to the plugin's capability grants.
+The shim `PluginContext` SHALL implement `register_tool`, `register_hook`, `register_middleware`, `register_command`, `register_skill`, `register_system_prompt_section`, `register_memory_provider`, `register_context_engine`, `register_context_reference`, `register_image_gen_provider`, `register_video_gen_provider`, `register_web_search_provider`, `register_tts_provider`, `register_transcription_provider`, `register_secret_source`, `register_auxiliary_task`, `register_redaction_patterns`, `register_locale`, `register_locale_dir`, `register_automation_blueprint`, `register_cli_command`, `register_provider`, `register_approval_transport`, `post_message`, `apost_message`, `inject_message`, `platform_actions`, `emit`, `subscribe`, `dispatch_tool`, `llm` (`complete`, `complete_structured`, `acomplete`, `acomplete_structured`), `state`, `get_config`, `set_config`, `profile_name`, `plugin_id`, `has_plugin`, `has_capability`, `session_cwd`, `session_surface`, `on_unload` and `spawn_task`, each mapped to the equivalent plugin-system host interface and subject to the plugin's capability grants.
 **Milestone:** M2
 
 #### Scenario: Hermes tool plugin works unchanged
@@ -63,7 +63,7 @@ The shim `PluginContext` SHALL implement `register_tool`, `register_hook`, `regi
 - **THEN** the handler SHALL run in the sidecar and its return value SHALL be the tool result
 
 ### Requirement: Unsupported APIs fail with a named error
-Calling a Hermes `PluginContext` method or attribute outside the supported subset (including `register_platform`, `register_platform_handler`, `register_telegram_handler`, `register_slack_action_handler`, `register_dashboard_auth_provider`, `register_approval_transport`, `register_login_backend`, `register_browser_page_backend`, `post_message`, `apost_message`, `inject_gateway_message` and `inject_tui_message`) SHALL raise `UnsupportedPluginApi` with the message `ctx.<name>() is not supported by the Prometheus python bridge: <reason>`, where the reason states why and the Prometheus alternative when one exists; `register_cli_command` SHALL be skipped with a WARN and the plugin SHALL continue loading.
+Calling a Hermes `PluginContext` method or attribute outside the supported subset (including `register_platform`, `register_platform_handler`, `register_telegram_handler`, `register_slack_action_handler`, `register_dashboard_auth_provider`, `register_login_backend`, `register_browser_page_backend`, `inject_gateway_message` and `inject_tui_message`) SHALL raise `UnsupportedPluginApi` with the message `ctx.<name>() is not supported by the Prometheus python bridge: <reason>`, where the reason states why and the Prometheus alternative when one exists.
 **Milestone:** M2
 
 #### Scenario: Platform adapter plugin gets a clear error
@@ -76,9 +76,9 @@ Calling a Hermes `PluginContext` method or attribute outside the supported subse
 **Milestone:** M2
 
 #### Scenario: Audit flags an unsupported call before install
-- **GIVEN** a plugin source that calls `ctx.post_message` from a tool handler
+- **GIVEN** a plugin source that calls `ctx.register_telegram_handler` from a tool handler
 - **WHEN** the user runs `prometheus plugins validate ./plugin`
-- **THEN** the report SHALL list `post_message` with file and line and classify the plugin `degraded`
+- **THEN** the report SHALL list `register_telegram_handler` with file and line and classify the plugin `degraded`
 
 ### Requirement: Hermes import shims
 The shim SHALL make importable, at their documented Hermes paths, the plugin-facing ABCs and helpers (`agent.memory_provider.MemoryProvider`, `agent.context_engine.ContextEngine`, the image-gen, video-gen, web-search, TTS, transcription and secret-source provider bases, `agent.secret_scope.get_secret` and `agent.memory_provider.spawn_context_thread`), and an import of any other `hermes_cli`, `agent`, `gateway`, `tools` or `run_agent` module SHALL raise `ImportError` naming the module and stating that only the documented plugin API is available.
@@ -161,7 +161,7 @@ When a sidecar exits unexpectedly the host SHALL fail its in-flight calls with `
 - **THEN** the plugin SHALL be marked `failed`, no further restarts SHALL happen, and the session SHALL continue with its other tools
 
 ### Requirement: Resource limits
-Each sidecar SHALL be limited to `python_bridge.max_memory_mib` (default 1024) of resident memory and `python_bridge.max_processes` (default 16) processes, using OS facilities (cgroups on Linux, Job Objects on Windows, rlimits on macOS), and exceeding a limit SHALL be handled as a crash with the status `resource limit exceeded (<limit>)`.
+Each sidecar SHALL be limited to `python_bridge.max_memory_bytes` (default 1073741824) of resident memory and `python_bridge.max_processes` (default 16) processes, using OS facilities (cgroups on Linux, Job Objects on Windows, rlimits on macOS), and exceeding a limit SHALL be handled as a crash with the status `resource limit exceeded (<limit>)`.
 **Milestone:** M2
 
 #### Scenario: Memory leak is bounded
@@ -204,3 +204,43 @@ When `hermes-migration` imports a Hermes home, the system SHALL copy each user p
 - **GIVEN** an enabled Hermes plugin that calls `ctx.register_platform`
 - **WHEN** `prometheus migrate from-hermes` runs
 - **THEN** the plugin SHALL be copied but left disabled and the report SHALL cite `register_platform`
+
+### Requirement: Model-provider plugins through the bridge
+The bridge SHALL host Hermes model-provider plugins by importing `plugins/model-providers/<name>/` in a sidecar, translating each registered `ProviderProfile` (name, aliases, base URL, API mode, env-var secret names, auth type, default headers, model list) into a `model-providers` descriptor (API mode mapped to `wire_format`, env-var names to `secret_names`, base URL host to `key_hosts`) and forwarding per-request hooks the profile defines (header building, request body preparation, model listing, error classification) as `provider.call` invocations bounded by `python_bridge.call_timeout_ms`; the HTTP request and streaming SHALL be performed by the Prometheus host, never by the sidecar, so credentials reach the sidecar only when granted; a profile whose API mode has no Prometheus wire format SHALL be refused with `provider '<name>': api mode '<mode>' is not supported`; and the plugin SHALL need the `providers` grant (and `providers_override` to replace a built-in id).
+**Milestone:** M2
+
+#### Scenario: Copilot provider plugin works unchanged
+- **GIVEN** a Hermes model-provider plugin registering profile `copilot` with an OpenAI chat-completions API mode and a header-building hook
+- **WHEN** the user selects `--provider copilot` and sends a message
+- **THEN** the host SHALL call the hook through the bridge for headers, send and stream the request itself, and record `billing_source` for `copilot`
+
+#### Scenario: Sidecar crash fails the call, not the agent
+- **GIVEN** a bridged provider whose header hook crashes
+- **WHEN** a turn uses it
+- **THEN** the call SHALL fail with `bridge_crashed`, the fallback chain SHALL apply, and the session SHALL continue
+
+### Requirement: Plugin CLI commands through the bridge
+`ctx.register_cli_command(name, help, setup_fn, handler_fn)` and a memory provider's `cli.py` `register_cli(subparser)` SHALL be exposed as `prometheus plugins run <plugin_id> <name> [args...]` (requiring `name` in the plugin's granted `cli_commands`): the host SHALL start a one-shot sidecar for the invoking profile, build the argparse tree in it with `setup_fn` or `register_cli`, pass argv, forward stdin when interactive, stream stdout and stderr, and exit with the handler's return code (a `SystemExit` code, 0 for `None`, 70 for an uncaught exception with the traceback in the plugin log); memory-provider commands SHALL be available only while that provider is the active `memory.provider`.
+**Milestone:** M2
+
+#### Scenario: Argparse error maps to usage exit
+- **GIVEN** bridged plugin `honcho` with CLI command `honcho`
+- **WHEN** the user runs `prometheus plugins run honcho honcho --bogus`
+- **THEN** argparse's usage message SHALL be printed on stderr and the command SHALL exit 2
+
+### Requirement: Host-bound plugin APIs through the bridge
+The shim SHALL implement `register_approval_transport`, `post_message`/`apost_message` (returning a handle with `edit`/`aedit`, `ok`, `message_id`, `error`, `pending`), `inject_message(content, role, session_key=, origin=)` and `platform_actions.add_reaction`/`set_thread_title` as `host.call` requests to the matching plugin-system host interfaces, with identical capability gates, error codes and session binding (the calling turn, hook or command), so the sidecar never holds an adapter handle; sync forms SHALL never deadlock (they wait on the host reply up to 30 s and then return a `timeout` result with the operation still completing on the handle).
+**Milestone:** M2
+
+#### Scenario: Ungranted injection returns False
+- **GIVEN** a bridged plugin without the `inject_messages` grant
+- **WHEN** it calls `ctx.inject_message("hi", session_key="...")`
+- **THEN** the call SHALL return `False` and the plugin log SHALL name the missing capability
+
+### Requirement: Named side environments
+`prometheus bridge env <name> [--requirement <file>]... [--extra <spec>]...` SHALL materialize a named pinned Python environment at `<profile_home>/python/named/<name>-<lock_digest12>/` using the managed interpreter and the same pinning and upper-bound rules as plugin environments, reuse it when the lock digest is unchanged, and print only the absolute interpreter path on stdout (diagnostics on stderr) so a skill script can run `"$(prometheus bridge env pdf --extra 'pypdf>=4,<5')" script.py`; `<name>` SHALL match `^[a-z0-9][a-z0-9_-]{0,63}$`.
+**Milestone:** M2
+
+#### Scenario: Stdout is only the path
+- **WHEN** a skill runs `prometheus bridge env ocr --extra "pillow>=10,<12"` twice
+- **THEN** both runs SHALL print the same single interpreter path and the second SHALL make no network request

@@ -51,7 +51,7 @@ The system SHALL identify every session, regardless of surface or origin, as `se
 - **THEN** the session id SHALL match `^ses_[0-9A-HJKMNP-TV-Z]{26}$`, `source` SHALL be `cron` and `origin.job_id` SHALL be `daily-digest`
 
 ### Requirement: Session record and source enum
-The system SHALL store for each session at least `id`, `profile_id`, `source` (one of `cli`, `tui`, `gateway`, `cron`, `subagent`, `acp`, `api`, `desktop`, `dashboard`, `eval`, `harness`, `import`), `origin` (typed JSON: platform/chat/thread/user for gateway, job id for cron, parent for subagent), `model`, `provider`, `cwd`, `git_repo_root`, `git_branch`, `title`, `title_source`, `started_at`, `last_activity_at`, `ended_at`, `end_reason` (one of `user_exit`, `new_session`, `compression`, `budget_exhausted`, `error`, `interrupted`, `idle_timeout`, `job_complete`), `pinned`, `archived` (`none`, `user`, `auto`), `hidden`, and `system_prompt_hash`, and SHALL reject an unknown `source` or `end_reason` value.
+The system SHALL store for each session at least `id`, `profile_id`, `source` (one of `cli`, `tui`, `gateway`, `cron`, `subagent`, `acp`, `api`, `desktop`, `dashboard`, `eval`, `harness`, `import`), `origin` (typed JSON: platform/chat/thread/user for gateway, job id for cron, parent for subagent), `model`, `provider`, `cwd`, `git_repo_root`, `git_branch`, `title`, `title_source`, `started_at`, `last_activity_at`, `ended_at`, `end_reason` (one of `user_exit`, `new_session`, `compression`, `budget_exhausted`, `error`, `interrupted`, `idle_timeout`, `job_complete`), `pinned`, `archived` (`none`, `user`, `auto`), `hidden`, `bot_chat` (boolean, default false; the canonical Bot Chat marker owned by `bot-mode`), and `system_prompt_hash`, and SHALL reject an unknown `source` or `end_reason` value.
 **Milestone:** M1
 
 #### Scenario: Unknown source rejected
@@ -318,3 +318,80 @@ The system SHALL support `storage.encryption = "none" | "keychain" | "passphrase
 - **GIVEN** an encrypted store whose keychain entry was removed
 - **WHEN** the agent starts
 - **THEN** the system SHALL exit with code 78 and the message `state.db is encrypted and its key is unavailable` and SHALL NOT create a new empty store
+
+### Requirement: Integration source tag
+The system SHALL store, besides the typed `source`, an optional `source_tag` (`^[a-z][a-z0-9_-]{0,31}$`) set by `prometheus chat --source <tag>` or the RPC session-create parameter, SHALL record one-shot runs with `source = "cli"` and `source_tag = "oneshot"`, and SHALL hide sessions whose tag is `oneshot` or `tool` from interactive pickers, `-c`, `--resume latest` and `/sessions` while keeping them in `sessions list --all`, search and usage totals.
+**Milestone:** M1
+
+#### Scenario: Integration session hidden from continue
+- **GIVEN** a session created with `--source tool` after the user's last interactive session in the same directory
+- **WHEN** the user runs `prometheus -c`
+- **THEN** the system SHALL resume the interactive session
+
+### Requirement: Interactive session browser
+The system SHALL provide `prometheus sessions browse [--source <s>] [--all]`, an interactive picker listing sessions newest first with title, relative last activity, message count, source and a status tag derived from the session state (`live`, `done` for a final assistant answer, `intr` for `interrupted`, `err` for `error`, `empty` for no messages), incremental search over titles and full-text hits, and Enter resuming the selected session, exiting 2 when stdout is not a terminal.
+**Milestone:** M1
+
+#### Scenario: Status tags
+- **GIVEN** a session that ended with `end_reason = "interrupted"`
+- **WHEN** the user opens `prometheus sessions browse`
+- **THEN** its row SHALL carry the tag `intr`
+
+### Requirement: Offline recovery and journal mode
+The system SHALL provide `prometheus sessions recover [-o <file>]`, which with the profile's store closed (exit 75 when a daemon or client holds it) copies every readable row into a new clean store, writes it next to the original as `state.recovered-<timestamp>.db`, reports rows recovered and lost per table, and swaps it in only after confirmation keeping the original as `state.db.pre-recover`, and `prometheus sessions journal-mode <wal|delete>` switching the store's journal mode offline (for filesystems without shared-memory support), recorded in `store_meta` and reapplied on open.
+**Milestone:** M2
+
+#### Scenario: Recover refused while open
+- **GIVEN** a running daemon serving the profile
+- **WHEN** the user runs `prometheus sessions recover`
+- **THEN** the command SHALL exit 75 naming the daemon pid and change nothing
+
+### Requirement: Prompt refresh and retitling
+The system SHALL provide `prometheus sessions refresh-prompts [<ref>...|--all]` which marks resumable sessions so that their next turn rebuilds the stored system prompt from the current profile (identity, skills index, tool set, memory snapshot) keeping the transcript, recording one `prompt.rebuilt` event with `reason` `refresh-prompts`, and `prometheus sessions retitle [<ref>...|--auto-only]` regenerating titles through the auxiliary model only for sessions whose `title_source` is not `user`, and `prometheus sessions list --pinned` listing pinned sessions.
+**Milestone:** M2
+
+#### Scenario: User titles kept
+- **GIVEN** a session titled by the user and one titled automatically
+- **WHEN** the user runs `prometheus sessions retitle --all`
+- **THEN** only the automatically titled session SHALL get a new title
+
+### Requirement: Export formats and save command
+`prometheus sessions export` SHALL accept `--format jsonl|md|html|prompts|trace` (default `jsonl`), where `md` renders a readable Markdown transcript with tool calls collapsed, `html` a self-contained page with no external resources, `prompts` only the user messages one per entry, and `trace` the shared trajectory JSONL grammar, all exporting only active messages unless `--include-inactive`; the registry SHALL provide `/save [json|md|html] [file] [redact]` writing the current session to `<file>` or `<cwd>/<title-slug>-<YYYYMMDD-HHMM>.<ext>`, applying secret redaction when `redact` is given, and printing usage for a bare `/save`.
+**Milestone:** M1
+
+#### Scenario: Redacted save
+- **GIVEN** a session whose transcript contains `sk-live-abcdef1234567890`
+- **WHEN** the user types `/save md notes.md redact`
+- **THEN** `notes.md` SHALL NOT contain that key and SHALL contain a redaction marker
+
+### Requirement: Low-disk prune prompt
+The system SHALL, at interactive startup at most once per day, check free space on the volume holding the profile's `state.db` and, when it is below `sessions.low_disk_bytes` (default 1073741824) and `sessions.retention_secs = 0`, offer once to enable auto-prune with answers `on`, `off` (never ask again) or `later` (ask again after 7 days), and SHALL provide `/autoprune [on|off|later|status]` where `on` sets `sessions.retention_secs` to 7776000 (90 days) unless already set and `status` prints the retention setting, store size and free space.
+**Milestone:** M2
+
+#### Scenario: Later postpones a week
+- **GIVEN** low free disk space and the user answered `later` today
+- **WHEN** an interactive session starts tomorrow
+- **THEN** the prompt SHALL NOT be shown
+
+### Requirement: Attachment storage location
+The system SHALL store session attachments in the profile blob store by default (`attachments.storage = "blobs"`), SHALL accept `attachments.storage = "workspace"` which additionally writes a copy of each received attachment under `<cwd>/.prometheus/attachments/<session_id>/` for tools to read by path, and SHALL keep the blob store as the canonical reference in either mode.
+**Milestone:** M2
+
+#### Scenario: Workspace copy
+- **GIVEN** `attachments.storage = "workspace"`
+- **WHEN** a user sends `report.pdf` in a CLI session in `/repo`
+- **THEN** the file SHALL exist under `/repo/.prometheus/attachments/<session_id>/` and in the blob store
+
+### Requirement: Session search tool
+The `session_search` tool SHALL accept `query`, `limit` (default 10, maximum 50), `sort` (`relevance` default, `newest`, `oldest`), `after` and `before` (RFC 3339 or `YYYY-MM-DD`), `role_filter` (list of `user`, `assistant`, `tool`), `exclude_session_ids`, `detail` (`adaptive` default, returning snippets plus an auxiliary-model summary per session when more than 3 sessions match; `full` returning raw snippets) and a window mode (`session_id`, `around_message_id`, `window` default 5, maximum 25) returning the active messages around a hit, SHALL search only the calling session's profile, SHALL exclude the calling session's own active context by default, and SHALL cap the tool result at 16 KiB.
+**Milestone:** M1
+
+#### Scenario: Window around a hit
+- **GIVEN** a hit `msg_X` in session `ses_Y`
+- **WHEN** the model calls `session_search` with `session_id = "ses_Y"`, `around_message_id = "msg_X"` and `window = 2`
+- **THEN** the result SHALL contain at most the 2 active messages before and after `msg_X` plus `msg_X`
+
+#### Scenario: Profile isolation
+- **GIVEN** a matching message in profile `home`
+- **WHEN** a session in profile `work` calls `session_search`
+- **THEN** the result SHALL NOT include the `home` message

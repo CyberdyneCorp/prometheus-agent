@@ -272,3 +272,66 @@ The memory subsystem SHALL use the context engine chosen by the `context.engine`
 - **GIVEN** a context engine plugin whose selection drops older turns from the request
 - **WHEN** a turn is sent
 - **THEN** the stored transcript SHALL still contain every message
+
+### Requirement: Exact duplicate add is a no-op
+A memory `add` whose content, after trimming whitespace, exactly equals an `active` entry of the same `target` SHALL succeed without creating an entry or revision, returning `duplicate: true` and the existing entry's id, and a batch containing such an add SHALL treat it the same way while applying its other operations.
+**Milestone:** M1
+
+#### Scenario: Re-adding a known fact
+- **GIVEN** an active `user` entry `m_abcdefghijkl` with content `Prefers metric units.`
+- **WHEN** the model adds `Prefers metric units.` to target `user` again
+- **THEN** the result SHALL be a success with `duplicate: true` and id `m_abcdefghijkl`, and the entry count SHALL be unchanged
+
+### Requirement: Learning journey timeline
+The system SHALL provide `prometheus journey [--since <duration|date>] [--play [--fps N]] [--width W] [--height H] [--no-color] [--json]` (aliases `learning`, `memory-graph`) and the in-chat `/journey` (aliases `/learning`, `/memory-graph`) rendering a timeline, oldest first, of learned skills (created by the user's `/learn`, by the agent, by background review, or used at least once; bundled never-used skills excluded) and memory entries from the revision journal, with `--play` animating the build-up and `--json` emitting nodes `{id, kind, title, created_at, updated_at, origin}` where skill ids are `skill:<name>` and memory ids are the entry ids; the same data SHALL be served by RPC `journey.list` for the TUI overlay and the desktop star map.
+**Milestone:** M2
+
+#### Scenario: JSON nodes
+- **GIVEN** a profile with one agent-created skill `deploy-checklist` and two memory entries
+- **WHEN** the user runs `prometheus journey --json`
+- **THEN** the output SHALL contain three nodes including one with id `skill:deploy-checklist` and two with ids matching `^m_`
+
+### Requirement: Journey pruning and editing
+The system SHALL provide `prometheus journey list`, `prometheus journey delete <node> [--yes]` and `prometheus journey edit <node>` (also as `/journey list|delete|edit` and desktop node actions), where deleting a skill node archives the skill (restorable) and deleting a memory node removes the entry as a journaled `origin = user` revision, editing opens the skill's `SKILL.md` or the entry text in `$EDITOR` and applies it through the normal validation and scanning path, deletion asks for confirmation unless `--yes`, and non-interactive deletion without `--yes` SHALL exit 4.
+**Milestone:** M2
+
+#### Scenario: Delete a memory node
+- **WHEN** the user runs `prometheus journey delete m_abcdefghijkl --yes`
+- **THEN** the entry SHALL be removed, a revision with `origin = user` SHALL be recorded, and `prometheus memory revert` on that revision SHALL restore it
+
+### Requirement: External provider recall budget and spill
+The system SHALL bound external provider recall separately from built-in recall by `memory.provider_recall_max_chars` (default 100000), passing provider recall up to that bound whole inside the `<memory-context>` fence and truncating beyond it with a marker; with `memory.provider_recall_spill = true` (default false) oversized recall SHALL instead be replaced by a head and tail preview plus the path of a file under the profile's `cache/` holding the full text, readable by `read_file`; built-in archival recall SHALL remain bounded by `memory.recall.max_chars`.
+**Milestone:** M2
+
+#### Scenario: Spill to file
+- **GIVEN** `memory.provider_recall_spill = true` and a provider returning 250000 characters
+- **WHEN** the turn's request is built
+- **THEN** the fence SHALL contain a preview and a file path, and the file SHALL contain the full recall text
+
+### Requirement: Per-turn memory notifications
+The system SHALL, after a background review or agent memory change commits, show a notice per `memory.notifications` (`off`, `on` default, `verbose`; per-platform override `gateway.platforms.<platform>.memory_notifications`): `on` shows a generic line such as `Memory updated` or `Skill 'foo' patched`, `verbose` adds a compact preview of the change (for example `Memory + User prefers terse replies`), and `off` shows nothing; staged pending changes and rolled-back batches SHALL never be reported as completed, and the setting SHALL not affect whether the review runs or writes.
+**Milestone:** M2
+
+#### Scenario: Verbose preview
+- **GIVEN** `memory.notifications = "verbose"` on Telegram
+- **WHEN** a background review adds `User prefers terse replies`
+- **THEN** the chat SHALL receive a notice containing that text
+
+#### Scenario: Staged change not announced
+- **GIVEN** `memory.write_approval` staging agent writes
+- **WHEN** a background review proposes a patch
+- **THEN** no `Memory updated` notice SHALL be shown
+
+### Requirement: Background review controls
+The system SHALL read `[memory.review]` with `enabled = true` (false skips automatic post-turn reviews while manual `/refine` still works), `max_input_tokens` (unset = 75% of the review model's context window capped at 600000, or 120000 when the window is unknown; 0 or negative = unlimited) bounding the sum of replayed input tokens across one review's model calls, `extra_tools = []` (tool names added to the review's allow-list only when already available to the parent), `defer = "auto"` (queue reviews whose route is a managed local model until the machine is idle; `never` runs immediately) and `defer_max_age_secs = 1800`; the review SHALL route through auxiliary task `memory` (default the main model, replaying the full transcript to reuse its cache; a different model SHALL receive a digest of recent turns verbatim plus a summary of older ones), queued reviews SHALL coalesce per session, and each review's usage SHALL be recorded in the usage ledger with purpose `background_review`.
+**Milestone:** M2
+
+#### Scenario: Input budget stops the review
+- **GIVEN** `memory.review.max_input_tokens = 48000` and a review whose next call would bring replayed input to 52000 tokens
+- **WHEN** the review loop prepares that call
+- **THEN** the review SHALL stop before sending it and record its usage
+
+#### Scenario: Extra tool must exist on the parent
+- **GIVEN** `memory.review.extra_tools = ["propose_shared_memory"]` and a parent session without that tool
+- **WHEN** a review starts
+- **THEN** the review's tool list SHALL NOT contain `propose_shared_memory`

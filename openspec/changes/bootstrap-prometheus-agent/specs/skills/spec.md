@@ -311,3 +311,190 @@ Every skill path and record (skills directory, lockfile, archive, backups, locks
 - **GIVEN** one gateway serving profiles `a` and `b`
 - **WHEN** a session in `a` creates skill `x`
 - **THEN** `skills_list` in a session of `b` SHALL NOT include `x`
+
+### Requirement: Skill preload at launch and per-profile auto-load
+`prometheus chat -s/--skills <a,b>` (repeatable, comma-separated) and the profile key `skills.auto_load` (list of names, default `[]`, applied on every surface including gateway, cron and API sessions) SHALL load the named skills fully into the new session before its first turn, rendered once into the session's frozen prompt and reused byte-identically for the session's life (model switches and compression included), so preloading never breaks the prompt cache; names in both lists SHALL load once, a missing, disabled or gate-failing name SHALL be skipped with one WARN naming it, an explicit `-s` name that does not resolve SHALL additionally print `skill '<name>' not found` before the session starts, and edits to `skills.auto_load` SHALL apply from the next session.
+**Milestone:** M1
+
+#### Scenario: Preloaded skills are in the first request
+- **GIVEN** `prometheus chat -s github-pr-workflow,test-driven-development`
+- **WHEN** the first turn's request is built
+- **THEN** both skill bodies SHALL be present and the second turn's request prefix SHALL be byte-identical up to the first user message
+
+#### Scenario: Missing auto-load entry is skipped
+- **GIVEN** `skills.auto_load = ["gone"]` and no skill `gone`
+- **WHEN** a session starts
+- **THEN** the session SHALL start normally and one WARN SHALL name `gone`
+
+### Requirement: Stacking skills in one message
+A user message starting with several skill slash commands SHALL load every leading `/<skill>` token, up to 5, into one user message in the order given, with the remaining text as the instruction; parsing SHALL stop at the first token that is not an enabled skill slug, so arguments beginning with `/` (file paths) are never consumed, and a sixth leading skill token SHALL be treated as instruction text with a notice `at most 5 skills can be stacked; use a skill bundle for more`.
+**Milestone:** M1
+
+#### Scenario: Two skills and an instruction
+- **WHEN** the user sends `/github-pr-workflow /test-driven-development fix issue 123`
+- **THEN** both skills SHALL be loaded into one user message whose instruction is `fix issue 123`
+
+#### Scenario: Path argument is not swallowed
+- **WHEN** the user sends `/pdf /tmp/scan.pdf extract tables`
+- **THEN** only `pdf` SHALL load and `/tmp/scan.pdf extract tables` SHALL be the instruction
+
+### Requirement: Skill bundles
+The system SHALL load skill bundles from `<profile_home>/skill-bundles/<slug>.toml` with fields `name` (default: file stem, slugified for the command), `description`, `skills` (required, non-empty, at most 32 entries, each a skill name or `{name, source}` where `source` is a hub identifier) and `instruction`; each bundle SHALL register `/<slug>` on every chat surface, loading all resolvable listed skills plus the instruction into one user message (no system-prompt change) with the stacking cap not applied, skipping unresolved skills with a note listing them; a bundle slug SHALL win over a skill slug but never over a built-in command; `prometheus skills bundles list|show <slug>|create <slug> [--skill S]... [--description D] [--instruction I] [--force]|delete <slug>|reload|install <slug>` and the slash command `/bundles` SHALL manage and list them, where `install` installs missing entries that carry a `source` through the hub pipeline (upgrade) and `reload` rescans the directory and reports added, changed and removed bundles.
+**Milestone:** M1
+
+#### Scenario: Bundle loads three skills
+- **GIVEN** bundle `backend-dev` listing `github-code-review`, `test-driven-development`, `github-pr-workflow`
+- **WHEN** the user sends `/backend-dev refactor auth`
+- **THEN** one user message SHALL contain all three skills, the bundle instruction and `refactor auth`
+
+#### Scenario: Missing skill is skipped, not fatal
+- **GIVEN** a bundle listing `skill-foo` which is not installed
+- **WHEN** the bundle is invoked
+- **THEN** the other skills SHALL load and the message SHALL note `skipped: skill-foo`
+
+### Requirement: /learn distils a skill from sources
+`/learn <what to learn from>` SHALL be available on every chat surface and SHALL run a normal agent turn whose user message carries a fixed authoring instruction: gather the named sources (directories, files, URLs, the current conversation, pasted notes) with the session's own tools, then write a skill with `skill_manage` following the authoring lint rules (description within `skills.index_description_chars`, standard section order `When to Use`, `Procedure`, `Pitfalls`, `Verification`, no invented commands, no verbatim reproduction of source passages); when the gathered material exceeds 50,000 characters the instruction SHALL require a knowledge-base skill (a lean `SKILL.md` with core concepts and an index plus one distilled file per chapter or topic under `references/`), and re-running `/learn` on an existing topic SHALL patch that skill instead of creating a duplicate; `/learn` SHALL add no model tool, and its writes SHALL pass through `skill_manage` validation, scanning and `skills.write_approval`.
+**Milestone:** M1
+
+#### Scenario: Learn from a docs URL
+- **WHEN** the user sends `/learn https://docs.example.com/api/quickstart`
+- **THEN** the agent SHALL fetch the page with its web tool and create one skill via `skill_manage` that passes `prometheus skills lint`
+
+#### Scenario: Book becomes a knowledge base
+- **GIVEN** a 400-page PDF source
+- **WHEN** `/learn` runs on it
+- **THEN** the resulting skill SHALL have a `SKILL.md` index and multiple files under `references/`
+
+### Requirement: /refine runs self-improvement review on demand
+`/refine [focus]` SHALL start the background memory and skill review immediately, without waiting for the creation-nudge interval, in a background fork over a snapshot of the current conversation (or the stored conversation when the chat is idle), with the optional focus text added to the review instruction; the live session's prompt, history and cache SHALL be untouched, the review SHALL obey the same rules as the automatic review (view-before-overwrite, archive instead of delete, write approval), and its summary of created or patched skills and memory changes SHALL be posted to the same chat when done; a `/refine` while a review for that session is running SHALL reply `a review is already running`.
+**Milestone:** M1
+
+#### Scenario: Focused refine saves a workflow
+- **GIVEN** a conversation in which the user walked the agent through a deploy
+- **WHEN** the user sends `/refine save the deploy workflow as a skill`
+- **THEN** a background review SHALL create or patch a deploy skill and the chat SHALL receive its summary, while the session's system prompt hash is unchanged
+
+### Requirement: Skill write-approval review surface
+With `skills.write_approval = true`, every `skill_manage` write from a foreground turn or background review SHALL be staged as a pending record under `<profile_home>/pending/skills/<id>.json` (surviving restarts) instead of being applied; `/skills pending` SHALL list pending records with a one-line gist, `/skills diff <id>` SHALL show the unified diff (truncated to the adapter's message limit on messaging platforms with a pointer to the CLI), `/skills approve <id>|all` SHALL apply them through the normal validation and scan, `/skills reject <id>|all` SHALL drop them, and `/skills approval on|off` SHALL persist the setting; these commands SHALL work on every chat surface, and `/skills search|install|inspect` SHALL expose the hub commands in chat.
+**Milestone:** M1
+
+#### Scenario: Staged write applied on approval
+- **GIVEN** `skills.write_approval = true` and the agent patched skill `foo`
+- **WHEN** the user sends `/skills approve <id>`
+- **THEN** the patch SHALL be applied and the pending record removed, and before approval `skill_view(name="foo")` SHALL return the old content
+
+### Requirement: /reload-skills rescans roots
+`/reload-skills` (alias `/reload_skills`) and `prometheus skills reload` SHALL rescan every skill root and bundle directory, update the slash-command registry and listings immediately, and report added, removed and changed skills; the current session's system prompt SHALL NOT change (the change reaches the model only through the per-turn change note) and the next session's index SHALL reflect the rescan.
+**Milestone:** M1
+
+#### Scenario: Newly copied skill becomes invocable
+- **GIVEN** a skill directory copied into `<profile_home>/skills/` during a session
+- **WHEN** the user runs `/reload-skills`
+- **THEN** its `/<slug>` command SHALL work in that session and the system prompt hash SHALL be unchanged
+
+### Requirement: /curator slash command
+`/curator [status|run [--consolidate] [--dry-run]|pause|resume|pin <s>|unpin <s>|archive <s>|restore <s>|ledger]` SHALL be available on every chat surface with the same behaviour as `prometheus curator`, running `run` in the background and posting its summary (including the rename map) to the same chat when finished.
+**Milestone:** M2
+
+#### Scenario: Pin from a messaging chat
+- **WHEN** the user sends `/curator pin deploy-runbook` from Telegram
+- **THEN** `deploy-runbook` SHALL be pinned and the reply SHALL confirm it
+
+### Requirement: Hub discovery, inspection, updates and audit
+`prometheus skills` SHALL provide `browse [--source S]` (official first), `search <query> [--source S] [--json]` (answered from a cached central index, plus at most 8 s of live queries to skills.sh, ClawHub, LobeHub and well-known endpoints when the index has no match), `inspect <identifier>` (preview SKILL.md, file list, scan verdict and upstream metadata such as repo URL, install count and upstream audit status, without installing), `check` (report installed hub skills whose upstream content digest changed, `orphaned` for missing directories and `invalid_install` for unsafe recorded paths, without network calls for those), `update [<name>] [--force]` (reinstall changed skills through the full install pipeline, skipping locally modified ones unless `--force`), `audit` (re-scan every hub-installed skill and quarantine any `dangerous` verdict), `uninstall <name>` (hub skills only), and `untrust <root>` (remove a trusted project root); the same verbs SHALL be reachable as `/skills <verb>` in chat.
+**Milestone:** M2
+
+#### Scenario: Local edits survive update
+- **GIVEN** hub skill `react` modified on disk and changed upstream
+- **WHEN** `prometheus skills update` runs without `--force`
+- **THEN** `react` SHALL be skipped with `locally modified; use --force` and its files SHALL be unchanged
+
+#### Scenario: Inspect installs nothing
+- **WHEN** `prometheus skills inspect openai/skills/k8s` runs
+- **THEN** the preview SHALL print and no file SHALL be written under the skills directory
+
+### Requirement: Hub source identifiers
+The install, inspect and search commands SHALL accept these identifier forms, each mapped to a source adapter and a trust level: `official/<category>/<name>` (the embedded official catalog, trust `builtin`), `skills-sh/<owner>/<repo>/<skill>` (skills.sh directory, alias slugs resolved), `well-known:<https url>` (a site's `/.well-known/skills/index.json`), `<owner>/<repo>/<path>` or `github:<owner>/<repo>/<path>` (direct GitHub path or tap), `clawhub:<slug>`, `lobehub:<slug>`, `browse-sh:<slug>`, and a direct `https://.../SKILL.md` URL (fetching only support files the SKILL.md references, name resolved from frontmatter, then URL slug, then `--name`); an identifier matching none SHALL exit 2 with `unrecognized skill identifier '<id>'` listing the forms, and GitHub requests SHALL use the `GITHUB_TOKEN` secret when present.
+**Milestone:** M2
+
+#### Scenario: Direct URL without a name
+- **GIVEN** a `SKILL.md` URL whose frontmatter has no `name` and whose slug is `SKILL`
+- **WHEN** `prometheus skills install https://example.com/SKILL.md` runs non-interactively without `--name`
+- **THEN** it SHALL exit 2 asking for `--name`
+
+### Requirement: Custom skill taps
+`prometheus skills tap list|add <owner/repo> [--path P]|remove <owner/repo>` (and `/skills tap ...`) SHALL manage the profile's taps in `<profile_home>/skills/taps.toml`, where a tap is a GitHub repository whose skill directories live under `path` (default `skills/`), each directory containing `SKILL.md` becoming an installable skill named by its directory (directories starting with `.` or `_` ignored); new taps SHALL get trust `community` unless the repo is in `skills.trusted_sources`, tapped skills SHALL appear in `search` and install as `<owner>/<repo>/<skill>`, and a single skill MAY be installed from any repo path without adding a tap.
+**Milestone:** M2
+
+#### Scenario: Install from a team tap
+- **GIVEN** `prometheus skills tap add my-org/agent-skills` and a directory `skills/deploy-runbook/SKILL.md` in that repo
+- **WHEN** `prometheus skills install my-org/agent-skills/deploy-runbook` runs
+- **THEN** the skill SHALL be installed with trust `community` and recorded in `skills.lock`
+
+### Requirement: Skill publishing and snapshots
+`prometheus skills publish <dir> --to github|clawhub [--repo owner/repo]` SHALL lint and scan the skill (refusing on lint errors or a `dangerous` verdict), sign it when a signing key is configured, and open a pull request (GitHub) or registry submission with the skill directory, printing the resulting URL and never pushing to a default branch; `prometheus skills snapshot export <file|->` SHALL write a versioned JSON document listing every hub-installed skill (`name`, `source`, `identifier`, `category`, `resolved_ref`, `content_digest`) and every tap, and `snapshot import <file> [--force]` SHALL add the taps and install each listed skill through the full pipeline, exiting 5 when any entry failed and reporting each failure.
+**Milestone:** M2
+
+#### Scenario: Snapshot round trip
+- **GIVEN** a profile with 3 hub skills and one tap exported to `setup.json`
+- **WHEN** `prometheus skills snapshot import setup.json` runs in a fresh profile
+- **THEN** the same 3 skills and tap SHALL be present and the command SHALL exit 0
+
+### Requirement: Interactive per-surface skill enablement
+`prometheus skills config` SHALL open an interactive picker listing every visible skill with its enabled state globally and per surface or adapter, writing the result to `skills.disabled` and `skills.platform_disabled.<platform>`, refusing to disable `prometheus-agent`, and applying from the next session; without a TTY it SHALL exit 2 pointing to `prometheus skills enable|disable [--platform P]`.
+**Milestone:** M2
+
+#### Scenario: Disable a skill for Telegram only
+- **WHEN** the user disables `excalidraw` for `telegram` in `prometheus skills config`
+- **THEN** `skills.platform_disabled.telegram` SHALL contain `excalidraw` and CLI sessions SHALL still list it
+
+### Requirement: Bundled skill opt-out and official catalog repair
+`prometheus skills opt-out [--remove]` SHALL set `skills.include_bundled = false` (default `true`) so the bundled tier is hidden from every listing, index and slash command of the profile across upgrades, with `--remove` additionally deleting (after confirmation) ejected copies byte-identical to their bundled origin while keeping edited, hub and user skills; `prometheus skills opt-in` SHALL restore the default; `prometheus profile create --no-skills` SHALL create the profile opted out; `prometheus skills list-modified` SHALL list ejected skills whose content differs from their recorded origin digest; and `prometheus skills repair-official <name>|all [--restore] [--yes]` SHALL re-record provenance of official catalog installs that match the embedded copy and, with `--restore`, replace missing or modified copies from the embedded catalog after moving existing copies to `<profile_home>/skills/.backups/`; `prometheus-agent` SHALL remain available when opted out.
+**Milestone:** M1
+
+#### Scenario: Blank-slate profile stays blank across upgrades
+- **GIVEN** a profile created with `--no-skills`
+- **WHEN** Prometheus is upgraded to a release with new bundled skills
+- **THEN** `prometheus skills list` SHALL show no bundled skill except `prometheus-agent`
+
+### Requirement: Skill credential file passthrough
+A skill MAY declare `metadata.prometheus.credential_files` (alias `required_credential_files`) as a list of `{path, description}` where `path` is relative to the profile home and MUST NOT contain `..` or be absolute; while such a skill is loaded in a session and the user has granted `skill:<name>:credential_files` in `grants.toml`, the session's container backends SHALL mount each existing file read-only at the same relative path under the container's Prometheus home, and remote backends SHALL upload it before each command and delete it after the session; the files SHALL never be readable through the file tools or by other skills, a missing file SHALL be reported once (`credential file missing: <path>`) without failing the skill load, and an undeclared or ungranted file SHALL never be passed.
+**Milestone:** M2
+
+#### Scenario: Read-only mount into Docker
+- **GIVEN** skill `gcloud-ops` declaring `credential_files = [{path = "creds/gcp.json"}]`, the grant present, and a Docker backend
+- **WHEN** the agent runs a command after loading the skill
+- **THEN** the container SHALL see `creds/gcp.json` under its Prometheus home mounted read-only, and `read_file` on that path from the host session SHALL be refused
+
+#### Scenario: No grant, no file
+- **GIVEN** the same skill without the grant
+- **WHEN** a command runs
+- **THEN** the file SHALL NOT be mounted and the session SHALL show one notice naming the missing grant
+
+### Requirement: Curator audit ledger, single-edit rollback, purge and reports
+Every skill mutation (curator transitions and consolidation, agent `skill_manage` writes, user CLI archive, restore and purge) SHALL append an entry to the profile's `state.db` table `skill_ledger` with `id`, `at`, `actor` (`curator`, `agent`, `user`), `action` (`create`, `edit`, `patch`, `delete`, `write_file`, `remove_file`, `archive`, `restore`, `purge`, `rollback`), evidence (`absorbed_into`, session id) and per-file before/after `{path, sha256}` manifests whose contents live in the blob store; `prometheus curator ledger [--skill S] [--limit N]` SHALL list entries newest first and `prometheus curator rollback <entry-id>` SHALL restore exactly the files that entry touched (removing files it created), after recording a safety entry and failing closed if that capture fails; ledger write failure SHALL never block a mutation, and entries beyond `skills.ledger_max_bytes` (default 5242880; 0 unbounded) SHALL be compacted oldest first, always keeping the newest; `curator.archive_ttl_secs` (default 0 = never) with `prometheus curator purge [--days N] [--dry-run]` SHALL delete archived skills older than the TTL only when run explicitly, ledgering each first; every curator run SHALL write `<profile_home>/logs/curator/<UTC timestamp>/run.json` and `REPORT.md` including a rename map `old → new` for consolidations; and the review pass SHALL use the auxiliary slot `auxiliary.curator` (default: main model).
+**Milestone:** M2
+
+#### Scenario: Undo one agent edit
+- **GIVEN** ledger entry `L7` recording the agent's patch of skill `deploy`
+- **WHEN** `prometheus curator rollback L7` runs
+- **THEN** `deploy` SHALL return to its pre-patch content, no other skill file SHALL change, and a `rollback` entry SHALL be appended
+
+#### Scenario: Purge is never automatic
+- **GIVEN** `curator.archive_ttl_secs = 15552000` and an archived skill older than that
+- **WHEN** a curator pass runs
+- **THEN** the archived skill SHALL still exist until `prometheus curator purge` is run
+
+### Requirement: Bundled and official skill catalog content
+The binary SHALL embed a bundled skill tree containing at least these skills (by category): apple: `apple-notes`, `apple-reminders`, `findmy`, `imessage`; autonomous-ai-agents: `claude-code`, `codex`, `computer-use`, `prometheus-agent`; creative: `architecture-diagram`, `ascii-video`, `baoyu-infographic`, `claude-design`, `humanizer`, `manim-video`, `p5js`, `popular-web-designs`, `songwriting-and-ai-music`; devops: `sdlc-review`; email: `email-inbox-triage`, `himalaya`; media: `youtube-content`; note-taking: `obsidian`; productivity: `document-to-action-items`, `google-workspace`, `maps`, `meeting-action-items`, `microsoft-office`, `pdf`, `product-price-monitor`, `teams-meeting-pipeline`, `weekly-review-planning`; research: `arxiv`, `competitor-news-monitor`, `grounded-citations`; social-media: `xurl`; software-development: `codebase-inspection`, `dogfood`, `github`, `requesting-code-review`, `simplify-code`, `spike`, `systematic-debugging`, `test-driven-development`; web: `blocked-page-recovery`; and SHALL embed an `official` optional catalog (installable as `official/<category>/<name>`, never active until installed) containing at least the Hermes optional catalog: autonomous-ai-agents: `agent-merge-conflict-arbiter`, `antigravity-cli`, `blackbox`, `dynamic-workflow`, `grok`, `honcho`, `opencode`, `openhands`; blockchain: `evm`, `hyperliquid`, `solana`; communication: `one-three-one-rule`; creative: `ai-presenter-video`, `anatomy`, `archify`, `ascii-art`, `auteur`, `baoyu-article-illustrator`, `baoyu-comic`, `brag`, `brag-slim`, `comfyui`, `concept-diagrams`, `creative-ideation`, `design-md`, `draw-your-font`, `dream-loop`, `excalidraw`, `heartmula`, `hyperframes`, `impeccable`, `ip-as-logo`, `kanban-video-orchestrator`, `meme-generation`, `mono-color`, `pixel-art`, `pretext`, `simple-english`, `sketch`, `social-media-content-calendar`, `system-atlas`, `tldraw-offline`, `unreal-mcp`; data-science: `jupyter-notebook`; devops: `actual-setup`, `docker-management`, `prometheus-s6-container-supervision`, `inference-sh-cli`, `pinggy-tunnel`, `setup-wizard-generator`, `watchers`; dogfood: `adversarial-ux-test`; email: `agentmail`; finance: `3-statement-model`, `comps-analysis`, `dcf-model`, `excel-author`, `lbo-model`, `merger-model`, `polymarket`, `pptx-author`, `stocks`; gaming: `minecraft-modpack-server`, `pokemon-player`; health: `fitness-nutrition`, `neuroskill-bci`; mcp: `fastmcp`, `mcp-oauth-remote-gateway`, `mcporter`; media: `gif-search`, `songsee`; mlops: `accelerate`, `axolotl`, `chroma`, `dspy`, `evaluating-llms-harness`, `faiss`, `flash-attention`, `lambda-labs`, `llama-cpp`, `modal`, `nemo-curator`, `obliteratus`, `peft`, `pytorch-fsdp`, `pytorch-lightning`, `saelens`, `segment-anything-model`, `serving-llms-vllm`, `simpo`, `slime`, `tensorrt-llm`, `torchtitan`, `unsloth`; payments: `mpp-agent`, `stripe-link-cli`, `stripe-projects`; productivity: `airtable`, `box`, `canvas`, `decision-questionnaire`, `here-now`, `live-dashboard`, `memento-flashcards`, `notion`, `property-listings`, `shop`, `shopify`, `siyuan`, `telephony`; research: `bioinformatics`, `blogwatcher`, `darwinian-evolver`, `domain-intel`, `drug-discovery`, `duckduckgo-search`, `gitnexus-explorer`, `llm-wiki`, `osint-investigation`, `parallel-cli`, `qmd`, `research-paper-writing`, `rss-feeds`, `scrapling`, `searxng-search`; security: `1password`, `godmode`, `oss-forensics`, `sherlock`, `unbroker`, `web-pentest`; smart-home: `openhue`; social-media: `reddit-reading`; software-development: `ast-grep`, `code-wiki`, `grill-me`, `prometheus-skill-authoring`, `inspecting-prometheus-desktop-dom`, `node-inspect-debugger`, `pr-lens`, `python-debugpy`, `rest-graphql-debug`, `subagent-driven-development`; web-development: `cloudflare-temporary-deploy`, `har-derived-api-client`, `page-agent`, `publish-site`, `scrollcraft`; yuanbao: `yuanbao`. Hermes-specific skills SHALL be renamed (`hermes-*` → `prometheus-*`) with migration aliases, every embedded skill SHALL pass `prometheus skills lint --strict` in CI, and `prometheus skills browse --source official` SHALL list the whole official catalog.
+**Milestone:** M2
+
+#### Scenario: Official catalog is browsable offline
+- **GIVEN** a host with no network access
+- **WHEN** `prometheus skills browse --source official` runs
+- **THEN** it SHALL list the embedded official skills including `official/mlops/axolotl`
+
+#### Scenario: Hermes name alias resolves
+- **GIVEN** a migrated cron job referencing skill `hermes-agent`
+- **WHEN** the job's skills are resolved
+- **THEN** the skill SHALL resolve to `prometheus-agent`
