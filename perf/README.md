@@ -27,7 +27,8 @@ cargo xtask perf --baseline PATH          # compare with another baseline file
 
 The gate is not in `scripts/check`: wall-time samples on a busy developer
 machine are too noisy for a blocking pre-push hook. CI runs it as its own
-job on the reference runner (GitHub-hosted `ubuntu-latest`, x86_64):
+job, `perf` in `.github/workflows/ci.yml`, on the reference runner
+(GitHub-hosted `ubuntu-24.04`, x86_64):
 
 1. On every push to `main`, run `cargo xtask perf --update-baseline --baseline target/perf-main.json`
    and upload `target/perf-main.json` as the `perf-baseline` artifact.

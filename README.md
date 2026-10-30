@@ -8,7 +8,7 @@ It ships as a single signed binary (`prometheus`, alias `pmt`). Extensions run a
 
 ## Status
 
-Specification phase. The full target behavior is defined as an OpenSpec change:
+Milestone M0 (scaffolding): the Cargo workspace, the repository gates and CI exist; agent behavior starts in M1. The full target behavior is defined as an OpenSpec change:
 
 - `openspec/changes/bootstrap-prometheus-agent/proposal.md`: scope and capability list
 - `openspec/changes/bootstrap-prometheus-agent/design.md`: architecture decisions
@@ -16,25 +16,25 @@ Specification phase. The full target behavior is defined as an OpenSpec change:
 - `openspec/changes/bootstrap-prometheus-agent/tasks.md`: implementation plan by milestone
 - `docs/hermes-parity.md`: every Hermes Agent feature mapped to the Prometheus requirement that specifies it
 
-Validate locally:
+## Development
+
+The Rust workspace lives under `crates/` (toolchain pinned in `rust-toolchain.toml`). One command runs every gate CI runs (formatting, clippy, tests, `cargo deny`, `openspec validate`, generated-file freshness, the docs build and the code-health ratchet), with CI's pinned tool versions:
 
 ```sh
-npm install -g @fission-ai/openspec@1.13.2
-openspec validate --all --strict
+scripts/check                          # what CI runs on every Tier 1 target
+scripts/check --install-hook pre-push  # run it before every git push
 ```
 
-## Build
-
-The Rust workspace lives under `crates/` (toolchain pinned in `rust-toolchain.toml`):
+Other entry points:
 
 ```sh
 cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo deny check
-scripts/dev-install            # installs prometheus and its pmt alias into ~/.cargo/bin
+cargo xtask gen                # regenerate schema/ and docs/reference/
 cargo xtask perf               # startup, memory and size budgets (perf/README.md)
+scripts/dev-install            # installs prometheus and its pmt alias into ~/.cargo/bin
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for tool setup and the code-health rules, and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## License
 
