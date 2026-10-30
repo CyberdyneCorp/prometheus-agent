@@ -14,6 +14,7 @@
 
 mod acl;
 mod args;
+pub(crate) mod console;
 mod container;
 pub(crate) mod launch;
 

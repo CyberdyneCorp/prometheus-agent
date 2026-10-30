@@ -8,6 +8,7 @@
 - [Sessions](guide/sessions.md)
 - [Logs and trajectories](guide/observability.md)
 - [OS sandbox and terminal backends](guide/sandbox.md)
+- [The local terminal](guide/terminal.md)
 
 # Reference
 

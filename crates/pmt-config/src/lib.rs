@@ -22,6 +22,7 @@ pub mod layers;
 pub mod layout;
 pub mod migrate;
 mod parse;
+pub mod passthrough;
 pub mod profile_id;
 pub mod profiles;
 pub mod reference;

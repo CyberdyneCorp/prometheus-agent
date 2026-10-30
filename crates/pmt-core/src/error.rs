@@ -414,6 +414,12 @@ error_codes! {
     /// The selected terminal backend ships in a later milestone.
     TERMINAL_BACKEND_UNAVAILABLE = ("terminal.backend_unavailable", Unavailable,
         "The selected terminal backend (`container`, `ssh`) is reserved but not available in this build.");
+    /// `terminal.env_passthrough` (or `terminal.container.env`) names a secret.
+    TERMINAL_ENV_PASSTHROUGH_SECRET = ("terminal.env_passthrough_secret", Config,
+        "`terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead.");
+    /// The shell the local terminal backend needs is not installed.
+    TERMINAL_SHELL_NOT_FOUND = ("terminal.shell_not_found", Unavailable,
+        "The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

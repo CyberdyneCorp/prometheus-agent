@@ -4,13 +4,19 @@
 //! is secrets-only).
 //!
 //! Only the home override, the log filter, secrets and the OS directories
-//! needed to find the default home are kept. Every other `PMT_*` or
+//! needed to find the default home are read. Every other `PMT_*` or
 //! `PROMETHEUS_*` variable is recorded as ignored so startup can WARN and
 //! `prometheus doctor` can report it; it never changes behaviour, because
 //! behaviour lives in typed configuration.
+//!
+//! The remaining variables (neither secrets nor Prometheus-owned) are kept
+//! verbatim as [`LaunchEnv::inherited`] values. Prometheus never reads them
+//! for its own behaviour; they are the only source a child environment may
+//! copy from (its fixed allowlist and `terminal.env_passthrough`), so a
+//! child never sees a secret or the parent's whole environment.
 
 use std::collections::BTreeMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -102,6 +108,8 @@ pub struct LaunchEnv {
     editor: Option<String>,
     /// Keyed by variable name (`PMT_SECRET_X` or a provider-native name).
     secrets: BTreeMap<String, SecretString>,
+    /// Neither secret nor Prometheus-owned: forwardable to children only.
+    inherited: BTreeMap<String, OsString>,
     ignored: Vec<IgnoredVar>,
 }
 
@@ -139,7 +147,11 @@ impl LaunchEnv {
         let mut editor = None;
         for (name, value) in vars {
             let name = name.to_string_lossy().into_owned();
-            match classify(&name, policy) {
+            let class = classify(&name, policy);
+            if class.is_inheritable() {
+                env.inherited.insert(name.clone(), value.clone());
+            }
+            match class {
                 Var::Home => env.home = non_blank(value).map(PathBuf::from),
                 Var::UserHome => env.user_home = non_blank(value).map(PathBuf::from),
                 Var::LocalAppData => env.local_app_data = non_blank(value).map(PathBuf::from),
@@ -224,6 +236,32 @@ impl LaunchEnv {
         self.secrets.iter().map(|(k, v)| (k.as_str(), v))
     }
 
+    /// The launch value of `name` when it is neither a secret nor a
+    /// Prometheus-owned variable (`PMT_*`, `PROMETHEUS_*`, the log filters).
+    /// Only child-environment builders use it. Names are matched exactly,
+    /// except on Windows where environment names are case-insensitive.
+    #[must_use]
+    pub fn inherited(&self, name: &str) -> Option<&OsStr> {
+        if let Some(value) = self.inherited.get(name) {
+            return Some(value);
+        }
+        if cfg!(windows) {
+            return self
+                .inherited
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| v.as_os_str());
+        }
+        None
+    }
+
+    /// Every [`LaunchEnv::inherited`] variable, sorted by name.
+    pub fn inherited_vars(&self) -> impl Iterator<Item = (&str, &OsStr)> {
+        self.inherited
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_os_str()))
+    }
+
     /// Variables that were set but ignored, sorted by name.
     #[must_use]
     pub fn ignored(&self) -> &[IgnoredVar] {
@@ -242,6 +280,17 @@ enum Var {
     Secret,
     Ignored(Option<String>),
     Other,
+}
+
+impl Var {
+    /// Whether a child environment may copy the variable: everything but
+    /// secrets and Prometheus' own variables.
+    fn is_inheritable(&self) -> bool {
+        matches!(
+            self,
+            Self::UserHome | Self::LocalAppData | Self::Visual | Self::Editor | Self::Other
+        )
+    }
 }
 
 fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
@@ -325,6 +374,26 @@ mod tests {
             with.ignored()[0].doctor_message(),
             "ignored environment variable PMT_FOO (configuration lives in config.toml)"
         );
+    }
+
+    #[test]
+    fn children_may_inherit_only_non_secret_foreign_variables() {
+        let env = LaunchEnv::from_vars(
+            vars(&[
+                ("PATH", "/usr/bin"),
+                ("JAVA_HOME", "/opt/jdk"),
+                ("OPENAI_API_KEY", "sk-native"),
+                ("PMT_SECRET_TOKEN", "tok-123456"),
+                ("PMT_FOO", "bar"),
+                ("PROMETHEUS_HOME", "/srv/pmt"),
+                ("RUST_LOG", "debug"),
+            ]),
+            &POLICY,
+        );
+        let names: Vec<&str> = env.inherited_vars().map(|(name, _)| name).collect();
+        assert_eq!(names, ["JAVA_HOME", "PATH"]);
+        assert_eq!(env.inherited("JAVA_HOME"), Some("/opt/jdk".as_ref()));
+        assert_eq!(env.inherited("OPENAI_API_KEY"), None);
     }
 
     #[test]

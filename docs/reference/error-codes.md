@@ -137,3 +137,5 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `sandbox.setup` | `sandbox` | 77 | The OS sandbox profile for a child process could not be built or applied; the child was not started. |
 | `terminal.unknown_backend` | `config` | 78 | `terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends. |
 | `terminal.backend_unavailable` | `unavailable` | 69 | The selected terminal backend (`container`, `ssh`) is reserved but not available in this build. |
+| `terminal.env_passthrough_secret` | `config` | 78 | `terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead. |
+| `terminal.shell_not_found` | `unavailable` | 69 | The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable. |

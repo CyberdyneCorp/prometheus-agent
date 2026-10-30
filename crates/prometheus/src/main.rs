@@ -22,6 +22,8 @@ fn main() -> ExitCode {
     if let Some(code) = pmt_sandbox::launcher::run_if_requested() {
         std::process::exit(code);
     }
+    // UTF-8 console (and child consoles) on Windows until main returns.
+    let _console = pmt_sandbox::console::Utf8Console::enable();
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(err) => return usage_failure(&err),

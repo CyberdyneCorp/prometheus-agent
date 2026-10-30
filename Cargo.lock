@@ -1557,11 +1557,19 @@ dependencies = [
 name = "pmt-tools"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "glob",
+ "nix",
  "pmt-config",
  "pmt-core",
+ "pmt-net",
+ "pmt-sandbox",
+ "serde",
+ "serde_json",
  "tempfile",
+ "tokio",
  "tracing",
+ "ulid",
 ]
 
 [[package]]

@@ -140,6 +140,13 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test -p pmt-sandbox --locked --target "${{ matrix.target }}"
 
+      # The local terminal backend's shell resolution (execution-environments,
+      # Windows local shell): with only the WSL launcher on PATH it falls
+      # back to PowerShell, and commands run through the fallback shell.
+      - name: Windows terminal tests
+        if: runner.os == 'Windows'
+        run: cargo test -p pmt-tools --locked --target "${{ matrix.target }}"
+
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04

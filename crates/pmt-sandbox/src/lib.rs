@@ -9,6 +9,7 @@
 //!   [`std::process::Command`]s: Landlock + seccomp on Linux, a Seatbelt
 //!   profile on macOS, an `AppContainer` in a Job Object on Windows.
 //! - [`backend`] is the typed terminal backend registry and readiness check.
+//! - [`console`] switches a Windows console to UTF-8 for the CLI's life.
 //!
 //! On Windows a confined child is started by a small launcher process (the
 //! standard library cannot create `AppContainer` processes); executables
@@ -18,6 +19,7 @@
 pub mod backend;
 #[cfg(any(target_os = "linux", windows))]
 mod carve;
+pub mod console;
 pub mod launcher;
 mod locations;
 pub mod policy;

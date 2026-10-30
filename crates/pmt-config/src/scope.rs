@@ -67,6 +67,7 @@ impl ProfileScope {
             Launch::Other => None,
         };
         let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env);
+        crate::passthrough::check_with_secrets(&config.config().terminal, &secrets)?;
         Ok(Self {
             inner: Arc::new(Inner {
                 profile,
@@ -218,6 +219,38 @@ mod tests {
         assert_eq!(scope.config().agent.max_iterations, 500);
         let reopened = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
         assert_eq!(reopened.config().agent.max_iterations, 3);
+    }
+
+    #[test]
+    fn a_secret_listed_for_passthrough_fails_validation() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = Home::open(&temp.path().join("h")).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        let open = |list: &str| {
+            std::fs::write(
+                profile.path().join("config.toml"),
+                format!("[terminal]\nenv_passthrough = [{list}]\n"),
+            )
+            .unwrap();
+            ProfileScope::open(
+                profile.clone(),
+                &Overrides::default(),
+                Launch::Profile(&launch_env()),
+            )
+        };
+        let err = open("\"OPENAI_API_KEY\"").unwrap_err();
+        assert_eq!(err.exit_code(), 78);
+        assert_eq!(
+            err.message(),
+            "terminal.env_passthrough: 'OPENAI_API_KEY' is a secret; grant it with secrets.read instead"
+        );
+        // A name only the secrets store knows is refused as well.
+        let store = crate::SecretStore::open(&profile, crate::schema::SecretsBackend::File);
+        store
+            .set("ACME", &pmt_core::secret::SecretString::new("value-123456"))
+            .unwrap();
+        assert!(open("\"ACME\"").is_err());
+        assert!(open("\"JAVA_HOME\"").is_ok());
     }
 
     #[test]
