@@ -124,7 +124,10 @@ fn subscription_and_cached_calls_are_recorded_at_zero_with_their_status() {
         })
         .unwrap();
     assert_eq!(cached.cost_usd, Some(0.0));
-    assert!(store.usage_events(session).unwrap()[1].cache_hit);
+    let rows = store.usage_events(session).unwrap();
+    let stored = rows.iter().find(|r| r.call_id == cached.call_id).unwrap();
+    assert!(stored.cache_hit);
+    assert_eq!(stored.cost_usd, Some(0.0));
 }
 
 #[test]
