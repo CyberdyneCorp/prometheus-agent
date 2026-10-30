@@ -156,12 +156,22 @@ jobs:
           if-no-files-found: error
 
       # Without an artifact from main the absolute budgets still apply, and
-      # the checked-in perf/baseline.json is the fallback.
+      # the checked-in perf/baseline.json is the fallback. A pull request
+      # that changes perf/reference.json re-baselines deliberately (the new
+      # reference-runner numbers are reviewed in its diff) and is compared
+      # with that file instead of main.
       - name: Fetch the main-branch baseline
         if: github.event_name != 'push'
         env:
           GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          if [ -n "$BASE_REF" ] && git fetch --depth=1 origin "$BASE_REF" &&
+            ! git diff --quiet FETCH_HEAD HEAD -- perf/reference.json; then
+            echo "perf/reference.json changed in this pull request; comparing with it"
+            echo "PERF_BASELINE=perf/reference.json" >>"$GITHUB_ENV"
+            exit 0
+          fi
           run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
             --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
           if [ -n "$run_id" ] &&

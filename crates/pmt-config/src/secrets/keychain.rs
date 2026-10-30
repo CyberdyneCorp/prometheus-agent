@@ -42,7 +42,8 @@ pub trait Keychain: Send + Sync + std::fmt::Debug {
 }
 
 /// The platform keychain: macOS Keychain, Windows Credential Manager, or
-/// the Secret Service (over libdbus) on other Unix systems.
+/// the Secret Service (over libdbus) on other Unix systems except Android,
+/// where the keychain backend is unavailable.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OsKeychain;
 
@@ -58,9 +59,10 @@ fn native_store() -> keyring_core::Result<Store> {
     let store: Store = apple_native_keyring_store::keychain::Store::new()?;
     #[cfg(windows)]
     let store: Store = windows_native_keyring_store::Store::new()?;
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))]
     let store: Store = dbus_secret_service_keyring_store::Store::new()?;
-    #[cfg(not(any(unix, windows)))]
+    // Android has no Secret Service (and libdbus does not build for it).
+    #[cfg(any(target_os = "android", not(any(unix, windows))))]
     let store: Store = return Err(keyring_core::Error::NotSupportedByStore(
         "no OS keychain on this platform".to_owned(),
     ));

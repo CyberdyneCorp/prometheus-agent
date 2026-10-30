@@ -51,6 +51,14 @@ kind of machine:
    `main` and run `scripts/check --perf --baseline target/perf-main.json`; a
    non-zero exit fails the job. Without an artifact the absolute budgets
    still apply, and the checked-in `perf/baseline.json` is used as a fallback.
+3. A pull request whose growth is deliberate re-baselines in the open: it
+   commits the reference runner's measurements (the `perf (linux-x86_64):`
+   line of its own perf job) to `perf/reference.json`, and while the pull
+   request changes that file the job compares with it instead of `main`.
+   The new numbers are part of the reviewed diff; the absolute budgets
+   always apply. The M1 branch did this once (0.62 -> 8.49 MiB binary,
+   2.49 -> 4.28 MiB peak RSS: SQLite, the HTTP client, the keychain and
+   the async runtime), measured by CI run 41021271519.
 
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.

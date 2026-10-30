@@ -6,7 +6,9 @@ use std::io::{Seek, SeekFrom, Write};
 use std::time::{Duration, Instant};
 
 use pmt_core::doctor::Status;
-use pmt_store::{NewMessage, Role, SearchOptions, Store, TitleSource, Visibility};
+use pmt_store::{
+    NewMessage, NewSession, Role, SearchOptions, Source, Store, TitleSource, Visibility,
+};
 
 use crate::support::{TestHome, raw, session};
 
@@ -154,6 +156,74 @@ fn healthy_store_is_not_quarantined() {
     let store = home.store("default");
     assert!(store.quarantine().is_none());
     assert!(!home.scope("default").path("quarantine").exists());
+}
+
+#[test]
+fn corruption_found_by_a_write_stops_writes_and_flags_the_file() {
+    let original = TestHome::new();
+    filled(&original, 30);
+    let home = original.copied();
+    let store = home.store("default");
+    assert!(store.quarantine().is_none(), "healthy at open");
+    let sessions: Vec<String> = raw(&home.database("default"))
+        .prepare("SELECT id FROM sessions")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    damage_page(&home, message_page(&home));
+
+    // Deleting every session reads (and trips over) the damaged page.
+    let err = sessions
+        .iter()
+        .find_map(|id| store.delete_session(id.parse().unwrap(), false).err())
+        .expect("a deletion hit the damaged page");
+    assert_eq!(err.code().code, "store.corrupt", "{err}");
+    let marker = home.scope("default").path("state.db.corrupt");
+    assert!(marker.exists(), "the file is flagged for the next open");
+    let err = store
+        .create_session(&NewSession::new(Source::Cli))
+        .unwrap_err();
+    assert_eq!(err.code().code, "store.corrupt", "writes stop");
+    drop(store);
+
+    let reopened = home.store("default");
+    let report = reopened.quarantine().expect("quarantined at the next open");
+    assert!(
+        report.reason.contains("structural corruption"),
+        "{}",
+        report.reason
+    );
+    assert!(report.salvaged_rows() >= 30 * 20 / 2, "{report:?}");
+    assert!(!marker.exists(), "the flag is consumed");
+    session(&reopened);
+}
+
+/// The flag alone quarantines a file that passes `quick_check`.
+#[test]
+fn flagged_file_is_quarantined_even_when_quick_check_passes() {
+    let original = TestHome::new();
+    filled(&original, 2);
+    let home = original.copied();
+    let marker = home.scope("default").path("state.db.corrupt");
+    std::fs::write(&marker, b"").unwrap();
+
+    let store = home.store("default");
+
+    let report = store.quarantine().expect("quarantined");
+    assert!(
+        report.reason.contains("structural corruption"),
+        "{}",
+        report.reason
+    );
+    assert_eq!(report.lost_rows(), 0, "{report:?}");
+    assert_eq!(report.salvaged["messages"], 2 * 20);
+    assert!(!marker.exists(), "the flag is consumed");
+    let stored = raw(&home.database("default"))
+        .query_row("SELECT count(*) FROM messages", [], |r| r.get::<_, i64>(0))
+        .unwrap();
+    assert_eq!(stored, 2 * 20, "every row salvaged into the fresh store");
 }
 
 // Windows cannot rename over a file SQLite holds open; there a restore can

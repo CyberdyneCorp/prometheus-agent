@@ -293,6 +293,57 @@ fn compression_chain_is_pruned_only_as_a_whole() {
     assert_eq!(pruned, chain);
 }
 
+/// Deleting a parent cascades to its `delegate` children, so retention must
+/// not delete an old parent whose delegate child is not itself prunable.
+#[test]
+fn retention_keeps_an_old_parent_whose_delegate_child_is_not_prunable() {
+    let home = TestHome::new();
+    let store = home.store("default");
+    let month = Duration::from_hours(30 * 24);
+    let pinned_parent = session(&store);
+    let pinned_child = child(&store, pinned_parent.id, LineageKind::Delegate);
+    let live_parent = session(&store);
+    let live_child = child(&store, live_parent.id, LineageKind::Delegate);
+    for id in [pinned_parent.id, pinned_child, live_parent.id] {
+        age(&home, id, 100);
+    }
+    store.set_pinned(pinned_child, true).unwrap();
+
+    assert!(store.prune(month, true).unwrap().is_empty(), "dry run");
+    assert!(store.prune(month, false).unwrap().is_empty());
+    for id in [pinned_parent.id, pinned_child, live_parent.id, live_child] {
+        store.session(id).unwrap();
+    }
+}
+
+#[test]
+fn dry_run_lists_exactly_what_prune_deletes() {
+    let home = TestHome::new();
+    let store = home.store("default");
+    let month = Duration::from_hours(30 * 24);
+    let parent = session(&store);
+    let delegate = child(&store, parent.id, LineageKind::Delegate);
+    let nested = child(&store, delegate, LineageKind::Delegate);
+    let fork = child(&store, parent.id, LineageKind::Fork);
+    for id in [parent.id, delegate, nested] {
+        age(&home, id, 100);
+    }
+
+    let mut would = store.prune(month, true).unwrap();
+    let mut pruned = store.prune(month, false).unwrap();
+    would.sort();
+    pruned.sort();
+    let mut expected = vec![parent.id, delegate, nested];
+    expected.sort();
+    assert_eq!(would, expected, "each session listed once");
+    assert_eq!(pruned, expected);
+    let kept = store.session(fork).unwrap();
+    assert!(
+        kept.parent_deleted,
+        "the recent fork is re-parented, not pruned"
+    );
+}
+
 #[test]
 fn idle_lineage_tips_are_auto_archived_and_resume_clears_it() {
     let home = TestHome::new();

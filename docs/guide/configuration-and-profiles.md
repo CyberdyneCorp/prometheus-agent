@@ -125,9 +125,11 @@ with stdout redirected it refuses (exit 77).
 A profile resolves a secret from, in order:
 
 1. its secrets store: `<profile>/secrets.toml` (mode `0600`), or the OS
-   keychain with `secrets.backend = "keychain"` (service `prometheus`);
-   `prometheus secrets migrate --to keychain` moves every secret and
-   switches the backend;
+   keychain with `secrets.backend = "keychain"` (service `prometheus`;
+   macOS Keychain, Windows Credential Manager or the Secret Service on
+   Linux and other Unix systems; Android has no keychain backend, so keep
+   `file` there); `prometheus secrets migrate --to keychain` moves every
+   secret and switches the backend;
 2. only for the profile the process was started for: the environment
    variables `PMT_SECRET_<NAME>`, then the provider's own variable (for
    example `OPENAI_API_KEY`).

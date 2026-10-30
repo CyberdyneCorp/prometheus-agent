@@ -4,7 +4,8 @@
 //! A session is prunable when it ended, was inactive for longer than the
 //! retention period, is not pinned and has no live lease. A compression
 //! chain (a session and its compression ancestors and continuations) is
-//! pruned only as a whole, when every member is prunable. Maintenance runs
+//! pruned only as a whole, together with the `delegate` children deletion
+//! cascades to, and only when every one of those sessions is prunable. Maintenance runs
 //! the retention prune, the auto-archive of idle lineage tips and the blob
 //! collector at most once per 24 hours.
 
@@ -56,8 +57,8 @@ fn candidates(conn: &Connection, cutoff: i64) -> Result<HashSet<String>, Error> 
     rows.collect::<Result<_, _>>().map_err(sql)
 }
 
-/// The compression chain `id` belongs to, its first session first.
-fn chain(conn: &Connection, id: &str) -> Result<Vec<String>, Error> {
+/// The first session of the compression chain `id` belongs to.
+fn chain_head(conn: &Connection, id: &str) -> Result<String, Error> {
     let mut first = id.to_owned();
     while let Some(parent) = conn
         .query_row(
@@ -71,23 +72,7 @@ fn chain(conn: &Connection, id: &str) -> Result<Vec<String>, Error> {
     {
         first = parent;
     }
-    let mut members = vec![first.clone()];
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT id FROM sessions WHERE parent_session_id = ?1 AND lineage_kind = 'compression'",
-        )
-        .map_err(sql)?;
-    let mut i = 0;
-    while i < members.len() {
-        let next = stmt
-            .query_map([&members[i]], |row| row.get::<_, String>(0))
-            .map_err(sql)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(sql)?;
-        members.extend(next);
-        i += 1;
-    }
-    Ok(members)
+    Ok(first)
 }
 
 fn has_live_lease(conn: &Connection, id: &str) -> Result<bool, Error> {
@@ -100,42 +85,61 @@ fn has_live_lease(conn: &Connection, id: &str) -> Result<bool, Error> {
     Ok(false)
 }
 
-/// Whole chains of prunable sessions, each listed first-session first.
-fn prunable_chains(conn: &Connection, cutoff: i64) -> Result<Vec<Vec<String>>, Error> {
-    let eligible = candidates(conn, cutoff)?;
-    let mut seen = BTreeSet::new();
-    let mut chains = Vec::new();
-    let mut ordered: Vec<&String> = eligible.iter().collect();
-    ordered.sort();
-    for id in ordered {
-        if seen.contains(id) {
-            continue;
-        }
-        let members = chain(conn, id)?;
-        seen.extend(members.iter().cloned());
-        if !members.iter().all(|m| eligible.contains(m)) {
-            continue;
-        }
-        let mut leased = false;
-        for member in &members {
-            leased |= has_live_lease(conn, member)?;
-        }
-        if !leased {
-            chains.push(members);
-        }
-    }
-    Ok(chains)
+/// One deletion retention may run: a chain head with everything its
+/// deletion removes (`doomed`, head first) and the children it re-parents.
+struct Plan {
+    doomed: Vec<String>,
+    kept: Vec<String>,
 }
 
-/// Deletes one chain (its first session with its whole compression
-/// lineage); a session in use is skipped, not an error.
-/// Sessions a prune deleted and the blob hashes they referenced.
-type PrunedChain = (Vec<String>, BTreeSet<String>);
+/// The deletions retention runs. Deleting a chain head cascades to its
+/// whole compression chain and to `delegate` children (and theirs), so a
+/// chain is pruned only when every session that cascade removes is itself
+/// prunable and unleased; otherwise it is left whole. A plan another plan
+/// already contains (a prunable delegate child of a prunable parent) is
+/// dropped, so dry run and prune list each session once.
+fn prunable_plans(conn: &Connection, cutoff: i64) -> Result<Vec<Plan>, Error> {
+    let eligible = candidates(conn, cutoff)?;
+    let mut heads = BTreeSet::new();
+    for id in &eligible {
+        heads.insert(chain_head(conn, id)?);
+    }
+    let mut plans = Vec::new();
+    for head in heads {
+        let (doomed, kept) = delete::plan(conn, SessionId::parse(&head)?, true)?;
+        if all_prunable(conn, &eligible, &doomed)? {
+            plans.push(Plan { doomed, kept });
+        }
+    }
+    let nested: HashSet<String> = plans
+        .iter()
+        .flat_map(|plan| plan.doomed[1..].iter().cloned())
+        .collect();
+    plans.retain(|plan| !nested.contains(&plan.doomed[0]));
+    Ok(plans)
+}
 
-fn prune_chain(tx: &Transaction<'_>, first: &str) -> Result<Option<PrunedChain>, Error> {
-    let (doomed, kept) = delete::plan(tx, SessionId::parse(first)?, true)?;
-    match delete::delete_planned(tx, &doomed, &kept) {
-        Ok(blobs) => Ok(Some((doomed, blobs))),
+fn all_prunable(
+    conn: &Connection,
+    eligible: &HashSet<String>,
+    ids: &[String],
+) -> Result<bool, Error> {
+    for id in ids {
+        if !eligible.contains(id) || has_live_lease(conn, id)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Sessions a prune deleted and the blob hashes they referenced.
+type PrunedPlan = (Vec<String>, BTreeSet<String>);
+
+/// Runs one plan; a session that became busy since planning skips the
+/// plan, not the prune.
+fn prune_plan(tx: &Transaction<'_>, plan: Plan) -> Result<Option<PrunedPlan>, Error> {
+    match delete::delete_planned(tx, &plan.doomed, &plan.kept) {
+        Ok(blobs) => Ok(Some((plan.doomed, blobs))),
         Err(e) if e.code().code == pmt_core::error::codes::SESSION_IN_USE.code => Ok(None),
         Err(e) => Err(e),
     }
@@ -152,19 +156,19 @@ impl Store {
     pub fn prune(&self, older_than: Duration, dry_run: bool) -> Result<Vec<SessionId>, Error> {
         let cutoff = now_ms().saturating_sub(ms(older_than));
         if dry_run {
-            let chains = self.read(|conn| prunable_chains(conn, cutoff))?;
-            return chains
-                .into_iter()
-                .flatten()
-                .map(|id| SessionId::parse(&id))
+            let plans = self.read(|conn| prunable_plans(conn, cutoff))?;
+            return plans
+                .iter()
+                .flat_map(|plan| &plan.doomed)
+                .map(|id| SessionId::parse(id))
                 .collect();
         }
         let started = SystemTime::now();
         let (deleted, blobs) = self.write(|tx| {
             let mut deleted = Vec::new();
             let mut blobs = BTreeSet::new();
-            for members in prunable_chains(tx, cutoff)? {
-                if let Some((doomed, found)) = prune_chain(tx, &members[0])? {
+            for plan in prunable_plans(tx, cutoff)? {
+                if let Some((doomed, found)) = prune_plan(tx, plan)? {
                     deleted.extend(doomed);
                     blobs.extend(found);
                 }
