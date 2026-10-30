@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "xtask"]
 default-members = ["crates/*"]
 
 [workspace.package]
@@ -13,6 +13,12 @@ publish = false
 repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 
 [workspace.dependencies]
+pmt-config = { path = "crates/pmt-config" }
+pmt-core = { path = "crates/pmt-core" }
+prometheus = { path = "crates/prometheus" }
+schemars = "1.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

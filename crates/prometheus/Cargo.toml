@@ -7,6 +7,9 @@ rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "prometheus"
 path = "src/main.rs"

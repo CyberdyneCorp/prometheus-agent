@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prometheus config.toml",
+  "description": "Root of a profile's `config.toml`.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "description": "Version of this file's schema; older files are migrated forward.",
+      "type": "integer",
+      "format": "uint32",
+      "default": 1,
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}
