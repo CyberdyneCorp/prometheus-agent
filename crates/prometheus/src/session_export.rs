@@ -13,6 +13,8 @@ use std::io::Write;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_core::secret::Redactor;
+use pmt_obs::trajectory::Event;
+use pmt_obs::trajectory::payload::{MessageText, Reasoning, ToolCall, ToolResult};
 use pmt_store::{Message, Role, Session, Store, UsageEvent, Visibility};
 use serde_json::{Value, json};
 
@@ -321,44 +323,88 @@ fn prompts(
     })
 }
 
-/// Trajectory events for one stored message.
+/// Trajectory events for one stored message, with the grammar's typed
+/// payloads (so `trajectory show` renders an exported trace).
 fn trace_events(m: &Message) -> Vec<(&'static str, Value)> {
+    let id = Some(m.id.to_string());
+    let text = |text: &str| {
+        Event::UserMessage(MessageText {
+            message_id: id.clone(),
+            text: text.to_owned(),
+        })
+        .payload()
+    };
     let mut events = Vec::new();
     match m.role {
         Role::User => events.push((
             "user.message",
-            json!({"message_id": m.id.to_string(), "text": m.content}),
+            text(m.content.as_deref().unwrap_or_default()),
         )),
         Role::Assistant => {
-            if let Some(reasoning) = &m.reasoning {
+            if let Some(items) = &m.reasoning {
+                let reasoning = Reasoning {
+                    message_id: id.clone(),
+                    text: None,
+                    items: Some(items.clone()),
+                };
                 events.push((
                     "assistant.reasoning",
-                    json!({"message_id": m.id.to_string(), "items": reasoning}),
+                    Event::AssistantReasoning(reasoning).payload(),
                 ));
             }
             events.push((
                 "assistant.message",
-                json!({"message_id": m.id.to_string(), "text": m.content}),
+                text(m.content.as_deref().unwrap_or_default()),
             ));
-            for call in m
+            let calls = m
                 .tool_calls
                 .iter()
-                .flat_map(|c| c.as_array().cloned().unwrap_or_default())
-            {
-                events.push((
-                    "tool.call",
-                    json!({"message_id": m.id.to_string(), "call": call}),
-                ));
-            }
+                .flat_map(|c| c.as_array().cloned().unwrap_or_default());
+            events.extend(
+                calls.map(|call| ("tool.call", Event::ToolCall(tool_call(&call)).payload())),
+            );
         }
-        Role::Tool => events.push((
-            "tool.result",
-            json!({"message_id": m.id.to_string(), "call_id": m.tool_call_id, "tool": m.tool_name,
-                   "ok": true, "duration_ms": null, "output": m.content}),
-        )),
+        Role::Tool => {
+            let result = ToolResult {
+                call_id: m.tool_call_id.clone().unwrap_or_default(),
+                tool: m.tool_name.clone().unwrap_or_default(),
+                ok: true,
+                duration_ms: None,
+                output: m.content.clone(),
+                error: None,
+            };
+            events.push(("tool.result", Event::ToolResult(result).payload()));
+        }
         Role::System => {}
     }
     events
+}
+
+/// A stored tool call in either the flat (`{id, name, arguments}`) or the
+/// OpenAI (`{id, function: {name, arguments}}`) shape; JSON-string
+/// arguments are parsed when they are valid JSON.
+fn tool_call(call: &Value) -> ToolCall {
+    let function = call.get("function").unwrap_or(call);
+    let field = |key: &str| function.get(key).or_else(|| call.get(key));
+    let arguments = match field("arguments") {
+        Some(Value::String(raw)) => {
+            serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.clone()))
+        }
+        Some(other) => other.clone(),
+        None => Value::Object(serde_json::Map::new()),
+    };
+    ToolCall {
+        call_id: call
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        tool: field("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        arguments,
+    }
 }
 
 fn trace(
@@ -383,7 +429,7 @@ fn trace(
             turn_id: None,
             span_id: span,
             parent_span_id: None,
-            kind,
+            kind: kind.to_owned(),
             payload,
         };
         sink.line(&serde_json::to_value(line).unwrap_or(Value::Null))

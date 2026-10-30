@@ -60,15 +60,18 @@ pub const CREDENTIAL_PREFIXES: &[&str] = &[
 /// are 20+ characters, while shorter matches (`sk-learn`) are words.
 const MIN_PATTERN_LEN: usize = 16;
 
-/// Replaces known secret values in text with [`Redactor::MARKER`].
+/// Replaces known secret values in text with a marker: [`Redactor::MARKER`]
+/// for anonymous values, `[REDACTED:<NAME>]` for named ones
+/// ([`Redactor::named`]).
 #[derive(Debug, Clone, Default)]
 pub struct Redactor {
-    /// Longest first, so a secret containing another is replaced whole.
-    values: Vec<SecretString>,
+    /// `(value, marker)`, longest value first, so a secret containing
+    /// another is replaced whole.
+    values: Vec<(SecretString, String)>,
 }
 
 impl Redactor {
-    /// What a redacted value is replaced with.
+    /// What an anonymous value or a credential-shaped token is replaced with.
     pub const MARKER: &'static str = "[REDACTED]";
 
     /// Values shorter than this are not redacted: replacing every occurrence
@@ -76,25 +79,62 @@ impl Redactor {
     /// nothing a real credential looks like.
     pub const MIN_LEN: usize = 6;
 
-    /// A redactor for the given secret values.
+    /// A redactor for the given anonymous secret values.
     #[must_use]
     pub fn new<'a>(secrets: impl IntoIterator<Item = &'a SecretString>) -> Self {
-        let mut values: Vec<SecretString> = secrets
-            .into_iter()
-            .filter(|s| s.expose().len() >= Self::MIN_LEN)
-            .cloned()
+        Self::build(
+            secrets
+                .into_iter()
+                .map(|s| (s.clone(), Self::MARKER.to_owned())),
+        )
+    }
+
+    /// A redactor that replaces each value with `[REDACTED:<name>]`
+    /// (spec: security-boundaries, Known-secret redaction everywhere).
+    #[must_use]
+    pub fn named<'a>(secrets: impl IntoIterator<Item = (&'a str, &'a SecretString)>) -> Self {
+        Self::build(
+            secrets
+                .into_iter()
+                .map(|(name, s)| (s.clone(), format!("[REDACTED:{name}]"))),
+        )
+    }
+
+    fn build(values: impl Iterator<Item = (SecretString, String)>) -> Self {
+        let mut values: Vec<(SecretString, String)> = values
+            .filter(|(s, _)| s.expose().len() >= Self::MIN_LEN)
             .collect();
-        values.sort_by_key(|s| std::cmp::Reverse(s.expose().len()));
-        values.dedup();
+        values.sort_by(|a, b| {
+            b.0.expose()
+                .len()
+                .cmp(&a.0.expose().len())
+                .then_with(|| a.1.cmp(&b.1))
+        });
+        values.dedup_by(|a, b| a.0 == b.0);
         Self { values }
+    }
+
+    /// This redactor plus every value of `other` (for example the launch
+    /// environment's values plus a profile's store).
+    #[must_use]
+    pub fn merged(&self, other: &Self) -> Self {
+        Self::build(self.values.iter().chain(&other.values).cloned())
+    }
+
+    /// Whether no value is known (pattern redaction still applies).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
     /// `text` with every known secret value replaced.
     #[must_use]
     pub fn redact(&self, text: &str) -> String {
-        self.values.iter().fold(text.to_owned(), |acc, secret| {
-            acc.replace(secret.expose(), Self::MARKER)
-        })
+        self.values
+            .iter()
+            .fold(text.to_owned(), |acc, (secret, marker)| {
+                acc.replace(secret.expose(), marker)
+            })
     }
 
     /// `text` with known values and every credential-shaped token (a
@@ -189,6 +229,21 @@ mod tests {
         );
         let pem = "a -----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY----- b";
         assert_eq!(redactor.redact_all(pem), "a [REDACTED] b");
+    }
+
+    #[test]
+    fn named_values_carry_their_name_and_merge_keeps_the_longest_first() {
+        let token = SecretString::new("ghp_value_of_token");
+        let named = Redactor::named([("GITHUB_TOKEN", &token)]);
+        assert_eq!(
+            named.redact("echo ghp_value_of_token"),
+            "echo [REDACTED:GITHUB_TOKEN]"
+        );
+        let merged = Redactor::new([&SecretString::new("value_of")]).merged(&named);
+        assert_eq!(
+            merged.redact("ghp_value_of_token value_of"),
+            "[REDACTED:GITHUB_TOKEN] [REDACTED]"
+        );
     }
 
     #[test]

@@ -29,6 +29,17 @@ pub fn new_file_options() -> OpenOptions {
     options
 }
 
+/// Open options that append to `path`, creating it 0600 when missing (an
+/// existing file keeps its mode; callers tighten it when they care).
+#[must_use]
+pub fn append_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options.append(true).create(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+}
+
 /// Replaces `path` with `bytes` atomically: readers see the old or the new
 /// contents, never a torn file. The data goes to a 0600 sibling temp file
 /// that is synced and then renamed over `path`.

@@ -147,7 +147,8 @@ fn newer_store_opens_read_only_and_refuses_writes() {
         .unwrap_err();
     assert_eq!(err.code().code, "store.schema_too_new");
     assert!(err.message().contains("version 7"), "{err}");
-    assert!(err.message().contains("version 2"), "{err}");
+    let ours = format!("version {}", pmt_store::SCHEMA_VERSION);
+    assert!(err.message().contains(&ours), "{err}");
     drop(store);
     let version: String = raw(&home.database("default"))
         .query_row(

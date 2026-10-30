@@ -351,6 +351,27 @@ error_codes! {
     /// A session source tag does not have the allowed shape.
     SESSION_INVALID_SOURCE_TAG = ("session.invalid_source_tag", Usage,
         "A session source tag is 1-32 characters: a lowercase letter, then lowercase letters, digits, '_' or '-'.");
+    /// A trajectory was written by a newer grammar major version.
+    TRAJECTORY_GRAMMAR_TOO_NEW = ("trajectory.grammar_too_new", Protocol,
+        "The trajectory was written with a newer major grammar version than this build reads; run `prometheus update`.");
+    /// A trajectory line is not a valid event.
+    TRAJECTORY_MALFORMED = ("trajectory.malformed", InvalidInput,
+        "A trajectory line is not valid JSON or lacks the grammar's top-level keys; the message names the line.");
+    /// A session has no trajectory file.
+    TRAJECTORY_NOT_FOUND = ("trajectory.not_found", NotFound,
+        "The session has no trajectory: it was not recorded (`observability.trajectories.enabled = false`) or retention removed it.");
+    /// A trajectory file could not be read or written.
+    TRAJECTORY_IO = ("trajectory.io", Io,
+        "A trajectory file under `<profile>/trajectories/` could not be read or written.");
+    /// A session's trajectory reached its size limit.
+    TRAJECTORY_SIZE_LIMIT = ("trajectory.size_limit", Io,
+        "The session's trajectory reached `observability.trajectories.max_bytes_per_session`; later events are recorded without their payload. Recorded as an `error` event, not returned.");
+    /// A `prometheus logs --since` value does not parse.
+    LOGS_INVALID_SINCE = ("logs.invalid_since", Usage,
+        "`prometheus logs --since` takes `<N>[smhd]` (30m, 2h, 1d) or an RFC 3339 time.");
+    /// A log file could not be read.
+    LOGS_IO = ("logs.io", Io,
+        "A log file under `logs/` could not be read.");
     /// The shared outbound HTTP client could not be built.
     NET_CLIENT_INIT = ("net.client_init", Internal,
         "The shared outbound HTTP client could not be initialised.");

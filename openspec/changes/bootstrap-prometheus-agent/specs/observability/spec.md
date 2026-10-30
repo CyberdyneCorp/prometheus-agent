@@ -41,7 +41,7 @@ The `v` field SHALL hold the grammar version `<major>.<minor>`; minor versions S
 - **THEN** the observation SHALL be clipped to 50,000 characters followed by a truncation marker stating the number of omitted characters
 
 ### Requirement: Trajectories are lossless and redacted
-The system SHALL write trajectory events through a bounded asynchronous writer that applies backpressure to the turn (never drops events) when more than 10,000 events are pending, SHALL replace every value present in the secrets store and every match of the built-in credential patterns with `[REDACTED:<secret name or pattern id>]` before any byte reaches disk, and SHALL create trajectory files with mode 0600.
+The system SHALL write trajectory events through a bounded asynchronous writer that applies backpressure to the turn (never drops events) when more than 10,000 events are pending, SHALL replace every value present in the secrets store with `[REDACTED:<secret name>]` and every match of the built-in credential patterns with `[REDACTED]` (`security-boundaries` › Known-secret redaction everywhere) before any byte reaches disk, and SHALL create trajectory files with mode 0600.
 **Milestone:** M1
 
 #### Scenario: Secret echoed by a tool
@@ -59,7 +59,7 @@ The system SHALL compress a trajectory to `<session_id>.jsonl.zst` when its sess
 - **THEN** its trajectory file SHALL be deleted and the session row SHALL record `trajectory_purged_at`
 
 ### Requirement: Structured logs
-The system SHALL write logs as JSON lines to `<profile home>/logs/prometheus.log` with the keys `ts`, `level`, `component`, `profile`, `session_id`, `turn_id`, `trace_id`, `msg` and `fields`; it SHALL rotate at 16 MiB keeping 5 files, create files with mode 0600, apply the same secret redaction as trajectories, and take the level filter from `logging.level` (default `info`) overridden only by `PMT_LOG` or `RUST_LOG`. Daemon-wide records with no profile (startup, update) SHALL go to `<PROMETHEUS_HOME>/logs/prometheus.log`. On an interactive terminal, WARN and above SHALL also be printed to stderr in human form.
+The system SHALL write logs as JSON lines to `<profile home>/logs/prometheus.log` with the keys `ts`, `level`, `component`, `profile`, `session_id`, `turn_id`, `trace_id`, `msg` and `fields` (records of the `gateway`, `update` and `migrate` components to `<PROMETHEUS_HOME>/logs/<component>.log`, which `cli` › Log viewer reads); it SHALL rotate at 10 MiB keeping 5 files in all (the current file and 4 rotated ones), create files with mode 0600, apply the same secret redaction as trajectories, and take the level filter from `logging.level` (default `info`) overridden only by `PMT_LOG` or `RUST_LOG`. Daemon-wide records with no profile (startup, update) SHALL go to `<PROMETHEUS_HOME>/logs/prometheus.log`. On an interactive terminal, WARN and above SHALL also be printed to stderr in human form.
 **Milestone:** M1
 
 #### Scenario: Turn context on every record

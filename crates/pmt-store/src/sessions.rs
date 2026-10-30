@@ -140,6 +140,8 @@ pub struct Session {
     pub compaction_count: u32,
     /// Rewinds so far (the latest rewind batch).
     pub rewind_count: u32,
+    /// When the retention sweep deleted the session's trajectory.
+    pub trajectory_purged_at: Option<Timestamp>,
 }
 
 /// One descendant in [`Store::tree`].
@@ -159,7 +161,7 @@ pub(crate) const COLUMNS: &str = "id, profile_id, source, origin, model, provide
     git_repo_root, git_branch, title, title_source, started_at, last_activity_at, ended_at, \
     end_reason, pinned, archived, hidden, bot_chat, system_prompt_hash, parent_session_id, \
     lineage_kind, root_session_id, message_count, tool_call_count, compaction_count, source_tag, \
-    parent_deleted, rewind_count";
+    parent_deleted, rewind_count, trajectory_purged_at";
 
 pub(crate) fn now_ms() -> i64 {
     Timestamp::now().as_millisecond()
@@ -205,6 +207,7 @@ pub(crate) fn session_from_row(row: &Row<'_>) -> Result<Session, Error> {
         source_tag: get_text(26)?,
         parent_deleted: get_flag(27)?,
         rewind_count: u32::try_from(get_int(28)?).unwrap_or(0),
+        trajectory_purged_at: row.get::<_, Option<i64>>(29).map_err(sql)?.map(timestamp),
     })
 }
 

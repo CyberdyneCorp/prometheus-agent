@@ -82,6 +82,107 @@ pub enum Command {
         #[command(subcommand)]
         command: SessionsCommand,
     },
+    /// Show structured log records of a component (`list` names them).
+    Logs(LogsArgs),
+    /// Render the recorded trajectory of a session.
+    Trajectory {
+        /// The trajectory subcommand.
+        #[command(subcommand)]
+        command: TrajectoryCommand,
+    },
+}
+
+/// `prometheus logs` arguments.
+#[derive(Debug, Clone, clap::Args)]
+pub struct LogsArgs {
+    /// Component to show (default `agent`), or `list` for every component
+    /// and its file.
+    #[arg(value_parser = component_values())]
+    pub component: Option<String>,
+    /// Show the last N matching records; 0 shows all.
+    #[arg(short = 'n', long = "lines", value_name = "N", default_value_t = 50)]
+    pub lines: usize,
+    /// Keep printing new records until interrupted (exit 130).
+    #[arg(short, long)]
+    pub follow: bool,
+    /// Least severe level to show.
+    #[arg(long, value_enum)]
+    pub level: Option<LogLevelArg>,
+    /// Records since `<N>[smhd]` ago or an RFC 3339 time.
+    #[arg(long, value_name = "S")]
+    pub since: Option<String>,
+    /// Only records of this session.
+    #[arg(long, value_name = "ID", conflicts_with = "root")]
+    pub session: Option<String>,
+    /// Only records of the sessions of this root lineage.
+    #[arg(long, value_name = "ID")]
+    pub root: Option<String>,
+}
+
+fn component_values() -> clap::builder::PossibleValuesParser {
+    let mut values: Vec<&'static str> = pmt_obs::logs::COMPONENTS.to_vec();
+    values.push("list");
+    clap::builder::PossibleValuesParser::new(values)
+}
+
+/// `--level` values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum LogLevelArg {
+    /// Errors only.
+    Error,
+    /// Warnings and errors.
+    Warn,
+    /// Informational and above.
+    Info,
+    /// Debug and above.
+    Debug,
+    /// Everything.
+    Trace,
+}
+
+impl LogLevelArg {
+    /// The record level name.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        }
+    }
+}
+
+/// `prometheus trajectory` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum TrajectoryCommand {
+    /// Render a session's trajectory as canonical text or its JSONL lines.
+    Show {
+        /// Session id, id prefix or title.
+        session: String,
+        /// Output format.
+        #[arg(long, value_enum, default_value_t = TrajectoryFormat::Text)]
+        format: TrajectoryFormat,
+        /// Clip tool arguments at N characters.
+        #[arg(long, value_name = "N", default_value_t = pmt_obs::trajectory::render::ARGS_TRUNC)]
+        args_trunc: usize,
+        /// Clip each observation at N characters (at least 10000).
+        #[arg(long, value_name = "N", default_value_t = pmt_obs::trajectory::render::OBS_TRUNC)]
+        obs_trunc: usize,
+        /// Clip the whole output at N characters (default: unlimited).
+        #[arg(long, value_name = "N")]
+        max_chars: Option<usize>,
+    },
+}
+
+/// `trajectory show --format` values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum TrajectoryFormat {
+    /// Canonical text with [USER], [ACTION], [OBSERVATION]... markers.
+    Text,
+    /// The stored JSONL lines.
+    Jsonl,
 }
 
 /// `prometheus sessions` subcommands.

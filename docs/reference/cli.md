@@ -10,14 +10,16 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
-  version    Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  config     Read, change, validate and explain the profile's config.toml
-  secrets    Store, list and remove the profile's secrets (values never on the command line)
-  backup     Back up the whole home to a .tar.zst archive, or restore one
-  snapshots  Snapshot and restore the selected profile's critical state
-  profile    List, create, select, rename and delete profiles
-  sessions   List, search, export and manage the profile's sessions
-  help       Print this message or the help of the given subcommand(s)
+  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  config      Read, change, validate and explain the profile's config.toml
+  secrets     Store, list and remove the profile's secrets (values never on the command line)
+  backup      Back up the whole home to a .tar.zst archive, or restore one
+  snapshots   Snapshot and restore the selected profile's critical state
+  profile     List, create, select, rename and delete profiles
+  sessions    List, search, export and manage the profile's sessions
+  logs        Show structured log records of a component (`list` names them)
+  trajectory  Render the recorded trajectory of a session
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -2222,6 +2224,178 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus sessions help help
 ```
 
+## `prometheus logs`
+
+```text
+Show structured log records of a component (`list` names them)
+
+Usage: prometheus logs [OPTIONS] [COMPONENT]
+
+Arguments:
+  [COMPONENT]
+          Component to show (default `agent`), or `list` for every component and its file
+
+          [possible values: agent, errors, gateway, adapter, cron, kanban, mcp, plugins, sandbox, providers, rpc, update, migrate, evolve, eval, list]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -n, --lines <N>
+          Show the last N matching records; 0 shows all
+
+          [default: 50]
+
+  -f, --follow
+          Keep printing new records until interrupted (exit 130)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --level <LEVEL>
+          Least severe level to show
+
+          Possible values:
+          - error: Errors only
+          - warn:  Warnings and errors
+          - info:  Informational and above
+          - debug: Debug and above
+          - trace: Everything
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <S>
+          Records since `<N>[smhd]` ago or an RFC 3339 time
+
+      --session <ID>
+          Only records of this session
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --root <ID>
+          Only records of the sessions of this root lineage
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus trajectory`
+
+```text
+Render the recorded trajectory of a session
+
+Usage: prometheus trajectory [OPTIONS] <COMMAND>
+
+Commands:
+  show  Render a session's trajectory as canonical text or its JSONL lines
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus trajectory show`
+
+```text
+Render a session's trajectory as canonical text or its JSONL lines
+
+Usage: prometheus trajectory show [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - text:  Canonical text with [USER], [ACTION], [OBSERVATION]... markers
+          - jsonl: The stored JSONL lines
+
+          [default: text]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --args-trunc <N>
+          Clip tool arguments at N characters
+
+          [default: 2000]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --obs-trunc <N>
+          Clip each observation at N characters (at least 10000)
+
+          [default: 50000]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --max-chars <N>
+          Clip the whole output at N characters (default: unlimited)
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus trajectory help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus trajectory help [COMMAND]
+
+Commands:
+  show  Render a session's trajectory as canonical text or its JSONL lines
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus trajectory help show`
+
+```text
+Render a session's trajectory as canonical text or its JSONL lines
+
+Usage: prometheus trajectory help show
+```
+
+## `prometheus trajectory help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus trajectory help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -2230,14 +2404,16 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
-  version    Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  config     Read, change, validate and explain the profile's config.toml
-  secrets    Store, list and remove the profile's secrets (values never on the command line)
-  backup     Back up the whole home to a .tar.zst archive, or restore one
-  snapshots  Snapshot and restore the selected profile's critical state
-  profile    List, create, select, rename and delete profiles
-  sessions   List, search, export and manage the profile's sessions
-  help       Print this message or the help of the given subcommand(s)
+  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  config      Read, change, validate and explain the profile's config.toml
+  secrets     Store, list and remove the profile's secrets (values never on the command line)
+  backup      Back up the whole home to a .tar.zst archive, or restore one
+  snapshots   Snapshot and restore the selected profile's critical state
+  profile     List, create, select, rename and delete profiles
+  sessions    List, search, export and manage the profile's sessions
+  logs        Show structured log records of a component (`list` names them)
+  trajectory  Render the recorded trajectory of a session
+  help        Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus help version`
@@ -2695,6 +2871,33 @@ Compact state.db and truncate its write-ahead log
 Usage: prometheus help sessions vacuum
 ```
 
+## `prometheus help logs`
+
+```text
+Show structured log records of a component (`list` names them)
+
+Usage: prometheus help logs
+```
+
+## `prometheus help trajectory`
+
+```text
+Render the recorded trajectory of a session
+
+Usage: prometheus help trajectory [COMMAND]
+
+Commands:
+  show  Render a session's trajectory as canonical text or its JSONL lines
+```
+
+## `prometheus help trajectory show`
+
+```text
+Render a session's trajectory as canonical text or its JSONL lines
+
+Usage: prometheus help trajectory show
+```
+
 ## `prometheus help help`
 
 ```text
@@ -2724,3 +2927,6 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.session_tree.v1` | `prometheus sessions tree` |
 | `prometheus.session_stats.v1` | `prometheus sessions stats` |
 | `prometheus.prune.v1` | `prometheus sessions prune` |
+| `prometheus.logs.v1` | `prometheus logs` |
+| `prometheus.log_components.v1` | `prometheus logs list` |
+| `prometheus.trajectory.v1` | `prometheus trajectory show` |

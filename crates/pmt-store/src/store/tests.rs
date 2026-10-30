@@ -14,20 +14,19 @@ fn scope(root: &std::path::Path) -> ProfileScope {
     ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
 }
 
-/// The real v1 and v2 plus three trivial steps.
+/// The real v1 to v3 plus two trivial steps.
 fn five_versions() -> Vec<Migration> {
-    const EXTRA: [&str; 3] = [
-        "CREATE TABLE t3 (x INTEGER) STRICT;",
+    const EXTRA: [&str; 2] = [
         "CREATE TABLE t4 (x INTEGER) STRICT;",
         "CREATE TABLE t5 (x INTEGER) STRICT;",
     ];
     let mut all = MIGRATIONS.to_vec();
     assert_eq!(
         all.len(),
-        2,
+        3,
         "update the synthetic steps with new migrations"
     );
-    for (version, sql) in (3..).zip(EXTRA) {
+    for (version, sql) in (4..).zip(EXTRA) {
         all.push(Migration {
             version,
             min_read_version: 1,
@@ -140,7 +139,7 @@ fn reader_pool_never_exceeds_its_bound() {
 }
 
 #[test]
-fn v1_store_upgrades_to_v2_with_indexes_and_relaxed_lineage() {
+fn v1_store_upgrades_to_the_current_schema_with_indexes_and_relaxed_lineage() {
     let root = tempfile::tempdir().unwrap();
     let scope = scope(root.path());
     drop(Store::open_with(&scope, &MIGRATIONS[..1]).unwrap());
@@ -163,7 +162,10 @@ fn v1_store_upgrades_to_v2_with_indexes_and_relaxed_lineage() {
 
     let store = Store::open(&scope).unwrap();
 
-    assert_eq!(meta(&db, "schema_version"), "2");
+    assert_eq!(
+        meta(&db, "schema_version"),
+        crate::SCHEMA_VERSION.to_string()
+    );
     assert_eq!(meta(&db, "index_stale"), "0");
     let hits = store
         .search("kubernetes", &crate::SearchOptions::default())

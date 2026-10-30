@@ -10,6 +10,7 @@ pub mod build_info;
 pub mod cli;
 pub mod config_cmd;
 pub mod context;
+pub mod logs_cmd;
 pub mod output;
 pub mod profile_cmd;
 pub mod prompt;
@@ -19,10 +20,11 @@ pub mod sessions_cmd;
 pub mod slash_handlers;
 pub mod startup;
 pub mod surface;
+pub mod trajectory_cmd;
 pub mod version;
 
 pub use cli::{
-    BackupCommand, Cli, Command, ConfigCommand, ProfileCommand, SecretsCommand, SessionsCommand,
-    SnapshotsCommand, command,
+    BackupCommand, Cli, Command, ConfigCommand, LogsArgs, ProfileCommand, SecretsCommand,
+    SessionsCommand, SnapshotsCommand, TrajectoryCommand, command,
 };
 pub use context::Context;

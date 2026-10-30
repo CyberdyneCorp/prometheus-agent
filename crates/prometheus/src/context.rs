@@ -53,10 +53,12 @@ impl Context<'_> {
     /// As [`Context::profile_dir`], configuration errors.
     pub fn scope(&self) -> Result<ProfileScope, Error> {
         let overrides = Overrides::parse(self.set)?;
-        ProfileScope::open(
+        let scope = ProfileScope::open(
             self.profile_dir()?,
             &overrides,
             Launch::Profile(self.launch),
-        )
+        )?;
+        crate::startup::bind_profile(&scope);
+        Ok(scope)
     }
 }

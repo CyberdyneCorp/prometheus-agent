@@ -39,7 +39,8 @@ rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
-# WARN events for startup conditions; the subscriber arrives with logging.
+# `logs --follow` polls and stops on Ctrl-C.
+tokio = { workspace = true, features = ["signal"] }
 tracing.workspace = true
 
 [build-dependencies]
@@ -51,7 +52,8 @@ rusqlite.workspace = true
 tempfile.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
-nix.workspace = true
+# SIGINT for the `logs --follow` exit-130 test.
+nix = { workspace = true, features = ["signal"] }
 
 [lints]
 workspace = true

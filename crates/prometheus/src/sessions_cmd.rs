@@ -318,13 +318,7 @@ fn stats(ctx: &Context<'_>, store: &Store, id: SessionId) -> Result<u8, Error> {
 /// Known secret values of the profile (store and launch environment) for
 /// a redacted export.
 pub(crate) fn redactor(scope: &ProfileScope) -> Result<pmt_core::secret::Redactor, Error> {
-    let secrets = scope.secrets();
-    let mut values = Vec::new();
-    for row in secrets.list()? {
-        values.extend(secrets.resolve(&row.name).ok());
-        values.extend(secrets.launch_env_secret(&row.name).cloned());
-    }
-    Ok(pmt_core::secret::Redactor::new(&values))
+    scope.secrets().redactor()
 }
 
 fn export(

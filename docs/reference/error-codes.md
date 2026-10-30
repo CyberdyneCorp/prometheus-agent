@@ -116,4 +116,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `session.too_large_to_resume` | `invalid_input` | 65 | The session's active lineage has more messages than `sessions.max_resume_messages`; compact it with /compress or fork it. |
 | `session.too_large_to_export` | `invalid_input` | 65 | The session has more messages than `sessions.max_export_messages` allows in memory; export it to a file with `prometheus sessions export -o FILE`. |
 | `session.invalid_source_tag` | `usage` | 2 | A session source tag is 1-32 characters: a lowercase letter, then lowercase letters, digits, '_' or '-'. |
+| `trajectory.grammar_too_new` | `protocol` | 76 | The trajectory was written with a newer major grammar version than this build reads; run `prometheus update`. |
+| `trajectory.malformed` | `invalid_input` | 65 | A trajectory line is not valid JSON or lacks the grammar's top-level keys; the message names the line. |
+| `trajectory.not_found` | `not_found` | 66 | The session has no trajectory: it was not recorded (`observability.trajectories.enabled = false`) or retention removed it. |
+| `trajectory.io` | `io` | 74 | A trajectory file under `<profile>/trajectories/` could not be read or written. |
+| `trajectory.size_limit` | `io` | 74 | The session's trajectory reached `observability.trajectories.max_bytes_per_session`; later events are recorded without their payload. Recorded as an `error` event, not returned. |
+| `logs.invalid_since` | `usage` | 2 | `prometheus logs --since` takes `<N>[smhd]` (30m, 2h, 1d) or an RFC 3339 time. |
+| `logs.io` | `io` | 74 | A log file under `logs/` could not be read. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

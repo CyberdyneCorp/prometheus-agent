@@ -397,6 +397,31 @@ impl SecretsHandle {
         Ok(rows)
     }
 
+    /// A redactor for every value this profile can see (store and, for the
+    /// launch profile, the launch environment), each replaced by
+    /// `[REDACTED:<NAME>]`. Trajectories, logs and redacted exports use it.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn redactor(&self) -> Result<pmt_core::secret::Redactor, Error> {
+        let mut values: Vec<(String, SecretString)> = Vec::new();
+        for name in self.store.names()? {
+            if let Some(value) = self.stored(&name)? {
+                values.push((name, value));
+            }
+        }
+        for (variable, value) in self.launch_env.iter().flatten() {
+            let name = variable
+                .strip_prefix(pmt_core::env::SECRET_PREFIX)
+                .unwrap_or(variable);
+            values.push((name.to_owned(), value.clone()));
+        }
+        Ok(pmt_core::secret::Redactor::named(
+            values.iter().map(|(name, value)| (name.as_str(), value)),
+        ))
+    }
+
     fn stored(&self, name: &str) -> Result<Option<SecretString>, Error> {
         if self.store.kind() == SecretsBackend::File {
             return self.store.get(name);

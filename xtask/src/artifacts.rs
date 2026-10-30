@@ -35,6 +35,10 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: daemon_reference(),
         },
         Artifact {
+            path: "schema/trajectory/v1.json",
+            contents: pretty_schema(&pmt_obs::trajectory::schema()),
+        },
+        Artifact {
             path: "docs/reference/cli.md",
             contents: cli_reference(),
         },

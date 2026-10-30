@@ -1,6 +1,6 @@
 //! What every `prometheus` process does before running its command: read
-//! the launch environment once, resolve the home, raise the open-file
-//! limit and set up crash reports.
+//! the launch environment once, resolve the home, install the structured
+//! logger, raise the open-file limit and set up crash reports.
 //!
 //! None of these steps may stop a command that does not need the home
 //! (`version`, `help`): a home that cannot be resolved or an invalid
@@ -58,6 +58,46 @@ pub fn raise_nofile(home: Option<&Path>) -> Option<NofileLimit> {
             None
         }
     }
+}
+
+/// Installs the structured logger: JSON records under `<home>/logs/` and
+/// the selected profile's `logs/`, filtered by `PMT_LOG`/`RUST_LOG` (else
+/// `logging.level`, applied by [`bind_profile`]), redacting the launch
+/// environment's secrets; WARN and above also on an interactive stderr.
+pub fn install_logging(home: Option<&PathBuf>, launch: &LaunchEnv) {
+    pmt_obs::logs::install(pmt_obs::logs::LogSetup {
+        home: home.cloned(),
+        env_filter: launch.log_filter().map(str::to_owned),
+        redactor: launch_redactor(launch),
+        stderr: true,
+    });
+}
+
+/// Binds the command's logging to the profile it works on: records carry
+/// `profile` (so they go to that profile's `logs/`), its `logging.level`
+/// applies unless the environment set a filter, and its stored secrets are
+/// redacted.
+pub fn bind_profile(scope: &pmt_config::ProfileScope) {
+    let name = scope.name().to_string();
+    tracing::Span::current().record("profile", name.as_str());
+    let Some(handle) = pmt_obs::logs::handle() else {
+        return;
+    };
+    handle.set_level(scope.config().logging.level);
+    match scope.secrets().redactor() {
+        Ok(redactor) => handle.register_profile(&name, redactor),
+        Err(err) => tracing::warn!("log redaction without the secret store: {err}"),
+    }
+}
+
+/// The launch environment's secrets, named (`PMT_SECRET_X` is `X`).
+fn launch_redactor(launch: &LaunchEnv) -> Redactor {
+    Redactor::named(launch.secrets().map(|(variable, value)| {
+        let name = variable
+            .strip_prefix(pmt_core::env::SECRET_PREFIX)
+            .unwrap_or(variable);
+        (name, value)
+    }))
 }
 
 /// Crash reports go to `<home>/logs/crash/`, redacting every secret from

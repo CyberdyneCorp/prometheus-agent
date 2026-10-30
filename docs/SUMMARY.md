@@ -6,6 +6,7 @@
 
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
 - [Sessions](guide/sessions.md)
+- [Logs and trajectories](guide/observability.md)
 
 # Reference
 

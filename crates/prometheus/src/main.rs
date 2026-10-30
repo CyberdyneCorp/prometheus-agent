@@ -12,8 +12,8 @@ use pmt_core::error::{Error, codes};
 use pmt_core::{exit, panic};
 use prometheus::output::print_error;
 use prometheus::{
-    Cli, Command, Context, backup_cmd, config_cmd, profile_cmd, secrets_cmd, sessions_cmd, startup,
-    version,
+    Cli, Command, Context, backup_cmd, config_cmd, logs_cmd, profile_cmd, secrets_cmd,
+    sessions_cmd, startup, trajectory_cmd, version,
 };
 
 fn main() -> ExitCode {
@@ -25,10 +25,14 @@ fn main() -> ExitCode {
         Ok(launch) => launch,
         Err(err) => return failure(&err, cli.json),
     };
-    startup::warn_ignored_env(&launch);
     // Commands that need the home report the resolution error themselves.
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch);
     let home = home.as_ref().ok();
+    startup::install_logging(home, &launch);
+    // `profile` is recorded once a command selects one (startup::bind_profile).
+    let command_span = tracing::info_span!("command", profile = tracing::field::Empty);
+    let _command = command_span.enter();
+    startup::warn_ignored_env(&launch);
     startup::raise_nofile(home.map(PathBuf::as_path));
     let reporter = startup::crash_reporter(home, &launch);
     match panic::catch_main(&reporter, || run(&cli, &launch)) {
@@ -53,6 +57,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
         Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),
         Some(Command::Sessions { command }) => sessions_cmd::run(command, &ctx),
+        Some(Command::Logs(args)) => logs_cmd::run(args, &ctx),
+        Some(Command::Trajectory { command }) => trajectory_cmd::run(command, &ctx),
         // `chat`, the default command, arrives with the CLI chat group.
         None => Ok(exit::SUCCESS),
     };

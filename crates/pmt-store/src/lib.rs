@@ -34,6 +34,7 @@ pub mod search;
 pub mod sessions;
 mod store;
 pub mod titles;
+pub mod trajectories;
 pub mod usage;
 
 pub use blobs::{BlobRef, GcReport};
@@ -60,7 +61,7 @@ pub use usage::{Tokens, UsageEvent, UsageScope, UsageTotals};
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[cfg(test)]
 mod tests {
