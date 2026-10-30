@@ -230,6 +230,33 @@ fn validate_reports_every_error_with_line_and_allowed_values() {
 }
 
 #[test]
+fn unknown_toolset_fails_validation_with_the_closest_name() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    std::fs::write(
+        config_path(home.path()),
+        "[tools]\nenabled_toolsets = [\"core\", \"brwser\"]\n",
+    )
+    .unwrap();
+    let out = run(home.path(), &["config", "validate"]);
+    assert_eq!(out.status.code(), Some(78));
+    let err = stderr(&out);
+    assert!(
+        err.contains("tools.enabled_toolsets: unknown toolset 'brwser' (did you mean 'browser'?)"),
+        "{err}"
+    );
+    std::fs::write(
+        config_path(home.path()),
+        "[tools]\nenabled_toolsets = [\"core\", \"x_search\"]\ndisabled_toolsets = [\"browser\"]\n",
+    )
+    .unwrap();
+    assert_eq!(
+        run(home.path(), &["config", "validate"]).status.code(),
+        Some(0)
+    );
+}
+
+#[test]
 fn unknown_terminal_backend_fails_validation_with_the_available_list() {
     let home = temp_home();
     run(home.path(), &["config", "path"]);

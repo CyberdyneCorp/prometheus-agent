@@ -346,7 +346,17 @@ fn delete_asks_for_confirmation_and_keeps_nothing() {
     let refused = run(home.path(), &["sessions", "delete", &id]);
     assert_eq!(refused.status.code(), Some(4));
     ok(&run(home.path(), &["sessions", "show", &id]));
+    let spill = home
+        .path()
+        .join("profiles/default/cache/spillover")
+        .join(&id);
+    std::fs::create_dir_all(&spill).unwrap();
+    std::fs::write(spill.join("call_1.txt"), "oversized result").unwrap();
     ok(&run(home.path(), &["sessions", "delete", &id, "--yes"]));
+    assert!(
+        !spill.exists(),
+        "the session's spillover directory is removed"
+    );
     assert_eq!(
         run(home.path(), &["sessions", "show", &id]).status.code(),
         Some(66)

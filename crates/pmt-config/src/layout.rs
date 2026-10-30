@@ -52,6 +52,14 @@ pub const PROFILE_DIRS: &[&str] = &[
     "backups",
     "migrations",
 ];
+/// `<profile>/cache/spillover`: oversized tool results, one directory per
+/// session (`<session_id>/<call_id>.txt`). The tool system writes it; the
+/// store removes a session's directory when it deletes the session.
+#[must_use]
+pub fn spillover_root(profile_dir: &Path) -> PathBuf {
+    profile_dir.join("cache").join("spillover")
+}
+
 /// Private files created empty with every profile. `state.db` is created
 /// by the store and `secrets.toml` by the file secrets backend.
 const PROFILE_FILES: &[&str] = &["grants.toml"];

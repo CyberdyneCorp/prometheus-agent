@@ -8,7 +8,7 @@ error: cannot construct `StoreLocation` with struct literal syntax due to privat
 8 |         blobs: path.join("blobs"),
   |         ------------------------- private field
   |
-  = note: ...and other private field `quarantine` that was not provided
+  = note: ...and other private fields `quarantine` and `spillover` that were not provided
 help: you might have meant to use the `of` associated function
   |
 6 -     let _literal = StoreLocation {

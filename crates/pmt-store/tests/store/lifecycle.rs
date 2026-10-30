@@ -213,6 +213,27 @@ fn delete_is_refused_while_a_lease_is_live() {
     store.session(a.id).unwrap();
 }
 
+#[test]
+fn deleting_and_pruning_sessions_removes_their_spillover() {
+    let home = TestHome::new();
+    let store = home.store("default");
+    let (a, b, kept) = (session(&store), session(&store), session(&store));
+    let spill = |id: SessionId| store.location().spillover().join(id.to_string());
+    for id in [a.id, b.id, kept.id] {
+        std::fs::create_dir_all(spill(id)).unwrap();
+        std::fs::write(spill(id).join("call_1.txt"), "big").unwrap();
+    }
+    assert!(store.location().spillover().ends_with("cache/spillover"));
+
+    store.delete_session(a.id, false).unwrap();
+    assert!(!spill(a.id).exists());
+
+    age(&home, b.id, 100);
+    store.prune(Duration::from_hours(30 * 24), false).unwrap();
+    assert!(!spill(b.id).exists());
+    assert!(spill(kept.id).join("call_1.txt").exists());
+}
+
 fn blob_files(home: &TestHome) -> usize {
     let dir = home.scope("default").path("blobs");
     std::fs::read_dir(dir)

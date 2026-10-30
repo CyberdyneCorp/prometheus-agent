@@ -176,6 +176,7 @@ impl Store {
             Ok((deleted, blobs))
         })?;
         delete::remove_unreferenced(self, &blobs, started)?;
+        delete::remove_spillover(self, &deleted);
         deleted.iter().map(|id| SessionId::parse(id)).collect()
     }
 

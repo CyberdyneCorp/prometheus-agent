@@ -561,6 +561,18 @@ error_codes! {
     /// A token refresh did not complete.
     AUTH_REFRESH_FAILED = ("auth.refresh_failed", Unavailable,
         "Refreshing a sign-in's access token failed for a transient reason (network failure, a server error, or a borrowed login that could not be written back); the sign-in is unchanged and the next request tries again.");
+    /// A tool registration is malformed.
+    TOOL_INVALID_REGISTRATION = ("tool.invalid_registration", Config,
+        "A tool registration was rejected at load time: its name does not match `^[a-z][a-z0-9_]{0,63}$`, its parameters schema root is not an object, or it names an unknown toolset. The error names the tool and the offending field.");
+    /// A tool registration would shadow another owner's tool.
+    TOOL_SHADOWED = ("tool.shadowed", Config,
+        "A tool name is already registered by another owner (a built-in, plugin or MCP server); the first registration is kept. A plugin replaces a built-in tool only with the grant `tools.override:<tool>`. `prometheus doctor` lists rejected registrations.");
+    /// A tool name is not registered in this profile.
+    TOOL_UNKNOWN = ("tool.unknown", Usage,
+        "No tool of that name is registered in this profile (`unknown tool: <name>`); `prometheus tools list` shows the registered tools.");
+    /// Toolsets include each other in a cycle.
+    TOOLSET_CYCLE = ("toolset.cycle", Config,
+        "Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

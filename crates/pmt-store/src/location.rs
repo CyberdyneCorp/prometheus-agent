@@ -23,6 +23,7 @@ pub struct StoreLocation {
     database: PathBuf,
     blobs: PathBuf,
     quarantine: PathBuf,
+    spillover: PathBuf,
 }
 
 impl StoreLocation {
@@ -33,6 +34,7 @@ impl StoreLocation {
             database: scope.path(DATABASE_FILE),
             blobs: scope.path(BLOBS_DIR),
             quarantine: scope.path(QUARANTINE_DIR),
+            spillover: pmt_config::layout::spillover_root(scope.dir()),
         }
     }
 
@@ -53,6 +55,13 @@ impl StoreLocation {
     #[must_use]
     pub fn quarantine(&self) -> &Path {
         &self.quarantine
+    }
+
+    /// `<profile>/cache/spillover/`: oversized tool results, one directory
+    /// per session, removed with the session.
+    #[must_use]
+    pub fn spillover(&self) -> &Path {
+        &self.spillover
     }
 }
 

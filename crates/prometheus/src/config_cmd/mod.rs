@@ -123,6 +123,12 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     {
         return Err(err);
     }
+    // Toolset names are a registry as well (plugins and MCP servers add
+    // names); M1 knows the built-in toolsets.
+    let builtins = std::sync::Arc::new(pmt_tools::Builtins::standard(Vec::new())?);
+    let tools = pmt_tools::ToolRegistry::new(scope.name().as_str(), builtins);
+    let config = scope.config();
+    pmt_tools::selection::validate(&tools, &config.tools, &config.toolsets)?;
     // Provider blocks and the fallback chain name registry entries
     // (custom blocks need a base URL; chain entries a known provider).
     let providers = pmt_providers::ProviderRegistry::for_profile(scope.config(), Vec::new())?;

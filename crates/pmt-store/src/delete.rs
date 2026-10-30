@@ -6,7 +6,9 @@
 //! every other child to no parent with `parent_deleted = 1`, keeping its
 //! `lineage_kind` and `root_session_id` (usage rows stay grouped under the
 //! root they were recorded with). Blobs only the deleted rows referenced
-//! are removed after the commit.
+//! are removed after the commit, and so are the deleted sessions'
+//! tool-result spillover directories (spec: tool-system, Spillover
+//! retention).
 
 use std::collections::{BTreeSet, VecDeque};
 use std::path::Path;
@@ -151,6 +153,21 @@ pub(crate) fn remove_unreferenced(
     Ok(removed)
 }
 
+/// Removes the spillover directory of each deleted session. The rows are
+/// already gone, so a directory that cannot be removed is logged, not
+/// reported as a failed deletion (retention pruning removes it later).
+pub(crate) fn remove_spillover(store: &Store, sessions: &[String]) {
+    for session in sessions {
+        let dir = store.location().spillover().join(session);
+        match std::fs::remove_dir_all(&dir) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                tracing::warn!("could not remove {}: {err}", dir.display());
+            }
+            _ => {}
+        }
+    }
+}
+
 fn untouched_since(path: &Path, since: SystemTime) -> bool {
     std::fs::metadata(path)
         .and_then(|meta| meta.modified())
@@ -173,6 +190,7 @@ impl Store {
             let blobs = delete_planned(tx, &doomed, &kept)?;
             Ok((doomed, kept, blobs))
         })?;
+        remove_spillover(self, &doomed);
         let parse = |ids: Vec<String>| -> Result<Vec<SessionId>, Error> {
             ids.iter().map(|id| SessionId::parse(id)).collect()
         };

@@ -300,27 +300,7 @@ pub fn root(profile_dir: &Path) -> PathBuf {
 /// files were removed.
 #[allow(clippy::must_use_candidate)] // pruning is the point; the count is informational
 pub fn prune(root: &Path, now: SystemTime) -> usize {
-    let Ok(sessions) = fs::read_dir(root) else {
-        return 0;
-    };
-    let mut removed = 0;
-    for session in sessions.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
-        for file in fs::read_dir(&session).into_iter().flatten().flatten() {
-            let old = file
-                .metadata()
-                .and_then(|m| m.modified())
-                .is_ok_and(|modified| {
-                    now.duration_since(modified)
-                        .is_ok_and(|age| age > RETENTION)
-                });
-            if old && fs::remove_file(file.path()).is_ok() {
-                removed += 1;
-            }
-        }
-        // Only succeeds when empty.
-        let _ = fs::remove_dir(&session);
-    }
-    removed
+    crate::spillover::prune(root, now, RETENTION)
 }
 
 #[cfg(test)]
