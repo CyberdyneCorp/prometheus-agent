@@ -23,6 +23,18 @@ npm install -g @fission-ai/openspec@1.13.2
 openspec validate --all --strict
 ```
 
+## Build
+
+The Rust workspace lives under `crates/` (toolchain pinned in `rust-toolchain.toml`):
+
+```sh
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo deny check
+scripts/dev-install            # installs prometheus and its pmt alias into ~/.cargo/bin
+```
+
 ## License
 
 TBD.

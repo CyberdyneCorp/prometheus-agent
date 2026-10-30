@@ -1,0 +1,6 @@
+# The MSRV and the toolchain CI uses are the same pin, so a feature that needs a
+# newer compiler fails locally before it fails in CI.
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

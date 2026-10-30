@@ -1,0 +1,33 @@
+#!/bin/sh
+# Builds the prometheus binary and installs it with its `pmt` alias.
+#
+# usage: scripts/dev-install [--debug] [BIN_DIR]
+#   BIN_DIR defaults to $CARGO_HOME/bin (~/.cargo/bin).
+#
+# The alias is a hard link so both names run the same build; it falls back to
+# a copy on filesystems without hard links.
+set -eu
+
+profile=release
+if [ "${1:-}" = "--debug" ]; then
+    profile=debug
+    shift
+fi
+bin_dir=${1:-${CARGO_HOME:-$HOME/.cargo}/bin}
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+if [ "$profile" = release ]; then
+    cargo build --manifest-path "$root/Cargo.toml" -p prometheus --release
+else
+    cargo build --manifest-path "$root/Cargo.toml" -p prometheus
+fi
+
+target_dir=$(cargo metadata --manifest-path "$root/Cargo.toml" --format-version 1 --no-deps |
+    sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+mkdir -p "$bin_dir"
+# Remove first: overwriting a running binary in place can fail ("text file busy").
+rm -f "$bin_dir/prometheus" "$bin_dir/pmt"
+cp "$target_dir/$profile/prometheus" "$bin_dir/prometheus"
+ln "$bin_dir/prometheus" "$bin_dir/pmt" 2>/dev/null || cp "$bin_dir/prometheus" "$bin_dir/pmt"
+
+echo "installed $("$bin_dir/prometheus" --version) to $bin_dir (alias pmt)"
