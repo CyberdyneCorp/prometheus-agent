@@ -133,9 +133,13 @@ fn starting_processes_needs_process_spawn() {
 fn programs_outside_granted_roots_cannot_run() {
     let fixture = Fixture::new();
     let tool = fixture.outside.join("tool");
-    std::fs::copy("/bin/echo", &tool).unwrap();
+    // `true` (unlike `echo`) still runs as a copy under macOS code signing.
+    std::fs::copy("/usr/bin/true", &tool).unwrap();
+    let unconfined = std::process::Command::new(&tool).status().unwrap();
+    assert!(unconfined.success(), "the copy itself runs");
+
     let sandbox = confine(fixture.policy(&[]));
-    let ran = sandbox.command(&tool).unwrap().arg("hi").output();
+    let ran = sandbox.command(&tool).unwrap().output();
     assert!(
         ran.as_ref().map_or(true, |o| !o.status.success()),
         "{ran:?}"

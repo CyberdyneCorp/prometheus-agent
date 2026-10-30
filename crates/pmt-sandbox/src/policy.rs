@@ -313,6 +313,15 @@ pub(crate) fn is_strictly_below(path: &Path, root: &Path) -> bool {
 mod tests {
     use super::*;
 
+    /// An absolute, nonexistent directory on this OS.
+    fn base() -> PathBuf {
+        PathBuf::from(if cfg!(windows) {
+            r"C:\nonexistent-x"
+        } else {
+            "/nonexistent-x"
+        })
+    }
+
     fn paths(base: &Path) -> Paths {
         Paths {
             user_home: base.join("home"),
@@ -324,7 +333,7 @@ mod tests {
 
     #[test]
     fn unknown_capability_is_named() {
-        let p = paths(Path::new("/x"));
+        let p = paths(&base());
         let err = Policy::from_capabilities(&["filesystem.write:/tmp"], &p).unwrap_err();
         assert_eq!(err.message(), "unknown capability 'filesystem.write:/tmp'");
         assert_eq!(err.exit_code(), 78);
@@ -340,7 +349,7 @@ mod tests {
 
     #[test]
     fn host_level_capabilities_are_accepted() {
-        let p = paths(Path::new("/x"));
+        let p = paths(&base());
         let caps = [
             "llm.call",
             "llm.call:main",
@@ -355,7 +364,7 @@ mod tests {
 
     #[test]
     fn placeholders_expand_and_wildcards_never_widen() {
-        let p = paths(Path::new("/x"));
+        let p = paths(&base());
         let caps = [
             "fs.write:<workspace>/**",
             "fs.read:~/**",
@@ -363,19 +372,19 @@ mod tests {
             "fs.read:relative/**",
         ];
         let policy = Policy::from_capabilities(&caps, &p).unwrap();
-        assert_eq!(policy.write_roots(), [PathBuf::from("/x/home/work")]);
-        assert_eq!(policy.read_roots(), [PathBuf::from("/x/home")]);
+        assert_eq!(policy.write_roots(), [base().join("home/work")]);
+        assert_eq!(policy.read_roots(), [base().join("home")]);
         assert_eq!(policy.unrepresentable(), ["/etc/*.conf", "relative/**"]);
     }
 
     #[test]
     fn credential_stores_are_denied_below_broad_grants_only() {
-        let p = paths(Path::new("/x"));
+        let p = paths(&base());
         let broad = Policy::from_capabilities(&["fs.read:~/**"], &p).unwrap();
         let denied = broad.denied();
-        assert!(denied.contains(&Path::new("/x/home/.ssh")));
-        assert!(denied.contains(&Path::new("/x/home/.aws")));
-        assert!(denied.contains(&Path::new("/x/home/.prometheus")));
+        assert!(denied.contains(&base().join("home/.ssh").as_path()));
+        assert!(denied.contains(&base().join("home/.aws").as_path()));
+        assert!(denied.contains(&base().join("home/.prometheus").as_path()));
 
         let exact = Policy::from_capabilities(&["fs.read:~/.aws/config"], &p).unwrap();
         assert!(
@@ -384,12 +393,16 @@ mod tests {
         );
 
         let workspace = Policy::baseline(&p).unwrap();
-        assert!(!workspace.denied().contains(&Path::new("/x/home/.ssh")));
+        assert!(
+            !workspace
+                .denied()
+                .contains(&base().join("home/.ssh").as_path())
+        );
     }
 
     #[test]
     fn network_ports_and_hosts() {
-        let p = paths(Path::new("/x"));
+        let p = paths(&base());
         let policy = Policy::from_capabilities(
             &[
                 "net.connect:api.github.com:443",

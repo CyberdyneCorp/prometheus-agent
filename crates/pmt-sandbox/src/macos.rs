@@ -1,8 +1,9 @@
 //! macOS: a Seatbelt profile generated from the policy, applied by
 //! `/usr/bin/sandbox-exec` before it execs the child.
 //!
-//! The profile denies by default and then allows: process execution, forks
-//! (with `process.spawn`), signals and process inspection within the same
+//! The profile denies by default and then allows: executing programs that
+//! lie in a granted root (Seatbelt does not tie `process-exec` to
+//! `file-read*`, so it is granted per root), forks (with `process.spawn`), signals and process inspection within the same
 //! sandbox, reads of the granted roots, writes to the writable roots, the
 //! standard devices, a fixed list of system services, and the network per
 //! policy. Credential stores below a granted root are denied after the
@@ -112,7 +113,6 @@ const MACH_SERVICES: &[&str] = &[
 
 const BASE: &str = r#"(version 1)
 (deny default)
-(allow process-exec)
 (allow signal (target same-sandbox))
 (allow process-info* (target same-sandbox))
 (allow sysctl-read)
@@ -142,12 +142,16 @@ pub(crate) fn profile(policy: &Policy) -> String {
 
 fn filesystem(policy: &Policy, sbpl: &mut String) {
     for root in policy.read_roots() {
-        let _ = writeln!(sbpl, "(allow file-read* (subpath {}))", path(root));
+        let _ = writeln!(
+            sbpl,
+            "(allow file-read* process-exec (subpath {}))",
+            path(root)
+        );
     }
     for root in policy.write_roots() {
         let _ = writeln!(
             sbpl,
-            "(allow file-read* file-write* (subpath {}))",
+            "(allow file-read* file-write* process-exec (subpath {}))",
             path(root)
         );
     }
@@ -155,18 +159,22 @@ fn filesystem(policy: &Policy, sbpl: &mut String) {
     for store in &denied {
         let _ = writeln!(
             sbpl,
-            "(deny file-read* file-write* (subpath {}))",
+            "(deny file-read* file-write* process-exec (subpath {}))",
             path(store)
         );
     }
     let regranted = |root: &&PathBuf| denied.iter().any(|store| root.starts_with(store));
     for root in policy.read_roots().iter().filter(regranted) {
-        let _ = writeln!(sbpl, "(allow file-read* (subpath {}))", path(root));
+        let _ = writeln!(
+            sbpl,
+            "(allow file-read* process-exec (subpath {}))",
+            path(root)
+        );
     }
     for root in policy.write_roots().iter().filter(regranted) {
         let _ = writeln!(
             sbpl,
-            "(allow file-read* file-write* (subpath {}))",
+            "(allow file-read* file-write* process-exec (subpath {}))",
             path(root)
         );
     }
