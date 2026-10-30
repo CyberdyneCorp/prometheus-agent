@@ -286,6 +286,10 @@ fn powershell_run(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec
         "-NoLogo".into(),
         "-NoProfile".into(),
         "-NonInteractive".into(),
+        // With `-EncodedCommand` and redirected streams PowerShell otherwise
+        // serializes errors as CLIXML (`#< CLIXML <Objs ..>`).
+        "-OutputFormat".into(),
+        "Text".into(),
         "-EncodedCommand".into(),
         encode_utf16_base64(&script).into(),
     ]

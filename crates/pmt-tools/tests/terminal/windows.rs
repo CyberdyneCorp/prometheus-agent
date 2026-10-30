@@ -158,8 +158,21 @@ async fn commands_run_in_the_fallback_shell() {
         .run(TerminalArgs::new("(Get-Location).ProviderPath"))
         .await;
     assert_eq!(here.output.trim(), session.cwd().to_string_lossy());
-    let failed = session.run(TerminalArgs::new("cmd /c exit 3")).await;
+    // `PATH` holds only the fake WSL launcher, so name cmd.exe in full.
+    let failed = session
+        .run(TerminalArgs::new(
+            "& ([Environment]::SystemDirectory + '\\cmd.exe') /c exit 3",
+        ))
+        .await;
     assert_eq!(failed.exit_code, Some(3), "{failed:?}");
+    let missing = session
+        .run(TerminalArgs::new("Get-Item no-such-item"))
+        .await;
+    assert_eq!(missing.status, Status::Error, "{missing:?}");
+    assert!(
+        missing.output.contains("no-such-item") && !missing.output.contains("CLIXML"),
+        "errors are plain text: {missing:?}"
+    );
 }
 
 /// Git Bash (installed on the CI runners) tracks the cwd too: MSYS paths
