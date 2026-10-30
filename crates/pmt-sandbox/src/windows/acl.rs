@@ -6,13 +6,14 @@
 //! object's explicit entries plus the grant and set with the object's own
 //! protection state, so the system re-inherits the parent's entries.
 //!
-//! Revoking must leave every other entry exactly as it was. Setting a DACL
-//! through `SetNamedSecurityInfoW` again re-computes inheritance, and on the
-//! Windows ARM runners (a parent whose DACL is not auto-inherited) that
-//! turned the object's inherited entries into explicit copies. So revocation
-//! walks the granted tree itself and rewrites each DACL that names the SID
-//! with `SetFileSecurityW` (no inheritance processing), dropping only that
-//! SID's entries and keeping every other entry's flags and the control bits.
+//! Revoking must leave every other entry exactly as it was, inherited flags
+//! included. Revocation walks the granted tree itself and rewrites each DACL
+//! that names the SID with `SetFileSecurityW` (no inheritance processing),
+//! dropping only that SID's entries; the descriptor is marked
+//! auto-inherited whenever it keeps inherited entries, because otherwise the
+//! system clears their `INHERITED_ACE` flags (on the Windows ARM runners,
+//! whose directories carry inherited entries without that bit, every
+//! rewrite turned them into explicit copies).
 
 #![allow(unsafe_code)]
 
@@ -193,6 +194,8 @@ fn entries(old: *const ACL, sid: PSID, keep_inherited: bool) -> Result<Kept, u32
 #[derive(Default)]
 struct Kept {
     entries: Vec<(*const c_void, u32)>,
+    /// Some kept entry carries `INHERITED_ACE`.
+    inherited: bool,
     dropped: bool,
     inheritable: bool,
 }
@@ -247,13 +250,21 @@ fn strip(path: &Path, sid: PSID) -> Result<bool, u32> {
     let mut absolute = SECURITY_DESCRIPTOR::default();
     let sd: PSECURITY_DESCRIPTOR = (&raw mut absolute).cast();
     let control_bits = SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED;
+    // Without SE_DACL_AUTO_INHERITED the system clears every INHERITED_ACE
+    // flag of the DACL it is given (seen on the Windows ARM runners, whose
+    // directories carry inherited entries without that bit), turning the
+    // inherited entries into explicit copies.
+    let control = if kept.inherited {
+        (descriptor.control & SE_DACL_PROTECTED) | SE_DACL_AUTO_INHERITED
+    } else {
+        descriptor.control & control_bits
+    };
     // SAFETY: `absolute` is a SECURITY_DESCRIPTOR we own; the ACL buffer
     // outlives SetFileSecurityW; the path is NUL-terminated.
     let ok = unsafe {
         InitializeSecurityDescriptor(sd, SECURITY_DESCRIPTOR_REVISION) != 0
             && SetSecurityDescriptorDacl(sd, 1, acl.as_mut_ptr().cast(), 0) != 0
-            && SetSecurityDescriptorControl(sd, control_bits, descriptor.control & control_bits)
-                != 0
+            && SetSecurityDescriptorControl(sd, control_bits, control) != 0
             && SetFileSecurityW(wide_path.as_ptr(), DACL_SECURITY_INFORMATION, sd) != 0
     };
     if ok {
