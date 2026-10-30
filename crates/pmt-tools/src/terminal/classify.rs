@@ -7,8 +7,9 @@
 //! would either hang the call until its timeout or leave an untracked
 //! process behind. `--help`/`--version` invocations are never servers.
 //!
-//! The lexer understands quotes, comments and redirections such as `2>&1`
-//! and `&>`; it is a classifier, not a shell parser.
+//! The lexer understands quotes, comments, redirections such as `2>&1`
+//! and `&>`, and PowerShell's `&` call operator; it is a classifier, not a
+//! shell parser.
 
 /// How to run a command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +119,10 @@ impl Lexer {
             '#' if self.word.is_empty() => while chars.next_if(|(_, c)| *c != '\n').is_some() {},
             // `>&`, `<&` and `&>` are redirections, not control operators.
             '&' if self.word.ends_with(['>', '<']) || rest.starts_with("&>") => self.word.push(c),
+            // In command position (nothing before it in this command) `&` is
+            // PowerShell's call operator, `& 'C:\x\tool.exe' args`; POSIX
+            // shells reject it there, so this reading is safe for both.
+            '&' if self.at_command_start() && !rest.starts_with("&&") => self.word.push(c),
             c if c.is_whitespace() && c != '\n' => self.finish_word(),
             _ => match OPERATORS.iter().find(|op| rest.starts_with(**op)) {
                 Some(op) => {
@@ -141,6 +146,10 @@ impl Lexer {
         } else if Some(c) == self.quote {
             self.quote = None;
         }
+    }
+
+    fn at_command_start(&self) -> bool {
+        self.word.is_empty() && !matches!(self.tokens.last(), Some(Token::Word(_)))
     }
 
     fn finish_word(&mut self) {
@@ -167,7 +176,8 @@ fn segments(tokens: &[Token]) -> Vec<Vec<&str>> {
 /// The command and its arguments: leading `NAME=value` assignments and
 /// transparent wrappers are skipped, quotes are dropped.
 fn command_words(segment: &[&str]) -> Vec<String> {
-    const WRAPPERS: &[&str] = &["sudo", "env", "exec", "time", "command", "npx", "bunx"];
+    // `&` is PowerShell's call operator (see the lexer).
+    const WRAPPERS: &[&str] = &["sudo", "env", "exec", "time", "command", "npx", "bunx", "&"];
     let mut words: Vec<String> = segment.iter().map(|w| w.replace(['\'', '"'], "")).collect();
     while let Some(first) = words.first() {
         let assignment = first
@@ -292,5 +302,19 @@ mod tests {
         }
         assert_eq!(classify("grep nohup notes.txt"), Plan::Foreground);
         assert_eq!(classify("echo 'a & b'"), Plan::Foreground);
+    }
+
+    #[test]
+    fn powershell_call_operator_is_not_a_detach() {
+        for command in [
+            "& 'C:\\Tools\\cmd.exe' /c exit 3",
+            "& ([Environment]::SystemDirectory + '\\cmd.exe') /c exit 3",
+            "Get-Date; & $tool --check",
+            "Get-Item x | &{ process { $_ } }",
+        ] {
+            assert_eq!(classify(command), Plan::Foreground, "{command}");
+        }
+        assert!(refused("& npm run dev").starts_with(SERVER_REFUSAL));
+        assert!(refused("& ./job.ps1 & Write-Output started").contains("'&'"));
     }
 }
