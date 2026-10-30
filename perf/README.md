@@ -7,8 +7,14 @@ budget; Memory and size budgets):
 | Measurement | How | Absolute budget |
 |---|---|---|
 | Startup | 30 timed runs of `prometheus --version` after 3 warm-up runs; p95 checked | 20 ms |
-| Peak RSS | `getrusage(RUSAGE_CHILDREN)` in a dedicated sampler process | 120 MiB |
-| Binary size | stripped `target/release/prometheus` | 80 MiB |
+| Peak RSS | `getrusage(RUSAGE_CHILDREN)` in the small `perf-sampler` binary | 120 MiB |
+| Binary size | stripped release `prometheus`, at the path cargo reports | 80 MiB |
+
+Peak RSS is sampled from `xtask/src/bin/perf-sampler.rs`, a std-only
+binary, because on Linux a child spawned with `posix_spawn` (vfork) starts
+its `maxrss` at the spawner's memory high-water mark. The sampler is small,
+and a peak that does not rise above its own high-water mark is reported as
+"not measurable" rather than recorded as the binary's.
 
 It also fails when a measurement grows more than 15% over the entry for the
 current platform (`<os>-<arch>`) in `perf/baseline.json`. Startup uses the
@@ -23,17 +29,21 @@ cargo xtask perf --update-baseline        # record this platform's entry (budget
 cargo xtask perf --baseline PATH          # compare with another baseline file
 ```
 
+`scripts/check --perf [ARGS...]` runs exactly `cargo xtask perf [ARGS...]`.
+
 ## In CI
 
-The gate is not in `scripts/check`: wall-time samples on a busy developer
-machine are too noisy for a blocking pre-push hook. CI runs it as its own
-job, `perf` in `.github/workflows/ci.yml`, on the reference runner
-(GitHub-hosted `ubuntu-24.04`, x86_64):
+`scripts/check` runs the gate as its last step, against the checked-in
+`perf/baseline.json`; on a platform without an entry there only the absolute
+budgets apply. The regression check against `main` runs in its own job,
+`perf` in `.github/workflows/ci.yml`, on the reference runner (GitHub-hosted
+`ubuntu-24.04`, x86_64), so every comparison is between runs on the same
+kind of machine:
 
-1. On every push to `main`, run `cargo xtask perf --update-baseline --baseline target/perf-main.json`
+1. On every push to `main`, run `scripts/check --perf --update-baseline --baseline target/perf-main.json`
    and upload `target/perf-main.json` as the `perf-baseline` artifact.
 2. On every pull request, download the latest `perf-baseline` artifact from
-   `main` and run `cargo xtask perf --baseline target/perf-main.json`; a
+   `main` and run `scripts/check --perf --baseline target/perf-main.json`; a
    non-zero exit fails the job. Without an artifact the absolute budgets
    still apply, and the checked-in `perf/baseline.json` is used as a fallback.
 

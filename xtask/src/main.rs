@@ -74,13 +74,6 @@ enum Command {
         #[arg(long)]
         update_baseline: bool,
     },
-    /// Internal: sample a binary in a clean process for `perf`.
-    #[command(hide = true)]
-    PerfSample {
-        #[arg(long)]
-        runs: u16,
-        binary: PathBuf,
-    },
 }
 
 fn main() -> ExitCode {
@@ -98,7 +91,6 @@ fn main() -> ExitCode {
             let baseline = baseline.unwrap_or_else(|| root.join("perf/baseline.json"));
             perf::run(&root, runs.into(), &baseline, update_baseline)
         }
-        Command::PerfSample { runs, binary } => perf::sample_command(&binary, runs.into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

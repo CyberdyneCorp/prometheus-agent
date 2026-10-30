@@ -15,6 +15,9 @@ if [ "${1:-}" = "--debug" ]; then
 fi
 bin_dir=${1:-${CARGO_HOME:-$HOME/.cargo}/bin}
 root=$(cd "$(dirname "$0")/.." && pwd)
+# The install is for this machine, and the copy below expects the host
+# layout ($target_dir/$profile), not $target_dir/<triple>/$profile.
+unset CARGO_BUILD_TARGET
 
 if [ "$profile" = release ]; then
     cargo build --manifest-path "$root/Cargo.toml" -p prometheus --release

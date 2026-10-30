@@ -2,21 +2,21 @@
 //! (spec: workspace-architecture, Startup time budget; Memory and size
 //! budgets).
 //!
-//! It builds the release binary, runs `prometheus --version` repeatedly in a
-//! sampler child process, and fails when a measurement exceeds its absolute
-//! budget or regresses more than 15% against the entry for this platform in
-//! the baseline file. The chat and daemon budgets join when those commands
-//! exist (M1).
+//! It builds the release binary, runs `prometheus --version` repeatedly from
+//! the small `perf-sampler` binary, and fails when a measurement exceeds its
+//! absolute budget or regresses more than 15% against the entry for this
+//! platform in the baseline file. The chat and daemon budgets join when
+//! those commands exist (M1).
 //!
-//! The gate is not part of `scripts/check`: wall-time samples on a busy
-//! developer machine are too noisy for a blocking pre-push hook. CI runs it
-//! in its own job on the reference runner (see `perf/README.md`).
+//! `scripts/check` runs it against `perf/baseline.json`; CI's `perf` job
+//! runs it on the reference runner against main's baseline
+//! (see `perf/README.md`).
 
 mod budget;
 mod sample;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use self::budget::{Baseline, Metrics};
 
@@ -28,8 +28,7 @@ pub(crate) fn run(
     baseline_path: &Path,
     update: bool,
 ) -> Result<(), String> {
-    let binary = build_release(root)?;
-    let current = measure(&binary, runs)?;
+    let current = measure(root, runs)?;
     let mut baseline = load_baseline(baseline_path)?;
     let platform = platform();
     report(&platform, &current, baseline.get(&platform));
@@ -54,63 +53,74 @@ pub(crate) fn run(
     Ok(())
 }
 
-fn build_release(root: &Path) -> Result<PathBuf, String> {
+/// Builds `name` with `cargo build <args>` and returns the executable cargo
+/// reports, so `CARGO_TARGET_DIR`, `build.target-dir` and
+/// `CARGO_BUILD_TARGET` all land on the right path.
+fn cargo_build_bin(root: &Path, args: &[&str], name: &str) -> Result<PathBuf, String> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let status = Command::new(cargo)
+    let output = Command::new(cargo)
         .current_dir(root)
-        .args(["build", "--release", "--locked", "--package", "prometheus"])
-        .status()
-        .map_err(|e| format!("cargo build: {e}"))?;
-    if !status.success() {
-        return Err(format!("cargo build --release failed ({status})"));
-    }
-    let name = format!("prometheus{}", std::env::consts::EXE_SUFFIX);
-    Ok(root.join("target/release").join(name))
-}
-
-/// Samples in a fresh `cargo xtask perf-sample` process so its peak-RSS
-/// counter only sees the measured runs.
-fn measure(binary: &Path, runs: usize) -> Result<Metrics, String> {
-    let xtask = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
-    let output = Command::new(xtask)
-        .arg("perf-sample")
-        .arg("--runs")
-        .arg(runs.to_string())
-        .arg(binary)
+        .args([
+            "build",
+            "--locked",
+            "--message-format=json-render-diagnostics",
+        ])
+        .args(args)
+        .stderr(Stdio::inherit())
         .output()
-        .map_err(|e| format!("perf-sample: {e}"))?;
+        .map_err(|e| format!("cargo build: {e}"))?;
     if !output.status.success() {
         return Err(format!(
-            "perf-sample failed: {}",
-            String::from_utf8_lossy(&output.stderr)
+            "cargo build {} failed ({})",
+            args.join(" "),
+            output.status
         ));
     }
-    let samples: sample::Samples =
-        serde_json::from_slice(&output.stdout).map_err(|e| format!("perf-sample output: {e}"))?;
-    let (startup_median_ms, startup_p95_ms) = budget::summarize(samples.startup_ms);
-    let binary_bytes = std::fs::metadata(binary)
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| bin_artifact(line, name))
+        .ok_or_else(|| format!("cargo build reported no executable for {name}"))
+}
+
+/// The `executable` of a `compiler-artifact` message for binary `name`.
+fn bin_artifact(line: &str, name: &str) -> Option<PathBuf> {
+    let message: serde_json::Value = serde_json::from_str(line).ok()?;
+    let target = &message["target"];
+    let is_bin = target["kind"].as_array()?.iter().any(|kind| kind == "bin");
+    if message["reason"] != "compiler-artifact" || target["name"] != name || !is_bin {
+        return None;
+    }
+    message["executable"].as_str().map(PathBuf::from)
+}
+
+fn measure(root: &Path, runs: usize) -> Result<Metrics, String> {
+    let binary = cargo_build_bin(
+        root,
+        &["--release", "--package", "prometheus"],
+        "prometheus",
+    )?;
+    let sampler = cargo_build_bin(
+        root,
+        &["--package", "xtask", "--bin", "perf-sampler"],
+        "perf-sampler",
+    )?;
+    let measured = sample::collect(&sampler, &binary, runs)?;
+    let (startup_median_ms, startup_p95_ms) = budget::summarize(measured.startup_ms);
+    let binary_bytes = std::fs::metadata(&binary)
         .map_err(|e| format!("{}: {e}", binary.display()))?
         .len();
     Ok(Metrics {
         startup_median_ms: round2(startup_median_ms),
         startup_p95_ms: round2(startup_p95_ms),
-        peak_rss_bytes: samples.peak_rss_bytes,
+        peak_rss_bytes: measured.peak_rss_bytes,
         binary_bytes,
     })
-}
-
-/// Prints the sampler's JSON for the parent `perf` process.
-pub(crate) fn sample_command(binary: &Path, runs: usize) -> Result<(), String> {
-    let samples = sample::collect(binary, runs)?;
-    let json = serde_json::to_string(&samples).map_err(|e| e.to_string())?;
-    println!("{json}");
-    Ok(())
 }
 
 fn report(platform: &str, current: &Metrics, stored: Option<&Metrics>) {
     let rss = current
         .peak_rss_bytes
-        .map_or_else(|| "not reported".to_owned(), budget::mib);
+        .map_or_else(|| "not measurable".to_owned(), budget::mib);
     println!(
         "perf ({platform}): startup median {}, p95 {}; peak RSS {rss}; binary {}",
         budget::ms(current.startup_median_ms),
@@ -145,4 +155,27 @@ fn save_baseline(path: &Path, baseline: &Baseline) -> Result<(), String> {
 
 fn round2(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::bin_artifact;
+
+    #[test]
+    fn the_executable_comes_from_the_named_bin_artifact() {
+        let lib = r#"{"reason":"compiler-artifact","target":{"name":"prometheus","kind":["lib"]},"executable":null}"#;
+        let bin = r#"{"reason":"compiler-artifact","target":{"name":"prometheus","kind":["bin"]},"executable":"/t/x86_64-unknown-linux-musl/release/prometheus"}"#;
+        let other = r#"{"reason":"compiler-artifact","target":{"name":"xtask","kind":["bin"]},"executable":"/t/debug/xtask"}"#;
+        assert_eq!(bin_artifact(lib, "prometheus"), None);
+        assert_eq!(bin_artifact(other, "prometheus"), None);
+        assert_eq!(bin_artifact("not json", "prometheus"), None);
+        assert_eq!(
+            bin_artifact(bin, "prometheus"),
+            Some(PathBuf::from(
+                "/t/x86_64-unknown-linux-musl/release/prometheus"
+            ))
+        );
+    }
 }

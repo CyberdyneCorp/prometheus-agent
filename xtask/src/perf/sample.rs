@@ -1,73 +1,82 @@
-//! Runs the measured binary repeatedly and records wall time and peak RSS.
-//!
-//! This runs in a dedicated child process (`cargo xtask perf-sample`) because
-//! peak RSS comes from `getrusage(RUSAGE_CHILDREN)`, which covers every child
-//! ever reaped: in the parent it would include `cargo build`.
+//! Reads what the `perf-sampler` binary measured (see its module docs for
+//! why sampling happens in a separate, small process).
 
 use std::path::Path;
 use std::process::Command;
-use std::time::Instant;
 
-use serde::{Deserialize, Serialize};
-
-/// Runs excluded from the samples: the first launch of a fresh binary pays
-/// for page-cache misses and, on macOS, the code-signature check.
-const WARMUP_RUNS: usize = 3;
-
-/// What one `perf-sample` process measured, passed back to the parent as JSON.
-#[derive(Debug, Serialize, Deserialize)]
+/// What one `perf-sampler` run measured.
+#[derive(Debug, PartialEq)]
 pub(crate) struct Samples {
     /// Wall time of each `--version` run, in milliseconds.
     pub(crate) startup_ms: Vec<f64>,
-    /// Largest resident set of any run, when the platform reports it.
+    /// Largest resident set of any run, when it can be attributed to the
+    /// measured binary.
     pub(crate) peak_rss_bytes: Option<u64>,
 }
 
-/// Runs `binary --version` `runs` times after the warm-up runs.
-pub(crate) fn collect(binary: &Path, runs: usize) -> Result<Samples, String> {
-    for _ in 0..WARMUP_RUNS {
-        run_once(binary)?;
-    }
-    let startup_ms = (0..runs)
-        .map(|_| run_once(binary))
-        .collect::<Result<_, _>>()?;
-    Ok(Samples {
-        startup_ms,
-        peak_rss_bytes: children_peak_rss(),
-    })
-}
-
-fn run_once(binary: &Path) -> Result<f64, String> {
-    let start = Instant::now();
-    let output = Command::new(binary)
-        .arg("--version")
+/// Runs `sampler BINARY RUNS` and parses its output.
+pub(crate) fn collect(sampler: &Path, binary: &Path, runs: usize) -> Result<Samples, String> {
+    let output = Command::new(sampler)
+        .arg(binary)
+        .arg(runs.to_string())
         .output()
-        .map_err(|e| format!("{}: {e}", binary.display()))?;
-    let elapsed = start.elapsed();
-    if !output.status.success() || !output.stdout.starts_with(b"prometheus ") {
+        .map_err(|e| format!("{}: {e}", sampler.display()))?;
+    if !output.status.success() {
         return Err(format!(
-            "{} --version failed ({}): {}",
-            binary.display(),
-            output.status,
+            "perf-sampler failed: {}",
             String::from_utf8_lossy(&output.stderr)
         ));
     }
-    Ok(elapsed.as_secs_f64() * 1_000.0)
+    parse(&String::from_utf8_lossy(&output.stdout))
 }
 
-#[cfg(unix)]
-fn children_peak_rss() -> Option<u64> {
-    use nix::sys::resource::{UsageWho, getrusage};
-    let raw = u64::try_from(getrusage(UsageWho::RUSAGE_CHILDREN).ok()?.max_rss()).ok()?;
-    // Darwin reports ru_maxrss in bytes, Linux and the BSDs in KiB.
-    Some(if cfg!(target_vendor = "apple") {
-        raw
-    } else {
-        raw * 1024
-    })
+fn parse(text: &str) -> Result<Samples, String> {
+    let mut samples = Samples {
+        startup_ms: Vec::new(),
+        peak_rss_bytes: None,
+    };
+    for line in text.lines() {
+        let bad = || format!("perf-sampler output: unexpected line {line:?}");
+        match line.split_once(' ').ok_or_else(bad)? {
+            ("startup_ms", ms) => samples.startup_ms.push(ms.parse().map_err(|_| bad())?),
+            ("peak_rss_bytes", "none") => samples.peak_rss_bytes = None,
+            ("peak_rss_bytes", bytes) => {
+                samples.peak_rss_bytes = Some(bytes.parse().map_err(|_| bad())?);
+            }
+            _ => return Err(bad()),
+        }
+    }
+    if samples.startup_ms.is_empty() {
+        return Err("perf-sampler output: no timed runs".to_owned());
+    }
+    Ok(samples)
 }
 
-#[cfg(not(unix))]
-fn children_peak_rss() -> Option<u64> {
-    None
+#[cfg(test)]
+mod tests {
+    use super::{Samples, parse};
+
+    #[test]
+    fn parses_runs_and_peak() {
+        let samples = parse("startup_ms 1.5\nstartup_ms 2\npeak_rss_bytes 4096\n").unwrap();
+        assert_eq!(
+            samples,
+            Samples {
+                startup_ms: vec![1.5, 2.0],
+                peak_rss_bytes: Some(4096),
+            }
+        );
+    }
+
+    #[test]
+    fn an_unmeasurable_peak_is_absent() {
+        let samples = parse("startup_ms 1.5\npeak_rss_bytes none\n").unwrap();
+        assert_eq!(samples.peak_rss_bytes, None);
+    }
+
+    #[test]
+    fn garbage_and_empty_output_are_errors() {
+        assert!(parse("startup_ms fast\n").is_err());
+        assert!(parse("peak_rss_bytes 1\n").is_err());
+    }
 }

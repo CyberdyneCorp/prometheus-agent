@@ -4,11 +4,13 @@
 # (spec: workspace-architecture, Repository health gates).
 #
 # usage: scripts/check                       run every gate, stop at the first failure
+#        scripts/check --perf [ARGS...]        run only the startup, memory and size
+#                                              budgets (`cargo xtask perf ARGS...`)
 #        scripts/check --install-hook pre-push  run the gates before every `git push`
 #
-# The startup, memory and size budgets (`cargo xtask perf`) run as a separate
-# CI job on the reference runner, not here: timing samples on a busy
-# developer machine are too noisy for a blocking gate (perf/README.md).
+# The full run checks the budgets against perf/baseline.json. CI's perf job
+# uses `--perf` to compare with main's baseline on the reference runner
+# (perf/README.md).
 set -euo pipefail
 
 # Pinned tool versions. CI installs exactly these; a local mismatch fails up
@@ -99,6 +101,7 @@ run_gates() {
     step cargo xtask gen --check
     docs_gate
     health_gate
+    step cargo xtask perf
     echo "check: all gates passed"
 }
 
@@ -123,9 +126,13 @@ EOF
 
 case "${1:-}" in
 "") run_gates ;;
+--perf)
+    shift
+    step cargo xtask perf "$@"
+    ;;
 --install-hook)
     [ $# -eq 2 ] || die "usage: scripts/check --install-hook <hook-name>"
     install_hook "$2"
     ;;
-*) die "unknown argument: $1 (usage: scripts/check [--install-hook pre-push])" ;;
+*) die "unknown argument: $1 (usage: scripts/check [--perf [ARGS...] | --install-hook pre-push])" ;;
 esac
