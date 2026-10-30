@@ -6,8 +6,9 @@
 # usage: scripts/check                       run every gate, stop at the first failure
 #        scripts/check --install-hook pre-push  run the gates before every `git push`
 #
-# The startup, memory and size budgets (tasks 2.4) join the gate list when
-# that harness lands.
+# The startup, memory and size budgets (`cargo xtask perf`) run as a separate
+# CI job on the reference runner, not here: timing samples on a busy
+# developer machine are too noisy for a blocking gate (perf/README.md).
 set -euo pipefail
 
 # Pinned tool versions. CI installs exactly these; a local mismatch fails up

@@ -33,6 +33,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo deny check
 scripts/dev-install            # installs prometheus and its pmt alias into ~/.cargo/bin
+cargo xtask perf               # startup, memory and size budgets (perf/README.md)
 ```
 
 ## License

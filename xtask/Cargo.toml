@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository automation: generated contracts, reference docs and the code-health ratchet"
+description = "Repository automation: generated contracts, reference docs, the code-health ratchet and the performance gate"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,6 +19,10 @@ serde.workspace = true
 serde_json.workspace = true
 syn = { version = "3.0", default-features = false, features = ["full", "parsing", "visit"] }
 toml = "1.1"
+
+# Peak RSS of the measured binary (getrusage of reaped children).
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false, features = ["resource"] }
 
 [lints]
 workspace = true

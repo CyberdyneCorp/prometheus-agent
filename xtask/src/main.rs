@@ -14,9 +14,13 @@
 //!
 //! `cargo xtask health` enforces the complexity and unsafe-code ratchet
 //! described in `health.toml`.
+//!
+//! `cargo xtask perf` checks the startup, peak-RSS and binary-size budgets
+//! against `perf/baseline.json`.
 
 mod artifacts;
 mod health;
+mod perf;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -51,6 +55,27 @@ enum Command {
         #[arg(long)]
         base: Option<PathBuf>,
     },
+    /// Measure startup time, peak RSS and release binary size against the
+    /// budgets and the stored baseline.
+    Perf {
+        /// Timed `prometheus --version` runs (after 3 warm-up runs).
+        #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u16).range(1..))]
+        runs: u16,
+        /// Baseline file (default: `perf/baseline.json`).
+        #[arg(long)]
+        baseline: Option<PathBuf>,
+        /// Record this run as the baseline for this platform instead of
+        /// comparing with it; the absolute budgets still apply.
+        #[arg(long)]
+        update_baseline: bool,
+    },
+    /// Internal: sample a binary in a clean process for `perf`.
+    #[command(hide = true)]
+    PerfSample {
+        #[arg(long)]
+        runs: u16,
+        binary: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -59,6 +84,16 @@ fn main() -> ExitCode {
         Command::Health { root, base } => {
             health::run(&root.unwrap_or_else(repo_root), base.as_deref())
         }
+        Command::Perf {
+            runs,
+            baseline,
+            update_baseline,
+        } => {
+            let root = repo_root();
+            let baseline = baseline.unwrap_or_else(|| root.join("perf/baseline.json"));
+            perf::run(&root, runs.into(), &baseline, update_baseline)
+        }
+        Command::PerfSample { runs, binary } => perf::sample_command(&binary, runs.into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
