@@ -33,9 +33,11 @@ cargo xtask perf --baseline PATH          # compare with another baseline file
 
 ## In CI
 
-`scripts/check` runs the gate as its last step, against the checked-in
+A local `scripts/check` runs the gate as its last step, against the checked-in
 `perf/baseline.json`; on a platform without an entry there only the absolute
-budgets apply. The regression check against `main` runs in its own job,
+budgets apply. CI's platform jobs run `scripts/check --no-perf`, because the
+budgets are defined for the reference runner and shared runners are too noisy
+to gate on. The budgets and the regression check against `main` run in their own job,
 `perf` in `.github/workflows/ci.yml`, on the reference runner (GitHub-hosted
 `ubuntu-24.04`, x86_64), so every comparison is between runs on the same
 kind of machine:

@@ -1,5 +1,6 @@
-# CI runs scripts/check and nothing else on Tier 1, so a green local
-# `scripts/check` predicts a green check job (spec: workspace-architecture,
+# CI runs scripts/check and nothing else on Tier 1 (`--no-perf`: the budgets
+# only apply to the reference runner), so a green local `scripts/check`
+# predicts a green check job (spec: workspace-architecture,
 # Repository health gates; Supported targets and support tiers). Tier 2 targets
 # are build-only until the offline smoke suite lands in M1. The perf job runs
 # `scripts/check --perf` on one fixed reference runner, where the regression
@@ -83,7 +84,8 @@ jobs:
         run: npm install -g "@fission-ai/openspec@$OPENSPEC_VERSION"
 
       - name: scripts/check
-        run: scripts/check
+        # The budgets apply to the reference runner only; the perf job runs them.
+        run: scripts/check --no-perf
 
   build:
     name: build (${{ matrix.target }})

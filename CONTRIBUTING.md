@@ -38,10 +38,12 @@ naming it:
 9. `cargo xtask health` (the code-health rules below)
 10. `cargo xtask perf` (startup, memory and size budgets, below)
 
-CI (`.github/workflows/ci.yml`) runs exactly `scripts/check` on every Tier 1
-target, so a green local run predicts a green check job. CI also builds the
-Tier 2 targets (Windows x86_64 and aarch64, Android aarch64) and runs
-`scripts/check --perf` on its reference runner against main's baseline.
+CI (`.github/workflows/ci.yml`) runs `scripts/check --no-perf` on every Tier 1
+target, so a green local run predicts a green check job. The budgets are
+defined for one reference runner, so CI runs them only there, with
+`scripts/check --perf` against main's baseline; timing on the shared matrix
+runners is too noisy to gate on. CI also builds the Tier 2 targets (Windows
+x86_64 and aarch64, Android aarch64).
 
 ### Pre-push hook
 
@@ -65,8 +67,8 @@ cargo xtask gen
 ### Performance budgets
 
 Startup, peak memory and binary size have absolute budgets and a 15%
-regression limit (`perf/README.md`). `scripts/check` runs the gate last;
-run it alone before touching startup paths or dependencies:
+regression limit (`perf/README.md`). A local `scripts/check` runs the gate
+last (`--no-perf` skips it); run it alone before touching startup paths or dependencies:
 
 ```sh
 scripts/check --perf        # same as cargo xtask perf
