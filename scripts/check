@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# The single entry point for every blocking repository gate. CI runs exactly
+# this command, so a green local run means a green CI run
+# (spec: workspace-architecture, Repository health gates).
+#
+# usage: scripts/check                       run every gate, stop at the first failure
+#        scripts/check --install-hook pre-push  run the gates before every `git push`
+#
+# The complexity/unsafe ratchet (tasks 2.3) and the startup, memory and size
+# budgets (tasks 2.4) join the gate list when those harnesses land.
+set -euo pipefail
+
+# Pinned tool versions. CI installs exactly these; a local mismatch fails up
+# front instead of producing results CI would not reproduce. The Rust
+# toolchain itself is pinned by rust-toolchain.toml.
+readonly CARGO_DENY_VERSION=0.20.2
+readonly CARGO_NEXTEST_VERSION=0.9.148
+readonly OPENSPEC_VERSION=1.13.2
+
+readonly HOOK_MARKER="installed by scripts/check"
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+die() {
+    echo "check: $*" >&2
+    exit 1
+}
+
+# First token of a command's output that looks like a version number.
+version_of() {
+    "$@" 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1
+}
+
+require_version() {
+    local name=$1 want=$2 install=$3
+    shift 3
+    local have
+    have=$(version_of "$@" || true)
+    if [ "$have" != "$want" ]; then
+        die "$name ${have:-not found}, need $want (install: $install)"
+    fi
+}
+
+check_tools() {
+    require_version cargo-deny "$CARGO_DENY_VERSION" \
+        "cargo install --locked cargo-deny@$CARGO_DENY_VERSION" cargo deny --version
+    require_version cargo-nextest "$CARGO_NEXTEST_VERSION" \
+        "cargo install --locked cargo-nextest@$CARGO_NEXTEST_VERSION" cargo nextest --version
+    require_version openspec "$OPENSPEC_VERSION" \
+        "npm install -g @fission-ai/openspec@$OPENSPEC_VERSION" openspec --version
+}
+
+step() {
+    echo "==> $*"
+    "$@" || die "failed: $*"
+}
+
+run_gates() {
+    check_tools
+    step cargo fmt --all --check
+    step cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+    step cargo nextest run --workspace --all-features --locked --no-tests=fail
+    # nextest does not run doctests.
+    step cargo test --workspace --all-features --locked --doc
+    step cargo deny check
+    step openspec validate --all --strict --no-interactive
+    step cargo xtask gen --check
+    echo "check: all gates passed"
+}
+
+# Writes a git hook that runs this script. A hook that someone else wrote is
+# left alone rather than silently replaced.
+install_hook() {
+    local name=$1 hooks_dir hook
+    hooks_dir=$(git rev-parse --git-path hooks)
+    hook="$hooks_dir/$name"
+    if [ -e "$hook" ] && ! grep -q "$HOOK_MARKER" "$hook"; then
+        die "$hook exists and was not written by scripts/check; remove it first"
+    fi
+    mkdir -p "$hooks_dir"
+    cat >"$hook" <<EOF
+#!/bin/sh
+# $HOOK_MARKER; rerun \`scripts/check --install-hook $name\` to refresh.
+exec "\$(git rev-parse --show-toplevel)/scripts/check"
+EOF
+    chmod +x "$hook"
+    echo "check: installed $hook"
+}
+
+case "${1:-}" in
+"") run_gates ;;
+--install-hook)
+    [ $# -eq 2 ] || die "usage: scripts/check --install-hook <hook-name>"
+    install_hook "$2"
+    ;;
+*) die "unknown argument: $1 (usage: scripts/check [--install-hook pre-push])" ;;
+esac
