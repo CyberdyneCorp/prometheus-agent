@@ -115,6 +115,13 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     let file = profile.config_file();
     let (text, _) = file.read()?;
     pmt_config::check(file.path(), &text)?;
+    // Backend names are a registry, not a schema enum (plugins add names).
+    let backend = ctx.scope()?.config().terminal.backend.clone();
+    if let Err(err) = pmt_sandbox::backend::BackendRegistry::builtin().select(&backend)
+        && err.code() == &codes::TERMINAL_UNKNOWN_BACKEND
+    {
+        return Err(err);
+    }
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }

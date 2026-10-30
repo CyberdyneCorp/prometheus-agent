@@ -230,6 +230,35 @@ fn validate_reports_every_error_with_line_and_allowed_values() {
 }
 
 #[test]
+fn unknown_terminal_backend_fails_validation_with_the_available_list() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    std::fs::write(
+        config_path(home.path()),
+        "[terminal]\nbackend = \"acmebox\"\n",
+    )
+    .unwrap();
+    let out = run(home.path(), &["config", "validate"]);
+    assert_eq!(out.status.code(), Some(78));
+    let err = stderr(&out);
+    assert!(
+        err.contains("unknown terminal backend 'acmebox'; available: local, container, ssh"),
+        "{err}"
+    );
+
+    // Reserved names are valid configuration; selecting one fails at start.
+    std::fs::write(
+        config_path(home.path()),
+        "[terminal]\nbackend = \"container\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        run(home.path(), &["config", "validate"]).status.code(),
+        Some(0)
+    );
+}
+
+#[test]
 fn unknown_key_json_error_has_kind_and_code() {
     let home = temp_home();
     run(home.path(), &["config", "path"]);

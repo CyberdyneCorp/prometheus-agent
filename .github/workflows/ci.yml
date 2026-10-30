@@ -133,6 +133,13 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test -p pmt-core --lib --locked --target "${{ matrix.target }}" -- private_fs
 
+      # AppContainer + Job Object sandbox (security-boundaries, OS sandbox
+      # per platform): writes outside the workspace and credential reads
+      # fail, ACL entries are revoked, strength is reported per feature.
+      - name: Windows sandbox tests
+        if: runner.os == 'Windows'
+        run: cargo test -p pmt-sandbox --locked --target "${{ matrix.target }}"
+
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04

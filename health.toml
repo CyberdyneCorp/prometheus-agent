@@ -13,7 +13,13 @@ parser_modules = []
 
 # The only modules where `unsafe` may appear (OS sandbox and FFI). Every
 # `unsafe` block and `unsafe impl` also needs a `// SAFETY:` comment.
-unsafe_modules = []
+unsafe_modules = [
+    # pre_exec hook applying Landlock and seccomp between fork and exec.
+    "crates/pmt-sandbox/src/linux/exec.rs",
+    # AppContainer profiles, file ACLs, CreateProcessW and Job Objects.
+    "crates/pmt-sandbox/src/windows/container.rs",
+    "crates/pmt-sandbox/src/windows/launch.rs",
+]
 
 # Existing items over budget. Exceptions may only shrink: an item that grows
 # past its `max`, a new entry, or a raised `max` fails the gate, and a `max`

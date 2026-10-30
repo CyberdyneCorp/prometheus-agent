@@ -17,6 +17,7 @@ pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
+pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
 prometheus = { path = "crates/prometheus" }
@@ -72,6 +73,12 @@ pmt-backup = { path = "crates/pmt-backup" }
 proptest = { version = "1.9", default-features = false, features = ["std"] }
 # Test-only capture of log events; 7.3 installs the real subscriber.
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# OS sandbox: Landlock rulesets and seccomp-bpf filters (Linux), raw
+# constants for both, and the AppContainer/Job Object API (Windows).
+landlock = "0.4"
+seccompiler = "0.5"
+libc = "0.2"
+windows-sys = "0.61"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

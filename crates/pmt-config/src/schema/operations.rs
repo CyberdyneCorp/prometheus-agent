@@ -233,6 +233,24 @@ pub enum DegradedFeature {
     All,
 }
 
+impl DegradedFeature {
+    /// The name used in `security.sandbox.allow_degraded`.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Landlock => "landlock",
+            Self::LandlockNet => "landlock_net",
+            Self::Seccomp => "seccomp",
+            Self::Seatbelt => "seatbelt",
+            Self::Appcontainer => "appcontainer",
+            Self::NoNewPrivileges => "no_new_privileges",
+            Self::ReadOnlyRootfs => "read_only_rootfs",
+            Self::CapDrop => "cap_drop",
+            Self::All => "all",
+        }
+    }
+}
+
 /// The `[security.egress]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]

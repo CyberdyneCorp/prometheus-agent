@@ -17,6 +17,11 @@ use prometheus::{
 };
 
 fn main() -> ExitCode {
+    // A copy of this binary started as the Windows sandbox launcher only
+    // starts the confined child; it parses no CLI and reads no environment.
+    if let Some(code) = pmt_sandbox::launcher::run_if_requested() {
+        std::process::exit(code);
+    }
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(err) => return usage_failure(&err),

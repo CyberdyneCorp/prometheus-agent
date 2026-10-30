@@ -399,6 +399,21 @@ error_codes! {
     /// A protected-instruction-file pattern is invalid.
     SECURITY_INVALID_PATTERN = ("security.invalid_pattern", Config,
         "An entry of `security.protected_instruction_extra_patterns` is not a valid basename glob.");
+    /// A capability string is not in the closed vocabulary.
+    CAPABILITY_UNKNOWN = ("capability.unknown", Config,
+        "A capability string (config, plugin manifest, grants file) is not in the closed vocabulary (`fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host>[:<port>]`, `process.spawn:<program>`...).");
+    /// The OS sandbox lacks a hardening feature that was not explicitly allowed to be missing.
+    SANDBOX_UNAVAILABLE = ("sandbox.unavailable", Sandbox,
+        "The OS sandbox cannot enforce a feature (Landlock, seccomp, Seatbelt, AppContainer) on this host and `security.sandbox.allow_degraded` does not name it, so the command was not run.");
+    /// The OS sandbox could not be set up for a child process.
+    SANDBOX_SETUP = ("sandbox.setup", Sandbox,
+        "The OS sandbox profile for a child process could not be built or applied; the child was not started.");
+    /// `terminal.backend` names no registered backend.
+    TERMINAL_UNKNOWN_BACKEND = ("terminal.unknown_backend", Config,
+        "`terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends.");
+    /// The selected terminal backend ships in a later milestone.
+    TERMINAL_BACKEND_UNAVAILABLE = ("terminal.backend_unavailable", Unavailable,
+        "The selected terminal backend (`container`, `ssh`) is reserved but not available in this build.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line
