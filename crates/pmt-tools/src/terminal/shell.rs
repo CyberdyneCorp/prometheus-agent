@@ -170,10 +170,10 @@ pub fn init_argv(
     argv.extend([
         OsString::from(script),
         "pmt-shell-init".into(),
-        files.snapshot.clone().into(),
+        shell_path(&files.snapshot),
         hidden.join(" ").into(),
     ]);
-    argv.extend(init_files.iter().map(|f| f.clone().into_os_string()));
+    argv.extend(init_files.iter().map(|f| shell_path(f)));
     argv
 }
 
@@ -204,6 +204,21 @@ pub fn run_argv(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec<O
     }
 }
 
+/// A path as handed to a shell. Canonical Windows paths are verbatim
+/// (`\\?\D:\..`) and shells do not handle that form like the plain one
+/// (PowerShell lost the session cwd after `Set-Location sub` from a verbatim
+/// start; MSYS bash does not translate it at all). Such paths
+/// get the plain form whenever it names the same file; elsewhere the path is
+/// unchanged.
+fn shell_path(path: &Path) -> OsString {
+    dunce::simplified(path).as_os_str().to_owned()
+}
+
+/// How a POSIX shell reports its final directory: Git Bash's `pwd -P` gives
+/// an MSYS path (`/d/a/..`) the session cannot spawn in, `pwd -W` the
+/// Windows one (`D:/a/..`).
+const PWD: &str = if cfg!(windows) { "pwd -W" } else { "pwd -P" };
+
 fn posix_prefix(shell: &Shell) -> Vec<OsString> {
     let mut argv = vec![shell.path.clone().into_os_string()];
     if shell.kind == ShellKind::Bash {
@@ -223,18 +238,19 @@ fn posix_run(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec<OsSt
          shift 8\n\
          eval \"$__pmt_cmd\"\n\
          __pmt_rc=$?\n\
-         if [ \"$__pmt_track\" = 1 ]; then pwd -P > \"$__pmt_cwdf\" 2>/dev/null; fi\n\
+         if [ \"$__pmt_track\" = 1 ]; then {pwd} > \"$__pmt_cwdf\" 2>/dev/null; fi\n\
          if [ \"$__pmt_persist\" = 1 ]; then ( unset $__pmt_hide; {dump} ) > \"$__pmt_snap.tmp\" 2>/dev/null && mv -f \"$__pmt_snap.tmp\" \"$__pmt_snap\"; fi\n\
          exit $__pmt_rc\n",
-        dump = dump(shell.kind)
+        dump = dump(shell.kind),
+        pwd = PWD,
     );
     let mut argv = posix_prefix(shell);
     argv.extend([
         OsString::from(script),
         "pmt-shell".into(),
-        files.snapshot.clone().into(),
-        files.cwd.clone().into(),
-        run.cwd.as_os_str().to_owned(),
+        shell_path(&files.snapshot),
+        shell_path(&files.cwd),
+        shell_path(run.cwd),
         run.command.into(),
         flag(run.use_snapshot).into(),
         flag(run.persist && run.use_snapshot).into(),
@@ -249,7 +265,7 @@ fn powershell_run(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec
     let track = if run.track_cwd {
         format!(
             "(Get-Location).ProviderPath | Out-File -LiteralPath {} -Encoding utf8\n",
-            quote(&files.cwd.to_string_lossy())
+            quote(&shell_path(&files.cwd).to_string_lossy())
         )
     } else {
         String::new()
@@ -262,7 +278,7 @@ fn powershell_run(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec
          $__pmt_ok = $?; $__pmt_rc = $global:LASTEXITCODE\n\
          if (-not $__pmt_ok -and $__pmt_rc -eq 0) {{ $__pmt_rc = 1 }}\n\
          {track}exit $__pmt_rc\n",
-        cwd = quote(&run.cwd.to_string_lossy()),
+        cwd = quote(&shell_path(run.cwd).to_string_lossy()),
         command = run.command,
     );
     vec![

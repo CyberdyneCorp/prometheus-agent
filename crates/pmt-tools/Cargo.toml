@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 base64.workspace = true
+dunce.workspace = true
 glob.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true

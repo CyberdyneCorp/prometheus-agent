@@ -508,7 +508,7 @@ impl LocalTerminal {
         let Ok(text) = std::fs::read_to_string(file) else {
             return;
         };
-        let observed = PathBuf::from(
+        let observed = observed_path(
             text.trim_end_matches(['\r', '\n'])
                 .trim_start_matches('\u{feff}'),
         );
@@ -606,6 +606,16 @@ fn capture_into(
         })
         .await;
     })
+}
+
+/// The directory a shell reported. Git Bash's `pwd -W` writes `D:/a/..`;
+/// Windows reports use the native separator.
+fn observed_path(text: &str) -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(text.replace('/', "\\"))
+    } else {
+        PathBuf::from(text)
+    }
 }
 
 fn same_dir(a: &Path, b: &Path) -> bool {

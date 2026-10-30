@@ -38,6 +38,7 @@ async fn bashrc_is_sourced_once_and_exports_persist() {
     assert_eq!(run(&session, "echo $LATER; greet").await.output, "1\nhey\n");
 }
 
+/// Scenario: rc file reads stdin (init runs with stdin closed).
 #[tokio::test]
 async fn an_rc_file_reading_stdin_does_not_hang_a_command() {
     let fixture = Fixture::new();
@@ -57,6 +58,7 @@ async fn an_rc_file_reading_stdin_does_not_hang_a_command() {
     assert_eq!(result.hint, None);
 }
 
+/// Scenario: rc file blocks on read.
 #[tokio::test]
 async fn an_rc_file_that_blocks_on_read_times_out_into_a_plain_shell() {
     let fixture = Fixture::new();
