@@ -18,7 +18,9 @@ use crate::caller::{CredentialHooks, send_once};
 use crate::classify::{ErrorClass, ProviderError, RetryPolicy};
 use crate::cost::{CallContext, Pending};
 use crate::event::{StreamEvent, Usage};
+use crate::mock::Mock;
 use crate::request::Request;
+use crate::transport::Sender;
 
 /// Receives the `aux_call.*` events of a session (its trajectory writer).
 pub trait AuxEvents: Send + Sync {
@@ -42,7 +44,7 @@ pub struct AuxResponse {
 /// Makes auxiliary calls for one session.
 #[derive(Clone)]
 pub struct AuxCaller {
-    client: reqwest::Client,
+    sender: Sender,
     recorder: Option<Arc<UsageRecorder>>,
     events: Option<Arc<dyn AuxEvents>>,
     hooks: Option<Arc<dyn CredentialHooks>>,
@@ -65,7 +67,7 @@ impl AuxCaller {
     #[must_use]
     pub fn new(client: reqwest::Client) -> Self {
         Self {
-            client,
+            sender: Sender::new(client),
             recorder: None,
             events: None,
             hooks: None,
@@ -77,6 +79,14 @@ impl AuxCaller {
     #[must_use]
     pub fn with_credentials(mut self, hooks: Arc<dyn CredentialHooks>) -> Self {
         self.hooks = Some(hooks);
+        self
+    }
+
+    /// Serves `mock` provider routes from the session's script, as the
+    /// main caller does.
+    #[must_use]
+    pub fn with_mock(mut self, mock: Arc<Mock>) -> Self {
+        self.sender = self.sender.with_mock(mock);
         self
     }
 
@@ -155,7 +165,7 @@ impl AuxCaller {
     ) -> Attempt {
         let run = async {
             let (mut stream, route) =
-                send_once(&self.client, self.hooks.as_deref(), &aux.route, request)
+                send_once(&self.sender, self.hooks.as_deref(), &aux.route, request)
                     .await
                     .map_err(|e| (e, None))?;
             if let Some(recorder) = &self.recorder {

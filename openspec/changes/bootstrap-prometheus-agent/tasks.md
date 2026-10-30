@@ -124,8 +124,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 12. M1 Mock provider
 
-- [ ] 12.1 Implement the built-in `mock` provider (always available, no network, a script of ordered rules matching step index, last user message or last tool result; echo mode; usage ceil(bytes/4); cost 0); verify that two runs of the same script produce byte-identical event streams (spec: replay-and-evaluation)
-- [ ] 12.2 Implement mock fault injection (errors, 429, timeouts, truncated streams) used by the retry and fallback tests; verify that each injected fault maps to its classified error (spec: replay-and-evaluation)
+- [x] 12.1 Implement the built-in `mock` provider (always available, no network, a script of ordered rules matching step index, last user message or last tool result; echo mode; usage ceil(bytes/4); cost 0); verify that two runs of the same script produce byte-identical event streams (spec: replay-and-evaluation)
+- [x] 12.2 Implement mock fault injection (errors, 429, timeouts, truncated streams) used by the retry and fallback tests; verify that each injected fault maps to its classified error (spec: replay-and-evaluation)
 
 ## 13. M1 Tool system
 

@@ -348,3 +348,70 @@ ultra = "max"
 "gpt-5.5" = "high"
 "claude-opus-4-1" = "ultra"
 ```
+
+## The mock provider
+
+The built-in `mock` provider needs no credential and never touches the
+network; it answers in-process, which makes sessions, retries and the
+fallback chain reproducible offline. Automatic detection never picks it:
+name it with `--provider mock`.
+
+```console
+$ prometheus model explain --provider mock
+requested    ok     provider 'mock' (flag), model <provider default> (auto)
+provider     ok     'mock' -> 'mock'
+enabled      ok     providers.mock.enabled = true
+endpoint     ok     mock://local
+wire_format  ok     chat_completions (from descriptor)
+credential   ok     none
+model        ok     mock
+capability   ok     128000-token context window (from builtin) >= model.min_context_window 64000
+
+route: mock/mock via chat_completions at mock://local (credential none, billing keyless:mock)
+```
+
+Without a script it echoes the last user message as `mock: <message>`.
+A script (`--mock-script PATH`, or `providers.mock.script`, relative to
+the profile directory) is a list of rules; each call is answered by the
+first rule not used up whose matchers all hold:
+
+| Matcher | Holds when |
+|---|---|
+| `step` | the number of assistant messages already in the request (0 for the first call) equals it |
+| `model` | the route's model equals it (`mock/primary`, `mock/secondary`...) |
+| `user`, `user_regex` | the last user message contains the text or matches the regex |
+| `tool_result`, `tool_result_regex` | the last tool result contains the text or matches the regex |
+
+A rule answers with `reasoning`, `text` and `tool_calls` (streamed in that
+order, word by word), or injects a `fault`. It answers one call, unless it
+sets `times = N` or `repeat = true`. `latency_ms` (at the top for every
+rule, or per rule; default 0) delays every chunk, and a delay longer than
+`stream_idle_timeout_secs` aborts the stream as a `timeout`. A call no rule
+matches fails as a `config` error.
+
+```toml
+[[rule]]
+user = "summarise"
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "README.md" }
+
+[[rule]]
+text = "done"
+```
+
+| `fault` | Fails as |
+|---|---|
+| `rate_limit` (optional `retry_after_secs`) | HTTP 429, class `rate_limit` |
+| `timeout` | class `timeout`, at once |
+| `server_error` (optional `status`, 500-599, default 500) | that status: `server_error`, or `overloaded` for 503 and 529 |
+| `auth_error` | HTTP 401, class `auth` |
+| `context_overflow` | HTTP 400 `context_length_exceeded`, class `context_overflow` |
+| `malformed_stream` | after the rule's content, a malformed stream event (`server_error`) |
+| `truncated_stream` | after the rule's content, the stream ends early (`network`) |
+
+Faults are classified exactly like a provider's response, so they are
+retried and rerouted as described above. Usage is counted as
+ceil(UTF-8 bytes / 4) tokens per message, and every call costs 0
+(billing `keyless:mock`). The same script with the same inputs always
+produces byte-identical streams.

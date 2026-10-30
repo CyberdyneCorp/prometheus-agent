@@ -10,6 +10,7 @@ mod caching;
 mod faults;
 mod idp;
 mod local;
+mod mock;
 mod pools;
 mod refresh;
 mod session;

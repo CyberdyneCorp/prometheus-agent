@@ -510,6 +510,12 @@ error_codes! {
     /// A local inference server answered unexpectedly.
     LOCAL_SERVER_PROBE = ("local.server_probe", Unavailable,
         "A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`.");
+    /// The mock provider's script cannot be read.
+    MOCK_SCRIPT_MISSING = ("mock.script_missing", NotFound,
+        "The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read.");
+    /// The mock provider's script is malformed.
+    MOCK_SCRIPT_INVALID = ("mock.script_invalid", Config,
+        "The script of the built-in `mock` provider is not valid TOML or holds an invalid rule (an unknown field, a bad regex, a fault combined with fields it does not take); the message names the file and the rule.");
     /// An API key was given as a command-line argument.
     AUTH_KEY_ON_ARGV = ("auth.key_on_argv", Usage,
         "`prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings.");

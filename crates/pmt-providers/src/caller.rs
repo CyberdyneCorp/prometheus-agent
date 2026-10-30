@@ -14,9 +14,10 @@ use crate::capability;
 use crate::classify::ProviderError;
 use crate::cost::{CallContext, Pending};
 use crate::fallback::{Activated, Fallback, Walk};
+use crate::mock::Mock;
 use crate::request::Request;
 use crate::resolve::{BoxFuture, Route};
-use crate::transport::{self, ModelStream};
+use crate::transport::{ModelStream, Sender};
 
 /// Per-request credential work (spec: model-providers, Credential pool
 /// selection strategies; Exhausted credential cooldowns; Token refresh and
@@ -59,21 +60,18 @@ pub enum Recovery {
 ///
 /// The classified failure, or the hooks' refusal.
 pub(crate) async fn send_once(
-    client: &reqwest::Client,
+    sender: &Sender,
     hooks: Option<&dyn CredentialHooks>,
     route: &Route,
     request: &Request,
 ) -> Result<(ModelStream, Route), ProviderError> {
     let Some(hooks) = hooks else {
-        return Ok((
-            transport::send(client, route, request).await?,
-            route.clone(),
-        ));
+        return Ok((sender.send(route, request).await?, route.clone()));
     };
     let mut may_recover = true;
     loop {
         let prepared = hooks.prepare(route).await?;
-        let error = match transport::send(client, &prepared, request).await {
+        let error = match sender.send(&prepared, request).await {
             Ok(stream) => return Ok((stream, prepared)),
             Err(error) => error,
         };
@@ -88,7 +86,7 @@ pub(crate) async fn send_once(
 /// Sends model requests for one session.
 #[derive(Clone)]
 pub struct ModelCaller {
-    client: reqwest::Client,
+    sender: Sender,
     attempt_cap: Option<u32>,
     recorder: Option<Arc<UsageRecorder>>,
     hooks: Option<Arc<dyn CredentialHooks>>,
@@ -165,7 +163,7 @@ impl ModelCaller {
     #[must_use]
     pub fn new(client: reqwest::Client) -> Self {
         Self {
-            client,
+            sender: Sender::new(client),
             attempt_cap: None,
             recorder: None,
             hooks: None,
@@ -176,6 +174,14 @@ impl ModelCaller {
     #[must_use]
     pub fn with_credentials(mut self, hooks: Arc<dyn CredentialHooks>) -> Self {
         self.hooks = Some(hooks);
+        self
+    }
+
+    /// Serves routes of the built-in `mock` provider from `mock` (the
+    /// session's script; without one they echo).
+    #[must_use]
+    pub fn with_mock(mut self, mock: Arc<Mock>) -> Self {
+        self.sender = self.sender.with_mock(mock);
         self
     }
 
@@ -215,7 +221,7 @@ impl ModelCaller {
         }
         let mut retry = 0;
         loop {
-            let error = match send_once(&self.client, self.hooks.as_deref(), route, request).await {
+            let error = match send_once(&self.sender, self.hooks.as_deref(), route, request).await {
                 Ok((mut stream, prepared)) => {
                     if let (Some(recorder), Some(ctx)) = (&self.recorder, ctx) {
                         stream.record_with(Pending::new(recorder.clone(), &prepared, request, ctx));

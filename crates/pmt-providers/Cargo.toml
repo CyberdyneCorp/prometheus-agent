@@ -17,10 +17,12 @@ pmt-core.workspace = true
 pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-store.workspace = true
+regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+toml.workspace = true
 tokio = { workspace = true, features = ["net", "time", "io-util"] }
 tracing.workspace = true
 ulid.workspace = true
@@ -28,7 +30,6 @@ url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-toml.workspace = true
 tokio = { workspace = true, features = ["net", "time", "io-util"] }
 tracing-subscriber.workspace = true
 wiremock.workspace = true

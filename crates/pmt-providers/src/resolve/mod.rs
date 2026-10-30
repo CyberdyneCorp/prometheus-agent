@@ -457,10 +457,14 @@ impl Resolver<'_> {
         })
     }
 
-    /// The base URL: an explicit one, the configured one, else the
-    /// descriptor default (probed for local servers, which never fall back
+    /// The base URL: the mock's fixed one, an explicit one, the configured
+    /// one, else the descriptor default (probed for local servers, which never fall back
     /// to another provider).
     async fn endpoint(&self, provider: &Provider, explicit: Option<&str>) -> Result<String, Error> {
+        if provider.descriptor().wire_need == crate::descriptor::WireNeed::Mock {
+            // Answered in-process; no endpoint is ever contacted.
+            return Ok(crate::mock::BASE_URL.to_owned());
+        }
         if let Some(url) = explicit.or(provider.settings().base_url.as_deref()) {
             return Ok(url.to_owned());
         }

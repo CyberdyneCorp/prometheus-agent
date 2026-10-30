@@ -5,6 +5,7 @@
 //! timeouts).
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
@@ -15,6 +16,7 @@ use tokio::time::{Instant, timeout_at};
 use crate::classify::{self, ErrorClass, ProviderError};
 use crate::cost::Pending;
 use crate::event::{Normalizer, StopReason, StreamEvent, Usage};
+use crate::mock::{self, Feed, Mock};
 use crate::request::Request;
 use crate::resolve::Route;
 use crate::sse::SseParser;
@@ -55,18 +57,54 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
     wire::encode(route.wire_format, &request, &EncodeOptions { cache_key })
 }
 
-/// Sends one attempt and waits for its first normalised event.
-///
-/// # Errors
-///
-/// The classified failure when nothing was streamed yet (HTTP error,
-/// connection failure, timeout, an in-stream error before any event).
-pub(crate) async fn send(
+/// Sends model requests: over HTTP, or to the in-process [`Mock`] for
+/// routes of the built-in `mock` provider.
+#[derive(Debug, Clone)]
+pub(crate) struct Sender {
+    client: reqwest::Client,
+    mock: Arc<Mock>,
+}
+
+impl Sender {
+    /// HTTP over `client`; mock routes echo until [`with_mock`](Self::with_mock).
+    pub(crate) fn new(client: reqwest::Client) -> Self {
+        Self {
+            client,
+            mock: Arc::new(Mock::echo()),
+        }
+    }
+
+    /// Serves mock routes from `mock` (the session's script).
+    pub(crate) fn with_mock(mut self, mock: Arc<Mock>) -> Self {
+        self.mock = mock;
+        self
+    }
+
+    /// Sends one attempt and waits for its first normalised event.
+    ///
+    /// # Errors
+    ///
+    /// The classified failure when nothing was streamed yet (HTTP error,
+    /// connection failure, timeout, an in-stream error before any event).
+    pub(crate) async fn send(
+        &self,
+        route: &Route,
+        request: &Request,
+    ) -> Result<ModelStream, ProviderError> {
+        if mock::serves(route) {
+            let feed = self.mock.reply(route, request)?;
+            return ModelStream::start(Source::Mock(feed), Limits::of(route)).await;
+        }
+        send_http(&self.client, route, request).await
+    }
+}
+
+async fn send_http(
     client: &reqwest::Client,
     route: &Route,
     request: &Request,
 ) -> Result<ModelStream, ProviderError> {
-    let deadline = Instant::now() + route.timeouts.request;
+    let limits = Limits::of(route);
     let body = serde_json::to_vec(&body(route, request)).expect("JSON values serialize");
     let mut builder = client
         .post(wire::endpoint(route.wire_format, &route.base_url))
@@ -74,7 +112,7 @@ pub(crate) async fn send(
         .header("accept", "text/event-stream")
         .body(body);
     builder = authenticate(builder, route);
-    let response = match timeout_at(deadline, builder.send()).await {
+    let response = match timeout_at(limits.deadline, builder.send()).await {
         Err(_) => return Err(timed_out("no response within the request timeout")),
         Ok(Err(err)) => return Err(transport_error(&err)),
         Ok(Ok(response)) => response,
@@ -82,7 +120,7 @@ pub(crate) async fn send(
     let status = response.status();
     if !status.is_success() {
         let headers = response.headers().clone();
-        let text = timeout_at(deadline, response.text())
+        let text = timeout_at(limits.deadline, response.text())
             .await
             .ok()
             .and_then(Result::ok)
@@ -94,21 +132,12 @@ pub(crate) async fn send(
             Timestamp::now(),
         ));
     }
-    let mut stream = ModelStream {
+    let body = HttpBody {
         response: Some(response),
         parser: SseParser::default(),
         decoder: wire::decoder(route.wire_format),
-        normalizer: Normalizer::default(),
-        pending: VecDeque::new(),
-        deadline,
-        idle: route.timeouts.idle,
-        failure: None,
-        usage: None,
-        ledger: None,
-        recorded: None,
     };
-    stream.fill().await?;
-    Ok(stream)
+    ModelStream::start(Source::Http(body), limits).await
 }
 
 fn authenticate(builder: reqwest::RequestBuilder, route: &Route) -> reqwest::RequestBuilder {
@@ -155,7 +184,8 @@ fn subscription_identity(
     builder
 }
 
-fn timed_out(message: &str) -> ProviderError {
+/// A timeout failure (the class every request or idle timeout gets).
+pub(crate) fn timed_out(message: &str) -> ProviderError {
     ProviderError::new(ErrorClass::Timeout, message)
 }
 
@@ -169,18 +199,90 @@ fn transport_error(err: &reqwest::Error) -> ProviderError {
     ProviderError::new(class, err.to_string())
 }
 
+/// The time limits of one attempt: the request deadline and the longest
+/// gap between stream events.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Limits {
+    deadline: Instant,
+    idle: Duration,
+}
+
+impl Limits {
+    /// The limits of an attempt on `route` starting now.
+    fn of(route: &Route) -> Self {
+        Self {
+            deadline: Instant::now() + route.timeouts.request,
+            idle: route.timeouts.idle,
+        }
+    }
+
+    /// Awaits the next piece of the stream within the idle and request
+    /// deadlines.
+    pub(crate) async fn within<F: Future>(self, next: F) -> Result<F::Output, ProviderError> {
+        let idle_deadline = (Instant::now() + self.idle).min(self.deadline);
+        match timeout_at(idle_deadline, next).await {
+            Err(_) if idle_deadline < self.deadline => {
+                Err(timed_out("no stream event within the idle timeout"))
+            }
+            Err(_) => Err(timed_out(
+                "the response did not finish within the request timeout",
+            )),
+            Ok(output) => Ok(output),
+        }
+    }
+}
+
+/// Where a stream's events come from.
+#[derive(Debug)]
+enum Source {
+    Http(HttpBody),
+    Mock(Feed),
+}
+
+/// An HTTP response body decoded from its wire format's SSE events.
+#[derive(Debug)]
+struct HttpBody {
+    response: Option<reqwest::Response>,
+    parser: SseParser,
+    decoder: Box<dyn Decode>,
+}
+
+impl HttpBody {
+    /// Reads and decodes the next body chunk, or finishes at its end.
+    async fn step(&mut self, out: &mut Normalizer, limits: Limits) -> Result<(), ProviderError> {
+        let Some(response) = self.response.as_mut() else {
+            return Err(wire::truncated());
+        };
+        let chunk = match limits.within(response.chunk()).await? {
+            Err(err) => return Err(transport_error(&err)),
+            Ok(chunk) => chunk,
+        };
+        let Some(bytes) = chunk else {
+            self.response = None;
+            if let Some(event) = self.parser.finish() {
+                self.decoder.event(&event, out)?;
+            }
+            if !out.is_finished() {
+                self.decoder.end(out)?;
+            }
+            return Ok(());
+        };
+        for event in self.parser.feed(&bytes) {
+            self.decoder.event(&event, out)?;
+        }
+        Ok(())
+    }
+}
+
 /// A started response: normalised events in order, ending with exactly
 /// one `stop` (`stop_reason = "error"` when the stream failed after it
 /// started; [`failure`](Self::failure) then says why).
 #[derive(Debug)]
 pub struct ModelStream {
-    response: Option<reqwest::Response>,
-    parser: SseParser,
-    decoder: Box<dyn Decode>,
+    source: Source,
     normalizer: Normalizer,
     pending: VecDeque<StreamEvent>,
-    deadline: Instant,
-    idle: Duration,
+    limits: Limits,
     failure: Option<ProviderError>,
     usage: Option<Usage>,
     ledger: Option<Pending>,
@@ -194,6 +296,22 @@ impl std::fmt::Debug for dyn Decode {
 }
 
 impl ModelStream {
+    /// A stream over `source` that has produced its first event.
+    async fn start(source: Source, limits: Limits) -> Result<Self, ProviderError> {
+        let mut stream = Self {
+            source,
+            normalizer: Normalizer::default(),
+            pending: VecDeque::new(),
+            limits,
+            failure: None,
+            usage: None,
+            ledger: None,
+            recorded: None,
+        };
+        stream.fill().await?;
+        Ok(stream)
+    }
+
     /// The next event; `None` after `stop`.
     pub async fn next(&mut self) -> Option<StreamEvent> {
         if self.pending.is_empty()
@@ -256,52 +374,19 @@ impl ModelStream {
     /// Reads until at least one event is pending or the stream finished.
     async fn fill(&mut self) -> Result<(), ProviderError> {
         while self.pending.is_empty() && !self.normalizer.is_finished() {
-            let chunk = self.read_chunk().await?;
-            self.consume(chunk.as_deref())?;
+            match &mut self.source {
+                Source::Http(body) => body.step(&mut self.normalizer, self.limits).await?,
+                Source::Mock(feed) => feed.step(&mut self.normalizer, self.limits).await?,
+            }
             self.pending.extend(self.normalizer.drain());
         }
         Ok(())
     }
 
-    /// The next body chunk (`None` at the end) within the idle and request
-    /// deadlines.
-    async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, ProviderError> {
-        let Some(response) = self.response.as_mut() else {
-            return Err(wire::truncated());
-        };
-        let idle_deadline = (Instant::now() + self.idle).min(self.deadline);
-        match timeout_at(idle_deadline, response.chunk()).await {
-            Err(_) if idle_deadline < self.deadline => {
-                Err(timed_out("no stream event within the idle timeout"))
-            }
-            Err(_) => Err(timed_out(
-                "the response did not finish within the request timeout",
-            )),
-            Ok(Err(err)) => Err(transport_error(&err)),
-            Ok(Ok(chunk)) => Ok(chunk.map(|bytes| bytes.to_vec())),
-        }
-    }
-
-    /// Decodes `chunk`, or finishes the stream at its end.
-    fn consume(&mut self, chunk: Option<&[u8]>) -> Result<(), ProviderError> {
-        let Some(bytes) = chunk else {
-            self.response = None;
-            if let Some(event) = self.parser.finish() {
-                self.decoder.event(&event, &mut self.normalizer)?;
-            }
-            if !self.normalizer.is_finished() {
-                self.decoder.end(&mut self.normalizer)?;
-            }
-            return Ok(());
-        };
-        for event in self.parser.feed(bytes) {
-            self.decoder.event(&event, &mut self.normalizer)?;
-        }
-        Ok(())
-    }
-
     fn fail(&mut self, error: ProviderError) {
-        self.response = None;
+        if let Source::Http(body) = &mut self.source {
+            body.response = None;
+        }
         self.failure = Some(error);
         self.normalizer.finish(Some(StopReason::Error));
         self.pending.extend(self.normalizer.drain());

@@ -68,6 +68,7 @@ const SPEC: &[(&str, &str, &str, &str, &str, &str)] = &[
     ("vllm", "", "", "required", "chat_completions", "none"),
     ("sglang", "", "", "required", "chat_completions", "none"),
     ("moa", "mixture-of-agents", "", "moa://local", "aggregator's", "none"),
+    ("mock", "", "", "mock://local", "mock_script", "none"),
     ("custom", "local", "", "required (--base-url or config)", "chat_completions", "none"),
     ("copilot", "github-copilot", "COPILOT_GITHUB_TOKEN,GH_TOKEN,GITHUB_TOKEN", "https://api.githubcopilot.com", "chat_completions", "oauth"),
     ("copilot-acp", "", "COPILOT_GITHUB_TOKEN,GH_TOKEN,GITHUB_TOKEN", "https://api.githubcopilot.com", "external_process", "oauth"),

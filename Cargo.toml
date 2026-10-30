@@ -50,6 +50,8 @@ base64 = "0.23"
 ipnet = "2.12"
 # Basename globs of protected instruction files.
 glob = "0.3"
+# Mock provider script matchers (last user message / tool result).
+regex = "1.12"
 # Test-only TLS server and certificates (fetch and trust-store tests).
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }

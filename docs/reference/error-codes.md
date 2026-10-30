@@ -169,6 +169,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `fallback.not_found` | `not_found` | 66 | `prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain. |
 | `reasoning.invalid` | `config` | 78 | An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`. |
 | `local.server_probe` | `unavailable` | 69 | A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`. |
+| `mock.script_missing` | `not_found` | 66 | The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read. |
+| `mock.script_invalid` | `config` | 78 | The script of the built-in `mock` provider is not valid TOML or holds an invalid rule (an unknown field, a bad regex, a fault combined with fields it does not take); the message names the file and the rule. |
 | `auth.key_on_argv` | `usage` | 2 | `prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings. |
 | `auth.unsupported` | `usage` | 2 | `prometheus auth add` asked for a credential type the provider does not take (an API key for a sign-in-only provider, a sign-in for a provider without sign-in flows, or a flow it does not offer). |
 | `auth.invalid_label` | `usage` | 2 | A credential label must be 1-32 characters a-z, 0-9 or '-', starting with a letter or digit. |

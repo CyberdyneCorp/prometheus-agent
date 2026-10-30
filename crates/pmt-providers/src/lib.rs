@@ -6,8 +6,8 @@
 //! [`metadata`] catalog with capability checks, per-call cost accounting
 //! ([`cost`]), [`auxiliary`] task routing, [`reasoning`] effort, model
 //! references and aliases ([`target`]), the `/model` [`switch`], local
-//! inference servers ([`local`]) and credentials and subscription sign-in
-//! ([`auth`]).
+//! inference servers ([`local`]), credentials and subscription sign-in
+//! ([`auth`]) and the deterministic in-process [`mock`] provider.
 
 pub mod auth;
 pub mod auxiliary;
@@ -21,6 +21,7 @@ pub mod event;
 pub mod fallback;
 pub mod local;
 pub mod metadata;
+pub mod mock;
 pub mod pool;
 pub mod reasoning;
 pub mod registry;

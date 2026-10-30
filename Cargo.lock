@@ -1664,6 +1664,7 @@ dependencies = [
  "pmt-net",
  "pmt-obs",
  "pmt-store",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

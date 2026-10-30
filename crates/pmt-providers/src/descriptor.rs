@@ -84,6 +84,9 @@ pub enum WireNeed {
         /// What the user can do meanwhile.
         hint: String,
     },
+    /// The built-in deterministic `mock` provider, served in-process from
+    /// a script (no network, no credential).
+    Mock,
     /// A virtual provider served in-process by another capability.
     Virtual {
         /// The listed wire format (`aggregator's`).
@@ -183,6 +186,7 @@ impl Descriptor {
             WireNeed::Native => self.wire_format.as_str(),
             WireNeed::PerModel => "per-model",
             WireNeed::Detected => "auto-detected",
+            WireNeed::Mock => "mock_script",
             WireNeed::Plugin { wire, .. } | WireNeed::Virtual { wire, .. } => wire,
         }
     }

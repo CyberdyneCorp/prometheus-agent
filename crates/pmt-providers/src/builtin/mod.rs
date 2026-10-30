@@ -14,6 +14,7 @@ enum Need {
     Native,
     PerModel,
     Detected,
+    Mock,
     Plugin {
         wire: &'static str,
         plugin: &'static str,
@@ -616,6 +617,16 @@ const ROWS: &[Row] = &[
         ..BASE
     },
     Row {
+        id: crate::mock::PROVIDER_ID,
+        endpoint_note: Some(crate::mock::BASE_URL),
+        need: Need::Mock,
+        auth: Keyless,
+        listing: false,
+        hidden: true,
+        default_model: Some(crate::mock::DEFAULT_MODEL),
+        ..BASE
+    },
+    Row {
         id: "custom",
         aliases: &["local"],
         endpoint_note: Some("required (--base-url or config)"),
@@ -717,6 +728,7 @@ fn wire_need(need: Need) -> WireNeed {
         Need::Native => WireNeed::Native,
         Need::PerModel => WireNeed::PerModel,
         Need::Detected => WireNeed::Detected,
+        Need::Mock => WireNeed::Mock,
         Need::Plugin { wire, plugin, hint } => WireNeed::Plugin {
             wire: wire.to_owned(),
             plugin: plugin.to_owned(),

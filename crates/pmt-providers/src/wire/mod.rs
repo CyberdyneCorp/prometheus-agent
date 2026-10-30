@@ -158,12 +158,15 @@ pub(crate) fn decoder(format: WireFormat) -> Box<dyn Decode> {
 
 /// Parses an event's JSON data.
 fn json(event: &SseEvent) -> Result<Value, ProviderError> {
-    serde_json::from_str(&event.data).map_err(|e| {
-        ProviderError::new(
-            crate::classify::ErrorClass::ServerError,
-            format!("malformed stream event: {e}"),
-        )
-    })
+    serde_json::from_str(&event.data).map_err(|e| malformed(&e.to_string()))
+}
+
+/// A stream event that cannot be decoded.
+pub(crate) fn malformed(detail: &str) -> ProviderError {
+    ProviderError::new(
+        crate::classify::ErrorClass::ServerError,
+        format!("malformed stream event: {detail}"),
+    )
 }
 
 /// The stream ended without its terminal event.

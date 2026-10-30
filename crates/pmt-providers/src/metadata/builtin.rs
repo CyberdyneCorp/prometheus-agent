@@ -141,6 +141,9 @@ const ENTRIES: &[Entry] = &[
 
 /// The shipped metadata of `provider`/`model`.
 pub(super) fn lookup(provider: &str, model: &str) -> Option<ModelMetadata> {
+    if provider == crate::mock::PROVIDER_ID {
+        return Some(crate::mock::metadata());
+    }
     ENTRIES
         .iter()
         .find(|e| e.provider == provider && e.model == model)
@@ -149,6 +152,9 @@ pub(super) fn lookup(provider: &str, model: &str) -> Option<ModelMetadata> {
 
 /// Model ids shipped for `provider`.
 pub(super) fn models(provider: &str) -> Vec<String> {
+    if provider == crate::mock::PROVIDER_ID {
+        return vec![crate::mock::DEFAULT_MODEL.to_owned()];
+    }
     ENTRIES
         .iter()
         .filter(|e| e.provider == provider)
