@@ -1932,7 +1932,7 @@
         },
         "protected_instruction_extra_patterns": {
           "default": [],
-          "description": "Extra instruction-file basename globs.",
+          "description": "Extra instruction-file basename globs (case-insensitive), e.g.\n`\"*.mdc\"`; writes to matches need human approval in every mode.",
           "items": {
             "type": "string"
           },

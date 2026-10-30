@@ -1,6 +1,9 @@
 //! Owner-only files and directories under the Prometheus home: the home
 //! can hold prompts, paths and pids, so everything is created 0700/0600 on
-//! POSIX (spec: configuration-and-profiles, home layout).
+//! POSIX and, on Windows, under a home whose DACL grants only the owner
+//! ([`restrict_to_owner`]); files are opened without following symbolic
+//! links, junctions or other reparse points (specs: configuration-and-profiles,
+//! home layout; security-boundaries, Private file modes).
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write as _};
@@ -30,14 +33,47 @@ pub fn new_file_options() -> OpenOptions {
 }
 
 /// Open options that append to `path`, creating it 0600 when missing (an
-/// existing file keeps its mode; callers tighten it when they care).
+/// existing file keeps its mode; callers tighten it when they care). A
+/// symbolic link (or Windows reparse point) at `path` is not followed: the
+/// open fails instead of writing through it.
 #[must_use]
 pub fn append_options() -> OpenOptions {
     let mut options = OpenOptions::new();
     options.append(true).create(true);
     #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options
+            .mode(0o600)
+            .custom_flags(nix::fcntl::OFlag::O_NOFOLLOW.bits());
+    }
+    #[cfg(windows)]
+    {
+        /// `FILE_FLAG_OPEN_REPARSE_POINT`: open the link itself, which
+        /// cannot be appended to, instead of its target.
+        const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        std::os::windows::fs::OpenOptionsExt::custom_flags(&mut options, OPEN_REPARSE_POINT);
+    }
     options
+}
+
+/// Restricts `dir` to its owner. On Windows the DACL becomes protected
+/// (inherited entries removed) and grants full control only to the current
+/// user and SYSTEM, inherited by everything later created inside, the
+/// equivalent of mode 0700. POSIX modes are set at creation, so this is a
+/// no-op there.
+///
+/// # Errors
+///
+/// When `icacls`/`whoami` cannot run or report failure.
+pub fn restrict_to_owner(dir: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    return owner_acl::restrict(dir);
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        Ok(())
+    }
 }
 
 /// Replaces `path` with `bytes` atomically: readers see the old or the new
@@ -99,6 +135,59 @@ pub fn copy_file(src: &Path, dst: &Path) -> io::Result<()> {
     write_atomic(dst, &fs::read(src)?)
 }
 
+#[cfg(windows)]
+mod owner_acl {
+    //! Owner-only DACLs through the system `icacls` tool (no unsafe FFI).
+
+    use std::io;
+    use std::path::Path;
+    use std::process::Command;
+    use std::sync::OnceLock;
+
+    /// The well-known SID of the local SYSTEM account.
+    const SYSTEM_SID: &str = "S-1-5-18";
+
+    pub(super) fn restrict(dir: &Path) -> io::Result<()> {
+        let user = current_user_sid()?;
+        let grant = |sid: &str| format!("*{sid}:(OI)(CI)F");
+        run(Command::new("icacls")
+            .arg(dir)
+            .args(["/inheritance:r", "/grant:r"])
+            .arg(grant(&user))
+            .arg(grant(SYSTEM_SID))
+            .arg("/q"))
+        .map(drop)
+    }
+
+    fn current_user_sid() -> io::Result<String> {
+        static SID: OnceLock<String> = OnceLock::new();
+        if let Some(sid) = SID.get() {
+            return Ok(sid.clone());
+        }
+        // `"DOMAIN\\user","S-1-5-21-..."`
+        let out = run(Command::new("whoami").args(["/user", "/fo", "csv", "/nh"]))?;
+        let sid = out
+            .trim()
+            .rsplit(',')
+            .next()
+            .map(|field| field.trim_matches('"').to_owned())
+            .filter(|sid| sid.starts_with("S-1-"))
+            .ok_or_else(|| io::Error::other(format!("unexpected whoami output: {out}")))?;
+        Ok(SID.get_or_init(|| sid).clone())
+    }
+
+    fn run(command: &mut Command) -> io::Result<String> {
+        let output = command.output()?;
+        if !output.status.success() {
+            return Err(io::Error::other(format!(
+                "{command:?} failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{copy_tree, create_dir, write_atomic};
@@ -139,6 +228,59 @@ mod tests {
             let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode();
             assert_eq!(mode(&sub) & 0o777, 0o700);
             assert_eq!(mode(&path) & 0o777, 0o600);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn append_does_not_follow_a_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target.log");
+        std::fs::write(&target, "").unwrap();
+        let link = dir.path().join("app.log");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert!(super::append_options().open(&link).is_err());
+        assert!(
+            super::append_options()
+                .open(dir.path().join("new.log"))
+                .is_ok()
+        );
+    }
+
+    /// A home under a directory readable by Everyone ends up owner-only:
+    /// the inherited Everyone entry is gone from it and from new files.
+    #[cfg(windows)]
+    #[test]
+    fn restrict_to_owner_drops_inherited_access() {
+        use std::process::Command;
+        let dir = tempfile::tempdir().unwrap();
+        let shared = dir.path().join("shared");
+        create_dir(&shared).unwrap();
+        let everyone = Command::new("icacls")
+            .arg(&shared)
+            .args(["/grant", "*S-1-1-0:(OI)(CI)R"])
+            .status()
+            .unwrap();
+        assert!(everyone.success());
+        let home = shared.join("home");
+        create_dir(&home).unwrap();
+        let acl = |p: &std::path::Path| {
+            let out = Command::new("icacls").arg(p).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        };
+        assert!(
+            acl(&home).contains("Everyone"),
+            "precondition: {}",
+            acl(&home)
+        );
+
+        super::restrict_to_owner(&home).unwrap();
+        let file = home.join("secrets.toml");
+        write_atomic(&file, b"x").unwrap();
+        for path in [&home, &file] {
+            let acl = acl(path);
+            assert!(!acl.contains("Everyone"), "{acl}");
+            assert!(!acl.contains("BUILTIN\\Users"), "{acl}");
         }
     }
 }

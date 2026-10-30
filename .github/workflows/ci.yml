@@ -126,6 +126,13 @@ jobs:
       - name: cargo build
         run: cargo build --workspace --all-targets --all-features --locked --target "${{ matrix.target }}"
 
+      # Windows-only code with tests of its own: owner-only DACLs and
+      # no-follow opens of private files (security-boundaries, Private file
+      # modes). The full suite runs on the Unix check jobs.
+      - name: Windows private-file tests
+        if: runner.os == 'Windows'
+        run: cargo test -p pmt-core --lib --locked --target "${{ matrix.target }}" -- private_fs
+
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04

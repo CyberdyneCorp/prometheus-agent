@@ -7,5 +7,14 @@ rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[dependencies]
+glob.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

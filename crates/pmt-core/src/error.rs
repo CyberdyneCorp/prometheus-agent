@@ -375,6 +375,30 @@ error_codes! {
     /// The shared outbound HTTP client could not be built.
     NET_CLIENT_INIT = ("net.client_init", Internal,
         "The shared outbound HTTP client could not be initialised.");
+    /// A fetch targeted a private, metadata or unresolvable destination.
+    NET_DESTINATION_BLOCKED = ("net.destination_blocked", PermissionDenied,
+        "A URL resolved to a private or cloud-metadata address, or did not resolve; private destinations need `security.egress.allow_private` or a session grant, metadata endpoints are always refused.");
+    /// A fetch followed more redirects than allowed.
+    NET_TOO_MANY_REDIRECTS = ("net.too_many_redirects", Unavailable,
+        "A fetched URL redirected more than 10 times.");
+    /// A fetched URL is malformed or uses a scheme other than http(s).
+    NET_INVALID_URL = ("net.invalid_url", InvalidInput,
+        "A URL to fetch is malformed or is not `http://` / `https://`.");
+    /// An HTTP request failed in transport (connect, TLS, read).
+    NET_REQUEST = ("net.request", Unavailable,
+        "An outbound HTTP request failed: connection, TLS verification or transfer error.");
+    /// `network.extra_ca_file` could not be read or holds no certificate.
+    NET_EXTRA_CA = ("net.extra_ca", Config,
+        "`network.extra_ca_file` cannot be read or contains no PEM certificate.");
+    /// A listener was asked to bind a non-loopback address without an explicit, authenticated configuration.
+    NET_LISTEN_REFUSED = ("net.listen_refused", PermissionDenied,
+        "A network surface may bind a non-loopback address only when its configuration sets that address explicitly and an allowlist or auth provider is configured.");
+    /// A listener could not bind its address.
+    NET_LISTEN = ("net.listen", Io,
+        "A listener could not bind its address (in use or not permitted).");
+    /// A protected-instruction-file pattern is invalid.
+    SECURITY_INVALID_PATTERN = ("security.invalid_pattern", Config,
+        "An entry of `security.protected_instruction_extra_patterns` is not a valid basename glob.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

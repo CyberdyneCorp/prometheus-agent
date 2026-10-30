@@ -184,7 +184,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
 | `security.egress.allow_private` | boolean | `false` | any | `next_session` | Allow private destinations without a session grant. |
 | `security.egress.fake_ip_ranges` | array of string | `[]` | any | `next_session` | CIDR ranges a local TUN proxy answers with (treated as public). |
-| `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs. |
+| `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
 | `security.protected_instruction_files` | boolean | `true` | any | `next_session` | Require human approval for agent writes to instruction files. |
 | `security.redact_secrets` | boolean | `true` | any | `next_session` | Redact every loaded secret value everywhere output is written. |
 | `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |

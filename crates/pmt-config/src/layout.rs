@@ -146,6 +146,10 @@ impl Home {
     /// `home.io` when a directory or file cannot be created.
     pub fn open(root: &Path) -> Result<Self, Error> {
         private_dir(root)?;
+        // Windows: everything below inherits the owner-only DACL.
+        if let Err(e) = private_fs::restrict_to_owner(root) {
+            tracing::warn!("cannot restrict {} to its owner: {e}", root.display());
+        }
         for dir in ROOT_DIRS {
             private_dir(&root.join(dir))?;
         }
@@ -457,6 +461,57 @@ mod tests {
             std::fs::metadata(&root).unwrap().permissions().mode() & 0o777,
             0o700
         );
+    }
+
+    /// Spec scenario "Loose permissions": 0644 `secrets.toml` (and
+    /// `grants.toml`) become 0600 on start, with a WARN naming the file.
+    #[cfg(unix)]
+    #[test]
+    fn loose_secret_and_grant_files_are_tightened_with_a_warning() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone, Default)]
+        struct Capture(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Capture {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("home");
+        Home::open(&root).unwrap();
+        let profile = root.join("profiles/default");
+        for file in ["secrets.toml", "grants.toml"] {
+            std::fs::set_permissions(profile.join(file), std::fs::Permissions::from_mode(0o644))
+                .unwrap();
+        }
+        let capture = Capture::default();
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_ansi(false)
+            .finish();
+        tracing::subscriber::with_default(subscriber, || Home::open(&root).unwrap());
+
+        let log = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+        for file in ["secrets.toml", "grants.toml"] {
+            let path = profile.join(file);
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            assert!(
+                log.lines()
+                    .any(|l| l.contains("WARN") && l.contains(&path.display().to_string())),
+                "{log}"
+            );
+        }
     }
 
     #[test]

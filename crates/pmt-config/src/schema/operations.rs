@@ -169,7 +169,8 @@ pub struct SecurityConfig {
     pub egress: EgressConfig,
     /// Require human approval for agent writes to instruction files.
     pub protected_instruction_files: bool,
-    /// Extra instruction-file basename globs.
+    /// Extra instruction-file basename globs (case-insensitive), e.g.
+    /// `"*.mdc"`; writes to matches need human approval in every mode.
     pub protected_instruction_extra_patterns: Vec<String>,
 }
 

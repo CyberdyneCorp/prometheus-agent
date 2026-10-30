@@ -124,3 +124,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `logs.invalid_since` | `usage` | 2 | `prometheus logs --since` takes `<N>[smhd]` (30m, 2h, 1d) or an RFC 3339 time. |
 | `logs.io` | `io` | 74 | A log file under `logs/` could not be read. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |
+| `net.destination_blocked` | `permission_denied` | 77 | A URL resolved to a private or cloud-metadata address, or did not resolve; private destinations need `security.egress.allow_private` or a session grant, metadata endpoints are always refused. |
+| `net.too_many_redirects` | `unavailable` | 69 | A fetched URL redirected more than 10 times. |
+| `net.invalid_url` | `invalid_input` | 65 | A URL to fetch is malformed or is not `http://` / `https://`. |
+| `net.request` | `unavailable` | 69 | An outbound HTTP request failed: connection, TLS verification or transfer error. |
+| `net.extra_ca` | `config` | 78 | `network.extra_ca_file` cannot be read or contains no PEM certificate. |
+| `net.listen_refused` | `permission_denied` | 77 | A network surface may bind a non-loopback address only when its configuration sets that address explicitly and an allowlist or auth provider is configured. |
+| `net.listen` | `io` | 74 | A listener could not bind its address (in use or not permitted). |
+| `security.invalid_pattern` | `config` | 78 | An entry of `security.protected_instruction_extra_patterns` is not a valid basename glob. |

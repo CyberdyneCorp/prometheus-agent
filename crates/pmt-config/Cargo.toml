@@ -31,6 +31,7 @@ dbus-secret-service-keyring-store.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 trybuild.workspace = true
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

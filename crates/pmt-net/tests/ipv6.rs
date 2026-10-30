@@ -34,6 +34,13 @@ impl Lookup for FixedLookup {
     }
 }
 
+fn v4_only() -> OutboundPolicy {
+    OutboundPolicy {
+        force_ipv4: true,
+        ..OutboundPolicy::default()
+    }
+}
+
 fn ip(s: &str) -> IpAddr {
     s.parse().unwrap()
 }
@@ -107,7 +114,8 @@ async fn force_ipv4_avoids_a_blackholed_aaaa_record() {
     let port = v4.local_addr().unwrap().port();
     serve(v4, "v4");
     let lookup = Arc::new(FixedLookup(vec![ip(BLACKHOLE), ip("127.0.0.1")]));
-    let client = client_builder_with_lookup(OutboundPolicy { force_ipv4: true }, lookup)
+    let client = client_builder_with_lookup(&v4_only(), lookup)
+        .unwrap()
         // Far below the happy-eyeballs fallback a blackholed attempt would cost.
         .connect_timeout(Duration::from_millis(250))
         .build()
@@ -139,16 +147,23 @@ async fn forced_ipv4_connects_only_to_a_records() {
     let get = |force_ipv4: bool| {
         let lookup = Arc::clone(&lookup);
         async move {
-            client_builder_with_lookup(OutboundPolicy { force_ipv4 }, lookup)
-                .build()
-                .unwrap()
-                .get(format!("http://{HOST}:{port}/"))
-                .send()
-                .await
-                .unwrap()
-                .text()
-                .await
-                .unwrap()
+            client_builder_with_lookup(
+                &OutboundPolicy {
+                    force_ipv4,
+                    ..OutboundPolicy::default()
+                },
+                lookup,
+            )
+            .unwrap()
+            .build()
+            .unwrap()
+            .get(format!("http://{HOST}:{port}/"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap()
         }
     };
 
@@ -167,12 +182,10 @@ async fn ipv6_literal_is_refused_when_forced() {
     };
     let port = v6.local_addr().unwrap().port();
     serve(v6, "v6");
-    let client = client_builder_with_lookup(
-        OutboundPolicy { force_ipv4: true },
-        Arc::new(FixedLookup(vec![])),
-    )
-    .build()
-    .unwrap();
+    let client = client_builder_with_lookup(&v4_only(), Arc::new(FixedLookup(vec![])))
+        .unwrap()
+        .build()
+        .unwrap();
     assert!(
         client
             .get(format!("http://[::1]:{port}/"))

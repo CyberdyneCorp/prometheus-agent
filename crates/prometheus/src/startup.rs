@@ -76,10 +76,12 @@ pub fn install_logging(home: Option<&PathBuf>, launch: &LaunchEnv) {
 /// Binds the command's logging to the profile it works on: records carry
 /// `profile` (so they go to that profile's `logs/`), its `logging.level`
 /// applies unless the environment set a filter, and its stored secrets are
-/// redacted.
+/// redacted. A disabled `security.protected_instruction_files` is logged at
+/// WARN here, on every start.
 pub fn bind_profile(scope: &pmt_config::ProfileScope) {
     let name = scope.name().to_string();
     tracing::Span::current().record("profile", name.as_str());
+    pmt_tools::protected::warn_if_disabled(&scope.config().security);
     let Some(handle) = pmt_obs::logs::handle() else {
         return;
     };
