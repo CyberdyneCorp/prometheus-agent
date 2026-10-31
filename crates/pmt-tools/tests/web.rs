@@ -5,6 +5,7 @@
 //! fixed resolver; the backend mocks run on loopback.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::io;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -15,7 +16,7 @@ use pmt_net::resolve::{Lookup, LookupFuture};
 use pmt_net::{DestinationPolicy, Fetcher, OutboundPolicy};
 use pmt_tools::environments::{Environments, SessionEnv};
 use pmt_tools::result::Status;
-use pmt_tools::web::{SecretLookup, WebSession};
+use pmt_tools::web::{FullTextStore, SecretLookup, WebSession};
 use serde_json::{Value, json};
 use wiremock::matchers::{body_partial_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -52,8 +53,24 @@ fn secrets() -> SecretLookup {
 }
 
 fn session(config: &WebConfig) -> WebSession {
+    session_in(config, &store_dir())
+}
+
+fn store_dir() -> std::path::PathBuf {
+    tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR"))
+        .unwrap()
+        .keep()
+}
+
+fn session_in(config: &WebConfig, profile: &std::path::Path) -> WebSession {
     let client = pmt_net::client(&OutboundPolicy::default()).unwrap();
-    WebSession::from_config(config, &client, fetcher(), &secrets())
+    WebSession::from_config(
+        config,
+        &client,
+        fetcher(),
+        &secrets(),
+        FullTextStore::for_profile(profile),
+    )
 }
 
 fn body(result: &pmt_tools::ToolResult) -> Value {
@@ -255,4 +272,60 @@ async fn the_tools_are_exposed_only_with_a_configured_backend() {
     .await;
     assert_eq!(found.status, Status::Ok, "{}", found.text_content());
     assert_eq!(body(&found)["results"].as_array().unwrap().len(), 2);
+}
+
+/// 60,000 characters of Markdown in 2,000 numbered lines.
+fn long_page() -> String {
+    (1..=2_000).fold(String::new(), |mut page, n| {
+        let _ = writeln!(page, "paragraph {n:05} of a long page.");
+        page
+    })
+}
+
+#[tokio::test]
+async fn a_long_page_is_windowed_deterministically_over_a_stored_full_text() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/scrape"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "success": true, "data": {"markdown": long_page(), "metadata": {"title": "Long"}}
+        })))
+        .mount(&server)
+        .await;
+    let profile = store_dir();
+    let web = session_in(&firecrawl_config(&server), &profile);
+    let url = vec!["https://public.test/long".to_owned()];
+    let first = web.extract(&url, None).await;
+    let second = web.extract(&url, None).await;
+    assert_eq!(first, second);
+    let reply = body(&first);
+    let content = reply["results"][0]["content"].as_str().unwrap();
+    let chars = content.chars().count();
+    assert!((14_000..=15_000).contains(&chars), "{chars}");
+    assert!(content.starts_with("paragraph 00001"));
+    let footer = &content[content.rfind("[TRUNCATED]").unwrap()..];
+    let stored = profile.join("cache").join("web");
+    let file = std::fs::read_dir(&stored)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert!(footer.contains(&file.display().to_string()), "{footer}");
+    assert!(footer.contains("read_file(path="), "{footer}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), long_page());
+    // A page within budget is returned whole.
+    let whole = body(&web.extract(&url, Some(100_000)).await);
+    assert_eq!(whole["results"][0]["content"], long_page());
+}
+
+#[tokio::test]
+async fn auto_selects_a_backend_from_the_secrets_store() {
+    let server = firecrawl().await;
+    let mut config = WebConfig::default();
+    // `auto` with FIRECRAWL_API_KEY present picks firecrawl (self-hosted
+    // URL here only to reach the mock).
+    config.firecrawl.base_url = Some(server.uri());
+    let reply = body(&session(&config).search("rust", 1).await);
+    assert_eq!(reply["backend"], "firecrawl");
 }

@@ -31,13 +31,28 @@ pub const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 /// A failure this soon after a success is treated as a flake.
 pub const FLAKE_GRACE: Duration = Duration::from_mins(1);
 
-/// What a probe may look at: the profile it answers for and its config.
-#[derive(Debug, Clone, Copy)]
+/// Answers whether the profile's secrets store holds a secret (never its
+/// value), for opt-in checks such as "is a search key configured".
+pub type SecretPresence = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
+/// What a probe may look at: the profile it answers for, its config and
+/// which secrets it holds.
+#[derive(Clone, Copy)]
 pub struct ProbeContext<'a> {
     /// Profile name (the cache key).
     pub profile: &'a str,
     /// The profile's configuration.
     pub config: &'a Config,
+    /// Whether a secret is present in the profile's secrets store.
+    pub has_secret: &'a (dyn Fn(&str) -> bool + Send + Sync),
+}
+
+impl std::fmt::Debug for ProbeContext<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProbeContext")
+            .field("profile", &self.profile)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A probe's answer: `Err` carries the reason shown as
@@ -204,7 +219,11 @@ mod tests {
     }
 
     fn context<'a>(profile: &'a str, config: &'a Config) -> ProbeContext<'a> {
-        ProbeContext { profile, config }
+        ProbeContext {
+            profile,
+            config,
+            has_secret: &|_| false,
+        }
     }
 
     async fn advance(secs: u64) {

@@ -135,7 +135,16 @@ regex fails with `invalid pattern: <reason>` before anything is searched.
 ## Web search and extraction
 
 Each web tool uses the backend configured for it: `web.search_backend` or
-`web.extract_backend`, else `web.backend`. This build ships:
+`web.extract_backend`, else `web.backend`, else `auto` (the default).
+`auto` takes, per tool, the first backend in the order `tavily`,
+`perplexity`, `exa`, `parallel`, `firecrawl`, `nous`, `searxng`,
+`brave-free`, then `keyless` (only with `web.keyless.enabled = true`) whose
+credentials are present (a secret in the secrets store, or the backend's
+URL setting) and that serves the tool; backends this build does not ship
+are skipped. `xai` and `openai-native` are never chosen by `auto`, so an
+xAI key alone leaves the web tools unavailable. `prometheus tools explain
+web_search` shows the resolved backend (`backend = ...`), and every result
+names it in `backend`. This build ships:
 
 | Backend | Search | Extract | Configuration |
 |---|---|---|---|
@@ -176,8 +185,17 @@ failure is an error naming the backend, never an empty list.
 
 [`web_extract`](../reference/tools.md#web_extract) takes 1 to 5 URLs and
 returns, per URL, `{url, title, content, status}` as Markdown with images
-replaced by `[IMAGE: <alt>]`, cut to `char_limit` (default
-`web.extract_char_limit`) characters. Each URL is checked before the
+replaced by `[IMAGE: <alt>]`. A page within `char_limit` (default
+`web.extract_char_limit`, 15,000; clamped to 2,000-500,000) characters is
+returned whole. A longer page is returned as a deterministic window, about
+75% head and 25% tail cut on line boundaries, followed by a `[TRUNCATED]`
+footer naming the stored full text and the exact
+[`read_file`](../reference/tools.md#read_file) call that pages through the
+omitted lines; the same page always yields the same bytes and nothing is
+summarized. Full texts are stored under `<profile>/cache/web/` (0600, one
+file per URL, format and backend), capped at 2,000,000 characters with a
+final line stating the cap, and deleted after 7 days (the daemon prunes on
+start and hourly). Each URL is checked before the
 backend sees it: only `http(s)`, and a host that resolves to a private,
 loopback or link-local address (unless `security.egress.allow_private` or
 a grant allows it), to a cloud metadata address, or does not resolve is

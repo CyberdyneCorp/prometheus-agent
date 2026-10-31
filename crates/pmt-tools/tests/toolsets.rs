@@ -233,3 +233,19 @@ async fn disabling_browser_keeps_search() {
     let names: Vec<&str> = surface.names().collect();
     assert_eq!(names.len(), CORE.len() - 4);
 }
+
+/// spec: agent-turn-loop, clarify tool contract — surfaces with no
+/// interactive channel (cron, API, `-z`, kanban workers) do not get it.
+#[test]
+fn a_surface_without_an_interactive_channel_drops_clarify() {
+    let registry = ToolRegistry::new(
+        "default",
+        Arc::new(Builtins::standard(pmt_tools::agent_level::tools()).unwrap()),
+    );
+    let selection = Selection::resolve(&registry, &["core".to_owned()], &[]).unwrap();
+    assert!(selection.contains("clarify"));
+    let unattended = selection.without_interactive(&registry);
+    assert!(!unattended.contains("clarify"));
+    assert!(unattended.disabled.contains("clarify"));
+    assert!(unattended.contains("todo") && unattended.contains("session_search"));
+}

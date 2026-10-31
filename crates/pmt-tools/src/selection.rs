@@ -77,6 +77,26 @@ impl Selection {
         })
     }
 
+    /// The selection of a surface with no interactive channel (cron, API,
+    /// one-shot `-z`, kanban workers): every tool claiming `interactive`
+    /// (`clarify`) is removed as if disabled.
+    #[must_use]
+    pub fn without_interactive(mut self, registry: &ToolRegistry) -> Self {
+        let interactive: Vec<String> = self
+            .tools
+            .iter()
+            .filter(|name| {
+                registry
+                    .get(name)
+                    .is_ok_and(|tool| tool.descriptor.claims.interactive)
+            })
+            .cloned()
+            .collect();
+        self.tools.retain(|name| !interactive.contains(name));
+        self.disabled.extend(interactive);
+        self
+    }
+
     /// The selection `[tools]` configures.
     ///
     /// # Errors

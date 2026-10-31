@@ -1586,6 +1586,17 @@ version = "0.1.0"
 [[package]]
 name = "pmt-agent"
 version = "0.1.0"
+dependencies = [
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-store",
+ "pmt-tools",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
 
 [[package]]
 name = "pmt-backup"

@@ -9,7 +9,10 @@
 //! sees them.
 
 pub mod backend;
+pub mod full_text;
+pub mod select;
 pub mod tools;
+pub mod window;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,10 +21,9 @@ use pmt_config::schema::WebConfig;
 use pmt_net::fetch::Fetcher;
 
 pub use backend::{Firecrawl, Hit, Page, Searxng, SecretLookup, WebBackend};
+pub use full_text::FullTextStore;
+pub use select::{AUTO_ORDER, BACKENDS, HasSecret, NOTHING_CONFIGURED, resolve};
 pub use tools::tools;
-
-/// Backend ids this build implements.
-pub const BACKENDS: &[&str] = &["firecrawl", "searxng"];
 
 /// Which web capability a backend serves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,61 +34,36 @@ pub enum Capability {
     Extract,
 }
 
-/// The backend id configured for `capability`, or why there is none. This
-/// is also the tools' availability probe.
-///
-/// # Errors
-///
-/// The unavailability reason (`no web backend configured`, a search-only
-/// backend chosen for extract, an id this build does not implement).
-pub fn configured(config: &WebConfig, capability: Capability) -> Result<&str, String> {
-    let specific = match capability {
-        Capability::Search => config.search_backend.as_deref(),
-        Capability::Extract => config.extract_backend.as_deref(),
-    };
-    let id = specific.unwrap_or(&config.backend);
-    if id == "auto" {
-        return Err("no web backend configured".to_owned());
-    }
-    if !BACKENDS.contains(&id) {
-        return Err(format!("web backend '{id}' is not available in this build"));
-    }
-    if capability == Capability::Extract && id == "searxng" {
-        return Err(format!(
-            "backend '{id}' is search-only; set web.extract_backend"
-        ));
-    }
-    if id == "searxng" && config.searxng.url.is_none() {
-        return Err("backend 'searxng' needs web.searxng.url".to_owned());
-    }
-    Ok(id)
-}
-
 /// One session's web tools.
 pub struct WebSession {
     search: Result<Arc<dyn WebBackend>, String>,
     extract: Result<Arc<dyn WebBackend>, String>,
     fetcher: Arc<Fetcher>,
+    full_text: FullTextStore,
     config: WebConfig,
 }
 
 impl WebSession {
     /// The session's backends from `config`. `client` calls the backends'
-    /// APIs; `fetcher` carries the session's destination policy.
+    /// APIs; `fetcher` carries the session's destination policy;
+    /// `full_text` keeps the full text of truncated pages.
     #[must_use]
     pub fn from_config(
         config: &WebConfig,
         client: &reqwest::Client,
         fetcher: Arc<Fetcher>,
         secrets: &SecretLookup,
+        full_text: FullTextStore,
     ) -> Self {
+        let has_secret = |name: &str| secrets(name).is_some();
         let build = |capability| {
-            configured(config, capability).map(|id| backend(id, config, client, secrets))
+            resolve(config, capability, &has_secret).map(|id| backend(id, config, client, secrets))
         };
         Self {
             search: build(Capability::Search),
             extract: build(Capability::Extract),
             fetcher,
+            full_text,
             config: config.clone(),
         }
     }
@@ -98,12 +75,14 @@ impl WebSession {
         search: Option<Arc<dyn WebBackend>>,
         extract: Option<Arc<dyn WebBackend>>,
         fetcher: Arc<Fetcher>,
+        full_text: FullTextStore,
     ) -> Self {
-        let missing = || "no web backend configured".to_owned();
+        let missing = || NOTHING_CONFIGURED.to_owned();
         Self {
             search: search.ok_or_else(missing),
             extract: extract.ok_or_else(missing),
             fetcher,
+            full_text,
             config: config.clone(),
         }
     }
@@ -130,37 +109,4 @@ fn backend(
         config.firecrawl.base_url.as_deref(),
         Arc::clone(secrets),
     ))
-}
-
-#[cfg(test)]
-mod selection_tests {
-    use pmt_config::schema::WebConfig;
-
-    use super::{Capability, configured};
-
-    #[test]
-    fn per_capability_backends_and_reasons() {
-        let mut config = WebConfig::default();
-        assert_eq!(
-            configured(&config, Capability::Search),
-            Err("no web backend configured".into())
-        );
-        config.search_backend = Some("searxng".into());
-        config.searxng.url = Some("http://127.0.0.1:8888".into());
-        config.extract_backend = Some("firecrawl".into());
-        assert_eq!(configured(&config, Capability::Search), Ok("searxng"));
-        assert_eq!(configured(&config, Capability::Extract), Ok("firecrawl"));
-        config.extract_backend = None;
-        config.backend = "searxng".into();
-        assert_eq!(
-            configured(&config, Capability::Extract),
-            Err("backend 'searxng' is search-only; set web.extract_backend".into())
-        );
-        config.backend = "tavily".into();
-        assert!(
-            configured(&config, Capability::Extract)
-                .unwrap_err()
-                .contains("tavily")
-        );
-    }
 }

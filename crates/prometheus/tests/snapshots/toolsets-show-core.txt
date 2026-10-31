@@ -18,10 +18,10 @@ browser_cdp         unregistered
 browser_dialog      unregistered
 browser_vault       unregistered
 text_to_speech      unregistered
-todo                unregistered
+todo                exposed
 memory              unregistered
-session_search      unregistered
-clarify             unregistered
+session_search      exposed
+clarify             exposed
 execute_code        unregistered
 delegate_task       unregistered
 cronjob             unregistered

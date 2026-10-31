@@ -347,6 +347,31 @@ async fn agent_level_tool_is_refused_and_post_hook_fires() {
 }
 
 #[tokio::test]
+async fn the_shipped_agent_level_tools_are_refused_on_the_generic_path() {
+    let harness = harness(crate::agent_level::tools(), Options::default()).await;
+    for (name, args) in [
+        ("todo", "{}"),
+        ("clarify", r#"{"questions": [{"question": "Which?"}]}"#),
+        ("session_search", r#"{"query": "x"}"#),
+    ] {
+        let result = call(&harness, name, args).await;
+        assert_eq!(result.status, Status::Error, "{name}");
+        assert_eq!(
+            result.text_content(),
+            format!("{name} must be handled by the agent loop")
+        );
+        assert!(
+            harness
+                .recorder
+                .events()
+                .contains(&format!("post {name} error")),
+            "{name}: {:?}",
+            harness.recorder.events()
+        );
+    }
+}
+
+#[tokio::test]
 async fn capability_is_rechecked_at_dispatch() {
     let runs = Arc::new(AtomicUsize::new(0));
     let mut web = counting("web_extract", &runs);

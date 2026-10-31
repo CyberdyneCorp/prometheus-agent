@@ -17,6 +17,7 @@ use pmt_core::doctor::{Check, Status};
 use pmt_core::error::{Error, codes};
 
 use crate::descriptor::{self, Owner, RegisteredTool};
+use crate::probe::SecretPresence;
 use crate::toolset::{self, Toolset, Toolsets};
 
 /// The built-in tools and toolsets, shared by every profile.
@@ -75,7 +76,7 @@ pub struct Rejection {
 }
 
 /// One profile's tools and toolsets.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ToolRegistry {
     profile: String,
     builtins: Arc<Builtins>,
@@ -83,6 +84,17 @@ pub struct ToolRegistry {
     toolsets: Toolsets,
     generation: u64,
     rejections: Vec<Rejection>,
+    secrets: SecretPresence,
+}
+
+impl std::fmt::Debug for ToolRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolRegistry")
+            .field("profile", &self.profile)
+            .field("tools", &self.tools.keys())
+            .field("generation", &self.generation)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ToolRegistry {
@@ -96,7 +108,22 @@ impl ToolRegistry {
             toolsets: Toolsets::new(),
             generation: 0,
             rejections: Vec::new(),
+            secrets: Arc::new(|_| false),
         }
+    }
+
+    /// Lets availability probes see which secrets the profile holds
+    /// (default: none).
+    #[must_use]
+    pub fn with_secret_presence(mut self, secrets: SecretPresence) -> Self {
+        self.secrets = secrets;
+        self
+    }
+
+    /// Whether a secret is present in the profile's secrets store.
+    #[must_use]
+    pub fn secret_presence(&self) -> SecretPresence {
+        Arc::clone(&self.secrets)
     }
 
     /// The profile this registry belongs to.

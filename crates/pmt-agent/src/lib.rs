@@ -1,3 +1,6 @@
 //! The agent turn loop, system-prompt assembly and context compression.
 //!
-//! Empty in M0; populated in M1.
+//! So far: [`tools`], the agent-level tools the turn loop executes itself
+//! (`todo`, `clarify`, `session_search`).
+
+pub mod tools;

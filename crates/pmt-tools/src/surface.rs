@@ -237,9 +237,11 @@ async fn probe_all(
             .entry(probe.id().to_owned())
             .or_insert_with(|| Arc::clone(probe));
     }
+    let has_secret = inputs.registry.secret_presence();
     let context = ProbeContext {
         profile: inputs.registry.profile(),
         config: inputs.config,
+        has_secret: has_secret.as_ref(),
     };
     let checks = distinct.iter().map(|(id, probe)| async move {
         (

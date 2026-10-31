@@ -6,7 +6,7 @@ use pmt_core::capability::Capability as Cap;
 use regex::Regex;
 use serde_json::{Value, json};
 
-use super::{Capability, WebSession, configured};
+use super::{Capability, WebSession, resolve, window::window};
 use crate::descriptor::{
     CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolHandler,
 };
@@ -39,7 +39,7 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
         Arc::new(FnProbe::new(
             id,
             move |context: crate::probe::ProbeContext<'_>| {
-                configured(&context.config.web, capability).map(|_| ())
+                resolve(&context.config.web, capability, context.has_secret).map(|_| ())
             },
         ))
     };
@@ -166,26 +166,31 @@ impl WebSession {
                 "no answer within {} s (web.extract_timeout_secs)", self.config.extract_timeout_secs)}),
             Some(Err(why)) => json!({"url": url, "status": "error", "error": format!(
                 "web_extract failed ({}): {why}", backend.id())}),
-            Some(Ok(page)) => json!({
-                "url": url,
-                "title": page.title,
-                "content": capped(&IMAGE.replace_all(&page.markdown, "[IMAGE: $1]"), budget),
-                "status": "ok",
-            }),
+            Some(Ok(page)) => self.page_entry(backend.id(), url, &page, budget),
         }
+    }
+
+    /// The entry of an extracted page: whole within `budget`, else the
+    /// head/tail window over the full text stored on disk.
+    fn page_entry(&self, backend: &str, url: &str, page: &super::Page, budget: usize) -> Value {
+        let text = IMAGE.replace_all(&page.markdown, "[IMAGE: $1]");
+        let content = if text.chars().count() <= budget {
+            text.into_owned()
+        } else {
+            match self.full_text.save(url, FORMAT, backend, &text) {
+                Ok(stored) => window(&text, budget, &stored),
+                Err(err) => {
+                    return json!({"url": url, "status": "error", "error": format!(
+                        "web_extract could not store the full text: {err}")});
+                }
+            }
+        };
+        json!({"url": url, "title": page.title, "content": content, "status": "ok"})
     }
 }
 
-/// `text` within `budget` characters, cut at a line boundary with a
-/// `[TRUNCATED]` footer.
-fn capped(text: &str, budget: usize) -> String {
-    if text.chars().count() <= budget {
-        return text.to_owned();
-    }
-    let head: String = text.chars().take(budget).collect();
-    let cut = head.rfind('\n').map_or(head.as_str(), |at| &head[..at]);
-    format!("{cut}\n[TRUNCATED]")
-}
+/// The stored text format.
+const FORMAT: &str = "markdown";
 
 fn search_descriptor() -> ToolDescriptor {
     let mut d = ToolDescriptor::new(
@@ -233,16 +238,4 @@ fn web_traits(descriptor: &mut ToolDescriptor) {
     descriptor.effect = Effect::None;
     descriptor.idempotent = true;
     descriptor.capabilities = vec![Cap::parse("net.connect:*").expect("valid capability")];
-}
-
-#[cfg(test)]
-mod tests {
-    use super::capped;
-
-    #[test]
-    fn long_pages_are_cut_on_a_line_boundary() {
-        let text = "line one\nline two\nline three\n";
-        assert_eq!(capped(text, 100), text);
-        assert_eq!(capped(text, 12), "line one\n[TRUNCATED]");
-    }
 }

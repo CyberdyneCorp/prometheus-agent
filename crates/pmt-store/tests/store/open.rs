@@ -165,15 +165,20 @@ fn newer_store_opens_read_only_and_refuses_writes() {
 fn store_a_newer_build_locked_out_cannot_be_opened() {
     let home = TestHome::new();
     drop(home.store("default"));
+    let min_read = pmt_store::SCHEMA_VERSION + 1;
     raw(&home.database("default"))
-        .execute_batch(
-            "UPDATE store_meta SET value = '9' WHERE key = 'schema_version';
-             UPDATE store_meta SET value = '8' WHERE key = 'min_read_version';",
-        )
+        .execute_batch(&format!(
+            "UPDATE store_meta SET value = '{}' WHERE key = 'schema_version';
+             UPDATE store_meta SET value = '{min_read}' WHERE key = 'min_read_version';",
+            min_read + 1
+        ))
         .unwrap();
     let err = Store::open(&home.scope("default")).unwrap_err();
     assert_eq!(err.code().code, "store.schema_too_new");
-    assert!(err.message().contains("version 8"), "{err}");
+    assert!(
+        err.message().contains(&format!("version {min_read}")),
+        "{err}"
+    );
 }
 
 #[test]

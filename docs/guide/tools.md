@@ -112,6 +112,34 @@ Calls from one model response run at the same time (up to
 needs an exclusive resource or talks to you; otherwise they run one after
 another. Results always come back in the order the model asked.
 
+## Tools the agent runs itself
+
+[`todo`](../reference/tools.md#todo),
+[`clarify`](../reference/tools.md#clarify) and
+[`session_search`](../reference/tools.md#session_search) need session state
+only the turn loop has, so the turn loop runs them; dispatching one through
+the generic path (for example from an RPC client) returns
+`<name> must be handled by the agent loop`.
+
+- [`todo`](../reference/tools.md#todo) keeps a prioritized list of
+  `{id, content, status, parent?}` items (`pending`, `in_progress`,
+  `completed`, `cancelled`; at most 256 items of 4,000 characters). Without
+  `todos` it returns the list; `merge = false` replaces it; `merge = true`
+  changes only the given fields of existing ids and appends new ones. Every
+  write bumps `revision`, every call returns the whole list, the list is
+  stored with the session, and after compaction only open items (and the
+  parents of open subtasks) are shown again.
+- [`clarify`](../reference/tools.md#clarify) asks you 1 to 5 questions in
+  one prompt (each with at most 4 choices plus a free-text answer) and waits
+  `agent.clarify_timeout_secs` (default 3600, 0 = no limit); when nobody
+  answers the result says `[user did not respond within <N>m]`. Sessions no
+  one attends (cron, API, `-z`) do not offer it.
+- [`session_search`](../reference/tools.md#session_search) searches this
+  profile's past sessions (never another profile's), leaving out what the
+  current session already has in context, and can return the messages
+  around a hit (`session_id`, `around_message_id`, `window`). Results are
+  capped at 16 KiB.
+
 ## Large results
 
 A result longer than its budget is saved to

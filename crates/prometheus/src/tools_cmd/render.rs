@@ -120,6 +120,10 @@ pub struct Explanation {
     pub approval_mode: ApprovalMode,
     /// The approval rules that apply to its calls.
     pub approval_rules: Vec<String>,
+    /// The backend serving a web tool (`web_search`, `web_extract`), or why
+    /// none resolves.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 }
 
 /// Explains `name`.
@@ -155,7 +159,24 @@ pub async fn explain(inv: &Inventory<'_>, name: &str) -> Result<Explanation, Err
         exposure: exposure(&surface, name),
         approval_mode: inv.config.approvals.mode,
         approval_rules: approval_rules(tool, inv.config),
+        backend: web_backend(inv, name),
     })
+}
+
+/// The resolved backend of a web tool, or `unavailable:<reason>`.
+fn web_backend(inv: &Inventory<'_>, name: &str) -> Option<String> {
+    let capability = match name {
+        "web_search" => pmt_tools::web::Capability::Search,
+        "web_extract" => pmt_tools::web::Capability::Extract,
+        _ => return None,
+    };
+    let has_secret = inv.registry.secret_presence();
+    Some(
+        match pmt_tools::web::resolve(&inv.config.web, capability, has_secret.as_ref()) {
+            Ok(id) => id.to_owned(),
+            Err(why) => format!("unavailable:{why}"),
+        },
+    )
 }
 
 /// The approval rules that apply to calls of `tool`.
@@ -259,6 +280,9 @@ pub fn render_explain(e: &Explanation) -> String {
         ("approval_mode", mode_name(e.approval_mode).to_owned()),
     ] {
         let _ = writeln!(out, "{key} = {value}");
+    }
+    if let Some(backend) = &e.backend {
+        let _ = writeln!(out, "backend = {backend}");
     }
     out.push_str("approval rules:\n");
     for rule in &e.approval_rules {

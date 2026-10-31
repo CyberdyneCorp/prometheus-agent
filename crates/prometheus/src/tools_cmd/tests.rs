@@ -117,6 +117,30 @@ async fn tools_list_reports_one_reason_per_excluded_tool() {
 }
 
 #[tokio::test]
+async fn explain_shows_the_resolved_web_backend() {
+    let mut config = Config::default();
+    let none = with(&config, async |inv| {
+        explain(inv, "web_extract").await.unwrap()
+    })
+    .await;
+    assert_eq!(
+        none.backend.as_deref(),
+        Some("unavailable:no web backend configured")
+    );
+    config.web.search_backend = Some("searxng".into());
+    config.web.searxng.url = Some("http://127.0.0.1:8888".into());
+    config.web.extract_backend = Some("firecrawl".into());
+    let extract = with(&config, async |inv| {
+        explain(inv, "web_extract").await.unwrap()
+    })
+    .await;
+    assert_eq!(extract.backend.as_deref(), Some("firecrawl"));
+    assert!(render_explain(&extract).contains("backend = firecrawl\n"));
+    let terminal = with(&config, async |inv| explain(inv, "terminal").await.unwrap()).await;
+    assert_eq!(terminal.backend, None);
+}
+
+#[tokio::test]
 async fn explaining_a_tool() {
     let mut config = Config::default();
     config.approvals.mode = ApprovalMode::Smart;

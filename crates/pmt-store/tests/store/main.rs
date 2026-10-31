@@ -12,4 +12,5 @@ mod search;
 mod sessions;
 mod support;
 mod titles;
+mod todos;
 mod tool_surface;

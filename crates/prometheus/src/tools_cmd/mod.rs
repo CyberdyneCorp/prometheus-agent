@@ -242,7 +242,9 @@ where
 {
     let scope = ctx.scope()?;
     let config = scope.config();
-    let registry = registry(scope.name().as_str())?;
+    let secrets = scope.secrets().clone();
+    let registry = registry(scope.name().as_str())?
+        .with_secret_presence(Arc::new(move |name| secrets.resolve(name).is_ok()));
     let grants = SessionGrants::new(baseline(&config.security), GrantsFile::of(scope.profile()));
     let capabilities = grants.capabilities(&Subject::Profile)?;
     let probes = ProbeCache::new();
