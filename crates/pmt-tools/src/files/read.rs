@@ -3,7 +3,7 @@
 //! Protected secret files and device-namespace paths).
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::{Map, Value, json};
 
@@ -208,13 +208,21 @@ impl FileSession {
             .filter(|entry| matches!(entry.kind, Kind::File | Kind::Dir))
             .filter_map(|entry| {
                 let score = text::similarity(wanted, &entry.name);
-                (score >= SUGGESTION_SIMILARITY).then(|| {
-                    let full: PathBuf = shown_dir.join(&entry.name);
-                    (score, full.display().to_string())
-                })
+                (score >= SUGGESTION_SIMILARITY).then(|| (score, joined(shown_dir, &entry.name)))
             })
             .collect()
     }
+}
+
+/// `dir/name` with the separator the model used (`/` unless it wrote
+/// backslashes), so a suggestion reads like the path it corrects.
+fn joined(dir: &Path, name: &str) -> String {
+    let dir = dir.to_string_lossy();
+    if dir.is_empty() {
+        return name.to_owned();
+    }
+    let separator = if dir.contains('\\') { '\\' } else { '/' };
+    format!("{}{separator}{name}", dir.trim_end_matches(['/', '\\']))
 }
 
 /// Guards decided by the path alone (resolved and as written).
