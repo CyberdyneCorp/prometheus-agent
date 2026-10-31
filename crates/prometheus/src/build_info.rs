@@ -2,6 +2,8 @@
 //! (spec: workspace-architecture, Version and build identity; Supported
 //! targets and support tiers).
 
+use std::sync::LazyLock;
+
 /// Semantic version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Target triple.
@@ -16,16 +18,20 @@ pub const BUILD_DATE: &str = env!("PMT_BUILD_DATE");
 pub const BUILD_ID: &str = env!("PMT_BUILD_ID");
 
 /// Text after the program name in the identity line
-/// `prometheus <semver> (<target>, <commit>)`, shared by `--version`,
-/// `prometheus version` and `/version`.
-pub const IDENTITY: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " (",
-    env!("PMT_BUILD_TARGET"),
-    ", ",
-    env!("PMT_BUILD_COMMIT"),
-    ")"
-);
+/// `prometheus <semver> (<channel>, <target>, <commit>, <build date>)`, shared
+/// by `--version`, `prometheus version` and `/version`. Built once at first
+/// use because the channel is derived from the version by [`channel`], which
+/// stays the single place that rule lives.
+#[must_use]
+pub fn identity() -> &'static str {
+    static IDENTITY: LazyLock<String> = LazyLock::new(|| {
+        format!(
+            "{VERSION} ({}, {TARGET}, {COMMIT}, {BUILD_DATE})",
+            channel(VERSION)
+        )
+    });
+    &IDENTITY
+}
 
 /// Tier 1 targets: full test suite on every merge.
 const TIER_1: [&str; 6] = [

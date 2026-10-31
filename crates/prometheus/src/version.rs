@@ -57,7 +57,7 @@ impl VersionInfo {
     /// compiled-in surfaces when verbose.
     #[must_use]
     pub fn render_text(&self, verbose: bool) -> String {
-        let mut out = format!("prometheus {}\n", build_info::IDENTITY);
+        let mut out = format!("prometheus {}\n", build_info::identity());
         if !verbose {
             return out;
         }

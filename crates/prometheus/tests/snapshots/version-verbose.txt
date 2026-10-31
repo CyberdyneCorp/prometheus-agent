@@ -1,4 +1,4 @@
-prometheus <VERSION> (<TARGET>, <COMMIT>)
+prometheus <VERSION> (stable, <TARGET>, <COMMIT>, <BUILD_DATE>)
 build_id: <BUILD_ID>
 build_date: <BUILD_DATE>
 profile: <PROFILE>

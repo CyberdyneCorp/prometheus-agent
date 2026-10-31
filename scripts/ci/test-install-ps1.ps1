@@ -16,7 +16,10 @@ function Fail([string]$Message) {
 }
 
 function Install([string[]]$Arguments) {
-    & $Shell -NoProfile -ExecutionPolicy Bypass -File $Installer @Arguments
+    # Send the installer's output to the host: a PowerShell function returns every
+    # uncaptured pipeline value, so letting it through would turn the exit code
+    # into an array and every comparison against it would fail.
+    & $Shell -NoProfile -ExecutionPolicy Bypass -File $Installer @Arguments | Out-Host
     return $LASTEXITCODE
 }
 

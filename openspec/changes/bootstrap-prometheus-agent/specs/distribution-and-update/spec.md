@@ -15,8 +15,12 @@ Each release SHALL publish one self-contained `prometheus` executable per target
 - **THEN** its signature SHALL verify and it SHALL list a digest for every target archive that matches the downloaded bytes
 
 ### Requirement: Release identity grammar
-A stable release SHALL be tagged `vMAJOR.MINOR.PATCH` matching `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, and a canary SHALL be `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS` (UTC) where MAJOR.MINOR.PATCH is the next planned stable, so that semantic-version ordering places every canary after the previous stable and before its own stable; `prometheus --version` SHALL print the version, channel, target, commit and build date on one line.
+A stable release SHALL be tagged `vMAJOR.MINOR.PATCH` matching `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, and a canary SHALL be `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS` (UTC) where MAJOR.MINOR.PATCH is the next planned stable, so that semantic-version ordering places every canary after the previous stable and before its own stable; `prometheus --version` SHALL print the version, channel, target, commit and build date on one line, as `prometheus <semver> (<channel>, <target>, <commit>, <build date>)` with the build date in RFC 3339 UTC (for example `prometheus 1.5.0-canary.20261029064100 (canary, x86_64-unknown-linux-musl, 1a2b3c4d5e6f, 2026-10-29T06:41:00Z)`).
 **Milestone:** M1
+
+#### Scenario: One-line identity
+- **WHEN** the user runs `prometheus --version`
+- **THEN** it SHALL print exactly one line `prometheus <semver> (<channel>, <target>, <commit>, <build date>)` whose values equal `version`, `channel`, `target`, `commit` and `build_date` of `prometheus version --json`
 
 #### Scenario: Canary ordering
 - **GIVEN** installed `v1.4.0` and available `v1.5.0-canary.20261029064100`

@@ -16,7 +16,7 @@ pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand}
 // is cleared so this type's doc comment never leaks into `--help`.
 /// Parsed command line.
 #[derive(Debug, Parser)]
-#[command(name = "prometheus", bin_name = "prometheus", version = build_info::IDENTITY)]
+#[command(name = "prometheus", bin_name = "prometheus", version = build_info::identity())]
 #[command(about = "Prometheus Agent", long_about = None)]
 pub struct Cli {
     /// Prometheus home directory.
