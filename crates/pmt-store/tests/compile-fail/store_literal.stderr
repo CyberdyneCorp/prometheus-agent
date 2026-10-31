@@ -1,0 +1,19 @@
+error: cannot construct `StoreLocation` with struct literal syntax due to private fields
+ --> tests/compile-fail/store_literal.rs:6:20
+  |
+6 |     let _literal = StoreLocation {
+  |                    ^^^^^^^^^^^^^
+7 |         database: path.join("state.db"),
+  |         ------------------------------- private field
+8 |         blobs: path.join("blobs"),
+  |         ------------------------- private field
+  |
+  = note: ...and other private fields `quarantine` and `spillover` that were not provided
+help: you might have meant to use the `of` associated function
+  |
+6 -     let _literal = StoreLocation {
+7 -         database: path.join("state.db"),
+8 -         blobs: path.join("blobs"),
+9 -     };
+6 +     let _literal = StoreLocation::of(_);
+  |

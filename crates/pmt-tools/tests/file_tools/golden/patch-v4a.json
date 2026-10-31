@@ -1,0 +1,24 @@
+{
+  "diff": "--- a/a.rs\n+++ b/a.rs\n@@ -1,3 +1,3 @@\n fn a() {\n-    1\n+    2\n }\n--- /dev/null\n+++ b/c.rs\n@@ -0,0 +1 @@\n+fn c() {}\n--- a/old.rs\n+++ /dev/null\n@@ -1 +0,0 @@\n-fn old() {}\n",
+  "files": [
+    {
+      "action": "updated",
+      "lint": {
+        "status": "ok"
+      },
+      "path": "a.rs"
+    },
+    {
+      "action": "added",
+      "lint": {
+        "status": "ok"
+      },
+      "path": "c.rs"
+    },
+    {
+      "action": "deleted",
+      "lint": null,
+      "path": "old.rs"
+    }
+  ]
+}

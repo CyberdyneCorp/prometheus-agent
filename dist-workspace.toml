@@ -1,0 +1,66 @@
+# cargo-dist builds and publishes the release archives (design D11; spec:
+# distribution-and-update, Release artifacts and targets). Regenerate the
+# workflow after editing this file with `dist generate` (cargo-dist pinned
+# below); `dist plan` must report no out-of-date files.
+#
+# cargo-dist owns: the per-target `.tar.gz` archives, their `.sha256`
+# checksums and the GitHub build-provenance attestations. The custom job
+# `release-finalize` (.github/workflows/release-finalize.yml) adds the
+# macOS universal archive, the SPDX SBOMs, `release-manifest.json`, the
+# channel index, the rendered installers and every minisign signature, and
+# verifies the whole set (`cargo xtask release verify`). On pull requests
+# the same pipeline runs as a dry run (pr-run-mode = "upload") signed with
+# an ephemeral key; nothing is published.
+
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.33.1"
+ci = "github"
+# The installers are ours (distrib/install.sh, distrib/install.ps1): they
+# verify minisign signatures and write the Prometheus install receipt.
+installers = []
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "aarch64-linux-android",
+]
+# One archive format everywhere, so the updater has one extractor; Windows
+# ships tar.exe since 1803.
+unix-archive = ".tar.gz"
+windows-archive = ".tar.gz"
+checksum = "sha256"
+github-attestations = true
+# Pull requests run the whole build and finalize pipeline as a dry run.
+pr-run-mode = "upload"
+cargo-auditable = false
+global-artifacts-jobs = ["./release-finalize"]
+publish-jobs = ["./release-channels"]
+# Canary releases update the canary channel index too.
+publish-prereleases = true
+github-build-setup = "../release-build-setup.yml"
+
+[dist.github-custom-runners]
+# Native ARM Windows (as in CI) instead of a cargo-xwin container.
+aarch64-pc-windows-msvc = "windows-11-arm"
+# The x86_64 Ubuntu image ships the Android NDK.
+aarch64-linux-android = "ubuntu-24.04"
+
+[dist.github-custom-job-permissions]
+"release-finalize" = { contents = "read", id-token = "write", attestations = "write" }
+"release-channels" = { contents = "write" }
+
+# Every action pinned to a full commit SHA, like ci.yml.
+[dist.github-action-commits]
+"actions/checkout" = "d23441a48e516b6c34aea4fa41551a30e30af803" # v6.1.0
+"actions/upload-artifact" = "cf430e030ddbb5b0abf93d22962f4752f3646cd9" # v7.0.2
+"actions/download-artifact" = "9000827ccba6bdab643e8b6fd33ac0654aef8333" # v8.0.2
+"actions/attest" = "1e69f48acb82d1966a394da916b4c1698aa569d6" # v4.2.2
+"swatinem/rust-cache" = "d1527c8f67ef9af357290475d4af4b0fab8f12e0" # v2.9.3

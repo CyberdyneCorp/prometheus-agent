@@ -7,12 +7,8684 @@
 ```text
 Prometheus Agent
 
-Usage: prometheus
+Usage: prometheus [OPTIONS] [COMMAND]
+
+Commands:
+  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  config      Read, change, validate and explain the profile's config.toml
+  secrets     Store, list and remove the profile's secrets (values never on the command line)
+  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants      List and revoke the profile's permanent capability grants and approvals
+  backup      Back up the whole home to a .tar.zst archive, or restore one
+  snapshots   Snapshot and restore the selected profile's critical state
+  profile     List, create, select, rename and delete profiles
+  sessions    List, search, export and manage the profile's sessions
+  logs        Show structured log records of a component (`list` names them)
+  usage       Totals of model and metered tool calls from the usage ledger
+  prompt      Measure the system prompt and tool schemas a new session would send
+  trajectory  Render the recorded trajectory of a session
+  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth        Add, list and remove provider API keys and subscription sign-ins
+  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets    List toolsets and show the tools a toolset resolves to
+  approvals   Check how the approval gate treats a command, without running it
+  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -m, --model <MODEL>
+          Model for this session (`[<provider>/]<model>` or an alias)
+
+      --provider <ID>
+          Provider for this session
+
+  -t, --toolsets <LIST>
+          Toolsets for this session, comma-separated
+
+  -r, --resume <REF>
+          Resume a session by id, id prefix, title or `latest`
+
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
+      --query <TEXT>
+          Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
+
+      --image <PATH>
+          Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
+
+      --approvals <MODE>
+          Approval mode for this session
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with an auxiliary model; ask when uncertain
+          - off:    No prompts (deny rules and hardline blocks still apply)
+
+      --yolo
+          Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --max-iterations <N>
+          Model calls allowed per turn
+
+      --cwd <DIR>
+          Working directory of the session (also scopes `-c` and `latest`)
+
+      --in-process
+          Run the session in this process (the only mode until the daemon lands)
+
+      --tui
+          Use the full-screen interface
+
+      --line
+          Use the line interface
+
+  -s, --skills <LIST>
+          Skills to load at session start, comma-separated (repeatable)
+
+      --source <TAG>
+          Integration tag recorded on the session
+
+      --pass-session-id
+          Put the session id in the system prompt
+
+      --run-budget <SECS>
+          Wall-clock budget of each turn in seconds
+
+      --no-context-files
+          Do not load project context files (AGENTS.md and friends)
+
+      --ignore-user-config
+          Run with schema defaults and this command line's flags instead of the profile's config.toml (secrets still resolve)
+
+      --ignore-rules
+          Skip workspace rule files (AGENTS.md and friends), the identity file, the memory snapshot and preloaded skills
+
+      --usage-file <PATH>
+          Write this run's usage as JSON to PATH when it ends, whatever the outcome
+
+      --mock-script <PATH>
+          Script for the `mock` provider
+
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 
   -V, --version
           Print version
 ```
+
+## `prometheus chat`
+
+```text
+Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+
+Usage: prometheus chat [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -m, --model <MODEL>
+          Model for this session (`[<provider>/]<model>` or an alias)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --provider <ID>
+          Provider for this session
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+  -t, --toolsets <LIST>
+          Toolsets for this session, comma-separated
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -r, --resume <REF>
+          Resume a session by id, id prefix, title or `latest`
+
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --query <TEXT>
+          Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
+
+      --image <PATH>
+          Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
+
+      --approvals <MODE>
+          Approval mode for this session
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with an auxiliary model; ask when uncertain
+          - off:    No prompts (deny rules and hardline blocks still apply)
+
+      --yolo
+          Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --max-iterations <N>
+          Model calls allowed per turn
+
+      --cwd <DIR>
+          Working directory of the session (also scopes `-c` and `latest`)
+
+      --in-process
+          Run the session in this process (the only mode until the daemon lands)
+
+      --tui
+          Use the full-screen interface
+
+      --line
+          Use the line interface
+
+  -s, --skills <LIST>
+          Skills to load at session start, comma-separated (repeatable)
+
+      --source <TAG>
+          Integration tag recorded on the session
+
+      --pass-session-id
+          Put the session id in the system prompt
+
+      --run-budget <SECS>
+          Wall-clock budget of each turn in seconds
+
+      --no-context-files
+          Do not load project context files (AGENTS.md and friends)
+
+      --ignore-user-config
+          Run with schema defaults and this command line's flags instead of the profile's config.toml (secrets still resolve)
+
+      --ignore-rules
+          Skip workspace rule files (AGENTS.md and friends), the identity file, the memory snapshot and preloaded skills
+
+      --usage-file <PATH>
+          Write this run's usage as JSON to PATH when it ends, whatever the outcome
+
+      --mock-script <PATH>
+          Script for the `mock` provider
+
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus version`
+
+```text
+Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+
+Usage: prometheus version [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus setup`
+
+```text
+Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+
+Usage: prometheus setup [OPTIONS] [SECTION]
+
+Arguments:
+  [SECTION]
+          Only this section (all but `tools` and `gateway` when omitted)
+
+          Possible values:
+          - model:    Provider and model, or a subscription sign-in, and its API key
+          - secrets:  The secrets the configured providers need
+          - tools:    Toolsets per surface and tool providers
+          - terminal: The terminal backend
+          - memory:   The memory stores
+          - gateway:  Messaging adapters (with the gateway)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --non-interactive
+          Take values from `--set` and secrets from the environment instead of asking; a missing required value exits 78
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reset-onboarding
+          Clear the onboarding state (offered setup, shown tips, tour steps)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus doctor`
+
+```text
+Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+
+Usage: prometheus doctor [OPTIONS] [GROUP]
+
+Arguments:
+  [GROUP]
+          Only this group: home, config, secrets, store, daemon, sandbox, terminal, runtimes, plugins, observability, network, providers or security
+
+Options:
+      --fix
+          Perform the enumerated repairs (permissions, stale run files, the full-text index, pending config migrations) and print each
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --online
+          Allow network probes (provider reachability, IPv6)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --strict
+          Treat warnings as failures; `doctor security --strict` exits 77 on any downgrade
+
+      --all-profiles
+          Check every profile of the home
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug`
+
+```text
+Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+
+Usage: prometheus debug [OPTIONS] <COMMAND>
+
+Commands:
+  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug summary`
+
+```text
+A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+
+Usage: prometheus debug summary [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --show-key-prefixes
+          Show the first and last 4 characters of secrets longer than 16 characters
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus debug help [COMMAND]
+
+Commands:
+  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus debug help summary`
+
+```text
+A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+
+Usage: prometheus debug help summary
+```
+
+## `prometheus debug help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus debug help help
+```
+
+## `prometheus config`
+
+```text
+Read, change, validate and explain the profile's config.toml
+
+Usage: prometheus config [OPTIONS] <COMMAND>
+
+Commands:
+  path      Print the path of the profile's config.toml
+  show      Print config.toml, or with --effective every effective value
+  get       Print the effective value of a key
+  set       Set a key in config.toml (the value is typed by the key's schema)
+  unset     Remove a key from config.toml so its default applies
+  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate  Validate config.toml (exit 0 when valid, 78 when not)
+  explain   Explain a key: type, default, effective value, source, apply class
+  schema    Print the config.toml JSON Schema (draft 2020-12)
+  docs      Print the configuration reference (Markdown)
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config path`
+
+```text
+Print the path of the profile's config.toml
+
+Usage: prometheus config path [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config show`
+
+```text
+Print config.toml, or with --effective every effective value
+
+Usage: prometheus config show [OPTIONS]
+
+Options:
+      --effective
+          Every effective value (defaults, file and --set) instead of the file
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config get`
+
+```text
+Print the effective value of a key
+
+Usage: prometheus config get [OPTIONS] <KEY>
+
+Arguments:
+  <KEY>
+          Dotted key, for example agent.max_iterations
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config set`
+
+```text
+Set a key in config.toml (the value is typed by the key's schema)
+
+Usage: prometheus config set [OPTIONS] <KEY> <VALUE>
+
+Arguments:
+  <KEY>
+          Dotted key, for example display.theme
+
+  <VALUE>
+          New value: text for string keys, else a TOML value (10, true, ["a"])
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config unset`
+
+```text
+Remove a key from config.toml so its default applies
+
+Usage: prometheus config unset [OPTIONS] <KEY>
+
+Arguments:
+  <KEY>
+          Dotted key
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config edit`
+
+```text
+Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+
+Usage: prometheus config edit [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config validate`
+
+```text
+Validate config.toml (exit 0 when valid, 78 when not)
+
+Usage: prometheus config validate [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config explain`
+
+```text
+Explain a key: type, default, effective value, source, apply class
+
+Usage: prometheus config explain [OPTIONS] [KEY]
+
+Arguments:
+  [KEY]
+          Dotted key
+
+Options:
+      --changed
+          List every key whose effective value differs from its default
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config schema`
+
+```text
+Print the config.toml JSON Schema (draft 2020-12)
+
+Usage: prometheus config schema [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config docs`
+
+```text
+Print the configuration reference (Markdown)
+
+Usage: prometheus config docs [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus config help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus config help [COMMAND]
+
+Commands:
+  path      Print the path of the profile's config.toml
+  show      Print config.toml, or with --effective every effective value
+  get       Print the effective value of a key
+  set       Set a key in config.toml (the value is typed by the key's schema)
+  unset     Remove a key from config.toml so its default applies
+  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate  Validate config.toml (exit 0 when valid, 78 when not)
+  explain   Explain a key: type, default, effective value, source, apply class
+  schema    Print the config.toml JSON Schema (draft 2020-12)
+  docs      Print the configuration reference (Markdown)
+  help      Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus config help path`
+
+```text
+Print the path of the profile's config.toml
+
+Usage: prometheus config help path
+```
+
+## `prometheus config help show`
+
+```text
+Print config.toml, or with --effective every effective value
+
+Usage: prometheus config help show
+```
+
+## `prometheus config help get`
+
+```text
+Print the effective value of a key
+
+Usage: prometheus config help get
+```
+
+## `prometheus config help set`
+
+```text
+Set a key in config.toml (the value is typed by the key's schema)
+
+Usage: prometheus config help set
+```
+
+## `prometheus config help unset`
+
+```text
+Remove a key from config.toml so its default applies
+
+Usage: prometheus config help unset
+```
+
+## `prometheus config help edit`
+
+```text
+Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+
+Usage: prometheus config help edit
+```
+
+## `prometheus config help validate`
+
+```text
+Validate config.toml (exit 0 when valid, 78 when not)
+
+Usage: prometheus config help validate
+```
+
+## `prometheus config help explain`
+
+```text
+Explain a key: type, default, effective value, source, apply class
+
+Usage: prometheus config help explain
+```
+
+## `prometheus config help schema`
+
+```text
+Print the config.toml JSON Schema (draft 2020-12)
+
+Usage: prometheus config help schema
+```
+
+## `prometheus config help docs`
+
+```text
+Print the configuration reference (Markdown)
+
+Usage: prometheus config help docs
+```
+
+## `prometheus config help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus config help help
+```
+
+## `prometheus secrets`
+
+```text
+Store, list and remove the profile's secrets (values never on the command line)
+
+Usage: prometheus secrets [OPTIONS] <COMMAND>
+
+Commands:
+  set      Store a secret; the value is read from a hidden prompt or from stdin
+  list     List secret names, their source and whether they are shadowed (never values)
+  get      Show where a secret comes from; --reveal prints the value to a terminal only
+  unset    Remove a secret from the profile's store [alias: rm]
+  migrate  Move every secret to another backend and select it in config.toml
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets set`
+
+```text
+Store a secret; the value is read from a hidden prompt or from stdin
+
+Usage: prometheus secrets set [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Secret name, for example `OPENAI_API_KEY`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets list`
+
+```text
+List secret names, their source and whether they are shadowed (never values)
+
+Usage: prometheus secrets list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets get`
+
+```text
+Show where a secret comes from; --reveal prints the value to a terminal only
+
+Usage: prometheus secrets get [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Secret name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --reveal
+          Print the value (refused unless stdout is a terminal)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets unset`
+
+```text
+Remove a secret from the profile's store
+
+Usage: prometheus secrets unset [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Secret name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets migrate`
+
+```text
+Move every secret to another backend and select it in config.toml
+
+Usage: prometheus secrets migrate [OPTIONS] --to <TO>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          Target backend
+
+          Possible values:
+          - file:     `<profile>/secrets.toml` (mode 0600)
+          - keychain: The OS keychain
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus secrets help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets help [COMMAND]
+
+Commands:
+  set      Store a secret; the value is read from a hidden prompt or from stdin
+  list     List secret names, their source and whether they are shadowed (never values)
+  get      Show where a secret comes from; --reveal prints the value to a terminal only
+  unset    Remove a secret from the profile's store
+  migrate  Move every secret to another backend and select it in config.toml
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus secrets help set`
+
+```text
+Store a secret; the value is read from a hidden prompt or from stdin
+
+Usage: prometheus secrets help set
+```
+
+## `prometheus secrets help list`
+
+```text
+List secret names, their source and whether they are shadowed (never values)
+
+Usage: prometheus secrets help list
+```
+
+## `prometheus secrets help get`
+
+```text
+Show where a secret comes from; --reveal prints the value to a terminal only
+
+Usage: prometheus secrets help get
+```
+
+## `prometheus secrets help unset`
+
+```text
+Remove a secret from the profile's store
+
+Usage: prometheus secrets help unset
+```
+
+## `prometheus secrets help migrate`
+
+```text
+Move every secret to another backend and select it in config.toml
+
+Usage: prometheus secrets help migrate
+```
+
+## `prometheus secrets help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets help help
+```
+
+## `prometheus skills`
+
+```text
+List, inspect, enable, lint and maintain the profile's skills and skill bundles
+
+Usage: prometheus skills [OPTIONS] <COMMAND>
+
+Commands:
+  list             List the profile's skills with category, source and status (shadowed copies marked)
+  show             Show one skill: where it comes from, its status, its files and its SKILL.md
+  enable           Enable a skill (from the next session)
+  disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+  lint             Check skills against the authoring rules (all of the profile's when no path is given)
+  trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject            Copy a bundled skill into the profile as an editable copy that shadows it
+  diff             Show how an ejected copy differs from the current bundled version
+  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+  bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+  pending          Review skill writes staged by `skills.write_approval` (default: list them)
+  opt-out          Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+  opt-in           Show bundled skills again (the default)
+  list-modified    List ejected skills whose content differs from their recorded origin
+  repair-official  Re-record the provenance of official catalog installs that match the embedded copy
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills list`
+
+```text
+List the profile's skills with category, source and status (shadowed copies marked)
+
+Usage: prometheus skills list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --outdated
+          Only ejected skills whose bundled origin changed in this release
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills show`
+
+```text
+Show one skill: where it comes from, its status, its files and its SKILL.md
+
+Usage: prometheus skills show [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills enable`
+
+```text
+Enable a skill (from the next session)
+
+Usage: prometheus skills enable [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <P>
+          Only on this surface or adapter (`skills.platform_disabled.<P>`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills disable`
+
+```text
+Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+
+Usage: prometheus skills disable [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <P>
+          Only on this surface or adapter (`skills.platform_disabled.<P>`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills lint`
+
+```text
+Check skills against the authoring rules (all of the profile's when no path is given)
+
+Usage: prometheus skills lint [OPTIONS] [PATHS]...
+
+Arguments:
+  [PATHS]...
+          Skill directories, SKILL.md files or directories holding skills
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --strict
+          Exit 1 when any finding exists
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills trust`
+
+```text
+Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+
+Usage: prometheus skills trust [OPTIONS] <ROOT>
+
+Arguments:
+  <ROOT>
+          The repository root
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills eject`
+
+```text
+Copy a bundled skill into the profile as an editable copy that shadows it
+
+Usage: prometheus skills eject [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The bundled skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills diff`
+
+```text
+Show how an ejected copy differs from the current bundled version
+
+Usage: prometheus skills diff [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The ejected skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills reset`
+
+```text
+Remove an ejected copy so the name resolves to the bundled skill again
+
+Usage: prometheus skills reset [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The ejected skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills doctor`
+
+```text
+Report skills that do not load (path, line, reason) and quarantined project skills
+
+Usage: prometheus skills doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills reload`
+
+```text
+Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+
+Usage: prometheus skills reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles`
+
+```text
+Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+
+Usage: prometheus skills bundles [OPTIONS] <COMMAND>
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus skills bundles list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles show`
+
+```text
+Show one bundle
+
+Usage: prometheus skills bundles show [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles create`
+
+```text
+Write a bundle
+
+Usage: prometheus skills bundles create [OPTIONS] --skill <S> <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name (`/<slug>`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --skill <S>
+          A skill to load; repeatable, in order
+
+      --description <D>
+          One line for listings
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --instruction <I>
+          Text added after the skills
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --force
+          Replace an existing bundle
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus skills bundles delete [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus skills bundles reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus skills bundles install [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills bundles help [COMMAND]
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills bundles help list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus skills bundles help list
+```
+
+## `prometheus skills bundles help show`
+
+```text
+Show one bundle
+
+Usage: prometheus skills bundles help show
+```
+
+## `prometheus skills bundles help create`
+
+```text
+Write a bundle
+
+Usage: prometheus skills bundles help create
+```
+
+## `prometheus skills bundles help delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus skills bundles help delete
+```
+
+## `prometheus skills bundles help reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus skills bundles help reload
+```
+
+## `prometheus skills bundles help install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus skills bundles help install
+```
+
+## `prometheus skills bundles help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills bundles help help
+```
+
+## `prometheus skills pending`
+
+```text
+Review skill writes staged by `skills.write_approval` (default: list them)
+
+Usage: prometheus skills pending [OPTIONS] [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus skills pending list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus skills pending diff [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The pending id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus skills pending approve [OPTIONS] <TARGET>
+
+Arguments:
+  <TARGET>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus skills pending reject [OPTIONS] <TARGET>
+
+Arguments:
+  <TARGET>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills pending help [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills pending help list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus skills pending help list
+```
+
+## `prometheus skills pending help diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus skills pending help diff
+```
+
+## `prometheus skills pending help approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus skills pending help approve
+```
+
+## `prometheus skills pending help reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus skills pending help reject
+```
+
+## `prometheus skills pending help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills pending help help
+```
+
+## `prometheus skills opt-out`
+
+```text
+Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+
+Usage: prometheus skills opt-out [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --remove
+          Also delete ejected copies still identical to their bundled origin
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask before deleting
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills opt-in`
+
+```text
+Show bundled skills again (the default)
+
+Usage: prometheus skills opt-in [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills list-modified`
+
+```text
+List ejected skills whose content differs from their recorded origin
+
+Usage: prometheus skills list-modified [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills repair-official`
+
+```text
+Re-record the provenance of official catalog installs that match the embedded copy
+
+Usage: prometheus skills repair-official [OPTIONS] <TARGET>
+
+Arguments:
+  <TARGET>
+          An official skill name, or `all` for every official skill the profile holds
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --restore
+          Replace missing or modified copies (old copies move to `skills/.backups/`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask before restoring
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills help [COMMAND]
+
+Commands:
+  list             List the profile's skills with category, source and status (shadowed copies marked)
+  show             Show one skill: where it comes from, its status, its files and its SKILL.md
+  enable           Enable a skill (from the next session)
+  disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+  lint             Check skills against the authoring rules (all of the profile's when no path is given)
+  trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject            Copy a bundled skill into the profile as an editable copy that shadows it
+  diff             Show how an ejected copy differs from the current bundled version
+  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+  bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+  pending          Review skill writes staged by `skills.write_approval` (default: list them)
+  opt-out          Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+  opt-in           Show bundled skills again (the default)
+  list-modified    List ejected skills whose content differs from their recorded origin
+  repair-official  Re-record the provenance of official catalog installs that match the embedded copy
+  help             Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills help list`
+
+```text
+List the profile's skills with category, source and status (shadowed copies marked)
+
+Usage: prometheus skills help list
+```
+
+## `prometheus skills help show`
+
+```text
+Show one skill: where it comes from, its status, its files and its SKILL.md
+
+Usage: prometheus skills help show
+```
+
+## `prometheus skills help enable`
+
+```text
+Enable a skill (from the next session)
+
+Usage: prometheus skills help enable
+```
+
+## `prometheus skills help disable`
+
+```text
+Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+
+Usage: prometheus skills help disable
+```
+
+## `prometheus skills help lint`
+
+```text
+Check skills against the authoring rules (all of the profile's when no path is given)
+
+Usage: prometheus skills help lint
+```
+
+## `prometheus skills help trust`
+
+```text
+Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+
+Usage: prometheus skills help trust
+```
+
+## `prometheus skills help eject`
+
+```text
+Copy a bundled skill into the profile as an editable copy that shadows it
+
+Usage: prometheus skills help eject
+```
+
+## `prometheus skills help diff`
+
+```text
+Show how an ejected copy differs from the current bundled version
+
+Usage: prometheus skills help diff
+```
+
+## `prometheus skills help reset`
+
+```text
+Remove an ejected copy so the name resolves to the bundled skill again
+
+Usage: prometheus skills help reset
+```
+
+## `prometheus skills help doctor`
+
+```text
+Report skills that do not load (path, line, reason) and quarantined project skills
+
+Usage: prometheus skills help doctor
+```
+
+## `prometheus skills help reload`
+
+```text
+Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+
+Usage: prometheus skills help reload
+```
+
+## `prometheus skills help bundles`
+
+```text
+Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+
+Usage: prometheus skills help bundles [COMMAND]
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+```
+
+## `prometheus skills help bundles list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus skills help bundles list
+```
+
+## `prometheus skills help bundles show`
+
+```text
+Show one bundle
+
+Usage: prometheus skills help bundles show
+```
+
+## `prometheus skills help bundles create`
+
+```text
+Write a bundle
+
+Usage: prometheus skills help bundles create
+```
+
+## `prometheus skills help bundles delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus skills help bundles delete
+```
+
+## `prometheus skills help bundles reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus skills help bundles reload
+```
+
+## `prometheus skills help bundles install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus skills help bundles install
+```
+
+## `prometheus skills help pending`
+
+```text
+Review skill writes staged by `skills.write_approval` (default: list them)
+
+Usage: prometheus skills help pending [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+```
+
+## `prometheus skills help pending list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus skills help pending list
+```
+
+## `prometheus skills help pending diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus skills help pending diff
+```
+
+## `prometheus skills help pending approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus skills help pending approve
+```
+
+## `prometheus skills help pending reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus skills help pending reject
+```
+
+## `prometheus skills help opt-out`
+
+```text
+Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+
+Usage: prometheus skills help opt-out
+```
+
+## `prometheus skills help opt-in`
+
+```text
+Show bundled skills again (the default)
+
+Usage: prometheus skills help opt-in
+```
+
+## `prometheus skills help list-modified`
+
+```text
+List ejected skills whose content differs from their recorded origin
+
+Usage: prometheus skills help list-modified
+```
+
+## `prometheus skills help repair-official`
+
+```text
+Re-record the provenance of official catalog installs that match the embedded copy
+
+Usage: prometheus skills help repair-official
+```
+
+## `prometheus skills help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills help help
+```
+
+## `prometheus memory`
+
+```text
+Inspect, edit, export and import what the agent remembers (built-in memory)
+
+Usage: prometheus memory [OPTIONS] <COMMAND>
+
+Commands:
+  status   Show whether built-in memory is enabled, each store's usage and pending changes
+  list     List entries (dormant ones only with --all)
+  show     Show one entry in full (blocked entries show their raw text here)
+  add      Add an entry (from the next session's snapshot)
+  rm       Remove an entry
+  pin      Pin an entry
+  unpin    Unpin an entry
+  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export   Print every entry as Markdown (the edit view) or JSONL
+  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending  List memory changes staged for approval
+  approve  Apply a staged change (`all` for every one)
+  reject   Drop a staged change (`all` for every one)
+  reset    Delete every entry of a store
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory status`
+
+```text
+Show whether built-in memory is enabled, each store's usage and pending changes
+
+Usage: prometheus memory status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory list`
+
+```text
+List entries (dormant ones only with --all)
+
+Usage: prometheus memory list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+      --kind <KIND>
+          Only this kind
+
+          Possible values:
+          - fact:        A fact
+          - preference:  A preference
+          - instruction: A standing instruction
+          - project:     A project
+          - person:      A person
+          - event:       An event
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --tier <TIER>
+          Only this tier
+
+          Possible values:
+          - core:     Shown in the system prompt (budgeted)
+          - archival: Recalled per turn
+
+      --all
+          Include dormant entries
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory show`
+
+```text
+Show one entry in full (blocked entries show their raw text here)
+
+Usage: prometheus memory show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id (m_...)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory add`
+
+```text
+Add an entry (from the next session's snapshot)
+
+Usage: prometheus memory add [OPTIONS] <CONTENT>
+
+Arguments:
+  <CONTENT>
+          The text
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          The store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+          [default: memory]
+
+      --kind <KIND>
+          The kind
+
+          Possible values:
+          - fact:        A fact
+          - preference:  A preference
+          - instruction: A standing instruction
+          - project:     A project
+          - person:      A person
+          - event:       An event
+
+          [default: fact]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --tier <TIER>
+          The tier
+
+          Possible values:
+          - core:     Shown in the system prompt (budgeted)
+          - archival: Recalled per turn
+
+          [default: core]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory rm`
+
+```text
+Remove an entry
+
+Usage: prometheus memory rm [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory pin`
+
+```text
+Pin an entry
+
+Usage: prometheus memory pin [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory unpin`
+
+```text
+Unpin an entry
+
+Usage: prometheus memory unpin [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory edit`
+
+```text
+Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+
+Usage: prometheus memory edit [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory export`
+
+```text
+Print every entry as Markdown (the edit view) or JSONL
+
+Usage: prometheus memory export [OPTIONS]
+
+Options:
+      --format <FORMAT>
+          The format
+
+          Possible values:
+          - md:    The Markdown view `memory edit` opens
+          - jsonl: One JSON object per entry
+
+          [default: md]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+  -o, --output <FILE>
+          Write to this file instead of stdout
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory import`
+
+```text
+Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+
+Usage: prometheus memory import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          The store a Hermes file belongs to (default: from the file name)
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --tier <TIER>
+          The tier of entries from a Hermes file
+
+          Possible values:
+          - core:     Shown in the system prompt (budgeted)
+          - archival: Recalled per turn
+
+          [default: core]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory pending`
+
+```text
+List memory changes staged for approval
+
+Usage: prometheus memory pending [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory approve`
+
+```text
+Apply a staged change (`all` for every one)
+
+Usage: prometheus memory approve [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory reject`
+
+```text
+Drop a staged change (`all` for every one)
+
+Usage: prometheus memory reject [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory reset`
+
+```text
+Delete every entry of a store
+
+Usage: prometheus memory reset [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Which store
+
+          Possible values:
+          - all:    Both stores
+          - memory: The agent's own notes
+          - user:   The user profile
+
+          [default: all]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus memory help [COMMAND]
+
+Commands:
+  status   Show whether built-in memory is enabled, each store's usage and pending changes
+  list     List entries (dormant ones only with --all)
+  show     Show one entry in full (blocked entries show their raw text here)
+  add      Add an entry (from the next session's snapshot)
+  rm       Remove an entry
+  pin      Pin an entry
+  unpin    Unpin an entry
+  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export   Print every entry as Markdown (the edit view) or JSONL
+  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending  List memory changes staged for approval
+  approve  Apply a staged change (`all` for every one)
+  reject   Drop a staged change (`all` for every one)
+  reset    Delete every entry of a store
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus memory help status`
+
+```text
+Show whether built-in memory is enabled, each store's usage and pending changes
+
+Usage: prometheus memory help status
+```
+
+## `prometheus memory help list`
+
+```text
+List entries (dormant ones only with --all)
+
+Usage: prometheus memory help list
+```
+
+## `prometheus memory help show`
+
+```text
+Show one entry in full (blocked entries show their raw text here)
+
+Usage: prometheus memory help show
+```
+
+## `prometheus memory help add`
+
+```text
+Add an entry (from the next session's snapshot)
+
+Usage: prometheus memory help add
+```
+
+## `prometheus memory help rm`
+
+```text
+Remove an entry
+
+Usage: prometheus memory help rm
+```
+
+## `prometheus memory help pin`
+
+```text
+Pin an entry
+
+Usage: prometheus memory help pin
+```
+
+## `prometheus memory help unpin`
+
+```text
+Unpin an entry
+
+Usage: prometheus memory help unpin
+```
+
+## `prometheus memory help edit`
+
+```text
+Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+
+Usage: prometheus memory help edit
+```
+
+## `prometheus memory help export`
+
+```text
+Print every entry as Markdown (the edit view) or JSONL
+
+Usage: prometheus memory help export
+```
+
+## `prometheus memory help import`
+
+```text
+Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+
+Usage: prometheus memory help import
+```
+
+## `prometheus memory help pending`
+
+```text
+List memory changes staged for approval
+
+Usage: prometheus memory help pending
+```
+
+## `prometheus memory help approve`
+
+```text
+Apply a staged change (`all` for every one)
+
+Usage: prometheus memory help approve
+```
+
+## `prometheus memory help reject`
+
+```text
+Drop a staged change (`all` for every one)
+
+Usage: prometheus memory help reject
+```
+
+## `prometheus memory help reset`
+
+```text
+Delete every entry of a store
+
+Usage: prometheus memory help reset
+```
+
+## `prometheus memory help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus memory help help
+```
+
+## `prometheus grants`
+
+```text
+List and revoke the profile's permanent capability grants and approvals
+
+Usage: prometheus grants [OPTIONS] <COMMAND>
+
+Commands:
+  list    List grants (id, subject, capability, surface, time) and approved command patterns
+  revoke  Remove a grant; running sessions lose it at their next tool call
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants list`
+
+```text
+List grants (id, subject, capability, surface, time) and approved command patterns
+
+Usage: prometheus grants list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --subject <SUBJECT>
+          Only grants of this subject (`plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>`, `profile`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants revoke`
+
+```text
+Remove a grant; running sessions lose it at their next tool call
+
+Usage: prometheus grants revoke [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The grant id (`grant_<ULID>`) shown by `grants list`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus grants help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus grants help [COMMAND]
+
+Commands:
+  list    List grants (id, subject, capability, surface, time) and approved command patterns
+  revoke  Remove a grant; running sessions lose it at their next tool call
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus grants help list`
+
+```text
+List grants (id, subject, capability, surface, time) and approved command patterns
+
+Usage: prometheus grants help list
+```
+
+## `prometheus grants help revoke`
+
+```text
+Remove a grant; running sessions lose it at their next tool call
+
+Usage: prometheus grants help revoke
+```
+
+## `prometheus grants help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus grants help help
+```
+
+## `prometheus backup`
+
+```text
+Back up the whole home to a .tar.zst archive, or restore one
+
+Usage: prometheus backup [OPTIONS] <COMMAND>
+
+Commands:
+  create   Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+  restore  Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus backup create`
+
+```text
+Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+
+Usage: prometheus backup create [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          Write the archive here instead
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --quick
+          Only critical state: config, secrets, grants, state.db, cron jobs, pairing data
+
+      --label <TEXT>
+          Label added to the default file name
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --keep <N>
+          Default-named backups to keep in <home>/backups
+
+          [default: 3]
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus backup restore`
+
+```text
+Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+
+Usage: prometheus backup restore [OPTIONS] <ARCHIVE>
+
+Arguments:
+  <ARCHIVE>
+          The .tar.zst archive
+
+Options:
+      --force
+          Replace existing data without asking
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus backup help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus backup help [COMMAND]
+
+Commands:
+  create   Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+  restore  Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus backup help create`
+
+```text
+Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+
+Usage: prometheus backup help create
+```
+
+## `prometheus backup help restore`
+
+```text
+Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+
+Usage: prometheus backup help restore
+```
+
+## `prometheus backup help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus backup help help
+```
+
+## `prometheus snapshots`
+
+```text
+Snapshot and restore the selected profile's critical state
+
+Usage: prometheus snapshots [OPTIONS] <COMMAND>
+
+Commands:
+  list     List the profile's snapshots, newest first
+  create   Snapshot the profile's critical state now
+  restore  Restore a snapshot (a pre-restore snapshot is taken first)
+  prune    Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots list`
+
+```text
+List the profile's snapshots, newest first
+
+Usage: prometheus snapshots list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots create`
+
+```text
+Snapshot the profile's critical state now
+
+Usage: prometheus snapshots create [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --label <TEXT>
+          A label for the snapshot
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots restore`
+
+```text
+Restore a snapshot (a pre-restore snapshot is taken first)
+
+Usage: prometheus snapshots restore [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          Snapshot id (`snap_...`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots prune`
+
+```text
+Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+
+Usage: prometheus snapshots prune [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --keep <N>
+          Manual snapshots to keep
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus snapshots help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus snapshots help [COMMAND]
+
+Commands:
+  list     List the profile's snapshots, newest first
+  create   Snapshot the profile's critical state now
+  restore  Restore a snapshot (a pre-restore snapshot is taken first)
+  prune    Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus snapshots help list`
+
+```text
+List the profile's snapshots, newest first
+
+Usage: prometheus snapshots help list
+```
+
+## `prometheus snapshots help create`
+
+```text
+Snapshot the profile's critical state now
+
+Usage: prometheus snapshots help create
+```
+
+## `prometheus snapshots help restore`
+
+```text
+Restore a snapshot (a pre-restore snapshot is taken first)
+
+Usage: prometheus snapshots help restore
+```
+
+## `prometheus snapshots help prune`
+
+```text
+Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+
+Usage: prometheus snapshots help prune
+```
+
+## `prometheus snapshots help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus snapshots help help
+```
+
+## `prometheus profile`
+
+```text
+List, create, select, rename and delete profiles
+
+Usage: prometheus profile [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the profiles; the active one is marked
+  create  Create a profile, optionally copying another one once
+  use     Make a profile the one used without -p (`use default` clears the choice)
+  show    Show a profile (default: the selected one)
+  rename  Rename a profile
+  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile list`
+
+```text
+List the profiles; the active one is marked
+
+Usage: prometheus profile list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile create`
+
+```text
+Create a profile, optionally copying another one once
+
+Usage: prometheus profile create [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          New profile name (lowercase letters, digits, '_' and '-')
+
+Options:
+      --clone-from <NAME>
+          Copy config, identity, memory, skills, themes and plugins from this profile
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --clone-secrets
+          With --clone-from, also copy the secrets
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --no-skills
+          Start without bundled skills (`skills.include_bundled = false`); the essential skill stays
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile use`
+
+```text
+Make a profile the one used without -p (`use default` clears the choice)
+
+Usage: prometheus profile use [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile show`
+
+```text
+Show a profile (default: the selected one)
+
+Usage: prometheus profile show [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile rename`
+
+```text
+Rename a profile
+
+Usage: prometheus profile rename [OPTIONS] <OLD> <NEW>
+
+Arguments:
+  <OLD>
+          Current name
+
+  <NEW>
+          New name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile delete`
+
+```text
+Delete a profile and everything in it (asks to type its name unless --yes)
+
+Usage: prometheus profile delete [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile help [COMMAND]
+
+Commands:
+  list    List the profiles; the active one is marked
+  create  Create a profile, optionally copying another one once
+  use     Make a profile the one used without -p (`use default` clears the choice)
+  show    Show a profile (default: the selected one)
+  rename  Rename a profile
+  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus profile help list`
+
+```text
+List the profiles; the active one is marked
+
+Usage: prometheus profile help list
+```
+
+## `prometheus profile help create`
+
+```text
+Create a profile, optionally copying another one once
+
+Usage: prometheus profile help create
+```
+
+## `prometheus profile help use`
+
+```text
+Make a profile the one used without -p (`use default` clears the choice)
+
+Usage: prometheus profile help use
+```
+
+## `prometheus profile help show`
+
+```text
+Show a profile (default: the selected one)
+
+Usage: prometheus profile help show
+```
+
+## `prometheus profile help rename`
+
+```text
+Rename a profile
+
+Usage: prometheus profile help rename
+```
+
+## `prometheus profile help delete`
+
+```text
+Delete a profile and everything in it (asks to type its name unless --yes)
+
+Usage: prometheus profile help delete
+```
+
+## `prometheus profile help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile help help
+```
+
+## `prometheus sessions`
+
+```text
+List, search, export and manage the profile's sessions
+
+Usage: prometheus sessions [OPTIONS] <COMMAND>
+
+Commands:
+  browse     Pick a session interactively (status tags, search) and resume it
+  list       List sessions, most recently active first
+  show       Show a session (id, id prefix or title)
+  search     Full-text search over the profile's messages
+  rename     Set a session's title
+  pin        Pin a session (pinned sessions are never pruned)
+  unpin      Unpin a session
+  archive    Archive a session (hidden from the default listing)
+  unarchive  Unarchive a session
+  tree       Show a session's lineage tree (forks, continuations, delegates)
+  stats      Show a session's and its lineage's message and token totals
+  export     Export sessions (jsonl, md, html, prompts or trace)
+  delete     Delete a session (asks for confirmation unless --yes)
+  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
+  repair     Rebuild the derived search indexes from the stored messages
+  vacuum     Compact state.db and truncate its write-ahead log
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions browse`
+
+```text
+Pick a session interactively (status tags, search) and resume it
+
+Usage: prometheus sessions browse [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <SOURCE>
+          Only sessions from this source
+
+      --all
+          Also hidden, archived and integration (oneshot, tool) sessions
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions list`
+
+```text
+List sessions, most recently active first
+
+Usage: prometheus sessions list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --limit <N>
+          At most this many sessions
+
+      --all
+          Also hidden, archived and integration (oneshot, tool) sessions
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --source <SOURCE>
+          Only sessions from this source (repeatable)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --pinned
+          Only pinned sessions
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions show`
+
+```text
+Show a session (id, id prefix or title)
+
+Usage: prometheus sessions show [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix (8+ characters) or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions search`
+
+```text
+Full-text search over the profile's messages
+
+Usage: prometheus sessions search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          The query: words, "quoted phrases", prefix* and AND/OR/NOT
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --limit <N>
+          Hits to return
+
+          [default: 20]
+
+      --offset <N>
+          Hits to skip
+
+          [default: 0]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --sort <SORT>
+          Result order
+
+          Possible values:
+          - rank:   Best match first
+          - newest: Newest first
+          - oldest: Oldest first
+
+          [default: rank]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --source <SOURCE>
+          Only these sources (repeatable)
+
+      --exclude-source <SOURCE>
+          Never these sources (repeatable)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --role <ROLE>
+          Only these roles (repeatable: user, assistant, tool, system)
+
+      --after <TIME>
+          Only messages at or after this time (RFC 3339 or YYYY-MM-DD)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --before <TIME>
+          Only messages before this time (RFC 3339 or YYYY-MM-DD)
+
+      --session <SESSION>
+          Only this session (id, id prefix or title)
+
+      --pinned
+          Only pinned sessions
+
+      --no-archived
+          Leave archived sessions out
+
+      --include-inactive
+          Include rewound messages
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions rename`
+
+```text
+Set a session's title
+
+Usage: prometheus sessions rename [OPTIONS] <SESSION> <TITLE>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+  <TITLE>
+          The new title (at most 100 characters)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions pin`
+
+```text
+Pin a session (pinned sessions are never pruned)
+
+Usage: prometheus sessions pin [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions unpin`
+
+```text
+Unpin a session
+
+Usage: prometheus sessions unpin [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions archive`
+
+```text
+Archive a session (hidden from the default listing)
+
+Usage: prometheus sessions archive [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions unarchive`
+
+```text
+Unarchive a session
+
+Usage: prometheus sessions unarchive [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions tree`
+
+```text
+Show a session's lineage tree (forks, continuations, delegates)
+
+Usage: prometheus sessions tree [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions stats`
+
+```text
+Show a session's and its lineage's message and token totals
+
+Usage: prometheus sessions stats [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions export`
+
+```text
+Export sessions (jsonl, md, html, prompts or trace)
+
+Usage: prometheus sessions export [OPTIONS] [SESSIONS]...
+
+Arguments:
+  [SESSIONS]...
+          Sessions to export (id, id prefix or title)
+
+Options:
+      --all
+          Export every session
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - jsonl:   Portable JSONL (header, session, messages, usage, lineage)
+          - md:      Readable Markdown transcript, tool calls collapsed
+          - html:    Self-contained HTML page
+          - prompts: Only the user messages, one JSON line each
+          - trace:   Trajectory grammar JSONL
+
+          [default: jsonl]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --include-inactive
+          Include rewound and compacted messages
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --redact
+          Replace secrets and credential-shaped text with [REDACTED]
+
+  -o, --output <FILE>
+          Write to this file instead of stdout
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions delete`
+
+```text
+Delete a session (asks for confirmation unless --yes)
+
+Usage: prometheus sessions delete [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --with-lineage
+          Also delete its compression continuations
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask for confirmation
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions prune`
+
+```text
+Delete ended, unpinned sessions inactive for longer than --older-than days
+
+Usage: prometheus sessions prune [OPTIONS] --older-than <DAYS>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --older-than <DAYS>
+          Inactivity threshold in days
+
+      --dry-run
+          Only print what would be deleted
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --yes
+          Do not ask for confirmation
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions rewind`
+
+```text
+Rewind a session to a user message (soft delete; --restore undoes it)
+
+Usage: prometheus sessions rewind [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <MESSAGE_ID>
+          The user message to rewind to (default: the last one)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --restore <MESSAGE_ID>
+          Restore the rewind that hid this message
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions repair`
+
+```text
+Rebuild the derived search indexes from the stored messages
+
+Usage: prometheus sessions repair [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --indexes
+          Rebuild the search indexes (the only repair so far)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions vacuum`
+
+```text
+Compact state.db and truncate its write-ahead log
+
+Usage: prometheus sessions vacuum [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus sessions help [COMMAND]
+
+Commands:
+  browse     Pick a session interactively (status tags, search) and resume it
+  list       List sessions, most recently active first
+  show       Show a session (id, id prefix or title)
+  search     Full-text search over the profile's messages
+  rename     Set a session's title
+  pin        Pin a session (pinned sessions are never pruned)
+  unpin      Unpin a session
+  archive    Archive a session (hidden from the default listing)
+  unarchive  Unarchive a session
+  tree       Show a session's lineage tree (forks, continuations, delegates)
+  stats      Show a session's and its lineage's message and token totals
+  export     Export sessions (jsonl, md, html, prompts or trace)
+  delete     Delete a session (asks for confirmation unless --yes)
+  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
+  repair     Rebuild the derived search indexes from the stored messages
+  vacuum     Compact state.db and truncate its write-ahead log
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus sessions help browse`
+
+```text
+Pick a session interactively (status tags, search) and resume it
+
+Usage: prometheus sessions help browse
+```
+
+## `prometheus sessions help list`
+
+```text
+List sessions, most recently active first
+
+Usage: prometheus sessions help list
+```
+
+## `prometheus sessions help show`
+
+```text
+Show a session (id, id prefix or title)
+
+Usage: prometheus sessions help show
+```
+
+## `prometheus sessions help search`
+
+```text
+Full-text search over the profile's messages
+
+Usage: prometheus sessions help search
+```
+
+## `prometheus sessions help rename`
+
+```text
+Set a session's title
+
+Usage: prometheus sessions help rename
+```
+
+## `prometheus sessions help pin`
+
+```text
+Pin a session (pinned sessions are never pruned)
+
+Usage: prometheus sessions help pin
+```
+
+## `prometheus sessions help unpin`
+
+```text
+Unpin a session
+
+Usage: prometheus sessions help unpin
+```
+
+## `prometheus sessions help archive`
+
+```text
+Archive a session (hidden from the default listing)
+
+Usage: prometheus sessions help archive
+```
+
+## `prometheus sessions help unarchive`
+
+```text
+Unarchive a session
+
+Usage: prometheus sessions help unarchive
+```
+
+## `prometheus sessions help tree`
+
+```text
+Show a session's lineage tree (forks, continuations, delegates)
+
+Usage: prometheus sessions help tree
+```
+
+## `prometheus sessions help stats`
+
+```text
+Show a session's and its lineage's message and token totals
+
+Usage: prometheus sessions help stats
+```
+
+## `prometheus sessions help export`
+
+```text
+Export sessions (jsonl, md, html, prompts or trace)
+
+Usage: prometheus sessions help export
+```
+
+## `prometheus sessions help delete`
+
+```text
+Delete a session (asks for confirmation unless --yes)
+
+Usage: prometheus sessions help delete
+```
+
+## `prometheus sessions help prune`
+
+```text
+Delete ended, unpinned sessions inactive for longer than --older-than days
+
+Usage: prometheus sessions help prune
+```
+
+## `prometheus sessions help rewind`
+
+```text
+Rewind a session to a user message (soft delete; --restore undoes it)
+
+Usage: prometheus sessions help rewind
+```
+
+## `prometheus sessions help repair`
+
+```text
+Rebuild the derived search indexes from the stored messages
+
+Usage: prometheus sessions help repair
+```
+
+## `prometheus sessions help vacuum`
+
+```text
+Compact state.db and truncate its write-ahead log
+
+Usage: prometheus sessions help vacuum
+```
+
+## `prometheus sessions help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus sessions help help
+```
+
+## `prometheus logs`
+
+```text
+Show structured log records of a component (`list` names them)
+
+Usage: prometheus logs [OPTIONS] [COMPONENT]
+
+Arguments:
+  [COMPONENT]
+          Component to show (default `agent`), or `list` for every component and its file
+
+          [possible values: agent, errors, gateway, adapter, cron, kanban, mcp, plugins, sandbox, providers, rpc, update, migrate, evolve, eval, list]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -n, --lines <N>
+          Show the last N matching records; 0 shows all
+
+          [default: 50]
+
+  -f, --follow
+          Keep printing new records until interrupted (exit 130)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --level <LEVEL>
+          Least severe level to show
+
+          Possible values:
+          - error: Errors only
+          - warn:  Warnings and errors
+          - info:  Informational and above
+          - debug: Debug and above
+          - trace: Everything
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --since <S>
+          Records since `<N>[smhd]` ago or an RFC 3339 time
+
+      --session <ID>
+          Only records of this session
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --root <ID>
+          Only records of the sessions of this root lineage
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus usage`
+
+```text
+Totals of model and metered tool calls from the usage ledger
+
+Usage: prometheus usage [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --since <S>
+          Calls since `<N>[smhd]` ago or an RFC 3339 time
+
+          [default: 30d]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --until <S>
+          Calls before `<N>[smhd]` ago or an RFC 3339 time (default: now)
+
+      --by <BY>
+          One row per group
+
+          Possible values:
+          - root:     Root session of the lineage
+          - session:  Session that made the call
+          - model:    Provider and model
+          - provider: Provider
+          - purpose:  Purpose (`main`, `auxiliary.title`, `compression`...)
+          - day:      Calendar day in the profile's time zone
+          - profile:  Profile
+
+          [default: day]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --session <ID>
+          Only this session and its descendants (a root: its whole lineage)
+
+      --all-profiles
+          Every profile, each through its own scope, with a grand total
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus prompt`
+
+```text
+Measure the system prompt and tool schemas a new session would send
+
+Usage: prometheus prompt [OPTIONS] <COMMAND>
+
+Commands:
+  size  Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus prompt size`
+
+```text
+Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+
+Usage: prometheus prompt size [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <SURFACE>
+          Surface whose platform hint the prompt carries
+
+          [default: cli]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --toolsets <A,B>
+          Comma-separated toolsets (default: `tools.enabled_toolsets`)
+
+      --model <ID>
+          `<provider>/<model>` or a model of the configured provider (default: `model.default`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus prompt help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus prompt help [COMMAND]
+
+Commands:
+  size  Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus prompt help size`
+
+```text
+Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+
+Usage: prometheus prompt help size
+```
+
+## `prometheus prompt help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus prompt help help
+```
+
+## `prometheus trajectory`
+
+```text
+Render the recorded trajectory of a session
+
+Usage: prometheus trajectory [OPTIONS] <COMMAND>
+
+Commands:
+  show  Render a session's trajectory as canonical text or its JSONL lines
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus trajectory show`
+
+```text
+Render a session's trajectory as canonical text or its JSONL lines
+
+Usage: prometheus trajectory show [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session id, id prefix or title
+
+Options:
+      --format <FORMAT>
+          Output format
+
+          Possible values:
+          - text:  Canonical text with [USER], [ACTION], [OBSERVATION]... markers
+          - jsonl: The stored JSONL lines
+
+          [default: text]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --args-trunc <N>
+          Clip tool arguments at N characters
+
+          [default: 2000]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --obs-trunc <N>
+          Clip each observation at N characters (at least 10000)
+
+          [default: 50000]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --max-chars <N>
+          Clip the whole output at N characters (default: unlimited)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus trajectory help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus trajectory help [COMMAND]
+
+Commands:
+  show  Render a session's trajectory as canonical text or its JSONL lines
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus trajectory help show`
+
+```text
+Render a session's trajectory as canonical text or its JSONL lines
+
+Usage: prometheus trajectory help show
+```
+
+## `prometheus trajectory help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus trajectory help help
+```
+
+## `prometheus model`
+
+```text
+Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+
+Usage: prometheus model [OPTIONS] [COMMAND]
+
+Commands:
+  explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  set      Validate a route (credential, tool support, context window) and make it the profile's model
+  list     List models with their context window and capabilities
+  info     Show the profile's current route, context window and reasoning effort
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model explain`
+
+```text
+Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+
+Usage: prometheus model explain [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <ID>
+          Provider id or alias (as `--provider` on a session)
+
+      --model <ID>
+          Model id (as `--model` on a session)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model set`
+
+```text
+Validate a route (credential, tool support, context window) and make it the profile's model
+
+Usage: prometheus model set [OPTIONS] <PROVIDER/MODEL>
+
+Arguments:
+  <PROVIDER/MODEL>
+          `<provider>/<model>` or a `[model.aliases]` name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --wire-format <FORMAT>
+          Also set `providers.<id>.wire_format`
+
+          Possible values:
+          - chat-completions:   OpenAI Chat Completions
+          - responses:          OpenAI Responses
+          - anthropic-messages: Anthropic Messages
+
+      --base-url <URL>
+          Also set `providers.<id>.base_url` (a local server root is normalised to the prefix that serves its model listing)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus model list`
+
+```text
+List models with their context window and capabilities
+
+Usage: prometheus model list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <ID>
+          Only this provider's models
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --providers
+          List providers (ids, aliases, wire format, endpoint, secret names) instead of models
+
+      --refresh
+          Fetch live listings and the models.dev catalog first
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model info`
+
+```text
+Show the profile's current route, context window and reasoning effort
+
+Usage: prometheus model info [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus model help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus model help [COMMAND]
+
+Commands:
+  explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  set      Validate a route (credential, tool support, context window) and make it the profile's model
+  list     List models with their context window and capabilities
+  info     Show the profile's current route, context window and reasoning effort
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus model help explain`
+
+```text
+Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+
+Usage: prometheus model help explain
+```
+
+## `prometheus model help set`
+
+```text
+Validate a route (credential, tool support, context window) and make it the profile's model
+
+Usage: prometheus model help set
+```
+
+## `prometheus model help list`
+
+```text
+List models with their context window and capabilities
+
+Usage: prometheus model help list
+```
+
+## `prometheus model help info`
+
+```text
+Show the profile's current route, context window and reasoning effort
+
+Usage: prometheus model help info
+```
+
+## `prometheus model help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus model help help
+```
+
+## `prometheus fallback`
+
+```text
+List and edit the profile's fallback chain (`[[fallback.chain]]`)
+
+Usage: prometheus fallback [OPTIONS] <COMMAND>
+
+Commands:
+  list    List the chain in order
+  add     Validate a route and append it (no argument: the model picker)
+  remove  Remove an entry by its 1-based position or `<provider>/<model>`
+  clear   Remove every entry
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback list`
+
+```text
+List the chain in order
+
+Usage: prometheus fallback list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback add`
+
+```text
+Validate a route and append it (no argument: the model picker)
+
+Usage: prometheus fallback add [OPTIONS] [PROVIDER/MODEL]
+
+Arguments:
+  [PROVIDER/MODEL]
+          `<provider>/<model>` or a `[model.aliases]` name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback remove`
+
+```text
+Remove an entry by its 1-based position or `<provider>/<model>`
+
+Usage: prometheus fallback remove [OPTIONS] <INDEX|PROVIDER/MODEL>
+
+Arguments:
+  <INDEX|PROVIDER/MODEL>
+          Position or `<provider>/<model>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback clear`
+
+```text
+Remove every entry
+
+Usage: prometheus fallback clear [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus fallback help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus fallback help [COMMAND]
+
+Commands:
+  list    List the chain in order
+  add     Validate a route and append it (no argument: the model picker)
+  remove  Remove an entry by its 1-based position or `<provider>/<model>`
+  clear   Remove every entry
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus fallback help list`
+
+```text
+List the chain in order
+
+Usage: prometheus fallback help list
+```
+
+## `prometheus fallback help add`
+
+```text
+Validate a route and append it (no argument: the model picker)
+
+Usage: prometheus fallback help add
+```
+
+## `prometheus fallback help remove`
+
+```text
+Remove an entry by its 1-based position or `<provider>/<model>`
+
+Usage: prometheus fallback help remove
+```
+
+## `prometheus fallback help clear`
+
+```text
+Remove every entry
+
+Usage: prometheus fallback help clear
+```
+
+## `prometheus fallback help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus fallback help help
+```
+
+## `prometheus auth`
+
+```text
+Add, list and remove provider API keys and subscription sign-ins
+
+Usage: prometheus auth [OPTIONS] <COMMAND>
+
+Commands:
+  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list    List every credential: provider, label, kind, source and status (never key or token material)
+  status  One provider's credentials, sign-in flows and plan notes
+  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation) [alias: rm]
+  import  Copy another tool's sign-in into the secrets store
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth add`
+
+```text
+Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+
+Usage: prometheus auth add [OPTIONS] <PROVIDER>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --type <TYPE>
+          Credential type (default: `oauth` for sign-in-only providers, else `api_key`)
+
+          Possible values:
+          - api_key: An API key
+          - oauth:   A subscription or OAuth sign-in
+
+      --label <LABEL>
+          Label of this credential (default `default`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --browser
+          Sign in through the browser (PKCE on a loopback redirect)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --device
+          Sign in with a device code
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus auth list`
+
+```text
+List every credential: provider, label, kind, source and status (never key or token material)
+
+Usage: prometheus auth list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth status`
+
+```text
+One provider's credentials, sign-in flows and plan notes
+
+Usage: prometheus auth status [OPTIONS] <PROVIDER>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth remove`
+
+```text
+Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+
+Usage: prometheus auth remove [OPTIONS] <PROVIDER> <LABEL|INDEX>
+
+Arguments:
+  <PROVIDER>
+          Provider id or alias
+
+  <LABEL|INDEX>
+          Label, or 1-based position in `auth status <provider>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus auth import`
+
+```text
+Copy another tool's sign-in into the secrets store
+
+Usage: prometheus auth import [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          Where the sign-in comes from
+
+          Possible values:
+          - codex-cli: The Codex CLI's `auth.json` (provider `openai-codex`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --path <PATH>
+          The sign-in file (default `~/.codex/auth.json`); only read
+
+      --label <LABEL>
+          Label of the imported sign-in (default `default`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus auth help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus auth help [COMMAND]
+
+Commands:
+  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list    List every credential: provider, label, kind, source and status (never key or token material)
+  status  One provider's credentials, sign-in flows and plan notes
+  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+  import  Copy another tool's sign-in into the secrets store
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus auth help add`
+
+```text
+Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+
+Usage: prometheus auth help add
+```
+
+## `prometheus auth help list`
+
+```text
+List every credential: provider, label, kind, source and status (never key or token material)
+
+Usage: prometheus auth help list
+```
+
+## `prometheus auth help status`
+
+```text
+One provider's credentials, sign-in flows and plan notes
+
+Usage: prometheus auth help status
+```
+
+## `prometheus auth help remove`
+
+```text
+Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+
+Usage: prometheus auth help remove
+```
+
+## `prometheus auth help import`
+
+```text
+Copy another tool's sign-in into the secrets store
+
+Usage: prometheus auth help import
+```
+
+## `prometheus auth help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus auth help help
+```
+
+## `prometheus tools`
+
+```text
+List the profile's tools and explain one (exposure, capabilities, approvals)
+
+Usage: prometheus tools [OPTIONS] <COMMAND>
+
+Commands:
+  configure  Enable or disable toolsets per surface and choose tool providers, interactively
+  enable     Enable a toolset from the next session
+  disable    Disable a toolset from the next session
+  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
+  toolsets   The toolsets, as `prometheus toolsets list`
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools configure`
+
+```text
+Enable or disable toolsets per surface and choose tool providers, interactively
+
+Usage: prometheus tools configure [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          The surface: cli, tui, cron, acp or gateway.<platform> (every surface when omitted)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools enable`
+
+```text
+Enable a toolset from the next session
+
+Usage: prometheus tools enable [OPTIONS] <TOOLSET>
+
+Arguments:
+  <TOOLSET>
+          The toolset
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Only for this surface
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools disable`
+
+```text
+Disable a toolset from the next session
+
+Usage: prometheus tools disable [OPTIONS] <TOOLSET>
+
+Arguments:
+  <TOOLSET>
+          The toolset
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Only for this surface
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools provider`
+
+```text
+Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+
+Usage: prometheus tools provider [OPTIONS] <CATEGORY> <PROVIDER>
+
+Arguments:
+  <CATEGORY>
+          The category
+
+  <PROVIDER>
+          The provider
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools list`
+
+```text
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+
+Usage: prometheus tools list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <SESSION>
+          Show the surface this session froze when it started (id, id prefix or title) instead of the one a new session would get
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools explain`
+
+```text
+A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+
+Usage: prometheus tools explain [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The tool name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools toolsets`
+
+```text
+The toolsets, as `prometheus toolsets list`
+
+Usage: prometheus tools toolsets [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus tools help [COMMAND]
+
+Commands:
+  configure  Enable or disable toolsets per surface and choose tool providers, interactively
+  enable     Enable a toolset from the next session
+  disable    Disable a toolset from the next session
+  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets   The toolsets, as `prometheus toolsets list`
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus tools help configure`
+
+```text
+Enable or disable toolsets per surface and choose tool providers, interactively
+
+Usage: prometheus tools help configure
+```
+
+## `prometheus tools help enable`
+
+```text
+Enable a toolset from the next session
+
+Usage: prometheus tools help enable
+```
+
+## `prometheus tools help disable`
+
+```text
+Disable a toolset from the next session
+
+Usage: prometheus tools help disable
+```
+
+## `prometheus tools help provider`
+
+```text
+Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+
+Usage: prometheus tools help provider
+```
+
+## `prometheus tools help list`
+
+```text
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+
+Usage: prometheus tools help list
+```
+
+## `prometheus tools help explain`
+
+```text
+A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+
+Usage: prometheus tools help explain
+```
+
+## `prometheus tools help toolsets`
+
+```text
+The toolsets, as `prometheus toolsets list`
+
+Usage: prometheus tools help toolsets
+```
+
+## `prometheus tools help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus tools help help
+```
+
+## `prometheus toolsets`
+
+```text
+List toolsets and show the tools a toolset resolves to
+
+Usage: prometheus toolsets [OPTIONS] <COMMAND>
+
+Commands:
+  list  Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+  show  The tools a toolset resolves to, in order, with their availability
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus toolsets list`
+
+```text
+Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+
+Usage: prometheus toolsets list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus toolsets show`
+
+```text
+The tools a toolset resolves to, in order, with their availability
+
+Usage: prometheus toolsets show [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The toolset name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus toolsets help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus toolsets help [COMMAND]
+
+Commands:
+  list  Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+  show  The tools a toolset resolves to, in order, with their availability
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus toolsets help list`
+
+```text
+Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+
+Usage: prometheus toolsets help list
+```
+
+## `prometheus toolsets help show`
+
+```text
+The tools a toolset resolves to, in order, with their availability
+
+Usage: prometheus toolsets help show
+```
+
+## `prometheus toolsets help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus toolsets help help
+```
+
+## `prometheus approvals`
+
+```text
+Check how the approval gate treats a command, without running it
+
+Usage: prometheus approvals [OPTIONS] <COMMAND>
+
+Commands:
+  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus approvals test`
+
+```text
+Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+
+Usage: prometheus approvals test [OPTIONS] <COMMAND>...
+
+Arguments:
+  <COMMAND>...
+          The command line, after `--`
+
+Options:
+      --backend <NAME>
+          Execution backend to assume (default: `terminal.backend`); hardline and deny rules apply on every backend
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --mode <MODE>
+          Approval mode to assume (default: `approvals.mode`)
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with the guardian model (asks like manual in M1)
+          - off:    Bypass prompts; hardline and deny rules still block
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --context <CONTEXT>
+          Context to assume; unattended contexts answer from their typed mode
+
+          Possible values:
+          - interactive:  A human can answer
+          - cron:         A cron job (`approvals.cron_mode`)
+          - single_query: `chat -z` (`approvals.single_query_mode`)
+          - unattended:   Webhook/API surfaces (`approvals.unattended_mode`)
+
+          [default: interactive]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus approvals help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus approvals help [COMMAND]
+
+Commands:
+  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus approvals help test`
+
+```text
+Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+
+Usage: prometheus approvals help test
+```
+
+## `prometheus approvals help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus approvals help help
+```
+
+## `prometheus update`
+
+```text
+Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+
+Usage: prometheus update [OPTIONS]
+
+Options:
+      --check
+          Only check: print the newest release and exit 10 when it is newer
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --status
+          Print the install's owner, channel, version and last update; no network request
+
+      --channel <CHANNEL>
+          Use this channel (`stable` or `canary`) for this run only
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --set-channel <CHANNEL>
+          Persist the install's channel (`stable` or `canary`)
+
+      --allow-downgrade
+          Install the channel's newest release even when it is older than this build (for example after leaving canary)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --rollback
+          Put back the binary the last update replaced (`prometheus.prev`)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --restore-snapshots
+          With `--rollback`: also restore the pre-update snapshots, losing the sessions created since the update (asks first)
+
+  -y, --yes
+          Confirm `--restore-snapshots` without asking
+
+  -h, --help
+          Print help
+```
+
+## `prometheus self-test`
+
+```text
+Check this build against the home before an update installs it (run by `prometheus update` on the staged binary)
+
+Usage: prometheus self-test [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus help [COMMAND]
+
+Commands:
+  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  config      Read, change, validate and explain the profile's config.toml
+  secrets     Store, list and remove the profile's secrets (values never on the command line)
+  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants      List and revoke the profile's permanent capability grants and approvals
+  backup      Back up the whole home to a .tar.zst archive, or restore one
+  snapshots   Snapshot and restore the selected profile's critical state
+  profile     List, create, select, rename and delete profiles
+  sessions    List, search, export and manage the profile's sessions
+  logs        Show structured log records of a component (`list` names them)
+  usage       Totals of model and metered tool calls from the usage ledger
+  prompt      Measure the system prompt and tool schemas a new session would send
+  trajectory  Render the recorded trajectory of a session
+  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth        Add, list and remove provider API keys and subscription sign-ins
+  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets    List toolsets and show the tools a toolset resolves to
+  approvals   Check how the approval gate treats a command, without running it
+  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  help        Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus help chat`
+
+```text
+Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+
+Usage: prometheus help chat
+```
+
+## `prometheus help version`
+
+```text
+Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+
+Usage: prometheus help version
+```
+
+## `prometheus help setup`
+
+```text
+Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+
+Usage: prometheus help setup
+```
+
+## `prometheus help doctor`
+
+```text
+Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+
+Usage: prometheus help doctor
+```
+
+## `prometheus help debug`
+
+```text
+Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+
+Usage: prometheus help debug [COMMAND]
+
+Commands:
+  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+```
+
+## `prometheus help debug summary`
+
+```text
+A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+
+Usage: prometheus help debug summary
+```
+
+## `prometheus help config`
+
+```text
+Read, change, validate and explain the profile's config.toml
+
+Usage: prometheus help config [COMMAND]
+
+Commands:
+  path      Print the path of the profile's config.toml
+  show      Print config.toml, or with --effective every effective value
+  get       Print the effective value of a key
+  set       Set a key in config.toml (the value is typed by the key's schema)
+  unset     Remove a key from config.toml so its default applies
+  edit      Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+  validate  Validate config.toml (exit 0 when valid, 78 when not)
+  explain   Explain a key: type, default, effective value, source, apply class
+  schema    Print the config.toml JSON Schema (draft 2020-12)
+  docs      Print the configuration reference (Markdown)
+```
+
+## `prometheus help config path`
+
+```text
+Print the path of the profile's config.toml
+
+Usage: prometheus help config path
+```
+
+## `prometheus help config show`
+
+```text
+Print config.toml, or with --effective every effective value
+
+Usage: prometheus help config show
+```
+
+## `prometheus help config get`
+
+```text
+Print the effective value of a key
+
+Usage: prometheus help config get
+```
+
+## `prometheus help config set`
+
+```text
+Set a key in config.toml (the value is typed by the key's schema)
+
+Usage: prometheus help config set
+```
+
+## `prometheus help config unset`
+
+```text
+Remove a key from config.toml so its default applies
+
+Usage: prometheus help config unset
+```
+
+## `prometheus help config edit`
+
+```text
+Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved
+
+Usage: prometheus help config edit
+```
+
+## `prometheus help config validate`
+
+```text
+Validate config.toml (exit 0 when valid, 78 when not)
+
+Usage: prometheus help config validate
+```
+
+## `prometheus help config explain`
+
+```text
+Explain a key: type, default, effective value, source, apply class
+
+Usage: prometheus help config explain
+```
+
+## `prometheus help config schema`
+
+```text
+Print the config.toml JSON Schema (draft 2020-12)
+
+Usage: prometheus help config schema
+```
+
+## `prometheus help config docs`
+
+```text
+Print the configuration reference (Markdown)
+
+Usage: prometheus help config docs
+```
+
+## `prometheus help secrets`
+
+```text
+Store, list and remove the profile's secrets (values never on the command line)
+
+Usage: prometheus help secrets [COMMAND]
+
+Commands:
+  set      Store a secret; the value is read from a hidden prompt or from stdin
+  list     List secret names, their source and whether they are shadowed (never values)
+  get      Show where a secret comes from; --reveal prints the value to a terminal only
+  unset    Remove a secret from the profile's store
+  migrate  Move every secret to another backend and select it in config.toml
+```
+
+## `prometheus help secrets set`
+
+```text
+Store a secret; the value is read from a hidden prompt or from stdin
+
+Usage: prometheus help secrets set
+```
+
+## `prometheus help secrets list`
+
+```text
+List secret names, their source and whether they are shadowed (never values)
+
+Usage: prometheus help secrets list
+```
+
+## `prometheus help secrets get`
+
+```text
+Show where a secret comes from; --reveal prints the value to a terminal only
+
+Usage: prometheus help secrets get
+```
+
+## `prometheus help secrets unset`
+
+```text
+Remove a secret from the profile's store
+
+Usage: prometheus help secrets unset
+```
+
+## `prometheus help secrets migrate`
+
+```text
+Move every secret to another backend and select it in config.toml
+
+Usage: prometheus help secrets migrate
+```
+
+## `prometheus help skills`
+
+```text
+List, inspect, enable, lint and maintain the profile's skills and skill bundles
+
+Usage: prometheus help skills [COMMAND]
+
+Commands:
+  list             List the profile's skills with category, source and status (shadowed copies marked)
+  show             Show one skill: where it comes from, its status, its files and its SKILL.md
+  enable           Enable a skill (from the next session)
+  disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+  lint             Check skills against the authoring rules (all of the profile's when no path is given)
+  trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject            Copy a bundled skill into the profile as an editable copy that shadows it
+  diff             Show how an ejected copy differs from the current bundled version
+  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+  bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+  pending          Review skill writes staged by `skills.write_approval` (default: list them)
+  opt-out          Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+  opt-in           Show bundled skills again (the default)
+  list-modified    List ejected skills whose content differs from their recorded origin
+  repair-official  Re-record the provenance of official catalog installs that match the embedded copy
+```
+
+## `prometheus help skills list`
+
+```text
+List the profile's skills with category, source and status (shadowed copies marked)
+
+Usage: prometheus help skills list
+```
+
+## `prometheus help skills show`
+
+```text
+Show one skill: where it comes from, its status, its files and its SKILL.md
+
+Usage: prometheus help skills show
+```
+
+## `prometheus help skills enable`
+
+```text
+Enable a skill (from the next session)
+
+Usage: prometheus help skills enable
+```
+
+## `prometheus help skills disable`
+
+```text
+Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+
+Usage: prometheus help skills disable
+```
+
+## `prometheus help skills lint`
+
+```text
+Check skills against the authoring rules (all of the profile's when no path is given)
+
+Usage: prometheus help skills lint
+```
+
+## `prometheus help skills trust`
+
+```text
+Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+
+Usage: prometheus help skills trust
+```
+
+## `prometheus help skills eject`
+
+```text
+Copy a bundled skill into the profile as an editable copy that shadows it
+
+Usage: prometheus help skills eject
+```
+
+## `prometheus help skills diff`
+
+```text
+Show how an ejected copy differs from the current bundled version
+
+Usage: prometheus help skills diff
+```
+
+## `prometheus help skills reset`
+
+```text
+Remove an ejected copy so the name resolves to the bundled skill again
+
+Usage: prometheus help skills reset
+```
+
+## `prometheus help skills doctor`
+
+```text
+Report skills that do not load (path, line, reason) and quarantined project skills
+
+Usage: prometheus help skills doctor
+```
+
+## `prometheus help skills reload`
+
+```text
+Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+
+Usage: prometheus help skills reload
+```
+
+## `prometheus help skills bundles`
+
+```text
+Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+
+Usage: prometheus help skills bundles [COMMAND]
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+```
+
+## `prometheus help skills bundles list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus help skills bundles list
+```
+
+## `prometheus help skills bundles show`
+
+```text
+Show one bundle
+
+Usage: prometheus help skills bundles show
+```
+
+## `prometheus help skills bundles create`
+
+```text
+Write a bundle
+
+Usage: prometheus help skills bundles create
+```
+
+## `prometheus help skills bundles delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus help skills bundles delete
+```
+
+## `prometheus help skills bundles reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus help skills bundles reload
+```
+
+## `prometheus help skills bundles install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus help skills bundles install
+```
+
+## `prometheus help skills pending`
+
+```text
+Review skill writes staged by `skills.write_approval` (default: list them)
+
+Usage: prometheus help skills pending [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+```
+
+## `prometheus help skills pending list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus help skills pending list
+```
+
+## `prometheus help skills pending diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus help skills pending diff
+```
+
+## `prometheus help skills pending approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus help skills pending approve
+```
+
+## `prometheus help skills pending reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus help skills pending reject
+```
+
+## `prometheus help skills opt-out`
+
+```text
+Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+
+Usage: prometheus help skills opt-out
+```
+
+## `prometheus help skills opt-in`
+
+```text
+Show bundled skills again (the default)
+
+Usage: prometheus help skills opt-in
+```
+
+## `prometheus help skills list-modified`
+
+```text
+List ejected skills whose content differs from their recorded origin
+
+Usage: prometheus help skills list-modified
+```
+
+## `prometheus help skills repair-official`
+
+```text
+Re-record the provenance of official catalog installs that match the embedded copy
+
+Usage: prometheus help skills repair-official
+```
+
+## `prometheus help memory`
+
+```text
+Inspect, edit, export and import what the agent remembers (built-in memory)
+
+Usage: prometheus help memory [COMMAND]
+
+Commands:
+  status   Show whether built-in memory is enabled, each store's usage and pending changes
+  list     List entries (dormant ones only with --all)
+  show     Show one entry in full (blocked entries show their raw text here)
+  add      Add an entry (from the next session's snapshot)
+  rm       Remove an entry
+  pin      Pin an entry
+  unpin    Unpin an entry
+  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export   Print every entry as Markdown (the edit view) or JSONL
+  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending  List memory changes staged for approval
+  approve  Apply a staged change (`all` for every one)
+  reject   Drop a staged change (`all` for every one)
+  reset    Delete every entry of a store
+```
+
+## `prometheus help memory status`
+
+```text
+Show whether built-in memory is enabled, each store's usage and pending changes
+
+Usage: prometheus help memory status
+```
+
+## `prometheus help memory list`
+
+```text
+List entries (dormant ones only with --all)
+
+Usage: prometheus help memory list
+```
+
+## `prometheus help memory show`
+
+```text
+Show one entry in full (blocked entries show their raw text here)
+
+Usage: prometheus help memory show
+```
+
+## `prometheus help memory add`
+
+```text
+Add an entry (from the next session's snapshot)
+
+Usage: prometheus help memory add
+```
+
+## `prometheus help memory rm`
+
+```text
+Remove an entry
+
+Usage: prometheus help memory rm
+```
+
+## `prometheus help memory pin`
+
+```text
+Pin an entry
+
+Usage: prometheus help memory pin
+```
+
+## `prometheus help memory unpin`
+
+```text
+Unpin an entry
+
+Usage: prometheus help memory unpin
+```
+
+## `prometheus help memory edit`
+
+```text
+Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+
+Usage: prometheus help memory edit
+```
+
+## `prometheus help memory export`
+
+```text
+Print every entry as Markdown (the edit view) or JSONL
+
+Usage: prometheus help memory export
+```
+
+## `prometheus help memory import`
+
+```text
+Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+
+Usage: prometheus help memory import
+```
+
+## `prometheus help memory pending`
+
+```text
+List memory changes staged for approval
+
+Usage: prometheus help memory pending
+```
+
+## `prometheus help memory approve`
+
+```text
+Apply a staged change (`all` for every one)
+
+Usage: prometheus help memory approve
+```
+
+## `prometheus help memory reject`
+
+```text
+Drop a staged change (`all` for every one)
+
+Usage: prometheus help memory reject
+```
+
+## `prometheus help memory reset`
+
+```text
+Delete every entry of a store
+
+Usage: prometheus help memory reset
+```
+
+## `prometheus help grants`
+
+```text
+List and revoke the profile's permanent capability grants and approvals
+
+Usage: prometheus help grants [COMMAND]
+
+Commands:
+  list    List grants (id, subject, capability, surface, time) and approved command patterns
+  revoke  Remove a grant; running sessions lose it at their next tool call
+```
+
+## `prometheus help grants list`
+
+```text
+List grants (id, subject, capability, surface, time) and approved command patterns
+
+Usage: prometheus help grants list
+```
+
+## `prometheus help grants revoke`
+
+```text
+Remove a grant; running sessions lose it at their next tool call
+
+Usage: prometheus help grants revoke
+```
+
+## `prometheus help backup`
+
+```text
+Back up the whole home to a .tar.zst archive, or restore one
+
+Usage: prometheus help backup [COMMAND]
+
+Commands:
+  create   Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+  restore  Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+```
+
+## `prometheus help backup create`
+
+```text
+Write a backup of the whole home (default: <home>/backups/prometheus-<UTC time>.tar.zst)
+
+Usage: prometheus help backup create
+```
+
+## `prometheus help backup restore`
+
+```text
+Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
+
+Usage: prometheus help backup restore
+```
+
+## `prometheus help snapshots`
+
+```text
+Snapshot and restore the selected profile's critical state
+
+Usage: prometheus help snapshots [COMMAND]
+
+Commands:
+  list     List the profile's snapshots, newest first
+  create   Snapshot the profile's critical state now
+  restore  Restore a snapshot (a pre-restore snapshot is taken first)
+  prune    Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+```
+
+## `prometheus help snapshots list`
+
+```text
+List the profile's snapshots, newest first
+
+Usage: prometheus help snapshots list
+```
+
+## `prometheus help snapshots create`
+
+```text
+Snapshot the profile's critical state now
+
+Usage: prometheus help snapshots create
+```
+
+## `prometheus help snapshots restore`
+
+```text
+Restore a snapshot (a pre-restore snapshot is taken first)
+
+Usage: prometheus help snapshots restore
+```
+
+## `prometheus help snapshots prune`
+
+```text
+Remove the oldest manual snapshots beyond --keep (default: snapshots.keep)
+
+Usage: prometheus help snapshots prune
+```
+
+## `prometheus help profile`
+
+```text
+List, create, select, rename and delete profiles
+
+Usage: prometheus help profile [COMMAND]
+
+Commands:
+  list    List the profiles; the active one is marked
+  create  Create a profile, optionally copying another one once
+  use     Make a profile the one used without -p (`use default` clears the choice)
+  show    Show a profile (default: the selected one)
+  rename  Rename a profile
+  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+```
+
+## `prometheus help profile list`
+
+```text
+List the profiles; the active one is marked
+
+Usage: prometheus help profile list
+```
+
+## `prometheus help profile create`
+
+```text
+Create a profile, optionally copying another one once
+
+Usage: prometheus help profile create
+```
+
+## `prometheus help profile use`
+
+```text
+Make a profile the one used without -p (`use default` clears the choice)
+
+Usage: prometheus help profile use
+```
+
+## `prometheus help profile show`
+
+```text
+Show a profile (default: the selected one)
+
+Usage: prometheus help profile show
+```
+
+## `prometheus help profile rename`
+
+```text
+Rename a profile
+
+Usage: prometheus help profile rename
+```
+
+## `prometheus help profile delete`
+
+```text
+Delete a profile and everything in it (asks to type its name unless --yes)
+
+Usage: prometheus help profile delete
+```
+
+## `prometheus help sessions`
+
+```text
+List, search, export and manage the profile's sessions
+
+Usage: prometheus help sessions [COMMAND]
+
+Commands:
+  browse     Pick a session interactively (status tags, search) and resume it
+  list       List sessions, most recently active first
+  show       Show a session (id, id prefix or title)
+  search     Full-text search over the profile's messages
+  rename     Set a session's title
+  pin        Pin a session (pinned sessions are never pruned)
+  unpin      Unpin a session
+  archive    Archive a session (hidden from the default listing)
+  unarchive  Unarchive a session
+  tree       Show a session's lineage tree (forks, continuations, delegates)
+  stats      Show a session's and its lineage's message and token totals
+  export     Export sessions (jsonl, md, html, prompts or trace)
+  delete     Delete a session (asks for confirmation unless --yes)
+  prune      Delete ended, unpinned sessions inactive for longer than --older-than days
+  rewind     Rewind a session to a user message (soft delete; --restore undoes it)
+  repair     Rebuild the derived search indexes from the stored messages
+  vacuum     Compact state.db and truncate its write-ahead log
+```
+
+## `prometheus help sessions browse`
+
+```text
+Pick a session interactively (status tags, search) and resume it
+
+Usage: prometheus help sessions browse
+```
+
+## `prometheus help sessions list`
+
+```text
+List sessions, most recently active first
+
+Usage: prometheus help sessions list
+```
+
+## `prometheus help sessions show`
+
+```text
+Show a session (id, id prefix or title)
+
+Usage: prometheus help sessions show
+```
+
+## `prometheus help sessions search`
+
+```text
+Full-text search over the profile's messages
+
+Usage: prometheus help sessions search
+```
+
+## `prometheus help sessions rename`
+
+```text
+Set a session's title
+
+Usage: prometheus help sessions rename
+```
+
+## `prometheus help sessions pin`
+
+```text
+Pin a session (pinned sessions are never pruned)
+
+Usage: prometheus help sessions pin
+```
+
+## `prometheus help sessions unpin`
+
+```text
+Unpin a session
+
+Usage: prometheus help sessions unpin
+```
+
+## `prometheus help sessions archive`
+
+```text
+Archive a session (hidden from the default listing)
+
+Usage: prometheus help sessions archive
+```
+
+## `prometheus help sessions unarchive`
+
+```text
+Unarchive a session
+
+Usage: prometheus help sessions unarchive
+```
+
+## `prometheus help sessions tree`
+
+```text
+Show a session's lineage tree (forks, continuations, delegates)
+
+Usage: prometheus help sessions tree
+```
+
+## `prometheus help sessions stats`
+
+```text
+Show a session's and its lineage's message and token totals
+
+Usage: prometheus help sessions stats
+```
+
+## `prometheus help sessions export`
+
+```text
+Export sessions (jsonl, md, html, prompts or trace)
+
+Usage: prometheus help sessions export
+```
+
+## `prometheus help sessions delete`
+
+```text
+Delete a session (asks for confirmation unless --yes)
+
+Usage: prometheus help sessions delete
+```
+
+## `prometheus help sessions prune`
+
+```text
+Delete ended, unpinned sessions inactive for longer than --older-than days
+
+Usage: prometheus help sessions prune
+```
+
+## `prometheus help sessions rewind`
+
+```text
+Rewind a session to a user message (soft delete; --restore undoes it)
+
+Usage: prometheus help sessions rewind
+```
+
+## `prometheus help sessions repair`
+
+```text
+Rebuild the derived search indexes from the stored messages
+
+Usage: prometheus help sessions repair
+```
+
+## `prometheus help sessions vacuum`
+
+```text
+Compact state.db and truncate its write-ahead log
+
+Usage: prometheus help sessions vacuum
+```
+
+## `prometheus help logs`
+
+```text
+Show structured log records of a component (`list` names them)
+
+Usage: prometheus help logs
+```
+
+## `prometheus help usage`
+
+```text
+Totals of model and metered tool calls from the usage ledger
+
+Usage: prometheus help usage
+```
+
+## `prometheus help prompt`
+
+```text
+Measure the system prompt and tool schemas a new session would send
+
+Usage: prometheus help prompt [COMMAND]
+
+Commands:
+  size  Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+```
+
+## `prometheus help prompt size`
+
+```text
+Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+
+Usage: prometheus help prompt size
+```
+
+## `prometheus help trajectory`
+
+```text
+Render the recorded trajectory of a session
+
+Usage: prometheus help trajectory [COMMAND]
+
+Commands:
+  show  Render a session's trajectory as canonical text or its JSONL lines
+```
+
+## `prometheus help trajectory show`
+
+```text
+Render a session's trajectory as canonical text or its JSONL lines
+
+Usage: prometheus help trajectory show
+```
+
+## `prometheus help model`
+
+```text
+Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+
+Usage: prometheus help model [COMMAND]
+
+Commands:
+  explain  Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+  set      Validate a route (credential, tool support, context window) and make it the profile's model
+  list     List models with their context window and capabilities
+  info     Show the profile's current route, context window and reasoning effort
+```
+
+## `prometheus help model explain`
+
+```text
+Show each step resolving the provider, endpoint, wire format, credential and model, without calling the model or printing secrets
+
+Usage: prometheus help model explain
+```
+
+## `prometheus help model set`
+
+```text
+Validate a route (credential, tool support, context window) and make it the profile's model
+
+Usage: prometheus help model set
+```
+
+## `prometheus help model list`
+
+```text
+List models with their context window and capabilities
+
+Usage: prometheus help model list
+```
+
+## `prometheus help model info`
+
+```text
+Show the profile's current route, context window and reasoning effort
+
+Usage: prometheus help model info
+```
+
+## `prometheus help fallback`
+
+```text
+List and edit the profile's fallback chain (`[[fallback.chain]]`)
+
+Usage: prometheus help fallback [COMMAND]
+
+Commands:
+  list    List the chain in order
+  add     Validate a route and append it (no argument: the model picker)
+  remove  Remove an entry by its 1-based position or `<provider>/<model>`
+  clear   Remove every entry
+```
+
+## `prometheus help fallback list`
+
+```text
+List the chain in order
+
+Usage: prometheus help fallback list
+```
+
+## `prometheus help fallback add`
+
+```text
+Validate a route and append it (no argument: the model picker)
+
+Usage: prometheus help fallback add
+```
+
+## `prometheus help fallback remove`
+
+```text
+Remove an entry by its 1-based position or `<provider>/<model>`
+
+Usage: prometheus help fallback remove
+```
+
+## `prometheus help fallback clear`
+
+```text
+Remove every entry
+
+Usage: prometheus help fallback clear
+```
+
+## `prometheus help auth`
+
+```text
+Add, list and remove provider API keys and subscription sign-ins
+
+Usage: prometheus help auth [COMMAND]
+
+Commands:
+  add     Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+  list    List every credential: provider, label, kind, source and status (never key or token material)
+  status  One provider's credentials, sign-in flows and plan notes
+  remove  Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+  import  Copy another tool's sign-in into the secrets store
+```
+
+## `prometheus help auth add`
+
+```text
+Store an API key (read from a hidden prompt or stdin) or sign in to a subscription
+
+Usage: prometheus help auth add
+```
+
+## `prometheus help auth list`
+
+```text
+List every credential: provider, label, kind, source and status (never key or token material)
+
+Usage: prometheus help auth list
+```
+
+## `prometheus help auth status`
+
+```text
+One provider's credentials, sign-in flows and plan notes
+
+Usage: prometheus help auth status
+```
+
+## `prometheus help auth remove`
+
+```text
+Delete a credential (and revoke a sign-in's refresh token where the provider offers revocation)
+
+Usage: prometheus help auth remove
+```
+
+## `prometheus help auth import`
+
+```text
+Copy another tool's sign-in into the secrets store
+
+Usage: prometheus help auth import
+```
+
+## `prometheus help tools`
+
+```text
+List the profile's tools and explain one (exposure, capabilities, approvals)
+
+Usage: prometheus help tools [COMMAND]
+
+Commands:
+  configure  Enable or disable toolsets per surface and choose tool providers, interactively
+  enable     Enable a toolset from the next session
+  disable    Disable a toolset from the next session
+  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets   The toolsets, as `prometheus toolsets list`
+```
+
+## `prometheus help tools configure`
+
+```text
+Enable or disable toolsets per surface and choose tool providers, interactively
+
+Usage: prometheus help tools configure
+```
+
+## `prometheus help tools enable`
+
+```text
+Enable a toolset from the next session
+
+Usage: prometheus help tools enable
+```
+
+## `prometheus help tools disable`
+
+```text
+Disable a toolset from the next session
+
+Usage: prometheus help tools disable
+```
+
+## `prometheus help tools provider`
+
+```text
+Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+
+Usage: prometheus help tools provider
+```
+
+## `prometheus help tools list`
+
+```text
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+
+Usage: prometheus help tools list
+```
+
+## `prometheus help tools explain`
+
+```text
+A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+
+Usage: prometheus help tools explain
+```
+
+## `prometheus help tools toolsets`
+
+```text
+The toolsets, as `prometheus toolsets list`
+
+Usage: prometheus help tools toolsets
+```
+
+## `prometheus help toolsets`
+
+```text
+List toolsets and show the tools a toolset resolves to
+
+Usage: prometheus help toolsets [COMMAND]
+
+Commands:
+  list  Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+  show  The tools a toolset resolves to, in order, with their availability
+```
+
+## `prometheus help toolsets list`
+
+```text
+Every toolset: description, direct tools, includes, resolved tool count, default-off and posture flags, and whether it is active
+
+Usage: prometheus help toolsets list
+```
+
+## `prometheus help toolsets show`
+
+```text
+The tools a toolset resolves to, in order, with their availability
+
+Usage: prometheus help toolsets show
+```
+
+## `prometheus help approvals`
+
+```text
+Check how the approval gate treats a command, without running it
+
+Usage: prometheus help approvals [COMMAND]
+
+Commands:
+  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+```
+
+## `prometheus help approvals test`
+
+```text
+Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+
+Usage: prometheus help approvals test
+```
+
+## `prometheus help update`
+
+```text
+Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+
+Usage: prometheus help update
+```
+
+## `prometheus help self-test`
+
+```text
+Check this build against the home before an update installs it (run by `prometheus update` on the staged binary)
+
+Usage: prometheus help self-test
+```
+
+## `prometheus help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus help help
+```
+
+## JSON output
+
+With `--json` a command prints exactly one JSON document on stdout (JSON Lines for `--follow` streams) and nothing else; diagnostics go to stderr. A failing command prints `{"error": {kind, code, message, hint}}` to stderr and exits with its [exit code](error-codes.md). Listing and status documents carry a top-level `schema` naming their versioned shape; a breaking change bumps the shape's major version. `version --json` is the fixed build-identity object and has no `schema` field.
+
+| Schema | Command |
+|---|---|
+| `prometheus.doctor.v1` | `prometheus doctor` |
+| `prometheus.update_status.v1` | `prometheus update --status` |
+| `prometheus.update_check.v1` | `prometheus update --check` |
+| `prometheus.grants.v1` | `prometheus grants list` |
+| `prometheus.usage.v1` | `prometheus usage` |
+| `prometheus.prompt_size.v1` | `prometheus prompt size` |
+| `prometheus.config.v1` | `prometheus config show` |
+| `prometheus.config_value.v1` | `prometheus config get` |
+| `prometheus.config_explain.v1` | `prometheus config explain` |
+| `prometheus.secrets.v1` | `prometheus secrets list` |
+| `prometheus.backup.v1` | `prometheus backup create` |
+| `prometheus.restore.v1` | `prometheus backup restore` |
+| `prometheus.skills.v1` | `prometheus skills list` |
+| `prometheus.skill.v1` | `prometheus skills show` |
+| `prometheus.skills_lint.v1` | `prometheus skills lint` |
+| `prometheus.snapshots.v1` | `prometheus snapshots list` |
+| `prometheus.profiles.v1` | `prometheus profile list` |
+| `prometheus.profile.v1` | `prometheus profile show` |
+| `prometheus.sessions.v1` | `prometheus sessions list` |
+| `prometheus.session.v1` | `prometheus sessions show` |
+| `prometheus.search.v1` | `prometheus sessions search` |
+| `prometheus.session_tree.v1` | `prometheus sessions tree` |
+| `prometheus.session_stats.v1` | `prometheus sessions stats` |
+| `prometheus.prune.v1` | `prometheus sessions prune` |
+| `prometheus.logs.v1` | `prometheus logs` |
+| `prometheus.log_components.v1` | `prometheus logs list` |
+| `prometheus.trajectory.v1` | `prometheus trajectory show` |
+| `prometheus.model_explain.v1` | `prometheus model explain` |
+| `prometheus.models.v1` | `prometheus model list` |
+| `prometheus.providers.v1` | `prometheus model list --providers` |
+| `prometheus.model_info.v1` | `prometheus model info` |
+| `prometheus.model_set.v1` | `prometheus model set` |
+| `prometheus.fallback.v1` | `prometheus fallback list` |
+| `prometheus.auth.v1` | `prometheus auth list` |
+| `prometheus.auth_status.v1` | `prometheus auth status` |
+| `prometheus.tools.v1` | `prometheus tools list` |
+| `prometheus.tool.v1` | `prometheus tools explain` |
+| `prometheus.toolsets.v1` | `prometheus toolsets list` |
+| `prometheus.toolset.v1` | `prometheus toolsets show` |
+| `prometheus.approvals_test.v1` | `prometheus approvals test` |

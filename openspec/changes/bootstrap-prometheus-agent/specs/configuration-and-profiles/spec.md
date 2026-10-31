@@ -107,12 +107,17 @@ The system SHALL provide `prometheus config` subcommands `path`, `show [--effect
 - **THEN** the system SHALL print the validation errors and offer to re-open the editor, keeping the last valid file in place if the user aborts
 
 ### Requirement: Secrets are not configuration
-The system SHALL refuse to store a value in a non-secret config key when it matches a known credential pattern (for example `sk-`, `ghp_`, `xoxb-`, `AKIA` prefixes or a PEM private key header), failing with `this looks like a credential; store it with: prometheus secrets set <NAME>`, and config keys that need a credential SHALL accept only a secret reference `{ secret = "<NAME>" }`.
+The system SHALL refuse to store a value in a non-secret config key when it matches a known credential pattern (for example `sk-`, `ghp_`, `xoxb-`, `AKIA` prefixes or a PEM private key header), failing with `this looks like a credential; store it with: prometheus secrets set <NAME>` (a command-line value exits 2; a credential found in `config.toml` is a validation error, exit 78, for `prometheus config validate`, `config edit` and every command that loads the profile), and config keys that need a credential SHALL accept only a secret reference: a key named `<purpose>_secret` (or `<purpose>_secrets` for a list) whose value is the secret's name, for example `providers.acme.key_secret = "ACME_API_KEY"`, never the value itself.
 **Milestone:** M1
 
 #### Scenario: API key pasted into config
 - **WHEN** the user runs `prometheus config set providers.acme.base_url sk-live-123456`
 - **THEN** the command SHALL fail with the credential message and SHALL NOT write the value
+
+#### Scenario: Credential written into the file by hand
+- **GIVEN** a profile `config.toml` containing `base_url = "sk-live-123456"` under `[providers.acme]`
+- **WHEN** the user runs `prometheus config validate` or any command that loads the profile
+- **THEN** the command SHALL exit 78 with the credential message naming `providers.acme.base_url` and its line, without printing the value
 
 ### Requirement: Secrets store
 The system SHALL keep each profile's secrets in a store selected by `secrets.backend` (`file` default: `<profile>/secrets.toml` with mode `0600`; `keychain`: the OS keychain under service `prometheus` and account `<home-id>/<profile>/<NAME>`), SHALL restrict secret names to `^[A-Z][A-Z0-9_]{0,127}$`, and SHALL provide `prometheus secrets set <NAME>` (value read from a no-echo prompt or stdin, never from argv), `list` (names, source and whether shadowed, never values), `get <NAME> --reveal` (TTY only), `unset <NAME>` and `migrate --to <backend>`.

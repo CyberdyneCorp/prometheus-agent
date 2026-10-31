@@ -25,6 +25,11 @@ const REGRESSION_RATIO: f64 = 1.15;
 /// would fail at random.
 const STARTUP_NOISE_MS: f64 = 1.0;
 const RSS_NOISE_BYTES: u64 = MIB;
+/// Size growth below 5% of the 80 MiB budget never counts. Size does not
+/// jitter, but against a near-empty binary any real dependency is a large
+/// percentage; the floor keeps the 15% rule meaningful once the binary has
+/// real weight while letting small, deliberate additions through.
+const BINARY_NOISE_BYTES: u64 = 4 * MIB;
 
 /// One measurement of the stub binary, as stored in the baseline.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -121,7 +126,7 @@ fn regressions(current: &Metrics, base: &Metrics) -> Vec<Violation> {
         "binary size",
         as_f64(current.binary_bytes),
         as_f64(base.binary_bytes),
-        0.0,
+        as_f64(BINARY_NOISE_BYTES),
         mib_f64,
     );
     found
@@ -199,18 +204,47 @@ mod tests {
     }
 
     #[test]
-    fn binary_growth_over_15_percent_fails() {
-        let bigger = Metrics {
-            binary_bytes: 2 * MIB + MIB / 2,
+    fn binary_growth_under_the_size_floor_is_not_a_regression() {
+        // The M1 dependencies took a 0.62 MiB binary to 1.21 MiB: +94%,
+        // but well under the 4 MiB floor.
+        let small = Metrics {
+            binary_bytes: 634 * 1024,
             ..BASE
         };
-        let violations = evaluate(&bigger, Some(&BASE));
+        let doubled = Metrics {
+            binary_bytes: 1239 * 1024,
+            ..BASE
+        };
+        assert!(evaluate(&doubled, Some(&small)).is_empty());
+    }
+
+    #[test]
+    fn binary_growth_over_15_percent_and_the_floor_fails() {
+        let base = Metrics {
+            binary_bytes: 20 * MIB,
+            ..BASE
+        };
+        let bigger = Metrics {
+            binary_bytes: 25 * MIB,
+            ..BASE
+        };
+        let violations = evaluate(&bigger, Some(&base));
         assert_eq!(violations.len(), 1);
         assert!(
             violations[0]
                 .to_string()
                 .starts_with("binary size regressed 25%")
         );
+        // Over the floor but within 15% passes.
+        let within = Metrics {
+            binary_bytes: 30 * MIB,
+            ..BASE
+        };
+        let base_large = Metrics {
+            binary_bytes: 27 * MIB,
+            ..BASE
+        };
+        assert!(evaluate(&within, Some(&base_large)).is_empty());
     }
 
     #[test]

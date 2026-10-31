@@ -68,6 +68,14 @@ result:
 cargo xtask gen
 ```
 
+`gen` and `gen --check` also check tool names in the docs against the tool
+registry: a hand-written page names a tool as a link to its reference entry
+(`` [`todo`](../reference/tools.md#todo) ``), and an unregistered name in a
+tool context (`` the `todo_list` tool ``) or one that extends a registered
+name (`todo_list` for `todo`) fails, in hand-written and generated pages
+alike. A page that documents another product's tools opts out with
+`<!-- tool-refs: off -- <why> -->`.
+
 ### Performance budgets
 
 Startup, peak memory and binary size have absolute budgets and a 15%

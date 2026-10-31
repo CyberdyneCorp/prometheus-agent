@@ -1,0 +1,523 @@
+//! Model, provider and auxiliary routing sections (spec: model-providers).
+
+use std::collections::BTreeMap;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use super::{ReasoningLevel, SecretName};
+
+/// The `[model]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct ModelConfig {
+    /// Provider id or alias; unset means `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Default model id (or a `[model.aliases]` name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// User model aliases: a name (matched case-insensitively) for a
+    /// `"<provider>/<model>"` string or a route table. Usable wherever a
+    /// model is named (`/model`, `prometheus model set`, fallback and
+    /// auxiliary slots).
+    pub aliases: BTreeMap<String, ModelAlias>,
+    /// Provider order tried by `auto` among providers with a stored secret.
+    pub auto_order: Vec<String>,
+    /// Smallest context window (tokens) a session may start with.
+    #[schemars(range(min = 16_000))]
+    pub min_context_window: u64,
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        Self {
+            provider: None,
+            default: None,
+            aliases: BTreeMap::new(),
+            auto_order: ["anthropic", "openai", "openrouter", "google", "nous"]
+                .map(str::to_owned)
+                .to_vec(),
+            min_context_window: 64_000,
+        }
+    }
+}
+
+/// One `[model.aliases.<name>]` entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ModelAlias {
+    /// `"<provider>/<model>"`.
+    Ref(String),
+    /// A route with its own endpoint or secret.
+    Route(AliasRoute),
+}
+
+/// A `[model.aliases.<name>]` table.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AliasRoute {
+    /// Provider id or alias.
+    pub provider: String,
+    /// Model id at that provider.
+    pub model: String,
+    /// Base URL replacing the provider's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Name of the secret this alias uses instead of the provider's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_secret: Option<SecretName>,
+}
+
+/// One `[providers.<id>]` override of a built-in or custom provider.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProviderConfig {
+    /// `false` makes every request to this provider fail with
+    /// `provider.disabled`.
+    pub enabled: bool,
+    /// Extra names a custom provider answers to.
+    pub aliases: Vec<String>,
+    /// API base URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Allow a plain `http://` base URL on a public host (plain HTTP to
+    /// loopback and private-network hosts is always allowed).
+    pub allow_insecure_http: bool,
+    /// Wire format; wins over host rules and the provider's own format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wire_format: Option<WireFormat>,
+    /// Credential kind of a custom provider; unset uses the built-in
+    /// provider's, or `api_key` when `key_secret` is set and `none`
+    /// otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<ProviderAuth>,
+    /// Model listing URL; unset is `<base_url>/models`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub models_url: Option<String>,
+    /// Whether the provider lists its models; unset uses the provider
+    /// default (true for custom providers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_model_listing: Option<bool>,
+    /// Whether the provider honours a prompt cache key; unset uses the
+    /// provider default (false for custom providers).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_prompt_cache: Option<bool>,
+    /// Name of the secret holding this provider's key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_secret: Option<SecretName>,
+    /// Hostnames the provider's secret may be sent to (exact, or a leading
+    /// `*.` wildcard).
+    pub key_hosts: Vec<String>,
+    /// Which credential wins when both exist.
+    pub prefer_credential: PreferCredential,
+    /// Credential pool selection.
+    pub pool_strategy: PoolStrategy,
+    /// Same-route retries of a retryable failure.
+    #[schemars(range(min = 0, max = 6))]
+    pub max_retries: u32,
+    /// Per-request timeout.
+    pub request_timeout_secs: u64,
+    /// Longest gap between stream events.
+    pub stream_idle_timeout_secs: u64,
+    /// Lifetime of the cached live model listing.
+    pub catalog_ttl_secs: u64,
+    /// Sign-in flow for OAuth providers; unset uses the provider default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_flow: Option<LoginFlow>,
+    /// Eligibility and billing notes shown before sign-in and by `auth
+    /// status`; replaces the provider's built-in notes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_notes: Option<Vec<String>>,
+    /// Sign-in endpoints replacing (field by field) the built-in ones, or
+    /// configuring a sign-in for a custom `auth = "oauth"` provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<OAuthEndpoints>,
+    /// Script file of the built-in `mock` provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            aliases: Vec::new(),
+            base_url: None,
+            allow_insecure_http: false,
+            wire_format: None,
+            auth: None,
+            models_url: None,
+            supports_model_listing: None,
+            supports_prompt_cache: None,
+            key_secret: None,
+            key_hosts: Vec::new(),
+            prefer_credential: PreferCredential::Subscription,
+            pool_strategy: PoolStrategy::FillFirst,
+            max_retries: 2,
+            request_timeout_secs: 600,
+            stream_idle_timeout_secs: 120,
+            catalog_ttl_secs: 86_400,
+            login_flow: None,
+            plan_notes: None,
+            oauth: None,
+            script: None,
+        }
+    }
+}
+
+/// Natively supported wire formats; any other format needs a provider
+/// plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WireFormat {
+    /// OpenAI Chat Completions (`/chat/completions`).
+    ChatCompletions,
+    /// OpenAI Responses (`/responses`).
+    Responses,
+    /// Anthropic Messages (`/v1/messages`).
+    AnthropicMessages,
+}
+
+impl WireFormat {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ChatCompletions => "chat_completions",
+            Self::Responses => "responses",
+            Self::AnthropicMessages => "anthropic_messages",
+        }
+    }
+}
+
+/// How a provider authenticates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAuth {
+    /// An API key from the secrets store.
+    ApiKey,
+    /// A subscription sign-in.
+    Oauth,
+    /// A short-lived token minted from a longer-lived credential.
+    TokenMint,
+    /// A credential printed by an external command.
+    ExternalProcess,
+    /// The AWS credential chain.
+    AwsChain,
+    /// No credential (local servers).
+    None,
+}
+
+impl ProviderAuth {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ApiKey => "api_key",
+            Self::Oauth => "oauth",
+            Self::TokenMint => "token_mint",
+            Self::ExternalProcess => "external_process",
+            Self::AwsChain => "aws_chain",
+            Self::None => "none",
+        }
+    }
+}
+
+/// Credential preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PreferCredential {
+    /// A subscription sign-in.
+    Subscription,
+    /// An API key.
+    ApiKey,
+}
+
+/// Credential pool strategies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolStrategy {
+    /// Use the first healthy credential until it is benched.
+    FillFirst,
+    /// Rotate per request.
+    RoundRobin,
+    /// Pick at random.
+    Random,
+    /// Pick the least used.
+    LeastUsed,
+}
+
+/// A `[providers.<id>.oauth]` table: sign-in endpoints. Endpoints must be
+/// `https://` (plain `http://` only on a loopback address) and their hosts
+/// must be in `allowed_hosts`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct OAuthEndpoints {
+    /// The OAuth client id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+    /// Authorization endpoint of the browser (PKCE) flow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authorize_url: Option<String>,
+    /// Token endpoint (code exchange and refresh).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_url: Option<String>,
+    /// Device authorization endpoint of the device-code flow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_authorization_url: Option<String>,
+    /// Polling endpoint of a device flow that polls somewhere other than
+    /// the token endpoint (OpenAI's).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_poll_url: Option<String>,
+    /// Page where the user enters the device code, when the device
+    /// endpoint does not name one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification_url: Option<String>,
+    /// Token revocation endpoint (`auth remove` revokes the refresh token).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revoke_url: Option<String>,
+    /// Requested scopes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scopes: Option<Vec<String>>,
+    /// Loopback redirect port of the browser flow; 0 lets the OS assign
+    /// one (only for providers that accept any port).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_port: Option<u16>,
+    /// Path of the loopback redirect.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_path: Option<String>,
+    /// Hosts the sign-in endpoints may be on (exact, or a leading `*.`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_hosts: Option<Vec<String>>,
+}
+
+/// OAuth sign-in flows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LoginFlow {
+    /// Device code.
+    Device,
+    /// Browser with PKCE.
+    Browser,
+}
+
+/// One `[models]` entry: an alias string `"<provider>/<model>"` or a route
+/// and metadata table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ModelEntry {
+    /// `"<provider>/<model>"`.
+    Alias(String),
+    /// A route with optional metadata overrides.
+    Route(ModelRoute),
+}
+
+/// A `[models.<name>]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ModelRoute {
+    /// Provider id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Model id at the provider.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Base URL override.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Name of the secret for this route.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_secret: Option<SecretName>,
+    /// Context window override in tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<u64>,
+    /// Output token cap override.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u64>,
+    /// Whether the model takes tool schemas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_tools: Option<bool>,
+    /// Whether the model takes image input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_vision: Option<bool>,
+    /// Whether the model takes video input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_video: Option<bool>,
+    /// Whether the model reasons (thinking tokens).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_reasoning: Option<bool>,
+    /// Highest reasoning effort the model accepts; higher requested
+    /// levels are clamped down to it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_reasoning_effort: Option<ReasoningLevel>,
+    /// Prices per million tokens (USD).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price: Option<ModelPrice>,
+}
+
+/// Per-million-token prices in USD.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ModelPrice {
+    /// Input tokens.
+    #[schemars(range(min = 0.0))]
+    pub input: f64,
+    /// Output tokens.
+    #[schemars(range(min = 0.0))]
+    pub output: f64,
+    /// Cache-read tokens.
+    #[schemars(range(min = 0.0))]
+    pub cache_read: f64,
+    /// Cache-write tokens.
+    #[schemars(range(min = 0.0))]
+    pub cache_write: f64,
+    /// Reasoning tokens (a part of the output tokens); unset bills them at
+    /// the output price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 0.0))]
+    pub reasoning: Option<f64>,
+}
+
+/// The `[auxiliary]` section: one optional table per auxiliary task.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct AuxiliaryConfig {
+    /// Same-route retries of a retryable auxiliary failure.
+    #[schemars(range(min = 0, max = 6))]
+    pub transient_retries: u32,
+    /// Context compression summaries.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compression: Option<AuxiliaryTask>,
+    /// Session titles.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<AuxiliaryTask>,
+    /// Image descriptions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vision: Option<AuxiliaryTask>,
+    /// Smart approvals.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval: Option<AuxiliaryTask>,
+    /// Memory review.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory: Option<AuxiliaryTask>,
+    /// Skill curator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub curator: Option<AuxiliaryTask>,
+    /// Web extraction summaries.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_extract: Option<AuxiliaryTask>,
+    /// Skill review.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skill_review: Option<AuxiliaryTask>,
+    /// Harness evolution.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evolution: Option<AuxiliaryTask>,
+    /// Goal judging (defaults to the main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub goal_judge: Option<AuxiliaryTask>,
+    /// Side questions (defaults to the main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side_question: Option<AuxiliaryTask>,
+    /// Voice chat (defaults to the main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice_chat: Option<AuxiliaryTask>,
+}
+
+impl Default for AuxiliaryConfig {
+    fn default() -> Self {
+        Self {
+            transient_retries: 2,
+            compression: None,
+            title: None,
+            vision: None,
+            approval: None,
+            memory: None,
+            curator: None,
+            web_extract: None,
+            skill_review: None,
+            evolution: None,
+            goal_judge: None,
+            side_question: None,
+            voice_chat: None,
+        }
+    }
+}
+
+/// One `[auxiliary.<task>]` table.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct AuxiliaryTask {
+    /// Provider id; unset means `auto` (the session's main route).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Model id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Timeout; unset uses the task default (120 s for `vision` and
+    /// `compression`, 30 s for `approval` and `title`, 600 s for `curator`
+    /// and `evolution`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u64>,
+    /// Fallback routes (`"<provider>/<model>"`); `[]` disables fallback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback_chain: Option<Vec<String>>,
+}
+
+/// The `[fallback]` section.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct FallbackConfig {
+    /// Fallback entries with a health score below this are skipped.
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub min_health: f64,
+    /// Ordered fallback routes (`[[fallback.chain]]`); empty disables
+    /// fallback.
+    pub chain: Vec<FallbackEntry>,
+}
+
+impl Default for FallbackConfig {
+    fn default() -> Self {
+        Self {
+            min_health: 0.2,
+            chain: Vec::new(),
+        }
+    }
+}
+
+/// One `[[fallback.chain]]` entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FallbackEntry {
+    /// Provider id or alias.
+    pub provider: String,
+    /// Model id at that provider.
+    pub model: String,
+    /// Base URL override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// Name of the secret this entry uses instead of the provider's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential: Option<SecretName>,
+}
+
+/// The `[auth]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct AuthConfig {
+    /// Use an existing Claude Code or Codex CLI sign-in when the profile
+    /// holds no credential of its own.
+    pub adopt_external_logins: bool,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            adopt_external_logins: true,
+        }
+    }
+}

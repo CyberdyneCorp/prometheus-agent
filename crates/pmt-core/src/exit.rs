@@ -21,10 +21,8 @@ const fn exit(code: u8, name: &'static str, meaning: &'static str) -> ExitCode {
     }
 }
 
-/// Every exit code the binary may return, in ascending order.
-///
-/// The mapping from each error kind to one of these codes is expanded in
-/// M1 group 4 (task 4.1).
+/// Every exit code the binary may return, in ascending order. Each
+/// [`ErrorKind`](crate::error::ErrorKind) maps to one of them.
 pub const EXIT_CODES: &[ExitCode] = &[
     exit(0, "success", "Success."),
     exit(
@@ -83,9 +81,27 @@ pub const EXIT_CODES: &[ExitCode] = &[
     exit(143, "terminated", "Terminated by SIGTERM."),
 ];
 
+/// The table entry for a numeric status, if it is a documented code.
+#[must_use]
+pub fn lookup(code: u8) -> Option<&'static ExitCode> {
+    EXIT_CODES.iter().find(|e| e.code == code)
+}
+
+/// Exit status for success.
+pub const SUCCESS: u8 = 0;
+/// Exit status for a panic on the main thread (the `internal` code).
+pub const INTERNAL: u8 = 70;
+
 #[cfg(test)]
 mod tests {
-    use super::EXIT_CODES;
+    use super::{EXIT_CODES, INTERNAL, SUCCESS, lookup};
+
+    #[test]
+    fn named_constants_are_documented() {
+        assert_eq!(lookup(SUCCESS).map(|e| e.name), Some("success"));
+        assert_eq!(lookup(INTERNAL).map(|e| e.name), Some("internal"));
+        assert!(lookup(99).is_none());
+    }
 
     #[test]
     fn table_matches_the_shared_contract() {

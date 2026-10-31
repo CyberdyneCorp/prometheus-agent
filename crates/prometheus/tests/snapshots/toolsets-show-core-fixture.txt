@@ -1,0 +1,29 @@
+core: The default tool set of every surface
+TOOL                AVAILABILITY
+web_search          unregistered
+web_extract         missing_capability:net.connect:*
+terminal            exposed
+process             unregistered
+read_file           unregistered
+write_file          exposed
+patch               unregistered
+search_files        unregistered
+vision_analyze      unregistered
+image_generate      unregistered
+skills_list         unregistered
+skill_view          unregistered
+skill_manage        unregistered
+browser_exec        unavailable:browser not found
+browser_cdp         unregistered
+browser_dialog      unregistered
+browser_vault       unregistered
+text_to_speech      unregistered
+todo                unregistered
+memory              unregistered
+session_search      unregistered
+clarify             unregistered
+execute_code        unregistered
+delegate_task       unregistered
+cronjob             unregistered
+computer_use        unregistered
+manage_connections  unregistered

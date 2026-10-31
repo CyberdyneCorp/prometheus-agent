@@ -2,8 +2,292 @@
 
 # Configuration reference
 
-Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key missing here is a typo, not a silent default.
+Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key missing here is a typo, not a silent default. Machine-wide settings live in [`daemon.toml`](daemon-configuration.md).
 
-| Key | Type | Default | Allowed values | Description |
-|---|---|---|---|---|
-| `schema_version` | integer | `1` | ≥ 0 | Version of this file's schema; older files are migrated forward. |
+`<name>` stands for any table name (a provider id, a model alias, a platform). Apply: `live` takes effect at once, `next_session` for sessions started afterwards, `restart` after the process restarts.
+
+| Key | Type | Default | Allowed values | Apply | Description |
+|---|---|---|---|---|---|
+| `agent.api_max_retries` | integer | `3` | 1 to 10 | `next_session` | Attempts per model call before the fallback chain is consulted. |
+| `agent.auto_recovery_cycles` | integer | `5` | ≥ 0 | `next_session` | Extra wait-and-retry cycles after retries and fallbacks are spent on a transient failure with nothing streamed; `0` disables. |
+| `agent.clarify_timeout_secs` | integer | `3600` | ≥ 0 | `next_session` | How long the `clarify` tool waits for an answer. |
+| `agent.empty_response_guard.cost_threshold_usd` | number | `0.25` | ≥ 0.0 | `next_session` | Estimated input cost (USD) of one empty attempt at which the retry budget drops to one. |
+| `agent.intent_continuation` | one of "auto" or boolean or array of string | `"auto"` | any | `next_session` | Nudge a model that announces an action without calling a tool: `"auto"` (Responses-wire models only), `true`, `false` or a list of model-name substrings. |
+| `agent.max_iterations` | integer | `500` | 0 to 100000 | `next_session` | Maximum model calls per turn; `0` means unlimited. |
+| `agent.personalities` | table | `{}` | any | `next_session` | Custom or overriding personalities: name to prompt text. |
+| `agent.personality` | string | `"none"` | any | `next_session` | Selected personality overlay (`none`, a built-in name or a key of `[agent.personalities]`). |
+| `agent.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort; unset means `medium`. |
+| `agent.reasoning_overrides` | table | `{}` | any | `next_session` | Per-model reasoning overrides: model id to a level or a tier name of `[agent.reasoning_tiers]`. |
+| `agent.reasoning_tiers` | table | `{}` | any | `next_session` | Provider-specific tier names mapped to a level, for example `ultra = "max"`. |
+| `agent.run_budget_secs` | integer | unset | ≥ 0 | `next_session` | Optional per-turn wall-clock budget; unset means no budget. |
+| `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
+| `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
+| `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
+| `approvals.mode` | one of "manual", "smart", "off" | `"manual"` | `"manual"`, `"smart"`, `"off"` | `live` | Approval mode of interactive sessions. |
+| `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |
+| `approvals.timeout_secs` | integer | `300` | ≥ 0 | `live` | Unanswered approvals are denied after this long. |
+| `approvals.unattended_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in other unattended sessions. |
+| `auth.adopt_external_logins` | boolean | `true` | any | `next_session` | Use an existing Claude Code or Codex CLI sign-in when the profile holds no credential of its own. |
+| `auxiliary.approval.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.approval.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.approval.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.compression.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.compression.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.compression.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.compression.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.curator.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.curator.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.curator.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.curator.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.evolution.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.evolution.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.evolution.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.evolution.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.goal_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.goal_judge.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.goal_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.goal_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.memory.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.side_question.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.side_question.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.side_question.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.side_question.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.skill_review.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.skill_review.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.skill_review.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.skill_review.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.title.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.title.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.title.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.title.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.transient_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable auxiliary failure. |
+| `auxiliary.vision.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.vision.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.vision.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.vision.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.voice_chat.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.voice_chat.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.voice_chat.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.voice_chat.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.web_extract.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `browser.cdp_url` | string | unset | any | `next_session` | Explicit CDP endpoint. |
+| `browser.dialog_policy` | one of "must_respond", "auto_dismiss", "auto_accept" | `"must_respond"` | `"must_respond"`, `"auto_dismiss"`, `"auto_accept"` | `next_session` | JavaScript dialog handling. |
+| `browser.dialog_timeout_secs` | integer | `300` | ≥ 0 | `next_session` | Unanswered dialogs are dismissed after this long. |
+| `browser.inactivity_timeout_secs` | integer | `120` | ≥ 0 | `live` | Idle browser sessions are closed after this long. |
+| `browser.provider` | string | `"local"` | any | `next_session` | Browser provider: `local` or a cloud browser plugin. |
+| `budgets.allow_unpriced` | boolean | `false` | any | `live` | Allow models without a known price under a USD budget (token budgets still apply). |
+| `budgets.daily_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per day. |
+| `budgets.monthly_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per month. |
+| `budgets.root_tokens` | integer | `0` | ≥ 0 | `live` | Tokens per root session lineage. |
+| `budgets.root_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per root session lineage. |
+| `budgets.session_tokens` | integer | `0` | ≥ 0 | `live` | Tokens per session. |
+| `budgets.session_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per session. |
+| `budgets.turn_tokens` | integer | `0` | ≥ 0 | `live` | Tokens per turn. |
+| `budgets.turn_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per turn. |
+| `budgets.unattended_root_usd` | number | `5.0` | ≥ 0.0 | `live` | USD per root lineage of cron, unattended gateway sessions, background delegations and harness evolution. |
+| `budgets.warn_ratio` | number | `0.8` | 0.0 to 1.0 | `live` | Fraction of a limit at which a budget warning is emitted. |
+| `busy.input_mode` | one of "queue", "steer", "interrupt" | `"queue"` | `"queue"`, `"steer"`, `"interrupt"` | `live` | What plain text typed while a turn runs does: `queue` runs it as the next turn, `steer` hands it to the running turn after its current tool step, `interrupt` stops the turn and then runs it. |
+| `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and `/rewind`. |
+| `compression.abort_on_summary_failure` | boolean | `false` | any | `next_session` | End the turn when the summary cannot be produced. |
+| `compression.enabled` | boolean | `true` | any | `next_session` | Compact the context automatically. |
+| `compression.max_attempts` | integer | `3` | 1 to 10 | `next_session` | Compaction attempts per turn. |
+| `compression.micro_compact` | boolean | `false` | any | `next_session` | Compact tool results between turns. |
+| `compression.micro_compact_every_n_turns` | integer | `1` | ≥ 1 | `next_session` | Turns between micro-compactions. |
+| `compression.min_tail_user_messages` | integer | `1` | ≥ 0 | `next_session` | User messages always kept in the tail. |
+| `compression.pinned_max_tokens` | integer | `8000` | ≥ 0 | `next_session` | Token cap for pinned content carried across compactions. |
+| `compression.prepare_ahead` | boolean | `false` | any | `next_session` | Prepare the next summary ahead of the trigger. |
+| `compression.proactive_prune_tokens` | integer | `0` | ≥ 0 | `next_session` | Prune old tool output above this many tokens; `0` is off. |
+| `compression.protect_first_n` | integer | `3` | ≥ 0 | `next_session` | Non-system messages protected at the head of the first compaction. |
+| `compression.quality_min_coverage` | number | `0.8` | 0.0 to 1.0 | `next_session` | Minimum coverage a summary must reach. |
+| `compression.summary_max_tokens` | integer | `10000` | ≥ 0 | `next_session` | Summary length cap in tokens. |
+| `compression.summary_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Time allowed for one summary call. |
+| `compression.tail_mode` | one of "lean", "ratio" | `"lean"` | `"lean"`, `"ratio"` | `next_session` | How much recent conversation is kept verbatim. |
+| `compression.target_ratio` | number | `0.2` | 0.1 to 0.8 | `next_session` | Target size after compaction as a fraction of the input budget. |
+| `compression.threshold` | number | `0.5` | > 0.0, < 1.0 | `next_session` | Fraction of the input budget at which compaction triggers. |
+| `compression.threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Lower absolute trigger in tokens; `0` is off. |
+| `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
+| `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
+| `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
+| `display.bell_on_prompt` | boolean | `false` | any | `live` | Ring the terminal bell when an approval or clarify prompt opens. |
+| `display.compact` | boolean | `false` | any | `live` | Compact layout. |
+| `display.final_response_markdown` | one of "render", "raw" | `"render"` | `"render"`, `"raw"` | `live` | How the final response is printed. |
+| `display.inline_diffs` | boolean | `true` | any | `live` | Show file-edit diffs inline. |
+| `display.interim_messages` | boolean | `true` | any | `live` | Show assistant text between tool calls. |
+| `display.reasoning_full` | boolean | `false` | any | `live` | Show reasoning in full instead of clamped. |
+| `display.resume_display` | one of "full", "minimal", "off" | `"full"` | `"full"`, `"minimal"`, `"off"` | `live` | Recap printed when a session is resumed. |
+| `display.resume_exchanges` | integer | `10` | ≥ 0 | `live` | User/assistant exchanges shown in the recap. |
+| `display.resume_max_assistant_chars` | integer | `200` | ≥ 0 | `live` | Characters of non-final assistant messages shown in the recap. |
+| `display.resume_max_assistant_lines` | integer | `3` | ≥ 0 | `live` | Lines of non-final assistant messages shown in the recap. |
+| `display.resume_max_user_chars` | integer | `300` | ≥ 0 | `live` | User message characters shown in the recap. |
+| `display.show_cost` | boolean | `false` | any | `live` | Show the session cost in the status line. |
+| `display.show_reasoning` | boolean | `false` | any | `live` | Show model reasoning. |
+| `display.theme` | string | `"default"` | any | `live` | Theme: a built-in (`default`, `mono`, `daylight`, `slate`) or a file in `<profile>/themes/`. |
+| `display.timestamp_format` | string | `"%H:%M"` | any | `live` | `strftime` format of message timestamps. |
+| `display.timestamps` | boolean | `false` | any | `live` | Prefix messages with timestamps. |
+| `display.tool_preview_length` | integer | `0` | ≥ 0 | `live` | Tool preview length in characters; `0` means no limit. |
+| `display.tool_progress` | one of "off", "new", "all", "verbose" | `"all"` | `"off"`, `"new"`, `"all"`, `"verbose"` | `live` | Tool activity shown while a turn runs. |
+| `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
+| `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
+| `display.vim_mode` | boolean | `false` | any | `live` | Vim key bindings in the composer. |
+| `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
+| `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
+| `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
+| `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
+| `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
+| `memory.nudge_interval` | integer | `10` | ≥ 0 | `next_session` | User turns without a memory call before a background review; `0` disables. |
+| `memory.recall.max_chars` | integer | `1500` | ≥ 0 | `next_session` | Character cap of recalled content per turn. |
+| `memory.recall.top_k` | integer | `5` | ≥ 0 | `next_session` | Archival entries recalled per turn. |
+| `memory.review_mode` | one of "summary", "off", "require" | `"summary"` | `"summary"`, `"off"`, `"require"` | `next_session` | How agent memory changes are reviewed. |
+| `memory.user_char_limit` | integer | `1375` | ≥ 0 | `next_session` | Character budget of core user-profile entries. |
+| `memory.user_profile_enabled` | boolean | `true` | any | `next_session` | The user profile store. |
+| `memory.write_approval` | boolean | `false` | any | `next_session` | Approve every memory write. |
+| `model.aliases` | table | `{}` | any | `next_session` | User model aliases: a name (matched case-insensitively) for a `"<provider>/<model>"` string or a route table. Usable wherever a model is named (`/model`, `prometheus model set`, fallback and auxiliary slots). |
+| `model.auto_order` | array of string | `["anthropic","openai","openrouter","google","nous"]` | any | `next_session` | Provider order tried by `auto` among providers with a stored secret. |
+| `model.default` | string | unset | any | `next_session` | Default model id (or a `[model.aliases]` name). |
+| `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
+| `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
+| `models` | table | `{}` | any | `next_session` | Model aliases and metadata overrides, keyed by name or `"<provider>/<model>"`. |
+| `network.extra_ca_file` | string | unset | any | `restart` | Extra PEM CA bundle trusted in addition to the platform store. |
+| `network.force_ipv4` | boolean | `false` | any | `restart` | Resolve and connect every outbound client (providers, MCP over HTTP, web tools, adapters, OTLP, downloads) over IPv4 only; loopback listeners are unaffected. Set it when `prometheus doctor network --online` reports a blackholed IPv6 route. |
+| `network.proxy` | string | unset | any | `restart` | Outbound HTTP(S) proxy URL. |
+| `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
+| `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
+| `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
+| `prompt.context_file_max_chars` | integer | `0` | ≥ 0 | `next_session` | Character cap per context file; `0` derives it from the model's context window. |
+| `prompt.context_file_read_timeout_secs` | integer | `5` | ≥ 0 | `next_session` | Time allowed to read each context file. |
+| `prompt.include_session_id` | boolean | `false` | any | `next_session` | Add `Session ID: ses_<ULID>` to the session tier. |
+| `prompt.load_context_files` | boolean | `true` | any | `next_session` | Load project context files (`AGENTS.md` and friends). |
+| `prompt.load_identity` | boolean | `true` | any | `next_session` | Load the identity file `SOUL.md`. |
+| `prompt.platform_hints.<name>.append` | string | unset | any | `next_session` | Appended after the (possibly replaced) hint. |
+| `prompt.platform_hints.<name>.replace` | string | unset | any | `next_session` | Replaces the built-in hint. |
+| `prompt_cache.ttl` | one of "5m", "1h", "auto", "off" | `"5m"` | `"5m"`, `"1h"`, `"auto"`, `"off"` | `next_session` | Provider prompt-cache lifetime. |
+| `providers.<name>.aliases` | array of string | `[]` | any | `next_session` | Extra names a custom provider answers to. |
+| `providers.<name>.allow_insecure_http` | boolean | `false` | any | `next_session` | Allow a plain `http://` base URL on a public host (plain HTTP to loopback and private-network hosts is always allowed). |
+| `providers.<name>.auth` | one of "api_key", "oauth", "token_mint", "external_process", "aws_chain", "none" | unset | `"api_key"`, `"oauth"`, `"token_mint"`, `"external_process"`, `"aws_chain"`, `"none"` | `next_session` | Credential kind of a custom provider; unset uses the built-in provider's, or `api_key` when `key_secret` is set and `none` otherwise. |
+| `providers.<name>.base_url` | string | unset | any | `next_session` | API base URL. |
+| `providers.<name>.catalog_ttl_secs` | integer | `86400` | ≥ 0 | `next_session` | Lifetime of the cached live model listing. |
+| `providers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` makes every request to this provider fail with `provider.disabled`. |
+| `providers.<name>.key_hosts` | array of string | `[]` | any | `next_session` | Hostnames the provider's secret may be sent to (exact, or a leading `*.` wildcard). |
+| `providers.<name>.key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding this provider's key. |
+| `providers.<name>.login_flow` | one of "device", "browser" | unset | `"device"`, `"browser"` | `next_session` | Sign-in flow for OAuth providers; unset uses the provider default. |
+| `providers.<name>.max_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable failure. |
+| `providers.<name>.models_url` | string | unset | any | `next_session` | Model listing URL; unset is `<base_url>/models`. |
+| `providers.<name>.oauth.allowed_hosts` | array | unset | any | `next_session` | Hosts the sign-in endpoints may be on (exact, or a leading `*.`). |
+| `providers.<name>.oauth.authorize_url` | string | unset | any | `next_session` | Authorization endpoint of the browser (PKCE) flow. |
+| `providers.<name>.oauth.client_id` | string | unset | any | `next_session` | The OAuth client id. |
+| `providers.<name>.oauth.device_authorization_url` | string | unset | any | `next_session` | Device authorization endpoint of the device-code flow. |
+| `providers.<name>.oauth.device_poll_url` | string | unset | any | `next_session` | Polling endpoint of a device flow that polls somewhere other than the token endpoint (OpenAI's). |
+| `providers.<name>.oauth.redirect_path` | string | unset | any | `next_session` | Path of the loopback redirect. |
+| `providers.<name>.oauth.redirect_port` | integer | unset | 0 to 65535 | `next_session` | Loopback redirect port of the browser flow; 0 lets the OS assign one (only for providers that accept any port). |
+| `providers.<name>.oauth.revoke_url` | string | unset | any | `next_session` | Token revocation endpoint (`auth remove` revokes the refresh token). |
+| `providers.<name>.oauth.scopes` | array | unset | any | `next_session` | Requested scopes. |
+| `providers.<name>.oauth.token_url` | string | unset | any | `next_session` | Token endpoint (code exchange and refresh). |
+| `providers.<name>.oauth.verification_url` | string | unset | any | `next_session` | Page where the user enters the device code, when the device endpoint does not name one. |
+| `providers.<name>.plan_notes` | array | unset | any | `next_session` | Eligibility and billing notes shown before sign-in and by `auth status`; replaces the provider's built-in notes. |
+| `providers.<name>.pool_strategy` | one of "fill_first", "round_robin", "random", "least_used" | `"fill_first"` | `"fill_first"`, `"round_robin"`, `"random"`, `"least_used"` | `next_session` | Credential pool selection. |
+| `providers.<name>.prefer_credential` | one of "subscription", "api_key" | `"subscription"` | `"subscription"`, `"api_key"` | `next_session` | Which credential wins when both exist. |
+| `providers.<name>.request_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Per-request timeout. |
+| `providers.<name>.script` | string | unset | any | `next_session` | Script file of the built-in `mock` provider. |
+| `providers.<name>.stream_idle_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Longest gap between stream events. |
+| `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
+| `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
+| `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
+| `quick_commands.<name>.command` | string | unset | any | `live` | The shell command an `exec` entry runs, with every secret removed from its environment and its output redacted. |
+| `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
+| `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |
+| `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
+| `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
+| `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
+| `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
+| `security.egress.allow_private` | boolean | `false` | any | `next_session` | Allow private destinations without a session grant. |
+| `security.egress.fake_ip_ranges` | array of string | `[]` | any | `next_session` | CIDR ranges a local TUN proxy answers with (treated as public). |
+| `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
+| `security.protected_instruction_files` | boolean | `true` | any | `next_session` | Require human approval for agent writes to instruction files. |
+| `security.redact_secrets` | boolean | `true` | any | `next_session` | Redact every loaded secret value everywhere output is written. |
+| `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |
+| `security.sandbox.mode` | one of "enforce", "off" | `"enforce"` | `"enforce"`, `"off"` | `next_session` | Sandbox mode; `off` needs `allow_degraded` to name `all`. |
+| `sessions.auto_archive_secs` | integer | `604800` | ≥ 0 | `live` | Archive lineage tips idle for this long. |
+| `sessions.max_export_messages` | integer | `20000` | ≥ 0 | `live` | Refuse in-memory exports with more messages. |
+| `sessions.max_resume_messages` | integer | `20000` | ≥ 0 | `live` | Refuse to resume a lineage with more messages; `0` disables. |
+| `sessions.retention_secs` | integer | `0` | ≥ 0 | `live` | Prune ended sessions inactive for longer than this; `0` never prunes. |
+| `sessions.terminal_continue` | boolean | `true` | any | `live` | `-c` prefers the session last used from the same terminal. |
+| `skills.auto_load` | array of string | `[]` | any | `next_session` | Skills loaded into every new session. |
+| `skills.config` | table | `{}` | any | `next_session` | Non-secret per-skill settings: skill to key to value. |
+| `skills.creation_nudge_interval` | integer | `10` | ≥ 0 | `next_session` | Tool-calling iterations before a skill-creation nudge. |
+| `skills.disabled` | array of string | `[]` | any | `next_session` | Disabled skill names. |
+| `skills.external_dirs` | array of string | `[]` | any | `next_session` | Extra skill directories (`~` expanded; missing ones skipped). |
+| `skills.include_bundled` | boolean | `true` | any | `next_session` | Show the bundled skills tier. |
+| `skills.index_description_chars` | integer | `60` | ≥ 0 | `next_session` | Description length in the skills index. |
+| `skills.inline_shell` | boolean | `false` | any | `next_session` | Expand inline shell snippets at load. |
+| `skills.inline_shell_timeout_ms` | integer | `10000` | ≥ 0 | `next_session` | Deadline of one inline shell snippet. |
+| `skills.platform_disabled` | table | `{}` | any | `next_session` | Disabled skill names per platform or surface. |
+| `skills.project_discovery` | boolean | `true` | any | `next_session` | Scan for untrusted project skills and show a notice. |
+| `skills.template_vars` | boolean | `true` | any | `next_session` | Substitute `${PROMETHEUS_SKILL_DIR}`-style tokens at load. |
+| `skills.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Git roots whose project-local skills are trusted. |
+| `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
+| `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
+| `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |
+| `telemetry.enabled` | boolean | `false` | any | `restart` | Send redacted aggregate counters. |
+| `telemetry.endpoint` | string | unset | any | `restart` | HTTPS endpoint (loopback HTTP allowed). |
+| `terminal.auto_source_bashrc` | boolean | `true` | any | `next_session` | Source `~/.bashrc` once when the shell is bash. |
+| `terminal.backend` | string | `"local"` | any | `next_session` | Backend: `local`, `container`, `ssh` or a plugin backend. |
+| `terminal.container.cpus` | number | `1.0` | ≥ 0.0 | `next_session` | CPU limit. |
+| `terminal.container.disk_bytes` | integer | `53687091200` | ≥ 0 | `next_session` | Disk limit. |
+| `terminal.container.env` | table | `{}` | any | `next_session` | Literal environment set in the container. |
+| `terminal.container.memory_bytes` | integer | `5368709120` | ≥ 0 | `next_session` | Memory limit. |
+| `terminal.container.persistent` | boolean | `true` | any | `next_session` | Keep the container between sessions. |
+| `terminal.container.pids_limit` | integer | `2048` | ≥ 0 | `next_session` | Process limit. |
+| `terminal.container.shm_size` | string | `"1g"` | any | `next_session` | `/dev/shm` size in the runtime's syntax. |
+| `terminal.cwd` | string | unset | any | `next_session` | Start directory for `local`; unset is the launch directory. |
+| `terminal.degraded_mode` | one of "degrade", "fail" | `"degrade"` | `"degrade"`, `"fail"` | `next_session` | Backend connection failures: degraded results or errors. |
+| `terminal.env_passthrough` | array of string | `[]` | any | `next_session` | Non-secret launch-environment variables passed to children. |
+| `terminal.idle_lifetime_secs` | integer | `300` | ≥ 0 | `next_session` | Idle time before a cached environment is torn down. |
+| `terminal.max_foreground_secs` | integer | `600` | ≥ 0 | `next_session` | Longer foreground calls become tracked background processes. |
+| `terminal.persistent_shell` | boolean | `true` | any | `next_session` | Keep one shell per session. |
+| `terminal.shell_init_files` | array of string | `[]` | any | `next_session` | Extra files sourced at shell start (`~` expanded). |
+| `terminal.shell_init_timeout_secs` | integer | `10` | ≥ 0 | `next_session` | Bound on the whole shell init step. |
+| `terminal.ssh.host` | string | unset | any | `next_session` | Host name. |
+| `terminal.ssh.port` | integer | `22` | 1 to 65535 | `next_session` | Port. |
+| `terminal.ssh.user` | string | unset | any | `next_session` | User name. |
+| `terminal.timeout_secs` | integer | `180` | ≥ 0 | `next_session` | Default foreground command timeout. |
+| `terminal.windows_bash_path` | string | unset | any | `next_session` | Git Bash path tried first by `windows_shell = "auto"`. |
+| `terminal.windows_shell` | one of "auto", "git-bash", "pwsh", "powershell" | `"auto"` | `"auto"`, `"git-bash"`, `"pwsh"`, `"powershell"` | `next_session` | Windows shell. |
+| `tool_loop_guardrails.hard_stop_after.exact_failure` | integer | unset | ≥ 1 | `next_session` | Same tool, same arguments, same error. |
+| `tool_loop_guardrails.hard_stop_after.idempotent_no_progress` | integer | unset | ≥ 1 | `next_session` | Idempotent calls returning identical results. |
+| `tool_loop_guardrails.hard_stop_after.same_tool_failure` | integer | unset | ≥ 1 | `next_session` | Failures of the same tool. |
+| `tool_loop_guardrails.hard_stop_enabled` | boolean | `false` | any | `next_session` | Stop the turn (`guardrail_stop`) at `hard_stop_after` on interactive surfaces. |
+| `tool_loop_guardrails.loop_caps.max_subagents` | integer | `50` | ≥ 0 | `next_session` | Subagents per turn; `0` is unlimited. |
+| `tool_loop_guardrails.loop_caps.max_web_searches` | integer | `50` | ≥ 0 | `next_session` | Web searches per turn; `0` is unlimited. |
+| `tool_loop_guardrails.non_interactive_hard_stop_enabled` | boolean | `true` | any | `next_session` | Stop the turn at `hard_stop_after` on gateway, cron, API and kanban sessions. |
+| `tool_loop_guardrails.warn_after.exact_failure` | integer | unset | ≥ 1 | `next_session` | Same tool, same arguments, same error. |
+| `tool_loop_guardrails.warn_after.idempotent_no_progress` | integer | unset | ≥ 1 | `next_session` | Idempotent calls returning identical results. |
+| `tool_loop_guardrails.warn_after.same_tool_failure` | integer | unset | ≥ 1 | `next_session` | Failures of the same tool. |
+| `tool_loop_guardrails.warnings_enabled` | boolean | `true` | any | `next_session` | Append a warning to the tool result when a `warn_after` threshold is reached. |
+| `tool_output.max_chars` | integer | `50000` | ≥ 0 | `live` | Terminal output characters kept (40% head, 60% tail). |
+| `tools.default_timeout_secs` | integer | `300` | ≥ 0 | `next_session` | Timeout of a tool call that declares none. |
+| `tools.disabled_toolsets` | array of string | `[]` | any | `next_session` | Toolsets removed last, even when a composite lists them. |
+| `tools.enabled_toolsets` | array of string | `["core"]` | any | `next_session` | Toolsets exposed to sessions. |
+| `tools.kill_grace_secs` | integer | `5` | ≥ 0 | `next_session` | Wait between SIGTERM and SIGKILL when cancelling tool processes. |
+| `tools.result_budget.default_chars` | integer | `100000` | ≥ 0 | `next_session` | Characters kept inline for tools without a declared cap. |
+| `tools.result_budget.mcp_chars` | integer | `50000` | ≥ 0 | `next_session` | Characters kept inline for MCP tools. |
+| `tools.result_budget.overrides` | table | `{}` | any | `next_session` | Per-tool overrides: tool name to characters. |
+| `toolsets.surfaces` | table | `{}` | any | `next_session` | Default toolsets per surface (otherwise `core`). |
+| `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface on a TTY (M1 ships `line`; `tui` falls back to it until the TUI lands). |
+| `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
+| `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
+| `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |
+| `web.extract_char_limit` | integer | `15000` | 2000 to 500000 | `next_session` | Characters per extracted page. |
+| `web.extract_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Bound on one extract dispatch. |
+| `web.firecrawl.base_url` | string | unset | any | `next_session` | Self-hosted Firecrawl base URL; unset is the hosted API (`https://api.firecrawl.dev`, secret `FIRECRAWL_API_KEY`). |
+| `web.keyless.enabled` | boolean | `false` | any | `next_session` | Allow keyless web search as the last `auto` choice. |
+| `web.search_backend` | string | unset | any | `next_session` | Search backend; unset uses `backend`. |
+| `web.searxng.url` | string | unset | any | `next_session` | Base URL of the SearXNG instance (its JSON output must be enabled); `searxng` is unavailable until it is set. |

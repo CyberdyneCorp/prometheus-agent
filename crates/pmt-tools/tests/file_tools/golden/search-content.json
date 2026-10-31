@@ -1,0 +1,12 @@
+{
+  "matches": [
+    "src/lib.rs:1:// TODO: docs",
+    "src/lib.rs-2-pub fn run() {}",
+    "src/lib.rs:3:// TODO: tests",
+    "src/main.rs-1-fn main() {",
+    "src/main.rs:2:    // TODO: parse args",
+    "src/main.rs-3-    run();"
+  ],
+  "total_matches": 3,
+  "truncated": false
+}

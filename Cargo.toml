@@ -13,12 +13,117 @@ publish = false
 repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 
 [workspace.dependencies]
+pmt-agent = { path = "crates/pmt-agent" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
+pmt-memory = { path = "crates/pmt-memory" }
+pmt-net = { path = "crates/pmt-net" }
+pmt-obs = { path = "crates/pmt-obs" }
+pmt-providers = { path = "crates/pmt-providers" }
+pmt-sandbox = { path = "crates/pmt-sandbox" }
+pmt-skills = { path = "crates/pmt-skills" }
+pmt-store = { path = "crates/pmt-store" }
+pmt-tools = { path = "crates/pmt-tools" }
+pmt-update = { path = "crates/pmt-update" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+jiff = "0.2"
+tokio = { version = "1.54", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+tokio-util = "0.7"
+tempfile = "3.27"
+ulid = "3.0"
+toml = "1.1"
+# Format-preserving config writes (comments, order, spans for line numbers).
+toml_edit = "0.25"
+# Compile-fail tests of the ProfileScope API contract.
+trybuild = "1.0"
+tracing = "0.1"
+sha2 = "0.11"
+reqwest = { version = "0.13", default-features = false }
+# TLS for every outbound client: rustls on the ring provider (aws-lc-sys
+# carries the OpenSSL license, outside deny.toml) with the platform verifier,
+# so OS-installed roots (corporate CAs) are trusted.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+# The OS roots exported into the CA bundle handed to sandboxed children.
+rustls-native-certs = "0.8"
+base64 = "0.23"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+resvg = { version = "0.49", default-features = false }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+percent-encoding = "2.3"
+# CIDR ranges (`security.egress.fake_ip_ranges`, private-destination grants).
+ipnet = "2.12"
+# Basename globs of protected instruction files.
+glob = "0.3"
+# Mock provider script matchers (last user message / tool result).
+regex = "1.12"
+# Test-only TLS server and certificates (fetch and trust-store tests).
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+nix = { version = "0.31", default-features = false, features = ["resource", "fs"] }
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+# OS keychain secrets backend: keyring-core with one native store per OS
+# (macOS Keychain, Windows Credential Manager, Secret Service over libdbus
+# elsewhere; the zbus-based store depends on unmaintained crates).
+keyring-core = "1.0"
+apple-native-keyring-store = { version = "1.0", features = ["keychain"] }
+windows-native-keyring-store = "1.0"
+dbus-secret-service-keyring-store = { version = "1.0", features = ["crypto-rust", "vendored"] }
+# No-echo prompts for secret values.
+rpassword = "7.5"
+# SQLite (bundled); the online backup API copies live databases.
+rusqlite = { version = "0.41", features = ["bundled", "backup"] }
+# Release signatures (spec: distribution-and-update, Signature trust root):
+# verification in the binary, signing only in xtask and tests.
+minisign-verify = "0.3"
+minisign = "0.10"
+# Release archives are `.tar.gz` on every target.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+# Whole-home backup archives (`.tar.zst`).
+tar = { version = "0.4", default-features = false }
+zstd = { version = "0.14", default-features = false }
+pmt-backup = { path = "crates/pmt-backup" }
+# Property tests (store transaction atomicity).
+proptest = { version = "1.9", default-features = false, features = ["std"] }
+# Test-only capture of log events; 7.3 installs the real subscriber.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+# OS sandbox: Landlock rulesets and seccomp-bpf filters (Linux), raw
+# constants for both, and the AppContainer/Job Object API (Windows).
+landlock = "0.4"
+seccompiler = "0.5"
+libc = "0.2"
+# Plain (non-`\\?\`) Windows paths for shells that mishandle verbatim ones.
+dunce = "1.0"
+windows-sys = "0.61"
+# Full jitter of provider retry backoff.
+fastrand = "2.3"
+# OS randomness for sign-in secrets (PKCE verifier, OAuth state).
+getrandom = "0.4"
+# URL parsing and form encoding of sign-in requests and callbacks.
+url = "2.5"
+# Test-only HTTP mock server (recorded provider stream fixtures).
+wiremock = "0.6"
+# search_files: .gitignore-aware directory walks.
+ignore = "0.4"
+# Unified diffs of file tool edits.
+similar = "3.2"
+# Post-write syntax checks: tree-sitter grammars (Rust, Python,
+# JavaScript, TypeScript) and a YAML 1.2 event parser.
+tree-sitter = "0.27"
+tree-sitter-rust = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+saphyr-parser = "0.3"
+# The line interface's editor (history, multi-line, completion, printing
+# above the prompt while a turn runs).
+rustyline = { version = "19.0", default-features = false, features = ["with-file-history", "custom-bindings"] }
+# Test-only: drives the line interface through a pseudo-terminal.
+expectrl = "0.9"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]
@@ -33,3 +138,7 @@ pedantic = { level = "warn", priority = -1 }
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+# The profile cargo-dist builds the release archives with (dist-workspace.toml).
+[profile.dist]
+inherits = "release"

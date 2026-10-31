@@ -24,13 +24,27 @@ fn pmt_alias() -> PathBuf {
     alias
 }
 
+/// One line naming version, channel, target, commit and build date
+/// (spec: cli, Binary names; distribution-and-update, Release identity grammar).
 #[test]
-fn version_line_has_identity_shape() {
+fn version_line_names_version_channel_target_commit_and_build_date() {
     let line = version_line(Path::new(BIN), "--version");
-    let expected_prefix = format!("prometheus {} (", env!("CARGO_PKG_VERSION"));
-    assert!(line.starts_with(&expected_prefix), "got {line:?}");
-    assert!(line.ends_with(")\n"), "got {line:?}");
-    assert_eq!(line.lines().count(), 1, "got {line:?}");
+    let out = Command::new(BIN)
+        .args(["version", "--json"])
+        .output()
+        .expect("binary runs");
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).expect("version --json");
+    let field = |key: &str| json[key].as_str().expect(key).to_owned();
+    let expected = format!(
+        "prometheus {} ({}, {}, {}, {})\n",
+        field("version"),
+        field("channel"),
+        field("target"),
+        field("commit"),
+        field("build_date"),
+    );
+    assert_eq!(line, expected);
+    assert_eq!(field("version"), env!("CARGO_PKG_VERSION"));
 }
 
 #[test]

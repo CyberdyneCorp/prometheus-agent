@@ -430,13 +430,18 @@ For a terminal command whose executable, after optional `env` options and assign
 - **THEN** no prompt SHALL be shown and the result SHALL explain that subagents cannot prompt for sudo
 
 ### Requirement: Shell startup files
-Terminal commands SHALL run in a non-interactive, non-login shell; when `terminal.auto_source_bashrc = true` (default) and the shell is bash, the persistent shell SHALL source `~/.bashrc` once at shell start, and it SHALL then source each path in `terminal.shell_init_files` (default empty, `~` expanded, missing files skipped with a one-time notice); the whole init step SHALL be bounded by `terminal.shell_init_timeout_secs` (default 10), after which the shell SHALL be restarted without init files and the first result SHALL carry the hint `shell init timed out; guard interactive-only code in your rc file with: case $- in *i*) ;; *) return;; esac`.
+Terminal commands SHALL run in a non-interactive, non-login shell; when `terminal.auto_source_bashrc = true` (default) and the shell is bash, the persistent shell SHALL source `~/.bashrc` once at shell start, and it SHALL then source each path in `terminal.shell_init_files` (default empty, `~` expanded, missing files skipped with a one-time notice), all with stdin closed so a read of stdin gets end-of-file instead of waiting; the whole init step SHALL be bounded by `terminal.shell_init_timeout_secs` (default 10), after which the shell SHALL be restarted without init files and the first result SHALL carry the hint `shell init timed out; guard interactive-only code in your rc file with: case $- in *i*) ;; *) return;; esac`.
 **Milestone:** M1
 
 #### Scenario: rc file blocks on read
-- **GIVEN** a `~/.bashrc` that calls `read`
+- **GIVEN** an init file (`~/.bashrc` or a `terminal.shell_init_files` entry) whose `read` blocks, e.g. reading a FIFO nobody writes
 - **WHEN** the model runs `git status`
-- **THEN** after at most 10 seconds the command SHALL run in a shell without init files and the result SHALL carry the shell-init hint
+- **THEN** after at most `terminal.shell_init_timeout_secs` (default 10) seconds the command SHALL run in a shell without init files and the result SHALL carry the shell-init hint
+
+#### Scenario: rc file reads stdin
+- **GIVEN** a `~/.bashrc` that calls `read` on stdin
+- **WHEN** the model runs `git status`
+- **THEN** the `read` SHALL get end-of-file at once, the command SHALL run without waiting for the timeout and the result SHALL carry no shell-init hint
 
 ### Requirement: Non-secret environment passthrough
 The system SHALL add to every child environment the variables named in `terminal.env_passthrough` (default empty) with values taken from the launch environment, and for container backends SHALL additionally set the literal `terminal.container.env` map (default empty); a name or value that matches a stored secret name, a registered provider-native secret name or the `PMT_SECRET_*` pattern SHALL be rejected at config validation with `terminal.env_passthrough: '<NAME>' is a secret; grant it with secrets.read instead` (exit 78).

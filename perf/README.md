@@ -20,7 +20,10 @@ It also fails when a measurement grows more than 15% over the entry for the
 current platform (`<os>-<arch>`) in `perf/baseline.json`. Startup uses the
 median for that comparison, and growth under 1 ms (startup) or 1 MiB (RSS)
 never counts, because a millisecond-scale run jitters by more than 15% on a
-shared runner. The chat and daemon budgets join when those commands land (M1).
+shared runner. Binary growth under 4 MiB (5% of the size budget) never counts
+either: size does not jitter, but against a near-empty binary any real
+dependency is a large percentage (M1's first runtime crates took 0.62 MiB to
+1.21 MiB, +94%), so a pure percentage gate would fail on every addition. The chat and daemon budgets join when those commands land (M1).
 
 ```sh
 cargo xtask perf                          # check against perf/baseline.json
@@ -48,6 +51,38 @@ kind of machine:
    `main` and run `scripts/check --perf --baseline target/perf-main.json`; a
    non-zero exit fails the job. Without an artifact the absolute budgets
    still apply, and the checked-in `perf/baseline.json` is used as a fallback.
+3. A pull request whose growth is deliberate re-baselines in the open: it
+   commits the reference runner's measurements (the `perf (linux-x86_64):`
+   line of its own perf job) to `perf/reference.json`, and while the pull
+   request changes that file the job compares with it instead of `main`.
+   The new numbers are part of the reviewed diff; the absolute budgets
+   always apply. The M1 branch did this five times. First (0.62 -> 8.49 MiB binary,
+   2.49 -> 4.28 MiB peak RSS: SQLite, the HTTP client, the keychain and
+   the async runtime), measured by CI run 41021271519. Then when the
+   `prometheus` binary itself started calling the HTTP client (8.49 ->
+   13.05 MiB binary, 4.28 -> 4.96 MiB peak RSS: `model list --refresh`,
+   local-server probes and endpoint tests link reqwest, rustls and ring,
+   which chat needs anyway), measured by CI run 41112215077. Then when the
+   tool system landed (13.05 -> 15.37 MiB binary, 4.96 -> 6.00 MiB peak
+   RSS: the `tools`, `toolsets` and `approvals` commands link the tool
+   registry, dispatcher and approval gate, which chat needs anyway, and add
+   their subcommands to the clap tree every launch builds; nothing in them
+   runs eagerly, their regexes are lazy), measured by CI run 41155059146.
+   Then when the vision and browser tools landed (15.37 -> 19.46 MiB
+   binary, 6.00 -> 6.15 MiB peak RSS: image decoding and SVG
+   rasterization for `vision_analyze` and the DevTools WebSocket client of
+   `browser_exec`, registered as built-in tools; nothing in them runs at
+   startup), measured by CI run 41169839367. Then when `prometheus chat`
+   landed (19.46 -> 31.30 MiB binary, 6.15 -> 7.62 MiB peak RSS: session
+   start links the whole runtime the earlier commands only named: the turn
+   loop with compression, every provider wire format and the streaming
+   caller, the memory and skills sessions, the local terminal, file and
+   web backends and the line editor; `--version` still runs none of it),
+   measured by CI run 41211014328.
+   The CI line
+   prints MiB with two decimals, so the committed byte counts are those
+   values times 1048576; the rounding (under 6 KiB) is far inside the 15%
+   tolerance.
 
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.

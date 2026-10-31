@@ -1,0 +1,15 @@
+# Extra steps cargo-dist inserts into every build job of release.yml
+# (dist-workspace.toml: github-build-setup). Regenerate release.yml with
+# `dist generate` after editing.
+- name: Point cargo at the Android NDK
+  if: contains(join(matrix.targets, ','), 'android')
+  shell: bash
+  run: |
+    # Termux's minimum Android API level.
+    api=24
+    bin="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+    {
+      echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android$api-clang"
+      echo "CC_aarch64_linux_android=$bin/aarch64-linux-android$api-clang"
+      echo "AR_aarch64_linux_android=$bin/llvm-ar"
+    } >>"$GITHUB_ENV"

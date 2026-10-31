@@ -1,4 +1,24 @@
 //! Observability: the trajectory grammar and writer, structured logs, the
 //! usage ledger and the budget engine.
 //!
-//! Empty in M0; populated in M1 group 7.
+//! - [`trajectory`]: the one JSONL grammar every surface records, its
+//!   canonical text rendering, the redacted writer and retention;
+//! - [`logs`]: structured JSON logs (the `tracing` subscriber) and the
+//!   reading side of `prometheus logs`;
+//! - [`usage`]: pricing, the ledger writer and grouped reports;
+//! - [`budget`]: pre-call budget checks, warnings and the agent-write
+//!   guard on `budgets.*`;
+//! - [`telemetry`]: the opt-in telemetry gate (nothing is sent by default).
+
+pub mod budget;
+pub mod logs;
+pub mod telemetry;
+pub mod time;
+pub mod trajectory;
+pub mod usage;
+
+/// Major version of the trajectory event grammar this build writes
+/// (`grammar_version`); readers skip event types they do not know and
+/// refuse a newer major. Reported by `prometheus version --json` and
+/// recorded in replay exports.
+pub const GRAMMAR_VERSION: u32 = 1;

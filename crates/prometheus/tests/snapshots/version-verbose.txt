@@ -1,0 +1,18 @@
+prometheus <VERSION> (stable, <TARGET>, <COMMIT>, <BUILD_DATE>)
+build_id: <BUILD_ID>
+build_date: <BUILD_DATE>
+profile: <PROFILE>
+tier: <TIER>
+channel: stable
+rpc_protocol: 1.0
+config_schema_version: 1
+store_schema_version: 14
+trajectory_grammar: 1
+surfaces:
+  tui: yes
+  gateway: yes
+  dashboard: yes
+  acp: yes
+  mcp: yes
+  evolve: yes
+  eval: yes

@@ -28,23 +28,221 @@
 
 ## Error kinds
 
-- `usage`
-- `invalid_input`
-- `not_found`
-- `config`
-- `auth`
-- `permission_denied`
-- `budget_exceeded`
-- `provider`
-- `tool`
-- `sandbox`
-- `conflict`
-- `unavailable`
-- `protocol`
-- `cancelled`
-- `io`
-- `internal`
+Every error has exactly one kind; the kind fixes the exit code.
+
+| Kind | Exit code |
+|---|---:|
+| `usage` | 2 |
+| `invalid_input` | 65 |
+| `not_found` | 66 |
+| `config` | 78 |
+| `auth` | 78 |
+| `permission_denied` | 77 |
+| `budget_exceeded` | 3 |
+| `provider` | 69 |
+| `tool` | 1 |
+| `sandbox` | 77 |
+| `conflict` | 75 |
+| `unavailable` | 69 |
+| `protocol` | 76 |
+| `cancelled` | 130 |
+| `io` | 74 |
+| `internal` | 70 |
 
 ## Error codes
 
-No error codes are registered yet.
+| Code | Kind | Exit code | Meaning |
+|---|---|---:|---|
+| `id.malformed` | `invalid_input` | 65 | An id does not have the expected `<prefix>_<ULID>` shape. |
+| `registry.unknown_name` | `config` | 78 | A configured name (provider, backend, toolset, engine, hook...) is not registered; the error lists the registered names. |
+| `registry.duplicate_name` | `config` | 78 | Two entries (for example two plugins) register the same name in one registry. |
+| `task.panicked` | `internal` | 70 | A task panicked. It was isolated and a crash report was written under `logs/crash/`. |
+| `task.cancelled` | `cancelled` | 130 | The operation was cancelled (interrupt, `/stop` or shutdown). |
+| `launch_env.reread` | `internal` | 70 | The process environment was read a second time; it may only be read once at startup. |
+| `cli.usage` | `usage` | 2 | The command line names an unknown command, flag or argument, or misses a required one. |
+| `home.unresolved` | `config` | 78 | No Prometheus home could be determined: `--home` and `PROMETHEUS_HOME` are unset and the user home directory is unknown. |
+| `home.io` | `io` | 74 | A file or directory under the Prometheus home could not be read or written. |
+| `home.locked` | `conflict` | 75 | Another Prometheus process (the daemon or an in-process chat) holds the home's writer lock `run/gateway.lock`; retry when it exits. |
+| `config.parse` | `config` | 78 | A configuration file (`config.toml`, `daemon.toml`) is not valid TOML or does not match its schema. |
+| `config.unknown_key` | `config` | 78 | A profile `config.toml` contains a key the schema does not define (the error suggests the closest key), or a machine-wide section that belongs in `daemon.toml`. |
+| `config.invalid` | `config` | 78 | A profile `config.toml` value has the wrong type, is out of range or is not one of the allowed values; the error names the key, line and allowed values. |
+| `config.invalid_argument` | `usage` | 2 | A configuration key or value given on the command line (`config set`, `config get`, `--set`) is unknown, malformed, out of range or not allowed. |
+| `config.credential_value` | `usage` | 2 | A value that looks like a credential (API key, token, private key) was given for a non-secret configuration key; store it with `prometheus secrets set <NAME>`. |
+| `config.credential_in_file` | `config` | 78 | A profile `config.toml` holds a value that looks like a credential (API key, token, private key) in a non-secret key; move it into the secrets store with `prometheus secrets set <NAME>` and reference it by name. |
+| `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
+| `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
+| `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
+| `profile.not_found` | `usage` | 2 | The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`. |
+| `secret.invalid_name` | `usage` | 2 | A secret name does not match `^[A-Z][A-Z0-9_]{0,127}$`. |
+| `secret.value_on_argv` | `usage` | 2 | A secret value was given as a command-line argument; values are read only from a no-echo prompt or stdin, so they never appear in shell history or process listings. |
+| `secret.empty` | `invalid_input` | 65 | The secret value read from the prompt or stdin is empty. |
+| `secret.missing` | `config` | 78 | A secret the profile needs is not in its secrets store (nor, for the launch profile, in the environment); set it with `prometheus secrets set <NAME>`. |
+| `secret.store` | `config` | 78 | The profile's secrets store (`secrets.toml` or the OS keychain) cannot be read, parsed or written. |
+| `secret.keychain_unavailable` | `unavailable` | 69 | `secrets.backend = "keychain"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend. |
+| `secret.reveal_refused` | `permission_denied` | 77 | `prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file. |
+| `profile.reserved` | `usage` | 2 | A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`). |
+| `profile.exists` | `usage` | 2 | `prometheus profile create` or `rename` names a profile that already exists. |
+| `profile.protected` | `usage` | 2 | The `default` profile cannot be deleted or renamed. |
+| `profile.in_use` | `conflict` | 75 | A running daemon or interactive client uses the profile; stop it and retry. |
+| `profile.deleted` | `not_found` | 66 | The profile was deleted (`profiles/.deleted/<name>` exists); nothing may write to it until it is created again. |
+| `backup.running` | `conflict` | 75 | Another `prometheus backup create` is running for this home. |
+| `backup.corrupt` | `invalid_input` | 65 | A backup archive or snapshot is unreadable, misses its manifest, or a member does not match its manifest size and SHA-256 hash; nothing was restored. |
+| `backup.io` | `io` | 74 | A backup archive or snapshot could not be written or read. |
+| `snapshot.not_found` | `not_found` | 66 | No snapshot of this profile has the given id; list them with `prometheus snapshots list`. |
+| `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
+| `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
+| `profile.id_invalid` | `config` | 78 | The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup. |
+| `store.profile_mismatch` | `config` | 78 | The profile's `state.db` records another profile's id (it was copied from another profile); nothing was written. Restore the profile's own database or move the file away. |
+| `store.schema_too_new` | `config` | 78 | `state.db` has a newer schema than this build supports: it is read-only (or unreadable when the newer build says so). Update Prometheus. |
+| `store.invalid_enum` | `invalid_input` | 65 | A session field (source, end reason, archive state, title source, lineage kind, role) got a value outside its allowed set. |
+| `store.constraint` | `invalid_input` | 65 | A write violated a store constraint (duplicate id, unknown session); the whole transaction was rolled back. |
+| `store.io` | `io` | 74 | `state.db` or a blob file could not be read or written (disk full, permissions, I/O error). |
+| `store.sqlite` | `internal` | 70 | SQLite reported an unexpected error on `state.db`. |
+| `store.unsupported_filesystem` | `config` | 78 | `state.db` is on a network or cross-VM filesystem where WAL is unsafe; set `storage.journal_mode = "delete"` or move the home to a local disk. |
+| `store.blob_corrupt` | `io` | 74 | A blob file's contents do not match its SHA-256 name. |
+| `store.blob_missing` | `not_found` | 66 | A row references a blob that is not in the profile's blob store. |
+| `store.compaction_conflict` | `conflict` | 75 | A message the compaction read changed (rewound, compacted or rewritten) before it committed; nothing changed. Retry the compaction. |
+| `store.lease_lost` | `conflict` | 75 | The turn lease or compaction lock expired and was taken by another holder; nothing changed. |
+| `store.title_too_long` | `invalid_input` | 65 | Session titles are at most 100 characters. |
+| `store.title_in_use` | `invalid_input` | 65 | Session titles are unique per profile; pick another title. |
+| `session.not_found` | `not_found` | 66 | No session of the profile matches the id, id prefix or title; list them with `prometheus sessions list`. |
+| `session.ambiguous` | `usage` | 2 | A session id prefix matches several sessions; give more characters or the full id. |
+| `store.busy` | `conflict` | 75 | Another process held `state.db`'s write lock for longer than the write's time budget (20 s metadata, 60 s transcript, 0.5 s activity); retry later. |
+| `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
+| `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
+| `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
+| `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
+| `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |
+| `session.too_large_to_resume` | `invalid_input` | 65 | The session's active lineage has more messages than `sessions.max_resume_messages`; compact it with /compress or fork it. |
+| `session.too_large_to_export` | `invalid_input` | 65 | The session has more messages than `sessions.max_export_messages` allows in memory; export it to a file with `prometheus sessions export -o FILE`. |
+| `session.invalid_source_tag` | `usage` | 2 | A session source tag is 1-32 characters: a lowercase letter, then lowercase letters, digits, '_' or '-'. |
+| `trajectory.grammar_too_new` | `protocol` | 76 | The trajectory was written with a newer major grammar version than this build reads; run `prometheus update`. |
+| `trajectory.malformed` | `invalid_input` | 65 | A trajectory line is not valid JSON or lacks the grammar's top-level keys; the message names the line. |
+| `trajectory.not_found` | `not_found` | 66 | The session has no trajectory: it was not recorded (`observability.trajectories.enabled = false`) or retention removed it. |
+| `trajectory.io` | `io` | 74 | A trajectory file under `<profile>/trajectories/` could not be read or written. |
+| `trajectory.size_limit` | `io` | 74 | The session's trajectory reached `observability.trajectories.max_bytes_per_session`; later events are recorded without their payload. Recorded as an `error` event, not returned. |
+| `logs.invalid_since` | `usage` | 2 | `prometheus logs --since` takes `<N>[smhd]` (30m, 2h, 1d) or an RFC 3339 time. |
+| `logs.io` | `io` | 74 | A log file under `logs/` could not be read. |
+| `usage.invalid_time` | `usage` | 2 | `prometheus usage --since/--until` take `<N>[smhd]` (30m, 2h, 7d) or an RFC 3339 time. |
+| `budget.exceeded` | `budget_exceeded` | 3 | A model call was not sent because its worst-case cost or tokens would exceed a `budgets.*` limit; raise it with `prometheus config set budgets.<key>` or `/budget set`. |
+| `budget.unpriced_model` | `budget_exceeded` | 3 | A USD budget is set but the model has no price; set `models.<model>.price` or `budgets.allow_unpriced = true` (then only token budgets apply to it). |
+| `budget.agent_write` | `permission_denied` | 77 | Budgets are changed only by the user (`prometheus config set`, `/budget set`); agent tools may not write `budgets.*` keys, including through file writes to `config.toml`. |
+| `turn.scope_required` | `internal` | 70 | Every turn runs inside an explicit profile scope; a surface that has none bound is a bug (the default profile is never assumed). |
+| `turn.scope_mismatch` | `internal` | 70 | The profile scope passed to a turn is not the profile the session's agent was built for. |
+| `turn.lease_unavailable` | `conflict` | 75 | Another process is running a turn on this session; retry when it finished. |
+| `turn.interrupted` | `cancelled` | 130 | The turn was stopped before it produced a final response (user interrupt, lost turn lease, shutdown). |
+| `turn.empty_response` | `provider` | 69 | The model returned an empty response; retry, or switch model with `/model`. |
+| `turn.context_exhausted` | `provider` | 69 | The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window. |
+| `turn.guardrail_stop` | `cancelled` | 130 | The model kept repeating a failing or unproductive tool call; see `tool_loop_guardrails` to tune the thresholds. |
+| `turn.empty_steer` | `usage` | 2 | A steer message needs text; empty or whitespace-only steers are rejected. |
+| `personality.unknown` | `usage` | 2 | `agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`. |
+| `prompt.unknown_platform` | `usage` | 2 | `--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...). |
+| `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |
+| `telemetry.refused` | `config` | 78 | `telemetry.enabled = true` needs an `https://` `telemetry.endpoint` (plain HTTP only to loopback); nothing is sent otherwise. Logged, not returned. |
+| `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |
+| `net.destination_blocked` | `permission_denied` | 77 | A URL resolved to a private or cloud-metadata address, or did not resolve; private destinations need `security.egress.allow_private` or a session grant, metadata endpoints are always refused. |
+| `net.too_many_redirects` | `unavailable` | 69 | A fetched URL redirected more than 10 times. |
+| `net.invalid_url` | `invalid_input` | 65 | A URL to fetch is malformed or is not `http://` / `https://`. |
+| `net.request` | `unavailable` | 69 | An outbound HTTP request failed: connection, TLS verification or transfer error. |
+| `net.extra_ca` | `config` | 78 | `network.extra_ca_file` cannot be read or contains no PEM certificate. |
+| `net.listen_refused` | `permission_denied` | 77 | A network surface may bind a non-loopback address only when its configuration sets that address explicitly and an allowlist or auth provider is configured. |
+| `net.listen` | `io` | 74 | A listener could not bind its address (in use or not permitted). |
+| `security.invalid_pattern` | `config` | 78 | An entry of `security.protected_instruction_extra_patterns` is not a valid basename glob. |
+| `capability.unknown` | `config` | 78 | A capability string (config, plugin manifest, grants file) is not in the closed vocabulary (`fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host>[:<port>]`, `process.spawn:<program>`...). |
+| `capability.not_granted` | `permission_denied` | 77 | A capability was used or requested that the session, parent, plugin approval or grant does not include (`capability not granted: <capability>`); grant it when prompted, or review grants with `prometheus grants list`. |
+| `grants.store` | `config` | 78 | A profile's `grants.toml` cannot be read, is not valid (bad TOML, unknown capability or subject) or cannot be written; fix or remove the offending entry. |
+| `grants.not_found` | `not_found` | 66 | No grant in the profile's `grants.toml` has this id; list them with `prometheus grants list`. |
+| `grants.invalid_subject` | `usage` | 2 | A grant subject is not `plugin:<id>@<digest>`, `mcp:<server>`, `skill:<name>` or `profile`. |
+| `grants.denied` | `permission_denied` | 77 | A capability request was denied: the human answered deny, dismissed the prompt, the surface detached, `approvals.timeout_secs` passed, or the context is unattended (no prompt is possible). |
+| `sandbox.unavailable` | `sandbox` | 77 | The OS sandbox cannot enforce a feature (Landlock, seccomp, Seatbelt, AppContainer) on this host and `security.sandbox.allow_degraded` does not name it, so the command was not run. |
+| `sandbox.setup` | `sandbox` | 77 | The OS sandbox profile for a child process could not be built or applied; the child was not started. |
+| `terminal.unknown_backend` | `config` | 78 | `terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends. |
+| `terminal.backend_unavailable` | `unavailable` | 69 | The selected terminal backend (`container`, `ssh`) is reserved but not available in this build. |
+| `terminal.env_passthrough_secret` | `config` | 78 | `terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead. |
+| `terminal.shell_not_found` | `unavailable` | 69 | The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable. |
+| `provider.unknown` | `config` | 78 | A requested or configured provider id is neither a canonical id nor an alias in this profile's registry (built-in providers, `[providers.*]` blocks and the profile's enabled provider plugins); the message suggests the closest id. |
+| `provider.disabled` | `config` | 78 | The requested or fallback provider has `providers.<id>.enabled = false`; nothing else was resolved. |
+| `provider.not_configured` | `config` | 78 | No provider is configured, no provider secret is stored, no sign-in exists and no configured local endpoint answers. Run `prometheus model` or `prometheus auth add <provider>`. |
+| `provider.missing_base_url` | `config` | 78 | A provider that needs an endpoint (local servers, `custom`) has no `providers.<id>.base_url` and its default loopback endpoint, if any, does not answer; the request is never sent to another provider. |
+| `provider.missing_credential` | `auth` | 78 | The provider needs a credential but none is stored whose bound hosts (`key_hosts`) include the request's host; store one with `prometheus secrets set <NAME>`. |
+| `provider.invalid_descriptor` | `config` | 78 | A provider descriptor (a `[providers.<id>]` block or a plugin's) misses a required field or holds an invalid value. |
+| `provider.auth_failed` | `auth` | 78 | The provider rejected the credential (`auth`) or the account's plan is not entitled to the API (`entitlement`). |
+| `provider.invalid_request` | `invalid_input` | 65 | The provider rejected the request as malformed or misconfigured (`invalid_request`, `config`); it is never retried or rerouted. |
+| `provider.call_failed` | `provider` | 69 | A model call failed after same-route retries and fallback (`billing`, `rate_limit`, `overloaded`, `server_error`, `timeout`, `network`, `context_overflow` or `content_filter`); the message names the class. |
+| `model.not_selected` | `config` | 78 | No model id was given (`--model`, `model.default`) and the provider has no default model. |
+| `model.capability_missing` | `config` | 78 | The route's model lacks a capability the request needs (tool calling, image input, or a context window large enough for the request). |
+| `model.context_too_small` | `config` | 78 | The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models."<provider>/<model>"] context_window`. |
+| `provider.plugin_unavailable` | `config` | 78 | The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing. |
+| `model.not_configured` | `config` | 78 | The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`). |
+| `chat.nothing_to_continue` | `not_found` | 66 | `-c`, `-c <name>` or `--resume latest` found no CLI session in the directory (or none in the named lineage); start a new chat instead. |
+| `chat.import_unavailable` | `unavailable` | 69 | `--resume @claude-code` and `--resume @codex` import that agent's most recent log through the migration importer, which arrives with M2; resume a Prometheus session instead. |
+| `chat.approval_required` | `permission_denied` | 77 | A tool call of a one-shot run (`-z`, piped) needed an approval and `approvals.single_query_mode` denies it; the run ended with exit 4. Run interactively, or pass `--approvals off` / set `approvals.single_query_mode = "approve"`. |
+| `chat.cwd_missing` | `not_found` | 66 | The `--cwd` directory does not exist or is not a directory. |
+| `chat.prompt_file` | `not_found` | 66 | The `--prompt-file` file does not exist or cannot be read. |
+| `chat.empty_prompt` | `usage` | 2 | A one-shot run (`-z`, or stdin not a terminal) got an empty prompt from the flag, `--prompt-file` and stdin. |
+| `chat.image` | `invalid_input` | 65 | An `--image` or `/image` file is missing, unreadable, larger than 20 MiB or not a PNG, JPEG, GIF or WebP image. |
+| `chat.image_unsupported` | `config` | 78 | The resolved model's metadata has `supports_vision = false` and no `[auxiliary.vision]` route is configured to describe the image; switch to a vision model or configure `auxiliary.vision.provider`/`model`. Nothing was sent to the provider. |
+| `chat.usage_file` | `io` | 74 | The `--usage-file` path cannot be created or written (missing directory, permissions); the run itself finished and the command exits 73. |
+| `setup.missing_value` | `config` | 78 | `prometheus setup --non-interactive` needs every required value from `--set` flags or, for secrets, from the environment (`PMT_SECRET_<NAME>` or the provider's own variable); the message names the missing one. |
+| `tools.unknown_provider` | `config` | 78 | The tool configurator (`prometheus tools provider|enable|disable|configure`) named a category, provider or surface that is not registered, or a posture toolset (chosen per session, never saved); the message lists the valid names and nothing was written. |
+| `doctor.unknown_group` | `usage` | 2 | `prometheus doctor <group>` names a group that does not exist; the message lists the groups. |
+| `slash.admin_only` | `permission_denied` | 77 | The command (for example `/sessions all` on a messaging platform) is reserved for the surface's admins; nothing was listed or changed. |
+| `cli.requires_terminal` | `usage` | 2 | An interactive command (`sessions browse`, `tools configure`) ran without a terminal on stdin and stdout; use its non-interactive form. |
+| `slash.conflict` | `config` | 78 | A plugin, skill or quick command declares a slash command whose name or alias is already a built-in command; the built-in is kept and the registration fails. |
+| `slash.invalid` | `internal` | 70 | Two built-in slash commands share a name or alias (a programming error caught by the registry test). |
+| `model.invalid_ref` | `usage` | 2 | A model argument is neither a `[model.aliases]` name nor `<provider>/<model>` (or a model id of the current provider). |
+| `model.requires_terminal` | `usage` | 2 | `prometheus model` (the picker) or `prometheus fallback add` without an argument ran without a terminal on stdin and stdout; use `prometheus model set <provider>/<model>` instead. |
+| `fallback.duplicate` | `conflict` | 75 | `prometheus fallback add` named a route (canonical provider, model, base URL) the chain already holds; the chain is unchanged. |
+| `fallback.not_found` | `not_found` | 66 | `prometheus fallback remove` named an index or `<provider>/<model>` that is not in the chain. |
+| `reasoning.invalid` | `config` | 78 | An `[agent.reasoning_overrides]` value or `[agent.reasoning_tiers]` target is neither a reasoning level (none, minimal, low, medium, high, xhigh, max, ultra) nor a tier name of `[agent.reasoning_tiers]`. |
+| `local.server_probe` | `unavailable` | 69 | A local inference server (LM Studio, Ollama, llama.cpp, vLLM, SGLang) did not serve a model listing at the given root or at `<root>/v1`. |
+| `mock.script_missing` | `not_found` | 66 | The script of the built-in `mock` provider (`--mock-script` or `providers.mock.script`) does not exist or cannot be read. |
+| `mock.script_invalid` | `config` | 78 | The script of the built-in `mock` provider is not valid TOML or holds an invalid rule (an unknown field, a bad regex, a fault combined with fields it does not take); the message names the file and the rule. |
+| `auth.key_on_argv` | `usage` | 2 | `prometheus auth add` received an extra argument; API keys are read only from the hidden prompt or stdin, so they never appear in shell history or process listings. |
+| `auth.unsupported` | `usage` | 2 | `prometheus auth add` asked for a credential type the provider does not take (an API key for a sign-in-only provider, a sign-in for a provider without sign-in flows, or a flow it does not offer). |
+| `auth.invalid_label` | `usage` | 2 | A credential label must be 1-32 characters a-z, 0-9 or '-', starting with a letter or digit. |
+| `auth.not_found` | `not_found` | 66 | `prometheus auth remove` named a label or 1-based index that `prometheus auth list` does not show for the provider. |
+| `auth.signin_unavailable` | `unavailable` | 69 | The provider declares a sign-in, but this build ships no endpoints for it and `[providers.<id>.oauth]` does not configure them. |
+| `auth.insecure_endpoint` | `config` | 78 | A sign-in authorize, device or token endpoint is not an `https://` URL; plain `http://` is accepted only for an identity provider on a loopback address. |
+| `auth.host_not_allowed` | `config` | 78 | A sign-in endpoint's host is not in the provider's allowed sign-in hosts (`[providers.<id>.oauth] allowed_hosts`); nothing was sent to it. |
+| `auth.login_expired` | `auth` | 78 | The device-code sign-in expired before it was approved in the browser; run `prometheus auth add <provider>` again. |
+| `auth.login_failed` | `unavailable` | 69 | The identity provider refused or did not answer the sign-in (denied consent, an error response, repeated network failures or no callback before the timeout); nothing was stored. |
+| `auth.port_busy` | `conflict` | 75 | A browser sign-in needs a fixed loopback redirect port that another process is using, and the provider offers no device-code flow to fall back to. |
+| `auth.plan_not_eligible` | `auth` | 78 | The provider refused a request made with a valid subscription sign-in because the plan is not eligible for this use (for example Claude Pro, or Claude Max without extra-usage credits); the sign-in stays valid. Use an API key: `prometheus auth add <provider> --type api_key`. |
+| `auth.import_incomplete` | `tool` | 1 | The external sign-in file (`prometheus auth import`) is missing, unreadable or does not hold both an access token and a refresh token; nothing was imported. |
+| `auth.reauth_required` | `auth` | 78 | The provider refused the sign-in's refresh token for good (revoked, expired or reused), so the sign-in is quarantined as `dead` and its refresh token is never sent again; run `prometheus auth add <provider>` to sign in again. |
+| `auth.credentials_benched` | `unavailable` | 69 | Every credential of the provider is benched after a rate-limit, billing or authentication failure; requests resume when the earliest bench ends (shown by `prometheus auth status <provider>`). |
+| `auth.refresh_failed` | `unavailable` | 69 | Refreshing a sign-in's access token failed for a transient reason (network failure, a server error, or a borrowed login that could not be written back); the sign-in is unchanged and the next request tries again. |
+| `tool.invalid_registration` | `config` | 78 | A tool registration was rejected at load time: its name does not match `^[a-z][a-z0-9_]{0,63}$`, its parameters schema root is not an object, or it names an unknown toolset. The error names the tool and the offending field. |
+| `tool.shadowed` | `config` | 78 | A tool name is already registered by another owner (a built-in, plugin or MCP server); the first registration is kept. A plugin replaces a built-in tool only with the grant `tools.override:<tool>`. `prometheus doctor` lists rejected registrations. |
+| `tool.unknown` | `usage` | 2 | No tool of that name is registered in this profile (`unknown tool: <name>`); `prometheus tools list` shows the registered tools. |
+| `tool.surface_unrecorded` | `not_found` | 66 | The session never recorded a tool surface: it never ran a turn (a surface is frozen when a session builds it) or was created by an import. `prometheus tools list` without `--session` shows the surface a new session would get. |
+| `toolset.cycle` | `config` | 78 | Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected. |
+| `toolset.unknown` | `usage` | 2 | A command named a toolset that does not exist (`unknown toolset '<name>' (did you mean ...?)`); `prometheus toolsets list` shows them. In configuration the same mistake is `registry.unknown_name` (exit 78). |
+| `approvals.unparsable` | `usage` | 2 | `prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting. |
+| `skill.not_found` | `not_found` | 66 | No skill of that name resolves in the profile (`Skill '<name>' not found in profile '<profile>'.`); the message names another profile of the home that has it. |
+| `skill.ambiguous` | `invalid_input` | 65 | Two different skills share a name within one search tier (`Ambiguous skill name '<name>'` with both paths); rename or remove one of them. |
+| `skill.invalid` | `invalid_input` | 65 | A `SKILL.md` or a skill write is malformed: frontmatter that is not valid YAML or lacks `name`/`description`, a name outside `^[a-z0-9][a-z0-9._-]*$`, an empty body or an oversized file. |
+| `skill.read_only` | `permission_denied` | 77 | The skill cannot be changed: bundled skills are read-only (eject a copy with `prometheus skills eject <name>`), and hub, plugin, project and external-directory skills are not written by Prometheus. |
+| `skill.scan_blocked` | `permission_denied` | 77 | A skill's security scan returned `dangerous` or failed; scanning fails closed, so the skill was not written, loaded or ejected. |
+| `skill.io` | `io` | 74 | A skill file or directory could not be read or written. |
+| `skill.hub_unavailable` | `unavailable` | 69 | Installing and removing hub skills ships with the skills hub in M2; create skills with `skill_manage` or copy them into the profile's `skills/` directory. |
+| `skill.pending_not_found` | `not_found` | 66 | No staged skill write has that id; `/skills pending` lists them. |
+| `skill.review_running` | `conflict` | 75 | A background skill review of this session is already running (`a review is already running`); `/refine` again once it posts its summary. |
+| `skill.bundle_invalid` | `invalid_input` | 65 | A skill bundle (`<profile>/skill-bundles/<slug>.toml`) is malformed: TOML that does not parse, an unknown field, an empty `skills` list or more than 32 entries; `prometheus skills bundles list` reports each file. |
+| `skill.bundle_not_found` | `not_found` | 66 | No skill bundle has that slug; `prometheus skills bundles list` lists them. |
+| `memory.not_found` | `not_found` | 66 | No memory entry of the profile has that id; `prometheus memory list --all` shows every entry with its id. |
+| `memory.invalid` | `invalid_input` | 65 | A memory write, import file or edited Markdown view is malformed: an unknown target, kind or tier, an empty entry, an `expires_at` that is not a future RFC 3339 timestamp, or a section heading that names no known entry. |
+| `memory.over_budget` | `invalid_input` | 65 | The write would push the target's core tier past `memory.memory_char_limit` or `memory.user_char_limit` (or the archival tier past `memory.archival_max_entries`); consolidate entries in one batch or store the entry with `tier: "archival"`. |
+| `memory.blocked` | `permission_denied` | 77 | The entry matches a prompt-injection or secret-exfiltration pattern, or contains a credential; memory never stores it. |
+| `memory.pending_not_found` | `not_found` | 66 | No staged memory change has that id; `prometheus memory pending` lists them. |
+| `memory.stale` | `conflict` | 75 | The staged change was proposed against an entry that has since changed or been removed; reject it and let the agent propose again. |
+| `memory.disabled` | `config` | 78 | The target's built-in store is disabled (`memory.memory_enabled` / `memory.user_profile_enabled`); enable it with `prometheus config set`. |
+| `update.signature` | `permission_denied` | 77 | A downloaded release index, manifest or archive is unsigned, or its minisign signature does not verify against the release keys embedded in this binary (primary or standby), or its bytes do not match the signed manifest; nothing was installed. There is no flag that skips this check. |
+| `update.owned_elsewhere` | `unavailable` | 69 | This install's receipt names another owner (a package manager, the container image, or a source build): `prometheus update` refuses before any network request and names the command that updates it. |
+| `update.locked` | `conflict` | 75 | Another `prometheus update` holds `<PROMETHEUS_HOME>/updates/update.lock`; nothing was changed. Wait for it to finish. |
+| `update.failed` | `tool` | 1 | The update could not complete (release server unreachable, malformed release metadata, no archive for this target, or a filesystem error); the installed binary is unchanged. |
+| `update.self_test_failed` | `tool` | 1 | The downloaded binary failed `prometheus self-test` (version, schema versions, sandbox probe, profile configs) within 30 s; it was not installed. |
+| `update.rollback_refused` | `tool` | 1 | There is no `prometheus.prev` to roll back to, or a profile's storage was migrated beyond what the previous binary reads; rerun with `--restore-snapshots` to restore the pre-update snapshots. |
+| `update.invalid_argument` | `usage` | 2 | A release version is not `vMAJOR.MINOR.PATCH` (or `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS`), or a channel is not `stable` or `canary`. |
+| `store.schema_unreadable` | `tool` | 1 | `state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`. |

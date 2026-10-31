@@ -1,0 +1,44 @@
+#!/bin/sh
+# Runs install.sh against a fixture release server and checks the result
+# (spec: distribution-and-update, Installers; Install receipt). CI runs it
+# inside Linux containers with different verifiers (minisign, OpenSSL).
+#
+# usage: scripts/ci/test-install-sh INSTALL_SH BASE_URL TAG
+set -eu
+
+installer=$1 base_url=$2 tag=$3
+fail() { echo "test-install-sh: $*" >&2; exit 1; }
+
+# An unknown channel exits 2 before downloading anything.
+set +e
+message=$(sh "$installer" --channel main --base-url http://127.0.0.1:9 2>&1)
+status=$?
+set -e
+[ "$status" = 2 ] || fail "--channel main exited $status, expected 2"
+case $message in *"--channel must be stable or canary, not main"*) ;; *) fail "unexpected message: $message" ;; esac
+
+export HOME="${TMPDIR:-/tmp}/installer-home.$$"
+mkdir -p "$HOME"
+output=$(sh "$installer" --base-url "$base_url" --no-modify-path)
+echo "$output"
+bin="$HOME/.local/bin"
+[ -x "$bin/prometheus" ] || fail "no $bin/prometheus"
+[ -L "$bin/pmt" ] || fail "no pmt alias"
+"$bin/prometheus" version >/dev/null || fail "the installed binary does not run"
+"$bin/pmt" version >/dev/null || fail "the pmt alias does not run"
+grep -q '"owner": "self"' "$bin/install.json" || fail "receipt owner is not self"
+grep -q '"channel": "stable"' "$bin/install.json" || fail "receipt channel is not stable"
+grep -q "\"version\": \"$tag\"" "$bin/install.json" || fail "receipt version is not $tag"
+case $output in *'export PATH="$HOME/.local/bin:$PATH"'*) ;; *) fail "no PATH instructions printed" ;; esac
+"$bin/prometheus" --home "$HOME/.prometheus" update --status | grep -q '^owner: self$' ||
+    fail "update --status does not report owner self"
+
+# A tampered archive is refused and leaves the installed binary alone.
+before=$(cksum <"$bin/prometheus")
+set +e
+sh "$installer" --base-url "$base_url/tampered" --no-modify-path >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" = 77 ] || fail "tampered release exited $status, expected 77"
+[ "$(cksum <"$bin/prometheus")" = "$before" ] || fail "tampered release changed the binary"
+echo "install.sh checks passed"

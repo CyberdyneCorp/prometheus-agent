@@ -6,9 +6,15 @@
 //! - `schema/config.schema.json`: JSON Schema of `config.toml` (`pmt-config`)
 //! - `docs/reference/configuration.md`: configuration reference (every key,
 //!   type, default and allowed values, rendered from that schema)
-//! - `docs/reference/cli.md`: CLI reference (the `prometheus` clap tree)
+//! - `schema/daemon.schema.json` and `docs/reference/daemon-configuration.md`:
+//!   the same for the machine-wide `daemon.toml`
+//! - `docs/reference/cli.md`: CLI reference (the `prometheus` clap tree and
+//!   the registered `--json` output shapes)
 //! - `docs/reference/error-codes.md`: exit codes, error kinds and error codes
 //!   (`pmt-core`)
+//! - `docs/reference/tools.md`: the shipped toolsets and every tool name they
+//!   refer to (`pmt-tools`); links to it from any page under `docs/` must
+//!   name a listed tool (both `gen` and `gen --check` refuse others)
 //!
 //! `cargo xtask gen --check` writes nothing and exits 1 naming every stale
 //! file, and also fails on any file in `docs/reference/` it does not
@@ -21,11 +27,16 @@
 //!
 //! `cargo xtask perf` checks the startup, peak-RSS and binary-size budgets
 //! against `perf/baseline.json`.
+//!
+//! `cargo xtask release <step>` runs the release steps around cargo-dist:
+//! SBOMs, the signed manifest and channel index, rendered installers,
+//! minisign signatures and the end-to-end check of a release directory.
 
 mod artifacts;
-mod config_reference;
 mod health;
 mod perf;
+mod release;
+mod tool_refs;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -74,6 +85,11 @@ enum Command {
         #[arg(long)]
         update_baseline: bool,
     },
+    /// Release steps run by the Release workflow around cargo-dist.
+    Release {
+        #[command(subcommand)]
+        step: release::Step,
+    },
 }
 
 fn main() -> ExitCode {
@@ -91,6 +107,7 @@ fn main() -> ExitCode {
             let baseline = baseline.unwrap_or_else(|| root.join("perf/baseline.json"));
             perf::run(&root, runs.into(), &baseline, update_baseline)
         }
+        Command::Release { step } => release::run(step),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -105,6 +122,7 @@ fn generate(check: bool) -> Result<(), String> {
     let root = repo_root();
     let artifacts = artifacts::all();
     reject_unowned(&root, artifacts::REFERENCE_DIR, &artifacts)?;
+    tool_refs::check(&root, &artifacts)?;
     if check {
         check_all(&root, &artifacts)
     } else {
