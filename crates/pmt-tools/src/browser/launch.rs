@@ -137,6 +137,19 @@ pub struct Launched {
     pub endpoint: String,
     /// The throwaway profile directory.
     pub profile_dir: PathBuf,
+    /// The browser's short temporary directory.
+    pub temp_dir: PathBuf,
+}
+
+impl Launched {
+    /// Kills the browser, waits for it to exit and removes its profile and
+    /// temporary directories.
+    pub async fn terminate(mut self) {
+        let _ = self.child.start_kill();
+        let _ = tokio::time::timeout(Duration::from_secs(5), self.child.wait()).await;
+        let _ = std::fs::remove_dir_all(&self.profile_dir);
+        let _ = std::fs::remove_dir_all(&self.temp_dir);
+    }
 }
 
 /// Launches `executable` headless on a fresh profile directory under
@@ -155,6 +168,17 @@ pub async fn launch(
     let profile_dir = profiles_root.join(ulid::Ulid::generate().to_string().to_lowercase());
     pmt_core::private_fs::create_dir(&profile_dir)
         .map_err(|err| format!("cannot create the browser profile: {err}"))?;
+    // Chromium puts its singleton socket under TMPDIR, and a Unix socket
+    // path must stay under about 100 bytes: a session scratch directory is
+    // too deep, so the browser gets a short directory in the host's temp.
+    let temp_dir = std::env::temp_dir().join(format!(
+        "pmt-browser-{}",
+        &ulid::Ulid::generate().to_string().to_lowercase()[16..]
+    ));
+    pmt_core::private_fs::create_dir(&temp_dir)
+        .map_err(|err| format!("cannot create the browser's temp directory: {err}"))?;
+    let mut env = env.clone();
+    env.set_temp_dir(&temp_dir);
     let mut flag = OsString::from("--user-data-dir=");
     flag.push(&profile_dir);
     let mut std_command = std::process::Command::new(executable);
@@ -178,9 +202,10 @@ pub async fn launch(
         .stderr(Stdio::piped());
     let mut command = Command::from(std_command);
     command.kill_on_drop(true);
-    let mut child = command
-        .spawn()
-        .map_err(|err| format!("cannot start {}: {err}", executable.display()))?;
+    let mut child = command.spawn().map_err(|err| {
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        format!("cannot start {}: {err}", executable.display())
+    })?;
     let pid = child.id().unwrap_or_default();
     let log = StderrTail::drain(child.stderr.take());
     let endpoint = match wait_for_endpoint(&mut child, &profile_dir, timeout).await {
@@ -189,6 +214,7 @@ pub async fn launch(
             let _ = child.start_kill();
             let _ = child.wait().await;
             let _ = std::fs::remove_dir_all(&profile_dir);
+            let _ = std::fs::remove_dir_all(&temp_dir);
             return Err(log.explain(why).await);
         }
     };
@@ -197,6 +223,7 @@ pub async fn launch(
         pid,
         endpoint,
         profile_dir,
+        temp_dir,
     })
 }
 

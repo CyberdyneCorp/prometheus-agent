@@ -27,6 +27,9 @@ pub struct Record {
     pub browser_start: u64,
     /// Its throwaway profile directory.
     pub profile_dir: PathBuf,
+    /// Its temporary directory.
+    #[serde(default)]
+    pub temp_dir: Option<PathBuf>,
 }
 
 /// The records directory of a profile's browser cache.
@@ -49,7 +52,12 @@ impl Records {
     /// # Errors
     ///
     /// The record could not be written.
-    pub fn add(&self, browser_pid: u32, profile_dir: &Path) -> io::Result<PathBuf> {
+    pub fn add(
+        &self,
+        browser_pid: u32,
+        profile_dir: &Path,
+        temp_dir: &Path,
+    ) -> io::Result<PathBuf> {
         pmt_core::private_fs::create_dir(&self.dir)?;
         let owner_pid = std::process::id();
         let record = Record {
@@ -58,6 +66,7 @@ impl Records {
             browser_pid,
             browser_start: start_time(browser_pid).unwrap_or_default(),
             profile_dir: profile_dir.to_owned(),
+            temp_dir: Some(temp_dir.to_owned()),
         };
         let path = self
             .dir
@@ -87,6 +96,9 @@ impl Records {
                 wait_for_exit(record.browser_pid, record.browser_start);
             }
             let _ = fs::remove_dir_all(&record.profile_dir);
+            if let Some(temp) = &record.temp_dir {
+                let _ = fs::remove_dir_all(temp);
+            }
             let _ = fs::remove_file(&path);
             cleared += 1;
         }

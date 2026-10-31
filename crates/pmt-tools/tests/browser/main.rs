@@ -56,6 +56,7 @@ async fn a_batched_sub_procedure_keeps_its_tab_for_the_next_call() {
     assert_eq!(result.status, Status::Ok, "{body}");
     assert_eq!(body["output"], "Test page\nsaved\nFalse\n");
     assert_eq!(body["workspace"], workspace.as_str());
+    manager.shutdown().await;
 }
 
 #[tokio::test]
@@ -98,6 +99,7 @@ async fn helpers_fill_click_evaluate_and_screenshot() {
             .iter()
             .all(|c| matches!(c, Content::Text { .. }))
     );
+    manager.shutdown().await;
 }
 
 #[tokio::test]
@@ -122,6 +124,7 @@ async fn refused_navigations_and_closing_the_browser() {
     // The browser is still there.
     let (result, _) = run(&exec, "ensure_real_tab()").await;
     assert_eq!(result.status, Status::Ok);
+    manager.shutdown().await;
 }
 
 #[tokio::test]
@@ -144,6 +147,8 @@ async fn a_crashed_browser_is_replaced_and_its_record_removed() {
     let now = records(&fixture.browser_cache());
     assert_eq!(now.len(), 1);
     assert!(!now.contains(&old_records[0]), "the dead record is gone");
+    drop(second);
+    manager.shutdown().await;
 }
 
 #[tokio::test]
@@ -169,6 +174,7 @@ async fn named_sessions_get_their_own_browser_and_idle_ones_are_closed() {
     assert!(records(&fixture.browser_cache()).is_empty());
     let fresh = manager.session("ses_b/default").await.unwrap().pid();
     assert_ne!(fresh, default, "a closed session starts a new browser");
+    manager.shutdown().await;
 }
 
 #[tokio::test]
@@ -198,6 +204,7 @@ async fn dialogs_follow_the_dialog_policy() {
         if policy == DialogPolicy::MustRespond {
             assert!(handled.contains("after 1 s"), "{handled}");
         }
+        manager.shutdown().await;
     }
 }
 
@@ -222,6 +229,8 @@ async fn a_failing_cloud_provider_falls_back_to_a_local_browser() {
     assert_eq!(body["fallback_from_cloud"], true);
     let session = manager.session("ses_b/default").await.unwrap();
     assert_eq!(session.origin(), &Origin::Local);
+    drop(session);
+    manager.shutdown().await;
 
     // Both failing names both reasons.
     let nothing = RuntimePolicy {
@@ -288,6 +297,7 @@ async fn a_missing_chromium_is_installed_on_first_use_only_when_allowed() {
     );
     assert!(lazy.session("ses_b/default").await.is_ok());
     assert_eq!(*store.installs.lock().unwrap(), ["chromium"]);
+    lazy.shutdown().await;
 }
 
 #[tokio::test]
@@ -313,9 +323,11 @@ async fn an_explicit_endpoint_is_used_and_rebinding_replaces_the_session() {
     let second = manager.session("ses_b/default").await.unwrap();
     assert_eq!(second.origin(), &Origin::Connected(b.endpoint.clone()));
     // The supervisor gives up on a browser that is gone for good.
-    drop(b);
+    b.terminate().await;
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert!(!second.is_alive());
+    manager.shutdown().await;
+    a.terminate().await;
 }
 
 #[tokio::test]
@@ -341,6 +353,7 @@ async fn a_crashed_owners_browser_is_reaped_by_the_next_process() {
         browser_pid: launched.pid,
         browser_start: pmt_core::runtime::process_start_time(launched.pid).unwrap(),
         profile_dir: launched.profile_dir.clone(),
+        temp_dir: Some(launched.temp_dir.clone()),
     };
     std::fs::create_dir_all(cache.join("records")).unwrap();
     std::fs::write(
@@ -353,6 +366,7 @@ async fn a_crashed_owners_browser_is_reaped_by_the_next_process() {
     assert!(exited.is_ok(), "the orphaned browser was killed");
     assert!(records(&cache).is_empty());
     assert!(!launched.profile_dir.exists());
+    assert!(!launched.temp_dir.exists());
 }
 
 #[tokio::test]

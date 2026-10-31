@@ -72,33 +72,61 @@ struct LocalBrowser {
     child: Mutex<Option<Child>>,
     record: PathBuf,
     profile_dir: PathBuf,
+    temp_dir: PathBuf,
     pid: u32,
 }
 
-impl Drop for LocalBrowser {
-    /// Kills the browser, then removes its record and profile once it has
-    /// exited (a dying browser still writes to its profile directory).
-    fn drop(&mut self) {
-        let child = self
-            .child
+impl LocalBrowser {
+    fn take_child(&self) -> Option<Child> {
+        self.child
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        let record = std::mem::take(&mut self.record);
-        let profile_dir = std::mem::take(&mut self.profile_dir);
-        let cleanup = move || {
-            let _ = std::fs::remove_file(&record);
-            let _ = std::fs::remove_dir_all(&profile_dir);
-        };
-        let Some(mut process) = child else {
-            cleanup();
+            .take()
+    }
+
+    fn remove_files(&self) {
+        let _ = std::fs::remove_file(&self.record);
+        let _ = std::fs::remove_dir_all(&self.profile_dir);
+        let _ = std::fs::remove_dir_all(&self.temp_dir);
+    }
+
+    /// Kills the browser, waits for it to exit (a dying browser still
+    /// writes to its profile directory) and removes its files.
+    async fn terminate(&self) {
+        if let Some(mut child) = self.take_child() {
+            let _ = child.start_kill();
+            let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
+        }
+        self.remove_files();
+    }
+}
+
+/// How long a killed browser may take to exit before its files go anyway.
+const EXIT_WAIT: Duration = Duration::from_secs(5);
+
+impl Drop for LocalBrowser {
+    /// Best effort when a session is dropped without
+    /// [`BrowserManager::shutdown`]: kill now, clean up once it exited.
+    fn drop(&mut self) {
+        let Some(mut child) = self.take_child() else {
+            self.remove_files();
             return;
         };
-        let _ = process.start_kill();
+        let _ = child.start_kill();
+        let files = (
+            std::mem::take(&mut self.record),
+            std::mem::take(&mut self.profile_dir),
+            std::mem::take(&mut self.temp_dir),
+        );
+        let cleanup = move || {
+            let _ = std::fs::remove_file(&files.0);
+            let _ = std::fs::remove_dir_all(&files.1);
+            let _ = std::fs::remove_dir_all(&files.2);
+        };
         match tokio::runtime::Handle::try_current() {
             Ok(runtime) => {
                 runtime.spawn(async move {
-                    let _ = tokio::time::timeout(Duration::from_secs(5), process.wait()).await;
+                    let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
                     cleanup();
                 });
             }
@@ -166,6 +194,14 @@ impl BrowserSession {
             )
         });
         process_alive && !self.supervisor.gave_up()
+    }
+
+    /// Kills a local browser and removes its files (a connected or cloud
+    /// browser is left running).
+    async fn terminate(&self) {
+        if let Some(local) = &self.local {
+            local.terminate().await;
+        }
     }
 
     fn touch(&self) {
@@ -241,7 +277,9 @@ impl BrowserManager {
                 existing.touch();
                 return Ok(Arc::clone(existing));
             }
-            sessions.remove(key);
+            if let Some(old) = sessions.remove(key) {
+                old.terminate().await;
+            }
         }
         let session = Arc::new(self.create(wanted).await?);
         sessions.insert(key.to_owned(), Arc::clone(&session));
@@ -252,17 +290,41 @@ impl BrowserManager {
 
     /// Closes the session of `key` (its local browser is killed).
     pub async fn close(&self, key: &str) {
-        self.sessions.lock().await.remove(key);
+        let closed = self.sessions.lock().await.remove(key);
+        if let Some(session) = closed {
+            session.terminate().await;
+        }
+    }
+
+    /// Closes every session (session end): local browsers are killed and
+    /// their files removed before this returns.
+    pub async fn shutdown(&self) {
+        let closed: Vec<_> = self.sessions.lock().await.drain().map(|(_, s)| s).collect();
+        for session in closed {
+            session.terminate().await;
+        }
     }
 
     /// Closes every session idle longer than `browser.inactivity_timeout_secs`
-    /// (read now); returns how many were closed.
+    /// (read now) or whose browser died; returns how many were closed.
     pub async fn reap_idle(&self) -> usize {
         let limit = Duration::from_secs((self.setup.config)().inactivity_timeout_secs);
-        let mut sessions = self.sessions.lock().await;
-        let before = sessions.len();
-        sessions.retain(|_, session| session.idle_for() <= limit && session.is_alive());
-        before - sessions.len()
+        let closed: Vec<_> = {
+            let mut sessions = self.sessions.lock().await;
+            let stale: Vec<String> = sessions
+                .iter()
+                .filter(|(_, s)| s.idle_for() > limit || !s.is_alive())
+                .map(|(key, _)| key.clone())
+                .collect();
+            stale
+                .iter()
+                .filter_map(|key| sessions.remove(key))
+                .collect()
+        };
+        for session in &closed {
+            session.terminate().await;
+        }
+        closed.len()
     }
 
     fn explicit_endpoint(&self) -> Option<String> {
@@ -315,12 +377,13 @@ impl BrowserManager {
         .await?;
         let record = self
             .records
-            .add(launched.pid, &launched.profile_dir)
+            .add(launched.pid, &launched.profile_dir, &launched.temp_dir)
             .map_err(|err| format!("cannot record the browser: {err}"))?;
         let local = LocalBrowser {
             child: Mutex::new(Some(launched.child)),
             record,
             profile_dir: launched.profile_dir,
+            temp_dir: launched.temp_dir,
             pid: launched.pid,
         };
         let cdp = Cdp::connect(&launched.endpoint).await?;
