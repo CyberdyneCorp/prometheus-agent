@@ -152,7 +152,7 @@ The system SHALL ask `once / always / cancel` before `/clear`, `/new`, `/undo` a
 - **THEN** the session transcript SHALL be unchanged
 
 ### Requirement: Skill invocation as user message
-The system SHALL invoke `/<skill> [instruction]` by appending a user message that loads the skill, never by editing the system prompt, and SHALL accept up to 5 stacked leading skill tokens (`/a /b do X`), rejecting a sixth with `at most 5 skills per message`.
+The system SHALL invoke `/<skill> [instruction]` by appending a user message that loads the skill, never by editing the system prompt, and SHALL accept up to 5 stacked leading skill tokens (`/a /b do X`), treating a sixth as instruction text with the notice `at most 5 skills can be stacked; use a skill bundle for more` (as defined by the `skills` capability, Stacking skills in one message).
 **Milestone:** M1
 
 #### Scenario: Stacked skills

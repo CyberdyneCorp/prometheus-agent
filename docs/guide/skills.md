@@ -139,8 +139,10 @@ The agent writes skills with
   under `references/`. Learning the same topic again patches the skill.
 - After a long tool-using conversation the agent reviews it in the
   background and may save or improve skills (`skills.creation_nudge_interval`).
-  `/refine [focus]` starts that review now; its summary is posted to the
-  chat and the running session is not changed.
+  `/refine [focus]` starts that review, and the memory review, now; their
+  summary (skills created or patched, memories saved or proposed) is
+  posted to the chat and the running session is not changed. A second
+  `/refine` while one runs answers `a review is already running`.
 - With `skills.write_approval = true` (`/skills approval on`), every write is
   staged in `<profile>/pending/skills/` instead of applied.
   `/skills pending` lists staged writes, `/skills diff <id>` shows one,

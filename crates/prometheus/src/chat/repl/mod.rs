@@ -13,6 +13,7 @@ mod commands;
 pub mod input;
 mod prompts;
 mod quick;
+mod refine;
 mod sessions;
 mod turn;
 
@@ -80,6 +81,9 @@ struct Repl {
     approvals: Option<Prompts<ApprovalRequest, Decision>>,
     clarify: Option<Prompts<ClarifyRequest, ClarifyAnswer>>,
     memory: mpsc::UnboundedReceiver<MemoryAsk>,
+    /// Messages background work posts to the chat (`/refine` summaries).
+    posted: mpsc::UnboundedSender<String>,
+    to_post: mpsc::UnboundedReceiver<String>,
     last_interrupt: Option<Instant>,
     start: Start,
     confirm_destructive: bool,
@@ -126,6 +130,7 @@ pub async fn run(
         cwd: factory.options.cwd.clone(),
         redactor: factory.redactor().clone(),
     })?;
+    let (posted, to_post) = mpsc::unbounded_channel();
     let mut repl = Repl {
         factory,
         live: None,
@@ -142,6 +147,8 @@ pub async fn run(
         approvals: None,
         clarify: None,
         memory,
+        posted,
+        to_post,
         last_interrupt: None,
         start,
         confirm_destructive: config.cli.confirm_destructive,
@@ -168,7 +175,14 @@ impl Repl {
             } else {
                 let prompt = self.prompt();
                 self.input.request(&prompt);
-                match self.input.next().await {
+                let event = tokio::select! {
+                    event = self.input.next() => event,
+                    Some(text) = self.to_post.recv() => {
+                        self.notice(&text);
+                        continue;
+                    }
+                };
+                match event {
                     Event::Line(line) => {
                         self.last_interrupt = None;
                         line

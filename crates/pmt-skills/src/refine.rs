@@ -11,10 +11,11 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use pmt_agent::turn::TurnResult;
-use pmt_core::error::Error;
+use pmt_core::error::{Error, codes};
 
 use crate::reload::{self, Changes};
 use crate::review::{self, ReviewRun};
+use crate::session::ReviewGuard;
 
 /// What a finished refine reports.
 #[derive(Debug)]
@@ -34,9 +35,23 @@ pub struct Refined {
 /// `skill.review_running` (reply [`review::ALREADY_RUNNING`]) while a
 /// review of the session runs; store or turn errors.
 pub async fn refine(run: ReviewRun) -> Result<Refined, Error> {
+    let running = run
+        .parent
+        .begin_review()
+        .ok_or_else(|| Error::new(&codes::SKILL_REVIEW_RUNNING, review::ALREADY_RUNNING))?;
+    refine_held(run, running).await
+}
+
+/// [`refine`] under a review slot the caller already holds
+/// ([`SkillsSession::begin_review`](crate::session::SkillsSession::begin_review)).
+///
+/// # Errors
+///
+/// Store or turn errors.
+pub async fn refine_held(run: ReviewRun, running: ReviewGuard) -> Result<Refined, Error> {
     let parent = Arc::clone(&run.parent);
     let before = reload::scan(&parent);
-    let result = review::run(run).await?;
+    let result = review::run_held(run, running).await?;
     let changes = Changes::between(&before, &reload::scan(&parent));
     Ok(Refined {
         summary: summary(&changes, &result),

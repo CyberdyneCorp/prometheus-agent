@@ -173,6 +173,7 @@ impl Repl {
             ))),
             "approvals" => Ok(approvals(&self.factory.scope, live)),
             "reload-secrets" => crate::slash_handlers::reload_secrets(&self.factory.scope),
+            "refine" => self.refine(live, args).await,
             "theme" => self.theme(args),
             "verbose" => Ok(self.verbose()),
             "profile" => Ok(format!(

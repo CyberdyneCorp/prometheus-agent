@@ -47,7 +47,7 @@ impl Repl {
             );
             Box::pin(self.busy(turn, &live, &interrupt)).await
         };
-        self.after_turn(&live, result);
+        self.after_turn(&live, result).await;
         self.live = Some(live);
     }
 
@@ -82,6 +82,7 @@ impl Repl {
                     }
                     self.ask(Pending::Clarify { prompt, answers: Vec::new() });
                 }
+                Some(text) = self.to_post.recv() => self.notice(&text),
                 Some(ask) = self.memory.recv() => {
                     self.say(Role::Notice, &ask.preview);
                     self.ask(Pending::Memory(ask.reply));
@@ -221,7 +222,7 @@ impl Repl {
     }
 
     /// Shows a finished turn.
-    fn after_turn(&mut self, live: &Live, result: Result<TurnResult, Error>) {
+    async fn after_turn(&mut self, live: &Live, result: Result<TurnResult, Error>) {
         let result = match result {
             Ok(result) => result,
             Err(err) => {
@@ -246,6 +247,7 @@ impl Repl {
         if live.memory.end_turn() {
             self.spawn_memory_review(live);
         }
+        self.skill_nudge(live, &result).await;
         if self.factory.scope.config().display.bell_on_complete {
             self.input.print("\x07");
         }
@@ -266,6 +268,7 @@ impl Repl {
             session: live.id,
             child,
             model: Arc::clone(&live.model) as _,
+            focus: None,
         };
         tokio::spawn(async move {
             if let Err(err) = pmt_memory::review::run(review).await {

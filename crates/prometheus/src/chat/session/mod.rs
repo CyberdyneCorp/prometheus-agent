@@ -10,12 +10,14 @@ pub mod model;
 pub mod tools;
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use jiff::Timestamp;
 use pmt_agent::tools::clarify::{Clarifier, ClarifyAnswer, ClarifyRequest};
 use pmt_agent::tools::{AgentTools, SessionSearch};
-use pmt_agent::turn::{Agent, AgentSetup, EventSink, NoEvents, PromptSetup, RefreshPrompt};
+use pmt_agent::turn::{
+    Agent, AgentSetup, EventSink, NoEvents, PromptSetup, RefreshPrompt, SessionTools,
+};
 use pmt_config::ProfileScope;
 use pmt_config::grants::{GrantsFile, SessionGrants, Subject, baseline};
 use pmt_core::capability::CapabilitySet;
@@ -28,6 +30,7 @@ use pmt_memory::session::{Approver, MemorySession, MemorySetup};
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{SessionEnd, SessionStart};
 use pmt_obs::trajectory::writer::{Emit, TrajectoryWriter};
+use pmt_skills::review::Nudge;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
 use pmt_store::{EndReason, NewSession, Source, Store};
 use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
@@ -100,6 +103,8 @@ pub struct Live {
     pub skills: Arc<SkillsSession>,
     /// The session's memory.
     pub memory: Arc<MemorySession>,
+    /// Counts tool-calling iterations towards a background skill review.
+    pub skill_nudge: Mutex<Nudge>,
     /// The toolset selection the surface was built from.
     pub selection: Selection,
     /// Notices to show once at start.
@@ -232,7 +237,7 @@ impl Factory {
             selection: &selection,
             capabilities: &capabilities,
             gate: &gate.gate,
-            agent: &agent_tools,
+            agent: Some(&agent_tools),
             redactor: &self.redactor,
             context_window: None,
         })
@@ -274,6 +279,7 @@ impl Factory {
             clarify,
             skills,
             memory,
+            skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
             selection,
             notices,
             agent_tools,
@@ -282,13 +288,7 @@ impl Factory {
             _environment: environment,
             _skills: attached,
         };
-        live.emit(Event::SessionStart(SessionStart {
-            source: session.source.as_str().to_owned(),
-            title: session.title.clone(),
-            model: target.model.clone(),
-            parent_session_id: session.parent_session_id.map(|p| p.to_string()),
-        }))
-        .await;
+        live.emit_start(&session, target).await;
         Ok(live)
     }
 
@@ -390,13 +390,48 @@ impl Factory {
             selection,
             capabilities: &live.capabilities,
             gate: &live.gate,
-            agent: &live.agent_tools,
+            agent: Some(&live.agent_tools),
             redactor: &self.redactor,
             context_window: None,
         })
         .await?;
         live.tools.swap(tools);
         Ok(())
+    }
+}
+
+impl Factory {
+    /// The tools of `live`'s background skill review running in `child`:
+    /// the skills toolset only, under the session's capabilities and gate
+    /// (spec: skills, Autonomous skill creation and improvement).
+    ///
+    /// # Errors
+    ///
+    /// The skills toolset is not registered; store errors recording the
+    /// surface.
+    pub(crate) async fn review_tools(
+        &self,
+        live: &Live,
+        child: SessionId,
+    ) -> Result<Arc<SessionTools>, Error> {
+        let selection = Selection::resolve(
+            &self.registry,
+            &[pmt_skills::tools::TOOLSET.to_owned()],
+            &[],
+        )?;
+        tools::session_tools(&SurfaceInputsOwned {
+            scope: &self.scope,
+            store: &self.store,
+            session: child,
+            registry: &self.registry,
+            selection: &selection,
+            capabilities: &live.capabilities,
+            gate: &live.gate,
+            agent: None,
+            redactor: &self.redactor,
+            context_window: None,
+        })
+        .await
     }
 }
 
@@ -412,6 +447,21 @@ fn refresher(skills: &Arc<SkillsSession>, memory: &Arc<MemorySession>) -> Refres
 }
 
 impl Live {
+    /// Records `session.start` for `session` on `target`'s route.
+    async fn emit_start(
+        &self,
+        session: &pmt_store::Session,
+        target: &pmt_providers::resolve::Target,
+    ) {
+        self.emit(Event::SessionStart(SessionStart {
+            source: session.source.as_str().to_owned(),
+            title: session.title.clone(),
+            model: target.model.clone(),
+            parent_session_id: session.parent_session_id.map(|p| p.to_string()),
+        }))
+        .await;
+    }
+
     /// Emits `event` outside any turn.
     pub async fn emit(&self, event: Event) {
         let Some(writer) = &self.trajectory else {

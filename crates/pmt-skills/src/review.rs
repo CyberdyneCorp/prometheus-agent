@@ -25,7 +25,7 @@ use pmt_store::Source;
 
 pub use pmt_agent::review::{EXCERPT_CHARS, child_session, excerpt};
 
-use crate::session::{SessionSetup, SkillSessions, SkillsSession};
+use crate::session::{ReviewGuard, SessionSetup, SkillSessions, SkillsSession};
 
 /// Files read with `skill_view` during a review.
 #[derive(Debug, Default)]
@@ -170,10 +170,20 @@ pub fn instruction(focus: Option<&str>, conversation: &str) -> String {
 /// `skill.review_running` while another review of the session runs;
 /// store or turn errors.
 pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
-    let _running = review
+    let running = review
         .parent
         .begin_review()
         .ok_or_else(|| Error::new(&codes::SKILL_REVIEW_RUNNING, ALREADY_RUNNING))?;
+    run_held(review, running).await
+}
+
+/// [`run`] under a review slot the caller already holds (a surface that
+/// must answer [`ALREADY_RUNNING`] before it spawns the review).
+///
+/// # Errors
+///
+/// Store or turn errors.
+pub async fn run_held(review: ReviewRun, _running: ReviewGuard) -> Result<TurnResult, Error> {
     let parent = review.parent.setup();
     let store = Arc::clone(&parent.store);
     let child = review.child;

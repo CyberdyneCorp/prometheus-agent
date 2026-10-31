@@ -177,6 +177,7 @@ async fn the_background_review_runs_in_a_child_session_and_never_deletes() {
         session,
         child,
         model,
+        focus: None,
     })
     .await
     .unwrap();
@@ -193,6 +194,49 @@ async fn the_background_review_runs_in_a_child_session_and_never_deletes() {
             .unwrap()
             .iter()
             .any(|e| e.content == "Works in UTC.")
+    );
+}
+
+const FOCUSED_SCRIPT: &str = r#"
+[[rule]]
+user = "focus on: time zones"
+times = 1
+[[rule.tool_calls]]
+name = "memory"
+arguments = { target = "user", operations = [{ action = "remove", old_text = "metric" }, { action = "add", content = "Works in UTC." }] }
+
+[[rule]]
+text = "Saved."
+"#;
+
+/// `/refine <focus>` (spec: skills, /refine runs self-improvement review
+/// on demand): the focus reaches the memory review and its summary
+/// counts what it saved and what awaits approval.
+#[tokio::test]
+async fn a_focused_review_reports_its_memory_changes() {
+    let profile = Profile::new("");
+    let session = profile.session();
+    let parent = profile.memory(session);
+    add(&parent, "user", "Prefers metric units.").await;
+    let model = mock_model(&profile, FOCUSED_SCRIPT).await;
+    let child = pmt_agent::review::child_session(&profile.store, session).unwrap();
+    let (changes, result) = pmt_memory::review::refine(pmt_memory::review::ReviewRun {
+        parent,
+        session,
+        child,
+        model,
+        focus: Some("time zones".to_owned()),
+    })
+    .await
+    .unwrap();
+    assert_eq!(result.final_response.as_deref(), Some("Saved."));
+    assert_eq!(
+        (changes.saved, changes.updated, changes.proposed),
+        (1, 0, 1)
+    );
+    assert_eq!(
+        changes.summary(),
+        "Memory: 1 saved, 1 proposed (see /memory pending)."
     );
 }
 

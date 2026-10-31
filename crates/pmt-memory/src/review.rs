@@ -7,7 +7,11 @@
 //! `memory` in review mode: its adds commit, its patches, removals and
 //! unpins become pending proposals.
 
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::sync::Arc;
+
+use jiff::Timestamp;
 
 use pmt_agent::review::excerpt;
 use pmt_agent::tools::MemoryPort;
@@ -19,7 +23,7 @@ use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_providers::request::Tool;
-use pmt_store::Source;
+use pmt_store::{Source, Store};
 use pmt_tools::ToolResult;
 
 use crate::session::{MemorySession, MemorySetup};
@@ -134,6 +138,110 @@ pub struct ReviewRun {
     pub child: SessionId,
     /// The model (normally the session's main route).
     pub model: Arc<dyn ModelPort>,
+    /// What the user asked the review to look for (`/refine <focus>`).
+    pub focus: Option<String>,
+}
+
+/// The review's user message: [`REVIEW_PROMPT`], the focus, the
+/// conversation.
+#[must_use]
+pub fn instruction(focus: Option<&str>, conversation: &str) -> String {
+    let mut text = REVIEW_PROMPT.to_owned();
+    if let Some(focus) = focus.map(str::trim).filter(|f| !f.is_empty()) {
+        let _ = write!(text, "\n\nThe user asked this review to focus on: {focus}");
+    }
+    let _ = write!(text, "\n\n<conversation>\n{conversation}\n</conversation>");
+    text
+}
+
+/// The memory state a review is measured against ([`Mark::changes`]).
+#[derive(Debug, Clone)]
+pub struct Mark {
+    entries: BTreeMap<String, Timestamp>,
+    pending: BTreeSet<String>,
+}
+
+/// What changed in memory since a [`Mark`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Changes {
+    /// New entries.
+    pub saved: usize,
+    /// Existing entries changed.
+    pub updated: usize,
+    /// New staged proposals awaiting `/memory approve`.
+    pub proposed: usize,
+}
+
+impl Mark {
+    /// The current entries and staged proposals.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn take(store: &Store) -> Result<Self, Error> {
+        Ok(Self {
+            entries: store
+                .memory_entries(None)?
+                .into_iter()
+                .map(|e| (e.id, e.updated_at))
+                .collect(),
+            pending: store.memory_pending()?.into_iter().map(|p| p.id).collect(),
+        })
+    }
+
+    /// What changed since the mark was taken.
+    ///
+    /// # Errors
+    ///
+    /// Store errors.
+    pub fn changes(&self, store: &Store) -> Result<Changes, Error> {
+        let mut changes = Changes::default();
+        for entry in store.memory_entries(None)? {
+            match self.entries.get(&entry.id) {
+                None => changes.saved += 1,
+                Some(at) if *at != entry.updated_at => changes.updated += 1,
+                Some(_) => {}
+            }
+        }
+        changes.proposed = store
+            .memory_pending()?
+            .iter()
+            .filter(|p| !self.pending.contains(&p.id))
+            .count();
+        Ok(changes)
+    }
+}
+
+impl Changes {
+    /// The summary line of a finished review.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        if *self == Self::default() {
+            return "Memory: nothing changed.".to_owned();
+        }
+        let mut parts = Vec::new();
+        for (count, what) in [(self.saved, "saved"), (self.updated, "updated")] {
+            if count > 0 {
+                parts.push(format!("{count} {what}"));
+            }
+        }
+        if self.proposed > 0 {
+            parts.push(format!("{} proposed (see /memory pending)", self.proposed));
+        }
+        format!("Memory: {}.", parts.join(", "))
+    }
+}
+
+/// [`run`], measuring what the review changed in memory.
+///
+/// # Errors
+///
+/// Store or turn errors.
+pub async fn refine(review: ReviewRun) -> Result<(Changes, TurnResult), Error> {
+    let store = Arc::clone(&review.parent.setup().store);
+    let mark = Mark::take(&store)?;
+    let result = run(review).await?;
+    Ok((mark.changes(&store)?, result))
 }
 
 /// Runs a background memory review of `review.session` in `review.child`.
@@ -169,10 +277,7 @@ pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
     agent_setup.unattended = true;
     agent_setup.interactive = false;
     let agent = Agent::new(agent_setup)?;
-    let text = format!(
-        "{REVIEW_PROMPT}\n\n<conversation>\n{}\n</conversation>",
-        excerpt(&store, review.session)?
-    );
+    let text = instruction(review.focus.as_deref(), &excerpt(&store, review.session)?);
     agent
         .run_turn(
             Some(&scope),

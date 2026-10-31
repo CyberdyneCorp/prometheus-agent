@@ -128,8 +128,8 @@ pub struct SurfaceInputsOwned<'a> {
     pub capabilities: &'a CapabilitySet,
     /// The gate.
     pub gate: &'a Arc<CommandGate>,
-    /// Agent-level tools.
-    pub agent: &'a Arc<AgentTools>,
+    /// Agent-level tools (none for a background review).
+    pub agent: Option<&'a Arc<AgentTools>>,
     /// Known secrets.
     pub redactor: &'a Redactor,
     /// The route's context window (result budget).
@@ -184,7 +184,7 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
             .max(1),
     });
     Ok(Arc::new(SessionTools::new(
-        Some(Arc::clone(inputs.agent)),
+        inputs.agent.map(Arc::clone),
         Arc::new(dispatcher),
         timings,
     )))

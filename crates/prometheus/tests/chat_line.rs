@@ -518,3 +518,144 @@ fn at_references_complete_files_of_the_working_directory() {
     prompt(&mut p);
     exit(p);
 }
+
+const REFINE_SCRIPT: &str = r#"
+[[rule]]
+user_regex = "(?s)reusable know-how.*focus on: save the deploy workflow as a skill"
+times = 1
+latency_ms = 1500
+[[rule.tool_calls]]
+name = "skill_manage"
+arguments = { action = "create", name = "deploy", category = "ops", content = "---\nname: deploy\ndescription: Deploy the service.\n---\n\n1. Build.\n2. Ship.\n" }
+
+[[rule]]
+user = "reusable know-how"
+tool_result_regex = "Created skill"
+text = "saved the deploy workflow"
+
+[[rule]]
+user = "durable knowledge"
+times = 1
+[[rule.tool_calls]]
+name = "memory"
+arguments = { target = "memory", operations = [{ action = "add", content = "Deploys run build then ship." }] }
+
+[[rule]]
+user = "durable knowledge"
+text = "noted"
+
+[[rule]]
+repeat = true
+text = "ok"
+"#;
+
+/// Scenario: Focused refine saves a workflow (spec: skills, /refine runs
+/// self-improvement review on demand): the review runs in the background,
+/// a second `/refine` meanwhile is refused, the summary reaches the chat
+/// and the session's system prompt is never rebuilt.
+#[test]
+fn refine_reviews_in_the_background_and_posts_its_summary() {
+    let home = mock_home();
+    let path = script(home.path(), REFINE_SCRIPT);
+    let mut p = spawn(home.path(), &["--no-color", "--mock-script", &path]);
+    prompt(&mut p);
+    p.send_line("deploy: build then ship").unwrap();
+    p.expect("ok").unwrap();
+    prompt(&mut p);
+    p.send_line("/refine save the deploy workflow as a skill")
+        .unwrap();
+    p.expect("Self-improvement review started").unwrap();
+    prompt(&mut p);
+    p.send_line("/refine").unwrap();
+    p.expect("a review is already running").unwrap();
+    p.expect("Created skills: deploy").unwrap();
+    p.expect("saved the deploy workflow").unwrap();
+    p.expect("Memory: 1 saved.").unwrap();
+    p.send_line("thanks").unwrap();
+    p.expect("ok").unwrap();
+    prompt(&mut p);
+    exit(p);
+
+    assert!(
+        profile(home.path())
+            .join("skills/ops/deploy/SKILL.md")
+            .is_file()
+    );
+    let listed = ok(&run(home.path(), &["--json", "sessions", "list"]));
+    let listed: serde_json::Value = serde_json::from_str(&listed).unwrap();
+    let sessions = listed["sessions"].as_array().unwrap();
+    assert_eq!(sessions.len(), 1, "review children are hidden: {listed}");
+    let id = sessions[0]["id"].as_str().unwrap().to_owned();
+    let trajectory = ok(&run(
+        home.path(),
+        &["trajectory", "show", &id, "--format", "jsonl"],
+    ));
+    let rebuilt: Vec<&str> = trajectory
+        .lines()
+        .filter(|l| l.contains("\"prompt.rebuilt\""))
+        .collect();
+    assert_eq!(rebuilt.len(), 1, "built once at start: {trajectory}");
+    let exported = ok(&run(home.path(), &["sessions", "export", &id]));
+    let users: Vec<&str> = exported
+        .lines()
+        .filter(|l| l.contains("\"role\":\"user\""))
+        .collect();
+    assert_eq!(
+        users.len(),
+        2,
+        "history holds only the two exchanges: {exported}"
+    );
+}
+
+const NUDGE_SCRIPT: &str = r#"
+[[rule]]
+user = "reusable know-how"
+times = 1
+[[rule.tool_calls]]
+name = "skill_manage"
+arguments = { action = "create", name = "listing", content = "---\nname: listing\ndescription: List the skills.\n---\n\nCall skills_list.\n" }
+
+[[rule]]
+user = "reusable know-how"
+text = "saved"
+
+[[rule]]
+user = "list my skills"
+times = 1
+[[rule.tool_calls]]
+name = "skills_list"
+arguments = {}
+
+[[rule]]
+user = "list my skills"
+text = "listed"
+
+[[rule]]
+repeat = true
+text = "ok"
+"#;
+
+/// Spec: skills, Autonomous skill creation and improvement: a completed
+/// turn that reaches `skills.creation_nudge_interval` tool-calling
+/// iterations runs a background review after the reply.
+#[test]
+fn the_creation_nudge_runs_a_background_skill_review() {
+    let home = mock_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "skills.creation_nudge_interval", "1"],
+    ));
+    let path = script(home.path(), NUDGE_SCRIPT);
+    let mut p = spawn(home.path(), &["--no-color", "--mock-script", &path]);
+    prompt(&mut p);
+    p.send_line("list my skills").unwrap();
+    p.expect("listed").unwrap();
+    prompt(&mut p);
+    let skill = profile(home.path()).join("skills/listing/SKILL.md");
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !skill.is_file() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(skill.is_file(), "the review created the skill");
+    exit(p);
+}
