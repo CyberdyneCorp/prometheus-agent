@@ -47,3 +47,6 @@ $code = Install @('-BaseUrl', "$BaseUrl/tampered", '-NoModifyPath')
 if ($code -ne 77) { Fail "tampered release exited $code, expected 77" }
 if ((Get-FileHash (Join-Path $dir 'prometheus.exe')).Hash -ne $before) { Fail 'tampered release changed the binary' }
 Write-Output "install.ps1 checks passed ($Shell)"
+# Exit explicitly: otherwise the caller sees $LASTEXITCODE from the last
+# native command, which is the tampered install's deliberate 77.
+exit 0
