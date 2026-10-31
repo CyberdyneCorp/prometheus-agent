@@ -237,3 +237,26 @@ fn list_dir_goes_through_the_backend_and_its_capabilities() {
     assert!(denied.contains("fs.read"), "{denied}");
     assert!(session.list_dir(r"\\host\share").is_err());
 }
+
+/// The local backend refuses device-namespace and UNC paths before its
+/// capability check resolves them, even under a grant covering everything.
+#[test]
+fn the_local_backend_never_resolves_a_unc_path() {
+    use pmt_core::capability::{Access, CapabilitySet, Places};
+    use pmt_tools::files::{FileBackend as _, LocalBackend};
+
+    let all = CapabilitySet::parse(["fs.read:/**", "fs.write:/**"]).unwrap();
+    let backend = LocalBackend::new(all, Places::default());
+    for raw in [r"\\attacker.example\share\x", r"\\?\UNC\host\share\x"] {
+        let path = std::path::Path::new(raw);
+        for access in [Access::Read, Access::Write] {
+            let err = backend.check(access, path).unwrap_err();
+            assert_eq!(err.kind(), std::io::ErrorKind::PermissionDenied);
+            assert_eq!(
+                err.to_string(),
+                format!("Refusing device-namespace or UNC path '{raw}'")
+            );
+        }
+        assert!(backend.metadata(path).is_err());
+    }
+}

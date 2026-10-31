@@ -168,6 +168,10 @@ impl FileBackend for LocalBackend {
     }
 
     fn check(&self, access: Access, path: &Path) -> io::Result<()> {
+        // Before the capability check, which canonicalizes the path.
+        if let Some(refusal) = super::guards::device_namespace(&path.to_string_lossy()) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, refusal));
+        }
         self.capabilities
             .require_path(access, path, &self.places)
             .map_err(|err| io::Error::new(io::ErrorKind::PermissionDenied, err.message()))

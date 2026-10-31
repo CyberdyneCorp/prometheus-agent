@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use serde_json::{Map, Value, json};
 
 use super::write::WriteTarget;
-use super::{FileSession, diff, io_failure, json_result, lines};
+use super::{FileSession, diff, guards, io_failure, json_result, lines};
 use crate::result::{Status, ToolResult};
 
 /// `patch` arguments in either shape.
@@ -167,6 +167,13 @@ impl FileSession {
     }
 
     fn v4a(&self, text: &str) -> ToolResult {
+        // A guard refusal, not a planning error: `denied`, like write_file.
+        if let Some(refusal) = v4a::touched_paths(text)
+            .iter()
+            .find_map(|path| guards::device_namespace(path))
+        {
+            return ToolResult::text(Status::Denied, refusal);
+        }
         let ops = match v4a::parse(text) {
             Ok(ops) => ops,
             Err(why) => return ToolResult::error(format!("invalid patch: {why}")),

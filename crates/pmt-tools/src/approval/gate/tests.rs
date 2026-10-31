@@ -602,3 +602,34 @@ async fn v4a_patch_paths_and_ssh_config_ask_under_yolo() {
         .unwrap();
     assert_eq!(result.status, Status::Ok);
 }
+
+#[tokio::test]
+async fn device_namespace_writes_are_refused_by_the_gate_before_any_resolution() {
+    let fx = fixture();
+    let options = Options {
+        yolo: true,
+        ..Options::default()
+    };
+    let session = session(&fx, Channel::unattended(), options).await;
+    let unc = r"\\attacker.example\share\AGENTS.md";
+    let patch = format!("*** Begin Patch\n*** Add File: {unc}\n+x\n*** End Patch");
+    for (tool, arguments) in [
+        ("write_file", json!({"path": unc})),
+        (
+            "write_file",
+            json!({"path": r"\\?\UNC\host\share\.ssh\config"}),
+        ),
+        ("patch", json!({"patch": patch})),
+    ] {
+        let result = run(&session, tool, arguments).await.unwrap();
+        assert_eq!(result.status, Status::Denied, "{tool}");
+        assert!(
+            result
+                .text_content()
+                .starts_with("Refusing device-namespace or UNC path '"),
+            "{}",
+            result.text_content()
+        );
+    }
+    assert_eq!(fx.runs.load(Ordering::SeqCst), 0, "no handler ran");
+}

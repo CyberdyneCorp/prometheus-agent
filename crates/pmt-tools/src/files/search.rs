@@ -15,7 +15,7 @@ use pmt_core::capability::Access;
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
-use super::{FileSession, io_failure, json_result, shown, text};
+use super::{FileSession, guards, io_failure, json_result, shown, text};
 use crate::result::{Status, ToolResult};
 
 /// Entries returned when the model gives no `limit`.
@@ -148,6 +148,9 @@ impl FileSession {
                 "search_files on the '{}' backend is not available in this build",
                 self.backend().name()
             ));
+        }
+        if let Some(refusal) = args.path.as_deref().and_then(guards::device_namespace) {
+            return ToolResult::text(Status::Denied, refusal);
         }
         let cwd = self.cwd();
         let root = args

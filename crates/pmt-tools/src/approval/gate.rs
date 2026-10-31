@@ -15,7 +15,7 @@ use super::rules::{PLUGIN_RULE_PREFIX, literal};
 use super::{Context, Finding, Floors, Policy, Verdict, evaluate};
 use crate::descriptor::{PathClaim, RegisteredTool};
 use crate::dispatch::{ApprovalGate, Escalation, GateRequest, GateVerdict, SeamFuture};
-use crate::files::guards::{absolute, resolve_existing};
+use crate::files::guards::{absolute, device_namespace, resolve_existing};
 use crate::files::patch::v4a::touched_paths;
 use crate::grants::GrantAnswer;
 use crate::protected::ProtectedFiles;
@@ -191,12 +191,19 @@ impl CommandGate {
         .await
     }
 
-    /// Writes to protected instruction files ask in every mode.
+    /// Writes to protected instruction files ask in every mode. A written
+    /// device-namespace or UNC path is refused here, before the protected
+    /// check resolves it (which would open it on Windows), in every mode.
     async fn check_protected(&self, request: &GateRequest<'_>) -> GateVerdict {
         let floors = &self.setup.floors;
         let user_home = floors.user_home.as_deref().map(Path::new);
         for path in written_paths(request.tool, request.arguments) {
             let absolute = absolute(&path, Path::new(&floors.cwd), user_home);
+            if let Some(refusal) =
+                device_namespace(&path).or_else(|| device_namespace(&absolute.to_string_lossy()))
+            {
+                return GateVerdict::Denied(refusal);
+            }
             let reason = self
                 .setup
                 .protected

@@ -55,6 +55,14 @@ pub fn device_namespace(raw: &str) -> Option<String> {
     (device || unc).then(|| format!("Refusing device-namespace or UNC path '{raw}'"))
 }
 
+/// Whether `path` is a device-namespace or UNC path: such a path must
+/// never reach `canonicalize`/`metadata`, which on Windows open it (an SMB
+/// connection that sends the user's NTLM credentials to the host).
+#[must_use]
+pub fn is_device_path(path: &Path) -> bool {
+    device_namespace(&path.to_string_lossy()).is_some()
+}
+
 /// `//host/share` (Windows also reads forward slashes as UNC).
 fn is_slash_unc(raw: &str) -> bool {
     raw.strip_prefix("//")
@@ -149,9 +157,13 @@ impl ControlPaths {
 }
 
 /// `path` with links resolved as far as it exists: the canonical form of
-/// its deepest existing ancestor plus the remaining components.
+/// its deepest existing ancestor plus the remaining components. A
+/// device-namespace or UNC path is returned as is, never opened.
 #[must_use]
 pub fn resolve_existing(path: &Path) -> PathBuf {
+    if is_device_path(path) {
+        return path.to_path_buf();
+    }
     let mut rest = Vec::new();
     let mut current = path.to_path_buf();
     loop {

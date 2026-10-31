@@ -1,6 +1,6 @@
 //! A dispatcher over the built-in tools, as a session builds it: the
 //! shipped toolsets, `core` selected, the baseline capabilities plus
-//! `extra`, no hooks and no approval prompts.
+//! `extra`, no hooks and no approval prompts (or a given approval gate).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use pmt_core::capability::{BASELINE, CapabilitySet};
 use pmt_core::panic::CrashReporter;
 use pmt_core::secret::Redactor;
 use pmt_tools::budget::ResultBudget;
-use pmt_tools::dispatch::{AllowAll, NoHooks, NoObserver};
+use pmt_tools::dispatch::{AllowAll, ApprovalGate, NoHooks, NoObserver};
 use pmt_tools::environments::Environments;
 use pmt_tools::probe::ProbeCache;
 use pmt_tools::spillover::session_dir;
@@ -29,6 +29,19 @@ pub(crate) async fn dispatcher(
     config: &Config,
     extra: &[&str],
     profile_dir: &Path,
+) -> Dispatcher {
+    let gate = Arc::new(AllowAll);
+    dispatcher_gated(environments, session_id, config, extra, profile_dir, gate).await
+}
+
+/// [`dispatcher`] asking `gate` about every call.
+pub(crate) async fn dispatcher_gated(
+    environments: &Arc<Environments>,
+    session_id: &str,
+    config: &Config,
+    extra: &[&str],
+    profile_dir: &Path,
+    gate: Arc<dyn ApprovalGate>,
 ) -> Dispatcher {
     let tools = pmt_tools::builtin_tools(environments);
     let registry = ToolRegistry::new("default", Arc::new(Builtins::standard(tools).unwrap()));
@@ -48,7 +61,7 @@ pub(crate) async fn dispatcher(
         surface: Arc::new(surface),
         capabilities: Arc::new(capabilities),
         hooks: Arc::new(NoHooks),
-        gate: Arc::new(AllowAll),
+        gate,
         observer: Arc::new(NoObserver),
         budget: ResultBudget::new(
             BudgetConfig::default(),

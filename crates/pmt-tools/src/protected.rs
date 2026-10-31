@@ -174,6 +174,10 @@ fn compile(raw: &str) -> Result<Pattern, Error> {
 /// The written path, plus its resolved forms when they exist on disk.
 fn candidates(path: &Path) -> Vec<PathBuf> {
     let mut all = vec![path.to_owned()];
+    // Canonicalizing a UNC path connects to its host; its text is checked.
+    if crate::files::guards::is_device_path(path) {
+        return all;
+    }
     if let Ok(target) = std::fs::canonicalize(path) {
         all.push(target);
     } else if let (Some(parent), Some(name)) = (path.parent(), path.file_name())
