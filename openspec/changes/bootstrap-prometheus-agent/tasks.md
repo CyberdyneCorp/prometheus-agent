@@ -213,7 +213,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 20. M1 Distribution and self-update
 
-- [ ] 20.1 Configure `cargo-dist` for every target in D11 with checksums, minisign signatures, SPDX SBOM, provenance attestation and a signed `release-manifest.json`; verify with a dry-run release in CI that every artifact is produced and verified (spec: distribution-and-update)
+- [x] 20.1 Configure `cargo-dist` for every target in D11 with checksums, minisign signatures, SPDX SBOM, provenance attestation and a signed `release-manifest.json`; verify with a dry-run release in CI that every artifact is produced and verified (spec: distribution-and-update)
 - [x] 20.2 Implement the release identity grammar (incl. canary `vX.Y.Z-canary.<ts>`), the embedded trust root (primary and standby keys) and signature verification with no skip flag; verify that a tampered archive fails with `signature verification failed` (spec: distribution-and-update, spec: security-boundaries)
 - [ ] 20.3 Ship shell and PowerShell installers that write the install receipt (owner, channel); verify the installers in CI containers (spec: distribution-and-update)
 - [x] 20.4 Implement `prometheus update [--check] [--channel]` with telemetry-free checks, exit 10 for an available update, the single-writer update lock, refusal for installs owned elsewhere (exit 69 naming the owner), atomic swap with a health check, update receipts and `--rollback`; verify with a local release server fixture (spec: distribution-and-update)
