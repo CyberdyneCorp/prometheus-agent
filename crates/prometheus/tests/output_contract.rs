@@ -75,7 +75,14 @@ fn normalize(text: &str, doc: &serde_json::Map<String, Value>) -> String {
     for profile in ["debug", "release"] {
         text = text.replace(&format!("profile: {profile}"), "profile: <PROFILE>");
     }
-    text
+    // The runtime index changes with every pin refresh; the pins depend on
+    // the host platform.
+    text = text.replace(str_field(doc, "runtime_index_sha256"), "<RUNTIME_INDEX>");
+    let pins = doc["runtime_pins"].to_string();
+    text.replace(
+        &format!("\"runtime_pins\":{pins}"),
+        "\"runtime_pins\":<RUNTIME_PINS>",
+    )
 }
 
 #[test]

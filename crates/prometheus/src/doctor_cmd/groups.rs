@@ -246,14 +246,32 @@ pub(super) fn daemon(inputs: &Inputs<'_>) -> Vec<Check> {
     vec![check]
 }
 
-/// `runtimes`: managed runtimes (none are installed by this build yet).
-pub(super) fn runtimes() -> Vec<Check> {
-    vec![Check::new(
-        "runtimes",
-        "managed",
-        Status::Ok,
-        "no managed runtimes installed",
-    )]
+/// `runtimes`: the store policy and the verification state of every
+/// installed runtime version.
+pub(super) fn runtimes(inputs: &Inputs<'_>) -> Vec<Check> {
+    match pmt_config::home::resolve(inputs.ctx.home_flag, inputs.ctx.launch) {
+        Ok(root) => crate::runtimes_cmd::checks::runtimes(&root),
+        Err(err) => vec![Check::new(
+            "runtimes",
+            "managed",
+            Status::Fail,
+            err.message().to_owned(),
+        )],
+    }
+}
+
+/// `distribution`: owner, channel, version, release keys, last update
+/// (spec: distribution-and-update, Doctor reports distribution health).
+pub(super) fn distribution(inputs: &Inputs<'_>) -> Vec<Check> {
+    match crate::update_cmd::install(inputs.ctx) {
+        Ok(install) => crate::runtimes_cmd::checks::distribution(&install),
+        Err(err) => vec![Check::new(
+            "distribution",
+            "install",
+            Status::Fail,
+            err.message().to_owned(),
+        )],
+    }
 }
 
 /// `plugins`: signatures and grants of installed plugins.

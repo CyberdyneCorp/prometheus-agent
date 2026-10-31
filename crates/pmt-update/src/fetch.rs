@@ -3,7 +3,10 @@
 //! Signature trust root; Update check without telemetry).
 //!
 //! Requests carry only `prometheus/<version> (<target>)` as the user agent:
-//! no install id, profile, usage or host identifiers.
+//! no install id, profile, usage or host identifiers. Every request runs
+//! under the retry budget ([`crate::download`]); with a mirror and
+//! `update.mirror_fallback = true` a file the mirror fails to serve is
+//! fetched from [`DEFAULT_ORIGIN`] instead (and verified the same way).
 
 use std::time::Duration;
 
@@ -11,6 +14,7 @@ use pmt_core::error::{Error, codes};
 use pmt_net::OutboundPolicy;
 use serde::de::DeserializeOwned;
 
+use crate::download::{self, Budget};
 use crate::manifest::{ChannelIndex, MANIFEST_FILE, ReleaseManifest, SIGNATURE_SUFFIX};
 use crate::trust::{self, TrustRoot};
 use crate::version::{Channel, ReleaseVersion};
@@ -28,6 +32,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 pub struct Releases {
     client: reqwest::Client,
     origin: String,
+    fallback: Option<String>,
+    budget: Budget,
     trust: TrustRoot,
     require_transparency_log: bool,
 }
@@ -69,9 +75,28 @@ impl Releases {
                 .unwrap_or(DEFAULT_ORIGIN)
                 .trim_end_matches('/')
                 .to_owned(),
+            fallback: None,
+            budget: Budget::default(),
             trust,
             require_transparency_log,
         })
+    }
+
+    /// With `update.mirror_fallback`: files a mirror fails to serve come
+    /// from [`DEFAULT_ORIGIN`]. Without a mirror there is nothing to fall
+    /// back from.
+    #[must_use]
+    pub fn with_fallback(mut self, fallback: bool) -> Self {
+        let mirrored = self.origin != DEFAULT_ORIGIN;
+        self.fallback = (fallback && mirrored).then(|| DEFAULT_ORIGIN.to_owned());
+        self
+    }
+
+    /// Replaces the retry budget (tests use short delays).
+    #[must_use]
+    pub fn with_budget(mut self, budget: Budget) -> Self {
+        self.budget = budget;
+        self
     }
 
     /// The verified index of `channel`.
@@ -133,16 +158,25 @@ impl Releases {
     }
 
     async fn get(&self, path: &str) -> Result<Vec<u8>, Error> {
-        let url = format!("{}/{path}", self.origin);
-        let failed = |e: &dyn std::fmt::Display| {
-            Error::new(&codes::UPDATE_FAILED, format!("cannot download {url}: {e}"))
-        };
-        let response = self.client.get(&url).send().await.map_err(|e| failed(&e))?;
-        let status = response.status();
-        if !status.is_success() {
-            return Err(failed(&status));
+        let primary = self.get_from(&self.origin, path).await;
+        match (&self.fallback, primary) {
+            (Some(origin), Err(err)) => {
+                tracing::warn!(component = "update", "{}; trying {origin}", err.message());
+                self.get_from(origin, path).await
+            }
+            (_, result) => result,
         }
-        Ok(response.bytes().await.map_err(|e| failed(&e))?.to_vec())
+    }
+
+    async fn get_from(&self, origin: &str, path: &str) -> Result<Vec<u8>, Error> {
+        let url = format!("{origin}/{path}");
+        let mut bytes = Vec::new();
+        download::fetch(&self.client, &url, &mut bytes, &self.budget)
+            .await
+            .map_err(|e| {
+                Error::new(&codes::UPDATE_FAILED, format!("cannot download {url}: {e}"))
+            })?;
+        Ok(bytes)
     }
 }
 

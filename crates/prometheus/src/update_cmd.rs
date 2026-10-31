@@ -2,11 +2,11 @@
 //! `--check`, `--set-channel`, `--rollback [--restore-snapshots]` and the
 //! update itself. The work lives in `pmt-update`; this module builds the
 //! install description, prints results and maps them to exit codes (0, 1,
-//! 2, 4, 10, 69, 75, 77).
+//! 2, 4, 10, 69, 73, 75, 77).
 
 use std::path::PathBuf;
 
-use pmt_config::daemon::DaemonConfig;
+use pmt_config::daemon::{DaemonConfig, PreUpdateBackup};
 use pmt_core::error::{Error, codes};
 use pmt_net::OutboundPolicy;
 use pmt_update::flow::{
@@ -59,7 +59,8 @@ pub fn run(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         &outbound_policy(ctx),
         TrustRoot::embedded(),
         config.require_transparency_log,
-    )?;
+    )?
+    .with_fallback(config.mirror_fallback);
     let progress = |line: &str| eprintln!("{line}");
     let session = Session {
         install: &install,
@@ -83,15 +84,40 @@ pub fn run(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let options = UpdateOptions {
         channel,
         allow_downgrade: args.allow_downgrade,
+        backup: backup_override(args),
     };
-    let updated = runtime.block_on(flow::update(&session, options))?;
-    print_updated(&updated);
-    Ok(pmt_core::exit::SUCCESS)
+    match runtime.block_on(flow::update(&session, options)) {
+        Ok(updated) => {
+            print_updated(&updated);
+            Ok(pmt_core::exit::SUCCESS)
+        }
+        // A backup that cannot be written exits 73 (cannot create output).
+        Err(err) if err.code().code == codes::UPDATE_BACKUP_FAILED.code => {
+            output::print_error(&err, ctx.json);
+            Ok(CANNOT_CREATE)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// Exit status of an update stopped because its backup cannot be written.
+pub const CANNOT_CREATE: u8 = 73;
+
+/// `--backup` forces `full`, `--no-backup` forces `off` (clap refuses both
+/// together with exit 2).
+fn backup_override(args: &UpdateArgs) -> Option<PreUpdateBackup> {
+    if args.backup {
+        Some(PreUpdateBackup::Full)
+    } else if args.no_backup {
+        Some(PreUpdateBackup::Off)
+    } else {
+        None
+    }
 }
 
 /// The running install: this executable (symlinks such as `pmt`
 /// resolved), the home, and this build's version and target.
-fn install(ctx: &Context<'_>) -> Result<Install, Error> {
+pub(crate) fn install(ctx: &Context<'_>) -> Result<Install, Error> {
     let binary = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .map_err(|e| {
@@ -111,13 +137,14 @@ fn install(ctx: &Context<'_>) -> Result<Install, Error> {
 /// The selected profile's network settings (IPv4-only, extra CA); the
 /// defaults when it does not load, since an update must not depend on a
 /// profile's health.
-fn outbound_policy(ctx: &Context<'_>) -> OutboundPolicy {
+pub(crate) fn outbound_policy(ctx: &Context<'_>) -> OutboundPolicy {
     match ctx.scope() {
         Ok(scope) => {
             let network = &scope.config().network;
             OutboundPolicy {
                 force_ipv4: network.force_ipv4,
                 extra_ca_file: network.extra_ca_file.clone().map(PathBuf::from),
+                proxy: network.proxy.clone(),
             }
         }
         Err(err) => {
@@ -167,11 +194,21 @@ fn print_check(checked: &Checked, json: bool) -> Result<u8, Error> {
 
 fn print_updated(updated: &Updated) {
     println!("{}", updated.message());
-    if let Updated::Installed { snapshots, .. } = updated {
+    if let Updated::Installed {
+        snapshots, backups, ..
+    } = updated
+    {
         for taken in snapshots {
             println!(
                 "pre-update snapshot of profile {}: {}",
                 taken.profile, taken.id
+            );
+        }
+        for backup in backups.iter().filter(|b| b.kind == "archive") {
+            println!(
+                "pre-update backup: {} ({} bytes)",
+                backup.path.display(),
+                backup.bytes
             );
         }
     }

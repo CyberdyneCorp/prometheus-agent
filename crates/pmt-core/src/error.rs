@@ -741,6 +741,33 @@ error_codes! {
     /// A `state.db` was written by a build this one cannot read.
     STORE_SCHEMA_UNREADABLE = ("store.schema_unreadable", Tool,
         "`state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`.");
+    /// The pre-update backup could not be written.
+    UPDATE_BACKUP_FAILED = ("update.backup_failed", Io,
+        "The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`.");
+    /// A runtime name is not in the pinned runtime index.
+    RUNTIME_UNKNOWN = ("runtime.unknown", Usage,
+        "The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names.");
+    /// A runtime has no pinned artifact for this host.
+    RUNTIME_UNSUPPORTED = ("runtime.unsupported", Unavailable,
+        "The pinned runtime index has no archive of this runtime for this host's OS, architecture and C library.");
+    /// A downloaded runtime archive does not match its pinned digest.
+    RUNTIME_DIGEST_MISMATCH = ("runtime.digest_mismatch", PermissionDenied,
+        "The downloaded archive's size or SHA-256 differs from the digest pinned in this binary (a corrupted download, or a mirror serving other bytes); the download was deleted and nothing was installed.");
+    /// A download failed after the retry budget.
+    RUNTIME_DOWNLOAD = ("runtime.download", Unavailable,
+        "The download failed with a permanent error, or with transient errors past the retry budget (4 consecutive failures without progress). Check the network, `network.proxy`, or the configured mirror.");
+    /// A runtime is excluded by `runtimes.exclude`.
+    RUNTIME_EXCLUDED = ("runtime.excluded", Tool,
+        "The runtime is listed in `runtimes.exclude` in `daemon.toml`, so nothing installs it; `prometheus runtimes exclude remove <name>` allows it again.");
+    /// A runtime is missing and lazy installs are disabled.
+    RUNTIME_NOT_INSTALLED = ("runtime.not_installed", Unavailable,
+        "The runtime is not in the store and `runtimes.allow_lazy_install = false`; install it with `prometheus runtimes install <name>`.");
+    /// The user declined a runtime install.
+    RUNTIME_DECLINED = ("runtime.declined", Cancelled,
+        "The install prompt was answered no; nothing was downloaded.");
+    /// A runtime store file could not be read or written.
+    RUNTIME_IO = ("runtime.io", Io,
+        "A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

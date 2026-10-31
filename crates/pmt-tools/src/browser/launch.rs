@@ -35,6 +35,10 @@ pub trait Runtimes: Send + Sync {
     fn installed(&self, name: &str) -> Option<PathBuf>;
     /// Installs `name` and returns its executable.
     fn install<'a>(&'a self, name: &'a str) -> InstallFuture<'a>;
+    /// Whether `runtimes.exclude` forbids installing `name`.
+    fn excluded(&self, _name: &str) -> bool {
+        false
+    }
 }
 
 /// A store with nothing installed and nothing installable (no store yet).
@@ -68,8 +72,8 @@ impl RuntimePolicy {
     ///
     /// # Errors
     ///
-    /// The spec message when lazy installs are disabled, or the install
-    /// failure.
+    /// The spec message when the runtime is excluded or lazy installs are
+    /// disabled, or the install failure.
     pub async fn executable(&self, name: &str) -> Result<PathBuf, String> {
         if let Some(path) = self.runtimes.installed(name) {
             return Ok(path);
@@ -77,12 +81,42 @@ impl RuntimePolicy {
         if let Some(path) = self.host_candidates.iter().find(|p| p.is_file()) {
             return Ok(path.clone());
         }
-        if !self.allow_lazy_install {
-            return Err(format!(
-                "{name} is not installed and lazy installs are disabled: run 'prometheus runtimes install {name}'"
-            ));
-        }
+        self.availability(name).map_err(|_| self.refusal(name))?;
         self.runtimes.install(name).await
+    }
+
+    /// The availability probe of a tool that needs runtime `name`: `Err`
+    /// carries the `unavailable:<reason>` reason (`excluded`, `lazy
+    /// installs disabled`) when using the tool would need an install the
+    /// policy forbids.
+    ///
+    /// # Errors
+    ///
+    /// The reason.
+    pub fn availability(&self, name: &str) -> Result<(), &'static str> {
+        let present = self.runtimes.installed(name).is_some()
+            || self.host_candidates.iter().any(|p| p.is_file());
+        if present {
+            Ok(())
+        } else if self.runtimes.excluded(name) {
+            Err("excluded")
+        } else if !self.allow_lazy_install {
+            Err("lazy installs disabled")
+        } else {
+            Ok(())
+        }
+    }
+
+    fn refusal(&self, name: &str) -> String {
+        if self.runtimes.excluded(name) {
+            format!(
+                "{name} is excluded by runtimes.exclude: run 'prometheus runtimes exclude remove {name}' to allow it"
+            )
+        } else {
+            format!(
+                "{name} is not installed and lazy installs are disabled: run 'prometheus runtimes install {name}'"
+            )
+        }
     }
 }
 

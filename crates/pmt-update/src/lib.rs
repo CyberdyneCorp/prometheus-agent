@@ -4,9 +4,11 @@
 //! and update receipts ([`install`], [`receipts`]), the update lock
 //! ([`lock`]), verified downloads ([`fetch`]) and the `prometheus update`
 //! operations ([`flow`]): check, atomic swap after a self-test with
-//! pre-update snapshots, and rollback.
+//! pre-update backups, and rollback; plus the managed runtime store
+//! ([`runtimes`]) and downloads under the retry budget ([`download`]).
 
 pub mod archive;
+pub mod download;
 pub mod fetch;
 pub mod flow;
 pub mod install;
@@ -15,6 +17,7 @@ pub mod manifest;
 pub mod notice;
 pub mod probe;
 pub mod receipts;
+pub mod runtimes;
 pub mod swap;
 pub mod trust;
 pub mod version;

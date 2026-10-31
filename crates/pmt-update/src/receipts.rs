@@ -75,6 +75,30 @@ pub struct SnapshotRef {
     pub created_at: String,
 }
 
+/// A pre-update backup the update wrote.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackupRef {
+    /// `snapshot` (one profile) or `archive` (the whole home).
+    pub kind: String,
+    /// Where it is.
+    pub path: PathBuf,
+    /// Its size in bytes.
+    pub bytes: u64,
+}
+
+/// The stages of an update, in order; an interrupted update was in the
+/// first one its receipt does not list.
+pub const UPDATE_STAGES: &[&str] = &[
+    "check",
+    "download",
+    "verify",
+    "unpack",
+    "self-test",
+    "backup",
+    "swap",
+    "runtimes",
+];
+
 /// One receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateReceipt {
@@ -110,6 +134,36 @@ pub struct UpdateReceipt {
     /// Pre-update snapshots taken (one per profile).
     #[serde(default)]
     pub snapshots: Vec<SnapshotRef>,
+    /// Every pre-update backup written, with its size.
+    #[serde(default)]
+    pub backups: Vec<BackupRef>,
+}
+
+impl UpdateReceipt {
+    /// The stage an interrupted or failed update stopped in: the first of
+    /// [`UPDATE_STAGES`] it did not complete.
+    #[must_use]
+    pub fn stopped_at(&self) -> Option<&'static str> {
+        if self.kind != Kind::Update {
+            return None;
+        }
+        UPDATE_STAGES
+            .iter()
+            .find(|stage| !self.stages.iter().any(|s| s == *stage))
+            .copied()
+    }
+
+    /// The outcome, reading a `running` receipt whose process is gone as
+    /// `interrupted` without rewriting it.
+    #[must_use]
+    pub fn effective_outcome(&self) -> Outcome {
+        let alive = process_start_time(self.pid) == Some(self.pid_started);
+        if self.outcome == Outcome::Running && !alive {
+            Outcome::Interrupted
+        } else {
+            self.outcome
+        }
+    }
 }
 
 /// A receipt being written: every change is persisted at once, so a crash
@@ -156,6 +210,7 @@ impl ReceiptWriter {
             follow_ups: Vec::new(),
             errors: Vec::new(),
             snapshots: Vec::new(),
+            backups: Vec::new(),
         };
         let writer = Self { dir, path, receipt };
         writer.save()?;
@@ -256,6 +311,20 @@ pub fn list(home: &Path) -> Result<Vec<(PathBuf, UpdateReceipt)>, Error> {
 #[must_use]
 pub fn latest(home: &Path) -> Option<UpdateReceipt> {
     read(&dir(home).join(LATEST_FILE))
+}
+
+/// The newest update or rollback receipt (checks and channel changes are
+/// skipped), for `prometheus doctor`.
+///
+/// # Errors
+///
+/// `update.failed` when the receipts cannot be read.
+pub fn last_update(home: &Path) -> Result<Option<UpdateReceipt>, Error> {
+    Ok(list(home)?
+        .into_iter()
+        .rev()
+        .map(|(_, r)| r)
+        .find(|r| matches!(r.kind, Kind::Update | Kind::Rollback)))
 }
 
 /// The newest successful update, whose snapshots a rollback restores.

@@ -3,16 +3,19 @@
 # distribution-and-update, Installers): one archive holding BINARY for
 # TARGET, the signed manifest and stable channel index, and install.sh /
 # install.ps1 rendered with an ephemeral fixture key instead of the
-# release keys.
+# release keys. With --test-key the release is signed with the committed
+# test key instead, which debug builds also trust, so `prometheus update`
+# can install from the fixture; a second run with --add publishes another
+# tag into the same directory (it becomes the channel's newest).
 #
-# usage: scripts/ci/installer-fixture OUT_DIR BINARY TARGET [TAG]
+# usage: scripts/ci/installer-fixture OUT_DIR BINARY TARGET [TAG [--test-key [--add]]]
 set -euo pipefail
 
-out=$1 binary=$2 target=$3 tag=${4:-v0.0.1}
+out=$1 binary=$2 target=$3 tag=${4:-v0.0.1} key_mode=${5:-} add=${6:-}
 root=$(cd "$(dirname "$0")/../.." && pwd)
 xtask() { (cd "$root" && cargo run --quiet -p xtask -- "$@"); }
 
-rm -rf "$out"
+[ "$add" = --add ] || rm -rf "$out"
 mkdir -p "$out/$tag/prometheus-$target" "$out/channels"
 out=$(cd "$out" && pwd)
 name=prometheus
@@ -21,7 +24,13 @@ cp "$binary" "$out/$tag/prometheus-$target/$name"
 tar -czf "$out/$tag/prometheus-$target.tar.gz" -C "$out/$tag" "prometheus-$target"
 rm -r "$out/$tag/prometheus-$target"
 
-xtask release keygen --out "$out/keys" --name fixture
+if [ "$key_mode" = --test-key ]; then
+    mkdir -p "$out/keys"
+    cp "$root/crates/pmt-update/keys/test.pub" "$out/keys/fixture.pub"
+    cp "$root/crates/pmt-update/tests/fixtures/test.key" "$out/keys/fixture.key"
+elif [ "$add" != --add ]; then
+    xtask release keygen --out "$out/keys" --name fixture
+fi
 xtask release manifest --dir "$out/$tag" --tag "$tag" --commit fixture
 mv "$out/$tag/channel-stable.json" "$out/channels/stable.json"
 xtask release installers --out "$out" --key "$out/keys/fixture.pub"

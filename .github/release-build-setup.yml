@@ -13,3 +13,12 @@
       echo "CC_aarch64_linux_android=$bin/aarch64-linux-android$api-clang"
       echo "AR_aarch64_linux_android=$bin/llvm-ar"
     } >>"$GITHUB_ENV"
+# Locked, reproducible builds (spec: distribution-and-update, Reproducible,
+# locked builds): the build must use Cargo.lock exactly as committed, and
+# the baked-in build date is the commit's, so rebuilding the same commit
+# gives the same binary (CI's `reproducible` job compares two builds).
+- name: Locked, reproducible build inputs
+  shell: bash
+  run: |
+    cargo metadata --locked --format-version 1 >/dev/null
+    echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >>"$GITHUB_ENV"

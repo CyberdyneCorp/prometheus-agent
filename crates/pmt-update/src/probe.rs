@@ -1,7 +1,9 @@
 //! Runs another `prometheus` binary — the staged build's `self-test`, the
-//! previous build's `version --json` — with a deadline (spec:
-//! distribution-and-update, Atomic binary swap with health check).
+//! previous build's `version --json`, the new build's runtime refresh —
+//! with a deadline (spec: distribution-and-update, Atomic binary swap with
+//! health check; Runtime leases and garbage collection).
 
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -12,6 +14,8 @@ use serde::Deserialize;
 
 /// The staged build's self-test budget.
 pub const SELF_TEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// The new build's runtime refresh budget (it may download runtimes).
+pub const REFRESH_TIMEOUT: Duration = Duration::from_mins(30);
 
 /// What `self-test --json` and `version --json` both report.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -22,6 +26,10 @@ pub struct BuildInfo {
     pub store_schema_version: u32,
     /// `config.toml` schema it writes.
     pub config_schema_version: u32,
+    /// The runtime store directories it pins on this host, by name
+    /// (`version --json` only).
+    #[serde(default)]
+    pub runtime_pins: BTreeMap<String, String>,
 }
 
 /// Runs `<binary> --home <home> self-test --json`.
@@ -66,6 +74,21 @@ pub fn version(binary: &Path) -> Result<BuildInfo, Error> {
     command.args(["version", "--json"]);
     let output = run(command, SELF_TEST_TIMEOUT).map_err(failed)?;
     serde_json::from_slice(&output).map_err(|e| failed(e.to_string()))
+}
+
+/// Runs `<binary> --home <home> runtimes refresh` (the new build installs
+/// its pins of the runtimes in use and collects garbage).
+///
+/// # Errors
+///
+/// A one-line reason.
+pub fn refresh_runtimes(binary: &Path, home: &Path) -> Result<(), String> {
+    let mut command = Command::new(binary);
+    command
+        .arg("--home")
+        .arg(home)
+        .args(["runtimes", "refresh"]);
+    run(command, REFRESH_TIMEOUT).map(drop)
 }
 
 /// Runs `command`, returns its stdout when it exits 0 within `timeout`,

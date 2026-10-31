@@ -6,6 +6,7 @@
 
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
 - [Chatting with the agent](guide/chat.md)
+- [Installing and updating](guide/install-and-update.md)
 - [Setup, onboarding and doctor](guide/setup-and-doctor.md)
 - [Sessions](guide/sessions.md)
 - [Turns and the system prompt](guide/turns.md)

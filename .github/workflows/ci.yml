@@ -212,6 +212,13 @@ jobs:
               apk add --no-cache curl minisign >/dev/null &&
               adduser -D tester && su tester -c "sh scripts/ci/test-install-sh target/installer-fixture/install.sh http://127.0.0.1:8765 v0.0.1"'
 
+      # Every installer and update command of the install guide, run as
+      # documented against a local signed release (task 20.10).
+      - name: Install and update guide
+        run: |
+          scripts/ci/test-install-guide docs/guide/install-and-update.md \
+            target/x86_64-unknown-linux-musl/debug/prometheus x86_64-unknown-linux-musl
+
   # install.ps1 under Windows PowerShell 5.1 and PowerShell 7 against the
   # same kind of fixture release.
   installers-windows:
@@ -248,6 +255,68 @@ jobs:
           } finally {
             Stop-Process -Id $server.Id -Force
           }
+
+      - name: Install and update guide
+        shell: pwsh
+        run: |
+          ./scripts/ci/test-install-guide.ps1 -Guide docs/guide/install-and-update.md `
+            -Binary target/debug/prometheus.exe -Target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  # Reproducible, locked builds (spec: distribution-and-update): the same
+  # commit built twice on separate runners, as the release builds it
+  # (`--locked`, the `dist` profile, the commit time as build date), must
+  # give byte-identical static musl binaries.
+  reproducible:
+    name: reproducible build (${{ matrix.build }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        build: [first, second]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # No build cache: each build starts from nothing.
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          target: x86_64-unknown-linux-musl
+          build-warnings: ""
+          cache: false
+
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Locked release build
+        run: |
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          export SOURCE_DATE_EPOCH
+          cargo build --locked --profile dist --target x86_64-unknown-linux-musl -p prometheus
+          mkdir out
+          cp target/x86_64-unknown-linux-musl/dist/prometheus out/
+          (cd out && sha256sum prometheus | tee prometheus.sha256)
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reproducible-${{ matrix.build }}
+          path: out/
+
+  reproducible-compare:
+    name: reproducible build (identical digests)
+    needs: reproducible
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: reproducible-*
+      - name: Compare the two builds
+        run: |
+          cat reproducible-first/prometheus.sha256 reproducible-second/prometheus.sha256
+          if ! cmp reproducible-first/prometheus reproducible-second/prometheus; then
+            echo "two locked builds of ${GITHUB_SHA} differ" >&2
+            exit 1
+          fi
+          echo "both builds: $(cut -d' ' -f1 reproducible-first/prometheus.sha256)"
 
   perf:
     name: perf (startup, memory, size)

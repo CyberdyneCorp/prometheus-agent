@@ -41,6 +41,16 @@ if ($receipt.version -ne $Tag) { Fail "receipt version is $($receipt.version)" }
 $status = & (Join-Path $dir 'prometheus.exe') --home (Join-Path $env:TEMP 'pmt-installer-home') update --status
 if (-not ($status -contains 'owner: self')) { Fail "update --status does not report owner self: $status" }
 
+# Runtimes opted out at install time are recorded in runtimes.exclude.
+$code = Install @('-Channel', 'stable', '-Without', 'java', '-BaseUrl', 'http://127.0.0.1:9')
+if ($code -ne 2) { Fail "-Without java exited $code, expected 2" }
+$code = Install @('-BaseUrl', $BaseUrl, '-NoModifyPath', '-Without', 'chromium,node')
+if ($code -ne 0) { Fail "install -Without exited $code" }
+$excluded = & (Join-Path $dir 'prometheus.exe') runtimes exclude list
+if (($excluded -join ',') -ne 'chromium,node') { Fail "runtimes.exclude is: $excluded" }
+& (Join-Path $dir 'prometheus.exe') runtimes install chromium 2>$null
+if ($LASTEXITCODE -ne 1) { Fail "installing an excluded runtime exited $LASTEXITCODE, expected 1" }
+
 # A tampered archive is refused and leaves the installed binary alone.
 $before = (Get-FileHash (Join-Path $dir 'prometheus.exe')).Hash
 $code = Install @('-BaseUrl', "$BaseUrl/tampered", '-NoModifyPath')

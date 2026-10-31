@@ -1,17 +1,18 @@
 //! `prometheus update` (spec: distribution-and-update, Atomic binary swap
-//! with health check; Schema migrations around updates): under the update
-//! lock, download and verify the archive into
-//! `<home>/updates/staging/<receipt id>/`, run the staged build's
-//! self-test, snapshot every profile (reason `pre-update`, label
-//! `pre-<version>`) so a rollback can restore the state the old build
-//! reads, then swap the binary atomically.
+//! with health check; Schema migrations around updates; Pre-update backup;
+//! Runtime leases and garbage collection): under the update lock, download
+//! and verify the archive into `<home>/updates/staging/<receipt id>/`, run
+//! the staged build's self-test, take the pre-update backup (see
+//! [`super::backup`]) so a rollback can restore the state the old build
+//! reads, swap the binary atomically, then let the new build refresh its
+//! runtime pins and collect unpinned runtimes.
 
 use std::path::{Path, PathBuf};
 
-use pmt_backup::snapshot::{self, Reason};
-use pmt_config::ProfileDir;
+use pmt_config::daemon::PreUpdateBackup;
 use pmt_core::error::{Error, codes};
 
+use super::backup::{self, Step};
 use super::check::begin;
 use super::{Checked, Install, Session, finish, refuse, self_updating};
 use crate::archive;
@@ -19,7 +20,7 @@ use crate::install::InstallReceipt;
 use crate::lock::UpdateLock;
 use crate::manifest::ReleaseManifest;
 use crate::probe;
-use crate::receipts::{Kind, Outcome, ReceiptWriter, SnapshotRef};
+use crate::receipts::{BackupRef, Kind, Outcome, ReceiptWriter, SnapshotRef};
 use crate::swap;
 use crate::trust;
 use crate::version::{Channel, ReleaseVersion};
@@ -31,6 +32,9 @@ pub struct UpdateOptions {
     pub channel: Option<Channel>,
     /// `--allow-downgrade`: install the channel's newest even when older.
     pub allow_downgrade: bool,
+    /// `--backup` (`full`) / `--no-backup` (`off`): overrides
+    /// `update.pre_update_backup` for this run.
+    pub backup: Option<PreUpdateBackup>,
 }
 
 /// What `update` did.
@@ -44,6 +48,8 @@ pub enum Updated {
         to: ReleaseVersion,
         /// Pre-update snapshots, one per profile.
         snapshots: Vec<SnapshotRef>,
+        /// Every pre-update backup with its size.
+        backups: Vec<BackupRef>,
     },
     /// Nothing to install (current, or ahead of the channel).
     Unchanged(Checked),
@@ -105,23 +111,56 @@ async fn run(
     let manifest = session.releases.manifest(&wanted).await?;
     let staged = download(session, writer, &manifest).await?;
     say("running the staged build's self-test");
-    probe::self_test(&staged, install.home.root())?;
+    let staged_info = probe::self_test(&staged, install.home.root())?;
     writer.stage("self-test")?;
-    let snapshots = snapshot_profiles(install, session.config.snapshot_keep, &wanted)?;
+    let mode = options.backup.unwrap_or(session.config.pre_update_backup);
+    say(&format!("pre-update backup ({})", mode.as_str()));
+    let taken = backup::run(&Step {
+        install,
+        mode,
+        snapshot_keep: session.config.snapshot_keep,
+        staged: &staged_info,
+        to: &wanted,
+    })?;
     writer.update(|r| {
-        r.snapshots.clone_from(&snapshots);
-        r.stages.push("snapshot".to_owned());
+        r.snapshots.clone_from(&taken.snapshots);
+        r.backups.clone_from(&taken.backups);
+        r.stages.push("backup".to_owned());
     })?;
     say("swapping the binary");
     swap::install(&staged, &install.binary)?;
     writer.stage("swap")?;
     receipt.version = wanted.to_string();
     receipt.write(install.home.root())?;
+    refresh_runtimes(install, writer, say)?;
     Ok(Updated::Installed {
         from: install.version,
         to: wanted,
-        snapshots,
+        snapshots: taken.snapshots,
+        backups: taken.backups,
     })
+}
+
+/// Lets the new build install its runtime pins for the runtimes in use
+/// (never an excluded one) and collect versions neither build pins. The
+/// update itself is done: a failure here is a follow-up, not a failure.
+fn refresh_runtimes(
+    install: &Install,
+    writer: &mut ReceiptWriter,
+    say: &dyn Fn(&str),
+) -> Result<(), Error> {
+    say("refreshing managed runtimes");
+    match probe::refresh_runtimes(&install.binary, install.home.root()) {
+        Ok(()) => writer.stage("runtimes"),
+        Err(reason) => {
+            say(&format!("runtime refresh failed: {reason}"));
+            writer.update(|r| {
+                r.follow_ups.push(format!(
+                    "runtime refresh failed ({reason}): run 'prometheus runtimes gc' and reinstall what tools need with 'prometheus runtimes install <name>'"
+                ));
+            })
+        }
+    }
 }
 
 /// Downloads, verifies and unpacks this host's archive; returns the
@@ -155,34 +194,6 @@ async fn download(
     let staged = archive::extract_binary(&bytes, &staging_dir(install, writer))?;
     writer.stage("unpack")?;
     Ok(staged)
-}
-
-/// Takes a `pre-update` snapshot of every profile (config and a
-/// consistent copy of `state.db`, among the quick member set) and keeps the
-/// newest `keep` of them per profile.
-fn snapshot_profiles(
-    install: &Install,
-    keep: u32,
-    to: &ReleaseVersion,
-) -> Result<Vec<SnapshotRef>, Error> {
-    let label = format!("pre-{to}");
-    let mut taken = Vec::new();
-    for name in install.home.profiles()? {
-        let profile = install.home.existing_profile(&name)?;
-        let info = snapshot::create(&profile, Reason::PreUpdate, Some(&label))?;
-        prune_pre_update(&profile, keep)?;
-        taken.push(SnapshotRef {
-            profile: name.to_string(),
-            id: info.id,
-            created_at: info.created_at,
-        });
-    }
-    Ok(taken)
-}
-
-fn prune_pre_update(profile: &ProfileDir, keep: u32) -> Result<(), Error> {
-    let keep = usize::try_from(keep).unwrap_or(usize::MAX);
-    snapshot::prune_reason(profile, Reason::PreUpdate, keep).map(drop)
 }
 
 fn staging_dir(install: &Install, writer: &ReceiptWriter) -> PathBuf {

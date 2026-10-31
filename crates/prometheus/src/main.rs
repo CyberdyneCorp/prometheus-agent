@@ -13,9 +13,9 @@ use pmt_core::panic;
 use prometheus::output::print_error;
 use prometheus::{
     Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, chat, config_cmd, fallback_cmd,
-    grants_cmd, logs_cmd, memory_cmd, model_cmd, profile_cmd, prompt_cmd, secrets_cmd,
-    self_test_cmd, sessions_cmd, skills_cmd, startup, tools_cmd, trajectory_cmd, update_cmd,
-    usage_cmd, version,
+    grants_cmd, logs_cmd, memory_cmd, model_cmd, profile_cmd, prompt_cmd, runtimes_cmd,
+    secrets_cmd, self_test_cmd, sessions_cmd, skills_cmd, startup, tools_cmd, trajectory_cmd,
+    update_cmd, usage_cmd, version,
 };
 
 fn main() -> ExitCode {
@@ -30,6 +30,9 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(err) => return usage_failure(&err),
     };
+    if cli.print_version {
+        return ExitCode::from(version::run(cli.json, cli.verbose > 0));
+    }
     if cli.command.is_some() && !cli.chat.is_empty() {
         let usage = Error::new(
             &codes::CLI_USAGE,
@@ -92,6 +95,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
+        Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
         None => chat::run(&cli.chat, &ctx, ui(cli)),
     };

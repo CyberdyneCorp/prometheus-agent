@@ -31,6 +31,10 @@ regex.workspace = true
 proc-macro2 = { version = "1.0", features = ["span-locations"] }
 serde.workspace = true
 serde_json.workspace = true
+# The release-age gate reads the crates.io sparse index.
+pmt-net.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
 syn = { version = "3.0", default-features = false, features = ["full", "parsing", "visit"] }
 toml.workspace = true
 

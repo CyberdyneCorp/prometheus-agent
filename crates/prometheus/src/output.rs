@@ -39,6 +39,22 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "update --check",
     },
     JsonShape {
+        schema: "prometheus.runtimes.v1",
+        command: "runtimes list",
+    },
+    JsonShape {
+        schema: "prometheus.runtimes_verify.v1",
+        command: "runtimes verify",
+    },
+    JsonShape {
+        schema: "prometheus.runtimes_doctor.v1",
+        command: "runtimes doctor",
+    },
+    JsonShape {
+        schema: "prometheus.runtimes_exclude.v1",
+        command: "runtimes exclude list",
+    },
+    JsonShape {
         schema: "prometheus.grants.v1",
         command: "grants list",
     },

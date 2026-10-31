@@ -11,7 +11,10 @@
 #   the installers
 #
 # and then verifies the complete set (`cargo xtask release verify`), so a
-# release missing any artifact or signature fails here. On a tag push it
+# release missing any artifact or signature fails here. Before any of that
+# the dependency gates run (`scripts/ci/release-dependency-gates`: the
+# advisory/license/source audit and the release-age gate), so an unwaived
+# finding publishes nothing. On a tag push it
 # signs with the PMT_RELEASE_SIGNING_KEY secret, which must be the primary
 # or standby key embedded in the binary; on pull requests (the dry run) it
 # signs with an ephemeral key. Every action is pinned to a commit SHA.
@@ -75,13 +78,23 @@ jobs:
       PLAN: ${{ inputs.plan }}
       PUBLISHING: ${{ startsWith(github.ref, 'refs/tags/') }}
     steps:
+      # Full history and tags: the release-age gate compares Cargo.lock with
+      # the previous release.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           build-warnings: ""
           cache-key: release-finalize
+      - name: Read pinned tool versions from scripts/check
+        run: sed -n 's/^readonly \([A-Z_]*_VERSION\)=\(.*\)$/\1=\2/p' scripts/check >>"$GITHUB_ENV"
+      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
+      - name: Dependency gates
+        run: scripts/ci/release-dependency-gates
       - name: Fetch the target archives
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

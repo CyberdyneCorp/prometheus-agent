@@ -18,6 +18,8 @@ pub struct OutboundPolicy {
     pub force_ipv4: bool,
     /// `network.extra_ca_file`: PEM roots trusted besides the OS store.
     pub extra_ca_file: Option<PathBuf>,
+    /// `network.proxy`: the HTTP(S) proxy every request goes through.
+    pub proxy: Option<String>,
 }
 
 /// A client builder for one profile's outbound traffic; callers add their
@@ -66,10 +68,19 @@ pub(crate) fn base_builder(
     CLIENTS_BUILT.fetch_add(1, Ordering::Relaxed);
     tracing::debug!(component = "net", "outbound HTTP client configured");
     let tls = crate::tls::client_config(policy.extra_ca_file.as_deref())?;
-    let builder = reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .user_agent(concat!("prometheus/", env!("CARGO_PKG_VERSION")))
         .tls_backend_preconfigured(tls)
         .dns_resolver(Arc::new(resolver));
+    if let Some(url) = &policy.proxy {
+        let proxy = reqwest::Proxy::all(url).map_err(|e| {
+            Error::new(
+                &codes::NET_CLIENT_INIT,
+                format!("network.proxy {url} is not a proxy URL: {e}"),
+            )
+        })?;
+        builder = builder.proxy(proxy);
+    }
     Ok(if policy.force_ipv4 {
         // Also covers IPv6 literals in URLs, which skip name resolution:
         // an IPv4-bound socket cannot reach them.

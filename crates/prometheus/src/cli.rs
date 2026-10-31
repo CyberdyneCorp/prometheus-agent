@@ -8,7 +8,6 @@ use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 
 use pmt_store::{Role, Source};
 
-use crate::build_info;
 pub use crate::chat::args::ChatArgs;
 pub use crate::memory_cmd::args::MemoryCommand;
 pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand};
@@ -18,7 +17,13 @@ pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand}
 // is cleared so this type's doc comment never leaks into `--help`.
 /// Parsed command line.
 #[derive(Debug, Parser)]
-#[command(name = "prometheus", bin_name = "prometheus", version = build_info::identity())]
+// `-V/--version` is a plain flag rather than clap's, so `--version
+// --verbose` can print the build details (and the runtime index digest).
+#[command(
+    name = "prometheus",
+    bin_name = "prometheus",
+    disable_version_flag = true
+)]
 #[command(about = "Prometheus Agent", long_about = None)]
 #[allow(clippy::struct_excessive_bools)] // independent global switches
 pub struct Cli {
@@ -46,6 +51,9 @@ pub struct Cli {
     /// Only the answer: no banner, spinner or tool previews.
     #[arg(short, long, global = true)]
     pub quiet: bool,
+    /// `-V/--version`: the identity line (`--verbose`: as `version --verbose`).
+    #[arg(short = 'V', long = "version", help = "Print version")]
+    pub print_version: bool,
     /// `chat` flags, when the subcommand is omitted.
     #[command(flatten)]
     pub chat: ChatArgs,
@@ -191,6 +199,67 @@ pub enum Command {
     /// (run by `prometheus update` on the staged binary).
     #[command(hide = true)]
     SelfTest,
+    /// List, install, verify and collect the managed runtimes (Node,
+    /// CPython, uv, Chromium) shared by every profile.
+    Runtimes {
+        /// The runtimes subcommand.
+        #[command(subcommand)]
+        command: RuntimesCommand,
+    },
+}
+
+/// `prometheus runtimes` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum RuntimesCommand {
+    /// Pinned and installed versions with their size and users.
+    List,
+    /// Download, verify and install the pinned versions.
+    Install {
+        /// Runtime names (node, cpython, uv, chromium).
+        #[arg(required = true, value_name = "NAME")]
+        names: Vec<String>,
+    },
+    /// Remove every installed version no process is using.
+    Remove {
+        /// Runtime name.
+        name: String,
+    },
+    /// Re-hash every installed file against its recorded digest (exit 1 on
+    /// any mismatch).
+    Verify,
+    /// Remove versions neither this binary nor its `.prev` pins and no
+    /// process uses, and partial downloads older than 24 hours.
+    Gc,
+    /// Report the store: location, platform, mirror, exclusions and the
+    /// verification state of every installed version.
+    Doctor,
+    /// List and edit `runtimes.exclude` (runtimes nothing may install).
+    Exclude {
+        /// The exclude subcommand.
+        #[command(subcommand)]
+        command: ExcludeCommand,
+    },
+    /// Install this build's pins of the runtimes in use, then collect
+    /// garbage (run by `prometheus update` with the new binary).
+    #[command(hide = true)]
+    Refresh,
+}
+
+/// `prometheus runtimes exclude` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ExcludeCommand {
+    /// The excluded runtimes.
+    List,
+    /// Exclude a runtime.
+    Add {
+        /// Runtime name.
+        name: String,
+    },
+    /// Allow a runtime again.
+    Remove {
+        /// Runtime name.
+        name: String,
+    },
 }
 
 /// `prometheus update` arguments. The flags are independent switches of
@@ -225,6 +294,14 @@ pub struct UpdateArgs {
     /// Confirm `--restore-snapshots` without asking.
     #[arg(long, short = 'y')]
     pub yes: bool,
+    /// Also write a full home archive before the swap
+    /// (`update.pre_update_backup = "full"` for this run).
+    #[arg(long, conflicts_with_all = ["no_backup", "rollback", "check", "status", "set_channel"])]
+    pub backup: bool,
+    /// Skip the pre-update backup for this run (a store migration still
+    /// gets its pre-migration snapshot).
+    #[arg(long, conflicts_with_all = ["rollback", "check", "status", "set_channel"])]
+    pub no_backup: bool,
 }
 
 /// `prometheus setup` arguments.

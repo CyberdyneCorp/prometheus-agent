@@ -25,6 +25,8 @@ tar.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 ulid.workspace = true
+zip.workspace = true
+sysinfo = { workspace = true, features = ["disk"] }
 
 [dev-dependencies]
 minisign.workspace = true

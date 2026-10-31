@@ -86,6 +86,9 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 # Whole-home backup archives (`.tar.zst`).
 tar = { version = "0.4", default-features = false }
 zstd = { version = "0.14", default-features = false }
+# Runtime archives published only as `.zip` (Chrome for Testing, Windows
+# builds of Node and uv); deflate through the flate2 backend above.
+zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
 pmt-backup = { path = "crates/pmt-backup" }
 # Property tests (store transaction atomicity).
 proptest = { version = "1.9", default-features = false, features = ["std"] }

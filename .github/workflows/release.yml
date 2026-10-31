@@ -143,6 +143,11 @@ jobs:
             echo "AR_aarch64_linux_android=$bin/llvm-ar"
           } >>"$GITHUB_ENV"
         shell: "bash"
+      - name: "Locked, reproducible build inputs"
+        run: |
+          cargo metadata --locked --format-version 1 >/dev/null
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >>"$GITHUB_ENV"
+        shell: "bash"
       - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           key: ${{ join(matrix.targets, '-') }}

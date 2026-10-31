@@ -246,3 +246,12 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `update.rollback_refused` | `tool` | 1 | There is no `prometheus.prev` to roll back to, or a profile's storage was migrated beyond what the previous binary reads; rerun with `--restore-snapshots` to restore the pre-update snapshots. |
 | `update.invalid_argument` | `usage` | 2 | A release version is not `vMAJOR.MINOR.PATCH` (or `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS`), or a channel is not `stable` or `canary`. |
 | `store.schema_unreadable` | `tool` | 1 | `state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`. |
+| `update.backup_failed` | `io` | 74 | The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`. |
+| `runtime.unknown` | `usage` | 2 | The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names. |
+| `runtime.unsupported` | `unavailable` | 69 | The pinned runtime index has no archive of this runtime for this host's OS, architecture and C library. |
+| `runtime.digest_mismatch` | `permission_denied` | 77 | The downloaded archive's size or SHA-256 differs from the digest pinned in this binary (a corrupted download, or a mirror serving other bytes); the download was deleted and nothing was installed. |
+| `runtime.download` | `unavailable` | 69 | The download failed with a permanent error, or with transient errors past the retry budget (4 consecutive failures without progress). Check the network, `network.proxy`, or the configured mirror. |
+| `runtime.excluded` | `tool` | 1 | The runtime is listed in `runtimes.exclude` in `daemon.toml`, so nothing installs it; `prometheus runtimes exclude remove <name>` allows it again. |
+| `runtime.not_installed` | `unavailable` | 69 | The runtime is not in the store and `runtimes.allow_lazy_install = false`; install it with `prometheus runtimes install <name>`. |
+| `runtime.declined` | `cancelled` | 130 | The install prompt was answered no; nothing was downloaded. |
+| `runtime.io` | `io` | 74 | A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed. |

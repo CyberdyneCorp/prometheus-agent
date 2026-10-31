@@ -16,6 +16,9 @@ const EXCLUDED_HOME_DIRS: &[&str] = &["runtimes", "run", "logs", "cache", "backu
 /// Profile-level directories never archived: logs, caches (browser
 /// profiles live under `cache/browser/`) and earlier config/state backups.
 const EXCLUDED_PROFILE_DIRS: &[&str] = &["logs", "cache", "backups"];
+/// Directories under `updates/` never archived: earlier pre-update backups
+/// and the staged binary of an update in progress.
+const EXCLUDED_UPDATE_DIRS: &[&str] = &["backups", "staging"];
 
 /// File-name suffixes never archived: lock files and SQLite sidecars (a
 /// database is copied whole through the online backup API instead).
@@ -60,7 +63,11 @@ fn excluded_dir(dirs: &[&str]) -> bool {
         && dirs
             .get(2)
             .is_some_and(|d| EXCLUDED_PROFILE_DIRS.contains(d));
-    home_level || profile_level
+    let update_level = dirs.first() == Some(&"updates")
+        && dirs
+            .get(1)
+            .is_some_and(|d| EXCLUDED_UPDATE_DIRS.contains(d));
+    home_level || profile_level || update_level
 }
 
 /// Whether `relative` belongs to the `--quick` set.
@@ -174,6 +181,8 @@ mod tests {
             "profiles/a/cache/browser/real-profile/Cookies",
             "profiles/a/logs/x.log",
             "backups/prometheus-1.tar.zst",
+            "updates/backups/pre-update-v1.0.0-v1.0.1.tar.zst",
+            "updates/staging/01J/prometheus",
             "profiles/a/backups/config/config-1.toml",
             "profiles/a/state.db-wal",
             "profiles/a/state.db-shm",

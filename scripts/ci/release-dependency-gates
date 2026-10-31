@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# The dependency gates of the release pipeline (spec: distribution-and-update,
+# Reproducible, locked builds; Dependency release-age gate): the RustSec,
+# license and source audit (`cargo deny`, waivers in deny.toml), and the
+# release-age gate over every crate version locked since the previous
+# release tag (on a pull request's dry run: since the merge base with main).
+# Any finding fails the release before anything is signed or published.
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."
+base=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null ||
+    git merge-base HEAD origin/main 2>/dev/null ||
+    git rev-list --max-parents=0 HEAD | tail -n 1)
+cargo deny --locked check
+cargo xtask deps-age --base "$base"

@@ -35,6 +35,7 @@ Commands:
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
   update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -58,6 +59,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+  -V, --version
+          Print version
 
   -m, --model <MODEL>
           Model for this session (`[<provider>/]<model>` or an alias)
@@ -147,9 +151,6 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
-
-  -V, --version
-          Print version
 ```
 
 ## `prometheus chat`
@@ -7296,6 +7297,12 @@ Options:
   -y, --yes
           Confirm `--restore-snapshots` without asking
 
+      --backup
+          Also write a full home archive before the swap (`update.pre_update_backup = "full"` for this run)
+
+      --no-backup
+          Skip the pre-update backup for this run (a store migration still gets its pre-migration snapshot)
+
   -h, --help
           Print help
 ```
@@ -7333,6 +7340,599 @@ Options:
           Print help
 ```
 
+## `prometheus runtimes`
+
+```text
+List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+
+Usage: prometheus runtimes [OPTIONS] <COMMAND>
+
+Commands:
+  list     Pinned and installed versions with their size and users
+  install  Download, verify and install the pinned versions
+  remove   Remove every installed version no process is using
+  verify   Re-hash every installed file against its recorded digest (exit 1 on any mismatch)
+  gc       Remove versions neither this binary nor its `.prev` pins and no process uses, and partial downloads older than 24 hours
+  doctor   Report the store: location, platform, mirror, exclusions and the verification state of every installed version
+  exclude  List and edit `runtimes.exclude` (runtimes nothing may install)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes list`
+
+```text
+Pinned and installed versions with their size and users
+
+Usage: prometheus runtimes list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes install`
+
+```text
+Download, verify and install the pinned versions
+
+Usage: prometheus runtimes install [OPTIONS] <NAME>...
+
+Arguments:
+  <NAME>...
+          Runtime names (node, cpython, uv, chromium)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes remove`
+
+```text
+Remove every installed version no process is using
+
+Usage: prometheus runtimes remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Runtime name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes verify`
+
+```text
+Re-hash every installed file against its recorded digest (exit 1 on any mismatch)
+
+Usage: prometheus runtimes verify [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes gc`
+
+```text
+Remove versions neither this binary nor its `.prev` pins and no process uses, and partial downloads older than 24 hours
+
+Usage: prometheus runtimes gc [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes doctor`
+
+```text
+Report the store: location, platform, mirror, exclusions and the verification state of every installed version
+
+Usage: prometheus runtimes doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes exclude`
+
+```text
+List and edit `runtimes.exclude` (runtimes nothing may install)
+
+Usage: prometheus runtimes exclude [OPTIONS] <COMMAND>
+
+Commands:
+  list    The excluded runtimes
+  add     Exclude a runtime
+  remove  Allow a runtime again
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes exclude list`
+
+```text
+The excluded runtimes
+
+Usage: prometheus runtimes exclude list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes exclude add`
+
+```text
+Exclude a runtime
+
+Usage: prometheus runtimes exclude add [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Runtime name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes exclude remove`
+
+```text
+Allow a runtime again
+
+Usage: prometheus runtimes exclude remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Runtime name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes exclude help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus runtimes exclude help [COMMAND]
+
+Commands:
+  list    The excluded runtimes
+  add     Exclude a runtime
+  remove  Allow a runtime again
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus runtimes exclude help list`
+
+```text
+The excluded runtimes
+
+Usage: prometheus runtimes exclude help list
+```
+
+## `prometheus runtimes exclude help add`
+
+```text
+Exclude a runtime
+
+Usage: prometheus runtimes exclude help add
+```
+
+## `prometheus runtimes exclude help remove`
+
+```text
+Allow a runtime again
+
+Usage: prometheus runtimes exclude help remove
+```
+
+## `prometheus runtimes exclude help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus runtimes exclude help help
+```
+
+## `prometheus runtimes refresh`
+
+```text
+Install this build's pins of the runtimes in use, then collect garbage (run by `prometheus update` with the new binary)
+
+Usage: prometheus runtimes refresh [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus runtimes help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus runtimes help [COMMAND]
+
+Commands:
+  list     Pinned and installed versions with their size and users
+  install  Download, verify and install the pinned versions
+  remove   Remove every installed version no process is using
+  verify   Re-hash every installed file against its recorded digest (exit 1 on any mismatch)
+  gc       Remove versions neither this binary nor its `.prev` pins and no process uses, and partial downloads older than 24 hours
+  doctor   Report the store: location, platform, mirror, exclusions and the verification state of every installed version
+  exclude  List and edit `runtimes.exclude` (runtimes nothing may install)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus runtimes help list`
+
+```text
+Pinned and installed versions with their size and users
+
+Usage: prometheus runtimes help list
+```
+
+## `prometheus runtimes help install`
+
+```text
+Download, verify and install the pinned versions
+
+Usage: prometheus runtimes help install
+```
+
+## `prometheus runtimes help remove`
+
+```text
+Remove every installed version no process is using
+
+Usage: prometheus runtimes help remove
+```
+
+## `prometheus runtimes help verify`
+
+```text
+Re-hash every installed file against its recorded digest (exit 1 on any mismatch)
+
+Usage: prometheus runtimes help verify
+```
+
+## `prometheus runtimes help gc`
+
+```text
+Remove versions neither this binary nor its `.prev` pins and no process uses, and partial downloads older than 24 hours
+
+Usage: prometheus runtimes help gc
+```
+
+## `prometheus runtimes help doctor`
+
+```text
+Report the store: location, platform, mirror, exclusions and the verification state of every installed version
+
+Usage: prometheus runtimes help doctor
+```
+
+## `prometheus runtimes help exclude`
+
+```text
+List and edit `runtimes.exclude` (runtimes nothing may install)
+
+Usage: prometheus runtimes help exclude [COMMAND]
+
+Commands:
+  list    The excluded runtimes
+  add     Exclude a runtime
+  remove  Allow a runtime again
+```
+
+## `prometheus runtimes help exclude list`
+
+```text
+The excluded runtimes
+
+Usage: prometheus runtimes help exclude list
+```
+
+## `prometheus runtimes help exclude add`
+
+```text
+Exclude a runtime
+
+Usage: prometheus runtimes help exclude add
+```
+
+## `prometheus runtimes help exclude remove`
+
+```text
+Allow a runtime again
+
+Usage: prometheus runtimes help exclude remove
+```
+
+## `prometheus runtimes help refresh`
+
+```text
+Install this build's pins of the runtimes in use, then collect garbage (run by `prometheus update` with the new binary)
+
+Usage: prometheus runtimes help refresh
+```
+
+## `prometheus runtimes help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus runtimes help help
+```
+
 ## `prometheus help`
 
 ```text
@@ -7366,6 +7966,7 @@ Commands:
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
   update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
   help        Print this message or the help of the given subcommand(s)
 ```
 
@@ -8634,6 +9235,116 @@ Check this build against the home before an update installs it (run by `promethe
 Usage: prometheus help self-test
 ```
 
+## `prometheus help runtimes`
+
+```text
+List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+
+Usage: prometheus help runtimes [COMMAND]
+
+Commands:
+  list     Pinned and installed versions with their size and users
+  install  Download, verify and install the pinned versions
+  remove   Remove every installed version no process is using
+  verify   Re-hash every installed file against its recorded digest (exit 1 on any mismatch)
+  gc       Remove versions neither this binary nor its `.prev` pins and no process uses, and partial downloads older than 24 hours
+  doctor   Report the store: location, platform, mirror, exclusions and the verification state of every installed version
+  exclude  List and edit `runtimes.exclude` (runtimes nothing may install)
+```
+
+## `prometheus help runtimes list`
+
+```text
+Pinned and installed versions with their size and users
+
+Usage: prometheus help runtimes list
+```
+
+## `prometheus help runtimes install`
+
+```text
+Download, verify and install the pinned versions
+
+Usage: prometheus help runtimes install
+```
+
+## `prometheus help runtimes remove`
+
+```text
+Remove every installed version no process is using
+
+Usage: prometheus help runtimes remove
+```
+
+## `prometheus help runtimes verify`
+
+```text
+Re-hash every installed file against its recorded digest (exit 1 on any mismatch)
+
+Usage: prometheus help runtimes verify
+```
+
+## `prometheus help runtimes gc`
+
+```text
+Remove versions neither this binary nor its `.prev` pins and no process uses, and partial downloads older than 24 hours
+
+Usage: prometheus help runtimes gc
+```
+
+## `prometheus help runtimes doctor`
+
+```text
+Report the store: location, platform, mirror, exclusions and the verification state of every installed version
+
+Usage: prometheus help runtimes doctor
+```
+
+## `prometheus help runtimes exclude`
+
+```text
+List and edit `runtimes.exclude` (runtimes nothing may install)
+
+Usage: prometheus help runtimes exclude [COMMAND]
+
+Commands:
+  list    The excluded runtimes
+  add     Exclude a runtime
+  remove  Allow a runtime again
+```
+
+## `prometheus help runtimes exclude list`
+
+```text
+The excluded runtimes
+
+Usage: prometheus help runtimes exclude list
+```
+
+## `prometheus help runtimes exclude add`
+
+```text
+Exclude a runtime
+
+Usage: prometheus help runtimes exclude add
+```
+
+## `prometheus help runtimes exclude remove`
+
+```text
+Allow a runtime again
+
+Usage: prometheus help runtimes exclude remove
+```
+
+## `prometheus help runtimes refresh`
+
+```text
+Install this build's pins of the runtimes in use, then collect garbage (run by `prometheus update` with the new binary)
+
+Usage: prometheus help runtimes refresh
+```
+
 ## `prometheus help help`
 
 ```text
@@ -8651,6 +9362,10 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.doctor.v1` | `prometheus doctor` |
 | `prometheus.update_status.v1` | `prometheus update --status` |
 | `prometheus.update_check.v1` | `prometheus update --check` |
+| `prometheus.runtimes.v1` | `prometheus runtimes list` |
+| `prometheus.runtimes_verify.v1` | `prometheus runtimes verify` |
+| `prometheus.runtimes_doctor.v1` | `prometheus runtimes doctor` |
+| `prometheus.runtimes_exclude.v1` | `prometheus runtimes exclude list` |
 | `prometheus.grants.v1` | `prometheus grants list` |
 | `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.prompt_size.v1` | `prometheus prompt size` |

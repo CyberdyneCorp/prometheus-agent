@@ -4,19 +4,23 @@
 #
 #   irm https://github.com/CyberdyneCorp/prometheus-agent/releases/latest/download/install.ps1 | iex
 #   .\install.ps1 [-Channel stable|canary] [-Version vX.Y.Z] [-ModifyPath|-NoModifyPath] [-BaseUrl URL]
+#                  [-Without node,cpython,uv,chromium]
 #
 # It downloads the signed channel index and release manifest, verifies their
 # minisign signatures against the embedded keys (Ed25519 and BLAKE2b in the
 # C# below: Windows ships no Ed25519 verifier), checks the archive against
 # the signed SHA-256, installs %LOCALAPPDATA%\Programs\Prometheus\prometheus.exe
 # (+ the pmt.exe alias) and writes the install receipt install.json beside
-# it (owner `self`). It sends nothing but the downloads themselves.
+# it (owner `self`). Every -Without runtime is recorded in `runtimes.exclude`
+# of the home's daemon.toml, so nothing ever installs it. It sends nothing
+# but the downloads themselves.
 param(
     [string]$Channel = 'stable',
     [string]$Version = '',
     [switch]$ModifyPath,
     [switch]$NoModifyPath,
-    [string]$BaseUrl = 'https://github.com/CyberdyneCorp/prometheus-agent/releases/download'
+    [string]$BaseUrl = 'https://github.com/CyberdyneCorp/prometheus-agent/releases/download',
+    [string[]]$Without = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +42,13 @@ if ($Channel -ne 'stable' -and $Channel -ne 'canary') {
 }
 if ($Version -ne '' -and $Version -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-canary\.[0-9]{14})?$') {
     Fail "--version must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS, not $Version" 2
+}
+# `-Without chromium,node` arrives as one string under `-File`.
+$Without = @($Without | ForEach-Object { $_ -split ',' } | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_.Trim() })
+foreach ($runtime in $Without) {
+    if (@('node', 'cpython', 'uv', 'chromium') -notcontains $runtime) {
+        Fail "--without: unknown runtime '$runtime' (expected node|cpython|uv|chromium)" 2
+    }
 }
 $BaseUrl = $BaseUrl.TrimEnd('/')
 
@@ -298,6 +309,11 @@ try {
 }
 
 Write-Output "installed prometheus $Version ($target) to $exe"
+foreach ($runtime in $Without) {
+    & $exe runtimes exclude add $runtime | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "cannot record -Without $runtime in runtimes.exclude" }
+    Write-Output "excluded runtime $runtime (runtimes.exclude)"
+}
 
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $onPath = ($userPath -split ';') -contains $dir

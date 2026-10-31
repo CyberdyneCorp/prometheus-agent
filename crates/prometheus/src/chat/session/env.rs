@@ -148,6 +148,7 @@ fn web(scope: &ProfileScope) -> Option<WebSession> {
     let policy = OutboundPolicy {
         force_ipv4: config.network.force_ipv4,
         extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
+        proxy: config.network.proxy.clone(),
     };
     let client = pmt_net::client(&policy).ok()?;
     let egress = &config.security.egress;

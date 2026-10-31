@@ -28,11 +28,16 @@
 //! `cargo xtask perf` checks the startup, peak-RSS and binary-size budgets
 //! against `perf/baseline.json`.
 //!
+//! `cargo xtask deps-age --base <rev>` is the dependency release-age gate:
+//! crate versions locked since `<rev>` must be older than
+//! `deps-policy.toml`'s minimum age.
+//!
 //! `cargo xtask release <step>` runs the release steps around cargo-dist:
 //! SBOMs, the signed manifest and channel index, rendered installers,
 //! minisign signatures and the end-to-end check of a release directory.
 
 mod artifacts;
+mod deps_age;
 mod health;
 mod perf;
 mod release;
@@ -85,6 +90,13 @@ enum Command {
         #[arg(long)]
         update_baseline: bool,
     },
+    /// Reject crate versions locked since BASE that were published less
+    /// than `release_age_days` (deps-policy.toml) before they were locked.
+    DepsAge {
+        /// The commit to compare `Cargo.lock` with (the merge base).
+        #[arg(long)]
+        base: String,
+    },
     /// Release steps run by the Release workflow around cargo-dist.
     Release {
         #[command(subcommand)]
@@ -107,6 +119,7 @@ fn main() -> ExitCode {
             let baseline = baseline.unwrap_or_else(|| root.join("perf/baseline.json"));
             perf::run(&root, runs.into(), &baseline, update_baseline)
         }
+        Command::DepsAge { base } => deps_age::run(&repo_root(), &base),
         Command::Release { step } => release::run(step),
     };
     match result {

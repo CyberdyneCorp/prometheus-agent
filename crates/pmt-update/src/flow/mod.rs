@@ -5,6 +5,7 @@
 //! before any network request or mutation.
 
 mod apply;
+pub mod backup;
 mod check;
 mod rollback;
 

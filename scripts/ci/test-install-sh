@@ -17,6 +17,14 @@ set -e
 [ "$status" = 2 ] || fail "--channel main exited $status, expected 2"
 case $message in *"--channel must be stable or canary, not main"*) ;; *) fail "unexpected message: $message" ;; esac
 
+# An unknown --without runtime exits 2 before downloading anything.
+set +e
+message=$(sh "$installer" --without java --base-url http://127.0.0.1:9 2>&1)
+status=$?
+set -e
+[ "$status" = 2 ] || fail "--without java exited $status, expected 2"
+case $message in *"unknown runtime 'java'"*) ;; *) fail "unexpected message: $message" ;; esac
+
 export HOME="${TMPDIR:-/tmp}/installer-home.$$"
 mkdir -p "$HOME"
 output=$(sh "$installer" --base-url "$base_url" --no-modify-path)
@@ -32,6 +40,19 @@ grep -q "\"version\": \"$tag\"" "$bin/install.json" || fail "receipt version is 
 case $output in *'export PATH="$HOME/.local/bin:$PATH"'*) ;; *) fail "no PATH instructions printed" ;; esac
 "$bin/prometheus" --home "$HOME/.prometheus" update --status | grep -q '^owner: self$' ||
     fail "update --status does not report owner self"
+
+# Runtimes opted out at install time are recorded in runtimes.exclude.
+sh "$installer" --base-url "$base_url" --no-modify-path --without chromium --without node >/dev/null
+excluded=$("$bin/prometheus" runtimes exclude list)
+[ "$excluded" = "$(printf 'chromium\nnode')" ] || fail "runtimes.exclude is: $excluded"
+grep -q 'exclude = \["chromium", "node"\]' "$HOME/.prometheus/daemon.toml" ||
+    fail "daemon.toml does not record the exclusions"
+set +e
+message=$("$bin/prometheus" runtimes install chromium 2>&1)
+status=$?
+set -e
+[ "$status" = 1 ] || fail "installing an excluded runtime exited $status, expected 1"
+case $message in *"chromium is excluded by runtimes.exclude"*) ;; *) fail "unexpected message: $message" ;; esac
 
 # A tampered archive is refused and leaves the installed binary alone.
 before=$(cksum <"$bin/prometheus")

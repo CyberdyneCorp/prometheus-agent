@@ -82,6 +82,14 @@ impl Fixture {
         cmd.stdin(Stdio::null()).output().unwrap()
     }
 
+    /// Appends `text` to `daemon.toml` (which already sets the mirror).
+    fn daemon(&self, text: &str) {
+        let path = self.home.join("daemon.toml");
+        let mut current = std::fs::read_to_string(&path).unwrap();
+        current.push_str(text);
+        std::fs::write(path, current).unwrap();
+    }
+
     fn bytes(&self) -> Vec<u8> {
         std::fs::read(&self.binary).unwrap()
     }
@@ -352,8 +360,9 @@ fn update_then_rollback_restores_the_previous_binary() {
             "verify",
             "unpack",
             "self-test",
-            "snapshot",
-            "swap"
+            "backup",
+            "swap",
+            "runtimes"
         ]
     );
     assert!(f.prev().is_file());
@@ -500,4 +509,156 @@ fn unknown_channel_is_a_usage_error() {
     assert_eq!(code(&out), 2);
     assert!(common::stderr(&out).contains("--channel must be stable or canary, not main"));
     assert!(f.requests().is_empty());
+}
+
+#[test]
+fn full_backup_is_written_before_the_swap_and_listed_in_the_receipt() {
+    let f = Fixture::self_install();
+    f.create_session("kept in the backup");
+    let newer = next_patch(f.version);
+    f.publish(&newer, Channel::Stable, &f.bytes(), None);
+    let out = f.run(&["update", "--backup"]);
+    let text = common::ok(&out);
+    let archive = f
+        .home
+        .join("updates/backups")
+        .join(format!("pre-update-{}-{newer}.tar.zst", f.version));
+    assert!(archive.is_file(), "{text}");
+    assert!(
+        text.contains(&format!("pre-update backup: {}", archive.display())),
+        "{text}"
+    );
+    let receipt = f.latest_receipt();
+    let backups = receipt["backups"].as_array().unwrap();
+    let listed = backups
+        .iter()
+        .find(|b| b["kind"] == "archive")
+        .expect("the archive is in the receipt");
+    assert_eq!(listed["path"], archive.to_str().unwrap());
+    assert_eq!(listed["bytes"], std::fs::metadata(&archive).unwrap().len());
+    assert!(backups.iter().any(|b| b["kind"] == "snapshot"), "{receipt}");
+    let stages: Vec<&str> = receipt["stages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap())
+        .collect();
+    let backup_at = stages.iter().position(|s| *s == "backup").unwrap();
+    let swap_at = stages.iter().position(|s| *s == "swap").unwrap();
+    assert!(backup_at < swap_at, "{stages:?}");
+    // A zstd stream in the `backup create` format.
+    assert_eq!(
+        &std::fs::read(&archive).unwrap()[..4],
+        [0x28, 0xb5, 0x2f, 0xfd]
+    );
+}
+
+/// Runs an update whose backup cannot be written and checks it stopped
+/// before the swap with 73, leaving the binary as it was.
+fn assert_backup_failure_stops_the_update(f: &Fixture, args: &[&str]) {
+    let before = f.bytes();
+    let out = f.run(args);
+    assert_eq!(code(&out), 73, "{}", common::stderr(&out));
+    assert!(
+        common::stderr(&out).contains("cannot write the pre-update backup"),
+        "{}",
+        common::stderr(&out)
+    );
+    assert_eq!(f.bytes(), before, "the installed binary is unchanged");
+    assert!(!f.prev().exists());
+    let receipt = f.latest_receipt();
+    assert_eq!(receipt["outcome"], "failed");
+    assert!(
+        !receipt["stages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s == "swap")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_snapshot_that_cannot_be_written_stops_before_the_swap_with_73() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::self_install();
+    f.create_session("needs a snapshot");
+    f.publish(&next_patch(f.version), Channel::Stable, &f.bytes(), None);
+    // No room for the snapshot: nothing can be written where it goes.
+    let snapshots = f.home.join("profiles/default/snapshots");
+    std::fs::set_permissions(&snapshots, std::fs::Permissions::from_mode(0o500)).unwrap();
+    assert_backup_failure_stops_the_update(&f, &["update"]);
+    std::fs::set_permissions(&snapshots, std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
+fn a_full_backup_that_cannot_be_written_stops_before_the_swap_with_73() {
+    let f = Fixture::self_install();
+    f.publish(&next_patch(f.version), Channel::Stable, &f.bytes(), None);
+    // The archive's directory cannot be created.
+    std::fs::create_dir_all(f.home.join("updates")).unwrap();
+    std::fs::write(f.home.join("updates/backups"), b"not a directory").unwrap();
+    assert_backup_failure_stops_the_update(&f, &["update", "--backup"]);
+}
+
+#[test]
+fn backup_flags_override_the_config_and_conflict() {
+    let f = Fixture::self_install();
+    let out = f.run(&["update", "--backup", "--no-backup"]);
+    assert_eq!(code(&out), 2);
+    assert!(f.requests().is_empty());
+    f.create_session("no backup");
+    let newer = next_patch(f.version);
+    f.publish(&newer, Channel::Stable, &f.bytes(), None);
+    common::ok(&f.run(&["update", "--no-backup"]));
+    let receipt = f.latest_receipt();
+    assert_eq!(receipt["outcome"], "success");
+    assert_eq!(receipt["backups"], serde_json::json!([]), "{receipt}");
+    let snapshots = common::ok(&f.run(&["snapshots", "list"]));
+    assert!(!snapshots.contains("pre-update"), "{snapshots}");
+}
+
+#[test]
+fn a_flaky_release_origin_is_retried() {
+    let f = Fixture::self_install();
+    f.runtime.block_on(
+        Mock::given(method("GET"))
+            .and(path("/channels/stable.json"))
+            .respond_with(ResponseTemplate::new(503))
+            .up_to_n_times(2)
+            .with_priority(1)
+            .mount(&f.server),
+    );
+    f.publish(&next_patch(f.version), Channel::Stable, b"unused", None);
+    assert_eq!(code(&f.run(&["update", "--check"])), 10);
+    let index_requests = f
+        .requests()
+        .iter()
+        .filter(|r| r.url.path() == "/channels/stable.json")
+        .count();
+    assert_eq!(index_requests, 3);
+}
+
+#[test]
+fn an_excluded_runtime_is_not_refreshed_after_an_update() {
+    let f = Fixture::self_install();
+    f.daemon(&format!(
+        "[runtimes]\nexclude = [\"chromium\"]\n[runtimes.mirrors]\nruntimes = \"{}/rt\"\n",
+        f.server.uri()
+    ));
+    // Chromium was used before: an older version is in the store.
+    let old = f.home.join("runtimes/chromium/100.0-aaaaaaaaaaaa");
+    std::fs::create_dir_all(&old).unwrap();
+    std::fs::write(old.join("chrome"), b"old").unwrap();
+    let newer = next_patch(f.version);
+    f.publish(&newer, Channel::Stable, &f.bytes(), None);
+    common::ok(&f.run(&["update"]));
+    assert!(
+        !f.requests()
+            .iter()
+            .any(|r| r.url.path().starts_with("/rt/")),
+        "nothing is downloaded for an excluded runtime"
+    );
+    assert_eq!(f.latest_receipt()["follow_ups"], serde_json::json!([]));
+    assert!(!old.exists(), "the unpinned version is collected");
 }

@@ -5,14 +5,16 @@
 #
 #   curl -fsSL https://github.com/CyberdyneCorp/prometheus-agent/releases/latest/download/install.sh | sh
 #   sh install.sh [--channel stable|canary] [--version vX.Y.Z] [--modify-path|--no-modify-path]
-#                 [--base-url URL]
+#                 [--base-url URL] [--without RUNTIME]...
 #
 # It downloads the signed channel index and release manifest, verifies their
 # minisign signatures against the embedded keys (with `minisign`, or with
 # OpenSSL 3), checks the archive against the signed SHA-256, installs
 # ~/.local/bin/prometheus (+ the `pmt` alias) and writes the install receipt
-# ~/.local/bin/install.json (owner `self`). It sends nothing but the
-# downloads themselves.
+# ~/.local/bin/install.json (owner `self`). Each `--without <runtime>`
+# (node, cpython, uv, chromium) is recorded in `runtimes.exclude` of the
+# home's daemon.toml, so nothing ever installs that runtime. It sends
+# nothing but the downloads themselves.
 set -eu
 
 DEFAULT_BASE_URL="https://github.com/CyberdyneCorp/prometheus-agent/releases/download"
@@ -24,7 +26,7 @@ RELEASE_KEYS="
 usage() {
     cat <<'USAGE'
 usage: install.sh [--channel stable|canary] [--version vX.Y.Z] [--modify-path|--no-modify-path]
-                  [--base-url URL]
+                  [--base-url URL] [--without node|cpython|uv|chromium]...
 USAGE
 }
 
@@ -37,6 +39,7 @@ channel=stable
 version=
 modify_path=ask
 base_url=$DEFAULT_BASE_URL
+without=
 
 need_value() {
     [ "$2" -ge 2 ] || die "$1 needs a value" 2
@@ -50,6 +53,8 @@ while [ $# -gt 0 ]; do
     --version=*) version=${1#*=}; shift ;;
     --base-url) need_value "$1" $#; base_url=$2; shift 2 ;;
     --base-url=*) base_url=${1#*=}; shift ;;
+    --without) need_value "$1" $#; without="$without $2"; shift 2 ;;
+    --without=*) without="$without ${1#*=}"; shift ;;
     --modify-path) modify_path=yes; shift ;;
     --no-modify-path) modify_path=no; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -66,6 +71,12 @@ if [ -n "$version" ] &&
     ! printf '%s\n' "$version" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-canary\.[0-9]{14})?$'; then
     die "--version must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS, not $version" 2
 fi
+for runtime in $without; do
+    case $runtime in
+    node | cpython | uv | chromium) ;;
+    *) die "--without: unknown runtime '$runtime' (expected node|cpython|uv|chromium)" 2 ;;
+    esac
+done
 base_url=${base_url%/}
 
 detect_target() {
@@ -253,4 +264,9 @@ cat >"$bin_dir/install.json" <<RECEIPT
 RECEIPT
 
 echo "installed prometheus $version ($target) to $bin_dir/prometheus"
+for runtime in $without; do
+    "$bin_dir/prometheus" runtimes exclude add "$runtime" >/dev/null ||
+        die "cannot record --without $runtime in runtimes.exclude"
+    echo "excluded runtime $runtime (runtimes.exclude)"
+done
 setup_path "$bin_dir"

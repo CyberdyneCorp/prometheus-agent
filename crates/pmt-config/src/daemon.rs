@@ -34,6 +34,83 @@ pub struct DaemonConfig {
     /// Self-update of this install (`prometheus update`).
     #[serde(default)]
     pub update: UpdateConfig,
+    /// The managed runtime store (`prometheus runtimes`).
+    #[serde(default)]
+    pub runtimes: RuntimesConfig,
+}
+
+/// The runtime names of the binary's pinned runtime index (spec:
+/// distribution-and-update, Managed runtime store); `runtimes.exclude`
+/// accepts only these. `pmt-update` checks its index names the same set.
+pub const RUNTIME_NAMES: &[&str] = &["node", "cpython", "uv", "chromium"];
+
+/// The `[runtimes]` section (spec: distribution-and-update, Lazy runtime
+/// installation policy; Persistent runtime opt-outs; Download mirrors).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct RuntimesConfig {
+    /// Install a missing pinned runtime the first time a tool needs it
+    /// (asking first on an interactive terminal). `false` makes the tool
+    /// fail with a `prometheus runtimes install <name>` hint instead.
+    pub allow_lazy_install: bool,
+    /// Runtimes nothing may install: not lazily, not `prometheus runtimes
+    /// install`, not the pin refresh after an update. `install.sh
+    /// --without <name>` records names here.
+    pub exclude: Vec<String>,
+    /// Mirror base URLs used in place of the default origins. Everything
+    /// downloaded from a mirror is still checked against the digests pinned
+    /// in the binary, so a mirror cannot change what is installed.
+    pub mirrors: RuntimeMirrors,
+}
+
+impl Default for RuntimesConfig {
+    fn default() -> Self {
+        Self {
+            allow_lazy_install: true,
+            exclude: Vec::new(),
+            mirrors: RuntimeMirrors::default(),
+        }
+    }
+}
+
+/// `[runtimes.mirrors]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct RuntimeMirrors {
+    /// Runtime archives: `<url>/<name>/<version>/<archive file name>`.
+    pub runtimes: Option<String>,
+    /// Python package index for the Python bridge's packages (used by the
+    /// bridge, milestone M2).
+    pub pypi: Option<String>,
+    /// Node package registry (used by Node-based plugins, milestone M2).
+    pub npm: Option<String>,
+}
+
+/// `update.pre_update_backup`: what `prometheus update` saves before the
+/// swap.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PreUpdateBackup {
+    /// A `pre-update` snapshot of each profile (config, grants, state.db).
+    #[default]
+    State,
+    /// The snapshots plus a full home archive under `updates/backups/`.
+    Full,
+    /// No backup; the pre-migration snapshot a rollback needs is still
+    /// taken when the new build migrates a store.
+    Off,
+}
+
+impl PreUpdateBackup {
+    /// The config spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::State => "state",
+            Self::Full => "full",
+            Self::Off => "off",
+        }
+    }
 }
 
 /// The `[process]` section.
@@ -80,6 +157,12 @@ pub struct UpdateConfig {
     /// `<url>/<tag>/release-manifest.json`, ...). Everything downloaded from
     /// it is still verified against the embedded release keys.
     pub mirror_url: Option<String>,
+    /// When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`)
+    /// still fails after the retry budget, download from the default origin
+    /// instead of failing.
+    pub mirror_fallback: bool,
+    /// What to save before the binary is swapped.
+    pub pre_update_backup: PreUpdateBackup,
 }
 
 impl Default for UpdateConfig {
@@ -90,6 +173,8 @@ impl Default for UpdateConfig {
             require_transparency_log: false,
             snapshot_keep: 3,
             mirror_url: None,
+            mirror_fallback: false,
+            pre_update_backup: PreUpdateBackup::State,
         }
     }
 }
@@ -127,8 +212,85 @@ impl DaemonConfig {
                 "update.snapshot_keep: must be between 1 and 100",
             ));
         }
+        if let Some(unknown) = config
+            .runtimes
+            .exclude
+            .iter()
+            .find(|name| !RUNTIME_NAMES.contains(&name.as_str()))
+        {
+            return Err(parse_error(&format!(
+                "runtimes.exclude: unknown runtime '{unknown}' (expected {})",
+                RUNTIME_NAMES.join("|")
+            )));
+        }
         Ok(config)
     }
+}
+
+/// Replaces `runtimes.exclude` in `<home>/daemon.toml`, keeping the rest
+/// of the file (comments included) as it is.
+///
+/// # Errors
+///
+/// `config.parse` for an unreadable `daemon.toml` or an unknown name;
+/// `home.io` when it cannot be written.
+pub fn set_runtime_exclude(home: &Path, names: &[String]) -> Result<(), Error> {
+    let path = home.join(FILE_NAME);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(e) => {
+            return Err(Error::new(
+                &codes::HOME_IO,
+                format!("cannot read {}: {e}", path.display()),
+            ));
+        }
+    };
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
+        Error::new(
+            &codes::CONFIG_PARSE,
+            format!("{}: {}", path.display(), e.message()),
+        )
+    })?;
+    let section = doc
+        .entry("runtimes")
+        .or_insert_with(toml_edit::table)
+        .as_table_mut()
+        .ok_or_else(|| {
+            Error::new(
+                &codes::CONFIG_PARSE,
+                format!("{}: runtimes is not a table", path.display()),
+            )
+        })?;
+    section["exclude"] = toml_edit::value(names.iter().collect::<toml_edit::Array>());
+    let updated = doc.to_string();
+    // Validate before writing: a bad name never reaches the file.
+    let config: DaemonConfig = toml::from_str(&updated).map_err(|e| {
+        Error::new(
+            &codes::CONFIG_PARSE,
+            format!("{}: {}", path.display(), e.message()),
+        )
+    })?;
+    if let Some(unknown) = config
+        .runtimes
+        .exclude
+        .iter()
+        .find(|n| !RUNTIME_NAMES.contains(&n.as_str()))
+    {
+        return Err(Error::new(
+            &codes::RUNTIME_UNKNOWN,
+            format!(
+                "unknown runtime '{unknown}' (expected {})",
+                RUNTIME_NAMES.join("|")
+            ),
+        ));
+    }
+    pmt_core::private_fs::write_atomic(&path, updated.as_bytes()).map_err(|e| {
+        Error::new(
+            &codes::HOME_IO,
+            format!("cannot write {}: {e}", path.display()),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -164,6 +326,50 @@ mod tests {
             load("[update]\ncheck_interval_secs = 0\nmirror_url = \"http://m\"\n").unwrap();
         assert_eq!(config.update.check_interval_secs, 0);
         assert_eq!(config.update.mirror_url.as_deref(), Some("http://m"));
+    }
+
+    #[test]
+    fn runtimes_default_to_lazy_installs_with_nothing_excluded() {
+        let home = tempfile::tempdir().unwrap();
+        let config = DaemonConfig::load(home.path()).unwrap();
+        assert!(config.runtimes.allow_lazy_install);
+        assert!(config.runtimes.exclude.is_empty());
+        assert_eq!(
+            config.update.pre_update_backup,
+            super::PreUpdateBackup::State
+        );
+        assert!(!config.update.mirror_fallback);
+    }
+
+    #[test]
+    fn unknown_excluded_runtime_fails_validation() {
+        let err = load("[runtimes]\nexclude = [\"chromium\", \"java\"]\n").unwrap_err();
+        assert_eq!(err.exit_code(), 78);
+        assert!(
+            err.message().contains(
+                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium)"
+            ),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn exclude_edits_keep_the_rest_of_the_file() {
+        let home = tempfile::tempdir().unwrap();
+        let path = home.path().join("daemon.toml");
+        std::fs::write(&path, "# mine\n[update]\nsnapshot_keep = 5\n").unwrap();
+        super::set_runtime_exclude(home.path(), &["chromium".to_owned()]).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("# mine\n"), "{text}");
+        let config = DaemonConfig::load(home.path()).unwrap();
+        assert_eq!(config.runtimes.exclude, ["chromium"]);
+        assert_eq!(config.update.snapshot_keep, 5);
+        let err = super::set_runtime_exclude(home.path(), &["java".to_owned()]).unwrap_err();
+        assert_eq!(err.exit_code(), 2);
+        assert_eq!(
+            DaemonConfig::load(home.path()).unwrap().runtimes.exclude,
+            ["chromium"]
+        );
     }
 
     #[test]

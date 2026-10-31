@@ -1,5 +1,6 @@
 //! `prometheus version [--json] [--verbose]`.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use serde::Serialize;
@@ -32,6 +33,11 @@ pub struct VersionInfo {
     pub store_schema_version: u32,
     /// Trajectory grammar version.
     pub trajectory_grammar: u32,
+    /// SHA-256 of the runtime index compiled into this build.
+    pub runtime_index_sha256: String,
+    /// The runtime store directories (`<version>-<sha12>`) this build pins
+    /// on this host, by runtime name; `runtimes gc` keeps them.
+    pub runtime_pins: BTreeMap<String, String>,
 }
 
 impl VersionInfo {
@@ -50,6 +56,9 @@ impl VersionInfo {
             config_schema_version: pmt_config::SCHEMA_VERSION,
             store_schema_version: pmt_store::SCHEMA_VERSION,
             trajectory_grammar: pmt_obs::GRAMMAR_VERSION,
+            runtime_index_sha256: pmt_update::runtimes::RuntimeIndex::embedded_digest(),
+            runtime_pins: pmt_update::runtimes::RuntimeIndex::embedded()
+                .pins_for(&pmt_update::runtimes::platform()),
         }
     }
 
@@ -80,6 +89,7 @@ impl VersionInfo {
                 self.store_schema_version.to_string(),
             ),
             ("trajectory_grammar", self.trajectory_grammar.to_string()),
+            ("runtime_index_sha256", self.runtime_index_sha256.clone()),
         ];
         for (key, value) in fields {
             let _ = writeln!(out, "{key}: {value}");
