@@ -65,7 +65,9 @@ pub struct DisplayConfig {
     pub final_response_markdown: MarkdownMode,
     /// Show file-edit diffs inline.
     pub inline_diffs: bool,
-    /// Vim key bindings in the composer.
+    /// Vim key bindings in the composer (the line editor is set up when
+    /// the session starts).
+    #[schemars(extend("x-apply" = "next_session"))]
     pub vim_mode: bool,
     /// Compact layout.
     pub compact: bool,

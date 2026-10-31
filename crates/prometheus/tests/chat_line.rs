@@ -192,7 +192,8 @@ fn multiline_input_history_and_ctrl_d() {
     prompt(&mut p);
     p.send_line("one \\").unwrap();
     p.send_line("two").unwrap();
-    p.expect("mock: one ").unwrap();
+    // The rendered answer drops the space before the line break.
+    p.expect("mock: one").unwrap();
     p.expect("two").unwrap();
     prompt(&mut p);
     p.send_line(format!("remember {secret}")).unwrap();

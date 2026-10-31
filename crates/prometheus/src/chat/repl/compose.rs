@@ -87,6 +87,8 @@ impl Repl {
         let path = dir.join(format!("prompt-{}.md", MessageId::new().ulid()));
         private_fs::write_atomic(&path, initial.as_bytes()).map_err(io)?;
         let editor = self.factory.launch().editor().unwrap_or(DEFAULT_EDITOR);
+        // The editor takes the terminal: earlier output first.
+        self.input.flush();
         let result =
             launch_editor(editor, &path).and_then(|()| std::fs::read_to_string(&path).map_err(io));
         let _ = std::fs::remove_file(&path);

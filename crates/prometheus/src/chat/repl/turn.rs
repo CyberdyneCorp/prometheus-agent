@@ -65,6 +65,7 @@ impl Repl {
         let calls = self.end_progress();
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
+        self.spacer();
         self.live = Some(live);
     }
 
@@ -264,7 +265,7 @@ impl Repl {
             self.notice(notice);
         }
         if let Some(answer) = &result.final_response {
-            self.say(Role::Assistant, &self.stamped(answer));
+            self.final_answer(answer);
         }
         // Before any stop notice or error, so those are the last lines.
         self.turn_summary(elapsed, calls, &result.usage);

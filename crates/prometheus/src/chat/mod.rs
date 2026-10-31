@@ -9,6 +9,7 @@
 
 pub mod args;
 pub mod attach;
+pub mod markdown;
 pub mod oneshot;
 pub mod recap;
 pub mod repl;

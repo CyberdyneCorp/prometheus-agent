@@ -135,7 +135,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.tool_progress` | one of "off", "new", "all", "verbose" | `"all"` | `"off"`, `"new"`, `"all"`, `"verbose"` | `live` | Tool activity shown while a turn runs. |
 | `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
 | `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
-| `display.vim_mode` | boolean | `false` | any | `live` | Vim key bindings in the composer. |
+| `display.vim_mode` | boolean | `false` | any | `next_session` | Vim key bindings in the composer (the line editor is set up when the session starts). |
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |

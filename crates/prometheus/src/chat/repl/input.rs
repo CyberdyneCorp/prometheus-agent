@@ -16,6 +16,13 @@
 //! ([`Event::SuspendRefused`]) (spec: cli, External editor composition;
 //! Job-control suspend).
 //!
+//! Output goes through one printer thread, in order: the editor's external
+//! printer hands a line to a running read through a one-slot channel and
+//! blocks while the slot is full, and a read can end (the user pressed
+//! Enter) with the slot still full. The REPL thread must never wait on
+//! that, or it deadlocks with an editor that only drains the slot during
+//! its next read; the printer thread waits instead.
+//!
 //! Why not the editor's own suspend: it sends SIGTSTP to the process group,
 //! a process-directed signal that Linux may hand to another thread, so the
 //! input thread can redraw the prompt before the process actually stops
@@ -37,8 +44,8 @@ use rustyline::hint::Hinter;
 use rustyline::history::{FileHistory, History as _};
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{
-    Cmd, ConditionalEventHandler, Config, Editor, EventContext, EventHandler, ExternalPrinter,
-    Helper, KeyCode, KeyEvent, Modifiers, RepeatCount,
+    Cmd, ConditionalEventHandler, Config, EditMode, Editor, EventContext, EventHandler,
+    ExternalPrinter, Helper, KeyCode, KeyEvent, Modifiers, RepeatCount,
 };
 use tokio::sync::mpsc;
 
@@ -71,13 +78,24 @@ struct Shared {
     suspend: Mutex<Option<(String, String)>>,
 }
 
+/// How long [`Input::flush`] waits for earlier output.
+const FLUSH_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// What the printer thread is handed.
+enum Output {
+    Text(String),
+    /// Answered once every earlier text is out.
+    Flush(std_mpsc::Sender<()>),
+}
+
 /// The REPL's end of the input thread.
 pub struct Input {
-    requests: std_mpsc::Sender<String>,
+    requests: Option<std_mpsc::Sender<String>>,
     events: mpsc::UnboundedReceiver<Event>,
-    printer: Option<Arc<Mutex<Box<dyn ExternalPrinter + Send>>>>,
+    output: Option<std_mpsc::Sender<Output>>,
     reading: bool,
     shared: Arc<Shared>,
+    printing: Option<std::thread::JoinHandle<()>>,
 }
 
 /// What the editor needs.
@@ -88,6 +106,8 @@ pub struct Setup {
     pub cwd: PathBuf,
     /// Scrubs secrets from history entries.
     pub redactor: Redactor,
+    /// Vi key bindings instead of Emacs ones (`display.vim_mode`).
+    pub vim_mode: bool,
 }
 
 impl Input {
@@ -110,14 +130,19 @@ impl Input {
             .map_err(|e| io_error(&e.to_string()))?;
         let printer = printer_rx
             .recv()
-            .map_err(|_| io_error("the line editor did not start"))?
-            .map(|p| Arc::new(Mutex::new(p)));
+            .map_err(|_| io_error("the line editor did not start"))?;
+        let (output, lines) = std_mpsc::channel();
+        let printing = std::thread::Builder::new()
+            .name("line-output".to_owned())
+            .spawn(move || printer_thread(printer, &lines))
+            .map_err(|e| io_error(&e.to_string()))?;
         Ok(Self {
-            requests,
+            requests: Some(requests),
             events,
-            printer,
+            output: Some(output),
             reading: false,
             shared,
+            printing: Some(printing),
         })
     }
 
@@ -128,7 +153,10 @@ impl Input {
 
     /// Asks for the next line with `prompt` (once per line).
     pub fn request(&mut self, prompt: &str) {
-        if !self.reading && self.requests.send(prompt.to_owned()).is_ok() {
+        if !self.reading
+            && let Some(requests) = &self.requests
+            && requests.send(prompt.to_owned()).is_ok()
+        {
             self.reading = true;
         }
     }
@@ -143,19 +171,61 @@ impl Input {
         event
     }
 
-    /// Prints `text` (one or more lines): above the prompt while a line is
-    /// being read, else straight to stdout.
+    /// Prints `text` (one or more lines), after everything printed
+    /// before it: above the prompt while a line is being read, else
+    /// straight to the terminal. Never waits.
     pub fn print(&self, text: &str) {
         let text = text.strip_suffix('\n').unwrap_or(text);
-        if let (true, Some(printer)) = (self.reading, &self.printer) {
-            let mut printer = printer.lock().unwrap_or_else(PoisonError::into_inner);
-            if printer.print(format!("{text}\n")).is_ok() {
-                return;
+        if let Some(output) = &self.output {
+            let _ = output.send(Output::Text(format!("{text}\n")));
+        }
+    }
+
+    /// Waits (at most [`FLUSH_WAIT`]) until everything printed so far is
+    /// out, before a child process takes the terminal.
+    pub fn flush(&self) {
+        let (done, wait) = std_mpsc::channel();
+        if let Some(output) = &self.output
+            && output.send(Output::Flush(done)).is_ok()
+        {
+            let _ = wait.recv_timeout(FLUSH_WAIT);
+        }
+    }
+}
+
+impl Drop for Input {
+    /// Ends the editor and waits until the printer has written what is
+    /// left (the editor thread is not joined: it may be inside a read).
+    fn drop(&mut self) {
+        self.requests = None;
+        self.output = None;
+        if let Some(printing) = self.printing.take() {
+            let _ = printing.join();
+        }
+    }
+}
+
+/// Writes every output in order: through the editor's printer (above a
+/// running read, or straight out when none runs), else to stdout. A text
+/// the editor refuses (it has ended) goes to stdout.
+fn printer_thread(mut printer: PrinterSlot, lines: &std_mpsc::Receiver<Output>) {
+    for output in lines {
+        match output {
+            Output::Text(text) => {
+                let delivered = printer
+                    .as_mut()
+                    .is_some_and(|p| p.print(text.clone()).is_ok());
+                if !delivered {
+                    printer = None;
+                    let mut out = std::io::stdout().lock();
+                    let _ = out.write_all(text.as_bytes());
+                    let _ = out.flush();
+                }
+            }
+            Output::Flush(done) => {
+                let _ = done.send(());
             }
         }
-        let mut out = std::io::stdout().lock();
-        let _ = writeln!(out, "{text}");
-        let _ = out.flush();
     }
 }
 
@@ -219,6 +289,11 @@ fn editor(
         .history_ignore_dups(true)?
         .history_ignore_space(true)
         .auto_add_history(false)
+        .edit_mode(if setup.vim_mode {
+            EditMode::Vi
+        } else {
+            EditMode::Emacs
+        })
         .build();
     let mut editor = Editor::with_config(config)?;
     editor.set_helper(Some(LineHelper {

@@ -63,6 +63,9 @@ impl Repl {
                     let line = format!("    ↳ {tool} {status}: {}", preview(&text, limit));
                     self.say(Role::Tool, &line);
                 }
+                if ok {
+                    self.inline_diff(&tool, &text);
+                }
             }
             Progress::Assistant(text) => self.view.assistant = Some(text),
             Progress::Reasoning(text) => {
@@ -115,7 +118,7 @@ impl Repl {
     }
 
     /// Prints the pending `accumulate` group.
-    fn flush_group(&mut self) {
+    pub(super) fn flush_group(&mut self) {
         if let Some((tool, count)) = self.view.group.take() {
             let line = if count > 1 {
                 format!("  ⚙ {tool} ×{count}")

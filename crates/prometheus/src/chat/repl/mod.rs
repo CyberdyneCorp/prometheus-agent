@@ -13,6 +13,7 @@ mod commands;
 mod compose;
 pub mod info;
 pub mod input;
+mod layout;
 mod progress;
 mod prompts;
 pub mod queue;
@@ -149,6 +150,7 @@ pub async fn run(
         history: factory.scope.dir().join("cli_history"),
         cwd: factory.options.cwd.clone(),
         redactor: factory.redactor().clone(),
+        vim_mode: config.display.vim_mode,
     })?;
     let (posted, to_post) = mpsc::unbounded_channel();
     let mut repl = Repl {
@@ -186,6 +188,7 @@ pub async fn run(
     if repl.start.resumed {
         repl.recap();
     }
+    repl.spacer();
     Ok(Box::pin(repl.main_loop()).await)
 }
 
@@ -351,11 +354,15 @@ impl Repl {
             target.provider,
             target.model.as_deref().unwrap_or("default")
         );
-        let banner = format!(
-            "Prometheus {} · profile {} · {model} · /help for commands",
-            crate::build_info::VERSION,
-            self.factory.scope.name()
-        );
+        let banner = if self.factory.scope.config().display.compact {
+            format!("Prometheus {} · {model}", crate::build_info::VERSION)
+        } else {
+            format!(
+                "Prometheus {} · profile {} · {model} · /help for commands",
+                crate::build_info::VERSION,
+                self.factory.scope.name()
+            )
+        };
         self.say(Role::Accent, &banner);
         self.tip(
             "slash-help",

@@ -1001,8 +1001,9 @@
         },
         "vim_mode": {
           "default": false,
-          "description": "Vim key bindings in the composer.",
-          "type": "boolean"
+          "description": "Vim key bindings in the composer (the line editor is set up when\nthe session starts).",
+          "type": "boolean",
+          "x-apply": "next_session"
         }
       },
       "type": "object",

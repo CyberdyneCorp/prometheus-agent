@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use pmt_backup::{CreateOptions, create, restore, sqlite};
 use pmt_config::{Home, ProfileName};
@@ -95,8 +95,9 @@ fn live_database_is_captured_consistently() {
     db.execute("INSERT INTO sessions (title) VALUES ('first')", [])
         .unwrap();
     let stop = Arc::new(AtomicBool::new(false));
+    let committed = Arc::new(AtomicU32::new(0));
     let writer = {
-        let (stop, db_path) = (stop.clone(), db_path.clone());
+        let (stop, committed, db_path) = (stop.clone(), committed.clone(), db_path.clone());
         std::thread::spawn(move || {
             let mut db = state_db(&db_path);
             let mut n = 0_u32;
@@ -110,11 +111,15 @@ fn live_database_is_captured_consistently() {
                 }
                 tx.commit().unwrap();
                 n += 1;
+                committed.store(n, Ordering::Release);
             }
             n
         })
     };
-    while !home.root().join("profiles/default/state.db-wal").exists() {
+    // Back up only once the writer has committed (the -wal file alone can
+    // exist before any of its transactions does), so the backup runs while
+    // writes are in flight.
+    while committed.load(Ordering::Acquire) == 0 {
         std::thread::yield_now();
     }
     let created = create(&home, &options(3)).unwrap();

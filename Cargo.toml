@@ -122,6 +122,9 @@ saphyr-parser = "0.3"
 # The line interface's editor (history, multi-line, completion, printing
 # above the prompt while a turn runs).
 rustyline = { version = "19.0", default-features = false, features = ["with-file-history", "custom-bindings"] }
+# Renders the final answer's Markdown in the line interface
+# (`display.final_response_markdown`).
+pulldown-cmark = { version = "0.13", default-features = false }
 # Test-only: drives the line interface through a pseudo-terminal.
 expectrl = "0.9"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }

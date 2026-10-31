@@ -178,6 +178,20 @@ clarify question opens and `display.bell_on_complete` when a turn ends.
 (`display.timestamp_format`, default `%H:%M`) and saves
 `display.timestamps`.
 
+The final answer's Markdown is rendered (`display.final_response_markdown
+= "render"`, the default): headings, bold, italic and table headers
+become terminal attributes, list items get `•` or their number, quotes a
+`│` bar, code blocks a four-space indent and links their URL after the
+text; `"raw"` prints the answer as the model wrote it. With
+`display.inline_diffs` (default on) every successful [`patch`](../reference/tools.md#patch) prints its
+unified diff under the tool line, added lines in the theme's `added`
+colour and removed ones in `removed`; diffs follow the tool display, so
+`tool_progress = "off"` and `/focus on` hide them too ([`write_file`](../reference/tools.md#write_file)
+reports no diff). `display.vim_mode` switches the composer to vi key
+bindings (insert mode first, `Esc` for normal mode). `display.compact`
+drops the blank line after the banner and after each turn and shortens
+the banner to the version and model.
+
 Local commands never call a model: `/history [N]` prints the last N
 user and assistant messages (`[HH:MM]` prefixes when timestamps are on),
 `/status` the model, provider, profile, session id, title, working
@@ -205,7 +219,7 @@ queue.
 `display.theme` picks `default`, `mono`, `daylight`, `slate` or a file
 `<profile>/themes/<name>.toml`, which may `extends` a built-in and
 override some colours (`prompt`, `assistant`, `tool`, `notice`, `error`,
-`accent`; a colour is a name, `bright_<name>`, `#rrggbb`, `bold`, `dim`,
+`accent`, `added`, `removed`; a colour is a name, `bright_<name>`, `#rrggbb`, `bold`, `dim`,
 `italic` or `underline`). A user theme named like a built-in is ignored
 with a WARN. `/theme` lists the themes; `/theme <name>` switches and saves
 it. Colour is off with `--no-color`, `NO_COLOR` or a stdout that is not a

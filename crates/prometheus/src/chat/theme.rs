@@ -30,6 +30,10 @@ pub enum Role {
     Error,
     /// Titles and highlights.
     Accent,
+    /// Added lines of an inline diff.
+    Added,
+    /// Removed lines of an inline diff.
+    Removed,
 }
 
 const ROLES: &[(&str, Role)] = &[
@@ -39,6 +43,8 @@ const ROLES: &[(&str, Role)] = &[
     ("notice", Role::Notice),
     ("error", Role::Error),
     ("accent", Role::Accent),
+    ("added", Role::Added),
+    ("removed", Role::Removed),
 ];
 
 /// The built-in theme names.
@@ -60,6 +66,8 @@ fn builtin(name: &str) -> Option<Theme> {
             (Role::Notice, "yellow"),
             (Role::Error, "red"),
             (Role::Accent, "magenta"),
+            (Role::Added, "green"),
+            (Role::Removed, "red"),
         ],
         "mono" => &[(Role::Prompt, "bold"), (Role::Error, "bold")],
         "daylight" => &[
@@ -68,6 +76,8 @@ fn builtin(name: &str) -> Option<Theme> {
             (Role::Notice, "magenta"),
             (Role::Error, "red"),
             (Role::Accent, "blue"),
+            (Role::Added, "green"),
+            (Role::Removed, "red"),
         ],
         "slate" => &[
             (Role::Prompt, "bold #8fa1b3"),
@@ -76,6 +86,8 @@ fn builtin(name: &str) -> Option<Theme> {
             (Role::Notice, "#ebcb8b"),
             (Role::Error, "#bf616a"),
             (Role::Accent, "#b48ead"),
+            (Role::Added, "#a3be8c"),
+            (Role::Removed, "#bf616a"),
         ],
         _ => return None,
     };
