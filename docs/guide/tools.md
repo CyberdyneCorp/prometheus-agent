@@ -145,7 +145,9 @@ the generic path (for example from an RPC client) returns
 A result longer than its budget is saved to
 `<profile>/cache/spillover/<session>/<call>.txt` (readable only by you,
 secrets redacted) and the model gets a `<persisted-output>` block with the
-size, the file path and a 1,500-character preview instead.
+size, the file path and a 1,500-character preview instead. The session's
+file tools may read its own spillover directory, so `read_file` and
+`search_files` reach the full result.
 
 | Budget | Default |
 |---|---|

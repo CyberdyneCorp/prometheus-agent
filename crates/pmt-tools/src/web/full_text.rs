@@ -41,6 +41,12 @@ impl FullTextStore {
         Self { dir }
     }
 
+    /// The directory holding the stored texts.
+    #[must_use]
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     /// Where the text of (`url`, `format`, `backend`) is stored.
     #[must_use]
     pub fn path_of(&self, url: &str, format: &str, backend: &str) -> PathBuf {

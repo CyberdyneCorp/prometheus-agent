@@ -144,7 +144,19 @@ fn pattern_matches(pattern: &str, path: &str) -> bool {
         require_literal_separator: true,
         require_literal_leading_dot: false,
     };
-    glob::Pattern::new(pattern).is_ok_and(|p| p.matches_with(path, options))
+    let matches =
+        |pattern: &str| glob::Pattern::new(pattern).is_ok_and(|p| p.matches_with(path, options));
+    // `<dir>/**` names `<dir>` too, also when `<dir>` is not literal (an
+    // escaped run-time directory name); `subtree` took the literal case.
+    matches(pattern) || pattern.strip_suffix("/**").is_some_and(matches)
+}
+
+/// The glob naming `dir` and everything below it: canonical, `/`
+/// separators, wildcard characters escaped so an odd directory name is
+/// taken literally.
+pub(super) fn subtree_glob(dir: &Path) -> String {
+    let dir = glob::Pattern::escape(&slashed(&canonical(dir)));
+    format!("{}/**", dir.trim_end_matches('/'))
 }
 
 fn slashed(path: &Path) -> String {

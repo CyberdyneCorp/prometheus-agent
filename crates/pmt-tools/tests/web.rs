@@ -8,13 +8,16 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io;
 use std::net::IpAddr;
+use std::path::Path;
 use std::sync::Arc;
 
 use pmt_config::schema::{Config, WebConfig};
+use pmt_core::capability::{BASELINE, CapabilitySet, Places};
 use pmt_core::secret::SecretString;
 use pmt_net::resolve::{Lookup, LookupFuture};
 use pmt_net::{DestinationPolicy, Fetcher, OutboundPolicy};
-use pmt_tools::environments::{Environments, SessionEnv};
+use pmt_tools::environments::{Environments, SessionEnv, tool_output_reads};
+use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::result::Status;
 use pmt_tools::web::{FullTextStore, SecretLookup, WebSession};
 use serde_json::{Value, json};
@@ -328,4 +331,172 @@ async fn auto_selects_a_backend_from_the_secrets_store() {
     config.firecrawl.base_url = Some(server.uri());
     let reply = body(&session(&config).search("rust", 1).await);
     assert_eq!(reply["backend"], "firecrawl");
+}
+
+/// A file session as session start builds it: the baseline plus
+/// [`tool_output_reads`] (or the baseline alone), over a workspace in
+/// `profile`.
+fn file_session(profile: &Path, session_id: &str, with_tool_output: bool) -> FileSession {
+    let work = profile.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let mut capabilities = CapabilitySet::parse(BASELINE).unwrap();
+    if with_tool_output {
+        capabilities = capabilities.union(&tool_output_reads(profile, session_id));
+    }
+    let places = Places {
+        workspace: work.clone(),
+        ..Places::default()
+    };
+    FileSession::new(FileSetup {
+        backend: Arc::new(LocalBackend::new(capabilities, places)),
+        cwd: Arc::new(move || work.clone()),
+        user_home: None,
+        control: ControlPaths {
+            prometheus_home: profile.join("no-home"),
+        },
+        read_max_chars: 100_000,
+        linter: Linter::builtin(),
+    })
+}
+
+/// The `read_file` call a `[TRUNCATED]` footer names, as JSON arguments.
+fn footer_call(content: &str) -> Value {
+    let call = &content[content.rfind("read_file(").unwrap()..];
+    let field = |name: &str| {
+        let start = call.find(&format!("{name}=")).unwrap() + name.len() + 1;
+        let rest = &call[start..];
+        &rest[..rest.find([',', ')']).unwrap()]
+    };
+    json!({
+        "path": field("path").trim_matches('"'),
+        "offset": field("offset").parse::<u64>().unwrap(),
+        "limit": field("limit").parse::<u64>().unwrap(),
+    })
+}
+
+/// Spec scenario: the `[TRUNCATED]` footer's `read_file` call pages
+/// through the omitted middle, through the dispatcher, with the
+/// capabilities a session has.
+#[tokio::test]
+async fn the_footer_read_file_call_returns_the_omitted_middle() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/scrape"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "success": true, "data": {"markdown": long_page(), "metadata": {"title": "Long"}}
+        })))
+        .mount(&server)
+        .await;
+    let profile = store_dir();
+    let config = Config {
+        web: firecrawl_config(&server),
+        ..Config::default()
+    };
+    let environments = Arc::new(Environments::default());
+    let attach = |with_tool_output: bool| {
+        environments.attach(
+            "ses_footer",
+            SessionEnv {
+                web: Some(Arc::new(session_in(&config.web, &profile))),
+                files: Some(Arc::new(file_session(
+                    &profile,
+                    "ses_footer",
+                    with_tool_output,
+                ))),
+                ..SessionEnv::default()
+            },
+        )
+    };
+    let attached = attach(true);
+    let dispatcher =
+        dispatcher::dispatcher(&environments, "ses_footer", &config, &[], &profile).await;
+    let extract = dispatcher::call(
+        &dispatcher,
+        "web_extract",
+        json!({"urls": ["https://public.test/long"]}),
+    )
+    .await;
+    assert_eq!(extract.status, Status::Ok, "{}", extract.text_content());
+    let content = body(&extract)["results"][0]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let call = footer_call(&content);
+
+    let read = dispatcher::call(&dispatcher, "read_file", call.clone()).await;
+    assert_eq!(read.status, Status::Ok, "{}", read.text_content());
+    let page = body(&read)["content"].as_str().unwrap().to_owned();
+    let middle: Vec<&str> = page
+        .lines()
+        .map(|line| line.split_once('|').unwrap().1)
+        .collect();
+    let (offset, limit) = (
+        usize::try_from(call["offset"].as_u64().unwrap()).unwrap(),
+        usize::try_from(call["limit"].as_u64().unwrap()).unwrap(),
+    );
+    let expected: Vec<String> = (offset..offset + limit)
+        .map(|n| format!("paragraph {n:05} of a long page."))
+        .collect();
+    assert_eq!(middle, expected);
+    // Head, the read middle and the tail are the whole page.
+    let head_last = format!("paragraph {:05} ", offset - 1);
+    let tail_first = format!("paragraph {:05} ", offset + limit);
+    assert!(content.contains(&head_last) && content.contains(&tail_first));
+
+    // The baseline alone does not reach the profile cache.
+    drop(attached);
+    let _attached = attach(false);
+    let refused = dispatcher::call(&dispatcher, "read_file", call).await;
+    assert_eq!(refused.status, Status::Denied, "{}", refused.text_content());
+    assert!(
+        refused.text_content().contains("capability not granted"),
+        "{}",
+        refused.text_content()
+    );
+}
+
+/// A spilled result's `<persisted-output>` path is readable with
+/// `read_file` in the session that produced it.
+#[tokio::test]
+async fn a_spilled_result_is_readable_with_read_file() {
+    let server = firecrawl().await;
+    let profile = store_dir();
+    let mut config = Config {
+        web: firecrawl_config(&server),
+        ..Config::default()
+    };
+    config
+        .tools
+        .result_budget
+        .overrides
+        .insert("web_search".into(), 500);
+    let environments = Arc::new(Environments::default());
+    let _attached = environments.attach(
+        "ses_spill",
+        SessionEnv {
+            web: Some(Arc::new(session_in(&config.web, &profile))),
+            files: Some(Arc::new(file_session(&profile, "ses_spill", true))),
+            ..SessionEnv::default()
+        },
+    );
+    let dispatcher =
+        dispatcher::dispatcher(&environments, "ses_spill", &config, &[], &profile).await;
+    let search = dispatcher::call(
+        &dispatcher,
+        "web_search",
+        json!({"query": "rust", "limit": 20}),
+    )
+    .await;
+    let text = search.text_content();
+    let marker = "Full output saved to: ";
+    let start = text.find(marker).expect(&text) + marker.len();
+    let spilled = &text[start..start + text[start..].find('\n').unwrap()];
+    let read = dispatcher::call(&dispatcher, "read_file", json!({"path": spilled})).await;
+    assert_eq!(read.status, Status::Ok, "{}", read.text_content());
+    assert!(
+        body(&read)["content"]
+            .as_str()
+            .unwrap()
+            .contains("Result 20")
+    );
 }

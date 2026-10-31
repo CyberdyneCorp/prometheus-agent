@@ -174,6 +174,22 @@ fn a_symlink_out_of_the_workspace_is_checked_at_its_target() {
     assert!(grants.allows_path(Access::Write, &places.workspace.join("new/file"), &places));
 }
 
+/// A grant made from a run-time directory reads exactly that subtree, even
+/// when the directory name holds glob characters.
+#[test]
+fn read_under_grants_reading_one_subtree_only() {
+    let dir = PathBuf::from("/nonexistent-p/cache/we[b]*");
+    let grant = Capability::read_under(&dir);
+    assert_eq!(Capability::parse(&grant.to_string()).unwrap(), grant);
+    let grants: CapabilitySet = std::iter::once(grant).collect();
+    let places = Places::default();
+    assert!(grants.allows_path(Access::Read, &dir, &places));
+    assert!(grants.allows_path(Access::Read, &dir.join("a/b.md"), &places));
+    assert!(!grants.allows_path(Access::Write, &dir.join("b.md"), &places));
+    let sibling = PathBuf::from("/nonexistent-p/cache/web-other/b.md");
+    assert!(!grants.allows_path(Access::Read, &sibling, &places));
+}
+
 #[test]
 fn path_checks_honour_access_placeholders_and_globs() {
     let temp = tempfile::tempdir().unwrap();

@@ -195,7 +195,10 @@ omitted lines; the same page always yields the same bytes and nothing is
 summarized. Full texts are stored under `<profile>/cache/web/` (0600, one
 file per URL, format and backend), capped at 2,000,000 characters with a
 final line stating the cap, and deleted after 7 days (the daemon prunes on
-start and hourly). Each URL is checked before the
+start and hourly). Every session's file tools may read (never
+write) this directory, so the footer's `read_file` call works under the
+baseline capabilities; it is shared by the profile's sessions, which is why
+it stays read-only. Each URL is checked before the
 backend sees it: only `http(s)`, and a host that resolves to a private,
 loopback or link-local address (unless `security.egress.allow_private` or
 a grant allows it), to a cloud metadata address, or does not resolve is

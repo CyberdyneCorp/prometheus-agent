@@ -7,14 +7,18 @@
 //! [`Attachment`] detaches it when the session ends.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, LazyLock, PoisonError, RwLock};
+
+use pmt_core::capability::{Capability, CapabilitySet};
 
 use crate::browser::BrowserExec;
 use crate::descriptor::{CallContext, ToolFailure};
 use crate::files::FileSession;
+use crate::spillover;
 use crate::terminal::LocalTerminal;
 use crate::vision::VisionSession;
-use crate::web::WebSession;
+use crate::web::{FullTextStore, WebSession};
 
 /// One session's execution environment. Each part is optional: a session
 /// without a terminal (no `terminal` toolset) attaches none.
@@ -30,6 +34,26 @@ pub struct SessionEnv {
     pub vision: Option<Arc<VisionSession>>,
     /// `browser_exec`'s browsers and interpreter.
     pub browser: Option<Arc<BrowserExec>>,
+}
+
+/// Read grants for the files the session's own tools point the model at
+/// with `read_file`: the profile's web full-text store (`web_extract`'s
+/// `[TRUNCATED]` footer) and the session's spillover directory (the
+/// `<persisted-output>` block). Neither is under the baseline's workspace,
+/// scratch or toolchain, so session start adds these to the effective set
+/// its file backend checks.
+///
+/// Read-only on purpose: the full-text store is shared by every session
+/// of the profile and answers repeat extractions, so write access would
+/// let one session forge the pages another one reads.
+#[must_use]
+pub fn tool_output_reads(profile_dir: &Path, session_id: &str) -> CapabilitySet {
+    [
+        Capability::read_under(FullTextStore::for_profile(profile_dir).dir()),
+        Capability::read_under(&spillover::session_dir(profile_dir, session_id)),
+    ]
+    .into_iter()
+    .collect()
 }
 
 /// The attached environments of a process, by session id.

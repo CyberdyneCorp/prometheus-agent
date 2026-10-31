@@ -1,12 +1,13 @@
 //! A dispatcher over the built-in tools, as a session builds it: the
 //! shipped toolsets, `core` selected, the baseline capabilities plus
-//! `extra`, no hooks and no approval prompts (or a given approval gate).
+//! `extra`, the configured result budget, no hooks and no approval prompts
+//! (or a given approval gate).
 
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use pmt_config::schema::{Config, ResultBudget as BudgetConfig};
+use pmt_config::schema::Config;
 use pmt_core::cancel::CancelToken;
 use pmt_core::capability::{BASELINE, CapabilitySet};
 use pmt_core::panic::CrashReporter;
@@ -64,7 +65,7 @@ pub(crate) async fn dispatcher_gated(
         gate,
         observer: Arc::new(NoObserver),
         budget: ResultBudget::new(
-            BudgetConfig::default(),
+            config.tools.result_budget.clone(),
             None,
             session_dir(profile_dir, session_id),
             Redactor::default(),
