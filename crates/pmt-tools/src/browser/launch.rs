@@ -175,19 +175,21 @@ pub async fn launch(
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
     let mut command = Command::from(std_command);
     command.kill_on_drop(true);
     let mut child = command
         .spawn()
         .map_err(|err| format!("cannot start {}: {err}", executable.display()))?;
     let pid = child.id().unwrap_or_default();
+    let log = StderrTail::drain(child.stderr.take());
     let endpoint = match wait_for_endpoint(&mut child, &profile_dir, timeout).await {
         Ok(endpoint) => endpoint,
         Err(why) => {
             let _ = child.start_kill();
+            let _ = child.wait().await;
             let _ = std::fs::remove_dir_all(&profile_dir);
-            return Err(why);
+            return Err(log.explain(why).await);
         }
     };
     Ok(Launched {
@@ -196,6 +198,56 @@ pub async fn launch(
         endpoint,
         profile_dir,
     })
+}
+
+/// The last lines the browser wrote to stderr. The pipe is drained for the
+/// browser's whole life (a full pipe would block it); the tail explains a
+/// failed start (for example Chromium's `No usable sandbox!`).
+struct StderrTail {
+    lines: Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
+    reader: Option<tokio::task::JoinHandle<()>>,
+}
+
+/// Lines of browser stderr kept for an error message.
+const TAIL_LINES: usize = 8;
+
+impl StderrTail {
+    fn drain(stderr: Option<tokio::process::ChildStderr>) -> Self {
+        use tokio::io::AsyncBufReadExt as _;
+        let lines: Arc<std::sync::Mutex<std::collections::VecDeque<String>>> = Arc::default();
+        let reader = stderr.map(|stderr| {
+            let kept = Arc::clone(&lines);
+            tokio::spawn(async move {
+                let mut reader = tokio::io::BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let mut kept = kept
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if kept.len() == TAIL_LINES {
+                        kept.pop_front();
+                    }
+                    kept.push_back(line);
+                }
+            })
+        });
+        Self { lines, reader }
+    }
+
+    /// `why` followed by the browser's last stderr lines, once it exited.
+    async fn explain(mut self, why: String) -> String {
+        if let Some(reader) = self.reader.take() {
+            let _ = tokio::time::timeout(Duration::from_secs(2), reader).await;
+        }
+        let lines = self
+            .lines
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if lines.is_empty() {
+            return why;
+        }
+        let tail: Vec<&str> = lines.iter().map(String::as_str).collect();
+        format!("{why}; browser output: {}", tail.join(" | "))
+    }
 }
 
 /// Polls `DevToolsActivePort` (port, then path) until the browser writes it.

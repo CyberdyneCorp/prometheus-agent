@@ -89,6 +89,12 @@ jobs:
         if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: npx --yes playwright@1.49.1 install --with-deps chromium
 
+      # Ubuntu 24.04's AppArmor refuses unprivileged user namespaces, which
+      # Chromium's own sandbox needs ("No usable sandbox!" then SIGABRT).
+      - name: Allow user namespaces for Chromium's sandbox
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: scripts/check
         # The budgets apply to the reference runner only; the perf job runs them.
         run: scripts/check --no-perf

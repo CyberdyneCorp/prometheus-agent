@@ -348,3 +348,27 @@ async fn a_crashed_owners_browser_is_reaped_by_the_next_process() {
     assert!(records(&cache).is_empty());
     assert!(!launched.profile_dir.exists());
 }
+
+#[tokio::test]
+async fn a_failed_start_reports_what_the_browser_said() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let fixture = Fixture::new();
+    let fake = fixture.home.join("fake-chrome");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\necho 'FATAL: No usable sandbox!' >&2\nexit 1\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let err = pmt_tools::browser::launch::launch(
+        &fake,
+        &fixture.home.join("profiles"),
+        &fixture.env(),
+        Duration::from_secs(10),
+    )
+    .await
+    .err()
+    .unwrap();
+    assert!(err.starts_with("the browser exited during start"), "{err}");
+    assert!(err.contains("No usable sandbox!"), "{err}");
+}
