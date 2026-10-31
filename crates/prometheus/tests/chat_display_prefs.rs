@@ -174,12 +174,10 @@ fn the_default_layout_separates_the_banner_and_turns() {
     let start = until_prompt(&mut p);
     assert!(start.contains("/help for commands"), "{start:?}");
     assert!(start.contains("\r\n\r\n"), "{start:?}");
-    // The summary line, then the blank line (each redraws the prompt).
-    p.send_line("hello").unwrap();
-    p.expect("tokens").unwrap();
-    p.expect("› ").unwrap();
-    let gap = String::from_utf8_lossy(p.expect("› ").unwrap().before()).into_owned();
-    assert_eq!(without_csi(&gap).replace('\r', ""), "\n", "{gap:?}");
+    // The summary line, then a blank line (printed above a running read
+    // or straight out, depending on timing: redrawn prompts are removed).
+    let after = after_a_turn(&mut p);
+    assert!(after.contains("\n\n"), "{after:?}");
     exit(p);
 }
 
