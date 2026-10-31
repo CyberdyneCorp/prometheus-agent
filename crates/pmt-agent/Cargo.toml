@@ -8,18 +8,26 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+fastrand.workspace = true
+getrandom.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-obs.workspace = true
 pmt-providers.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 base64.workspace = true
+rusqlite.workspace = true
+toml.workspace = true
 image.workspace = true
 pmt-net.workspace = true
 reqwest.workspace = true

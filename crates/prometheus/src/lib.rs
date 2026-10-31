@@ -21,6 +21,7 @@ pub mod model_slash;
 pub mod output;
 pub mod profile_cmd;
 pub mod prompt;
+pub mod prompt_cmd;
 pub mod secrets_cmd;
 pub mod session_export;
 pub mod sessions_cmd;

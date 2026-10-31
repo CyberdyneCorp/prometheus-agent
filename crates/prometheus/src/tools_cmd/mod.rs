@@ -236,7 +236,7 @@ fn active(selection: &Selection, disabled: &[String]) -> BTreeSet<String> {
 }
 
 /// Builds the inventory of the selected profile and runs `body` on it.
-fn with_inventory<F>(ctx: &Context<'_>, body: F) -> Result<u8, Error>
+pub(crate) fn with_inventory<F>(ctx: &Context<'_>, body: F) -> Result<u8, Error>
 where
     F: AsyncFnOnce(Inventory<'_>) -> Result<u8, Error>,
 {

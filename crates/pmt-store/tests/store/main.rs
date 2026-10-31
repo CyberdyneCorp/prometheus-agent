@@ -8,6 +8,7 @@ mod credential_state;
 mod integrity;
 mod lifecycle;
 mod open;
+mod prompts;
 mod search;
 mod sessions;
 mod support;

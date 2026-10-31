@@ -50,6 +50,10 @@ pub(crate) fn all() -> Vec<Artifact> {
             path: TOOLS_REFERENCE,
             contents: tools_reference(),
         },
+        Artifact {
+            path: "docs/reference/system-prompt.md",
+            contents: system_prompt_reference(),
+        },
     ]
 }
 
@@ -170,6 +174,28 @@ fn error_catalog() -> String {
             e.kind.exit_code(),
             e.summary
         );
+    }
+    out
+}
+
+/// The system prompt's tiers and layers in prompt order (spec:
+/// agent-turn-loop, Layered system prompt: the one documented placement).
+fn system_prompt_reference() -> String {
+    use pmt_agent::prompt::{Layer, Tier};
+    let mut out = format!(
+        "{HEADER}# System prompt layers\n\nThe system prompt is sent as one block per tier, \
+         each ending at a prompt-cache breakpoint. Layers appear in this order; \
+         empty layers are left out. See [Turns and the system prompt](../guide/turns.md).\n"
+    );
+    for tier in Tier::ALL {
+        let _ = write!(
+            out,
+            "\n## `{}`\n\n| Layer | Contents |\n|---|---|\n",
+            tier.as_str()
+        );
+        for layer in Layer::ALL.into_iter().filter(|l| l.tier() == tier) {
+            let _ = writeln!(out, "| `{}` | {} |", layer.as_str(), layer.description());
+        }
     }
     out
 }

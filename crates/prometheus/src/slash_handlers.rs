@@ -270,3 +270,51 @@ fn budget_status(
 fn budget_usage() -> Error {
     Error::new(&codes::CLI_USAGE, format!("usage: {BUDGET_USAGE}"))
 }
+
+/// Usage of `/personality` (surfaces cli, tui, desktop, gateway).
+pub const PERSONALITY_USAGE: &str = "/personality [<name>|none|default|neutral] [--now]";
+
+/// `/personality` (spec: agent-turn-loop, Personality overlays): without
+/// arguments, `none` and every personality with the active one marked;
+/// with a name, writes `agent.personality` (`none` for `none`, `default`
+/// or `neutral`) so the next session's prompt carries the overlay. With
+/// `--now` the second value is the selection to apply to the running
+/// session at once (the caller passes it to
+/// `pmt_agent::turn::Agent::apply_personality_now`, a recorded cache
+/// break); otherwise the current prompt is left untouched.
+///
+/// # Errors
+///
+/// `cli.usage` for malformed arguments, `personality.unknown` (exit 2)
+/// listing the valid names, config write errors.
+pub fn personality(scope: &ProfileScope, args: &str) -> Result<(String, Option<String>), Error> {
+    use pmt_agent::prompt::personality::{canonical, listing};
+    let mut words: Vec<&str> = args.split_whitespace().collect();
+    let now = words.contains(&"--now");
+    words.retain(|w| *w != "--now");
+    let agent = &scope.config().agent;
+    match (words.as_slice(), now) {
+        ([], false) => Ok((listing(agent), None)),
+        ([name], _) => {
+            let selected = canonical(agent, name)?;
+            scope
+                .profile()
+                .config_file()
+                .set("agent.personality", &selected)?;
+            if now {
+                let text = format!(
+                    "personality {selected} applied now (the system prompt is rebuilt: one prompt-cache break)"
+                );
+                return Ok((text, Some(selected)));
+            }
+            Ok((
+                format!("personality {selected} applies from the next session"),
+                None,
+            ))
+        }
+        _ => Err(Error::new(
+            &codes::CLI_USAGE,
+            format!("usage: {PERSONALITY_USAGE}"),
+        )),
+    }
+}

@@ -6,7 +6,7 @@
 //! across route changes).
 
 use pmt_config::schema::ReasoningLevel;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -109,7 +109,7 @@ impl Message {
 }
 
 /// A tool schema offered to the model.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tool {
     /// Name.
     pub name: String,

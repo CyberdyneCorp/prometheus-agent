@@ -20,6 +20,7 @@ Commands:
   sessions    List, search, export and manage the profile's sessions
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
+  prompt      Measure the system prompt and tool schemas a new session would send
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
@@ -2477,6 +2478,103 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus prompt`
+
+```text
+Measure the system prompt and tool schemas a new session would send
+
+Usage: prometheus prompt [OPTIONS] <COMMAND>
+
+Commands:
+  size  Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus prompt size`
+
+```text
+Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+
+Usage: prometheus prompt size [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <SURFACE>
+          Surface whose platform hint the prompt carries
+
+          [default: cli]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --toolsets <A,B>
+          Comma-separated toolsets (default: `tools.enabled_toolsets`)
+
+      --model <ID>
+          `<provider>/<model>` or a model of the configured provider (default: `model.default`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus prompt help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus prompt help [COMMAND]
+
+Commands:
+  size  Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus prompt help size`
+
+```text
+Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+
+Usage: prometheus prompt help size
+```
+
+## `prometheus prompt help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus prompt help help
+```
+
 ## `prometheus trajectory`
 
 ```text
@@ -3735,6 +3833,7 @@ Commands:
   sessions    List, search, export and manage the profile's sessions
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
+  prompt      Measure the system prompt and tool schemas a new session would send
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
@@ -4244,6 +4343,25 @@ Totals of model and metered tool calls from the usage ledger
 Usage: prometheus help usage
 ```
 
+## `prometheus help prompt`
+
+```text
+Measure the system prompt and tool schemas a new session would send
+
+Usage: prometheus help prompt [COMMAND]
+
+Commands:
+  size  Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+```
+
+## `prometheus help prompt size`
+
+```text
+Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
+
+Usage: prometheus help prompt size
+```
+
 ## `prometheus help trajectory`
 
 ```text
@@ -4510,6 +4628,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 |---|---|
 | `prometheus.grants.v1` | `prometheus grants list` |
 | `prometheus.usage.v1` | `prometheus usage` |
+| `prometheus.prompt_size.v1` | `prometheus prompt size` |
 | `prometheus.config.v1` | `prometheus config show` |
 | `prometheus.config_value.v1` | `prometheus config get` |
 | `prometheus.config_explain.v1` | `prometheus config explain` |

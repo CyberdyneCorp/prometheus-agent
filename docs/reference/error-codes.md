@@ -127,6 +127,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `budget.exceeded` | `budget_exceeded` | 3 | A model call was not sent because its worst-case cost or tokens would exceed a `budgets.*` limit; raise it with `prometheus config set budgets.<key>` or `/budget set`. |
 | `budget.unpriced_model` | `budget_exceeded` | 3 | A USD budget is set but the model has no price; set `models.<model>.price` or `budgets.allow_unpriced = true` (then only token budgets apply to it). |
 | `budget.agent_write` | `permission_denied` | 77 | Budgets are changed only by the user (`prometheus config set`, `/budget set`); agent tools may not write `budgets.*` keys, including through file writes to `config.toml`. |
+| `turn.scope_required` | `internal` | 70 | Every turn runs inside an explicit profile scope; a surface that has none bound is a bug (the default profile is never assumed). |
+| `turn.scope_mismatch` | `internal` | 70 | The profile scope passed to a turn is not the profile the session's agent was built for. |
+| `turn.lease_unavailable` | `conflict` | 75 | Another process is running a turn on this session; retry when it finished. |
+| `turn.interrupted` | `cancelled` | 130 | The turn was stopped before it produced a final response (user interrupt, lost turn lease, shutdown). |
+| `turn.empty_response` | `provider` | 69 | The model returned an empty response; retry, or switch model with `/model`. |
+| `turn.context_exhausted` | `provider` | 69 | The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window. |
+| `personality.unknown` | `usage` | 2 | `agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`. |
+| `prompt.unknown_platform` | `usage` | 2 | `--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...). |
 | `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |
 | `telemetry.refused` | `config` | 78 | `telemetry.enabled = true` needs an `https://` `telemetry.endpoint` (plain HTTP only to loopback); nothing is sent otherwise. Logged, not returned. |
 | `net.client_init` | `internal` | 70 | The shared outbound HTTP client could not be initialised. |

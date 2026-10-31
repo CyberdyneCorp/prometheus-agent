@@ -92,6 +92,12 @@ pub enum Command {
     Logs(LogsArgs),
     /// Totals of model and metered tool calls from the usage ledger.
     Usage(UsageArgs),
+    /// Measure the system prompt and tool schemas a new session would send.
+    Prompt {
+        /// The prompt subcommand.
+        #[command(subcommand)]
+        command: PromptCommand,
+    },
     /// Render the recorded trajectory of a session.
     Trajectory {
         /// The trajectory subcommand.
@@ -505,6 +511,29 @@ impl LogLevelArg {
             Self::Trace => "trace",
         }
     }
+}
+
+/// `prometheus prompt` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum PromptCommand {
+    /// Bytes and estimated tokens per prompt layer and per toolset, built
+    /// as a new session would build them (no model call, no credentials).
+    Size(PromptSizeArgs),
+}
+
+/// `prometheus prompt size` options.
+#[derive(Debug, clap::Args)]
+pub struct PromptSizeArgs {
+    /// Surface whose platform hint the prompt carries.
+    #[arg(long, value_name = "SURFACE", default_value = "cli")]
+    pub platform: String,
+    /// Comma-separated toolsets (default: `tools.enabled_toolsets`).
+    #[arg(long, value_name = "A,B", value_delimiter = ',')]
+    pub toolsets: Vec<String>,
+    /// `<provider>/<model>` or a model of the configured provider (default:
+    /// `model.default`).
+    #[arg(long, value_name = "ID")]
+    pub model: Option<String>,
 }
 
 /// `prometheus trajectory` subcommands.

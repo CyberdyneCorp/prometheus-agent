@@ -384,6 +384,30 @@ error_codes! {
     /// An agent tool tried to change a budget.
     BUDGET_AGENT_WRITE = ("budget.agent_write", PermissionDenied,
         "Budgets are changed only by the user (`prometheus config set`, `/budget set`); agent tools may not write `budgets.*` keys, including through file writes to `config.toml`.");
+    /// A turn was started without a profile scope.
+    TURN_SCOPE_REQUIRED = ("turn.scope_required", Internal,
+        "Every turn runs inside an explicit profile scope; a surface that has none bound is a bug (the default profile is never assumed).");
+    /// A turn was started with another profile's scope.
+    TURN_SCOPE_MISMATCH = ("turn.scope_mismatch", Internal,
+        "The profile scope passed to a turn is not the profile the session's agent was built for.");
+    /// Another process kept the session's turn lease past the admission wait.
+    TURN_LEASE_UNAVAILABLE = ("turn.lease_unavailable", Conflict,
+        "Another process is running a turn on this session; retry when it finished.");
+    /// The turn was interrupted by the user or the system.
+    TURN_INTERRUPTED = ("turn.interrupted", Cancelled,
+        "The turn was stopped before it produced a final response (user interrupt, lost turn lease, shutdown).");
+    /// The model answered with neither text nor tool calls.
+    TURN_EMPTY_RESPONSE = ("turn.empty_response", Provider,
+        "The model returned an empty response; retry, or switch model with `/model`.");
+    /// The conversation no longer fits the model's context window.
+    TURN_CONTEXT_EXHAUSTED = ("turn.context_exhausted", Provider,
+        "The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window.");
+    /// An unknown personality name.
+    PERSONALITY_UNKNOWN = ("personality.unknown", Usage,
+        "`agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`.");
+    /// `prometheus prompt size --platform` named an unknown surface.
+    PROMPT_UNKNOWN_PLATFORM = ("prompt.unknown_platform", Usage,
+        "`--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...).");
     /// The configured profile time zone is unknown.
     CONFIG_TIMEZONE = ("config.timezone", Config,
         "`cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`.");

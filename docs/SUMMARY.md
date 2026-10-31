@@ -6,6 +6,7 @@
 
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
 - [Sessions](guide/sessions.md)
+- [Turns and the system prompt](guide/turns.md)
 - [Logs and trajectories](guide/observability.md)
 - [Models and providers](guide/models.md)
 - [Provider credentials and sign-ins](guide/providers.md)
@@ -24,6 +25,7 @@
 - [CLI](reference/cli.md)
 - [Error codes](reference/error-codes.md)
 - [Tools](reference/tools.md)
+- [System prompt layers](reference/system-prompt.md)
 
 # Project
 

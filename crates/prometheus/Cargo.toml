@@ -30,6 +30,7 @@ eval = []
 [dependencies]
 clap.workspace = true
 jiff.workspace = true
+pmt-agent.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true

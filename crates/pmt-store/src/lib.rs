@@ -32,6 +32,7 @@ pub mod messages;
 mod migrate;
 pub mod model;
 pub mod model_context;
+pub mod prompts;
 pub mod retention;
 pub mod rewind;
 pub mod search;
@@ -55,6 +56,7 @@ pub use listing::ListOptions;
 pub use location::StoreLocation;
 pub use messages::{Message, NewMessage, Visibility};
 pub use model::{Archived, CostStatus, EndReason, LineageKind, Origin, Role, Source, TitleSource};
+pub use prompts::{PromptTier, SessionPrompt};
 pub use retention::Maintenance;
 pub use rewind::Rewound;
 pub use search::{SearchHit, SearchMode, SearchOptions, SearchResults, SearchSort};
@@ -70,7 +72,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 #[cfg(test)]
 mod tests {
