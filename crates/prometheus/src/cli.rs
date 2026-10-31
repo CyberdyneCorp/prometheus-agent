@@ -155,6 +155,47 @@ pub enum Command {
         #[command(subcommand)]
         command: ApprovalsCommand,
     },
+    /// Update this install to its channel's newest signed release, check
+    /// for one (exit 10 when available), change the channel, or roll back.
+    Update(UpdateArgs),
+    /// Check this build against the home before an update installs it
+    /// (run by `prometheus update` on the staged binary).
+    #[command(hide = true)]
+    SelfTest,
+}
+
+/// `prometheus update` arguments. The flags are independent switches of
+/// one command line, not a state machine.
+#[derive(Debug, Clone, clap::Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct UpdateArgs {
+    /// Only check: print the newest release and exit 10 when it is newer.
+    #[arg(long, conflicts_with_all = ["status", "rollback", "set_channel"])]
+    pub check: bool,
+    /// Print the install's owner, channel, version and last update; no
+    /// network request.
+    #[arg(long, conflicts_with_all = ["rollback", "set_channel", "channel"])]
+    pub status: bool,
+    /// Use this channel (`stable` or `canary`) for this run only.
+    #[arg(long, value_name = "CHANNEL", conflicts_with_all = ["rollback", "set_channel"])]
+    pub channel: Option<String>,
+    /// Persist the install's channel (`stable` or `canary`).
+    #[arg(long, value_name = "CHANNEL", conflicts_with = "rollback")]
+    pub set_channel: Option<String>,
+    /// Install the channel's newest release even when it is older than this
+    /// build (for example after leaving canary).
+    #[arg(long, conflicts_with = "rollback")]
+    pub allow_downgrade: bool,
+    /// Put back the binary the last update replaced (`prometheus.prev`).
+    #[arg(long)]
+    pub rollback: bool,
+    /// With `--rollback`: also restore the pre-update snapshots, losing the
+    /// sessions created since the update (asks first).
+    #[arg(long, requires = "rollback")]
+    pub restore_snapshots: bool,
+    /// Confirm `--restore-snapshots` without asking.
+    #[arg(long, short = 'y')]
+    pub yes: bool,
 }
 
 /// `prometheus tools` subcommands.

@@ -54,3 +54,27 @@ pub use write::ConfigFile;
 pub fn check(path: &std::path::Path, text: &str) -> Result<(), pmt_core::Error> {
     write::check_document(path, text)
 }
+
+/// Checks that the `config.toml` at `path` would load in this build
+/// (migrated in memory when older), writing nothing: what the self-test of
+/// a staged update runs against every profile. A missing file loads as the
+/// defaults.
+///
+/// # Errors
+///
+/// `config.too_new` for a file from a newer binary, otherwise what
+/// [`check`] reports; `home.io` when the file cannot be read.
+pub fn check_readonly(path: &std::path::Path) -> Result<(), pmt_core::Error> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(pmt_core::Error::new(
+                &pmt_core::error::codes::HOME_IO,
+                format!("cannot read {}: {e}", path.display()),
+            ));
+        }
+    };
+    let (_, migrated) = migrate::in_memory(path, &text)?;
+    write::check_document(path, &migrated)
+}

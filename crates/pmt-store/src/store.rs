@@ -462,14 +462,18 @@ fn check_readable(meta: &Meta, supported: u32) -> Result<(), Error> {
     if meta.min_read_version <= supported {
         return Ok(());
     }
+    // spec: distribution-and-update, Schema migrations around updates.
     Err(Error::new(
-        &codes::STORE_SCHEMA_TOO_NEW,
+        &codes::STORE_SCHEMA_UNREADABLE,
         format!(
-            "state.db is at schema version {} and needs a build supporting version {} to be read; this build supports up to version {supported}",
-            meta.schema_version, meta.min_read_version
+            "state.db schema {} is newer than this build supports ({supported}); update prometheus or roll back with --restore-snapshots",
+            meta.schema_version
         ),
     )
-    .with_hint("update Prometheus to open this store"))
+    .with_hint(format!(
+        "it needs a build that reads schema {}: prometheus update, or prometheus update --rollback --restore-snapshots",
+        meta.min_read_version
+    )))
 }
 
 fn set_journal_mode(conn: &Connection, mode: JournalMode) -> Result<(), Error> {

@@ -433,6 +433,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ct-codecs"
+version = "1.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fd9f3db6f2cfef61c10613071955154ffdc9e515daebff26de4b54e35038fdd"
+
+[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -855,9 +861,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1477,6 +1485,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
+name = "minisign"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3062dbbf4d8f57899e2252804f7512a4fd89c8211c58fa6c786d38794a0c809d"
+dependencies = [
+ "ct-codecs",
+ "getrandom 0.4.3",
+ "rpassword",
+ "scrypt",
+]
+
+[[package]]
+name = "minisign-verify"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "871285dc19d8d0ebe0eef3d0e99a205f2a71363b122632cbbfa4a6c370a960ce"
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1721,6 +1747,16 @@ dependencies = [
  "openssl-src",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "pbkdf2"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
+dependencies = [
+ "digest 0.10.7",
+ "hmac",
 ]
 
 [[package]]
@@ -2083,6 +2119,32 @@ name = "pmt-tui"
 version = "0.1.0"
 
 [[package]]
+name = "pmt-update"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "flate2",
+ "jiff",
+ "minisign",
+ "minisign-verify",
+ "pmt-backup",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-store",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+ "wiremock",
+]
+
+[[package]]
 name = "pmt-web"
 version = "0.1.0"
 
@@ -2153,7 +2215,9 @@ version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
  "clap",
+ "flate2",
  "jiff",
+ "minisign",
  "nix",
  "pmt-agent",
  "pmt-backup",
@@ -2167,12 +2231,14 @@ dependencies = [
  "pmt-skills",
  "pmt-store",
  "pmt-tools",
+ "pmt-update",
  "reqwest",
  "rpassword",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "tar",
  "tempfile",
  "tokio",
  "toml",
@@ -2551,6 +2617,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "salsa20"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2601,6 +2676,17 @@ dependencies = [
  "quote",
  "serde_derive_internals",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "scrypt"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0516a385866c09368f0b5bcd1caff3366aace790fcd46e2bb032697bb172fd1f"
+dependencies = [
+ "pbkdf2",
+ "salsa20",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -3888,12 +3974,15 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "jiff",
+ "minisign",
  "nix",
  "pmt-agent",
  "pmt-config",
  "pmt-core",
  "pmt-obs",
  "pmt-tools",
+ "pmt-update",
  "proc-macro2",
  "prometheus",
  "regex",

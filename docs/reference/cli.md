@@ -30,6 +30,7 @@ Commands:
   tools       List the profile's tools and explain one (exposure, capabilities, approvals)
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
+  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -5819,6 +5820,84 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus approvals help help
 ```
 
+## `prometheus update`
+
+```text
+Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+
+Usage: prometheus update [OPTIONS]
+
+Options:
+      --check
+          Only check: print the newest release and exit 10 when it is newer
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --status
+          Print the install's owner, channel, version and last update; no network request
+
+      --channel <CHANNEL>
+          Use this channel (`stable` or `canary`) for this run only
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --set-channel <CHANNEL>
+          Persist the install's channel (`stable` or `canary`)
+
+      --allow-downgrade
+          Install the channel's newest release even when it is older than this build (for example after leaving canary)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --rollback
+          Put back the binary the last update replaced (`prometheus.prev`)
+
+      --restore-snapshots
+          With `--rollback`: also restore the pre-update snapshots, losing the sessions created since the update (asks first)
+
+  -y, --yes
+          Confirm `--restore-snapshots` without asking
+
+  -h, --help
+          Print help
+```
+
+## `prometheus self-test`
+
+```text
+Check this build against the home before an update installs it (run by `prometheus update` on the staged binary)
+
+Usage: prometheus self-test [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus help`
 
 ```text
@@ -5847,6 +5926,7 @@ Commands:
   tools       List the profile's tools and explain one (exposure, capabilities, approvals)
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
+  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   help        Print this message or the help of the given subcommand(s)
 ```
 
@@ -7011,6 +7091,22 @@ Run a command line through the approval gate order (hardline, deny rules, bypass
 Usage: prometheus help approvals test
 ```
 
+## `prometheus help update`
+
+```text
+Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+
+Usage: prometheus help update
+```
+
+## `prometheus help self-test`
+
+```text
+Check this build against the home before an update installs it (run by `prometheus update` on the staged binary)
+
+Usage: prometheus help self-test
+```
+
 ## `prometheus help help`
 
 ```text
@@ -7025,6 +7121,8 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.update_status.v1` | `prometheus update --status` |
+| `prometheus.update_check.v1` | `prometheus update --check` |
 | `prometheus.grants.v1` | `prometheus grants list` |
 | `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.prompt_size.v1` | `prometheus prompt size` |

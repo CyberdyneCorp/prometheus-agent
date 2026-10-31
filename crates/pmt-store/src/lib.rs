@@ -27,6 +27,7 @@ pub mod delete;
 mod error;
 mod files;
 mod index;
+pub mod inspect;
 pub mod integrity;
 pub mod leases;
 pub mod listing;

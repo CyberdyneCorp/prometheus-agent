@@ -9,3 +9,8 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
 | `process.nofile_soft_limit` | integer | `4096` | ≥ 0 | `restart` | Open-file soft limit every process raises itself to at startup on POSIX hosts, capped by the hard limit and never lowering a higher limit; children inherit it. `0` disables the raise. |
+| `update.auto_apply` | boolean | `false` | any | `restart` | Install a release found by the background check without asking. |
+| `update.check_interval_secs` | integer | `86400` | ≥ 0 | `restart` | Seconds between background checks for a newer release; `0` disables them. A check sends only the version and target (in the user agent). |
+| `update.mirror_url` | string | unset | any | `restart` | Base URL serving release indexes and archives in place of the default origin (`<url>/channels/<channel>.json`, `<url>/<tag>/release-manifest.json`, ...). Everything downloaded from it is still verified against the embedded release keys. |
+| `update.require_transparency_log` | boolean | `false` | any | `restart` | Also require a keyless transparency-log signature on every release file, as a second check after the embedded-key signature. |
+| `update.snapshot_keep` | integer | `3` | 1 to 100 | `restart` | How many `pre-update` snapshots each profile keeps. |

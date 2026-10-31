@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository automation: generated contracts, reference docs, the code-health ratchet and the performance gate"
+description = "Repository automation: generated contracts, reference docs, the code-health ratchet, the performance gate and release steps"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,6 +17,10 @@ pmt-core.workspace = true
 pmt-obs.workspace = true
 prometheus.workspace = true
 pmt-tools.workspace = true
+pmt-update.workspace = true
+# Release signing (`cargo xtask release sign|keygen`).
+minisign.workspace = true
+jiff.workspace = true
 # Tool-name links in documentation.
 regex.workspace = true
 # Line numbers of syntax nodes, needed to measure function length.

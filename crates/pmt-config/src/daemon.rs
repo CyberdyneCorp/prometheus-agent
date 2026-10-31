@@ -31,6 +31,9 @@ pub struct DaemonConfig {
     /// Limits applied to every `prometheus` process of this home.
     #[serde(default)]
     pub process: ProcessConfig,
+    /// Self-update of this install (`prometheus update`).
+    #[serde(default)]
+    pub update: UpdateConfig,
 }
 
 /// The `[process]` section.
@@ -56,6 +59,41 @@ fn default_nofile_soft_limit() -> u64 {
     4096
 }
 
+/// The `[update]` section (spec: distribution-and-update). The release
+/// channel is not here: it belongs to the install receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct UpdateConfig {
+    /// Seconds between background checks for a newer release; `0` disables
+    /// them. A check sends only the version and target (in the user agent).
+    pub check_interval_secs: u64,
+    /// Install a release found by the background check without asking.
+    pub auto_apply: bool,
+    /// Also require a keyless transparency-log signature on every release
+    /// file, as a second check after the embedded-key signature.
+    pub require_transparency_log: bool,
+    /// How many `pre-update` snapshots each profile keeps.
+    #[schemars(range(min = 1, max = 100))]
+    pub snapshot_keep: u32,
+    /// Base URL serving release indexes and archives in place of the
+    /// default origin (`<url>/channels/<channel>.json`,
+    /// `<url>/<tag>/release-manifest.json`, ...). Everything downloaded from
+    /// it is still verified against the embedded release keys.
+    pub mirror_url: Option<String>,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self {
+            check_interval_secs: 86_400,
+            auto_apply: false,
+            require_transparency_log: false,
+            snapshot_keep: 3,
+            mirror_url: None,
+        }
+    }
+}
+
 impl DaemonConfig {
     /// Reads `<home>/daemon.toml`; a missing file means every default.
     ///
@@ -76,13 +114,20 @@ impl DaemonConfig {
                 .with_source(e));
             }
         };
-        toml::from_str(&text).map_err(|e| {
+        let parse_error = |message: &str| {
             Error::new(
                 &codes::CONFIG_PARSE,
-                format!("{}: {}", path.display(), e.message()),
+                format!("{}: {message}", path.display()),
             )
             .with_hint(format!("fix or remove {}", path.display()))
-        })
+        };
+        let config: Self = toml::from_str(&text).map_err(|e| parse_error(e.message()))?;
+        if !(1..=100).contains(&config.update.snapshot_keep) {
+            return Err(parse_error(
+                "update.snapshot_keep: must be between 1 and 100",
+            ));
+        }
+        Ok(config)
     }
 }
 
@@ -101,6 +146,24 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let config = DaemonConfig::load(home.path()).unwrap();
         assert_eq!(config.process.nofile_soft_limit, 4096);
+        assert_eq!(config.update.check_interval_secs, 86_400);
+        assert_eq!(config.update.snapshot_keep, 3);
+        assert!(!config.update.auto_apply);
+    }
+
+    #[test]
+    fn snapshot_keep_out_of_range_is_refused() {
+        let err = load("[update]\nsnapshot_keep = 0\n").unwrap_err();
+        assert_eq!(err.code().code, "config.parse");
+        assert!(err.message().contains("update.snapshot_keep"), "{err}");
+    }
+
+    #[test]
+    fn update_section_is_read() {
+        let config =
+            load("[update]\ncheck_interval_secs = 0\nmirror_url = \"http://m\"\n").unwrap();
+        assert_eq!(config.update.check_interval_secs, 0);
+        assert_eq!(config.update.mirror_url.as_deref(), Some("http://m"));
     }
 
     #[test]

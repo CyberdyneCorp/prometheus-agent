@@ -17,6 +17,11 @@ path = "src/main.rs"
 # Optional surfaces (`prometheus version --verbose` lists them). A build
 # without one answers its command with exit 69; each feature gains the
 # surface crate as an optional dependency when that surface lands.
+# Released by cargo-dist (dist-workspace.toml); `publish = false` would
+# otherwise hide it.
+[package.metadata.dist]
+dist = true
+
 [features]
 default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
 tui = []
@@ -42,6 +47,7 @@ pmt-sandbox.workspace = true
 pmt-skills.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true
+pmt-update.workspace = true
 reqwest.workspace = true
 rpassword.workspace = true
 serde.workspace = true
@@ -56,6 +62,9 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+flate2.workspace = true
+minisign.workspace = true
+tar.workspace = true
 base64.workspace = true
 rusqlite.workspace = true
 tempfile.workspace = true

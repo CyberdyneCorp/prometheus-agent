@@ -27,10 +27,15 @@
 //!
 //! `cargo xtask perf` checks the startup, peak-RSS and binary-size budgets
 //! against `perf/baseline.json`.
+//!
+//! `cargo xtask release <step>` runs the release steps around cargo-dist:
+//! SBOMs, the signed manifest and channel index, rendered installers,
+//! minisign signatures and the end-to-end check of a release directory.
 
 mod artifacts;
 mod health;
 mod perf;
+mod release;
 mod tool_refs;
 
 use std::path::{Path, PathBuf};
@@ -80,6 +85,11 @@ enum Command {
         #[arg(long)]
         update_baseline: bool,
     },
+    /// Release steps run by the Release workflow around cargo-dist.
+    Release {
+        #[command(subcommand)]
+        step: release::Step,
+    },
 }
 
 fn main() -> ExitCode {
@@ -97,6 +107,7 @@ fn main() -> ExitCode {
             let baseline = baseline.unwrap_or_else(|| root.join("perf/baseline.json"));
             perf::run(&root, runs.into(), &baseline, update_baseline)
         }
+        Command::Release { step } => release::run(step),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

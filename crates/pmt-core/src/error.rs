@@ -666,6 +666,30 @@ error_codes! {
     /// The built-in memory store is disabled for that target.
     MEMORY_DISABLED = ("memory.disabled", Config,
         "The target's built-in store is disabled (`memory.memory_enabled` / `memory.user_profile_enabled`); enable it with `prometheus config set`.");
+    /// A release file's signature does not verify against the embedded keys.
+    UPDATE_SIGNATURE = ("update.signature", PermissionDenied,
+        "A downloaded release index, manifest or archive is unsigned, or its minisign signature does not verify against the release keys embedded in this binary (primary or standby), or its bytes do not match the signed manifest; nothing was installed. There is no flag that skips this check.");
+    /// The install is updated by something else.
+    UPDATE_OWNED_ELSEWHERE = ("update.owned_elsewhere", Unavailable,
+        "This install's receipt names another owner (a package manager, the container image, or a source build): `prometheus update` refuses before any network request and names the command that updates it.");
+    /// Another update holds the update lock.
+    UPDATE_LOCKED = ("update.locked", Conflict,
+        "Another `prometheus update` holds `<PROMETHEUS_HOME>/updates/update.lock`; nothing was changed. Wait for it to finish.");
+    /// An update step failed.
+    UPDATE_FAILED = ("update.failed", Tool,
+        "The update could not complete (release server unreachable, malformed release metadata, no archive for this target, or a filesystem error); the installed binary is unchanged.");
+    /// The staged build failed its self-test.
+    UPDATE_SELF_TEST_FAILED = ("update.self_test_failed", Tool,
+        "The downloaded binary failed `prometheus self-test` (version, schema versions, sandbox probe, profile configs) within 30 s; it was not installed.");
+    /// `update --rollback` cannot run.
+    UPDATE_ROLLBACK_REFUSED = ("update.rollback_refused", Tool,
+        "There is no `prometheus.prev` to roll back to, or a profile's storage was migrated beyond what the previous binary reads; rerun with `--restore-snapshots` to restore the pre-update snapshots.");
+    /// A version or channel argument is malformed.
+    UPDATE_INVALID_ARGUMENT = ("update.invalid_argument", Usage,
+        "A release version is not `vMAJOR.MINOR.PATCH` (or `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS`), or a channel is not `stable` or `canary`.");
+    /// A `state.db` was written by a build this one cannot read.
+    STORE_SCHEMA_UNREADABLE = ("store.schema_unreadable", Tool,
+        "`state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

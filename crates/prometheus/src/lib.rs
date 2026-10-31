@@ -24,6 +24,7 @@ pub mod profile_cmd;
 pub mod prompt;
 pub mod prompt_cmd;
 pub mod secrets_cmd;
+pub mod self_test_cmd;
 pub mod session_export;
 pub mod sessions_cmd;
 pub mod skills_cmd;
@@ -32,12 +33,13 @@ pub mod startup;
 pub mod surface;
 pub mod tools_cmd;
 pub mod trajectory_cmd;
+pub mod update_cmd;
 pub mod usage_cmd;
 pub mod version;
 
 pub use cli::{
     ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, GrantsCommand,
     LogsArgs, ProfileCommand, SecretsCommand, SessionsCommand, SkillsCommand, SnapshotsCommand,
-    ToolsCommand, ToolsetsCommand, TrajectoryCommand, UsageArgs, command,
+    ToolsCommand, ToolsetsCommand, TrajectoryCommand, UpdateArgs, UsageArgs, command,
 };
 pub use context::Context;

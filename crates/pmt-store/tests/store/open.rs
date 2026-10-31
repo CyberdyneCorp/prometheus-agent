@@ -173,11 +173,22 @@ fn store_a_newer_build_locked_out_cannot_be_opened() {
             min_read + 1
         ))
         .unwrap();
+    let before = std::fs::read(home.database("default")).unwrap();
     let err = Store::open(&home.scope("default")).unwrap_err();
-    assert_eq!(err.code().code, "store.schema_too_new");
-    assert!(
-        err.message().contains(&format!("version {min_read}")),
-        "{err}"
+    assert_eq!(err.code().code, "store.schema_unreadable");
+    assert_eq!(err.exit_code(), 1);
+    assert_eq!(
+        err.message(),
+        format!(
+            "state.db schema {} is newer than this build supports ({}); update prometheus or roll back with --restore-snapshots",
+            min_read + 1,
+            pmt_store::SCHEMA_VERSION
+        )
+    );
+    assert_eq!(
+        std::fs::read(home.database("default")).unwrap(),
+        before,
+        "the database is not modified"
     );
 }
 

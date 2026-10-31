@@ -159,6 +159,96 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test -p pmt-tools --locked --target "${{ matrix.target }}"
 
+      # Release verification, receipts, the update lock and the Windows
+      # rename-aside swap of a running executable (distribution-and-update).
+      - name: Windows update tests
+        if: runner.os == 'Windows'
+        run: cargo test -p pmt-update --locked --target "${{ matrix.target }}"
+
+  # install.sh in clean Linux containers against a signed fixture release
+  # (spec: distribution-and-update, Installers): Debian verifies with
+  # OpenSSL, Alpine with minisign; both check the receipt, the alias, the
+  # PATH instructions, `--channel main` (exit 2) and a tampered archive
+  # (exit 77, binary unchanged).
+  installers-posix:
+    name: installers (install.sh in containers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          target: x86_64-unknown-linux-musl
+          build-warnings: ""
+          cache-key: installers-posix
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Build a static binary and a signed fixture release
+        run: |
+          cargo build --locked -p prometheus --target x86_64-unknown-linux-musl
+          scripts/ci/installer-fixture target/installer-fixture \
+            target/x86_64-unknown-linux-musl/debug/prometheus x86_64-unknown-linux-musl v0.0.1
+
+      - name: Serve the fixture
+        run: |
+          (cd target/installer-fixture && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+          sleep 1
+
+      - name: Debian (OpenSSL)
+        run: |
+          docker run --rm --network host -v "$PWD:/w" -w /w \
+            debian@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 sh -c '
+              apt-get update >/dev/null && apt-get install -y --no-install-recommends curl ca-certificates openssl >/dev/null &&
+              useradd -m tester && su tester -c "sh scripts/ci/test-install-sh target/installer-fixture/install.sh http://127.0.0.1:8765 v0.0.1"'
+
+      - name: Alpine (minisign)
+        run: |
+          docker run --rm --network host -v "$PWD:/w" -w /w \
+            alpine@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f sh -c '
+              apk add --no-cache curl minisign >/dev/null &&
+              adduser -D tester && su tester -c "sh scripts/ci/test-install-sh target/installer-fixture/install.sh http://127.0.0.1:8765 v0.0.1"'
+
+  # install.ps1 under Windows PowerShell 5.1 and PowerShell 7 against the
+  # same kind of fixture release.
+  installers-windows:
+    name: installers (install.ps1)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          cache-key: installers-windows
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build the binary and a signed fixture release
+        run: |
+          cargo build --locked -p prometheus
+          scripts/ci/installer-fixture target/installer-fixture \
+            target/debug/prometheus.exe x86_64-pc-windows-msvc v0.0.1
+
+      - name: install.ps1 under PowerShell 7 and Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          $server = Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1' `
+            -WorkingDirectory target/installer-fixture -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+          try {
+            foreach ($shell in 'pwsh', 'powershell') {
+              ./scripts/ci/test-install-ps1.ps1 -Installer target/installer-fixture/install.ps1 `
+                -BaseUrl http://127.0.0.1:8765 -Tag v0.0.1 -Shell $shell
+              if ($LASTEXITCODE -ne 0) { exit 1 }
+            }
+          } finally {
+            Stop-Process -Id $server.Id -Force
+          }
+
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04

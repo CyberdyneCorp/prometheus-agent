@@ -78,26 +78,11 @@ pub(crate) fn upgrade(
     text: &str,
     backups: &Path,
 ) -> Result<(String, Option<Migrated>), Error> {
-    let mut doc = parse::document(path, text)?.into_mut();
-    let version = file_version(&doc)?;
-    if version > SCHEMA_VERSION {
-        return Err(Error::new(
-            &codes::CONFIG_TOO_NEW,
-            format!(
-                "config.toml schema_version {version} is newer than this prometheus supports ({SCHEMA_VERSION}); upgrade prometheus"
-            ),
-        )
-        .with_hint("run: prometheus update"));
-    }
+    let (version, migrated) = in_memory(path, text)?;
     if version == SCHEMA_VERSION {
         return Ok((text.to_owned(), None));
     }
     let backup = crate::backups::save(backups, &format!("config-v{version}"), text)?;
-    for step in MIGRATIONS.iter().filter(|step| step.from >= version) {
-        (step.apply)(&mut doc);
-    }
-    doc["schema_version"] = toml_edit::value(i64::from(SCHEMA_VERSION));
-    let migrated = doc.to_string();
     private_fs::write_atomic(path, migrated.as_bytes()).map_err(|e| {
         Error::new(
             &codes::HOME_IO,
@@ -116,6 +101,35 @@ pub(crate) fn upgrade(
             backup,
         }),
     ))
+}
+
+/// The file's version and `text` brought to [`SCHEMA_VERSION`], touching
+/// nothing on disk.
+///
+/// # Errors
+///
+/// `config.parse` for invalid TOML, `config.too_new` for a file from a
+/// newer binary.
+pub(crate) fn in_memory(path: &Path, text: &str) -> Result<(u32, String), Error> {
+    let mut doc = parse::document(path, text)?.into_mut();
+    let version = file_version(&doc)?;
+    if version > SCHEMA_VERSION {
+        return Err(Error::new(
+            &codes::CONFIG_TOO_NEW,
+            format!(
+                "config.toml schema_version {version} is newer than this prometheus supports ({SCHEMA_VERSION}); upgrade prometheus"
+            ),
+        )
+        .with_hint("run: prometheus update"));
+    }
+    if version == SCHEMA_VERSION {
+        return Ok((version, text.to_owned()));
+    }
+    for step in MIGRATIONS.iter().filter(|step| step.from >= version) {
+        (step.apply)(&mut doc);
+    }
+    doc["schema_version"] = toml_edit::value(i64::from(SCHEMA_VERSION));
+    Ok((version, doc.to_string()))
 }
 
 /// Renames `[table] old` to `new`, keeping its comments; the value is

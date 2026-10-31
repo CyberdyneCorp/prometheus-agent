@@ -258,10 +258,33 @@ fn ensure_unused_by_others(profile: &ProfileDir) -> Result<(), Error> {
 ///
 /// `backup.io`.
 pub fn prune(profile: &ProfileDir, keep: usize) -> Result<Vec<String>, Error> {
+    prune_where(profile, keep, Reason::kept_by_snapshots_keep)
+}
+
+/// Removes the oldest snapshots taken for `reason` beyond `keep` (the
+/// update retention `update.snapshot_keep` for `pre-update`); returns the
+/// removed ids.
+///
+/// # Errors
+///
+/// `backup.io`.
+pub fn prune_reason(
+    profile: &ProfileDir,
+    reason: Reason,
+    keep: usize,
+) -> Result<Vec<String>, Error> {
+    prune_where(profile, keep, |r| r == reason)
+}
+
+fn prune_where(
+    profile: &ProfileDir,
+    keep: usize,
+    bounded: impl Fn(Reason) -> bool,
+) -> Result<Vec<String>, Error> {
     let mut removed = Vec::new();
     let prunable = list(profile)?
         .into_iter()
-        .filter(|s| s.reason.kept_by_snapshots_keep())
+        .filter(|s| bounded(s.reason))
         .skip(keep);
     for snapshot in prunable {
         let dir = snapshots_dir(profile).join(&snapshot.id);

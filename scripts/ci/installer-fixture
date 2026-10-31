@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Builds a signed release directory for the installer tests (spec:
+# distribution-and-update, Installers): one archive holding BINARY for
+# TARGET, the signed manifest and stable channel index, and install.sh /
+# install.ps1 rendered with an ephemeral fixture key instead of the
+# release keys.
+#
+# usage: scripts/ci/installer-fixture OUT_DIR BINARY TARGET [TAG]
+set -euo pipefail
+
+out=$1 binary=$2 target=$3 tag=${4:-v0.0.1}
+root=$(cd "$(dirname "$0")/../.." && pwd)
+xtask() { (cd "$root" && cargo run --quiet -p xtask -- "$@"); }
+
+rm -rf "$out"
+mkdir -p "$out/$tag/prometheus-$target" "$out/channels"
+out=$(cd "$out" && pwd)
+name=prometheus
+case $target in *windows*) name=prometheus.exe ;; esac
+cp "$binary" "$out/$tag/prometheus-$target/$name"
+tar -czf "$out/$tag/prometheus-$target.tar.gz" -C "$out/$tag" "prometheus-$target"
+rm -r "$out/$tag/prometheus-$target"
+
+xtask release keygen --out "$out/keys" --name fixture
+xtask release manifest --dir "$out/$tag" --tag "$tag" --commit fixture
+mv "$out/$tag/channel-stable.json" "$out/channels/stable.json"
+xtask release installers --out "$out" --key "$out/keys/fixture.pub"
+PMT_FIXTURE_KEY=$(cat "$out/keys/fixture.key") xtask release sign --key-env PMT_FIXTURE_KEY \
+    "$out/$tag/release-manifest.json" "$out/channels/stable.json" "$out/$tag/prometheus-$target.tar.gz"
+
+# The same release served with a modified archive (the signed manifest
+# still names the original digest).
+mkdir -p "$out/tampered"
+cp -R "$out/channels" "$out/$tag" "$out/tampered/"
+printf 'tampered' >>"$out/tampered/$tag/prometheus-$target.tar.gz"

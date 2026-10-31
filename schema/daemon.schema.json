@@ -13,6 +13,46 @@
         }
       },
       "type": "object"
+    },
+    "UpdateConfig": {
+      "additionalProperties": false,
+      "description": "The `[update]` section (spec: distribution-and-update). The release\nchannel is not here: it belongs to the install receipt.",
+      "properties": {
+        "auto_apply": {
+          "default": false,
+          "description": "Install a release found by the background check without asking.",
+          "type": "boolean"
+        },
+        "check_interval_secs": {
+          "default": 86400,
+          "description": "Seconds between background checks for a newer release; `0` disables\nthem. A check sends only the version and target (in the user agent).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mirror_url": {
+          "default": null,
+          "description": "Base URL serving release indexes and archives in place of the\ndefault origin (`<url>/channels/<channel>.json`,\n`<url>/<tag>/release-manifest.json`, ...). Everything downloaded from\nit is still verified against the embedded release keys.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "require_transparency_log": {
+          "default": false,
+          "description": "Also require a keyless transparency-log signature on every release\nfile, as a second check after the embedded-key signature.",
+          "type": "boolean"
+        },
+        "snapshot_keep": {
+          "default": 3,
+          "description": "How many `pre-update` snapshots each profile keeps.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -25,6 +65,17 @@
         "nofile_soft_limit": 4096
       },
       "description": "Limits applied to every `prometheus` process of this home."
+    },
+    "update": {
+      "$ref": "#/$defs/UpdateConfig",
+      "default": {
+        "auto_apply": false,
+        "check_interval_secs": 86400,
+        "mirror_url": null,
+        "require_transparency_log": false,
+        "snapshot_keep": 3
+      },
+      "description": "Self-update of this install (`prometheus update`)."
     }
   },
   "title": "Prometheus daemon.toml",

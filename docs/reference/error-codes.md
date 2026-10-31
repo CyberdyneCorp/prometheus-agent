@@ -221,3 +221,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `memory.pending_not_found` | `not_found` | 66 | No staged memory change has that id; `prometheus memory pending` lists them. |
 | `memory.stale` | `conflict` | 75 | The staged change was proposed against an entry that has since changed or been removed; reject it and let the agent propose again. |
 | `memory.disabled` | `config` | 78 | The target's built-in store is disabled (`memory.memory_enabled` / `memory.user_profile_enabled`); enable it with `prometheus config set`. |
+| `update.signature` | `permission_denied` | 77 | A downloaded release index, manifest or archive is unsigned, or its minisign signature does not verify against the release keys embedded in this binary (primary or standby), or its bytes do not match the signed manifest; nothing was installed. There is no flag that skips this check. |
+| `update.owned_elsewhere` | `unavailable` | 69 | This install's receipt names another owner (a package manager, the container image, or a source build): `prometheus update` refuses before any network request and names the command that updates it. |
+| `update.locked` | `conflict` | 75 | Another `prometheus update` holds `<PROMETHEUS_HOME>/updates/update.lock`; nothing was changed. Wait for it to finish. |
+| `update.failed` | `tool` | 1 | The update could not complete (release server unreachable, malformed release metadata, no archive for this target, or a filesystem error); the installed binary is unchanged. |
+| `update.self_test_failed` | `tool` | 1 | The downloaded binary failed `prometheus self-test` (version, schema versions, sandbox probe, profile configs) within 30 s; it was not installed. |
+| `update.rollback_refused` | `tool` | 1 | There is no `prometheus.prev` to roll back to, or a profile's storage was migrated beyond what the previous binary reads; rerun with `--restore-snapshots` to restore the pre-update snapshots. |
+| `update.invalid_argument` | `usage` | 2 | A release version is not `vMAJOR.MINOR.PATCH` (or `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS`), or a channel is not `stable` or `canary`. |
+| `store.schema_unreadable` | `tool` | 1 | `state.db` was migrated by a newer Prometheus to a schema this build cannot read; it was not modified. Update Prometheus, or roll back with `prometheus update --rollback --restore-snapshots`. |

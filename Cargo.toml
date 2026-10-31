@@ -24,6 +24,7 @@ pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-skills = { path = "crates/pmt-skills" }
 pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
+pmt-update = { path = "crates/pmt-update" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -76,6 +77,12 @@ dbus-secret-service-keyring-store = { version = "1.0", features = ["crypto-rust"
 rpassword = "7.5"
 # SQLite (bundled); the online backup API copies live databases.
 rusqlite = { version = "0.41", features = ["bundled", "backup"] }
+# Release signatures (spec: distribution-and-update, Signature trust root):
+# verification in the binary, signing only in xtask and tests.
+minisign-verify = "0.3"
+minisign = "0.10"
+# Release archives are `.tar.gz` on every target.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 # Whole-home backup archives (`.tar.zst`).
 tar = { version = "0.4", default-features = false }
 zstd = { version = "0.14", default-features = false }
