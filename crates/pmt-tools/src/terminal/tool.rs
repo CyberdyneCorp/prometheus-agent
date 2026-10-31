@@ -17,8 +17,8 @@ use super::process::{ACTIONS, ProcessArgs};
 use super::result::{Status as TerminalStatus, TerminalResult};
 use super::{LocalTerminal, TerminalArgs};
 use crate::descriptor::{
-    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolFailure,
-    ToolHandler,
+    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
+    ToolFailure, ToolHandler,
 };
 use crate::environments::{Environments, part};
 use crate::result::{Status, ToolResult};
@@ -149,5 +149,5 @@ fn process_descriptor() -> ToolDescriptor {
 fn shell_traits(descriptor: &mut ToolDescriptor) {
     descriptor.capabilities = vec![Capability::parse("process.spawn:*").expect("valid capability")];
     descriptor.effect = Effect::External;
-    descriptor.claims.exclusive = vec![SHELL.to_owned()];
+    descriptor.claims = Some(ResourceClaims::exclusive(SHELL));
 }

@@ -22,7 +22,7 @@ use super::{ApprovalRequest, CommandGate, Decision, GateSetup, STOP};
 use crate::approval::{Context, Floors};
 use crate::budget::ResultBudget;
 use crate::descriptor::{
-    CallContext, Owner, PathClaim, RegisteredTool, ToolDescriptor, ToolHandler,
+    CallContext, Owner, PathClaim, RegisteredTool, ResourceClaims, ToolDescriptor, ToolHandler,
 };
 use crate::dispatch::{
     DispatchSetup, Dispatcher, Escalation, HookCall, NoObserver, PreDecision, SeamFuture, ToolCall,
@@ -73,12 +73,14 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
         ToolDescriptor::new("terminal", "terminal", "Runs commands.", schema("command"));
     terminal.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
     let mut write = ToolDescriptor::new("write_file", "file", "Writes files.", schema("path"));
-    write.claims.writes = vec![PathClaim::Argument("/path".into())];
+    write.claims = Some(ResourceClaims::writes(vec![PathClaim::Argument(
+        "/path".into(),
+    )]));
     let mut patch = ToolDescriptor::new("patch", "file", "Patches files.", schema("patch"));
-    patch.claims.writes = vec![
+    patch.claims = Some(ResourceClaims::writes(vec![
         PathClaim::Argument("/path".into()),
         PathClaim::PatchText("/patch".into()),
-    ];
+    ]));
     vec![
         RegisteredTool::new(terminal, Owner::Builtin, counting(runs)),
         RegisteredTool::new(write, Owner::Builtin, counting(runs)),

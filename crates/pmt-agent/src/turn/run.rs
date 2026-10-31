@@ -1,38 +1,34 @@
 //! One turn, phase by phase (spec: agent-turn-loop, Iteration phases).
 //!
 //! Each iteration runs, in order: the interrupt and budget check, steer
-//! delivery and transcript repair (seams of later tasks), request assembly
-//! from the frozen prompt and the stored transcript, the compression
-//! preflight (seam), the budget check and model call, response intake,
-//! and then either the tool round or the final answer. [`super::finish`]
-//! holds the finalizer.
+//! delivery, request assembly from the frozen prompt and the repaired
+//! transcript, the compression preflight (seam of 16.x), the cache-prefix
+//! check, the budget check and the model call, response intake, and then
+//! either the tool round ([`super::round`]) or the final answer.
+//! [`super::finish`] holds the finalizer.
 
 use std::future::Future;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use jiff::Timestamp;
 use pmt_config::{Config, ProfileScope};
 use pmt_core::error::Error;
 use pmt_core::id::MessageId;
 use pmt_obs::trajectory::events::Event;
-use pmt_obs::trajectory::payload::{
-    MessageText, Reasoning, StepCall, ToolCall as ToolCallEvent, ToolResult as ToolResultEvent,
-    TurnStart, TurnStep, Usage,
-};
-use pmt_providers::classify::ErrorClass;
-use pmt_providers::cost::CallContext;
+use pmt_obs::trajectory::payload::{MessageText, Reasoning, TurnStart, Usage};
 use pmt_providers::request::{CacheControl, Request};
-use pmt_store::{NewMessage, Visibility};
-use pmt_tools::Status;
+use pmt_store::{NewMessage, Role, Visibility};
+use tokio::time::Instant;
 
 use super::events;
 use super::exit::{ExitReason, TurnId, TurnResult, TurnUsage};
+use super::guardrails::LoopGuard;
+use super::guards;
 use super::interrupt::Issuer;
 use super::iteration::IterationBudget;
 use super::lease::{self, Refresher};
 use super::model::{ModelReply, RouteInfo};
-use super::tools::ToolOutcome;
-use super::{Agent, TurnInput, TurnOptions, transcript};
+use super::{Agent, TurnInput, TurnOptions, repair, transcript};
 use crate::prompt::frozen::Frozen;
 use crate::prompt::system_blocks;
 
@@ -81,6 +77,32 @@ impl Ending {
             )),
             ..Self::new(reason)
         }
+    }
+}
+
+/// What the loop does after a reply.
+pub(super) enum Next {
+    /// Another iteration.
+    Continue,
+    /// The turn ends.
+    End(Ending),
+}
+
+/// The wall-clock run budget of a turn (on the runtime clock).
+#[derive(Debug, Clone, Copy)]
+pub(super) struct RunClock {
+    pub(super) started: Instant,
+    pub(super) budget: Duration,
+}
+
+impl RunClock {
+    pub(super) fn deadline(self) -> Instant {
+        self.started + self.budget
+    }
+
+    /// Whether 80% of the budget has elapsed.
+    pub(super) fn wrapping_up(self) -> bool {
+        self.started.elapsed() >= self.budget.mul_f64(0.8)
     }
 }
 
@@ -146,11 +168,21 @@ pub(super) struct Turn<'a> {
     pub(super) id: TurnId,
     pub(super) options: TurnOptions,
     pub(super) started_at: Timestamp,
-    deadline: Option<Instant>,
+    /// `None` without a run budget: the clock is then never read.
+    pub(super) clock: Option<RunClock>,
     pub(super) iterations: IterationBudget,
     pub(super) usage: TurnUsage,
     pub(super) appended: Vec<MessageId>,
+    /// The role of the newest row this turn stored.
+    pub(super) last_role: Option<Role>,
     pub(super) notices: Vec<String>,
+    pub(super) guard: LoopGuard,
+    /// Empty replies retried in the current streak.
+    empty_streak: u32,
+    /// Narration nudges sent this turn.
+    nudges: u32,
+    /// The run-budget wrap-up notice was sent.
+    pub(super) wrap_up_sent: bool,
 }
 
 impl<'a> Turn<'a> {
@@ -166,14 +198,21 @@ impl<'a> Turn<'a> {
             agent,
             config,
             id,
-            // With no run budget the clock is never read again.
-            deadline: budget.map(|b| Instant::now() + b),
+            clock: budget.map(|budget| RunClock {
+                started: Instant::now(),
+                budget,
+            }),
             options,
             started_at: Timestamp::now(),
             iterations: IterationBudget::new(max),
             usage: TurnUsage::default(),
             appended: Vec::new(),
+            last_role: None,
             notices: Vec::new(),
+            guard: LoopGuard::new(&config.tool_loop_guardrails, agent.setup.interactive),
+            empty_streak: 0,
+            nudges: 0,
+            wrap_up_sent: false,
         }
     }
 
@@ -182,7 +221,11 @@ impl<'a> Turn<'a> {
         setup.model.start_turn().await;
         let route = setup.model.route().await;
         let frozen = self.freeze(&route).await?;
-        let row = transcript::user_row(&input.text, &input.additions);
+        let text = match self.agent.steers.take() {
+            Some(steer) => format!("{steer}\n\n{}", input.text),
+            None => input.text,
+        };
+        let row = transcript::user_row(&text, &input.additions);
         let message_id = row.id;
         let wire = row.content.clone().unwrap_or_default();
         self.append(&row)?;
@@ -207,52 +250,86 @@ impl<'a> Turn<'a> {
             if !self.iterations.consume() {
                 return Ok(Ending::new(ExitReason::IterationLimit));
             }
-            // Steer delivery, transcript repair and the compression
-            // preflight run here once their owners land (15.8, 15.9, 16.x).
+            self.deliver_steers()?;
+            // The compression preflight runs here once 16.x lands.
             let route = self.agent.setup.model.route().await;
             let request = self.request(frozen, &route, true)?;
             if let Some(end) = self.check_budget(&request, &route).await? {
                 self.iterations.refund(); // nothing was sent
                 return Ok(end);
             }
+            self.check_prefix(&request).await;
             let reply = match self.call(&request).await {
                 Ok(reply) => reply,
                 Err(end) => return Ok(end),
             };
             self.record_call(&reply).await?;
-            if reply.is_empty() {
-                return Ok(Ending::failed(
-                    ExitReason::EmptyResponse,
-                    Error::new(
-                        &pmt_core::error::codes::TURN_EMPTY_RESPONSE,
-                        "the model returned an empty response",
-                    ),
-                ));
-            }
-            self.keep_reply(&reply).await?;
-            if reply.tool_calls.is_empty() {
-                let mut end = Ending::new(ExitReason::Completed);
-                end.final_response = Some(reply.text);
-                return Ok(end);
-            }
-            if let Some(end) = self.tool_round(&reply).await? {
+            if let Next::End(end) = self.intake(reply, &request, &route).await? {
                 return Ok(end);
             }
         }
     }
 
+    /// Response intake: the empty-response and narration guards, then the
+    /// final answer or the tool round.
+    async fn intake(
+        &mut self,
+        reply: ModelReply,
+        request: &Request,
+        route: &RouteInfo,
+    ) -> Result<Next, Error> {
+        if reply.is_empty() {
+            self.emit_step(Vec::new()).await;
+            let agent = &self.config.agent;
+            if guards::retry_empty(agent, request, route, &reply, self.empty_streak) {
+                self.empty_streak += 1;
+                return Ok(Next::Continue);
+            }
+            return Ok(Next::End(Ending::failed(
+                ExitReason::EmptyResponse,
+                Error::new(
+                    &pmt_core::error::codes::TURN_EMPTY_RESPONSE,
+                    "the model returned an empty response",
+                ),
+            )));
+        }
+        self.empty_streak = 0;
+        self.keep_reply(&reply).await?;
+        if !reply.tool_calls.is_empty() {
+            return Ok(match self.tool_round(&reply).await? {
+                Some(end) => Next::End(end),
+                None => Next::Continue,
+            });
+        }
+        self.emit_step(Vec::new()).await;
+        if self.nudges < guards::MAX_NUDGES
+            && guards::continuation_applies(&self.config.agent, route)
+            && guards::narrates(&reply, !request.tools.is_empty())
+        {
+            self.nudges += 1;
+            self.append(&transcript::notice_row(
+                guards::NUDGE,
+                "intent_continuation",
+            ))?;
+            return Ok(Next::Continue);
+        }
+        let mut end = Ending::new(ExitReason::Completed);
+        end.final_response = Some(reply.text);
+        Ok(Next::End(end))
+    }
+
     /// The interrupt and run-budget check at the top of an iteration.
-    fn stopped(&self) -> Option<Ending> {
+    pub(super) fn stopped(&self) -> Option<Ending> {
         if let Some(issuer) = self.options.interrupt.issuer() {
             return Some(Ending::interrupted(&issuer));
         }
-        self.deadline
-            .is_some_and(|d| Instant::now() >= d)
+        self.clock
+            .is_some_and(|c| Instant::now() >= c.deadline())
             .then(|| Ending::new(ExitReason::RunBudgetExhausted))
     }
 
     /// The request of the next call: the frozen prompt and tools plus the
-    /// stored transcript (toolless for the summary handoff).
+    /// repaired transcript (toolless for the summary handoff).
     pub(super) fn request(
         &self,
         frozen: &Frozen,
@@ -261,7 +338,7 @@ impl<'a> Turn<'a> {
     ) -> Result<Request, Error> {
         let setup = &self.agent.setup;
         let rows = setup.store.messages(setup.session, Visibility::Active)?;
-        let mut messages = transcript::wire(&rows);
+        let mut messages = repair::wire(&rows);
         if let Some(last) = messages.last_mut() {
             last.cache_breakpoint = true;
         }
@@ -280,37 +357,32 @@ impl<'a> Turn<'a> {
         })
     }
 
-    /// Sends `request`, racing the interrupt and the run budget.
-    pub(super) async fn call(&mut self, request: &Request) -> Result<ModelReply, Ending> {
-        let setup = &self.agent.setup;
-        let mut ctx = CallContext::new(setup.session, "main");
-        ctx.turn_id = Some(self.id.to_string());
-        let deltas = self.options.deltas.clone();
-        let call = setup.model.call(request, &ctx, &*deltas);
-        let failure = match self.race(call).await? {
-            Ok(reply) => return Ok(reply),
-            Err(failure) => failure,
-        };
-        for fallback in &failure.fallbacks {
-            self.emit(Event::ProviderFallback(fallback.clone())).await;
-        }
-        let reason = if failure.class == Some(ErrorClass::ContextOverflow) {
-            ExitReason::ContextExhausted
-        } else {
-            ExitReason::ProviderFailed
-        };
-        Err(Ending::failed(reason, failure.error))
+    /// Runs a model call until it finishes, any stop arrives (a soft stop
+    /// too: the call has no side effects) or the run budget runs out.
+    pub(super) async fn race_model<T>(&self, work: impl Future<Output = T>) -> Result<T, Ending> {
+        let token = self.options.interrupt.any().clone();
+        self.race(work, token).await
     }
 
-    /// Runs `work` until it finishes, the turn is interrupted or the run
-    /// budget runs out.
-    async fn race<T>(&self, work: impl Future<Output = T>) -> Result<T, Ending> {
+    /// Runs a tool batch until it finishes, a hard stop arrives or the run
+    /// budget runs out; a soft stop lets it finish.
+    pub(super) async fn race_tools<T>(&self, work: impl Future<Output = T>) -> Result<T, Ending> {
         let token = self.options.interrupt.token().clone();
-        let deadline = self.deadline;
+        self.race(work, token).await
+    }
+
+    async fn race<T>(
+        &self,
+        work: impl Future<Output = T>,
+        token: pmt_core::cancel::CancelToken,
+    ) -> Result<T, Ending> {
+        let deadline = self.clock.map(RunClock::deadline);
+        // A stop wins over work finishing at the same moment.
         tokio::select! {
-            out = work => Ok(out),
+            biased;
             () = token.cancelled() => Err(self.stopped().unwrap_or_else(|| Ending::interrupted(&Issuer::User))),
             () = until(deadline) => Err(Ending::new(ExitReason::RunBudgetExhausted)),
+            out = work => Ok(out),
         }
     }
 
@@ -350,55 +422,11 @@ impl<'a> Turn<'a> {
         Ok(())
     }
 
-    async fn tool_round(&mut self, reply: &ModelReply) -> Result<Option<Ending>, Error> {
-        let calls = &reply.tool_calls;
-        for call in calls {
-            self.emit(Event::ToolCall(ToolCallEvent {
-                call_id: call.id.clone(),
-                tool: call.name.clone(),
-                arguments: serde_json::from_str(&call.arguments)
-                    .unwrap_or_else(|_| serde_json::Value::String(call.arguments.clone())),
-            }))
-            .await;
-        }
-        let token = self.options.interrupt.token().child();
-        let tools = self.agent.setup.tools.clone();
-        let outcomes = match self.race(tools.run(calls, &token)).await {
-            Ok(outcomes) => outcomes,
-            Err(end) => {
-                token.cancel();
-                return Ok(Some(end));
-            }
-        };
-        let mut steps = Vec::with_capacity(calls.len());
-        for (call, outcome) in calls.iter().zip(&outcomes) {
-            self.append(&transcript::tool_row(call, &outcome.result))?;
-            self.emit(Event::ToolResult(result_event(call, outcome)))
-                .await;
-            steps.push(StepCall {
-                tool: call.name.clone(),
-                args_digest: digest(&call.arguments),
-                duration_ms: outcome.duration_ms,
-                outcome: outcome.result.status.as_str().to_owned(),
-            });
-        }
-        self.emit(Event::TurnStep(TurnStep {
-            iteration: self.iterations.used(),
-            calls: steps,
-            usage: usage_payload(&self.usage),
-        }))
-        .await;
-        let stop = self.agent.setup.guardrail.after_tools(calls, &outcomes);
-        Ok(stop.map(|why| {
-            self.notices.push(why);
-            Ending::new(ExitReason::GuardrailStop)
-        }))
-    }
-
     pub(super) fn append(&mut self, row: &NewMessage) -> Result<(), Error> {
         let setup = &self.agent.setup;
         setup.store.append_message(setup.session, row)?;
         self.appended.push(row.id);
+        self.last_role = Some(row.role);
         Ok(())
     }
 
@@ -409,30 +437,9 @@ impl<'a> Turn<'a> {
 
 async fn until(deadline: Option<Instant>) {
     match deadline {
-        Some(at) => tokio::time::sleep_until(at.into()).await,
+        Some(at) => tokio::time::sleep_until(at).await,
         None => std::future::pending().await,
     }
-}
-
-fn result_event(call: &super::model::RequestedCall, outcome: &ToolOutcome) -> ToolResultEvent {
-    let ok = matches!(outcome.result.status, Status::Ok | Status::Degraded);
-    let text = outcome.result.text_content();
-    ToolResultEvent {
-        call_id: call.id.clone(),
-        tool: call.name.clone(),
-        ok,
-        duration_ms: Some(outcome.duration_ms),
-        output: ok.then(|| text.clone()),
-        error: (!ok).then(|| pmt_obs::trajectory::payload::Failure {
-            kind: "tool".to_owned(),
-            code: Some(format!("tool.{}", outcome.result.status.as_str())),
-            message: text,
-        }),
-    }
-}
-
-fn digest(text: &str) -> String {
-    crate::sha256(text.as_bytes())
 }
 
 pub(super) fn usage_payload(usage: &TurnUsage) -> Usage {

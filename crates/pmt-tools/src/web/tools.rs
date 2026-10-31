@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 
 use super::{Capability, WebSession, resolve, window::window};
 use crate::descriptor::{
-    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolHandler,
+    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor,
+    ToolHandler,
 };
 use crate::environments::{Environments, part};
 use crate::probe::FnProbe;
@@ -237,5 +238,6 @@ fn extract_descriptor() -> ToolDescriptor {
 fn web_traits(descriptor: &mut ToolDescriptor) {
     descriptor.effect = Effect::None;
     descriptor.idempotent = true;
+    descriptor.claims = Some(ResourceClaims::none());
     descriptor.capabilities = vec![Cap::parse("net.connect:*").expect("valid capability")];
 }

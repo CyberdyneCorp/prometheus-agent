@@ -402,6 +402,12 @@ error_codes! {
     /// The conversation no longer fits the model's context window.
     TURN_CONTEXT_EXHAUSTED = ("turn.context_exhausted", Provider,
         "The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window.");
+    /// A tool loop guardrail stopped the turn.
+    TURN_GUARDRAIL_STOP = ("turn.guardrail_stop", Cancelled,
+        "The model kept repeating a failing or unproductive tool call; see `tool_loop_guardrails` to tune the thresholds.");
+    /// A steer message without text.
+    TURN_EMPTY_STEER = ("turn.empty_steer", Usage,
+        "A steer message needs text; empty or whitespace-only steers are rejected.");
     /// An unknown personality name.
     PERSONALITY_UNKNOWN = ("personality.unknown", Usage,
         "`agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`.");

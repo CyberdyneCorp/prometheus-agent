@@ -2,12 +2,9 @@
 //! Turn entry contract; Typed exit reasons; Single active turn per
 //! session; Iteration phases).
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use pmt_agent::turn::model::RequestedCall;
-use pmt_agent::turn::tools::ToolOutcome;
-use pmt_agent::turn::{ExitReason, Guardrail, Issuer, TurnInput};
+use pmt_agent::turn::{ExitReason, Issuer, TurnInput};
 use pmt_obs::trajectory::events::Event;
 use pmt_store::{Holder, LeaseKind, Role, Source, Visibility};
 
@@ -92,7 +89,8 @@ async fn tool_calls_loop_back_until_the_answer() {
             _ => None,
         })
         .collect();
-    assert_eq!(steps.len(), 1);
+    assert_eq!(steps.len(), 2, "one turn.step per iteration");
+    assert_eq!((steps[1].iteration, steps[1].calls.len()), (2, 0));
     assert_eq!(steps[0].iteration, 1);
     assert_eq!(steps[0].calls[0].tool, "lookup");
     assert_eq!(steps[0].calls[0].outcome, "ok");
@@ -227,28 +225,6 @@ async fn the_run_budget_ends_the_turn() {
         .await;
     assert_eq!(result.exit_reason, ExitReason::RunBudgetExhausted);
     assert_eq!(run.end_reasons(), ["run_budget_exhausted"]);
-}
-
-struct StopAfterOneRound;
-
-impl Guardrail for StopAfterOneRound {
-    fn after_tools(&self, _: &[RequestedCall], _: &[ToolOutcome]) -> Option<String> {
-        Some("the same call repeated".to_owned())
-    }
-}
-
-#[tokio::test]
-async fn a_guardrail_stops_the_turn() {
-    let profile = Profile::new("");
-    let s = profile.session(Source::Cron);
-    let model = mock_model(&profile, TOOL_THEN_ANSWER, "mock").await;
-    let run = agent(&profile, s, model, FakeTools::new(), |setup| {
-        setup.guardrail = Arc::new(StopAfterOneRound);
-    });
-    let result = run.turn(&profile, "go").await;
-    assert_eq!(result.exit_reason, ExitReason::GuardrailStop);
-    assert_eq!(result.notices, ["the same call repeated"]);
-    assert_eq!(result.iterations, 1);
 }
 
 #[tokio::test]

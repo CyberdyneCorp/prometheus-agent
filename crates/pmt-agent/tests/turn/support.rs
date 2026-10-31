@@ -10,7 +10,7 @@ use pmt_agent::turn::model::{
     BoxFuture, DeltaSink, ModelFailure, ModelPort, ModelReply, ProviderModel, ProviderSetup,
     RequestedCall, RouteInfo,
 };
-use pmt_agent::turn::tools::{ToolOutcome, ToolPort};
+use pmt_agent::turn::tools::{ToolBatch, ToolOutcome, ToolPort};
 use pmt_agent::turn::{
     Agent, AgentSetup, LeaseTiming, PromptSetup, Recorded, TurnInput, TurnOptions, TurnResult,
 };
@@ -19,7 +19,7 @@ use pmt_core::cancel::CancelToken;
 use pmt_core::id::SessionId;
 use pmt_core::secret::SecretString;
 use pmt_obs::trajectory::events::Event;
-use pmt_obs::usage::{Prices, UsageRecorder};
+use pmt_obs::usage::{Price, Prices, UsageRecorder};
 use pmt_providers::cost::CallContext;
 use pmt_providers::fallback::Healthy;
 use pmt_providers::metadata::Catalog;
@@ -108,7 +108,18 @@ impl Profile {
 pub(crate) struct Recording {
     inner: Arc<dyn ModelPort>,
     requests: Mutex<Vec<Request>>,
-    unpriced: bool,
+    price: Priced,
+}
+
+/// The price a test route reports.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Priced {
+    /// The catalog's.
+    Catalog,
+    /// No price.
+    Unpriced,
+    /// This price.
+    At(Price),
 }
 
 impl Recording {
@@ -124,8 +135,10 @@ impl ModelPort for Recording {
     fn route(&self) -> BoxFuture<'_, RouteInfo> {
         Box::pin(async move {
             let mut info = self.inner.route().await;
-            if self.unpriced {
-                info.price = None;
+            match self.price {
+                Priced::Catalog => {}
+                Priced::Unpriced => info.price = None,
+                Priced::At(price) => info.price = Some(price),
             }
             info
         })
@@ -161,6 +174,32 @@ pub(crate) async fn mock_model_with(
     model: &str,
     unpriced: bool,
 ) -> Arc<Recording> {
+    let price = if unpriced {
+        Priced::Unpriced
+    } else {
+        Priced::Catalog
+    };
+    mock_model_priced(profile, script, model, price).await
+}
+
+/// USD per million input tokens, nothing else billed.
+pub(crate) fn input_price(per_million: f64) -> Price {
+    Price {
+        input: per_million,
+        output: 0.0,
+        cache_read: 0.0,
+        cache_write: 0.0,
+        reasoning: None,
+    }
+}
+
+/// [`mock_model`] whose route reports `price` instead of its own.
+pub(crate) async fn mock_model_priced(
+    profile: &Profile,
+    script: &str,
+    model: &str,
+    price: Priced,
+) -> Arc<Recording> {
     let config = Arc::new(profile.scope.config().clone());
     let registry = Arc::new(ProviderRegistry::for_profile(&config, Vec::new()).unwrap());
     let catalog = Arc::new(Catalog::new(&config, None));
@@ -192,18 +231,24 @@ pub(crate) async fn mock_model_with(
     Arc::new(Recording {
         inner: Arc::new(inner),
         requests: Mutex::new(Vec::new()),
-        unpriced,
+        price,
     })
 }
 
-/// A tool `lookup` answering `result of <arguments>`, after `delay`, and
-/// running `effect` on each call.
+/// The result of one fake call.
+pub(crate) type Respond = Box<dyn Fn(&RequestedCall) -> ToolResult + Send + Sync>;
+
+/// A tool `lookup` answering `result of <arguments>` (or what `respond`
+/// says), after `delay`, and running `effect` on each batch.
 pub(crate) struct FakeTools {
     pub(crate) delay: Duration,
     pub(crate) output: String,
     pub(crate) calls: Mutex<Vec<RequestedCall>>,
     #[allow(clippy::type_complexity)]
     pub(crate) effect: Option<Box<dyn Fn() + Send + Sync>>,
+    pub(crate) respond: Option<Respond>,
+    /// Tools the no-progress guardrail counts.
+    pub(crate) idempotent: Vec<String>,
 }
 
 impl FakeTools {
@@ -218,7 +263,19 @@ impl FakeTools {
             output: String::new(),
             calls: Mutex::new(Vec::new()),
             effect: None,
+            respond: None,
+            idempotent: Vec::new(),
         }
+    }
+
+    /// Answers every call with `respond`.
+    pub(crate) fn answering(
+        respond: impl Fn(&RequestedCall) -> ToolResult + Send + Sync + 'static,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            respond: Some(Box::new(respond)),
+            ..Self::plain()
+        })
     }
 
     pub(crate) fn calls(&self) -> usize {
@@ -238,11 +295,15 @@ impl ToolPort for FakeTools {
         }]
     }
 
+    fn idempotent(&self, name: &str) -> bool {
+        self.idempotent.iter().any(|n| n == name)
+    }
+
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
         cancel: &'a CancelToken,
-    ) -> BoxFuture<'a, Vec<ToolOutcome>> {
+    ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(async move {
             if let Some(effect) = &self.effect {
                 effect();
@@ -255,13 +316,20 @@ impl ToolPort for FakeTools {
                 () = tokio::time::sleep(self.delay) => {}
                 () = cancel.cancelled() => {}
             }
-            calls
+            let outcomes = calls
                 .iter()
                 .map(|c| ToolOutcome {
-                    result: ToolResult::ok(format!("result of {}{}", c.arguments, self.output)),
+                    result: match &self.respond {
+                        Some(respond) => respond(c),
+                        None => ToolResult::ok(format!("result of {}{}", c.arguments, self.output)),
+                    },
                     duration_ms: 1,
                 })
-                .collect()
+                .collect();
+            ToolBatch {
+                outcomes,
+                plan: None,
+            }
         })
     }
 }
@@ -277,7 +345,7 @@ pub(crate) struct Run {
 pub(crate) fn agent(
     profile: &Profile,
     session: SessionId,
-    model: Arc<Recording>,
+    model: Arc<dyn ModelPort>,
     tools: Arc<dyn ToolPort>,
     tweak: impl FnOnce(&mut AgentSetup),
 ) -> Run {

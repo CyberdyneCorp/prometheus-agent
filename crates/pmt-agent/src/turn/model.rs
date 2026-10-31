@@ -8,9 +8,10 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use pmt_config::Config;
+use pmt_config::schema::WireFormat;
 use pmt_core::error::Error;
 use pmt_obs::trajectory::payload::{ModelCall, ProviderFallback};
 use pmt_obs::usage::{Price, Prices as _};
@@ -41,6 +42,8 @@ pub struct RouteInfo {
     pub price: Option<Price>,
     /// Context window in tokens, when known.
     pub context_window: Option<u64>,
+    /// The route's wire format.
+    pub wire_format: WireFormat,
 }
 
 /// One tool call the model asked for.
@@ -90,6 +93,24 @@ pub struct ModelFailure {
     pub class: Option<ErrorClass>,
     /// Fallback activations tried.
     pub fallbacks: Vec<ProviderFallback>,
+    /// The provider's `Retry-After`.
+    pub retry_after: Option<Duration>,
+    /// Answer text reached the user before the failure.
+    pub streamed: bool,
+}
+
+impl ModelFailure {
+    /// A failure of `class` that streamed nothing.
+    #[must_use]
+    pub fn new(error: pmt_core::Error, class: Option<ErrorClass>) -> Self {
+        Self {
+            error,
+            class,
+            fallbacks: Vec::new(),
+            retry_after: None,
+            streamed: false,
+        }
+    }
 }
 
 /// Receives answer text as it streams (the surface prints it).
@@ -165,9 +186,11 @@ pub struct ProviderModel {
 }
 
 impl ProviderModel {
-    /// A port over `caller` starting on `fallback`'s primary route.
+    /// A port over `caller` starting on `fallback`'s primary route; each
+    /// route gets at most `agent.api_max_retries` attempts per call.
     #[must_use]
     pub fn new(setup: ProviderSetup, caller: ModelCaller, fallback: Fallback) -> Self {
+        let caller = caller.with_attempt_cap(setup.config.agent.api_max_retries);
         Self {
             setup,
             caller,
@@ -206,6 +229,7 @@ impl ProviderModel {
             model: route.model.clone(),
             price: self.setup.catalog.price(&route.provider, &route.model),
             context_window: Some(meta.context_window),
+            wire_format: route.wire_format,
         }
     }
 
@@ -249,6 +273,8 @@ impl ProviderModel {
                 error: failure.to_route_error(&called.route),
                 class: Some(failure.class),
                 fallbacks: reply.fallbacks,
+                retry_after: failure.retry_after,
+                streamed: !reply.text.is_empty(),
             });
         }
         reply.reasoning = (!reasoning.is_empty()).then_some(reasoning);
@@ -290,15 +316,11 @@ impl ModelPort for ProviderModel {
 
 fn call_failure(err: &CallError) -> ModelFailure {
     match err {
-        CallError::Refused(_) => ModelFailure {
-            error: err.to_error(),
-            class: None,
-            fallbacks: Vec::new(),
-        },
+        CallError::Refused(_) => ModelFailure::new(err.to_error(), None),
         CallError::Failed(failed) => ModelFailure {
-            error: failed.to_error(),
-            class: Some(failed.error.class),
             fallbacks: failed.fallbacks.iter().map(Activated::payload).collect(),
+            retry_after: failed.error.retry_after,
+            ..ModelFailure::new(failed.to_error(), Some(failed.error.class))
         },
     }
 }

@@ -133,6 +133,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `turn.interrupted` | `cancelled` | 130 | The turn was stopped before it produced a final response (user interrupt, lost turn lease, shutdown). |
 | `turn.empty_response` | `provider` | 69 | The model returned an empty response; retry, or switch model with `/model`. |
 | `turn.context_exhausted` | `provider` | 69 | The request exceeds the model's context window and could not be compacted; start a new session or use a model with a larger window. |
+| `turn.guardrail_stop` | `cancelled` | 130 | The model kept repeating a failing or unproductive tool call; see `tool_loop_guardrails` to tune the thresholds. |
+| `turn.empty_steer` | `usage` | 2 | A steer message needs text; empty or whitespace-only steers are rejected. |
 | `personality.unknown` | `usage` | 2 | `agent.personality` and `/personality` take `none`, a built-in personality or a key of `[agent.personalities]`. |
 | `prompt.unknown_platform` | `usage` | 2 | `--platform` takes a surface with a built-in platform hint (cli, tui, desktop, telegram, discord, ...). |
 | `config.timezone` | `config` | 78 | `cron.timezone` must be an IANA time zone name such as `Europe/Lisbon`. |

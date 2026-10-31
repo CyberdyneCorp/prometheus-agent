@@ -14,7 +14,30 @@ use crate::event::Usage;
 use crate::request::Request;
 use crate::resolve::Route;
 
-/// Who makes a call, for its ledger row.
+/// A cap on implicit stream idle timeouts (spec: agent-turn-loop,
+/// Wall-clock run budget): applied to every route whose provider is not in
+/// `explicit`, and only ever lowers a timeout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaleCap {
+    /// The longest idle gap allowed.
+    pub cap: std::time::Duration,
+    /// Providers whose `stream_idle_timeout_secs` the user configured.
+    pub explicit: Vec<String>,
+}
+
+impl StaleCap {
+    /// `route` with its idle timeout capped, unless it was configured.
+    #[must_use]
+    pub fn apply(&self, route: &Route) -> Route {
+        let mut route = route.clone();
+        if !self.explicit.contains(&route.provider) {
+            route.timeouts.idle = route.timeouts.idle.min(self.cap);
+        }
+        route
+    }
+}
+
+/// Who makes a call, for its ledger row (and its per-call limits).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallContext {
     /// The calling session.
@@ -25,6 +48,8 @@ pub struct CallContext {
     pub purpose: String,
     /// The call this one serves.
     pub parent_call_id: Option<String>,
+    /// Caps implicit stream idle timeouts (a turn under a run budget).
+    pub stale_cap: Option<StaleCap>,
 }
 
 impl CallContext {
@@ -36,6 +61,7 @@ impl CallContext {
             turn_id: None,
             purpose: purpose.to_owned(),
             parent_call_id: None,
+            stale_cap: None,
         }
     }
 }

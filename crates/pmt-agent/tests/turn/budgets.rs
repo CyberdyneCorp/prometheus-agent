@@ -287,5 +287,6 @@ async fn an_unpriced_model_under_a_cost_budget_is_never_called() {
     assert_eq!(err.exit_code(), 3);
     assert!(model.requests().is_empty(), "no model call, no handoff");
     assert_eq!(result.final_response, None);
-    assert_eq!(stored_roles(&profile, s), [Role::User]);
+    // Only the failed-turn boundary row follows the user's message.
+    assert_eq!(stored_roles(&profile, s), [Role::User, Role::Assistant]);
 }

@@ -10,8 +10,8 @@ use super::patch::PatchArgs;
 use super::read::{DEFAULT_LIMIT, ReadArgs};
 use super::search::{MAX_CONTEXT, MAX_LIMIT, SearchArgs};
 use crate::descriptor::{
-    CallContext, Effect, HandlerFuture, Owner, PathClaim, RegisteredTool, ToolDescriptor,
-    ToolFailure, ToolHandler,
+    CallContext, Effect, HandlerFuture, Owner, PathClaim, RegisteredTool, ResourceClaims,
+    ToolDescriptor, ToolFailure, ToolHandler,
 };
 use crate::environments::{Environments, part};
 use crate::result::ToolResult;
@@ -108,7 +108,9 @@ fn read_file() -> ToolDescriptor {
         }),
         Effect::None,
     );
-    d.claims.reads = vec![PathClaim::Argument("/path".into())];
+    d.claims = Some(ResourceClaims::reads(vec![PathClaim::Argument(
+        "/path".into(),
+    )]));
     d
 }
 
@@ -130,7 +132,9 @@ fn write_file() -> ToolDescriptor {
         }),
         Effect::Workspace,
     );
-    d.claims.writes = vec![PathClaim::Argument("/path".into())];
+    d.claims = Some(ResourceClaims::writes(vec![PathClaim::Argument(
+        "/path".into(),
+    )]));
     d
 }
 
@@ -157,10 +161,10 @@ fn patch() -> ToolDescriptor {
         }),
         Effect::Workspace,
     );
-    d.claims.writes = vec![
+    d.claims = Some(ResourceClaims::writes(vec![
         PathClaim::Argument("/path".into()),
         PathClaim::PatchText("/patch".into()),
-    ];
+    ]));
     d
 }
 
@@ -190,6 +194,8 @@ fn search_files() -> ToolDescriptor {
         }),
         Effect::None,
     );
-    d.claims.reads = vec![PathClaim::Argument("/path".into())];
+    d.claims = Some(ResourceClaims::reads(vec![PathClaim::ArgumentOrCwd(
+        "/path".into(),
+    )]));
     d
 }

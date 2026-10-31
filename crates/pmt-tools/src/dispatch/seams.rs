@@ -156,6 +156,19 @@ impl Capabilities for SessionGrants {
     }
 }
 
+/// Executes the agent-level tools ([`crate::Executor::AgentLoop`]) of a
+/// batch the turn loop runs; their calls still go through the pipeline
+/// (arguments, hooks, gate, budget) and the batch plan.
+pub trait AgentLoopCalls: Send + Sync {
+    /// Runs `name` with validated `arguments`.
+    fn call<'a>(
+        &'a self,
+        name: &'a str,
+        arguments: Value,
+        cancel: &'a pmt_core::cancel::CancelToken,
+    ) -> SeamFuture<'a, ToolResult>;
+}
+
 /// Receives exactly one `tool.call` and one `tool.result` per call.
 pub trait DispatchObserver: Send + Sync {
     /// The call arrived (`arguments` as the model sent them).

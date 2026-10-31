@@ -2,20 +2,30 @@
 //!
 //! Every surface runs a turn through [`Agent::run_turn`]: admission under
 //! the session's turn lease, the frozen system prompt, then iterations of
-//! budget check, request assembly, model call, response intake and either
-//! a tool round or the final answer, and a finalizer that runs the budget
-//! summary handoff and emits `turn.end`. A turn always ends with exactly
-//! one [`ExitReason`].
+//! interrupt and budget checks, steer delivery, request assembly from the
+//! repaired transcript, the cache-prefix check, the model call (with
+//! auto-recovery), response intake (empty-response and narration guards)
+//! and either a tool round (planned batch, guardrails) or the final answer,
+//! and a finalizer that runs the budget summary handoff, writes the
+//! failed-turn boundary row and emits `turn.end`. A turn always ends with
+//! exactly one [`ExitReason`].
 
 mod budget;
+mod cache;
 pub mod events;
 mod exit;
 mod finish;
+mod guardrails;
+mod guards;
 pub mod interrupt;
 pub mod iteration;
 pub mod lease;
 pub mod model;
+mod recovery;
+pub mod repair;
+mod round;
 mod run;
+mod steer;
 mod system;
 pub mod tools;
 pub mod transcript;
@@ -29,6 +39,7 @@ use pmt_config::ProfileScope;
 use pmt_core::cancel::CancelToken;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
+use pmt_core::secret::Redactor;
 use pmt_obs::budget::Budgets;
 use pmt_store::Store;
 
@@ -38,7 +49,8 @@ pub use interrupt::{Interrupt, Issuer};
 pub use iteration::IterationBudget;
 pub use lease::LeaseTiming;
 pub use model::{DeltaSink, ModelPort, NoDeltas, ProviderModel, ProviderSetup};
-pub use tools::{SessionTools, Timings, ToolPort};
+pub use round::WRAP_UP_NOTICE;
+pub use tools::{SessionTools, Timings, ToolBatch, ToolPort};
 
 use crate::prompt::frozen::Rebuild;
 use crate::references::{Places, UrlSource};
@@ -102,24 +114,11 @@ pub struct ReferenceSetup {
     pub urls: Option<Arc<dyn UrlSource>>,
 }
 
-/// Stops a turn after a tool round (repeat detection and the like).
-pub trait Guardrail: Send + Sync {
-    /// `Some(why)` ends the turn with `guardrail_stop`.
-    fn after_tools(
-        &self,
-        calls: &[model::RequestedCall],
-        outcomes: &[tools::ToolOutcome],
-    ) -> Option<String>;
-}
-
-/// No guardrails.
-#[derive(Debug, Default)]
-pub struct NoGuardrails;
-
-impl Guardrail for NoGuardrails {
-    fn after_tools(&self, _: &[model::RequestedCall], _: &[tools::ToolOutcome]) -> Option<String> {
-        None
-    }
+/// Whether `platform` is an interactive surface (a person at a terminal
+/// or desktop app); gateway, cron, API and kanban sessions are not.
+#[must_use]
+pub fn interactive_platform(platform: &str) -> bool {
+    matches!(platform, "cli" | "tui" | "desktop" | "acp")
 }
 
 /// One session's agent: its ports and settings.
@@ -140,17 +139,21 @@ pub struct AgentSetup {
     pub prompt: PromptSetup,
     /// `@` reference expansion, when the surface offers it.
     pub references: Option<ReferenceSetup>,
-    /// Loop guardrails.
-    pub guardrail: Arc<dyn Guardrail>,
+    /// An interactive surface (CLI, TUI, desktop, ACP): tool loop
+    /// guardrails only warn there unless `hard_stop_enabled`.
+    pub interactive: bool,
     /// Cron, unattended gateway, background delegation, evolution.
     pub unattended: bool,
+    /// Redacts secrets from the failed-turn boundary row.
+    pub redactor: Redactor,
     /// This agent's own iteration budget (a delegated child's); `None`
     /// reads `agent.max_iterations`.
     pub max_iterations: Option<u32>,
 }
 
 impl AgentSetup {
-    /// A setup with no events, no references, no guardrails, attended.
+    /// A setup with no events and no references, attended, interactive as
+    /// its platform is.
     #[must_use]
     pub fn new(
         scope: ProfileScope,
@@ -160,6 +163,7 @@ impl AgentSetup {
         tools: Arc<dyn ToolPort>,
         prompt: PromptSetup,
     ) -> Self {
+        let interactive = interactive_platform(&prompt.platform);
         Self {
             scope,
             store,
@@ -169,8 +173,9 @@ impl AgentSetup {
             events: Arc::new(NoEvents),
             prompt,
             references: None,
-            guardrail: Arc::new(NoGuardrails),
+            interactive,
             unattended: false,
+            redactor: Redactor::default(),
             max_iterations: None,
         }
     }
@@ -234,6 +239,9 @@ pub struct Agent {
     budgets: Budgets,
     pending_rebuild: Mutex<Option<Rebuild>>,
     personality: Mutex<Option<String>>,
+    steers: steer::Steers,
+    /// The previous request's prefix (cache break detection).
+    prefix: Mutex<Option<cache::Prefix>>,
 }
 
 impl Agent {
@@ -249,6 +257,8 @@ impl Agent {
             budgets: Budgets::new(zone),
             pending_rebuild: Mutex::new(None),
             personality: Mutex::new(None),
+            steers: steer::Steers::default(),
+            prefix: Mutex::new(None),
         })
     }
 
@@ -275,6 +285,25 @@ impl Agent {
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(name.to_owned());
         self.rebuild_prompt(Rebuild::Now("personality".to_owned()));
+    }
+
+    /// Steers the running turn of this session (`session.steer`): the
+    /// text reaches the model after the next tool results, or with the
+    /// next user message when the turn ends first.
+    ///
+    /// # Errors
+    ///
+    /// `turn.empty_steer` (`empty steer`) for empty or whitespace text.
+    pub fn steer(&self, text: &str) -> Result<(), Error> {
+        self.steers.push(text)
+    }
+
+    /// Replaces the reference prefix, returning the previous one.
+    fn swap_prefix(&self, next: Option<cache::Prefix>) -> Option<cache::Prefix> {
+        std::mem::replace(
+            &mut *self.prefix.lock().unwrap_or_else(PoisonError::into_inner),
+            next,
+        )
     }
 
     fn personality_override(&self) -> Option<String> {

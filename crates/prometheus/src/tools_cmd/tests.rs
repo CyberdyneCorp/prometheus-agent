@@ -47,7 +47,9 @@ fn registry() -> ToolRegistry {
     terminal.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
     let mut write = tool("write_file", "file");
     write.effect = pmt_tools::Effect::Workspace;
-    write.claims.writes = vec![PathClaim::Argument("/path".into())];
+    write.claims = Some(pmt_tools::ResourceClaims::writes(vec![
+        PathClaim::Argument("/path".into()),
+    ]));
     let mut web = tool("web_extract", "web");
     web.capabilities = vec![Capability::parse("net.connect:*").unwrap()];
     let browser = RegisteredTool::new(

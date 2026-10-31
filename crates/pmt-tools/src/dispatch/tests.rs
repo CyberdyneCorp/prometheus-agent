@@ -18,7 +18,8 @@ use super::{
 };
 use crate::budget::ResultBudget;
 use crate::descriptor::{
-    CallContext, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolFailure, ToolHandler,
+    CallContext, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor, ToolFailure,
+    ToolHandler,
 };
 use crate::probe::ProbeCache;
 use crate::registry::{Builtins, ToolRegistry};
@@ -85,8 +86,11 @@ pub(super) fn counting(name: &str, runs: &Arc<AtomicUsize>) -> RegisteredTool {
     tool_with(name, Arc::new(handler))
 }
 
+/// A tool that declares no claims beyond running (parallel-safe).
 pub(super) fn tool_with(name: &str, handler: Arc<dyn ToolHandler>) -> RegisteredTool {
-    let descriptor = ToolDescriptor::new(name, "core", format!("The {name} tool."), path_schema());
+    let mut descriptor =
+        ToolDescriptor::new(name, "core", format!("The {name} tool."), path_schema());
+    descriptor.claims = Some(ResourceClaims::none());
     RegisteredTool::new(descriptor, Owner::Builtin, handler)
 }
 

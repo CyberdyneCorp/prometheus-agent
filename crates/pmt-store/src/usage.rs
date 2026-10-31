@@ -96,6 +96,18 @@ pub struct UsageTotals {
 }
 
 impl Tokens {
+    /// Cache-read tokens over all input tokens (uncached input, cache
+    /// reads and cache writes); `None` when no input was counted.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // a ratio for display
+    pub fn cache_hit_rate(&self) -> Option<f64> {
+        let input = self
+            .input
+            .saturating_add(self.cache_read)
+            .saturating_add(self.cache_write);
+        (input > 0).then(|| self.cache_read as f64 / input as f64)
+    }
+
     /// Tokens a token budget counts: input, output and both cache classes
     /// (reasoning tokens are a part of the output tokens).
     #[must_use]

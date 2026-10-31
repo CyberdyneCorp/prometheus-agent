@@ -18,10 +18,18 @@ A turn starts when a message arrives for a session:
 2. **The system prompt** is built once per session (see below) and
    replayed byte for byte on every later turn.
 3. **Iterations.** Each iteration checks for interrupts and budgets,
-   assembles the request from the frozen prompt and the stored transcript,
-   calls the model, stores the reply and then either runs the requested
-   tools (and loops) or returns the answer.
-4. **The finalizer** emits `turn.end` with the exit reason.
+   delivers pending steer messages, assembles the request from the frozen
+   prompt and the stored transcript, calls the model, stores the reply and
+   then either runs the requested tools (and loops) or returns the answer.
+   Each iteration ends with a `turn.step` event.
+4. **The finalizer** emits `turn.end` with the exit reason and the
+   session's prompt-cache hit rate.
+
+A turn that ends without a final answer (any reason but `completed` and
+`context_exhausted`) after your message or a tool result was stored gets a
+closing assistant row, marked as written by Prometheus, with the error
+(secrets redacted, at most 2,000 characters). Your next message therefore
+always starts a new request instead of merging into the failed one.
 
 ## Exit reasons
 
@@ -42,6 +50,84 @@ A turn always ends with exactly one of these reasons:
 | `provider_failed` | The provider failed and nothing could recover. |
 | `lease_unavailable` | Another process kept the session's turn lease. |
 | `crashed` | Only for a turn recovered after a crash. |
+
+## Interrupts and steering
+
+Stopping a turn ends it at the next safe point with `interrupted_by_user`
+(or `interrupted_by_system`). A hard stop (Ctrl-C, `/stop`) also cancels
+running tools and delegated children and drops steer messages not yet
+delivered; a soft stop lets the running tools finish and keeps them for
+your next message. Stopping one session never affects another.
+
+A steer message (`session.steer`) reaches the model without restarting
+the turn. It is never added to anything already sent: after the next tool
+results it becomes a new message wrapped in
+`[OUT-OF-BAND USER MESSAGE kind=note]` ... `[/OUT-OF-BAND USER MESSAGE]`
+(several steers are joined in arrival order). If the turn ends first, the
+steer opens your next message. An empty steer is refused with
+`empty steer`.
+
+## Failures and retries
+
+Each model call is tried up to `agent.api_max_retries` times (default 3)
+with jittered backoff, then on the configured fallback models. When all of
+them fail with a temporary error (rate limit, overload, server error,
+timeout, network) and no answer text reached you yet, the turn waits and
+calls again, up to `agent.auto_recovery_cycles` times (default 5, `0`
+turns it off) after 15, 30, 60, 60 and 60 seconds; a provider's
+`Retry-After` of up to 120 seconds is used instead. Authentication,
+billing, entitlement, content-policy and malformed-request errors end the
+turn with `provider_failed` at once.
+
+Before every request, a copy of the transcript is repaired for the
+provider: consecutive user messages are merged, a tool call without a
+stored result (after a crash or a hard stop) gets a placeholder result, a
+result without its call is dropped, and tool arguments that are not JSON
+are replaced by a stub. The stored transcript never changes.
+
+## Guards on the loop
+
+**Repeated tool calls.** Prometheus counts, per turn, the same call failing
+with the same error, the same tool failing, and a read-only call returning
+the same result again. From the second identical failure (third failure of
+one tool, second identical read) the tool result carries a warning for the
+model. Five identical failures (eight of one tool, five identical reads)
+end the turn with `guardrail_stop` on gateway, cron, API and kanban
+sessions; interactive sessions only warn unless
+`tool_loop_guardrails.hard_stop_enabled = true`. Every turn allows at most
+50 [`web_search`](../reference/tools.md#web_search) calls and 50 subagent
+spawns (`tool_loop_guardrails.loop_caps.max_web_searches` and
+`max_subagents`, `0` = unlimited); further calls are refused unrun.
+
+**Empty answers.** An answer with neither text nor tool calls is retried up
+to three times in a row, only once when a single attempt's input is
+estimated at `agent.empty_response_guard.cost_threshold_usd` (default
+$0.25) or more, and not at all when the model produced no output tokens
+(it would refuse again). Then the turn ends with `empty_response`.
+
+**Narration.** Some models announce an action ("Let me check the tests.")
+and stop without calling a tool. Where `agent.intent_continuation` applies
+(`auto`: models on the Responses API; `true`; `false`; or a list of model
+name fragments) the turn adds up to two short "continue now and call the
+tools" messages per turn.
+
+**Wall-clock budget.** With `agent.run_budget_secs` (or `prometheus chat
+--run-budget <secs>`), once 80% of the budget has elapsed the next tool
+result tells the model, once, to produce the final deliverable now;
+implicit stream idle timeouts are lowered to `max(60 s, half the remaining
+time)` (never raised, never one you configured); and the turn ends with
+`run_budget_exhausted` when the budget runs out.
+
+## Prompt-cache health
+
+Every model call records its uncached input, cache-read, cache-write and
+output tokens. `/usage` and `turn.end` report the session's cache hit rate
+(cache-read tokens over all input tokens). Each request is compared with
+the previous one of the session: if anything it already sent changed
+without a compaction or a recorded `prompt.rebuilt`, Prometheus emits a
+`cache.unexpected_break` warning naming the first changed message (logged
+as an error in debug builds), because such a change multiplies the cost of
+every later request.
 
 ## Iteration limit and budgets
 

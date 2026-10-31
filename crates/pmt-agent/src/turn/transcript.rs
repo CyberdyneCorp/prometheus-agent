@@ -15,13 +15,9 @@ use super::model::{ModelReply, RequestedCall};
 /// rows), not the user or the model.
 pub const AUTHORED: &str = "prometheus_authored";
 
-/// The request messages of the active transcript.
-#[must_use]
-pub fn wire(rows: &[Row]) -> Vec<Message> {
-    rows.iter().filter_map(message).collect()
-}
-
-fn message(row: &Row) -> Option<Message> {
+/// The request message of one stored row (none for system rows); see
+/// [`super::repair::wire`] for the whole transcript.
+pub(super) fn message(row: &Row) -> Option<Message> {
     let text = row.content.clone().unwrap_or_default();
     let (role, parts) = match row.role {
         Role::User => (WireRole::User, vec![Part::text(text)]),

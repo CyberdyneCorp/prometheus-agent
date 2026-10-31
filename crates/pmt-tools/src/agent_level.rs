@@ -11,7 +11,7 @@
 
 use serde_json::json;
 
-use crate::descriptor::{Effect, RegisteredTool, ToolDescriptor};
+use crate::descriptor::{Effect, RegisteredTool, ResourceClaims, ToolDescriptor};
 
 /// Most items of a todo list.
 pub const TODO_MAX_ITEMS: usize = 256;
@@ -74,6 +74,8 @@ fn todo() -> ToolDescriptor {
         }),
     );
     d.effect = Effect::None;
+    // Writes the session's list: two calls of one batch apply in order.
+    d.claims = Some(ResourceClaims::exclusive("todo"));
     d
 }
 
@@ -108,7 +110,10 @@ fn clarify() -> ToolDescriptor {
         }),
     );
     d.effect = Effect::None;
-    d.claims.interactive = true;
+    d.claims = Some(ResourceClaims {
+        interactive: true,
+        ..ResourceClaims::none()
+    });
     d
 }
 
@@ -139,5 +144,6 @@ fn session_search() -> ToolDescriptor {
     );
     d.effect = Effect::None;
     d.idempotent = true;
+    d.claims = Some(ResourceClaims::none());
     d
 }

@@ -348,10 +348,12 @@ fn written_paths(tool: &RegisteredTool, arguments: &Value) -> Vec<String> {
     let text = |pointer: &str| arguments.pointer(pointer).and_then(Value::as_str);
     tool.descriptor
         .claims
-        .writes
         .iter()
+        .flat_map(|claims| &claims.writes)
         .flat_map(|claim| match claim {
-            PathClaim::Argument(pointer) => text(pointer).map(str::to_owned).into_iter().collect(),
+            PathClaim::Argument(pointer) | PathClaim::ArgumentOrCwd(pointer) => {
+                text(pointer).map(str::to_owned).into_iter().collect()
+            }
             PathClaim::PatchText(pointer) => text(pointer).map(touched_paths).unwrap_or_default(),
             PathClaim::Fixed(_) => Vec::new(),
         })

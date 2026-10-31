@@ -346,6 +346,14 @@
           "payload": {
             "description": "`turn.end`.",
             "properties": {
+              "cache_hit_rate": {
+                "description": "The session's cache hit rate so far: cache-read tokens over all\ninput tokens (0..1); absent before any input was counted.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "iterations": {
                 "description": "Loop iterations run.",
                 "format": "uint32",

@@ -306,3 +306,33 @@ fn the_budget_command_shows_spend_and_sets_a_limit_for_the_next_call() {
         "a negative budget is refused by the schema"
     );
 }
+
+#[test]
+fn the_usage_command_shows_the_session_cache_hit_rate() {
+    use prometheus::slash_handlers::session_usage as usage;
+
+    let home = temp_home();
+    let store = store(home.path(), "default");
+    let id = session(&store, None);
+    assert!(usage(&store, id).unwrap().ends_with("cache hit rate —"));
+    // 90,000 cached of 100,000 input tokens.
+    recorder(&store)
+        .record_at(
+            Call {
+                tokens: Tokens {
+                    input: 10_000,
+                    output: 500,
+                    cache_read: 90_000,
+                    cache_write: 0,
+                    reasoning: 0,
+                },
+                billing_source: "local".to_owned(),
+                ..Call::new(id, "main", "test", "m1")
+            },
+            Timestamp::now(),
+        )
+        .unwrap();
+    let text = usage(&store, id).unwrap();
+    assert!(text.contains("cache read 90000"), "{text}");
+    assert!(text.ends_with("cache hit rate 90%"), "{text}");
+}

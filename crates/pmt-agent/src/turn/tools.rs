@@ -1,19 +1,21 @@
 //! The turn loop's view of the tools: the session's frozen schemas and a
 //! batch runner.
 //!
-//! [`SessionTools`] is the production port: agent-level tools (`todo`,
-//! `clarify`, `session_search`) run here, every other call goes through the
-//! session's [`Dispatcher`] (schema checks, approvals, budgets, parallel
-//! batches by resource claims).
+//! [`SessionTools`] is the production port: every call goes through the
+//! session's [`Dispatcher`] (schema checks, hooks, approvals, budgets),
+//! planned as one dependency graph by resource claims; the agent-level
+//! tools (`todo`, `clarify`, `session_search`) execute in the loop's
+//! [`AgentTools`] at their place in that plan.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;
 
 use pmt_core::cancel::CancelToken;
+use pmt_obs::trajectory::payload::{BatchEdge, BatchPlanned};
 use pmt_providers::request::Tool;
-use pmt_tools::dispatch::DispatchObserver;
-use pmt_tools::{Dispatcher, ToolCall, ToolResult};
+use pmt_tools::dispatch::{AgentLoopCalls, DispatchObserver, SeamFuture};
+use pmt_tools::{Dispatcher, Effect, ToolCall, ToolResult};
 use serde_json::Value;
 
 use super::model::{BoxFuture, RequestedCall};
@@ -28,17 +30,33 @@ pub struct ToolOutcome {
     pub duration_ms: u64,
 }
 
+/// One response's calls, run.
+#[derive(Debug, Clone, Default)]
+pub struct ToolBatch {
+    /// One outcome per call, in call order.
+    pub outcomes: Vec<ToolOutcome>,
+    /// The plan the batch ran by (`tool.batch_planned`), when planned.
+    pub plan: Option<BatchPlanned>,
+}
+
 /// The tools as the turn loop runs them.
 pub trait ToolPort: Send + Sync {
     /// The session's tool schemas in request order.
     fn definitions(&self) -> Vec<Tool>;
 
-    /// Runs one response's calls; results come back in call order.
+    /// Whether repeating a call of `name` changes nothing (read-only or
+    /// declared idempotent): the no-progress guardrail counts it.
+    fn idempotent(&self, name: &str) -> bool {
+        let _ = name;
+        false
+    }
+
+    /// Runs one response's calls; outcomes come back in call order.
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
         cancel: &'a CancelToken,
-    ) -> BoxFuture<'a, Vec<ToolOutcome>>;
+    ) -> BoxFuture<'a, ToolBatch>;
 }
 
 /// Per-call wall times reported by the dispatcher (pass one as the
@@ -70,14 +88,14 @@ impl DispatchObserver for Timings {
 
 /// The production port.
 pub struct SessionTools {
-    agent: Option<Arc<AgentTools>>,
+    agent: Option<Arc<dyn AgentLoopCalls>>,
     dispatcher: Arc<Dispatcher>,
     timings: Arc<Timings>,
 }
 
 impl SessionTools {
-    /// Agent-level tools from `agent`, the rest through `dispatcher`, whose
-    /// observer reports into `timings`.
+    /// Agent-level tools from `agent`, every call through `dispatcher`,
+    /// whose observer reports into `timings`.
     #[must_use]
     pub fn new(
         agent: Option<Arc<AgentTools>>,
@@ -85,67 +103,66 @@ impl SessionTools {
         timings: Arc<Timings>,
     ) -> Self {
         Self {
-            agent,
+            agent: agent.map(|tools| Arc::new(LoopTools(tools)) as Arc<dyn AgentLoopCalls>),
             dispatcher,
             timings,
         }
     }
 
-    async fn run_all(&self, calls: &[RequestedCall], cancel: &CancelToken) -> Vec<ToolOutcome> {
-        let mut outcomes: Vec<Option<ToolOutcome>> = vec![None; calls.len()];
-        let mut generic = Vec::new();
-        for (i, call) in calls.iter().enumerate() {
-            match self.agent_level(call).await {
-                Some(outcome) => outcomes[i] = Some(outcome),
-                None => generic.push(i),
-            }
-        }
-        let batch: Vec<ToolCall> = generic
+    async fn run_all(&self, calls: &[RequestedCall], cancel: &CancelToken) -> ToolBatch {
+        let batch: Vec<ToolCall> = calls
             .iter()
-            .map(|&i| ToolCall::new(&calls[i].id, &calls[i].name, &calls[i].arguments))
+            .map(|c| ToolCall::new(&c.id, &c.name, &c.arguments))
             .collect();
-        let started = Instant::now();
-        let results = self.dispatcher.run_batch(batch, cancel).await;
-        let batch_ms = elapsed_ms(started);
-        for (&i, result) in generic.iter().zip(results) {
-            let duration_ms = self.timings.take(&calls[i].id).unwrap_or(batch_ms);
-            outcomes[i] = Some(ToolOutcome {
-                result,
-                duration_ms,
-            });
-        }
-        outcomes
-            .into_iter()
-            .map(|o| {
-                o.unwrap_or_else(|| ToolOutcome {
-                    result: ToolResult::error("no result"),
-                    duration_ms: 0,
+        let plan = self.dispatcher.plan(&batch);
+        let planned = BatchPlanned {
+            calls: calls.iter().map(|c| c.id.clone()).collect(),
+            edges: plan
+                .edges()
+                .map(|(from, to)| BatchEdge {
+                    call: calls[to].id.clone(),
+                    after: calls[from].id.clone(),
                 })
-            })
-            .collect()
-    }
-
-    async fn agent_level(&self, call: &RequestedCall) -> Option<ToolOutcome> {
-        let agent = self.agent.as_ref()?;
-        // A tool the session was not offered goes to the dispatcher, which
-        // refuses it like any unknown name.
-        if !is_agent_level(&call.name) || self.dispatcher.surface().get(&call.name).is_none() {
-            return None;
-        }
-        let started = Instant::now();
-        let result = match serde_json::from_str::<Value>(&call.arguments) {
-            Ok(arguments) => agent.call(&call.name, arguments).await?,
-            Err(err) => ToolResult::error(format!("arguments are not valid JSON: {err}")),
+                .collect(),
         };
-        Some(ToolOutcome {
-            result,
-            duration_ms: elapsed_ms(started),
-        })
+        let started = Instant::now();
+        let results = self
+            .dispatcher
+            .run_planned(batch, &plan, cancel, self.agent.clone())
+            .await;
+        let batch_ms = elapsed_ms(started);
+        let outcomes = calls
+            .iter()
+            .zip(results)
+            .map(|(call, result)| ToolOutcome {
+                result,
+                duration_ms: self.timings.take(&call.id).unwrap_or(batch_ms),
+            })
+            .collect();
+        ToolBatch {
+            outcomes,
+            plan: Some(planned),
+        }
     }
 }
 
-fn is_agent_level(name: &str) -> bool {
-    matches!(name, "todo" | "clarify" | "session_search")
+/// The agent-level tools as the dispatcher calls them.
+struct LoopTools(Arc<AgentTools>);
+
+impl AgentLoopCalls for LoopTools {
+    fn call<'a>(
+        &'a self,
+        name: &'a str,
+        arguments: Value,
+        _cancel: &'a CancelToken,
+    ) -> SeamFuture<'a, ToolResult> {
+        // The dispatcher races the call against the cancel token.
+        Box::pin(async move {
+            self.0.call(name, arguments).await.unwrap_or_else(|| {
+                ToolResult::error(format!("{name} must be handled by the agent loop"))
+            })
+        })
+    }
 }
 
 fn elapsed_ms(started: Instant) -> u64 {
@@ -166,11 +183,18 @@ impl ToolPort for SessionTools {
             .collect()
     }
 
+    fn idempotent(&self, name: &str) -> bool {
+        self.dispatcher
+            .surface()
+            .get(name)
+            .is_some_and(|t| t.descriptor.idempotent || t.descriptor.effect == Effect::None)
+    }
+
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
         cancel: &'a CancelToken,
-    ) -> BoxFuture<'a, Vec<ToolOutcome>> {
+    ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(self.run_all(calls, cancel))
     }
 }

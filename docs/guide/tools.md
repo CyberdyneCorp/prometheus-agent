@@ -107,10 +107,15 @@ Every call ends with a status: `ok`, `error`, `blocked`, `denied`,
 to the model is stripped of role tags, CDATA markers and code fences and
 cut to 2,048 characters.
 
-Calls from one model response run at the same time (up to
-`agent.tool_concurrency`, default 8) only when none of them writes files,
-needs an exclusive resource or talks to you; otherwise they run one after
-another. Results always come back in the order the model asked.
+Calls from one model response are planned by what they touch: a call
+waits for an earlier one only when they conflict (a write and any access to
+an overlapping path, the same exclusive resource such as the shell or the
+browser, a call that talks to you, or arguments that are not valid JSON).
+Everything else runs at the same time, up to `agent.tool_concurrency`
+(default 8). Two reads always run together; two writes to one file never
+do. A tool that declares no resource claims (an MCP tool, for example) runs
+alone. Results always come back in the order the model asked, and the plan
+is recorded as a `tool.batch_planned` event.
 
 ## Tools the agent runs itself
 

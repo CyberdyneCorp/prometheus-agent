@@ -215,6 +215,10 @@ impl ModelCaller {
         request: &Request,
         ctx: Option<&CallContext>,
     ) -> Result<ModelStream, ProviderError> {
+        let capped = ctx
+            .and_then(|c| c.stale_cap.as_ref())
+            .map(|cap| cap.apply(route));
+        let route = capped.as_ref().unwrap_or(route);
         let mut retries = route.retry;
         if let Some(cap) = self.attempt_cap {
             retries.max_retries = retries.max_retries.min(cap - 1);

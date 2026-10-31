@@ -11,6 +11,8 @@ use pmt_agent::turn::{ExitReason, SessionTools, Timings};
 use pmt_core::capability::{BASELINE, CapabilitySet};
 use pmt_core::panic::CrashReporter;
 use pmt_core::secret::Redactor;
+use pmt_obs::trajectory::events::Event;
+use pmt_obs::trajectory::payload::BatchPlanned;
 use pmt_store::{Source, Visibility};
 use pmt_tools::budget::ResultBudget;
 use pmt_tools::dispatch::{AllowAll, NoHooks};
@@ -43,8 +45,12 @@ async fn session_tools(profile: &Profile, session: pmt_core::id::SessionId) -> A
         "default",
         Arc::new(Builtins::standard(pmt_tools::builtin_tools(&environments)).unwrap()),
     );
-    let selection =
-        Selection::resolve(&registry, &["file".to_owned(), "todo".to_owned()], &[]).unwrap();
+    let selection = Selection::resolve(
+        &registry,
+        &["file".to_owned(), "todo".to_owned(), "clarify".to_owned()],
+        &[],
+    )
+    .unwrap();
     let capabilities = CapabilitySet::parse(BASELINE.iter().copied()).unwrap();
     let surface = ToolSurface::build(SurfaceInputs {
         registry: &registry,
@@ -113,4 +119,87 @@ async fn agent_level_and_dispatched_calls_answer_in_call_order() {
         .map(|t| t.name.clone())
         .collect();
     assert!(names.contains(&"todo".to_owned()) && names.contains(&"read_file".to_owned()));
+}
+
+const BATCH: &str = r#"
+[[rule]]
+step = 0
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "a.txt" }
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "b.txt" }
+[[rule.tool_calls]]
+name = "write_file"
+arguments = { path = "out.txt", content = "1" }
+[[rule.tool_calls]]
+name = "write_file"
+arguments = { path = "./out.txt", content = "2" }
+[[rule.tool_calls]]
+name = "clarify"
+arguments = { questions = [{ question = "Which?" }] }
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "c.txt" }
+
+[[rule]]
+step = 1
+text = "Done."
+"#;
+
+#[tokio::test]
+async fn the_batch_plan_is_recorded_with_its_dependency_edges() {
+    let profile = Profile::new("");
+    let s = profile.session(Source::Cli);
+    let model = mock_model(&profile, BATCH, "mock").await;
+    let tools = session_tools(&profile, s).await;
+    let run = agent(&profile, s, model, tools, |_| {});
+    let result = run.turn(&profile, "go").await;
+    assert_eq!(result.exit_reason, ExitReason::Completed);
+
+    let plans: Vec<BatchPlanned> = run
+        .events
+        .events()
+        .into_iter()
+        .filter_map(|e| match e {
+            Event::ToolBatchPlanned(plan) => Some(plan),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(plans.len(), 1);
+    let ids: Vec<String> = (0..6).map(|i| format!("call_0_{i}")).collect();
+    assert_eq!(plans[0].calls, ids);
+    let edges: Vec<(String, String)> = plans[0]
+        .edges
+        .iter()
+        .map(|e| (e.after.clone(), e.call.clone()))
+        .collect();
+    let edge = |from: usize, to: usize| (ids[from].clone(), ids[to].clone());
+    // The reads wait for nothing; the second write waits for the first;
+    // `clarify` (interactive, run by the agent loop) is a barrier.
+    assert_eq!(
+        edges,
+        [
+            edge(2, 3),
+            edge(0, 4),
+            edge(1, 4),
+            edge(2, 4),
+            edge(3, 4),
+            edge(4, 5),
+        ]
+    );
+    let rows = profile.store.messages(s, Visibility::Active).unwrap();
+    let clarify = rows
+        .iter()
+        .find(|m| m.tool_name.as_deref() == Some("clarify"))
+        .unwrap();
+    assert!(
+        !clarify
+            .content
+            .as_deref()
+            .unwrap()
+            .contains("must be handled by the agent loop"),
+        "clarify ran in the agent loop"
+    );
 }

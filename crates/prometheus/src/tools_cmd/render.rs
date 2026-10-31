@@ -108,8 +108,8 @@ pub struct Explanation {
     pub effect: Effect,
     /// Whether repeating a call has no further effect.
     pub idempotent: bool,
-    /// Resource claims.
-    pub claims: ResourceClaims,
+    /// Resource claims; `null` when undeclared (the call runs alone).
+    pub claims: Option<ResourceClaims>,
     /// Timeout in seconds.
     pub timeout_secs: u64,
     /// Characters kept inline before spilling; `None`: never spilled.
@@ -199,13 +199,18 @@ fn approval_rules(tool: &RegisteredTool, config: &Config) -> Vec<String> {
             "dangerous patterns and the secret-upload and invisible-characters detectors ask; cron, single-query and unattended runs answer from approvals.<context>_mode".to_owned(),
         ]);
     }
-    if !tool.descriptor.claims.writes.is_empty() && config.security.protected_instruction_files {
+    let writes = tool
+        .descriptor
+        .claims
+        .as_ref()
+        .is_some_and(|c| !c.writes.is_empty());
+    if writes && config.security.protected_instruction_files {
         rules.push(format!(
             "writes to protected instruction files ({}, .prometheus/...) ask in every mode",
             BUILTIN_FILES.join(", ")
         ));
     }
-    if !tool.descriptor.claims.writes.is_empty() {
+    if writes {
         rules.push("writes to ~/.ssh/config ask in every mode".to_owned());
     }
     if rules.is_empty() {
@@ -238,12 +243,18 @@ fn list_or_dash(items: &[String]) -> String {
     }
 }
 
-fn claims_text(claims: &ResourceClaims) -> String {
+fn claims_text(claims: Option<&ResourceClaims>) -> String {
+    let Some(claims) = claims else {
+        return "undeclared (each call runs alone in its batch)".to_owned();
+    };
     let paths = |list: &[PathClaim]| -> String {
         let items: Vec<String> = list
             .iter()
             .map(|claim| match claim {
                 PathClaim::Argument(pointer) => format!("argument {pointer}"),
+                PathClaim::ArgumentOrCwd(pointer) => {
+                    format!("argument {pointer} (default: working directory)")
+                }
                 PathClaim::Fixed(path) => path.clone(),
                 PathClaim::PatchText(pointer) => format!("files of the patch in {pointer}"),
             })
@@ -262,7 +273,7 @@ fn claims_text(claims: &ResourceClaims) -> String {
 /// `tools explain` as text.
 #[must_use]
 pub fn render_explain(e: &Explanation) -> String {
-    let claims = claims_text(&e.claims);
+    let claims = claims_text(e.claims.as_ref());
     let budget = e
         .result_budget_chars
         .map_or_else(|| "never spilled".to_owned(), |c| format!("{c} chars"));

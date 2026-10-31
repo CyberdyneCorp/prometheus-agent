@@ -33,7 +33,7 @@ pub use safety::UrlSafety;
 pub use session::{BrowserManager, BrowserSession, BrowserSetup, CloudProvider, Origin};
 
 use crate::descriptor::{
-    CallContext, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolHandler,
+    CallContext, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor, ToolHandler,
 };
 use crate::environments::{Environments, part};
 use crate::result::ToolResult;
@@ -115,7 +115,7 @@ fn descriptor() -> ToolDescriptor {
         .iter()
         .map(|c| Capability::parse(c).expect("valid capability"))
         .collect();
-    d.claims.exclusive = vec![TOOLSET.to_owned()];
+    d.claims = Some(ResourceClaims::exclusive(TOOLSET));
     d.requires = vec!["terminal".to_owned()];
     d.timeout = Some(Duration::from_secs(exec::TIMEOUT_RANGE.1 + 30));
     d

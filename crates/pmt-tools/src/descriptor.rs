@@ -44,6 +44,9 @@ pub enum Effect {
 pub enum PathClaim {
     /// The string argument at this JSON pointer (`/path`).
     Argument(String),
+    /// The string argument at this JSON pointer, or the working directory
+    /// when the argument is absent (`search_files` without `path`).
+    ArgumentOrCwd(String),
     /// A fixed path or glob.
     Fixed(String),
     /// The files a V4A patch (the string argument at this JSON pointer)
@@ -51,7 +54,9 @@ pub enum PathClaim {
     PatchText(String),
 }
 
-/// The resources a call touches; the batch planner schedules by them.
+/// The resources a call touches; the batch planner schedules by them. A
+/// tool that declares none ([`ToolDescriptor::claims`] is `None`) is a
+/// barrier: it runs alone.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ResourceClaims {
     /// Paths read.
@@ -66,11 +71,37 @@ pub struct ResourceClaims {
 }
 
 impl ResourceClaims {
-    /// Whether a call with these claims may run beside other calls: it
-    /// writes nothing, holds no exclusive resource and is not interactive.
+    /// Claims of a call that touches no path or named resource.
     #[must_use]
-    pub fn parallel_safe(&self) -> bool {
-        self.writes.is_empty() && self.exclusive.is_empty() && !self.interactive
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// Claims of a call reading the paths of `reads`.
+    #[must_use]
+    pub fn reads(reads: Vec<PathClaim>) -> Self {
+        Self {
+            reads,
+            ..Self::default()
+        }
+    }
+
+    /// Claims of a call writing the paths of `writes`.
+    #[must_use]
+    pub fn writes(writes: Vec<PathClaim>) -> Self {
+        Self {
+            writes,
+            ..Self::default()
+        }
+    }
+
+    /// Claims of a call holding the named resource `name`.
+    #[must_use]
+    pub fn exclusive(name: impl Into<String>) -> Self {
+        Self {
+            exclusive: vec![name.into()],
+            ..Self::default()
+        }
     }
 }
 
@@ -116,8 +147,9 @@ pub struct ToolDescriptor {
     pub effect: Effect,
     /// Whether repeating a call has no further effect.
     pub idempotent: bool,
-    /// Resources a call touches.
-    pub claims: ResourceClaims,
+    /// Resources a call touches; `None` (undeclared) makes every call of
+    /// the tool a barrier in its batch.
+    pub claims: Option<ResourceClaims>,
     /// Overrides `tools.default_timeout_secs`.
     pub timeout: Option<Duration>,
     /// The tool's own result cap in characters (see the result budget).
@@ -129,7 +161,7 @@ pub struct ToolDescriptor {
 
 impl ToolDescriptor {
     /// A descriptor with no capabilities, `effect = external` (the safe
-    /// assumption), not idempotent and without claims.
+    /// assumption), not idempotent and with undeclared claims (a barrier).
     #[must_use]
     pub fn new(
         name: impl Into<String>,
@@ -145,7 +177,7 @@ impl ToolDescriptor {
             capabilities: Vec::new(),
             effect: Effect::External,
             idempotent: false,
-            claims: ResourceClaims::default(),
+            claims: None,
             timeout: None,
             result_cap: None,
             requires: Vec::new(),

@@ -13,6 +13,7 @@
 //! model sees it. Provenance tagging (M2) attaches after the budget.
 
 mod batch;
+pub mod plan;
 pub mod seams;
 
 use std::sync::Arc;
@@ -23,9 +24,10 @@ use pmt_core::panic::{CrashReporter, isolate};
 use serde_json::Value;
 use tokio::time::Instant;
 
+pub use self::plan::BatchPlan;
 pub use self::seams::{
-    AllowAll, ApprovalGate, Capabilities, DispatchObserver, Escalation, GateRequest, GateVerdict,
-    HookCall, NoHooks, NoObserver, PreDecision, SeamFuture, ToolHooks,
+    AgentLoopCalls, AllowAll, ApprovalGate, Capabilities, DispatchObserver, Escalation,
+    GateRequest, GateVerdict, HookCall, NoHooks, NoObserver, PreDecision, SeamFuture, ToolHooks,
 };
 use crate::args;
 use crate::budget::ResultBudget;
@@ -126,7 +128,12 @@ impl Dispatcher {
     }
 
     /// Runs one call through the pipeline up to the per-result budget.
-    async fn execute(&self, call: &ToolCall, cancel: &CancelToken) -> Executed {
+    async fn execute(
+        &self,
+        call: &ToolCall,
+        cancel: &CancelToken,
+        agent: Option<&Arc<dyn AgentLoopCalls>>,
+    ) -> Executed {
         let setup = &self.setup;
         setup
             .observer
@@ -136,7 +143,7 @@ impl Dispatcher {
         let (arguments, result) = tokio::select! {
             biased;
             () = cancel.cancelled() => (raw(call), cancelled(&call.name)),
-            outcome = self.pipeline(call, tool.as_deref(), cancel) => outcome,
+            outcome = self.pipeline(call, tool.as_deref(), cancel, agent) => outcome,
         };
         let mut result = bounded(&call.name, result);
         let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -168,6 +175,7 @@ impl Dispatcher {
         call: &ToolCall,
         tool: Option<&RegisteredTool>,
         cancel: &CancelToken,
+        agent: Option<&Arc<dyn AgentLoopCalls>>,
     ) -> (Value, ToolResult) {
         let Some(tool) = tool else {
             return (
@@ -180,7 +188,13 @@ impl Dispatcher {
             Err(result) => return (raw(call), result),
         };
         let result = match self.admit(call, tool, &arguments).await {
-            Ok(()) => self.run(call, tool, arguments.clone(), cancel).await,
+            Ok(()) => match (&tool.executor, agent) {
+                (Executor::AgentLoop, Some(agent)) => {
+                    // The loop owns their timing (clarify waits for a human).
+                    agent.call(&call.name, arguments.clone(), cancel).await
+                }
+                _ => self.run(call, tool, arguments.clone(), cancel).await,
+            },
             Err(result) => result,
         };
         (arguments, result)

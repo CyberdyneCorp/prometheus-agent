@@ -271,6 +271,31 @@ fn budget_usage() -> Error {
     Error::new(&codes::CLI_USAGE, format!("usage: {BUDGET_USAGE}"))
 }
 
+/// `/usage` (spec: agent-turn-loop, Cache-hit reporting and break
+/// detection; observability): the session's own model calls, tokens by
+/// class, cost and prompt-cache hit rate (cache-read tokens over all input
+/// tokens).
+///
+/// # Errors
+///
+/// `session.not_found`, store errors.
+pub fn session_usage(store: &Store, session: SessionId) -> Result<String, Error> {
+    let totals = store.usage_totals(pmt_store::UsageScope::Session(session))?;
+    let t = &totals.tokens;
+    let hit_rate = t
+        .cache_hit_rate()
+        .map_or_else(|| "—".to_owned(), |rate| format!("{:.0}%", rate * 100.0));
+    Ok(format!(
+        "calls {}  input {}  cache read {}  cache write {}  output {}  cost {}\ncache hit rate {hit_rate}",
+        totals.calls,
+        t.input,
+        t.cache_read,
+        t.cache_write,
+        t.output,
+        pmt_obs::usage::format_total_cost(&totals)
+    ))
+}
+
 /// Usage of `/personality` (surfaces cli, tui, desktop, gateway).
 pub const PERSONALITY_USAGE: &str = "/personality [<name>|none|default|neutral] [--now]";
 

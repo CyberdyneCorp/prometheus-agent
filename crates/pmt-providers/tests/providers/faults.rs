@@ -10,8 +10,10 @@ use std::fmt::Write as _;
 use std::time::Duration;
 
 use jiff::{SignedDuration, Timestamp};
+use pmt_core::id::SessionId;
 use pmt_providers::capability::Needs;
 use pmt_providers::classify::ErrorClass;
+use pmt_providers::cost::{CallContext, StaleCap};
 use pmt_providers::event::StopReason;
 use pmt_providers::fallback::{self, Fallback, Healthy, RouteHealth, Walk};
 use pmt_providers::request::{Part, Request};
@@ -452,6 +454,62 @@ async fn idle_stream_times_out() {
         .await
         .unwrap_err();
     assert_eq!(err.class, ErrorClass::Timeout);
+}
+
+/// A route of provider `slow` at `base` with the default idle timeout
+/// (120 s) unless `idle` sets one.
+async fn default_idle_route(base: &str, idle: &str) -> Route {
+    let env = Env::new(
+        &format!("[providers.slow]\nbase_url = \"{base}/v1\"\nmax_retries = 0\n{idle}"),
+        &[],
+    );
+    let mut route = env.route("slow", "m").await;
+    fast(&mut route);
+    route
+}
+
+fn capped(explicit: &[&str]) -> CallContext {
+    let mut ctx = CallContext::new(SessionId::new(), "main");
+    ctx.stale_cap = Some(StaleCap {
+        cap: Duration::from_secs(1),
+        explicit: explicit.iter().map(|p| (*p).to_owned()).collect(),
+    });
+    ctx
+}
+
+#[tokio::test]
+async fn a_stale_cap_lowers_only_implicit_idle_timeouts() {
+    // The default 120 s idle timeout is capped to 1 s.
+    let route = default_idle_route(&stalling_server(false).await, "").await;
+    let started = std::time::Instant::now();
+    let err = caller()
+        .send(&route, &request("x"), Some(&capped(&[])))
+        .await
+        .unwrap_err();
+    assert_eq!(err.class, ErrorClass::Timeout);
+    assert!(started.elapsed() < Duration::from_secs(10));
+    // A configured idle timeout is never overridden.
+    let route = default_idle_route(&stalling_server(false).await, "").await;
+    let ctx = capped(&["slow"]);
+    let (sender, body) = (caller(), request("x"));
+    let call = sender.send(&route, &body, Some(&ctx));
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), call)
+            .await
+            .is_err(),
+        "explicit idle timeout kept"
+    );
+    // The cap never raises a shorter timeout.
+    let route = idle_route(&stalling_server(false).await).await;
+    let mut ctx = capped(&[]);
+    ctx.stale_cap.as_mut().unwrap().cap = Duration::from_mins(1);
+    let started = std::time::Instant::now();
+    let err = caller()
+        .send(&route, &request("x"), Some(&ctx))
+        .await
+        .unwrap_err();
+    assert_eq!(err.class, ErrorClass::Timeout);
+    assert!(started.elapsed() < Duration::from_secs(10));
 }
 
 #[test]

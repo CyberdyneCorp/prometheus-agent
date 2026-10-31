@@ -79,6 +79,10 @@ pub struct TurnEnd {
     pub iterations: u32,
     /// Usage of the whole turn.
     pub usage: Usage,
+    /// The session's cache hit rate so far: cache-read tokens over all
+    /// input tokens (0..1); absent before any input was counted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_hit_rate: Option<f64>,
 }
 
 /// `user.message` and `assistant.message`.

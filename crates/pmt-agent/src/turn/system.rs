@@ -38,6 +38,8 @@ impl Turn<'_> {
             &why,
         )?;
         self.notices.extend(built.warnings);
+        // A recorded rebuild changes the prefix on purpose.
+        self.agent.swap_prefix(None);
         self.emit(Event::PromptRebuilt(PromptRebuilt {
             reason: why.reason(),
             prompt_hash: Some(frozen.sha256.clone()),

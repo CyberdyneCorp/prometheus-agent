@@ -86,9 +86,12 @@ impl Selection {
             .tools
             .iter()
             .filter(|name| {
-                registry
-                    .get(name)
-                    .is_ok_and(|tool| tool.descriptor.claims.interactive)
+                registry.get(name).is_ok_and(|tool| {
+                    tool.descriptor
+                        .claims
+                        .as_ref()
+                        .is_some_and(|c| c.interactive)
+                })
             })
             .cloned()
             .collect();

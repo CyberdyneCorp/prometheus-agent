@@ -16,7 +16,8 @@ use super::image::{ImageData, MAX_BYTES, too_large};
 use super::routing::{Inline, inline};
 use super::{NO_ROUTE, VisionSession};
 use crate::descriptor::{
-    CallContext, Effect, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolHandler,
+    CallContext, Effect, HandlerFuture, Owner, PathClaim, RegisteredTool, ResourceClaims,
+    ToolDescriptor, ToolHandler,
 };
 use crate::environments::{Environments, part};
 use crate::files::FileSession;
@@ -237,5 +238,9 @@ fn descriptor() -> ToolDescriptor {
     );
     d.effect = Effect::None;
     d.idempotent = true;
+    // A local image path is read; a URL never matches a written path.
+    d.claims = Some(ResourceClaims::reads(vec![PathClaim::Argument(
+        "/image_url".into(),
+    )]));
     d
 }
