@@ -60,16 +60,20 @@ pub fn extract_binary(archive: &[u8], staging: &Path) -> Result<PathBuf, Error> 
 /// Writes `bytes` to `path` with mode 0755 (owner-writable, world
 /// readable and executable, like any installed program).
 pub(crate) fn write_executable(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    std::fs::write(path, bytes).map_err(|e| io_error(path, &e))?;
+    use std::io::Write as _;
+    // Synced through the writing handle: Windows refuses to flush a file
+    // opened read-only.
+    let mut file = std::fs::File::create(path).map_err(|e| io_error(path, &e))?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|e| io_error(path, &e))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
             .map_err(|e| io_error(path, &e))?;
     }
-    std::fs::File::open(path)
-        .and_then(|f| f.sync_all())
-        .map_err(|e| io_error(path, &e))
+    Ok(())
 }
 
 #[cfg(test)]

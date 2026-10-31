@@ -41,7 +41,12 @@ if ($Version -ne '' -and $Version -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\
 }
 $BaseUrl = $BaseUrl.TrimEnd('/')
 
-Add-Type -ReferencedAssemblies System.Numerics -TypeDefinition @'
+# Windows PowerShell 5.1 (.NET Framework) needs System.Numerics for
+# BigInteger; PowerShell 7 compiles against every .NET reference assembly
+# unless -ReferencedAssemblies narrows the set, so it gets none.
+$references = @{}
+if ($PSVersionTable.PSEdition -ne 'Core') { $references.ReferencedAssemblies = 'System.Numerics' }
+Add-Type @references -TypeDefinition @'
 using System;
 using System.Numerics;
 using System.Security.Cryptography;

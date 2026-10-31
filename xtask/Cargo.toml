@@ -9,6 +9,10 @@ repository.workspace = true
 # `cargo xtask` runs this; src/bin/perf-sampler.rs is a helper `perf` builds.
 default-run = "xtask"
 
+# Repository tooling, never released by cargo-dist.
+[package.metadata.dist]
+dist = false
+
 [dependencies]
 clap.workspace = true
 pmt-agent.workspace = true
