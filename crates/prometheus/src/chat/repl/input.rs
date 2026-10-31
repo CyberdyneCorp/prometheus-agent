@@ -21,7 +21,9 @@
 //! blocks while the slot is full, and a read can end (the user pressed
 //! Enter) with the slot still full. The REPL thread must never wait on
 //! that, or it deadlocks with an editor that only drains the slot during
-//! its next read; the printer thread waits instead.
+//! its next read; the printer thread waits instead. Each request for a
+//! line first waits until the queue is written, so output printed between
+//! two reads always lands before the next prompt.
 //!
 //! Why not the editor's own suspend: it sends SIGTSTP to the process group,
 //! a process-directed signal that Linux may hand to another thread, so the
@@ -151,10 +153,16 @@ impl Input {
         self.shared.busy.store(busy, Ordering::Relaxed);
     }
 
-    /// Asks for the next line with `prompt` (once per line).
+    /// Asks for the next line with `prompt` (once per line). Everything
+    /// printed before is written first: the editor draws the prompt as
+    /// soon as it gets the request, and a line still queued would land
+    /// after the prompt instead of above it.
     pub fn request(&mut self, prompt: &str) {
-        if !self.reading
-            && let Some(requests) = &self.requests
+        if self.reading {
+            return;
+        }
+        self.flush();
+        if let Some(requests) = &self.requests
             && requests.send(prompt.to_owned()).is_ok()
         {
             self.reading = true;
@@ -182,7 +190,8 @@ impl Input {
     }
 
     /// Waits (at most [`FLUSH_WAIT`]) until everything printed so far is
-    /// out, before a child process takes the terminal.
+    /// out: before the editor draws a prompt, and before a child process
+    /// takes the terminal.
     pub fn flush(&self) {
         let (done, wait) = std_mpsc::channel();
         if let Some(output) = &self.output
