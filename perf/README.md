@@ -56,7 +56,7 @@ kind of machine:
    line of its own perf job) to `perf/reference.json`, and while the pull
    request changes that file the job compares with it instead of `main`.
    The new numbers are part of the reviewed diff; the absolute budgets
-   always apply. The M1 branch did this four times. First (0.62 -> 8.49 MiB binary,
+   always apply. The M1 branch did this five times. First (0.62 -> 8.49 MiB binary,
    2.49 -> 4.28 MiB peak RSS: SQLite, the HTTP client, the keychain and
    the async runtime), measured by CI run 41021271519. Then when the
    `prometheus` binary itself started calling the HTTP client (8.49 ->
@@ -72,7 +72,13 @@ kind of machine:
    binary, 6.00 -> 6.15 MiB peak RSS: image decoding and SVG
    rasterization for `vision_analyze` and the DevTools WebSocket client of
    `browser_exec`, registered as built-in tools; nothing in them runs at
-   startup), measured by CI run 41169839367.
+   startup), measured by CI run 41169839367. Then when `prometheus chat`
+   landed (19.46 -> 31.30 MiB binary, 6.15 -> 7.62 MiB peak RSS: session
+   start links the whole runtime the earlier commands only named: the turn
+   loop with compression, every provider wire format and the streaming
+   caller, the memory and skills sessions, the local terminal, file and
+   web backends and the line editor; `--version` still runs none of it),
+   measured by CI run 41211014328.
    The CI line
    prints MiB with two decimals, so the committed byte counts are those
    values times 1048576; the rounding (under 6 KiB) is far inside the 15%

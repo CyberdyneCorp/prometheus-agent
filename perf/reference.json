@@ -1,8 +1,8 @@
 {
   "linux-x86_64": {
-    "startup_median_ms": 1.42,
-    "startup_p95_ms": 1.54,
-    "peak_rss_bytes": 6448742,
-    "binary_bytes": 20405289
+    "startup_median_ms": 1.81,
+    "startup_p95_ms": 1.96,
+    "peak_rss_bytes": 7990149,
+    "binary_bytes": 32820429
   }
 }
