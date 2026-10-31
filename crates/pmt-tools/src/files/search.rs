@@ -164,22 +164,49 @@ impl FileSession {
         if !root.exists() {
             return ToolResult::error(format!("File not found: {shown_root}"));
         }
+        // The pattern is checked before the (possibly long) walk.
+        let matcher = match Matcher::compile(args) {
+            Ok(matcher) => matcher,
+            Err(why) => return ToolResult::error(why),
+        };
         let files = match walk(&root, args.file_glob.as_deref()) {
             Ok(files) => files,
             Err(why) => return ToolResult::error(why),
         };
         let files = ordered(files, args.order);
-        match args.target {
-            Target::Files => match glob::Pattern::new(&args.pattern) {
-                Ok(pattern) => by_name(&files, &pattern, args, &cwd),
-                Err(err) => ToolResult::error(format!("invalid pattern: {err}")),
-            },
-            Target::Content => match Regex::new(&args.pattern) {
-                Ok(regex) => by_content(&files, &regex, args, &cwd),
-                Err(err) => ToolResult::error(format!("invalid pattern: {err}")),
-            },
+        match matcher {
+            Matcher::Name(pattern) => by_name(&files, &pattern, args, &cwd),
+            Matcher::Content(regex) => by_content(&files, &regex, args, &cwd),
         }
     }
+}
+
+/// The compiled `pattern`: a glob for names or a regex for content.
+enum Matcher {
+    Name(glob::Pattern),
+    Content(Regex),
+}
+
+impl Matcher {
+    fn compile(args: &SearchArgs) -> Result<Self, String> {
+        let invalid = |err: &dyn std::fmt::Display| format!("invalid pattern: {err}");
+        match args.target {
+            Target::Files => glob::Pattern::new(&args.pattern)
+                .map(Self::Name)
+                .map_err(|err| invalid(&err)),
+            Target::Content => Regex::new(&args.pattern)
+                .map(Self::Content)
+                .map_err(|err| invalid(&err)),
+        }
+    }
+}
+
+/// Whether reading `path` is refused (protected secret files such as a
+/// project `.env`); a content search must not leak what `read_file`
+/// refuses. Name searches still list such files: a name is not a secret.
+fn protected(path: &Path) -> bool {
+    let shown = path.to_string_lossy();
+    guards::secret_file(path, &shown).is_some() || guards::proc_secret(path, &shown).is_some()
 }
 
 /// Every regular file below `root`, honouring `.gitignore` (also outside
@@ -244,7 +271,7 @@ fn by_name(files: &[Walked], pattern: &glob::Pattern, args: &SearchArgs, cwd: &P
 fn by_content(files: &[Walked], regex: &Regex, args: &SearchArgs, cwd: &Path) -> ToolResult {
     let mut entries: Vec<Value> = Vec::new();
     let mut total = 0;
-    for file in files {
+    for file in files.iter().filter(|file| !protected(&file.path)) {
         let Ok(bytes) = std::fs::read(&file.path) else {
             continue;
         };

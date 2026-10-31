@@ -98,13 +98,52 @@ fn files_mode_matches_names_by_glob_and_file_glob_filters_content() {
 #[test]
 fn an_invalid_regex_is_rejected_before_searching() {
     let fx = project();
-    let result = fx.session().search_files(&SearchArgs::new("fn ("));
-    assert_eq!(result.status, Status::Error);
-    assert!(
-        result.text_content().starts_with("invalid pattern: "),
-        "{}",
-        result.text_content()
-    );
+    let mut args = SearchArgs::new("fn (");
+    // An invalid file_glob is only noticed by the walk; the pattern error
+    // winning shows the pattern is compiled before any walking.
+    args.file_glob = Some("{".to_owned());
+    for target in [Target::Content, Target::Files] {
+        args.target = target;
+        args.pattern = if target == Target::Content {
+            "fn ("
+        } else {
+            "["
+        }
+        .to_owned();
+        let result = fx.session().search_files(&args);
+        assert_eq!(result.status, Status::Error);
+        assert!(
+            result.text_content().starts_with("invalid pattern: "),
+            "{}",
+            result.text_content()
+        );
+    }
+}
+
+#[test]
+fn protected_secret_files_are_never_searched() {
+    let fx = Fixture::new();
+    for secret in [".env", ".env.local", ".envrc", "config/.env.production"] {
+        fx.write(secret, "API_KEY=sk-live-supersecret\n");
+    }
+    fx.write(".env.example", "API_KEY=your-key-here\n");
+    for mode in [
+        OutputMode::Content,
+        OutputMode::FilesOnly,
+        OutputMode::Count,
+    ] {
+        let mut args = SearchArgs::new("API_KEY");
+        args.output_mode = mode;
+        let result = fx.session().search_files(&args);
+        assert_eq!(result.status, Status::Ok);
+        let text = result.text_content();
+        assert!(!text.contains("supersecret"), "{mode:?}: {text}");
+        for secret in [".env\"", ".env:", ".env.local", ".envrc", ".env.production"] {
+            assert!(!text.contains(secret), "{mode:?} leaked {secret}: {text}");
+        }
+        assert!(text.contains(".env.example"), "{mode:?}: {text}");
+        assert_eq!(body(&result)["total_matches"], 1, "{mode:?}");
+    }
 }
 
 #[test]
