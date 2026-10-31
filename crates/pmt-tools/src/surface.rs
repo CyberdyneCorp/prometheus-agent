@@ -38,6 +38,8 @@ pub enum Exclusion {
     MissingCapability(String),
     /// Its availability probe failed.
     Unavailable(String),
+    /// A tool it needs is not selected (`browser_exec` without `terminal`).
+    Requires(String),
 }
 
 impl fmt::Display for Exclusion {
@@ -47,6 +49,7 @@ impl fmt::Display for Exclusion {
             Self::Disabled => f.write_str("disabled"),
             Self::MissingCapability(cap) => write!(f, "missing_capability:{cap}"),
             Self::Unavailable(reason) => write!(f, "unavailable:{reason}"),
+            Self::Requires(tool) => write!(f, "requires:{tool}"),
         }
     }
 }
@@ -206,7 +209,7 @@ impl ToolSurface {
 }
 
 /// The first reason found without probing: toolset membership, then the
-/// disabled list, then capability coverage.
+/// disabled list, then capability coverage, then required companions.
 fn static_exclusion(
     tool: &RegisteredTool,
     selection: &Selection,
@@ -219,11 +222,19 @@ fn static_exclusion(
     if !selection.contains(name) {
         return Some(Exclusion::NotInToolset);
     }
-    tool.descriptor
+    if let Some(cap) = tool
+        .descriptor
         .capabilities
         .iter()
         .find(|cap| !capabilities.allows(cap))
-        .map(|cap| Exclusion::MissingCapability(cap.to_string()))
+    {
+        return Some(Exclusion::MissingCapability(cap.to_string()));
+    }
+    tool.descriptor
+        .requires
+        .iter()
+        .find(|needed| !selection.contains(needed))
+        .map(|needed| Exclusion::Requires(needed.clone()))
 }
 
 /// Runs each distinct probe of `tools` once, concurrently.

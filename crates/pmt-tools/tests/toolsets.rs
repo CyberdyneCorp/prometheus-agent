@@ -249,3 +249,33 @@ fn a_surface_without_an_interactive_channel_drops_clarify() {
     assert!(unattended.disabled.contains("clarify"));
     assert!(unattended.contains("todo") && unattended.contains("session_search"));
 }
+
+/// spec: execution-environments, `browser_exec` tool — offered only with the
+/// `terminal` toolset.
+#[tokio::test]
+async fn browser_exec_needs_the_terminal_toolset() {
+    let environments = Arc::new(pmt_tools::environments::Environments::default());
+    let registry = ToolRegistry::new(
+        "default",
+        Arc::new(Builtins::standard(pmt_tools::builtin_tools(&environments)).unwrap()),
+    );
+    let build = async |enabled: &[&str]| {
+        let selection = Selection::resolve(&registry, &strings(enabled), &[]).unwrap();
+        ToolSurface::build(SurfaceInputs {
+            registry: &registry,
+            selection: &selection,
+            capabilities: &CapabilitySet::parse(BASELINE.iter().copied()).unwrap(),
+            config: &Config::default(),
+            probes: &ProbeCache::new(),
+        })
+        .await
+    };
+    let without = build(&["browser", "file"]).await;
+    assert!(without.get("browser_exec").is_none());
+    assert_eq!(
+        without.excluded()["browser_exec"].to_string(),
+        "requires:terminal"
+    );
+    let with = build(&["browser", "terminal"]).await;
+    assert!(with.get("browser_exec").is_some());
+}

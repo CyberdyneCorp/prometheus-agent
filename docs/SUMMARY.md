@@ -13,6 +13,7 @@
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)
 - [File and web tools](guide/files-and-web.md)
+- [Browser automation](guide/browser.md)
 - [Tools and toolsets](guide/tools.md)
 - [Capabilities, grants and redaction](guide/security.md)
 

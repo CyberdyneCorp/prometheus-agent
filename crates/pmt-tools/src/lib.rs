@@ -14,7 +14,8 @@
 //!
 //! The built-in tools: [`files`] (`read_file`, `write_file`, `patch`,
 //! `search_files`), [`terminal::tool`] (`terminal`, `process`) and
-//! [`web`] (`web_search`, `web_extract`), [`vision`] (`vision_analyze`)
+//! [`web`] (`web_search`, `web_extract`), [`vision`] (`vision_analyze`),
+//! [`browser`] (`browser_exec`)
 //! and the agent-level entries of
 //! [`agent_level`] (`todo`, `clarify`, `session_search`, executed by the
 //! turn loop); [`builtin_tools`] lists them and
@@ -23,6 +24,7 @@
 pub mod agent_level;
 pub mod approval;
 pub mod args;
+pub mod browser;
 pub mod budget;
 pub mod descriptor;
 pub mod dispatch;
@@ -68,6 +70,7 @@ pub fn builtin_tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     tools.extend(terminal::tool::tools(environments));
     tools.extend(files::tools::tools(environments));
     tools.extend(vision::tools(environments));
+    tools.extend(browser::tools(environments));
     tools.extend(agent_level::tools());
     tools
 }

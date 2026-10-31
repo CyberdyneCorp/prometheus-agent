@@ -83,6 +83,12 @@ jobs:
       - name: Install OpenSpec CLI
         run: npm install -g "@fission-ai/openspec@$OPENSPEC_VERSION"
 
+      # The browser tests drive a real headless Chromium; the Linux ARM
+      # images ship no Chromium-family browser (the others ship Chrome).
+      - name: Install Chromium for the browser tests
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: npx --yes playwright@1.49.1 install --with-deps chromium
+
       - name: scripts/check
         # The budgets apply to the reference runner only; the perf job runs them.
         run: scripts/check --no-perf

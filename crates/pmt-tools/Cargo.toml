@@ -10,8 +10,10 @@ repository.workspace = true
 [dependencies]
 base64.workspace = true
 dunce.workspace = true
+futures-util.workspace = true
 glob.workspace = true
 ignore.workspace = true
+percent-encoding.workspace = true
 image.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
@@ -25,8 +27,10 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 similar.workspace = true
+sysinfo.workspace = true
 url.workspace = true
-tokio = { workspace = true, features = ["process", "io-util"] }
+tokio = { workspace = true, features = ["process", "io-util", "net"] }
+tokio-tungstenite.workspace = true
 toml.workspace = true
 tracing.workspace = true
 tree-sitter.workspace = true

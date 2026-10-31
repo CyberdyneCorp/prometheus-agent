@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, PoisonError, RwLock};
 
+use crate::browser::BrowserExec;
 use crate::descriptor::{CallContext, ToolFailure};
 use crate::files::FileSession;
 use crate::terminal::LocalTerminal;
@@ -27,6 +28,8 @@ pub struct SessionEnv {
     pub web: Option<Arc<WebSession>>,
     /// `vision_analyze`'s routes.
     pub vision: Option<Arc<VisionSession>>,
+    /// `browser_exec`'s browsers and interpreter.
+    pub browser: Option<Arc<BrowserExec>>,
 }
 
 /// The attached environments of a process, by session id.

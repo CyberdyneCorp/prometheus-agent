@@ -122,6 +122,9 @@ pub struct ToolDescriptor {
     pub timeout: Option<Duration>,
     /// The tool's own result cap in characters (see the result budget).
     pub result_cap: Option<usize>,
+    /// Tools the session must also expose for this one to be offered
+    /// (`browser_exec` needs `terminal`).
+    pub requires: Vec<String>,
 }
 
 impl ToolDescriptor {
@@ -145,6 +148,7 @@ impl ToolDescriptor {
             claims: ResourceClaims::default(),
             timeout: None,
             result_cap: None,
+            requires: Vec::new(),
         }
     }
 
