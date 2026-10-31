@@ -74,6 +74,33 @@ async fn a_declared_and_granted_secret_is_the_only_one_present() {
 }
 
 #[tokio::test]
+async fn a_secret_source_adds_its_secrets_to_later_commands() {
+    let fixture = Fixture::new();
+    let session = fixture.session();
+    assert!(!run(&session, "env").await.output.contains("NOTION_API_KEY"));
+    let value = Arc::new(std::sync::Mutex::new("ntn-first-value-123456"));
+    let current = Arc::clone(&value);
+    session.set_secret_source(Arc::new(move || {
+        vec![(
+            "NOTION_API_KEY".to_owned(),
+            SecretString::new(*current.lock().unwrap()),
+        )]
+    }));
+    let first = run(&session, "printenv NOTION_API_KEY").await;
+    assert!(first.output.contains("ntn-first-value-123456"), "{first:?}");
+    // Resolved per command: a rotated value is used at once.
+    *value.lock().unwrap() = "ntn-rotated-value-654321";
+    let second = run(&session, "printenv NOTION_API_KEY").await;
+    assert!(
+        second.output.contains("ntn-rotated-value-654321"),
+        "{second:?}"
+    );
+    let snapshot =
+        std::fs::read_to_string(fixture.scratch.join("pmt-shell-snapshot.sh")).unwrap_or_default();
+    assert!(!snapshot.contains("ntn-"), "{snapshot}");
+}
+
+#[tokio::test]
 async fn a_passthrough_variable_carries_its_launch_value() {
     let fixture = Fixture::new();
     let terminal = TerminalConfig {

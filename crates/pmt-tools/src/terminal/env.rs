@@ -123,6 +123,19 @@ impl ChildEnv {
         env
     }
 
+    /// A copy with `secrets` added (names recorded as secret names).
+    #[must_use]
+    pub fn with_secrets(&self, secrets: Vec<(String, SecretString)>) -> Self {
+        let mut env = self.clone();
+        for (name, value) in secrets {
+            env.set(&name, value.expose());
+            if !env.secret_names.contains(&name) {
+                env.secret_names.push(name);
+            }
+        }
+        env
+    }
+
     /// Points `TMPDIR` (and `TEMP`/`TMP` on Windows) at `dir`, the session
     /// scratch directory the sandbox lets the child write.
     pub fn set_temp_dir(&mut self, dir: &Path) {

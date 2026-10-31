@@ -25,6 +25,7 @@ pub mod prompt_cmd;
 pub mod secrets_cmd;
 pub mod session_export;
 pub mod sessions_cmd;
+pub mod skills_cmd;
 pub mod slash_handlers;
 pub mod startup;
 pub mod surface;
@@ -35,7 +36,7 @@ pub mod version;
 
 pub use cli::{
     ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, GrantsCommand,
-    LogsArgs, ProfileCommand, SecretsCommand, SessionsCommand, SnapshotsCommand, ToolsCommand,
-    ToolsetsCommand, TrajectoryCommand, UsageArgs, command,
+    LogsArgs, ProfileCommand, SecretsCommand, SessionsCommand, SkillsCommand, SnapshotsCommand,
+    ToolsCommand, ToolsetsCommand, TrajectoryCommand, UsageArgs, command,
 };
 pub use context::Context;

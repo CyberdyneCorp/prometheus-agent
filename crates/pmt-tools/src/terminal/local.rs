@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use pmt_config::schema::{DegradedMode, TerminalConfig};
-use pmt_core::secret::Redactor;
+use pmt_core::secret::{Redactor, SecretString};
 use pmt_sandbox::Sandbox;
 use tokio::sync::mpsc;
 
@@ -119,7 +119,13 @@ pub struct LocalTerminal {
     pending: Mutex<Pending>,
     processes: ProcessRegistry,
     runs: AtomicU64,
+    secret_source: std::sync::RwLock<Option<SecretSource>>,
 }
+
+/// Secrets added to every command's environment at spawn time (for
+/// example the declared secrets of the skills a session loaded), resolved
+/// per command so a rotated value is used at once.
+pub type SecretSource = Arc<dyn Fn() -> Vec<(String, SecretString)> + Send + Sync>;
 
 /// Things the next result carries once.
 #[derive(Debug, Default)]
@@ -188,8 +194,31 @@ impl LocalTerminal {
             }),
             processes,
             runs: AtomicU64::new(0),
+            secret_source: std::sync::RwLock::new(None),
             setup,
         })
+    }
+
+    /// Adds `source`'s secrets to the environment of every later command.
+    pub fn set_secret_source(&self, source: SecretSource) {
+        *self
+            .secret_source
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = Some(source);
+    }
+
+    /// The environment of the next command: the session's plus the secret
+    /// source's.
+    fn command_env(&self) -> std::borrow::Cow<'_, ChildEnv> {
+        let source = self
+            .secret_source
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        match source.map(|s| s()).filter(|secrets| !secrets.is_empty()) {
+            None => std::borrow::Cow::Borrowed(&self.setup.env),
+            Some(secrets) => std::borrow::Cow::Owned(self.setup.env.with_secrets(secrets)),
+        }
     }
 
     /// The session's current directory.
@@ -417,16 +446,17 @@ impl LocalTerminal {
             snapshot: self.files.snapshot.clone(),
             cwd: self.setup.scratch.join(format!("pmt-shell-cwd-{run}")),
         };
+        let env = self.command_env();
         let script = RunScript {
             command,
             cwd,
             use_snapshot: self.setup.shell.kind.is_posix(),
             persist: self.setup.terminal.persistent_shell,
             track_cwd: true,
-            hidden: self.setup.env.secret_names(),
+            hidden: env.secret_names(),
         };
         let argv = run_argv(&self.setup.shell, &files, &script);
-        let spawned = match spawn::spawn(&self.setup.sandbox, &self.setup.env, &argv, cwd, false) {
+        let spawned = match spawn::spawn(&self.setup.sandbox, &env, &argv, cwd, false) {
             Ok(spawned) => spawned,
             Err(SpawnError::Refused(err)) => return TerminalResult::refused(err.message()),
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
@@ -534,16 +564,17 @@ impl LocalTerminal {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
         }
+        let env = self.command_env();
         let script = RunScript {
             command,
             cwd,
             use_snapshot: self.setup.shell.kind.is_posix(),
             persist: false,
             track_cwd: false,
-            hidden: self.setup.env.secret_names(),
+            hidden: env.secret_names(),
         };
         let argv = run_argv(&self.setup.shell, &self.files, &script);
-        let spawned = match spawn::spawn(&self.setup.sandbox, &self.setup.env, &argv, cwd, true) {
+        let spawned = match spawn::spawn(&self.setup.sandbox, &env, &argv, cwd, true) {
             Ok(spawned) => spawned,
             Err(SpawnError::Refused(err)) => return TerminalResult::refused(err.message()),
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,

@@ -156,6 +156,32 @@ store_enum!(
 );
 
 store_enum!(
+    /// Lifecycle state of a skill (`skill_usage.state`).
+    SkillState, "skill_usage.state" {
+        /// In use.
+        Active = "active",
+        /// Unused for a while.
+        Stale = "stale",
+        /// Archived (kept, not offered).
+        Archived = "archived",
+    }
+);
+
+store_enum!(
+    /// Who created a skill (`skill_usage.created_by`).
+    CreatedBy, "skill_usage.created_by" {
+        /// The user (or a file copied into the profile).
+        User = "user",
+        /// The agent (`skill_manage`).
+        Agent = "agent",
+        /// A hub install.
+        Hub = "hub",
+        /// Shipped with Prometheus.
+        Bundled = "bundled",
+    }
+);
+
+store_enum!(
     /// A message's author role.
     Role, "role" {
         /// System prompt.

@@ -169,7 +169,7 @@ impl ConfigFile {
         let mut doc = parse::document(&self.path, &old)?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        crate::provider_urls::check(&parse::config(&self.path, &new)?)?;
+        crate::essential::semantic(&parse::config(&self.path, &new)?)?;
         if new == old {
             return Ok(());
         }
@@ -199,7 +199,7 @@ pub(crate) fn check_document(path: &Path, text: &str) -> Result<(), Error> {
             ),
         ));
     }
-    crate::provider_urls::check(&parse::config(path, text)?)
+    crate::essential::semantic(&parse::config(path, text)?)
 }
 
 fn io_error(path: &Path, e: &io::Error) -> Error {

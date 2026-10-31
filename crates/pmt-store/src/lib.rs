@@ -39,6 +39,7 @@ pub mod retention;
 pub mod rewind;
 pub mod search;
 pub mod sessions;
+pub mod skill_usage;
 mod store;
 pub mod titles;
 pub mod todos;
@@ -66,6 +67,7 @@ pub use search::{SearchHit, SearchMode, SearchOptions, SearchResults, SearchSort
 pub use sessions::{
     HIDDEN_SOURCE_TAGS, NewSession, ONESHOT_TAG, Session, TreeNode, check_source_tag,
 };
+pub use skill_usage::{CreatedBy, SkillActivity, SkillState, SkillUsage};
 pub use store::{CHECKPOINT_EVERY, MAX_READERS, Store};
 pub use titles::TitleWrite;
 pub use todos::SessionTodos;
@@ -75,7 +77,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 #[cfg(test)]
 mod tests {

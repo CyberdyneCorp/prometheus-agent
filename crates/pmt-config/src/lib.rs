@@ -17,6 +17,7 @@ pub mod catalog;
 pub mod credential;
 pub mod daemon;
 mod edit;
+pub mod essential;
 pub mod grants;
 pub mod home;
 pub mod layers;

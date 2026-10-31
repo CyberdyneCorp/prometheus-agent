@@ -13,6 +13,7 @@ Commands:
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
+  skills      Trust project skills and manage ejected copies of bundled skills
   grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
@@ -778,6 +779,256 @@ Usage: prometheus secrets help migrate
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus secrets help help
+```
+
+## `prometheus skills`
+
+```text
+Trust project skills and manage ejected copies of bundled skills
+
+Usage: prometheus skills [OPTIONS] <COMMAND>
+
+Commands:
+  trust   Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject   Copy a bundled skill into the profile as an editable copy that shadows it
+  diff    Show how an ejected copy differs from the current bundled version
+  reset   Remove an ejected copy so the name resolves to the bundled skill again
+  doctor  Report skills that do not load (path, line, reason) and quarantined project skills
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills trust`
+
+```text
+Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+
+Usage: prometheus skills trust [OPTIONS] <ROOT>
+
+Arguments:
+  <ROOT>
+          The repository root
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills eject`
+
+```text
+Copy a bundled skill into the profile as an editable copy that shadows it
+
+Usage: prometheus skills eject [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The bundled skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills diff`
+
+```text
+Show how an ejected copy differs from the current bundled version
+
+Usage: prometheus skills diff [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The ejected skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills reset`
+
+```text
+Remove an ejected copy so the name resolves to the bundled skill again
+
+Usage: prometheus skills reset [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The ejected skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills doctor`
+
+```text
+Report skills that do not load (path, line, reason) and quarantined project skills
+
+Usage: prometheus skills doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills help [COMMAND]
+
+Commands:
+  trust   Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject   Copy a bundled skill into the profile as an editable copy that shadows it
+  diff    Show how an ejected copy differs from the current bundled version
+  reset   Remove an ejected copy so the name resolves to the bundled skill again
+  doctor  Report skills that do not load (path, line, reason) and quarantined project skills
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills help trust`
+
+```text
+Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+
+Usage: prometheus skills help trust
+```
+
+## `prometheus skills help eject`
+
+```text
+Copy a bundled skill into the profile as an editable copy that shadows it
+
+Usage: prometheus skills help eject
+```
+
+## `prometheus skills help diff`
+
+```text
+Show how an ejected copy differs from the current bundled version
+
+Usage: prometheus skills help diff
+```
+
+## `prometheus skills help reset`
+
+```text
+Remove an ejected copy so the name resolves to the bundled skill again
+
+Usage: prometheus skills help reset
+```
+
+## `prometheus skills help doctor`
+
+```text
+Report skills that do not load (path, line, reason) and quarantined project skills
+
+Usage: prometheus skills help doctor
+```
+
+## `prometheus skills help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills help help
 ```
 
 ## `prometheus grants`
@@ -3826,6 +4077,7 @@ Commands:
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
+  skills      Trust project skills and manage ejected copies of bundled skills
   grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
@@ -4005,6 +4257,61 @@ Usage: prometheus help secrets unset
 Move every secret to another backend and select it in config.toml
 
 Usage: prometheus help secrets migrate
+```
+
+## `prometheus help skills`
+
+```text
+Trust project skills and manage ejected copies of bundled skills
+
+Usage: prometheus help skills [COMMAND]
+
+Commands:
+  trust   Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject   Copy a bundled skill into the profile as an editable copy that shadows it
+  diff    Show how an ejected copy differs from the current bundled version
+  reset   Remove an ejected copy so the name resolves to the bundled skill again
+  doctor  Report skills that do not load (path, line, reason) and quarantined project skills
+```
+
+## `prometheus help skills trust`
+
+```text
+Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+
+Usage: prometheus help skills trust
+```
+
+## `prometheus help skills eject`
+
+```text
+Copy a bundled skill into the profile as an editable copy that shadows it
+
+Usage: prometheus help skills eject
+```
+
+## `prometheus help skills diff`
+
+```text
+Show how an ejected copy differs from the current bundled version
+
+Usage: prometheus help skills diff
+```
+
+## `prometheus help skills reset`
+
+```text
+Remove an ejected copy so the name resolves to the bundled skill again
+
+Usage: prometheus help skills reset
+```
+
+## `prometheus help skills doctor`
+
+```text
+Report skills that do not load (path, line, reason) and quarantined project skills
+
+Usage: prometheus help skills doctor
 ```
 
 ## `prometheus help grants`

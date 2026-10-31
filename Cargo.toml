@@ -20,6 +20,7 @@ pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
 pmt-providers = { path = "crates/pmt-providers" }
 pmt-sandbox = { path = "crates/pmt-sandbox" }
+pmt-skills = { path = "crates/pmt-skills" }
 pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
 prometheus = { path = "crates/prometheus" }

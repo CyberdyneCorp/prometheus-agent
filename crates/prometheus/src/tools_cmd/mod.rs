@@ -43,7 +43,11 @@ use crate::output::{document, print_raw};
 /// as `unregistered`.
 #[must_use]
 pub fn builtin_tools() -> Vec<RegisteredTool> {
-    pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process())
+    let mut tools = pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process());
+    tools.extend(pmt_skills::tools::tools(
+        &pmt_skills::SkillSessions::process(),
+    ));
+    tools
 }
 
 /// The registry of profile `profile`: this binary's built-in tools and the

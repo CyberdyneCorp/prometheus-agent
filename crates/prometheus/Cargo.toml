@@ -38,6 +38,7 @@ pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-providers.workspace = true
 pmt-sandbox.workspace = true
+pmt-skills.workspace = true
 pmt-store.workspace = true
 pmt-tools.workspace = true
 reqwest.workspace = true

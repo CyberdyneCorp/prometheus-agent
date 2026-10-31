@@ -30,5 +30,5 @@ pub mod tool;
 pub mod windows_shell;
 
 pub use args::TerminalArgs;
-pub use local::{LocalSetup, LocalTerminal};
+pub use local::{LocalSetup, LocalTerminal, SecretSource};
 pub use result::{Status, TerminalResult};

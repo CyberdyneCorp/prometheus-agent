@@ -58,6 +58,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SecretsCommand,
     },
+    /// Trust project skills and manage ejected copies of bundled skills.
+    Skills {
+        /// The skills subcommand.
+        #[command(subcommand)]
+        command: SkillsCommand,
+    },
     /// List and revoke the profile's permanent capability grants and approvals.
     Grants {
         /// The grants subcommand.
@@ -786,6 +792,33 @@ fn parse_time(text: &str) -> Result<jiff::Timestamp, String> {
         .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC))
         .map(|zoned| zoned.timestamp())
         .map_err(|_| format!("'{text}' is not an RFC 3339 time or a YYYY-MM-DD date"))
+}
+
+/// `prometheus skills` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SkillsCommand {
+    /// Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions.
+    Trust {
+        /// The repository root.
+        root: std::path::PathBuf,
+    },
+    /// Copy a bundled skill into the profile as an editable copy that shadows it.
+    Eject {
+        /// The bundled skill.
+        name: String,
+    },
+    /// Show how an ejected copy differs from the current bundled version.
+    Diff {
+        /// The ejected skill.
+        name: String,
+    },
+    /// Remove an ejected copy so the name resolves to the bundled skill again.
+    Reset {
+        /// The ejected skill.
+        name: String,
+    },
+    /// Report skills that do not load (path, line, reason) and quarantined project skills.
+    Doctor,
 }
 
 /// `prometheus grants` subcommands.

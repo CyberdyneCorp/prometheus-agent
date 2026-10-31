@@ -179,11 +179,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 17. M1 Skills
 
-- [ ] 17.1 Implement the SKILL.md parser (agentskills.io frontmatter), directory layout with scanner exclusions, search roots with one precedence order, and read-only bundled skills with `skills eject`; verify against agentskills.io fixture skills (spec: skills)
-- [ ] 17.2 Implement explicit trust for project-local skills, platform/env/conditional gates and disabled skills; verify that an untrusted project skill is not indexed (spec: skills)
-- [ ] 17.3 Implement the skills index in the system prompt with deferred vs immediate activation (`--now`) that preserves the prompt cache; verify that installing a skill mid-session leaves the prompt unchanged until the next session (spec: skills)
-- [ ] 17.4 Implement `skills_list`/`skill_view`, load-time template substitution and inline shell (sandboxed), skill secrets/settings and skill slash commands; verify with fixture skills (spec: skills)
-- [ ] 17.5 Implement `skill_manage` validation, the description budget and advisory lint, mutation safety with fail-closed scanning, lookup with wrong-profile hints, autonomous creation and improvement, usage records and profile-scoped state; verify that a scanner error refuses the write (spec: skills)
+- [x] 17.1 Implement the SKILL.md parser (agentskills.io frontmatter), directory layout with scanner exclusions, search roots with one precedence order, and read-only bundled skills with `skills eject`; verify against agentskills.io fixture skills (spec: skills)
+- [x] 17.2 Implement explicit trust for project-local skills, platform/env/conditional gates and disabled skills; verify that an untrusted project skill is not indexed (spec: skills)
+- [x] 17.3 Implement the skills index in the system prompt with deferred vs immediate activation (`--now`) that preserves the prompt cache; verify that installing a skill mid-session leaves the prompt unchanged until the next session (spec: skills)
+- [x] 17.4 Implement `skills_list`/`skill_view`, load-time template substitution and inline shell (sandboxed), skill secrets/settings and skill slash commands; verify with fixture skills (spec: skills)
+- [x] 17.5 Implement `skill_manage` validation, the description budget and advisory lint, mutation safety with fail-closed scanning, lookup with wrong-profile hints, autonomous creation and improvement, usage records and profile-scoped state; verify that a scanner error refuses the write (spec: skills)
 - [ ] 17.6 Implement skill preload at launch and per-profile auto-load (missing entries skipped), stacking several skills in one message (path arguments not swallowed) and skill bundles (a missing member skipped, not fatal); verify that preloaded skills are in the first request (spec: skills)
 - [ ] 17.7 Implement `/learn` (distil a skill or knowledge base from URLs, files or books), `/refine` (on-demand self-improvement review), the skill write-approval review surface for staged writes and `/reload-skills` (rescans roots); verify with mock-provider tests that a staged write applies only on approval and a newly copied skill becomes invocable (spec: skills)
 - [ ] 17.8 Implement bundled-skill opt-out and official catalog repair (a blank-slate profile stays blank across upgrades); verify with an upgrade fixture (spec: skills)

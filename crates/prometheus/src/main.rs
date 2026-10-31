@@ -13,8 +13,8 @@ use pmt_core::{exit, panic};
 use prometheus::output::print_error;
 use prometheus::{
     Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, config_cmd, fallback_cmd,
-    grants_cmd, logs_cmd, model_cmd, profile_cmd, prompt_cmd, secrets_cmd, sessions_cmd, startup,
-    tools_cmd, trajectory_cmd, usage_cmd, version,
+    grants_cmd, logs_cmd, model_cmd, profile_cmd, prompt_cmd, secrets_cmd, sessions_cmd,
+    skills_cmd, startup, tools_cmd, trajectory_cmd, usage_cmd, version,
 };
 
 fn main() -> ExitCode {
@@ -62,6 +62,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
+        Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
         Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
         Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),

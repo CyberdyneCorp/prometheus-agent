@@ -612,6 +612,30 @@ error_codes! {
     /// `approvals test` was given a command line it cannot read.
     APPROVALS_UNPARSABLE = ("approvals.unparsable", Usage,
         "`prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting.");
+    /// No skill of that name resolves in the profile.
+    SKILL_NOT_FOUND = ("skill.not_found", NotFound,
+        "No skill of that name resolves in the profile (`Skill '<name>' not found in profile '<profile>'.`); the message names another profile of the home that has it.");
+    /// A skill name is claimed twice within one search tier.
+    SKILL_AMBIGUOUS = ("skill.ambiguous", InvalidInput,
+        "Two different skills share a name within one search tier (`Ambiguous skill name '<name>'` with both paths); rename or remove one of them.");
+    /// A skill or a skill write is malformed.
+    SKILL_INVALID = ("skill.invalid", InvalidInput,
+        "A `SKILL.md` or a skill write is malformed: frontmatter that is not valid YAML or lacks `name`/`description`, a name outside `^[a-z0-9][a-z0-9._-]*$`, an empty body or an oversized file.");
+    /// A skill cannot be changed from here.
+    SKILL_READ_ONLY = ("skill.read_only", PermissionDenied,
+        "The skill cannot be changed: bundled skills are read-only (eject a copy with `prometheus skills eject <name>`), and hub, plugin, project and external-directory skills are not written by Prometheus.");
+    /// A skill's security scan refused it or failed.
+    SKILL_SCAN_BLOCKED = ("skill.scan_blocked", PermissionDenied,
+        "A skill's security scan returned `dangerous` or failed; scanning fails closed, so the skill was not written, loaded or ejected.");
+    /// A skill file could not be read or written.
+    SKILL_IO = ("skill.io", Io,
+        "A skill file or directory could not be read or written.");
+    /// The skills hub is not part of this build.
+    SKILL_HUB_UNAVAILABLE = ("skill.hub_unavailable", Unavailable,
+        "Installing and removing hub skills ships with the skills hub in M2; create skills with `skill_manage` or copy them into the profile's `skills/` directory.");
+    /// No pending skill write has that id.
+    SKILL_PENDING_NOT_FOUND = ("skill.pending_not_found", NotFound,
+        "No staged skill write has that id; `/skills pending` lists them.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

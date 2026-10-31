@@ -1974,6 +1974,29 @@ dependencies = [
 [[package]]
 name = "pmt-skills"
 version = "0.1.0"
+dependencies = [
+ "jiff",
+ "pmt-agent",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-obs",
+ "pmt-providers",
+ "pmt-sandbox",
+ "pmt-store",
+ "pmt-tools",
+ "regex",
+ "saphyr-parser",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "similar",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "ulid",
+]
 
 [[package]]
 name = "pmt-store"
@@ -2120,6 +2143,7 @@ dependencies = [
  "pmt-obs",
  "pmt-providers",
  "pmt-sandbox",
+ "pmt-skills",
  "pmt-store",
  "pmt-tools",
  "reqwest",
