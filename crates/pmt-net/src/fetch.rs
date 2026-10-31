@@ -99,6 +99,17 @@ impl Fetcher {
         ))
     }
 
+    /// Runs the destination checks of the first hop of `url` without
+    /// sending anything: for URLs handed to a third party (a web
+    /// extraction backend) that fetches them itself.
+    ///
+    /// # Errors
+    ///
+    /// As [`Fetcher::get`], except the transport errors.
+    pub async fn check(&self, url: &str) -> Result<(), Error> {
+        self.preflight(&parse_url(url)?).await
+    }
+
     /// Checks one hop: metadata names, IP literals, and every address the
     /// host resolves to (with the URL's port, for port-scoped grants).
     async fn preflight(&self, url: &Url) -> Result<(), Error> {

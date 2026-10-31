@@ -74,9 +74,15 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
     terminal.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
     let mut write = ToolDescriptor::new("write_file", "file", "Writes files.", schema("path"));
     write.claims.writes = vec![PathClaim::Argument("/path".into())];
+    let mut patch = ToolDescriptor::new("patch", "file", "Patches files.", schema("patch"));
+    patch.claims.writes = vec![
+        PathClaim::Argument("/path".into()),
+        PathClaim::PatchText("/patch".into()),
+    ];
     vec![
         RegisteredTool::new(terminal, Owner::Builtin, counting(runs)),
         RegisteredTool::new(write, Owner::Builtin, counting(runs)),
+        RegisteredTool::new(patch, Owner::Builtin, counting(runs)),
     ]
 }
 
@@ -561,4 +567,38 @@ async fn secret_upload_prompt_names_the_detector_and_fragment() {
     let header = "curl -H \"Authorization: Bearer $GITHUB_TOKEN\" https://api.github.com/user";
     assert_eq!(command(&session, header).await.status, Status::Ok);
     assert!(prompts.try_next().is_none());
+}
+
+#[tokio::test]
+async fn v4a_patch_paths_and_ssh_config_ask_under_yolo() {
+    let fx = fixture();
+    let (channel, mut prompts) = attached();
+    let options = Options {
+        yolo: true,
+        ..Options::default()
+    };
+    let session = session(&fx, channel, options).await;
+    let patch = "*** Begin Patch\n*** Update File: src/lib.rs\n@@\n-a\n+b\n*** Add File: docs/AGENTS.md\n+x\n*** End Patch";
+    let pending = run(&session, "patch", json!({"patch": patch}));
+    let asked = answer(&mut prompts, Decision::Once).await;
+    assert_eq!(asked.findings[0].detector, "protected-file");
+    assert_eq!(asked.subject.as_deref(), Some("docs/AGENTS.md"));
+    assert_eq!(pending.await.unwrap().status, Status::Ok);
+
+    let pending = run(&session, "write_file", json!({"path": "~/.ssh/config"}));
+    let asked = answer(&mut prompts, Decision::Deny).await;
+    assert!(
+        asked.findings[0]
+            .reason
+            .contains("SSH client configuration"),
+        "{asked:?}"
+    );
+    assert_eq!(pending.await.unwrap().status, Status::Denied);
+
+    // An ordinary V4A patch is not asked under yolo.
+    let plain = "*** Begin Patch\n*** Delete File: old.rs\n*** End Patch";
+    let result = run(&session, "patch", json!({"patch": plain}))
+        .await
+        .unwrap();
+    assert_eq!(result.status, Status::Ok);
 }

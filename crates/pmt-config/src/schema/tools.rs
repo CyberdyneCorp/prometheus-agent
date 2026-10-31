@@ -363,6 +363,10 @@ pub struct WebConfig {
     pub extract_timeout_secs: u64,
     /// Keyless web search.
     pub keyless: KeylessConfig,
+    /// The `firecrawl` backend (search and extract).
+    pub firecrawl: FirecrawlConfig,
+    /// The `searxng` backend (search only).
+    pub searxng: SearxngConfig,
 }
 
 impl Default for WebConfig {
@@ -374,8 +378,30 @@ impl Default for WebConfig {
             extract_char_limit: 15_000,
             extract_timeout_secs: 120,
             keyless: KeylessConfig::default(),
+            firecrawl: FirecrawlConfig::default(),
+            searxng: SearxngConfig::default(),
         }
     }
+}
+
+/// The `[web.firecrawl]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct FirecrawlConfig {
+    /// Self-hosted Firecrawl base URL; unset is the hosted API
+    /// (`https://api.firecrawl.dev`, secret `FIRECRAWL_API_KEY`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+}
+
+/// The `[web.searxng]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SearxngConfig {
+    /// Base URL of the SearXNG instance (its JSON output must be enabled);
+    /// `searxng` is unavailable until it is set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 /// The `[web.keyless]` section.

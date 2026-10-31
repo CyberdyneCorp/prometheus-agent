@@ -37,12 +37,13 @@ use crate::context::Context;
 use crate::model_cmd::block_on;
 use crate::output::{document, print_raw};
 
-/// The built-in tools of this binary. Each tool group registers its tools
+/// The built-in tools of this binary, their handlers bound to the
+/// process-wide session environments. Each tool group registers its tools
 /// here as it lands; a toolset member that is not registered yet is shown
 /// as `unregistered`.
 #[must_use]
 pub fn builtin_tools() -> Vec<RegisteredTool> {
-    Vec::new()
+    pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process())
 }
 
 /// The registry of profile `profile`: this binary's built-in tools and the

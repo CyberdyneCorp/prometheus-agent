@@ -92,6 +92,18 @@ getrandom = "0.4"
 url = "2.5"
 # Test-only HTTP mock server (recorded provider stream fixtures).
 wiremock = "0.6"
+# search_files: .gitignore-aware directory walks.
+ignore = "0.4"
+# Unified diffs of file tool edits.
+similar = "3.2"
+# Post-write syntax checks: tree-sitter grammars (Rust, Python,
+# JavaScript, TypeScript) and a YAML 1.2 event parser.
+tree-sitter = "0.27"
+tree-sitter-rust = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"
+saphyr-parser = "0.3"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

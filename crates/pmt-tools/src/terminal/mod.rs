@@ -11,8 +11,7 @@
 //!   directory; [`guard`] is the fail-closed pre-execution chain;
 //!   [`classify`], [`shape`] and [`spill`] plan and shape foreground runs.
 //!
-//! The model-facing tool wrappers (descriptors, schemas, registration)
-//! live with the tool registry.
+//! [`tool`] wraps them as the model-facing `terminal` and `process` tools.
 
 pub mod args;
 pub mod classify;
@@ -27,6 +26,7 @@ pub mod shape;
 pub mod shell;
 pub mod spawn;
 pub mod spill;
+pub mod tool;
 pub mod windows_shell;
 
 pub use args::TerminalArgs;

@@ -1,0 +1,8 @@
+{
+  "diff": "--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n fn add(a: i32, b: i32) -> i32 {\n-    a + b\n+    a.wrapping_add(b)\n }\n",
+  "lint": {
+    "status": "ok"
+  },
+  "path": "src/lib.rs",
+  "replacements": 1
+}

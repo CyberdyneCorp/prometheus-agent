@@ -1,2 +1,2 @@
 # Product and protocol names that pedantic `doc_markdown` would otherwise ask to backtick.
-doc-valid-idents = ["OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID"]
+doc-valid-idents = ["OpenAI", "CPython", "SQLite", "WebAssembly", "JavaScript", "TypeScript", "..", "GitHub", "AppContainer", "SonarSource", "ChatGPT", "OpenID", "SearXNG"]

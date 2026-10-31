@@ -184,6 +184,9 @@ fn approval_rules(tool: &RegisteredTool, config: &Config) -> Vec<String> {
             BUILTIN_FILES.join(", ")
         ));
     }
+    if !tool.descriptor.claims.writes.is_empty() {
+        rules.push("writes to ~/.ssh/config ask in every mode".to_owned());
+    }
     if rules.is_empty() {
         rules.push("no approval rule applies; calls run once the tool is exposed".to_owned());
     }
@@ -221,6 +224,7 @@ fn claims_text(claims: &ResourceClaims) -> String {
             .map(|claim| match claim {
                 PathClaim::Argument(pointer) => format!("argument {pointer}"),
                 PathClaim::Fixed(path) => path.clone(),
+                PathClaim::PatchText(pointer) => format!("files of the patch in {pointer}"),
             })
             .collect();
         list_or_dash(&items)

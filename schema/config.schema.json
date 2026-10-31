@@ -1085,6 +1085,20 @@
       "type": "object",
       "x-apply": "live"
     },
+    "FirecrawlConfig": {
+      "additionalProperties": false,
+      "description": "The `[web.firecrawl]` section.",
+      "properties": {
+        "base_url": {
+          "description": "Self-hosted Firecrawl base URL; unset is the hosted API\n(`https://api.firecrawl.dev`, secret `FIRECRAWL_API_KEY`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "GuardrailThresholds": {
       "additionalProperties": false,
       "description": "Repetition thresholds of the tool loop guardrails.",
@@ -2243,6 +2257,20 @@
         }
       ]
     },
+    "SearxngConfig": {
+      "additionalProperties": false,
+      "description": "The `[web.searxng]` section.",
+      "properties": {
+        "url": {
+          "description": "Base URL of the SearXNG instance (its JSON output must be enabled);\n`searxng` is unavailable until it is set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "SecretName": {
       "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
       "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
@@ -2949,6 +2977,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "firecrawl": {
+          "$ref": "#/$defs/FirecrawlConfig",
+          "default": {},
+          "description": "The `firecrawl` backend (search and extract)."
+        },
         "keyless": {
           "$ref": "#/$defs/KeylessConfig",
           "default": {
@@ -2962,6 +2995,11 @@
             "string",
             "null"
           ]
+        },
+        "searxng": {
+          "$ref": "#/$defs/SearxngConfig",
+          "default": {},
+          "description": "The `searxng` backend (search only)."
         }
       },
       "type": "object",
@@ -3456,9 +3494,11 @@
         "backend": "auto",
         "extract_char_limit": 15000,
         "extract_timeout_secs": 120,
+        "firecrawl": {},
         "keyless": {
           "enabled": false
-        }
+        },
+        "searxng": {}
       },
       "description": "Web tools."
     }

@@ -52,8 +52,9 @@ pub use state::{
 };
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, KeylessConfig, ResultBudget, SshConfig, TerminalConfig, ToolOutputConfig,
-    ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
+    FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
+    TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
+    WindowsShell,
 };
 
 /// The `config.toml` schema version this build writes and reads.

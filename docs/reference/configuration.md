@@ -282,5 +282,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |
 | `web.extract_char_limit` | integer | `15000` | 2000 to 500000 | `next_session` | Characters per extracted page. |
 | `web.extract_timeout_secs` | integer | `120` | ≥ 0 | `next_session` | Bound on one extract dispatch. |
+| `web.firecrawl.base_url` | string | unset | any | `next_session` | Self-hosted Firecrawl base URL; unset is the hosted API (`https://api.firecrawl.dev`, secret `FIRECRAWL_API_KEY`). |
 | `web.keyless.enabled` | boolean | `false` | any | `next_session` | Allow keyless web search as the last `auto` choice. |
 | `web.search_backend` | string | unset | any | `next_session` | Search backend; unset uses `backend`. |
+| `web.searxng.url` | string | unset | any | `next_session` | Base URL of the SearXNG instance (its JSON output must be enabled); `searxng` is unavailable until it is set. |

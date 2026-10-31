@@ -1,6 +1,6 @@
 //! The session's approval gate: the dispatcher asks it about every call.
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -15,6 +15,8 @@ use super::rules::{PLUGIN_RULE_PREFIX, literal};
 use super::{Context, Finding, Floors, Policy, Verdict, evaluate};
 use crate::descriptor::{PathClaim, RegisteredTool};
 use crate::dispatch::{ApprovalGate, Escalation, GateRequest, GateVerdict, SeamFuture};
+use crate::files::guards::{absolute, resolve_existing};
+use crate::files::patch::v4a::touched_paths;
 use crate::grants::GrantAnswer;
 use crate::protected::ProtectedFiles;
 
@@ -191,9 +193,17 @@ impl CommandGate {
 
     /// Writes to protected instruction files ask in every mode.
     async fn check_protected(&self, request: &GateRequest<'_>) -> GateVerdict {
+        let floors = &self.setup.floors;
+        let user_home = floors.user_home.as_deref().map(Path::new);
         for path in written_paths(request.tool, request.arguments) {
-            let absolute = PathBuf::from(&self.setup.floors.cwd).join(&path);
-            let Some(protected) = self.setup.protected.requires_approval(&absolute) else {
+            let absolute = absolute(&path, Path::new(&floors.cwd), user_home);
+            let reason = self
+                .setup
+                .protected
+                .requires_approval(&absolute)
+                .map(|protected| protected.reason())
+                .or_else(|| ssh_config(&absolute, user_home));
+            let Some(reason) = reason else {
                 continue;
             };
             let verdict = self
@@ -203,7 +213,7 @@ impl CommandGate {
                     subject: Some(path.clone()),
                     findings: vec![Finding {
                         detector: PROTECTED.to_owned(),
-                        reason: protected.reason(),
+                        reason,
                         fragment: path,
                     }],
                     remember: None,
@@ -313,15 +323,30 @@ fn command_line<'a>(tool: &RegisteredTool, arguments: &'a Value) -> Option<&'a s
         .find_map(|key| arguments.get(key).and_then(Value::as_str))
 }
 
+/// `~/.ssh/config` steers every SSH connection (proxy commands run
+/// programs), so writes to it always ask, like protected instruction files.
+fn ssh_config(path: &Path, user_home: Option<&Path>) -> Option<String> {
+    let config = user_home?.join(".ssh").join("config");
+    let hit = path == config || resolve_existing(path) == resolve_existing(&config);
+    hit.then(|| {
+        format!(
+            "{} is the SSH client configuration; writes always need human approval",
+            path.display()
+        )
+    })
+}
+
 /// The paths a call writes, from its argument write claims.
 fn written_paths(tool: &RegisteredTool, arguments: &Value) -> Vec<String> {
+    let text = |pointer: &str| arguments.pointer(pointer).and_then(Value::as_str);
     tool.descriptor
         .claims
         .writes
         .iter()
-        .filter_map(|claim| match claim {
-            PathClaim::Argument(pointer) => arguments.pointer(pointer)?.as_str().map(str::to_owned),
-            PathClaim::Fixed(_) => None,
+        .flat_map(|claim| match claim {
+            PathClaim::Argument(pointer) => text(pointer).map(str::to_owned).into_iter().collect(),
+            PathClaim::PatchText(pointer) => text(pointer).map(touched_paths).unwrap_or_default(),
+            PathClaim::Fixed(_) => Vec::new(),
         })
         .collect()
 }

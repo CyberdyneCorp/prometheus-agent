@@ -11,12 +11,19 @@
 //! always need human approval, [`grants`], the capability grant gate, and
 //! [`terminal`], the execution environment behind the `terminal` and
 //! `process` tools.
+//!
+//! The built-in tools: [`files`] (`read_file`, `write_file`, `patch`,
+//! `search_files`), [`terminal::tool`] (`terminal`, `process`) and
+//! [`web`] (`web_search`, `web_extract`); [`builtin_tools`] lists them and
+//! [`environments`] is where their handlers find each session's state.
 
 pub mod approval;
 pub mod args;
 pub mod budget;
 pub mod descriptor;
 pub mod dispatch;
+pub mod environments;
+pub mod files;
 pub mod grants;
 pub mod probe;
 pub mod protected;
@@ -28,6 +35,7 @@ pub mod spillover;
 pub mod surface;
 pub mod terminal;
 pub mod toolset;
+pub mod web;
 
 #[cfg(test)]
 mod testing;
@@ -42,3 +50,17 @@ pub use result::{Content, Status, ToolResult};
 pub use selection::Selection;
 pub use surface::{Exclusion, SurfaceInputs, ToolSurface};
 pub use toolset::Toolset;
+
+use std::sync::Arc;
+
+use environments::Environments;
+
+/// The built-in tools implemented by this crate, their handlers bound to
+/// `environments`.
+#[must_use]
+pub fn builtin_tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
+    let mut tools = web::tools(environments);
+    tools.extend(terminal::tool::tools(environments));
+    tools.extend(files::tools::tools(environments));
+    tools
+}

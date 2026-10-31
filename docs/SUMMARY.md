@@ -12,6 +12,7 @@
 - [Usage, costs and budgets](guide/usage-and-budgets.md)
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)
+- [File and web tools](guide/files-and-web.md)
 - [Tools and toolsets](guide/tools.md)
 - [Capabilities, grants and redaction](guide/security.md)
 

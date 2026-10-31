@@ -46,6 +46,9 @@ pub enum PathClaim {
     Argument(String),
     /// A fixed path or glob.
     Fixed(String),
+    /// The files a V4A patch (the string argument at this JSON pointer)
+    /// adds, updates, deletes or moves to.
+    PatchText(String),
 }
 
 /// The resources a call touches; the batch planner schedules by them.

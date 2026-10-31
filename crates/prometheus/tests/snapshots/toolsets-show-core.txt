@@ -1,13 +1,13 @@
 core: The default tool set of every surface
 TOOL                AVAILABILITY
-web_search          unregistered
-web_extract         unregistered
-terminal            unregistered
-process             unregistered
-read_file           unregistered
-write_file          unregistered
-patch               unregistered
-search_files        unregistered
+web_search          unavailable:no web backend configured
+web_extract         unavailable:no web backend configured
+terminal            exposed
+process             exposed
+read_file           exposed
+write_file          exposed
+patch               exposed
+search_files        exposed
 vision_analyze      unregistered
 image_generate      unregistered
 skills_list         unregistered

@@ -12,5 +12,7 @@ mod foreground;
 mod processes;
 #[cfg(unix)]
 mod startup;
+#[cfg(unix)]
+mod tool;
 #[cfg(windows)]
 mod windows;
