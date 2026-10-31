@@ -14,10 +14,12 @@
 //!   deletes, [`delete`] and [`retention`] session removal, [`usage`] the
 //!   usage ledger, [`listing`] listings, pickers and size guards, and
 //!   [`credential_state`] provider credential request counts and benches,
-//!   and [`tool_surface`] the tool surface each session froze.
+//!   [`tool_surface`] the tool surface each session froze, and
+//!   [`compression_state`] each session's automatic-compaction guards.
 
 pub mod blobs;
 pub mod compaction;
+pub mod compression_state;
 mod contention;
 pub mod credential_state;
 pub mod delete;
@@ -47,6 +49,7 @@ pub mod usage_query;
 
 pub use blobs::{BlobRef, GcReport};
 pub use compaction::{Compacted, Compaction};
+pub use compression_state::CompressionState;
 pub use contention::WriteClass;
 pub use delete::Deleted;
 pub use index::DOCTOR_GROUP;
@@ -72,7 +75,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 10;
 
 #[cfg(test)]
 mod tests {

@@ -2,7 +2,7 @@
 //!
 //! Each iteration runs, in order: the interrupt and budget check, steer
 //! delivery, request assembly from the frozen prompt and the repaired
-//! transcript, the compression preflight (seam of 16.x), the cache-prefix
+//! transcript, the compression preflight ([`super::compression`]), the cache-prefix
 //! check, the budget check and the model call, response intake, and then
 //! either the tool round ([`super::round`]) or the final answer.
 //! [`super::finish`] holds the finalizer.
@@ -28,7 +28,8 @@ use super::interrupt::Issuer;
 use super::iteration::IterationBudget;
 use super::lease::{self, Refresher};
 use super::model::{ModelReply, RouteInfo};
-use super::{Agent, TurnInput, TurnOptions, repair, transcript};
+use super::{Agent, TurnInput, TurnOptions, breakpoints, repair, transcript};
+use crate::compress::Trigger;
 use crate::prompt::frozen::Frozen;
 use crate::prompt::system_blocks;
 
@@ -85,6 +86,14 @@ pub(super) enum Next {
     /// Another iteration.
     Continue,
     /// The turn ends.
+    End(Ending),
+}
+
+/// What sending a request led to.
+enum Sent {
+    Reply(Box<ModelReply>),
+    /// Compacted after an overflow: send again.
+    Retry,
     End(Ending),
 }
 
@@ -183,6 +192,12 @@ pub(super) struct Turn<'a> {
     nudges: u32,
     /// The run-budget wrap-up notice was sent.
     pub(super) wrap_up_sent: bool,
+    /// The label of the next compression check.
+    pub(super) next_trigger: Trigger,
+    /// Compaction attempts this turn.
+    pub(super) compression_attempts: u32,
+    /// Active rows the latest request was built from.
+    pub(super) request_rows: usize,
 }
 
 impl<'a> Turn<'a> {
@@ -213,6 +228,9 @@ impl<'a> Turn<'a> {
             empty_streak: 0,
             nudges: 0,
             wrap_up_sent: false,
+            next_trigger: Trigger::TurnStart,
+            compression_attempts: 0,
+            request_rows: 0,
         }
     }
 
@@ -220,7 +238,7 @@ impl<'a> Turn<'a> {
         let setup = &self.agent.setup;
         setup.model.start_turn().await;
         let route = setup.model.route().await;
-        let frozen = self.freeze(&route).await?;
+        let mut frozen = self.freeze(&route).await?;
         let text = match self.agent.steers.take() {
             Some(steer) => format!("{steer}\n\n{}", input.text),
             None => input.text,
@@ -238,11 +256,11 @@ impl<'a> Turn<'a> {
             text: wire,
         }))
         .await;
-        let ending = self.iterate(&frozen).await?;
+        let ending = self.iterate(&mut frozen).await?;
         self.finish(ending, Some(&frozen)).await
     }
 
-    async fn iterate(&mut self, frozen: &Frozen) -> Result<Ending, Error> {
+    async fn iterate(&mut self, frozen: &mut Frozen) -> Result<Ending, Error> {
         loop {
             if let Some(end) = self.stopped() {
                 return Ok(end);
@@ -251,22 +269,51 @@ impl<'a> Turn<'a> {
                 return Ok(Ending::new(ExitReason::IterationLimit));
             }
             self.deliver_steers()?;
-            // The compression preflight runs here once 16.x lands.
             let route = self.agent.setup.model.route().await;
+            let estimate = self.request(frozen, &route, true)?.estimated_tokens();
+            self.preflight(frozen, &route, estimate).await?;
             let request = self.request(frozen, &route, true)?;
             if let Some(end) = self.check_budget(&request, &route).await? {
                 self.iterations.refund(); // nothing was sent
                 return Ok(end);
             }
             self.check_prefix(&request).await;
-            let reply = match self.call(&request).await {
-                Ok(reply) => reply,
-                Err(end) => return Ok(end),
+            let reply = match self.send(frozen, &request, &route).await? {
+                Sent::Reply(reply) => *reply,
+                Sent::Retry => continue,
+                Sent::End(end) => return Ok(end),
             };
             self.record_call(&reply).await?;
+            let tool_round = !reply.tool_calls.is_empty();
             if let Next::End(end) = self.intake(reply, &request, &route).await? {
                 return Ok(end);
             }
+            if tool_round {
+                self.next_trigger = Trigger::PostTool;
+            }
+        }
+    }
+
+    /// Sends `request`; an overflow compacts and asks for the same
+    /// request again (its iteration refunded).
+    async fn send(
+        &mut self,
+        frozen: &mut Frozen,
+        request: &Request,
+        route: &RouteInfo,
+    ) -> Result<Sent, Error> {
+        match self.call(request).await {
+            Ok(reply) => Ok(Sent::Reply(Box::new(reply))),
+            Err(end) if end.reason == ExitReason::ContextExhausted => {
+                Ok(match self.overflow(frozen, route).await? {
+                    None => {
+                        self.iterations.refund();
+                        Sent::Retry
+                    }
+                    Some(end) => Sent::End(end),
+                })
+            }
+            Err(end) => Ok(Sent::End(end)),
         }
     }
 
@@ -331,30 +378,32 @@ impl<'a> Turn<'a> {
     /// The request of the next call: the frozen prompt and tools plus the
     /// repaired transcript (toolless for the summary handoff).
     pub(super) fn request(
-        &self,
+        &mut self,
         frozen: &Frozen,
         route: &RouteInfo,
         with_tools: bool,
     ) -> Result<Request, Error> {
         let setup = &self.agent.setup;
         let rows = setup.store.messages(setup.session, Visibility::Active)?;
-        let mut messages = repair::wire(&rows);
-        if let Some(last) = messages.last_mut() {
-            last.cache_breakpoint = true;
-        }
-        Ok(Request {
+        self.request_rows = rows.len();
+        let mut cache =
+            CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string());
+        cache.ttl = self.agent.cache_ttl(&self.config.prompt_cache, route);
+        let mut request = Request {
             model: route.model.clone(),
             system: system_blocks(&frozen.tiers),
-            messages,
+            messages: repair::wire(&rows),
             tools: if with_tools {
                 frozen.tools.clone()
             } else {
                 Vec::new()
             },
             max_output_tokens: None,
-            cache: CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string()),
+            cache,
             reasoning: None,
-        })
+        };
+        breakpoints::plan(&mut request, route.wire_format);
+        Ok(request)
     }
 
     /// Runs a model call until it finishes, any stop arrives (a soft stop
@@ -393,6 +442,7 @@ impl<'a> Turn<'a> {
         }
         let cost = reply.record.as_ref().and_then(|r| r.cost_usd);
         self.usage.add(&reply.usage, cost);
+        self.observe(reply)?;
         if let Some(record) = &reply.record {
             self.emit(Event::ModelCall(record.clone())).await;
         }

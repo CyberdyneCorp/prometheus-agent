@@ -217,6 +217,7 @@ impl ModelPort for Failing {
                 model: "fake".into(),
                 price: None,
                 context_window: None,
+                max_output_tokens: None,
                 wire_format: WireFormat::ChatCompletions,
             }
         })

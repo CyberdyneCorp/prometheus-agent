@@ -85,6 +85,16 @@ impl Environments {
         }
     }
 
+    /// The environment attached to `session_id`, if any.
+    #[must_use]
+    pub fn session(&self, session_id: &str) -> Option<Arc<SessionEnv>> {
+        self.sessions
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(session_id)
+            .cloned()
+    }
+
     /// The environment of the calling session.
     ///
     /// # Errors

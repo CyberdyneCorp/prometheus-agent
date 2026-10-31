@@ -7,6 +7,7 @@
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
 - [Sessions](guide/sessions.md)
 - [Turns and the system prompt](guide/turns.md)
+- [Context compression](guide/compression.md)
 - [Logs and trajectories](guide/observability.md)
 - [Models and providers](guide/models.md)
 - [Provider credentials and sign-ins](guide/providers.md)

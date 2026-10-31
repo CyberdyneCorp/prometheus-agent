@@ -257,6 +257,62 @@ fn unknown_toolset_fails_validation_with_the_closest_name() {
 }
 
 #[test]
+fn unknown_context_engine_fails_validation_instead_of_falling_back() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    std::fs::write(config_path(home.path()), "[context]\nengine = \"lcm\"\n").unwrap();
+    let out = run(home.path(), &["config", "validate"]);
+    assert_eq!(out.status.code(), Some(78));
+    assert!(
+        stderr(&out).contains("unknown context engine 'lcm'"),
+        "{}",
+        stderr(&out)
+    );
+    std::fs::write(
+        config_path(home.path()),
+        "[context]\nengine = \"builtin\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        run(home.path(), &["config", "validate"]).status.code(),
+        Some(0)
+    );
+}
+
+#[test]
+fn compression_values_out_of_range_fail_validation_instead_of_clamping() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    for (text, message) in [
+        (
+            "[compression]\nmax_attempts = 50\n",
+            "compression.max_attempts: must be between 1 and 10",
+        ),
+        (
+            "[compression]\ntail_mode = \"fat\"\n",
+            "compression.tail_mode: unknown value \"fat\" (allowed: \"lean\", \"ratio\")",
+        ),
+        (
+            "[compression]\ntarget_ratio = 0.05\n",
+            "compression.target_ratio: must be between 0.1 and 0.8",
+        ),
+        (
+            "[compression]\nthreshold = 0.0\n",
+            "compression.threshold: must be greater than 0 and less than 1",
+        ),
+        (
+            "[prompt_cache]\nttl = \"2h\"\n",
+            "prompt_cache.ttl: unknown value \"2h\"",
+        ),
+    ] {
+        std::fs::write(config_path(home.path()), text).unwrap();
+        let out = run(home.path(), &["config", "validate"]);
+        assert_eq!(out.status.code(), Some(78), "{text}");
+        assert!(stderr(&out).contains(message), "{text}: {}", stderr(&out));
+    }
+}
+
+#[test]
 fn unknown_terminal_backend_fails_validation_with_the_available_list() {
     let home = temp_home();
     run(home.path(), &["config", "path"]);

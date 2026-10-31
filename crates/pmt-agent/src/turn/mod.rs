@@ -10,8 +10,10 @@
 //! failed-turn boundary row and emits `turn.end`. A turn always ends with
 //! exactly one [`ExitReason`].
 
+pub mod breakpoints;
 mod budget;
 mod cache;
+mod compression;
 pub mod events;
 mod exit;
 mod finish;
@@ -31,7 +33,7 @@ pub mod tools;
 pub mod transcript;
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
 
 use jiff::Timestamp;
@@ -41,8 +43,10 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_core::secret::Redactor;
 use pmt_obs::budget::Budgets;
+use pmt_providers::request::CacheTtl;
 use pmt_store::Store;
 
+pub use compression::CONTEXT_FULL;
 pub use events::{EventSink, NoEvents, Recorded};
 pub use exit::{ExitReason, TurnId, TurnResult, TurnUsage};
 pub use interrupt::{Interrupt, Issuer};
@@ -52,6 +56,7 @@ pub use model::{DeltaSink, ModelPort, NoDeltas, ProviderModel, ProviderSetup};
 pub use round::WRAP_UP_NOTICE;
 pub use tools::{SessionTools, Timings, ToolBatch, ToolPort};
 
+use crate::compress::Summarizer;
 use crate::prompt::frozen::Rebuild;
 use crate::references::{Places, UrlSource};
 
@@ -149,7 +154,17 @@ pub struct AgentSetup {
     /// This agent's own iteration budget (a delegated child's); `None`
     /// reads `agent.max_iterations`.
     pub max_iterations: Option<u32>,
+    /// The auxiliary `compression` route; `None` compacts with the
+    /// deterministic fallback summary.
+    pub summarizer: Option<Arc<dyn Summarizer>>,
+    /// Re-reads the prompt inputs that live on disk (memory snapshot,
+    /// skills index, plugin sections) before every prompt rebuild, so a
+    /// compaction or `--now` rebuild sees the current state.
+    pub refresh_prompt: Option<RefreshPrompt>,
 }
+
+/// Updates a [`PromptSetup`] from the current disk state.
+pub type RefreshPrompt = Arc<dyn Fn(&mut PromptSetup) + Send + Sync>;
 
 impl AgentSetup {
     /// A setup with no events and no references, attended, interactive as
@@ -177,6 +192,8 @@ impl AgentSetup {
             unattended: false,
             redactor: Redactor::default(),
             max_iterations: None,
+            summarizer: None,
+            refresh_prompt: None,
         }
     }
 }
@@ -242,6 +259,12 @@ pub struct Agent {
     steers: steer::Steers,
     /// The previous request's prefix (cache break detection).
     prefix: Mutex<Option<cache::Prefix>>,
+    /// Reported usage, for the compression preflight.
+    usage: Mutex<compression::UsageMemory>,
+    /// The prompt-cache lifetime, resolved once per session.
+    cache_ttl: OnceLock<CacheTtl>,
+    /// The TTL lowering was logged.
+    ttl_lowered: std::sync::atomic::AtomicBool,
 }
 
 impl Agent {
@@ -259,6 +282,9 @@ impl Agent {
             personality: Mutex::new(None),
             steers: steer::Steers::default(),
             prefix: Mutex::new(None),
+            usage: Mutex::new(compression::UsageMemory::new()),
+            cache_ttl: OnceLock::new(),
+            ttl_lowered: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -304,6 +330,34 @@ impl Agent {
             &mut *self.prefix.lock().unwrap_or_else(PoisonError::into_inner),
             next,
         )
+    }
+
+    /// The session's prompt-cache lifetime (resolved once), lowered to
+    /// what `route` keeps.
+    fn cache_ttl(
+        &self,
+        config: &pmt_config::schema::PromptCacheConfig,
+        route: &model::RouteInfo,
+    ) -> CacheTtl {
+        let session = *self
+            .cache_ttl
+            .get_or_init(|| breakpoints::session_ttl(config.ttl, &self.setup.prompt.platform));
+        let kept = breakpoints::supported(session, route.wire_format);
+        if kept != session
+            && !self
+                .ttl_lowered
+                .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            tracing::debug!(
+                provider = %route.provider,
+                "prompt cache TTL lowered to the longest the provider keeps"
+            );
+        }
+        kept
+    }
+
+    fn usage_memory(&self) -> MutexGuard<'_, compression::UsageMemory> {
+        self.usage.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn personality_override(&self) -> Option<String> {

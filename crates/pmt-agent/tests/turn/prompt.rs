@@ -75,7 +75,6 @@ async fn the_system_prompt_bytes_are_identical_across_turns() {
         3,
         "static, profile, session tiers"
     );
-    assert!(requests[0].system.iter().all(|b| b.cache_breakpoint));
     assert!(requests[0].system[0].text.starts_with("You are Ada."));
     // Each request extends the previous one's transcript.
     assert_eq!(

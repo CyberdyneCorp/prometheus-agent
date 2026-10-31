@@ -145,8 +145,9 @@ pub struct CacheControl {
 
 impl CacheControl {
     /// The settings of a session under `prompt_cache.ttl` (`auto` uses
-    /// five-minute markers): the session's stable key and a breakpoint
-    /// after the tool list, unless caching is off.
+    /// five-minute markers here; the turn loop resolves `auto` per session
+    /// and plans the breakpoints): the session's stable key and a
+    /// breakpoint after the tool list, unless caching is off.
     #[must_use]
     pub fn for_session(config: &pmt_config::schema::PromptCacheConfig, session_id: &str) -> Self {
         use pmt_config::schema::PromptCacheTtl;

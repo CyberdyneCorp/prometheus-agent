@@ -148,6 +148,9 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
         })?;
     }
     pmt_providers::reasoning::check(&scope.config().agent)?;
+    // Context engines are a registry too: plugin engines arrive with the
+    // plugin host (M2), so M1 knows the built-in engine only.
+    pmt_agent::compress::engine::select(&scope.config().context, &[])?;
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }

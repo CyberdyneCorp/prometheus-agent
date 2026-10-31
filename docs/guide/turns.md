@@ -152,14 +152,15 @@ ends with `cost_budget_exhausted` and the error names the model.
 
 ## The system prompt
 
-The prompt has three tiers, each sent as its own cached block: `static`
+The prompt has three tiers, each sent as its own block: `static`
 (identity and guidance), `profile` (platform hint and skills) and `session`
 (personality, project context, memory and the rest, ending with the runtime
 environment block). The [system prompt layers](../reference/system-prompt.md)
 reference lists every layer in order.
 
 Sessions of the same profile and model share the first two blocks byte for
-byte, so the provider's prompt cache serves them.
+byte, so the provider's prompt cache serves them (see
+[prompt-cache breakpoints](compression.md#prompt-cache-breakpoints)).
 
 **The prompt is frozen per session.** It is stored with the session at its
 first turn; every later turn, including after a restart, sends exactly the

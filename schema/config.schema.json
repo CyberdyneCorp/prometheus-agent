@@ -1843,7 +1843,7 @@
         },
         {
           "const": "auto",
-          "description": "Chosen per route.",
+          "description": "Five minutes for machine-paced sessions (subagent, cron, webhook,\nkanban, api, batch), one hour otherwise; resolved once per session.",
           "type": "string"
         },
         {

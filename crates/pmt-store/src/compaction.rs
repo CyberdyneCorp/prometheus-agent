@@ -17,6 +17,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::{MessageId, SessionId};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
+use crate::blobs::BlobRef;
 use crate::contention::WriteClass;
 use crate::error::sql;
 use crate::leases::{self, Lease, LeaseKind};
@@ -32,6 +33,10 @@ pub struct Compaction {
     pub replaced: Vec<MessageId>,
     /// The rows inserted after the last replaced row (the summary).
     pub replacements: Vec<NewMessage>,
+    /// Blobs a replacement row refers to by content (pruned tool output
+    /// kept recoverable): `(blob, replacement row id)`, recorded in the
+    /// same transaction so the collector keeps them while the row exists.
+    pub references: Vec<(BlobRef, MessageId)>,
 }
 
 impl Compaction {
@@ -50,6 +55,7 @@ impl Compaction {
                 .collect(),
             replaced,
             replacements,
+            references: Vec::new(),
         }
     }
 }
@@ -120,6 +126,17 @@ fn check_shape(lock: &Lease, compaction: &Compaction) -> Result<(), Error> {
         return Err(Error::new(
             &codes::STORE_CONSTRAINT,
             format!("compaction replaces message {id}, which it did not read"),
+        ));
+    }
+    let inserted: HashSet<MessageId> = compaction.replacements.iter().map(|m| m.id).collect();
+    if let Some((_, id)) = compaction
+        .references
+        .iter()
+        .find(|(_, id)| !inserted.contains(id))
+    {
+        return Err(Error::new(
+            &codes::STORE_CONSTRAINT,
+            format!("compaction references a blob from {id}, which it does not insert"),
         ));
     }
     if compaction.replaced.is_empty() {
@@ -194,6 +211,14 @@ impl Store {
             let count = i64::try_from(rows.len()).unwrap_or(i64::MAX);
             make_room(tx, session, last, count)?;
             let inserted = messages::insert(tx, session, &rows, last + 1)?;
+            for (blob, owner) in &compaction.references {
+                tx.execute(
+                    "INSERT OR IGNORE INTO blob_refs (sha256, owner_kind, owner_id) \
+                     VALUES (?1, 'message', ?2)",
+                    params![blob.sha256(), owner.to_string()],
+                )
+                .map_err(sql)?;
+            }
             tx.execute(
                 "UPDATE sessions SET compaction_count = ?2 WHERE id = ?1",
                 params![session.to_string(), epoch],
@@ -201,5 +226,40 @@ impl Store {
             .map_err(sql)?;
             Ok(Compacted { epoch, inserted })
         })
+    }
+}
+
+impl Store {
+    /// The blob a row of `session` references whose SHA-256 starts with
+    /// `prefix` (the short ref a pruned tool result names); `None` when no
+    /// row of the session references one, or the prefix is not lower-case
+    /// hex of 8 to 64 characters.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn session_blob(&self, session: SessionId, prefix: &str) -> Result<Option<BlobRef>, Error> {
+        let hex = prefix
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        if !hex || !(8..=64).contains(&prefix.len()) {
+            return Ok(None);
+        }
+        let sha: Option<String> = self.read(|conn| {
+            conn.query_row(
+                "SELECT r.sha256 FROM blob_refs r JOIN messages m \
+                 ON r.owner_kind = 'message' AND r.owner_id = m.id \
+                 WHERE m.session_id = ?1 AND substr(r.sha256, 1, ?3) = ?2 LIMIT 1",
+                params![
+                    session.to_string(),
+                    prefix,
+                    i64::try_from(prefix.len()).unwrap_or(64)
+                ],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql)
+        })?;
+        Ok(sha.and_then(|sha| BlobRef::parse(&format!("blob:sha256:{sha}"))))
     }
 }

@@ -171,11 +171,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 16. M1 Context compression
 
-- [ ] 16.1 Implement context engine selection (built-in default, unknown name exits 78) and the compression config schema; verify config validation tests (spec: context-compression)
-- [ ] 16.2 Implement the threshold from the main model's input budget, the small-window floor, the trigger decision with blocking reasons, provider-usage-over-estimate, trigger points and the attempt budget; verify with table tests (spec: context-compression)
-- [ ] 16.3 Implement the deterministic recoverable prune, protected head, token-budgeted tail and orphan stubs; verify with golden transcripts (spec: context-compression)
-- [ ] 16.4 Implement the summary (budget, handoff shape, iterative update, failure handling) via the auxiliary route, compaction always in place, one compaction at a time, and context-overflow recovery; verify with mock scripts that an overflow error triggers a compaction and a retry (spec: context-compression)
-- [ ] 16.5 Implement the cache breakpoint plan and prompt cache TTL, plus the `/compress` manual command; verify request fixtures show the planned breakpoints and that compaction is the only cache break recorded (spec: context-compression)
+- [x] 16.1 Implement context engine selection (built-in default, unknown name exits 78) and the compression config schema; verify config validation tests (spec: context-compression)
+- [x] 16.2 Implement the threshold from the main model's input budget, the small-window floor, the trigger decision with blocking reasons, provider-usage-over-estimate, trigger points and the attempt budget; verify with table tests (spec: context-compression)
+- [x] 16.3 Implement the deterministic recoverable prune, protected head, token-budgeted tail and orphan stubs; verify with golden transcripts (spec: context-compression)
+- [x] 16.4 Implement the summary (budget, handoff shape, iterative update, failure handling) via the auxiliary route, compaction always in place, one compaction at a time, and context-overflow recovery; verify with mock scripts that an overflow error triggers a compaction and a retry (spec: context-compression)
+- [x] 16.5 Implement the cache breakpoint plan and prompt cache TTL, plus the `/compress` manual command; verify request fixtures show the planned breakpoints and that compaction is the only cache break recorded (spec: context-compression)
 
 ## 17. M1 Skills
 

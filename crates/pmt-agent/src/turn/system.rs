@@ -16,27 +16,36 @@ impl Turn<'_> {
     pub(super) async fn freeze(&mut self, route: &RouteInfo) -> Result<Frozen, Error> {
         let setup = &self.agent.setup;
         let pending = self.agent.take_rebuild();
-        let why = match frozen::stored(&setup.store, setup.session, &route.provider, &route.model)?
-        {
-            Ok(stored) => match pending {
-                None => return Ok(stored),
-                Some(why) => why,
-            },
-            Err(why) => why,
-        };
+        let (why, stored) =
+            match frozen::stored(&setup.store, setup.session, &route.provider, &route.model)? {
+                Ok(stored) => match pending {
+                    None => return Ok(stored),
+                    Some(why) => (why, Some(stored)),
+                },
+                Err(why) => (why, None),
+            };
         let tools = setup.tools.definitions();
         let inputs = self.inputs(route, tools.iter().map(|t| t.name.clone()).collect());
         let built = tokio::task::spawn_blocking(move || prompt::build(&inputs))
             .await
             .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("prompt build: {e}")))??;
-        let frozen = frozen::save(
-            &setup.store,
-            setup.session,
-            &built,
-            tools,
-            (&route.provider, &route.model),
-            &why,
-        )?;
+        // Rebuilt bytes equal to the stored ones keep the stored prompt.
+        let frozen = match stored {
+            Some(stored)
+                if stored.sha256 == prompt::hash(&built.prompt.tiers())
+                    && stored.tools == tools =>
+            {
+                stored
+            }
+            _ => frozen::save(
+                &setup.store,
+                setup.session,
+                &built,
+                tools,
+                (&route.provider, &route.model),
+                &why,
+            )?,
+        };
         self.notices.extend(built.warnings);
         // A recorded rebuild changes the prefix on purpose.
         self.agent.swap_prefix(None);
@@ -50,7 +59,10 @@ impl Turn<'_> {
 
     fn inputs(&self, route: &RouteInfo, tool_names: Vec<String>) -> PromptInputs {
         let setup = &self.agent.setup;
-        let p = &setup.prompt;
+        let mut p = setup.prompt.clone();
+        if let Some(refresh) = &setup.refresh_prompt {
+            refresh(&mut p);
+        }
         let mut config = self.config.clone();
         if let Some(name) = self.agent.personality_override() {
             config.agent.personality = name;

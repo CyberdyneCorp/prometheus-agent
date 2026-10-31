@@ -3,9 +3,10 @@
 //! [`turn`] runs a session's turns ([`turn::Agent::run_turn`]), [`prompt`]
 //! builds and freezes the layered system prompt, [`references`] expands
 //! `@` context references, [`tools`] holds the agent-level tools the loop
-//! executes itself (`todo`, `clarify`, `session_search`) and [`vision`]
-//! how images reach the model.
+//! executes itself (`todo`, `clarify`, `session_search`), [`vision`]
+//! how images reach the model and [`compress`] context compression.
 
+pub mod compress;
 pub mod prompt;
 pub mod references;
 pub mod tools;

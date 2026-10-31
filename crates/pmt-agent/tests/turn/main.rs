@@ -3,6 +3,7 @@
 
 mod budgets;
 mod cache;
+mod compression;
 mod context;
 mod exits;
 mod guardrails;

@@ -3,6 +3,7 @@
 
 mod blobs;
 mod compaction;
+mod compression_state;
 mod crash;
 mod credential_state;
 mod integrity;

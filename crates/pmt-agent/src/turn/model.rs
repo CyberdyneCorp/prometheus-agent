@@ -42,6 +42,8 @@ pub struct RouteInfo {
     pub price: Option<Price>,
     /// Context window in tokens, when known.
     pub context_window: Option<u64>,
+    /// The model's output cap, when known (reserved from the window).
+    pub max_output_tokens: Option<u64>,
     /// The route's wire format.
     pub wire_format: WireFormat,
 }
@@ -229,6 +231,7 @@ impl ProviderModel {
             model: route.model.clone(),
             price: self.setup.catalog.price(&route.provider, &route.model),
             context_window: Some(meta.context_window),
+            max_output_tokens: meta.max_output_tokens,
             wire_format: route.wire_format,
         }
     }

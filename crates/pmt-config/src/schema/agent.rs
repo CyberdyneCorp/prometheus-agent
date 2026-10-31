@@ -233,7 +233,8 @@ pub enum PromptCacheTtl {
     /// One hour.
     #[serde(rename = "1h")]
     OneHour,
-    /// Chosen per route.
+    /// Five minutes for machine-paced sessions (subagent, cron, webhook,
+    /// kanban, api, batch), one hour otherwise; resolved once per session.
     #[serde(rename = "auto")]
     Auto,
     /// No cache markers.

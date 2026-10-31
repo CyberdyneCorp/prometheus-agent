@@ -111,6 +111,7 @@ mod tests {
                 reasoning: None,
             }),
             context_window: None,
+            max_output_tokens: None,
             wire_format: wire,
         }
     }
