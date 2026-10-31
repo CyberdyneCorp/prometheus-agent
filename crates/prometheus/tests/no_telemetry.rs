@@ -8,11 +8,20 @@
 //! with pricing, budget checks, logs, telemetry resolution) and the
 //! commands that read it configure none. Its own test binary keeps the
 //! process-wide counter free of other tests' clients.
+//!
+//! A real `prometheus chat` does configure clients (model catalog, web
+//! tools) that stay idle until asked to reach a host, so the mock chat
+//! session is watched at the wire instead: every proxy variable points at
+//! a local listener that counts connections, and no name lookup may be
+//! logged.
 
 mod common;
 
+use std::net::TcpListener;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jiff::Timestamp;
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
@@ -24,7 +33,7 @@ use pmt_obs::trajectory::writer::{Emit, open_for_session};
 use pmt_obs::usage::{Call, ConfigPrices, UsageRecorder};
 use pmt_store::{EndReason, NewMessage, NewSession, Role, Source, Store, Tokens};
 
-use common::{command, ok, temp_home};
+use common::{command, mock_home, ok, temp_home};
 
 fn local_session(home: &Path) -> String {
     let home = Home::open(home).unwrap();
@@ -168,4 +177,87 @@ fn a_plaintext_telemetry_endpoint_is_refused_and_logged() {
         .find(|line| line.contains("refusing to send telemetry to http://example.com/ingest"))
         .unwrap_or_else(|| panic!("no refusal logged:\n{log}"));
     assert!(refusal.contains("\"level\":\"warn\""), "{refusal}");
+}
+
+/// A deny-all network stand-in: a proxy that counts and drops every
+/// connection. Returns its URL and the counter.
+fn counting_proxy() -> (String, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let count = Arc::new(AtomicUsize::new(0));
+    let seen = Arc::clone(&count);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            seen.fetch_add(1, Ordering::SeqCst);
+            drop(stream);
+        }
+    });
+    (url, count)
+}
+
+/// `cmd` with every proxy variable pointing at `proxy` and no exemption.
+fn through(proxy: &str, mut cmd: Command) -> Command {
+    for var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+        cmd.env(var, proxy).env(var.to_lowercase(), proxy);
+    }
+    cmd.env_remove("NO_PROXY").env_remove("no_proxy");
+    cmd.env("PMT_LOG", "debug").stdin(Stdio::null());
+    cmd
+}
+
+/// Scenario: No outbound telemetry by default (a full mock session: a
+/// prompt, a tool call, its result and the answer).
+#[test]
+fn a_mock_chat_session_makes_no_connection() {
+    let home = mock_home();
+    std::fs::write(home.path().join("notes.txt"), "local only\n").unwrap();
+    let script = home.path().join("script.toml");
+    std::fs::write(
+        &script,
+        r#"
+[[rule]]
+user = "read"
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "notes.txt" }
+
+[[rule]]
+tool_result = "local only"
+text = "it says local only"
+"#,
+    )
+    .unwrap();
+    let (proxy, connections) = counting_proxy();
+
+    let mut chat = through(&proxy, command(home.path()));
+    chat.current_dir(home.path())
+        .args(["-z", "read the notes", "--mock-script"])
+        .arg(&script);
+    let answer = ok(&chat.output().unwrap());
+    assert!(answer.contains("it says local only"), "{answer}");
+    assert_eq!(
+        connections.load(Ordering::SeqCst),
+        0,
+        "the session connected"
+    );
+    for log in common::files_under(home.path())
+        .iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "log"))
+    {
+        let text = std::fs::read_to_string(log).unwrap();
+        assert!(
+            !text.contains("outbound name lookup"),
+            "{} names a lookup:\n{text}",
+            log.display()
+        );
+    }
+
+    // Control: a command that does reach the network is seen by the proxy.
+    let mut refresh = through(&proxy, command(home.path()));
+    refresh.args(["model", "list", "--refresh", "--provider", "openrouter"]);
+    let _ = refresh.output().unwrap();
+    assert!(
+        connections.load(Ordering::SeqCst) > 0,
+        "the proxy saw no connection, so it proves nothing"
+    );
 }

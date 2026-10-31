@@ -69,7 +69,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 7.5 Implement the append-only `usage_ledger` (per call: tokens by class, `cost_usd` or null, `cost_source`, `billing_source`, root session id) and the pricing rules (provider-reported, then metadata table, then `unpriced`); verify that unpriced calls show as `—` and are counted in `unpriced_calls` (spec: observability)
 - [x] 7.6 Implement totals keyed by root lineage and `prometheus usage` (session, root, day, month views, `--json`); verify that a continuation and a child session roll up to the root (spec: observability, spec: cli)
 - [x] 7.7 Implement the budget engine: pre-call worst-case estimation against every applicable scope (turn, session, root, daily, monthly, unattended), warnings at the configured ratio, `budget.exceeded`/`budget.warning` events, agent-tool writes to budget keys refused, and CLI one-shot exit 3; verify with the scenario tests from both budget requirements (spec: observability, spec: agent-turn-loop)
-- [ ] 7.8 Ensure no outbound telemetry exists by default (no network client is constructed unless an opt-in key is set, HTTPS only); verify with a test that runs a full mock session under a deny-all network namespace/mock and observes zero connections (spec: observability, spec: security-boundaries)
+- [x] 7.8 Ensure no outbound telemetry exists by default (no network client is constructed unless an opt-in key is set, HTTPS only); verify with a test that runs a full mock session under a deny-all network namespace/mock and observes zero connections (spec: observability, spec: security-boundaries)
 
 ## 8. M1 Security boundaries: capabilities, grants and redaction
 

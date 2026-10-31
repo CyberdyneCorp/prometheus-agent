@@ -57,6 +57,10 @@ pub(crate) struct OutboundResolver {
 impl OutboundResolver {
     /// The checked addresses of `host`.
     pub(crate) async fn resolve_checked(&self, host: &str) -> io::Result<Vec<IpAddr>> {
+        // A connection attempt by name leaves this record, so a test can
+        // prove a session reached for no host (spec: observability, No
+        // outbound telemetry by default).
+        tracing::debug!(component = "net", host, "outbound name lookup");
         let found = self.lookup.lookup(host).await;
         let Some(policy) = &self.destinations else {
             return non_empty(host, filter(found?, self.force_ipv4), self.force_ipv4);

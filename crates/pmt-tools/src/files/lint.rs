@@ -318,7 +318,11 @@ mod tests {
 
     #[test]
     fn a_panicking_or_slow_checker_is_skipped() {
-        let panicking = Linter::builtin().with("yaml", |_| panic!("checker bug"));
+        // A generous budget: unwinding is slow on some runners (Windows),
+        // and a panic past the budget is reported as a timeout instead.
+        let panicking = Linter::builtin()
+            .with("yaml", |_| panic!("checker bug"))
+            .with_budget(Duration::from_secs(30));
         let lint = panicking.check(Path::new("a.yaml"), "a: 1\n");
         assert_eq!(lint.status, LintStatus::Skipped);
         assert_eq!(lint.output, "the syntax checker failed");
