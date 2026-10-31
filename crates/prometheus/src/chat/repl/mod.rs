@@ -10,11 +10,16 @@
 //! approvals, confirmations) are answered from the next line.
 
 mod commands;
+mod compose;
+pub mod info;
 pub mod input;
+mod progress;
 mod prompts;
+pub mod queue;
 mod quick;
 mod refine;
 mod sessions;
+pub mod shell;
 mod turn;
 
 use std::collections::VecDeque;
@@ -52,6 +57,8 @@ pub struct Start {
     pub run_budget: Option<Duration>,
     /// This terminal's identity (`-c` per terminal).
     pub terminal: Option<String>,
+    /// `--image` attachments: they go with the first prompt.
+    pub images: Vec<crate::chat::attach::Image>,
 }
 
 /// What the REPL does after a line.
@@ -67,6 +74,10 @@ struct Display {
     color: bool,
     quiet: bool,
     progress: ToolProgress,
+    /// `/focus on`: the mode `/focus off` restores.
+    focus: Option<ToolProgress>,
+    /// `display.timestamps` (`/timestamps`).
+    timestamps: bool,
 }
 
 /// The REPL.
@@ -80,6 +91,9 @@ struct Repl {
     pending: Option<Pending>,
     approvals: Option<Prompts<ApprovalRequest, Decision>>,
     clarify: Option<Prompts<ClarifyRequest, ClarifyAnswer>>,
+    /// The session's tool activity and what this turn showed of it.
+    progress: Option<mpsc::UnboundedReceiver<crate::chat::session::progress::Progress>>,
+    view: progress::TurnView,
     memory: mpsc::UnboundedReceiver<MemoryAsk>,
     /// Messages background work posts to the chat (`/refine` summaries).
     posted: mpsc::UnboundedSender<String>,
@@ -87,6 +101,12 @@ struct Repl {
     last_interrupt: Option<Instant>,
     start: Start,
     confirm_destructive: bool,
+    /// Images that go with the next prompt (`/image`, `--image`).
+    attachments: Vec<crate::chat::attach::Image>,
+    /// `!!` blocks that go with the next prompt.
+    shell_context: Vec<String>,
+    /// A turn runs (`/status`).
+    running: bool,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -141,17 +161,24 @@ pub async fn run(
             color,
             quiet: ui.quiet,
             progress: config.display.tool_progress,
+            focus: None,
+            timestamps: config.display.timestamps,
         },
         queue: VecDeque::new(),
         pending: None,
         approvals: None,
         clarify: None,
+        progress: None,
+        view: progress::TurnView::default(),
         memory,
         posted,
         to_post,
         last_interrupt: None,
+        attachments: start.images.clone(),
         start,
         confirm_destructive: config.cli.confirm_destructive,
+        shell_context: Vec::new(),
+        running: false,
     };
     repl.attach(live);
     repl.load_registry();
@@ -170,38 +197,42 @@ impl Repl {
             self.user_turn(seed).await;
         }
         loop {
-            let line = if let Some(line) = self.queue.pop_front() {
-                line
-            } else {
-                let prompt = self.prompt();
-                self.input.request(&prompt);
-                let event = tokio::select! {
-                    event = self.input.next() => event,
-                    Some(text) = self.to_post.recv() => {
-                        self.notice(&text);
-                        continue;
-                    }
-                };
-                match event {
-                    Event::Line(line) => {
-                        self.last_interrupt = None;
-                        line
-                    }
-                    Event::Interrupt => {
-                        if self.idle_interrupt() == Flow::Exit {
-                            break;
-                        }
-                        continue;
-                    }
-                    Event::Eof => break,
-                }
+            let flow = match self.queue.pop_front() {
+                Some(line) => self.idle_line(line).await,
+                None => self.idle_event().await,
             };
-            if self.idle_line(line).await == Flow::Exit {
+            if flow == Flow::Exit {
                 break;
             }
         }
         self.finish(EndReason::UserExit).await;
         0
+    }
+
+    /// Reads and handles one event at the idle prompt.
+    async fn idle_event(&mut self) -> Flow {
+        let prompt = self.prompt();
+        self.input.request(&prompt);
+        let event = tokio::select! {
+            event = self.input.next() => event,
+            Some(text) = self.to_post.recv() => {
+                self.notice(&text);
+                return Flow::Continue;
+            }
+        };
+        match event {
+            Event::Line(line) => {
+                self.last_interrupt = None;
+                self.idle_line(line).await
+            }
+            Event::Interrupt => self.idle_interrupt(),
+            Event::Eof => Flow::Exit,
+            Event::Compose(buffer) => {
+                self.last_interrupt = None;
+                self.compose(&buffer).await
+            }
+            Event::SuspendRefused => Flow::Continue,
+        }
     }
 
     /// Ctrl+C at an idle prompt: a hint, or exit when it is the second
@@ -236,6 +267,10 @@ impl Repl {
         if trimmed.starts_with('/') {
             return self.slash(trimmed.to_owned()).await;
         }
+        if trimmed.starts_with('!') {
+            self.shell_escape(trimmed).await;
+            return Flow::Continue;
+        }
         self.user_turn(line).await;
         Flow::Continue
     }
@@ -248,6 +283,7 @@ impl Repl {
     fn attach(&mut self, mut live: Live) {
         self.approvals = live.approvals.take();
         self.clarify = live.clarify.take();
+        self.progress = live.progress.take();
         for notice in std::mem::take(&mut live.notices) {
             self.notice(&notice);
         }
@@ -297,6 +333,7 @@ impl Repl {
     fn prompt(&self) -> String {
         let symbol = match &self.pending {
             Some(pending) => pending.prompt(),
+            None if self.display.focus.is_some() => "focus › ".to_owned(),
             None => "› ".to_owned(),
         };
         self.display

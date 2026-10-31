@@ -62,6 +62,10 @@ pub struct ChatArgs {
     /// Read the prompt verbatim from PATH (`-` for stdin).
     #[arg(long, value_name = "PATH")]
     pub prompt_file: Option<PathBuf>,
+    /// Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the
+    /// first prompt (repeatable).
+    #[arg(long, value_name = "PATH", action = ArgAction::Append)]
+    pub image: Vec<PathBuf>,
     /// Approval mode for this session.
     #[arg(long, value_enum, value_name = "MODE")]
     pub approvals: Option<ApprovalsFlag>,
@@ -100,6 +104,18 @@ pub struct ChatArgs {
     /// Do not load project context files (AGENTS.md and friends).
     #[arg(long)]
     pub no_context_files: bool,
+    /// Run with schema defaults and this command line's flags instead of
+    /// the profile's config.toml (secrets still resolve).
+    #[arg(long)]
+    pub ignore_user_config: bool,
+    /// Skip workspace rule files (AGENTS.md and friends), the identity
+    /// file, the memory snapshot and preloaded skills.
+    #[arg(long)]
+    pub ignore_rules: bool,
+    /// Write this run's usage as JSON to PATH when it ends, whatever the
+    /// outcome.
+    #[arg(long, value_name = "PATH")]
+    pub usage_file: Option<PathBuf>,
     /// Script for the `mock` provider.
     #[arg(long, value_name = "PATH")]
     pub mock_script: Option<PathBuf>,
@@ -170,6 +186,9 @@ impl ChatArgs {
         }
         if let Some(n) = self.max_iterations {
             set.push(format!("agent.max_iterations={n}"));
+        }
+        if self.ignore_rules {
+            set.push("prompt.load_identity=false".to_owned());
         }
         if !self.toolsets.is_empty() {
             let list: Vec<String> = self.toolsets.iter().map(|t| format!("{t:?}")).collect();

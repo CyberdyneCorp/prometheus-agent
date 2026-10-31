@@ -56,6 +56,7 @@ pub struct Cli {
 
 /// Top-level subcommands.
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)] // parsed once per process; boxing buys nothing
 pub enum Command {
     /// Talk to the agent: interactive on a terminal, one-shot with `-z`
     /// or when stdin or stdout is not a terminal (the default command).
@@ -640,6 +641,15 @@ pub enum TrajectoryFormat {
 /// `prometheus sessions` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum SessionsCommand {
+    /// Pick a session interactively (status tags, search) and resume it.
+    Browse {
+        /// Only sessions from this source.
+        #[arg(long, value_name = "SOURCE", value_parser = parse_source)]
+        source: Option<Source>,
+        /// Also hidden, archived and integration (oneshot, tool) sessions.
+        #[arg(long)]
+        all: bool,
+    },
     /// List sessions, most recently active first.
     List {
         /// At most this many sessions.

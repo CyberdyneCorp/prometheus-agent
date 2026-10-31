@@ -7,6 +7,7 @@
 
 pub mod env;
 pub mod model;
+pub mod progress;
 pub mod tools;
 
 use std::path::PathBuf;
@@ -61,6 +62,11 @@ pub struct Options {
     pub no_context_files: bool,
     /// `--source` (or `oneshot` for a one-shot run).
     pub source_tag: Option<String>,
+    /// `--ignore-user-config` (recorded on the session).
+    pub ignore_user_config: bool,
+    /// `--ignore-rules`: no rule files, identity file, memory snapshot or
+    /// preloaded skills (recorded on the session).
+    pub ignore_rules: bool,
 }
 
 /// What every session of this process shares.
@@ -76,6 +82,8 @@ pub struct Factory {
     grants: Arc<SessionGrants>,
     launch: LaunchEnv,
     redactor: Redactor,
+    /// What this run did (`--usage-file`).
+    pub record: Arc<crate::chat::usage_file::RunRecord>,
     /// The flags.
     pub options: Options,
     approver: Option<Arc<dyn Approver>>,
@@ -109,6 +117,10 @@ pub struct Live {
     pub selection: Selection,
     /// Notices to show once at start.
     pub notices: Vec<String>,
+    /// What this run did (`--usage-file`).
+    pub record: Arc<crate::chat::usage_file::RunRecord>,
+    /// Tool activity to render (taken by the interface).
+    pub progress: Option<tokio::sync::mpsc::UnboundedReceiver<progress::Progress>>,
     agent_tools: Arc<AgentTools>,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
@@ -146,6 +158,7 @@ impl Factory {
             grants,
             launch: launch.clone(),
             redactor,
+            record: Arc::default(),
             options,
             approver: None,
         })
@@ -207,6 +220,8 @@ impl Factory {
             self.models.port(target).await?,
         ));
         let session = self.store.session(id)?;
+        self.record.session(id, session.root_session_id, target);
+        self.record_launch_flags(id)?;
         let skills = Arc::new(SkillsSession::new(self.skills_setup(id)));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
@@ -259,14 +274,16 @@ impl Factory {
             Arc::clone(&tool_port) as _,
             prompt,
         );
-        setup.events = trajectory
+        let events = trajectory
             .clone()
             .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
+        let (tee, progress) = progress::Tee::new(events);
+        setup.events = Arc::new(tee);
         setup.redactor = self.redactor.clone();
         setup.memory = Some(Arc::clone(&memory) as _);
         setup.interactive = interactive;
         setup.unattended = !interactive;
-        setup.refresh_prompt = Some(refresher(&skills, &memory));
+        setup.refresh_prompt = Some(refresher(&skills, &memory, self.options.ignore_rules));
         let agent = Agent::new(setup)?;
         let live = Live {
             scope: scope.clone(),
@@ -282,6 +299,8 @@ impl Factory {
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
             selection,
             notices,
+            progress: interactive.then_some(progress),
+            record: Arc::clone(&self.record),
             agent_tools,
             capabilities,
             trajectory,
@@ -364,11 +383,34 @@ impl Factory {
         prompt.pass_session_id = self.options.pass_session_id;
         prompt.started_at = Timestamp::now();
         prompt.skills_index = skills.index_text();
+        if self.options.ignore_rules {
+            prompt.no_context_files = true;
+            return prompt;
+        }
         prompt.memory = memory.snapshot();
         let preloaded = pmt_skills::preload::preload(skills, &self.options.skills).await;
         notices.extend(preloaded.not_found_lines());
         prompt.pinned_skills = preloaded.text;
         prompt
+    }
+
+    /// Records `--ignore-user-config` / `--ignore-rules` on `id`.
+    fn record_launch_flags(&self, id: SessionId) -> Result<(), Error> {
+        use pmt_store::onboarding::LaunchFlag;
+        let flags: Vec<LaunchFlag> = [
+            (
+                self.options.ignore_user_config,
+                LaunchFlag::IgnoreUserConfig,
+            ),
+            (self.options.ignore_rules, LaunchFlag::IgnoreRules),
+        ]
+        .into_iter()
+        .filter_map(|(on, flag)| on.then_some(flag))
+        .collect();
+        if flags.is_empty() {
+            return Ok(());
+        }
+        self.store.set_launch_flags(id, &flags)
     }
 
     /// Rebuilds `live`'s tool surface from `selection` (`/tools ... --now`);
@@ -437,12 +479,18 @@ impl Factory {
 
 /// Re-reads the skills index and the memory snapshot before every prompt
 /// rebuild (a `--now` change or a compaction), never in between.
-fn refresher(skills: &Arc<SkillsSession>, memory: &Arc<MemorySession>) -> RefreshPrompt {
+fn refresher(
+    skills: &Arc<SkillsSession>,
+    memory: &Arc<MemorySession>,
+    ignore_rules: bool,
+) -> RefreshPrompt {
     let skills = Arc::clone(skills);
     let memory = Arc::clone(memory);
     Arc::new(move |prompt: &mut PromptSetup| {
         prompt.skills_index = skills.index_text();
-        memory.refresh(prompt);
+        if !ignore_rules {
+            memory.refresh(prompt);
+        }
     })
 }
 

@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use pmt_agent::prompt::frozen::Rebuild;
+use pmt_agent::turn::TurnInput;
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::{MessageId, SessionId};
@@ -56,11 +57,12 @@ impl Repl {
         ))
     }
 
-    /// `/retry`: the last user message again, its answer replaced.
+    /// `/retry`: the last user message again, with its attachments; what
+    /// followed it leaves the active transcript.
     pub(super) async fn retry(&mut self) -> Flow {
         let id = self.live().id;
-        let last = match last_user_text(&self.factory, id) {
-            Ok(Some(text)) => text,
+        let last = match last_user_input(&self.factory, id) {
+            Ok(Some(input)) => input,
             Ok(None) => {
                 self.notice("nothing to retry");
                 return Flow::Continue;
@@ -74,7 +76,7 @@ impl Repl {
             self.error(&err);
             return Flow::Continue;
         }
-        self.user_turn(last).await;
+        self.run_input(last).await;
         Flow::Continue
     }
 
@@ -389,6 +391,21 @@ fn authored(message: &pmt_store::Message) -> bool {
         .unwrap_or(false)
 }
 
-fn last_user_text(factory: &Factory, id: SessionId) -> Result<Option<String>, Error> {
-    Ok(user_messages(factory, id)?.pop().map(|(_, text)| text))
+/// The last user message as it was sent: its text and images.
+fn last_user_input(factory: &Factory, id: SessionId) -> Result<Option<TurnInput>, Error> {
+    let Some((message_id, text)) = user_messages(factory, id)?.pop() else {
+        return Ok(None);
+    };
+    let row = factory
+        .store
+        .messages(id, Visibility::Active)?
+        .into_iter()
+        .find(|m| m.id == message_id);
+    Ok(Some(TurnInput {
+        images: row
+            .as_ref()
+            .map(pmt_agent::turn::transcript::images_of)
+            .unwrap_or_default(),
+        ..TurnInput::text(text)
+    }))
 }

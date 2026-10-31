@@ -27,6 +27,7 @@ pub mod prompt_cmd;
 pub mod secrets_cmd;
 pub mod self_test_cmd;
 pub mod session_export;
+pub mod sessions_browse;
 pub mod sessions_cmd;
 pub mod skills_cmd;
 pub mod slash;

@@ -116,3 +116,61 @@ pub fn files_under(dir: &Path) -> Vec<std::path::PathBuf> {
     }
     found
 }
+
+#[cfg(unix)]
+pub mod pty;
+
+/// A 1x1 PNG.
+pub const PNG: &[u8] = &[
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
+    0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 218, 99, 100, 96, 248, 95, 15, 0, 2,
+    135, 1, 128, 235, 71, 186, 146, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
+
+/// A home whose default profile talks to the mock provider.
+pub fn mock_home() -> tempfile::TempDir {
+    let home = temp_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "model.provider", "mock"],
+    ));
+    ok(&run(
+        home.path(),
+        &["config", "set", "model.default", "mock"],
+    ));
+    home
+}
+
+/// Appends `text` to the default profile's `config.toml`.
+pub fn append_config(home: &Path, text: &str) {
+    let path = home.join("profiles/default/config.toml");
+    let mut file = std::fs::OpenOptions::new().append(true).open(path).unwrap();
+    file.write_all(text.as_bytes()).unwrap();
+}
+
+/// The newest session's id.
+pub fn newest_session(home: &Path) -> String {
+    let listed = ok(&run(home, &["--json", "sessions", "list", "--all"]));
+    let listed: serde_json::Value = serde_json::from_str(&listed).unwrap();
+    listed["sessions"][0]["id"].as_str().unwrap().to_owned()
+}
+
+/// The messages of session `id` (`sessions export`), active and not.
+pub fn session_messages(home: &Path, id: &str) -> Vec<serde_json::Value> {
+    ok(&run(
+        home,
+        &["sessions", "export", id, "--include-inactive"],
+    ))
+    .lines()
+    .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+    .filter_map(|line| line.get("message").cloned())
+    .collect()
+}
+
+/// The active messages of the newest session.
+pub fn active_messages(home: &Path) -> Vec<serde_json::Value> {
+    session_messages(home, &newest_session(home))
+        .into_iter()
+        .filter(|m| m["active"] == true)
+        .collect()
+}

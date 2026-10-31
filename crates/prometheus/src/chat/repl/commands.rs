@@ -7,7 +7,6 @@ use std::fmt::Write as _;
 
 use pmt_agent::prompt::frozen::Rebuild;
 use pmt_agent::turn::TurnInput;
-use pmt_config::schema::ToolProgress;
 use pmt_core::error::{Error, codes};
 
 use super::prompts::{Confirmation, Pending};
@@ -127,6 +126,7 @@ impl Repl {
             "model" => self.model(args).await,
             "tools" => self.tools(args).await,
             "learn" => return self.learn(args).await,
+            "prompt" => return self.compose(args).await,
             "snapshot" => self.snapshot(args).await,
             _ => {
                 let Some(live) = self.live.take() else {
@@ -166,7 +166,12 @@ impl Repl {
                 args,
                 &self.factory.options.cwd,
             ),
-            "sessions" => super::sessions::list(&self.factory),
+            "sessions" => self.sessions(live, args),
+            "history" => self.history(live, args),
+            "status" => self.status(live),
+            "version" => Ok(format!("prometheus {}", crate::build_info::identity())),
+            "queue" => super::queue::parse(args)
+                .and_then(|action| super::queue::apply(&mut self.queue, action)),
             "toolsets" => crate::tools_cmd::slash_toolsets(&self.factory.registry, &live.selection),
             "bundles" => Ok(pmt_skills::bundles::listing(&pmt_skills::bundles::load(
                 self.factory.scope.dir(),
@@ -174,8 +179,11 @@ impl Repl {
             "approvals" => Ok(approvals(&self.factory.scope, live)),
             "reload-secrets" => crate::slash_handlers::reload_secrets(&self.factory.scope),
             "refine" => self.refine(live, args).await,
+            "image" => self.image(args),
             "theme" => self.theme(args),
             "verbose" => Ok(self.verbose()),
+            "focus" => Ok(self.focus(args)),
+            "timestamps" => self.timestamps(args),
             "profile" => Ok(format!(
                 "profile {} ({})",
                 self.factory.scope.name(),
@@ -285,22 +293,6 @@ impl Repl {
             }
             Err(why) => Ok(why),
         }
-    }
-
-    fn verbose(&mut self) -> String {
-        self.display.progress = match self.display.progress {
-            ToolProgress::Off => ToolProgress::New,
-            ToolProgress::New => ToolProgress::All,
-            ToolProgress::All => ToolProgress::Verbose,
-            ToolProgress::Verbose => ToolProgress::Off,
-        };
-        let name = match self.display.progress {
-            ToolProgress::Off => "off",
-            ToolProgress::New => "new",
-            ToolProgress::All => "all",
-            ToolProgress::Verbose => "verbose",
-        };
-        format!("tool progress: {name}")
     }
 
     /// `/tools [list] | enable|disable <toolset> [--now]`.

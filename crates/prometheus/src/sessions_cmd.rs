@@ -26,7 +26,10 @@ use crate::session_export::{self, ExportOptions, session_json};
 /// # Errors
 ///
 /// The command's failure; the caller prints it and exits with its code.
-pub fn run(command: &SessionsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) -> Result<u8, Error> {
+    if let SessionsCommand::Browse { source, all } = command {
+        return crate::sessions_browse::run(*source, *all, ctx, ui);
+    }
     let scope = ctx.scope()?;
     let store = Store::open(&scope)?;
     let session = |reference: &str| store.resolve_session(reference);
@@ -45,6 +48,7 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             };
             list(ctx, &store.list_sessions(&options)?)
         }
+        SessionsCommand::Browse { .. } => unreachable!("handled above"),
         SessionsCommand::Show { session: r } => show(ctx, &store, session(r)?),
         SessionsCommand::Search(args) => search(ctx, &store, args),
         SessionsCommand::Rename { session: r, title } => {
@@ -130,9 +134,13 @@ fn list(ctx: &Context<'_>, sessions: &[Session]) -> Result<u8, Error> {
 fn show(ctx: &Context<'_>, store: &Store, id: SessionId) -> Result<u8, Error> {
     let session = store.session(id)?;
     let lineage: Vec<String> = store.lineage(id)?.iter().map(ToString::to_string).collect();
+    let flags = store.launch_flags(id)?;
+    let flag = |name: &str| flags.iter().any(|f| f == name);
     if ctx.json {
         let mut body = session_json(&session);
         body["lineage"] = json!(lineage);
+        body["ignore_user_config"] = json!(flag("ignore_user_config"));
+        body["ignore_rules"] = json!(flag("ignore_rules"));
         return document("sessions show", &json!({ "session": body }));
     }
     let mut text = String::new();
@@ -152,6 +160,9 @@ fn show(ctx: &Context<'_>, store: &Store, id: SessionId) -> Result<u8, Error> {
     field(&mut text, "pinned", &session.pinned);
     field(&mut text, "archived", &session.archived);
     field(&mut text, "lineage", &lineage.join(" -> "));
+    for name in &flags {
+        let _ = writeln!(text, "{name} = true");
+    }
     print_raw(&text)
 }
 

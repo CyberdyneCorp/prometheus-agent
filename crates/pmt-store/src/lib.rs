@@ -37,6 +37,7 @@ pub mod messages;
 mod migrate;
 pub mod model;
 pub mod model_context;
+pub mod onboarding;
 pub mod prompts;
 pub mod retention;
 pub mod rewind;
@@ -84,7 +85,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 13;
+pub const SCHEMA_VERSION: u32 = 14;
 
 #[cfg(test)]
 mod tests {

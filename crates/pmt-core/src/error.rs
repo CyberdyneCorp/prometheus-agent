@@ -543,6 +543,30 @@ error_codes! {
     /// A one-shot run read no prompt.
     CHAT_EMPTY_PROMPT = ("chat.empty_prompt", Usage,
         "A one-shot run (`-z`, or stdin not a terminal) got an empty prompt from the flag, `--prompt-file` and stdin.");
+    /// An image attachment cannot be used.
+    CHAT_IMAGE = ("chat.image", InvalidInput,
+        "An `--image` or `/image` file is missing, unreadable, larger than 20 MiB or not a PNG, JPEG, GIF or WebP image.");
+    /// The session's model cannot take an attached image.
+    CHAT_IMAGE_UNSUPPORTED = ("chat.image_unsupported", Config,
+        "The resolved model's metadata has `supports_vision = false` and no `[auxiliary.vision]` route is configured to describe the image; switch to a vision model or configure `auxiliary.vision.provider`/`model`. Nothing was sent to the provider.");
+    /// `--usage-file` cannot be written.
+    CHAT_USAGE_FILE = ("chat.usage_file", Io,
+        "The `--usage-file` path cannot be created or written (missing directory, permissions); the run itself finished and the command exits 73.");
+    /// A required setup value is missing in a non-interactive run.
+    SETUP_MISSING_VALUE = ("setup.missing_value", Config,
+        "`prometheus setup --non-interactive` needs every required value from `--set` flags or, for secrets, from the environment (`PMT_SECRET_<NAME>` or the provider's own variable); the message names the missing one.");
+    /// A tool category names an unregistered provider.
+    TOOLS_UNKNOWN_PROVIDER = ("tools.unknown_provider", Config,
+        "`prometheus tools provider <category> <provider>` named a category or provider that is not registered; the message lists the valid names and nothing was written.");
+    /// `prometheus doctor` was given an unknown group.
+    DOCTOR_UNKNOWN_GROUP = ("doctor.unknown_group", Usage,
+        "`prometheus doctor <group>` names a group that does not exist; the message lists the groups.");
+    /// A slash command needs an admin of the surface.
+    SLASH_ADMIN_ONLY = ("slash.admin_only", PermissionDenied,
+        "The command (for example `/sessions all` on a messaging platform) is reserved for the surface's admins; nothing was listed or changed.");
+    /// An interactive picker ran without a terminal.
+    CLI_REQUIRES_TERMINAL = ("cli.requires_terminal", Usage,
+        "An interactive command (`sessions browse`, `tools configure`) ran without a terminal on stdin and stdout; use its non-interactive form.");
     /// A slash command collides with a built-in or another source.
     SLASH_CONFLICT = ("slash.conflict", Config,
         "A plugin, skill or quick command declares a slash command whose name or alias is already a built-in command; the built-in is kept and the registration fails.");

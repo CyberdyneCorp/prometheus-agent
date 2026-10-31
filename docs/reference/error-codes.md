@@ -180,6 +180,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `chat.cwd_missing` | `not_found` | 66 | The `--cwd` directory does not exist or is not a directory. |
 | `chat.prompt_file` | `not_found` | 66 | The `--prompt-file` file does not exist or cannot be read. |
 | `chat.empty_prompt` | `usage` | 2 | A one-shot run (`-z`, or stdin not a terminal) got an empty prompt from the flag, `--prompt-file` and stdin. |
+| `chat.image` | `invalid_input` | 65 | An `--image` or `/image` file is missing, unreadable, larger than 20 MiB or not a PNG, JPEG, GIF or WebP image. |
+| `chat.image_unsupported` | `config` | 78 | The resolved model's metadata has `supports_vision = false` and no `[auxiliary.vision]` route is configured to describe the image; switch to a vision model or configure `auxiliary.vision.provider`/`model`. Nothing was sent to the provider. |
+| `chat.usage_file` | `io` | 74 | The `--usage-file` path cannot be created or written (missing directory, permissions); the run itself finished and the command exits 73. |
+| `setup.missing_value` | `config` | 78 | `prometheus setup --non-interactive` needs every required value from `--set` flags or, for secrets, from the environment (`PMT_SECRET_<NAME>` or the provider's own variable); the message names the missing one. |
+| `tools.unknown_provider` | `config` | 78 | `prometheus tools provider <category> <provider>` named a category or provider that is not registered; the message lists the valid names and nothing was written. |
+| `doctor.unknown_group` | `usage` | 2 | `prometheus doctor <group>` names a group that does not exist; the message lists the groups. |
+| `slash.admin_only` | `permission_denied` | 77 | The command (for example `/sessions all` on a messaging platform) is reserved for the surface's admins; nothing was listed or changed. |
+| `cli.requires_terminal` | `usage` | 2 | An interactive command (`sessions browse`, `tools configure`) ran without a terminal on stdin and stdout; use its non-interactive form. |
 | `slash.conflict` | `config` | 78 | A plugin, skill or quick command declares a slash command whose name or alias is already a built-in command; the built-in is kept and the registration fails. |
 | `slash.invalid` | `internal` | 70 | Two built-in slash commands share a name or alias (a programming error caught by the registry test). |
 | `model.invalid_ref` | `usage` | 2 | A model argument is neither a `[model.aliases]` name nor `<provider>/<model>` (or a model id of the current provider). |

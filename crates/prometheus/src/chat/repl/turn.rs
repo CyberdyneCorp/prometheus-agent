@@ -21,9 +21,18 @@ use crate::chat::theme::Role;
 use crate::slash::{BusyPolicy, Resolution, Surface};
 
 impl Repl {
-    /// Sends `text` as a user turn.
+    /// Sends `text` as a user turn, with the pending attachments and
+    /// `!!` context.
     pub(super) async fn user_turn(&mut self, text: String) {
-        self.run_input(TurnInput::text(text)).await;
+        let mut input = match self.compose_input(text).await {
+            Ok(input) => input,
+            Err(err) => {
+                self.error(&err);
+                return;
+            }
+        };
+        input.additions.append(&mut self.shell_context);
+        self.run_input(input).await;
     }
 
     /// Runs one turn of `input` to its end, then shows the outcome.
@@ -34,11 +43,15 @@ impl Repl {
         if let Some(note) = live.skills.change_note() {
             input.additions.push(note);
         }
+        live.record.turn();
         let mut options = TurnOptions::new(&CancelToken::new());
         options.run_budget = self.start.run_budget;
         let interrupt = options.interrupt.clone();
         let prompt = self.prompt();
         self.input.request(&prompt);
+        self.input.set_busy(true);
+        self.running = true;
+        let started = std::time::Instant::now();
         let result = {
             // Boxed: the turn's state machine is large.
             let turn = Box::pin(
@@ -47,7 +60,11 @@ impl Repl {
             );
             Box::pin(self.busy(turn, &live, &interrupt)).await
         };
-        self.after_turn(&live, result).await;
+        self.input.set_busy(false);
+        self.running = false;
+        let calls = self.end_progress();
+        self.after_turn(&live, result, started.elapsed(), calls)
+            .await;
         self.live = Some(live);
     }
 
@@ -83,6 +100,7 @@ impl Repl {
                     self.ask(Pending::Clarify { prompt, answers: Vec::new() });
                 }
                 Some(text) = self.to_post.recv() => self.notice(&text),
+                Some(progress) = recv(&mut self.progress) => self.on_progress(progress),
                 Some(ask) = self.memory.recv() => {
                     self.say(Role::Notice, &ask.preview);
                     self.ask(Pending::Memory(ask.reply));
@@ -107,7 +125,7 @@ impl Repl {
         );
     }
 
-    fn ring_bell(&self) {
+    pub(super) fn ring_bell(&self) {
         if self.factory.scope.config().display.bell_on_prompt {
             self.input.print("\x07");
         }
@@ -124,9 +142,15 @@ impl Repl {
                     self.queue.push_back("/exit".to_owned());
                 }
             }
+            Event::SuspendRefused => self.notice("cannot suspend while the agent is working"),
+            Event::Compose(_) => {
+                self.notice("/prompt is unavailable while the agent is working; use /stop first");
+            }
             Event::Line(text) => {
                 if let Some(pending) = self.pending.take() {
                     self.answer_now(pending, &text);
+                } else if text.trim_start().starts_with('!') {
+                    self.notice(super::shell::BUSY);
                 } else if text.trim_start().starts_with('/') {
                     self.busy_slash(text.trim(), session, interrupt).await;
                 } else if !text.trim().is_empty() {
@@ -222,7 +246,13 @@ impl Repl {
     }
 
     /// Shows a finished turn.
-    async fn after_turn(&mut self, live: &Live, result: Result<TurnResult, Error>) {
+    async fn after_turn(
+        &mut self,
+        live: &Live,
+        result: Result<TurnResult, Error>,
+        elapsed: std::time::Duration,
+        calls: u32,
+    ) {
         let result = match result {
             Ok(result) => result,
             Err(err) => {
@@ -234,8 +264,10 @@ impl Repl {
             self.notice(notice);
         }
         if let Some(answer) = &result.final_response {
-            self.say(Role::Assistant, answer);
+            self.say(Role::Assistant, &self.stamped(answer));
         }
+        // Before any stop notice or error, so those are the last lines.
+        self.turn_summary(elapsed, calls, &result.usage);
         match result.exit_reason {
             ExitReason::Completed => {}
             ExitReason::InterruptedByUser => self.notice("interrupted"),
@@ -291,9 +323,19 @@ impl Repl {
 }
 
 /// The next prompt of `prompts`; never resolves when there is none.
-async fn next<Q, A>(prompts: &mut Option<Prompts<Q, A>>) -> Option<pmt_core::human::Prompt<Q, A>> {
+pub(super) async fn next<Q, A>(
+    prompts: &mut Option<Prompts<Q, A>>,
+) -> Option<pmt_core::human::Prompt<Q, A>> {
     match prompts {
         Some(prompts) => prompts.next().await,
+        None => std::future::pending().await,
+    }
+}
+
+/// The next item of `rx`; never resolves when there is none.
+async fn recv<T>(rx: &mut Option<tokio::sync::mpsc::UnboundedReceiver<T>>) -> Option<T> {
+    match rx {
+        Some(rx) => rx.recv().await,
         None => std::future::pending().await,
     }
 }

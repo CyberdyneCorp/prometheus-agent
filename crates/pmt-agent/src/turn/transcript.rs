@@ -63,11 +63,42 @@ fn assistant_parts(text: String, calls: Option<&Value>) -> Vec<Part> {
     parts
 }
 
-/// The user row: the user's text plus request-time additions (memory
-/// prefetch, plugin context), stored as sent.
+/// Metadata key of the images a user row carries.
+pub const IMAGES: &str = "images";
+
+/// An image attached to a user message, kept in the session blob store
+/// (spec: cli, Image attachments). How it is delivered is decided once,
+/// when the message is composed, and kept with the message: pixels, or
+/// the `vision` route's description when the main model cannot see.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ImageRef {
+    /// Blob store reference (`blob:sha256:<hex>`).
+    pub blob: String,
+    /// MIME type (`image/png`).
+    pub media_type: String,
+    /// The file name shown in notes.
+    pub name: String,
+    /// The description sent instead of the pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// The images stored on `row` (none for rows without attachments).
 #[must_use]
-pub fn user_row(text: &str, additions: &[String]) -> NewMessage {
-    if additions.is_empty() {
+pub fn images_of(row: &Row) -> Vec<ImageRef> {
+    row.metadata
+        .as_ref()
+        .and_then(|m| m.get(IMAGES))
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default()
+}
+
+/// The user row: the user's text plus request-time additions (memory
+/// prefetch, plugin context, image descriptions), stored as sent, and the
+/// images sent as pixels.
+#[must_use]
+pub fn user_row(text: &str, additions: &[String], images: &[ImageRef]) -> NewMessage {
+    if additions.is_empty() && images.is_empty() {
         return NewMessage::new(Role::User, text);
     }
     let mut wire = text.to_owned();
@@ -76,7 +107,11 @@ pub fn user_row(text: &str, additions: &[String]) -> NewMessage {
         wire.push_str(addition);
     }
     let mut row = NewMessage::new(Role::User, wire);
-    row.metadata = Some(json!({ "user_text": text }));
+    let mut metadata = json!({ "user_text": text });
+    if !images.is_empty() {
+        metadata[IMAGES] = json!(images);
+    }
+    row.metadata = Some(metadata);
     row
 }
 

@@ -242,6 +242,8 @@ pub struct TurnInput {
     /// Request-time additions (memory prefetch, plugin context): sent in
     /// this turn's user message only, never in the system prompt.
     pub additions: Vec<String>,
+    /// Images sent as pixels (already in the session blob store).
+    pub images: Vec<transcript::ImageRef>,
 }
 
 impl TurnInput {
@@ -251,6 +253,7 @@ impl TurnInput {
         Self {
             text: text.into(),
             additions: Vec::new(),
+            images: Vec::new(),
         }
     }
 }

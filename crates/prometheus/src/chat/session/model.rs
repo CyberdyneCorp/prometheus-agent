@@ -11,12 +11,14 @@ use pmt_agent::turn::model::{
     BoxFuture, DeltaSink, ModelFailure, ModelPort, ModelReply, ProviderModel, ProviderSetup,
     RouteInfo,
 };
+use pmt_agent::vision::AuxDescriber;
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
 use pmt_obs::usage::{Prices, UsageRecorder};
 use pmt_providers::ModelCaller;
 use pmt_providers::ProviderRegistry;
 use pmt_providers::auth::Accounts;
+use pmt_providers::auxiliary::{self, AuxArgs, AuxCaller, AuxContext, AuxTask};
 use pmt_providers::cost::CallContext;
 use pmt_providers::fallback::Healthy;
 use pmt_providers::metadata::Catalog;
@@ -35,6 +37,9 @@ pub const NO_MODEL: &str = "no model configured; run: prometheus setup model";
 pub struct Models {
     setup: Arc<ProviderSetupParts>,
     caller: ModelCaller,
+    /// Auxiliary calls (image descriptions) on the same client, mock,
+    /// usage recorder and credentials as the main route.
+    aux: Arc<AuxCaller>,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -108,9 +113,15 @@ impl Models {
         let accounts = Arc::new(crate::accounts::open(scope, config, &registry, user_home)?);
         let mock = Arc::new(Mock::for_session(flags.mock_script, config, scope.dir())?);
         let prices: Arc<dyn Prices> = catalog.clone();
-        let caller = ModelCaller::new(crate::model_cmd::client(config)?)
+        let client = crate::model_cmd::client(config)?;
+        let recorder = Arc::new(UsageRecorder::new(Arc::clone(store), prices));
+        let aux = AuxCaller::new(client.clone())
+            .with_mock(Arc::clone(&mock))
+            .with_recorder(Arc::clone(&recorder))
+            .with_credentials(Arc::clone(&accounts) as _);
+        let caller = ModelCaller::new(client)
             .with_mock(mock)
-            .with_recorder(Arc::new(UsageRecorder::new(Arc::clone(store), prices)))
+            .with_recorder(recorder)
             .with_credentials(Arc::clone(&accounts) as _);
         Ok(Self {
             setup: Arc::new(ProviderSetupParts {
@@ -122,6 +133,7 @@ impl Models {
                 ad_hoc,
             }),
             caller,
+            aux: Arc::new(aux),
         })
     }
 
@@ -170,6 +182,35 @@ impl Models {
     /// The profile's model catalog.
     pub(crate) fn catalog(&self) -> &Catalog {
         &self.setup.catalog
+    }
+
+    /// The `vision` auxiliary route of a session on `main` as a describer;
+    /// `None` when no route answers.
+    ///
+    /// # Errors
+    ///
+    /// The resolution error of a pinned `[auxiliary.vision]` route.
+    pub(crate) async fn describer(
+        &self,
+        main: &Route,
+        session: pmt_core::id::SessionId,
+    ) -> Result<Option<AuxDescriber>, Error> {
+        let resolver = self.resolver();
+        let ctx = AuxContext {
+            resolver: &resolver,
+            main: Some(main),
+            health: &Healthy,
+        };
+        let Some(route) = auxiliary::resolve(AuxTask::Vision, &AuxArgs::default(), &ctx).await?
+        else {
+            return Ok(None);
+        };
+        let context = CallContext::new(session, &AuxTask::Vision.purpose());
+        Ok(Some(AuxDescriber::new(
+            Arc::clone(&self.aux),
+            route,
+            context,
+        )))
     }
 }
 

@@ -100,15 +100,15 @@ struct Report<'a> {
 
 /// Runs `prompt` as the session's one turn and prints the outcome;
 /// returns the exit status.
-pub async fn run(live: &Live, prompt: String, json: bool, run_budget: Option<Duration>) -> u8 {
+pub async fn run(live: &Live, input: TurnInput, json: bool, run_budget: Option<Duration>) -> u8 {
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = run_budget;
     let interrupt = options.interrupt.clone();
-    let turn =
-        Box::pin(
-            live.agent
-                .run_turn(Some(&live.scope), live.id, TurnInput::text(prompt), options),
-        );
+    live.record.turn();
+    let turn = Box::pin(
+        live.agent
+            .run_turn(Some(&live.scope), live.id, input, options),
+    );
     let (result, signal) = drive(live, turn, &interrupt).await;
     let result = match result {
         Ok(result) => result,

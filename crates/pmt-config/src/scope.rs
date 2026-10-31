@@ -57,6 +57,30 @@ impl ProfileScope {
         launch: Launch<'_>,
     ) -> Result<Self, Error> {
         let config = profile.config_file().load(overrides)?;
+        Self::with_config(profile, config, launch)
+    }
+
+    /// Like [`ProfileScope::open`] with schema defaults in place of the
+    /// profile's `config.toml` (`chat --ignore-user-config`); `overrides`
+    /// and the profile's secrets still apply.
+    ///
+    /// # Errors
+    ///
+    /// Invalid overrides (exit 2), `home.io`.
+    pub fn open_defaults(
+        profile: ProfileDir,
+        overrides: &Overrides,
+        launch: Launch<'_>,
+    ) -> Result<Self, Error> {
+        let config = profile.config_file().load_defaults(overrides)?;
+        Self::with_config(profile, config, launch)
+    }
+
+    fn with_config(
+        profile: ProfileDir,
+        config: Layered,
+        launch: Launch<'_>,
+    ) -> Result<Self, Error> {
         let store = SecretStore::open(&profile, config.config().secrets.backend);
         let launch_env = match launch {
             Launch::Profile(env) => Some(

@@ -4,10 +4,19 @@ error[E0599]: no function or associated item named `current` found for struct `P
 5 |     let _current = ProfileScope::current();
   |                                  ^^^^^^^ function or associated item not found in `ProfileScope`
   |
-note: if you're trying to build a new `ProfileScope`, consider using `ProfileScope::open` which returns `Result<ProfileScope, pmt_core::error::Error>`
+note: if you're trying to build a new `ProfileScope` consider using one of the following associated functions:
+      ProfileScope::open
+      ProfileScope::open_defaults
  --> src/scope.rs
   |
   | /     pub fn open(
+  | |         profile: ProfileDir,
+  | |         overrides: &Overrides,
+  | |         launch: Launch<'_>,
+  | |     ) -> Result<Self, Error> {
+  | |____________________________^
+...
+  | /     pub fn open_defaults(
   | |         profile: ProfileDir,
   | |         overrides: &Overrides,
   | |         launch: Launch<'_>,
@@ -20,10 +29,28 @@ error[E0599]: no function or associated item named `default` found for struct `P
 6 |     let _default = ProfileScope::default();
   |                                  ^^^^^^^ function or associated item not found in `ProfileScope`
   |
-note: if you're trying to build a new `ProfileScope`, consider using `ProfileScope::open` which returns `Result<ProfileScope, pmt_core::error::Error>`
+note: if you're trying to build a new `ProfileScope` consider using one of the following associated functions:
+      ProfileScope::open
+      ProfileScope::open_defaults
  --> src/scope.rs
   |
   | /     pub fn open(
+  | |         profile: ProfileDir,
+  | |         overrides: &Overrides,
+  | |         launch: Launch<'_>,
+  | |     ) -> Result<Self, Error> {
+  | |____________________________^
+...
+  | /     pub fn open_defaults(
+  | |         profile: ProfileDir,
+  | |         overrides: &Overrides,
+  | |         launch: Launch<'_>,
+  | |     ) -> Result<Self, Error> {
+  | |____________________________^
+help: there is an associated function `open_defaults` with a similar name
+ --> src/scope.rs
+  |
+  | /     pub fn open_defaults(
   | |         profile: ProfileDir,
   | |         overrides: &Overrides,
   | |         launch: Launch<'_>,

@@ -216,6 +216,7 @@ async fn request_time_additions_ride_the_current_user_message_only() {
     let input = TurnInput {
         text: "deploy it".into(),
         additions: vec!["[plugin context] repo is frozen".into()],
+        images: Vec::new(),
     };
     run.turn_with(&profile, input, options()).await;
     run.turn(&profile, "and now?").await;

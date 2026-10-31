@@ -8,10 +8,17 @@
 //! redacted, owner-only); `@` completes files under the session's working
 //! directory. In the editor Ctrl+C is a key (no signal), reported as
 //! [`Event::Interrupt`]; Ctrl+D on an empty line is [`Event::Eof`].
+//! Ctrl+X Ctrl+E hands the buffer to the external editor
+//! ([`Event::Compose`]). Ctrl+Z at an idle prompt suspends the process the
+//! way the editor does it (terminal mode restored, SIGTSTP; on `fg` the
+//! prompt is redrawn with its buffer); while a turn runs it is refused
+//! ([`Event::SuspendRefused`]) (spec: cli, External editor composition;
+//! Job-control suspend).
 
 use std::borrow::Cow;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc as std_mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -23,7 +30,8 @@ use rustyline::hint::Hinter;
 use rustyline::history::{FileHistory, History as _};
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{
-    Cmd, Config, Editor, EventHandler, ExternalPrinter, Helper, KeyCode, KeyEvent, Modifiers,
+    Cmd, ConditionalEventHandler, Config, Editor, EventContext, EventHandler, ExternalPrinter,
+    Helper, KeyCode, KeyEvent, Modifiers, RepeatCount,
 };
 use tokio::sync::mpsc;
 
@@ -39,6 +47,19 @@ pub enum Event {
     Interrupt,
     /// Ctrl+D on an empty line, or the terminal went away.
     Eof,
+    /// Ctrl+X Ctrl+E with the buffer so far.
+    Compose(String),
+    /// Ctrl+Z while a turn runs (the line is still being read).
+    SuspendRefused,
+}
+
+/// State the key handlers share with the REPL.
+#[derive(Default)]
+struct Shared {
+    /// A turn runs: Ctrl+Z is refused.
+    busy: AtomicBool,
+    /// The buffer Ctrl+X Ctrl+E took.
+    compose: Mutex<Option<String>>,
 }
 
 /// The REPL's end of the input thread.
@@ -47,6 +68,7 @@ pub struct Input {
     events: mpsc::UnboundedReceiver<Event>,
     printer: Option<Arc<Mutex<Box<dyn ExternalPrinter + Send>>>>,
     reading: bool,
+    shared: Arc<Shared>,
 }
 
 /// What the editor needs.
@@ -69,9 +91,13 @@ impl Input {
         let (requests, wanted) = std_mpsc::channel::<String>();
         let (events_tx, events) = mpsc::unbounded_channel();
         let (printer_tx, printer_rx) = std_mpsc::channel();
+        let shared = Arc::new(Shared::default());
+        let thread_shared = Arc::clone(&shared);
         std::thread::Builder::new()
             .name("line-input".to_owned())
-            .spawn(move || editor_thread(&setup, &wanted, &events_tx, &printer_tx))
+            .spawn(move || {
+                editor_thread(&setup, &thread_shared, &wanted, &events_tx, &printer_tx);
+            })
             .map_err(|e| io_error(&e.to_string()))?;
         let printer = printer_rx
             .recv()
@@ -82,7 +108,13 @@ impl Input {
             events,
             printer,
             reading: false,
+            shared,
         })
+    }
+
+    /// Marks whether a turn runs (Ctrl+Z is refused meanwhile).
+    pub fn set_busy(&self, busy: bool) {
+        self.shared.busy.store(busy, Ordering::Relaxed);
     }
 
     /// Asks for the next line with `prompt` (once per line).
@@ -95,7 +127,10 @@ impl Input {
     /// The next event; [`Event::Eof`] when the editor is gone.
     pub async fn next(&mut self) -> Event {
         let event = self.events.recv().await.unwrap_or(Event::Eof);
-        self.reading = false;
+        // A refused Ctrl+Z happens in the middle of a read.
+        if event != Event::SuspendRefused {
+            self.reading = false;
+        }
         event
     }
 
@@ -123,11 +158,12 @@ type PrinterSlot = Option<Box<dyn ExternalPrinter + Send>>;
 
 fn editor_thread(
     setup: &Setup,
+    shared: &Arc<Shared>,
     wanted: &std_mpsc::Receiver<String>,
     events: &mpsc::UnboundedSender<Event>,
     printer: &std_mpsc::Sender<PrinterSlot>,
 ) {
-    let mut editor = match editor(setup) {
+    let mut editor = match editor(setup, shared, events) {
         Ok(editor) => editor,
         Err(err) => {
             tracing::warn!(error = %err, "line editor unavailable");
@@ -147,7 +183,14 @@ fn editor_thread(
                 remember(&mut editor, setup, &line);
                 Event::Line(join_continuations(&line))
             }
-            Err(ReadlineError::Interrupted) => Event::Interrupt,
+            Err(ReadlineError::Interrupted) => {
+                let composed = shared
+                    .compose
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take();
+                composed.map_or(Event::Interrupt, Event::Compose)
+            }
             Err(_) => Event::Eof,
         };
         let eof = event == Event::Eof;
@@ -157,7 +200,11 @@ fn editor_thread(
     }
 }
 
-fn editor(setup: &Setup) -> rustyline::Result<Editor<LineHelper, FileHistory>> {
+fn editor(
+    setup: &Setup,
+    shared: &Arc<Shared>,
+    events: &mpsc::UnboundedSender<Event>,
+) -> rustyline::Result<Editor<LineHelper, FileHistory>> {
     let config = Config::builder()
         .max_history_size(HISTORY_CAP)?
         .history_ignore_dups(true)?
@@ -171,6 +218,17 @@ fn editor(setup: &Setup) -> rustyline::Result<Editor<LineHelper, FileHistory>> {
     editor.bind_sequence(
         KeyEvent(KeyCode::Enter, Modifiers::ALT),
         EventHandler::Simple(Cmd::Newline),
+    );
+    editor.bind_sequence(
+        rustyline::Event::KeySeq(vec![KeyEvent::ctrl('X'), KeyEvent::ctrl('E')]),
+        EventHandler::Conditional(Box::new(ComposeKey(Arc::clone(shared)))),
+    );
+    editor.bind_sequence(
+        KeyEvent::ctrl('Z'),
+        EventHandler::Conditional(Box::new(SuspendKey {
+            shared: Arc::clone(shared),
+            events: events.clone(),
+        })),
     );
     prepare_history_file(&setup.history);
     let _ = editor.load_history(&setup.history);
@@ -205,6 +263,49 @@ fn remember(editor: &mut Editor<LineHelper, FileHistory>, setup: &Setup, line: &
     };
     if let Err(err) = result {
         tracing::warn!(error = %err, "cannot write the history file");
+    }
+}
+
+/// Ctrl+X Ctrl+E: keep the buffer for the editor and end the read (as an
+/// interrupt, so the line is neither validated nor remembered).
+struct ComposeKey(Arc<Shared>);
+
+impl ConditionalEventHandler for ComposeKey {
+    fn handle(
+        &self,
+        _evt: &rustyline::Event,
+        _n: RepeatCount,
+        _positive: bool,
+        ctx: &EventContext<'_>,
+    ) -> Option<Cmd> {
+        *self
+            .0
+            .compose
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(ctx.line().to_owned());
+        Some(Cmd::Interrupt)
+    }
+}
+
+/// Ctrl+Z: the editor's own suspend when idle; refused while busy.
+struct SuspendKey {
+    shared: Arc<Shared>,
+    events: mpsc::UnboundedSender<Event>,
+}
+
+impl ConditionalEventHandler for SuspendKey {
+    fn handle(
+        &self,
+        _evt: &rustyline::Event,
+        _n: RepeatCount,
+        _positive: bool,
+        _ctx: &EventContext<'_>,
+    ) -> Option<Cmd> {
+        if self.shared.busy.load(Ordering::Relaxed) {
+            let _ = self.events.send(Event::SuspendRefused);
+            return Some(Cmd::Noop);
+        }
+        None
     }
 }
 

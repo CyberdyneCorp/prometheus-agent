@@ -77,6 +77,12 @@ impl ConfigFile {
         Layered::build(&self.path, &text, overrides)
     }
 
+    /// Schema defaults plus `overrides`, without reading the file
+    /// (`chat --ignore-user-config`).
+    pub(crate) fn load_defaults(&self, overrides: &Overrides) -> Result<Layered, Error> {
+        Layered::build(&self.path, "", overrides)
+    }
+
     /// `config set`: types `raw` by the key's schema (which refuses a
     /// credential for a non-secret key) and writes it.
     ///

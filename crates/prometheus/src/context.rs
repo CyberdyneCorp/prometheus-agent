@@ -61,4 +61,21 @@ impl Context<'_> {
         crate::startup::bind_profile(&scope);
         Ok(scope)
     }
+
+    /// Like [`Context::scope`] with schema defaults in place of the
+    /// profile's `config.toml` (`chat --ignore-user-config`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Context::profile_dir`], invalid overrides.
+    pub fn scope_defaults(&self) -> Result<ProfileScope, Error> {
+        let overrides = Overrides::parse(self.set)?;
+        let scope = ProfileScope::open_defaults(
+            self.profile_dir()?,
+            &overrides,
+            Launch::Profile(self.launch),
+        )?;
+        crate::startup::bind_profile(&scope);
+        Ok(scope)
+    }
 }

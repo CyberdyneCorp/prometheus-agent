@@ -23,9 +23,15 @@ pub const MALFORMED_ARGUMENTS: &str = r#"{"prometheus_error":"the arguments were
 /// The request messages of `rows`, repaired.
 #[must_use]
 pub fn wire(rows: &[Row]) -> Vec<Message> {
+    wire_with(rows, &|_| Vec::new())
+}
+
+/// [`wire`] with the image parts `images` gives each user row (the
+/// attachments it stored; spec: cli, Image attachments).
+pub fn wire_with(rows: &[Row], images: &dyn Fn(&Row) -> Vec<Part>) -> Vec<Message> {
     let mut repair = Repair::default();
     for row in rows {
-        repair.row(row);
+        repair.row(row, images);
     }
     repair.close_calls();
     repair.out
@@ -39,10 +45,13 @@ struct Repair {
 }
 
 impl Repair {
-    fn row(&mut self, row: &Row) {
+    fn row(&mut self, row: &Row, images: &dyn Fn(&Row) -> Vec<Part>) {
         let Some(mut message) = transcript::message(row) else {
             return;
         };
+        if row.role == Role::User {
+            message.parts.extend(images(row));
+        }
         match row.role {
             Role::Tool => self.result(row, message),
             Role::User => {

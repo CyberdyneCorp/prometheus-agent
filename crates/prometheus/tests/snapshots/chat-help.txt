@@ -48,6 +48,9 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --image <PATH>
+          Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
+
       --approvals <MODE>
           Approval mode for this session
 
@@ -88,6 +91,15 @@ Options:
 
       --no-context-files
           Do not load project context files (AGENTS.md and friends)
+
+      --ignore-user-config
+          Run with schema defaults and this command line's flags instead of the profile's config.toml (secrets still resolve)
+
+      --ignore-rules
+          Skip workspace rule files (AGENTS.md and friends), the identity file, the memory snapshot and preloaded skills
+
+      --usage-file <PATH>
+          Write this run's usage as JSON to PATH when it ends, whatever the outcome
 
       --mock-script <PATH>
           Script for the `mock` provider

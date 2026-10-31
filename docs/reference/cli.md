@@ -80,6 +80,9 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --image <PATH>
+          Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
+
       --approvals <MODE>
           Approval mode for this session
 
@@ -120,6 +123,15 @@ Options:
 
       --no-context-files
           Do not load project context files (AGENTS.md and friends)
+
+      --ignore-user-config
+          Run with schema defaults and this command line's flags instead of the profile's config.toml (secrets still resolve)
+
+      --ignore-rules
+          Skip workspace rule files (AGENTS.md and friends), the identity file, the memory snapshot and preloaded skills
+
+      --usage-file <PATH>
+          Write this run's usage as JSON to PATH when it ends, whatever the outcome
 
       --mock-script <PATH>
           Script for the `mock` provider
@@ -190,6 +202,9 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --image <PATH>
+          Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
+
       --approvals <MODE>
           Approval mode for this session
 
@@ -230,6 +245,15 @@ Options:
 
       --no-context-files
           Do not load project context files (AGENTS.md and friends)
+
+      --ignore-user-config
+          Run with schema defaults and this command line's flags instead of the profile's config.toml (secrets still resolve)
+
+      --ignore-rules
+          Skip workspace rule files (AGENTS.md and friends), the identity file, the memory snapshot and preloaded skills
+
+      --usage-file <PATH>
+          Write this run's usage as JSON to PATH when it ends, whatever the outcome
 
       --mock-script <PATH>
           Script for the `mock` provider
@@ -4239,6 +4263,7 @@ List, search, export and manage the profile's sessions
 Usage: prometheus sessions [OPTIONS] <COMMAND>
 
 Commands:
+  browse     Pick a session interactively (status tags, search) and resume it
   list       List sessions, most recently active first
   show       Show a session (id, id prefix or title)
   search     Full-text search over the profile's messages
@@ -4260,6 +4285,45 @@ Commands:
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions browse`
+
+```text
+Pick a session interactively (status tags, search) and resume it
+
+Usage: prometheus sessions browse [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --source <SOURCE>
+          Only sessions from this source
+
+      --all
+          Also hidden, archived and integration (oneshot, tool) sessions
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -4977,6 +5041,7 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus sessions help [COMMAND]
 
 Commands:
+  browse     Pick a session interactively (status tags, search) and resume it
   list       List sessions, most recently active first
   show       Show a session (id, id prefix or title)
   search     Full-text search over the profile's messages
@@ -4994,6 +5059,14 @@ Commands:
   repair     Rebuild the derived search indexes from the stored messages
   vacuum     Compact state.db and truncate its write-ahead log
   help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus sessions help browse`
+
+```text
+Pick a session interactively (status tags, search) and resume it
+
+Usage: prometheus sessions help browse
 ```
 
 ## `prometheus sessions help list`
@@ -7631,6 +7704,7 @@ List, search, export and manage the profile's sessions
 Usage: prometheus help sessions [COMMAND]
 
 Commands:
+  browse     Pick a session interactively (status tags, search) and resume it
   list       List sessions, most recently active first
   show       Show a session (id, id prefix or title)
   search     Full-text search over the profile's messages
@@ -7647,6 +7721,14 @@ Commands:
   rewind     Rewind a session to a user message (soft delete; --restore undoes it)
   repair     Rebuild the derived search indexes from the stored messages
   vacuum     Compact state.db and truncate its write-ahead log
+```
+
+## `prometheus help sessions browse`
+
+```text
+Pick a session interactively (status tags, search) and resume it
+
+Usage: prometheus help sessions browse
 ```
 
 ## `prometheus help sessions list`

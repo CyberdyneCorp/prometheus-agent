@@ -8,6 +8,7 @@
 //! it one-shot ([`oneshot`]) or in the line interface ([`repl`]).
 
 pub mod args;
+pub mod attach;
 pub mod oneshot;
 pub mod recap;
 pub mod repl;
@@ -16,10 +17,13 @@ pub mod session;
 mod signals;
 pub mod terminal;
 pub mod theme;
+pub mod usage_file;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
+use pmt_agent::turn::TurnInput;
 use pmt_config::schema::Interface;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
@@ -76,14 +80,37 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface) -> Mode {
 /// Usage, configuration, store and session errors (the caller prints and
 /// exits with their code); a finished run returns its own status.
 pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
+    let record = Arc::new(usage_file::RunRecord::default());
+    let outcome = run_recorded(args, ctx, ui, &record);
+    match &args.usage_file {
+        Some(path) => usage_file::finish(path, &record, outcome, ui.json),
+        None => outcome,
+    }
+}
+
+fn run_recorded(
+    args: &ChatArgs,
+    ctx: &Context<'_>,
+    ui: Ui,
+    record: &Arc<usage_file::RunRecord>,
+) -> Result<u8, Error> {
     let source = args.prompt_source()?;
+    let images = args
+        .image
+        .iter()
+        .map(|path| attach::load(path))
+        .collect::<Result<Vec<_>, _>>()?;
     if let Some(dir) = &args.cwd {
         change_dir(dir)?;
     }
     let mut set = ctx.set.to_vec();
     set.extend(args.overrides());
     let ctx = Context { set: &set, ..*ctx };
-    let scope = ctx.scope()?;
+    let scope = if args.ignore_user_config {
+        ctx.scope_defaults()?
+    } else {
+        ctx.scope()?
+    };
     let mode = mode(args, terminal::interactive(), scope.config().ui.interface);
     // The prompt is read before anything starts, so a missing file or an
     // empty pipe fails fast.
@@ -102,6 +129,8 @@ pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
         skills: args.skills.clone(),
         pass_session_id: args.pass_session_id,
         no_context_files: args.no_context_files,
+        ignore_user_config: args.ignore_user_config,
+        ignore_rules: args.ignore_rules,
         source_tag: args.source.clone().or_else(|| {
             (mode == Mode::OneShot).then(|| pmt_store::sessions::ONESHOT_TAG.to_owned())
         }),
@@ -111,8 +140,20 @@ pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
         model: args.model.as_deref(),
         mock_script: args.mock_script.as_deref(),
     };
-    let factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?;
+    let mut factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?;
+    record.store(&factory.store);
+    factory.record = Arc::clone(record);
+    let first = First {
+        text: first,
+        images,
+    };
     crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
+}
+
+/// The first prompt and the `--image` attachments that go with it.
+struct First {
+    text: Option<String>,
+    images: Vec<attach::Image>,
 }
 
 async fn start(
@@ -120,7 +161,7 @@ async fn start(
     args: &ChatArgs,
     flags: &RouteFlags<'_>,
     mode: Mode,
-    first: Option<String>,
+    first: First,
     ui: Ui,
 ) -> Result<u8, Error> {
     let target = factory.models.primary(flags).await?;
@@ -162,8 +203,18 @@ async fn start(
     let run_budget = args.run_budget.map(Duration::from_secs);
     match mode {
         Mode::OneShot => {
-            let prompt = first.unwrap_or_default();
-            let status = oneshot::run(&live, prompt, ui.json, run_budget).await;
+            let images = match attach::prepare(&factory, &live, &first.images).await {
+                Ok(images) => images,
+                Err(err) => {
+                    live.close(&factory.store, EndReason::Error).await;
+                    return Err(err);
+                }
+            };
+            let input = TurnInput {
+                images,
+                ..TurnInput::text(first.text.unwrap_or_default())
+            };
+            let status = oneshot::run(&live, input, ui.json, run_budget).await;
             live.close(&factory.store, end_reason(status)).await;
             Ok(status)
         }
@@ -171,7 +222,8 @@ async fn start(
             let memory = memory.unwrap_or_else(|| repl::memory_channel().1);
             let start = repl::Start {
                 resumed: resumed.is_some(),
-                seed: first,
+                seed: first.text,
+                images: first.images,
                 run_budget,
                 terminal,
             };

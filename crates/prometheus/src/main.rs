@@ -76,7 +76,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
         Some(Command::Backup { command }) => backup_cmd::backup(command, &ctx),
         Some(Command::Snapshots { command }) => backup_cmd::snapshots(command, &ctx),
-        Some(Command::Sessions { command }) => sessions_cmd::run(command, &ctx),
+        Some(Command::Sessions { command }) => sessions_cmd::run(command, &ctx, ui(cli)),
         Some(Command::Logs(args)) => logs_cmd::run(args, &ctx),
         Some(Command::Trajectory { command }) => trajectory_cmd::run(command, &ctx),
         Some(Command::Prompt { command }) => prompt_cmd::run(command, &ctx),
