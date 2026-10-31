@@ -202,11 +202,11 @@ impl Matcher {
 }
 
 /// Whether reading `path` is refused (protected secret files such as a
-/// project `.env`); a content search must not leak what `read_file`
-/// refuses. Name searches still list such files: a name is not a secret.
+/// project `.env`, also behind a link); a content search must not leak
+/// what `read_file` refuses. Name searches still list such files: a name
+/// is not a secret.
 fn protected(path: &Path) -> bool {
-    let shown = path.to_string_lossy();
-    guards::secret_file(path, &shown).is_some() || guards::proc_secret(path, &shown).is_some()
+    guards::read_refusal(path, &path.to_string_lossy()).is_some()
 }
 
 /// Every regular file below `root`, honouring `.gitignore` (also outside

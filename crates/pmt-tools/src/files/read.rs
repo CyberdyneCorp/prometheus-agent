@@ -62,7 +62,7 @@ impl FileSession {
             return ToolResult::text(Status::Denied, refusal);
         }
         let path = self.resolve(shown);
-        if let Some(refusal) = read_refusal(&path, shown) {
+        if let Some(refusal) = guards::read_refusal(&path, shown) {
             return ToolResult::text(Status::Denied, refusal);
         }
         let bytes = match self.read_bytes(&path, shown) {
@@ -223,16 +223,6 @@ fn joined(dir: &Path, name: &str) -> String {
     }
     let separator = if dir.contains('\\') { '\\' } else { '/' };
     format!("{}{separator}{name}", dir.trim_end_matches(['/', '\\']))
-}
-
-/// Guards decided by the path alone (resolved and as written).
-fn read_refusal(path: &Path, shown: &str) -> Option<String> {
-    let resolved = guards::resolve_existing(path);
-    [path, resolved.as_path()]
-        .into_iter()
-        .find_map(|candidate| {
-            guards::proc_secret(candidate, shown).or_else(|| guards::secret_file(candidate, shown))
-        })
 }
 
 /// Numbered lines from `offset`, at most `limit` of them and at most

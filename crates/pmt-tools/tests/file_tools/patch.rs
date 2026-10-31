@@ -169,11 +169,80 @@ fn patch_obeys_the_write_guards() {
     let result = fx
         .session()
         .patch(&replace(grants.to_str().unwrap(), "# control", "x"));
-    assert_eq!(result.status, Status::Error);
+    // A guard refusal is `denied`, as for write_file.
+    assert_eq!(result.status, Status::Denied);
     assert_eq!(
         result.text_content(),
         "refusing to write Prometheus control file: grants.toml"
     );
+}
+
+const SECRET: &str = "OPENAI_API_KEY=sk-live-secret\nDEBUG=1\n";
+const SECRET_REFUSAL: &str = "Refusing to read '.env.local': it typically holds secrets; ask the user to share the specific value you need";
+
+/// The call is refused as a read, nothing of the file reaches the model
+/// and the file is untouched.
+fn assert_secret_refused(fx: &Fixture, result: &pmt_tools::result::ToolResult) {
+    assert_eq!(result.status, Status::Denied);
+    let text = result.text_content();
+    assert_eq!(text, SECRET_REFUSAL);
+    assert!(!text.contains("sk-live-secret") && !text.contains("DEBUG"));
+    assert_eq!(fx.read(".env.local"), SECRET);
+}
+
+#[test]
+fn patch_never_reveals_a_protected_secret_file() {
+    let fx = Fixture::new();
+    fx.write(".env.local", SECRET);
+    let session = fx.session();
+    // A hit would return the old line in its diff, a miss the closest
+    // region of the file.
+    let hit = session.patch(&replace(".env.local", "DEBUG=1", "DEBUG=0"));
+    assert_secret_refused(&fx, &hit);
+    let miss = session.patch(&replace(".env.local", "OPENAI_API_KEX=", "X="));
+    assert_secret_refused(&fx, &miss);
+    for patch in [
+        "*** Begin Patch\n*** Update File: .env.local\n@@\n-DEBUG=1\n+DEBUG=0\n*** End Patch",
+        "*** Begin Patch\n*** Delete File: .env.local\n*** End Patch",
+    ] {
+        let result = session.patch(&PatchArgs::V4a {
+            patch: patch.into(),
+        });
+        assert_secret_refused(&fx, &result);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_a_secret_file_is_refused_too() {
+    let fx = Fixture::new();
+    fx.write(".env.local", SECRET);
+    std::os::unix::fs::symlink(fx.path(".env.local"), fx.path("notes.txt")).unwrap();
+    let result = fx
+        .session()
+        .patch(&replace("notes.txt", "DEBUG=1", "DEBUG=0"));
+    assert_eq!(result.status, Status::Denied);
+    assert!(!result.text_content().contains("sk-live-secret"));
+    assert_eq!(fx.read(".env.local"), SECRET);
+}
+
+#[test]
+fn secret_files_can_still_be_created_and_templates_patched() {
+    let fx = Fixture::new();
+    fx.write(".env.example", "OPENAI_API_KEY=\n");
+    let session = fx.session();
+    let template = session.patch(&replace(
+        ".env.example",
+        "OPENAI_API_KEY=",
+        "OPENAI_API_KEY=changeme",
+    ));
+    assert_eq!(template.status, Status::Ok, "{}", template.text_content());
+    assert_eq!(fx.read(".env.example"), "OPENAI_API_KEY=changeme\n");
+    let add = session.patch(&PatchArgs::V4a {
+        patch: "*** Begin Patch\n*** Add File: .env\n+TOKEN=abc\n*** End Patch".into(),
+    });
+    assert_eq!(add.status, Status::Ok, "{}", add.text_content());
+    assert_eq!(fx.read(".env"), "TOKEN=abc\n");
 }
 
 fn pretty(value: &Value) -> String {

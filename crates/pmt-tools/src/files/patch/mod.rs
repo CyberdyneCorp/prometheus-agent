@@ -111,7 +111,7 @@ impl FileSession {
         }
         let (target, content) = match self.existing_text(raw) {
             Ok(found) => found,
-            Err(message) => return ToolResult::error(message),
+            Err(result) => return *result,
         };
         let Some(found) = fuzzy::find(&content, old) else {
             return ToolResult::error(no_match(raw, &content, old));
@@ -154,15 +154,24 @@ impl FileSession {
     }
 
     /// The guarded write target of an existing UTF-8 file and its text.
-    fn existing_text(&self, raw: &str) -> Result<(WriteTarget, String), String> {
-        let target = self
-            .write_target(raw)
-            .map_err(|result| result.text_content())?;
+    /// Editing reads: a file `read_file` refuses (a project `.env`) is
+    /// refused here too, or its old content would leak through the diff
+    /// and the closest-candidate region.
+    fn existing_text(&self, raw: &str) -> Result<(WriteTarget, String), Box<ToolResult>> {
+        let target = self.write_target(raw)?;
+        if let Some(refusal) = guards::read_refusal(&target.path, raw) {
+            return Err(Box::new(ToolResult::text(Status::Denied, refusal)));
+        }
         let Some(bytes) = &target.existing else {
-            return Err(format!("File not found: {raw}"));
+            return Err(Box::new(ToolResult::error(format!(
+                "File not found: {raw}"
+            ))));
         };
-        let text = String::from_utf8(bytes.clone())
-            .map_err(|_| format!("cannot patch '{raw}': it is not UTF-8 text"))?;
+        let text = String::from_utf8(bytes.clone()).map_err(|_| {
+            Box::new(ToolResult::error(format!(
+                "cannot patch '{raw}': it is not UTF-8 text"
+            )))
+        })?;
         Ok((target, text))
     }
 
@@ -182,10 +191,13 @@ impl FileSession {
         for op in &ops {
             match self.plan(op) {
                 Ok(files) => planned.extend(files),
-                Err(why) => {
+                // A guard refusal keeps its own status and text.
+                Err(result) if result.status == Status::Denied => return *result,
+                Err(result) => {
                     return ToolResult::error(format!(
-                        "patch not applied (no file was changed): {}: {why}",
-                        op.path()
+                        "patch not applied (no file was changed): {}: {}",
+                        op.path(),
+                        result.text_content()
                     ));
                 }
             }
@@ -216,12 +228,15 @@ impl FileSession {
     }
 
     /// The files one operation changes, computed without writing.
-    fn plan(&self, op: &v4a::Op) -> Result<Vec<Planned>, String> {
+    fn plan(&self, op: &v4a::Op) -> Result<Vec<Planned>, Box<ToolResult>> {
+        let fail = |why: String| Box::new(ToolResult::error(why));
         match op {
             v4a::Op::Add { path, content } => {
-                let target = self.write_target(path).map_err(|r| r.text_content())?;
+                let target = self.write_target(path)?;
                 if target.existing.is_some() {
-                    return Err("the file already exists; use '*** Update File:'".to_owned());
+                    return Err(fail(
+                        "the file already exists; use '*** Update File:'".to_owned(),
+                    ));
                 }
                 Ok(vec![planned(
                     path,
@@ -240,15 +255,15 @@ impl FileSession {
                 hunks,
             } => {
                 let (target, old) = self.existing_text(path)?;
-                let new = v4a::apply_hunks(&old, hunks)?;
+                let new = v4a::apply_hunks(&old, hunks).map_err(fail)?;
                 let Some(destination) = move_to else {
                     return Ok(vec![planned(path, target.path, Some(old), Some(new))]);
                 };
-                let moved = self
-                    .write_target(destination)
-                    .map_err(|r| r.text_content())?;
+                let moved = self.write_target(destination)?;
                 if moved.existing.is_some() {
-                    return Err(format!("cannot move to '{destination}': it already exists"));
+                    return Err(fail(format!(
+                        "cannot move to '{destination}': it already exists"
+                    )));
                 }
                 Ok(vec![
                     planned(path, target.path, Some(old), None),

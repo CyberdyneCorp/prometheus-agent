@@ -40,8 +40,16 @@ characters. When lines remain the result carries `next_offset`.
 Refused outright: binary files, device files, named pipes and sockets,
 `/proc/<pid>/environ`, `mem`, `maps` and similar files, and project dotenv
 files (`.env`, `.env.*` except `.env.example`, `.env.sample` and
-`.env.template`, `.envrc`), which typically hold secrets. Writing a dotenv
-file stays allowed. Windows NT and device-namespace paths (`\??\`, `\\.\`,
+`.env.template`, `.envrc`), which typically hold secrets; a link to one is
+refused the same way. Every tool that would show file content applies these
+read refusals: [`search_files`](../reference/tools.md#search_files) skips
+such files in content searches and [`patch`](../reference/tools.md#patch)
+refuses to edit them (its diff and closest-candidate region would reveal the
+old content). Writing a dotenv file stays allowed: it can be created by
+[`write_file`](../reference/tools.md#write_file) or a V4A `Add File`, and an
+existing one can be replaced whole without the usual full read (which can
+never happen); one that changed on disk since the session's own write is
+still refused as stale. Windows NT and device-namespace paths (`\??\`, `\\.\`,
 `\\?\UNC\`, `\\?\GLOBALROOT`) and UNC hosts (`\\host\share`) are refused on
 every platform before anything is opened, so a crafted path cannot make the
 machine authenticate to another host.

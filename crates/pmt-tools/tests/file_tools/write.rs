@@ -60,6 +60,23 @@ fn unread_or_partly_read_files_are_not_overwritten_but_new_files_are_written() {
 }
 
 #[test]
+fn a_secret_file_can_be_overwritten_without_a_read_but_not_after_an_external_change() {
+    let fx = Fixture::new();
+    fx.write(".env", "TOKEN=old\n");
+    let session = fx.session();
+    // The session can never read a dotenv file, so the full-read rule
+    // cannot apply to it; writing it is explicitly allowed.
+    let first = session.write_file(".env", "TOKEN=new\n");
+    assert_eq!(first.status, Status::Ok, "{}", first.text_content());
+    assert_eq!(fx.read(".env"), "TOKEN=new\n");
+    // Changed on disk since the session's own write: still blocked.
+    fx.write(".env", "TOKEN=user\n");
+    let blocked = session.write_file(".env", "TOKEN=mine\n");
+    assert_eq!(body(&blocked)["stale_write_blocked"], true);
+    assert_eq!(fx.read(".env"), "TOKEN=user\n");
+}
+
+#[test]
 fn control_files_of_every_profile_are_refused() {
     let fx = Fixture::new();
     let session = fx.session();

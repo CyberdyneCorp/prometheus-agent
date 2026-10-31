@@ -82,6 +82,30 @@ pub fn secret_file(path: &Path, shown: &str) -> Option<String> {
     })
 }
 
+/// Every read refusal decided by the path alone ([`proc_secret`],
+/// [`secret_file`]), on the path as written and on where it leads (links
+/// resolved), so `notes.txt -> .env` is refused too. Every tool that
+/// returns file content (`read_file`, content searches, `patch` diffs and
+/// candidate regions) must apply it.
+#[must_use]
+pub fn read_refusal(path: &Path, shown: &str) -> Option<String> {
+    on_path_or_target(path, |candidate| {
+        proc_secret(candidate, shown).or_else(|| secret_file(candidate, shown))
+    })
+}
+
+/// Whether `path` (or its link target) is a protected dotenv file: one
+/// the session may write but can never read.
+#[must_use]
+pub fn is_secret_file(path: &Path) -> bool {
+    on_path_or_target(path, |candidate| secret_file(candidate, "")).is_some()
+}
+
+fn on_path_or_target(path: &Path, guard: impl Fn(&Path) -> Option<String>) -> Option<String> {
+    let resolved = resolve_existing(path);
+    [path, resolved.as_path()].into_iter().find_map(guard)
+}
+
 /// The read refusal for `/proc/<pid>/environ|mem|maps`-style files.
 #[must_use]
 pub fn proc_secret(path: &Path, shown: &str) -> Option<String> {

@@ -37,7 +37,12 @@ impl FileSession {
                 ));
             }
             let stale = self.tracker().stale(&target.path, tracker::hash(existing));
-            if let Some(stale) = stale {
+            // A dotenv file can be written but never read, so "read it
+            // first" could never be met: the spec's explicit write
+            // permission wins over the full-read rule. A change on disk
+            // since the session's own write still blocks.
+            let unreadable = stale == Some(Stale::NotRead) && guards::is_secret_file(&target.path);
+            if let Some(stale) = stale.filter(|_| !unreadable) {
                 return stale_result(raw, stale);
             }
         }
