@@ -146,8 +146,9 @@ A result longer than its budget is saved to
 `<profile>/cache/spillover/<session>/<call>.txt` (readable only by you,
 secrets redacted) and the model gets a `<persisted-output>` block with the
 size, the file path and a 1,500-character preview instead. The session's
-file tools may read its own spillover directory, so `read_file` and
-`search_files` reach the full result.
+file tools may read its own spillover directory, so
+[`read_file`](../reference/tools.md#read_file) and
+[`search_files`](../reference/tools.md#search_files) reach the full result.
 
 | Budget | Default |
 |---|---|
