@@ -14,7 +14,8 @@
 //!
 //! The built-in tools: [`files`] (`read_file`, `write_file`, `patch`,
 //! `search_files`), [`terminal::tool`] (`terminal`, `process`) and
-//! [`web`] (`web_search`, `web_extract`) and the agent-level entries of
+//! [`web`] (`web_search`, `web_extract`), [`vision`] (`vision_analyze`)
+//! and the agent-level entries of
 //! [`agent_level`] (`todo`, `clarify`, `session_search`, executed by the
 //! turn loop); [`builtin_tools`] lists them and
 //! [`environments`] is where their handlers find each session's state.
@@ -38,6 +39,7 @@ pub mod spillover;
 pub mod surface;
 pub mod terminal;
 pub mod toolset;
+pub mod vision;
 pub mod web;
 
 #[cfg(test)]
@@ -65,6 +67,7 @@ pub fn builtin_tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     let mut tools = web::tools(environments);
     tools.extend(terminal::tool::tools(environments));
     tools.extend(files::tools::tools(environments));
+    tools.extend(vision::tools(environments));
     tools.extend(agent_level::tools());
     tools
 }

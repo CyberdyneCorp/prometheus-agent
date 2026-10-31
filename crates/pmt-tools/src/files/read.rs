@@ -78,7 +78,7 @@ impl FileSession {
     }
 
     /// The file's bytes, after the kind checks; `Err` is the final result.
-    fn read_bytes(&self, path: &Path, shown: &str) -> Result<Vec<u8>, Box<ToolResult>> {
+    pub(super) fn read_bytes(&self, path: &Path, shown: &str) -> Result<Vec<u8>, Box<ToolResult>> {
         let meta = match self.backend().metadata(path) {
             Ok(meta) => meta,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {

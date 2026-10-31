@@ -8,7 +8,7 @@ read_file           exposed
 write_file          exposed
 patch               exposed
 search_files        exposed
-vision_analyze      unregistered
+vision_analyze      exposed
 image_generate      unregistered
 skills_list         unregistered
 skill_view          unregistered

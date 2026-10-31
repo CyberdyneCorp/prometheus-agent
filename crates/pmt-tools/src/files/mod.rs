@@ -106,6 +106,25 @@ impl FileSession {
             .map_err(|err| io_message(raw, &err))
     }
 
+    /// The bytes of a file (images for `vision_analyze`), under the same
+    /// guards as `read_file`: device paths, protected secret files, file
+    /// kind and the backend's capability checks.
+    ///
+    /// # Errors
+    ///
+    /// The refusal or I/O failure as text.
+    pub fn read_binary(&self, raw: &str) -> Result<Vec<u8>, String> {
+        if let Some(refusal) = guards::device_namespace(raw) {
+            return Err(refusal);
+        }
+        let path = self.resolve(raw);
+        if let Some(refusal) = guards::read_refusal(&path, raw) {
+            return Err(refusal);
+        }
+        self.read_bytes(&path, raw)
+            .map_err(|result| result.text_content())
+    }
+
     fn backend(&self) -> &dyn FileBackend {
         self.setup.backend.as_ref()
     }

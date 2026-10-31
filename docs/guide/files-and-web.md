@@ -201,3 +201,34 @@ loopback or link-local address (unless `security.egress.allow_private` or
 a grant allows it), to a cloud metadata address, or does not resolve is
 `blocked`. Each backend call is bounded by `web.extract_timeout_secs`
 (`timeout`); one failing URL never fails the others.
+
+## Images and vision
+
+[`vision_analyze`](../reference/tools.md#vision_analyze) (toolset `vision`,
+part of `core`) answers a `question` about an image given as an http(s)
+URL, a `data:` URL or a local path (read with the same guards as
+[`read_file`](../reference/tools.md#read_file)). Downloads pass the same
+destination checks as `web_extract` and stop at 50 MiB; animations with
+more than 100 frames or more than 100,000,000 pixels over all frames are
+refused. `region = [x1, y1, x2, y2]` crops the image in original pixels
+first, so small text stays readable.
+
+How an image reaches the model follows `vision.image_input_mode`:
+
+| Mode | Pixels sent | Otherwise |
+|---|---|---|
+| `auto` (default) | when the main model supports images and `[auxiliary.vision]` names no provider or model | a description from the `vision` auxiliary route |
+| `native` | always | - |
+| `text` | never | a description from the `vision` auxiliary route |
+
+The same rule covers images you attach,
+[`vision_analyze`](../reference/tools.md#vision_analyze) results and other
+tools' images. On a main route that sees images and carries them in tool
+results (Anthropic Messages), the tool returns the image itself
+(and says so when the image is already attached to your message);
+otherwise the `vision` auxiliary route answers in text. With neither, the
+tool is unavailable with `no vision-capable route`. Routes accept only
+PNG, JPEG, GIF and WebP inline: an SVG is rasterized to PNG, and an image
+that cannot be converted becomes a short note instead of failing the
+request. The choice is made when a message is first sent and never
+changes for it, so the cached prompt prefix stays the same.

@@ -12,6 +12,7 @@ use std::sync::{Arc, LazyLock, PoisonError, RwLock};
 use crate::descriptor::{CallContext, ToolFailure};
 use crate::files::FileSession;
 use crate::terminal::LocalTerminal;
+use crate::vision::VisionSession;
 use crate::web::WebSession;
 
 /// One session's execution environment. Each part is optional: a session
@@ -24,6 +25,8 @@ pub struct SessionEnv {
     pub terminal: Option<Arc<LocalTerminal>>,
     /// The web tools' backends and fetcher.
     pub web: Option<Arc<WebSession>>,
+    /// `vision_analyze`'s routes.
+    pub vision: Option<Arc<VisionSession>>,
 }
 
 /// The attached environments of a process, by session id.
