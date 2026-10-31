@@ -1874,6 +1874,25 @@ version = "0.1.0"
 [[package]]
 name = "pmt-memory"
 version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-agent",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-obs",
+ "pmt-providers",
+ "pmt-store",
+ "pmt-tools",
+ "regex",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "pmt-migrate"
@@ -2140,6 +2159,7 @@ dependencies = [
  "pmt-backup",
  "pmt-config",
  "pmt-core",
+ "pmt-memory",
  "pmt-net",
  "pmt-obs",
  "pmt-providers",

@@ -9,7 +9,9 @@
 //! the user's cost, reported as a WARN `cache.unexpected_break` event
 //! naming the first differing message, and logged at ERROR in debug and
 //! test builds so it cannot pass unnoticed there. The summary handoff's
-//! toolless request is not compared.
+//! toolless request is not compared. This turn's recall block is not part
+//! of the canonical form: it rides on the wire for one turn only
+//! ([`super::recall`]).
 
 use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::CacheBreak;
@@ -69,7 +71,13 @@ impl Turn<'_> {
     /// Compares `request` with the session's previous request and keeps it
     /// as the new reference.
     pub(super) async fn check_prefix(&self, request: &Request) {
-        let next = Prefix::of(request);
+        let mut next = Prefix::of(request);
+        if let Some(e) = &self.ephemeral
+            && let Some(i) = e.index
+            && let Some(slot) = next.messages.get_mut(i)
+        {
+            *slot = digest(&e.stored());
+        }
         let previous = self.agent.swap_prefix(Some(next.clone()));
         let Some(previous) = previous else {
             return;

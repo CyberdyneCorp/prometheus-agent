@@ -191,10 +191,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 18. M1 Memory
 
-- [ ] 18.1 Implement the built-in memory store as rows in `state.db` (typed entries, core and archival tiers, core character budgets) and the frozen system-prompt snapshot refreshed only at compression or a new session; verify that a mid-session write does not change the prompt (spec: memory)
-- [ ] 18.2 Implement the `memory` tool (targets, operations, `new_text` alias, `replace` refusal), validation before any write, atomic batches judged on the final state, entry matching, the per-turn retry cap, and exact duplicate adds as no-ops; verify with tool tests for each action and for re-adding a known fact (spec: memory)
-- [ ] 18.3 Implement threat scanning of memory content, store enable flags, write approval with pending changes, the rule that background review cannot delete unattended, the nudge interval, and per-turn recall injection as a fenced ephemeral block; verify that recall never persists into history (spec: memory)
-- [ ] 18.4 Implement the `memory` CLI (`list|show|edit|export|import`) with Markdown as the edit/export view; verify a round trip export → edit → import (spec: memory)
+- [x] 18.1 Implement the built-in memory store as rows in `state.db` (typed entries, core and archival tiers, core character budgets) and the frozen system-prompt snapshot refreshed only at compression or a new session; verify that a mid-session write does not change the prompt (spec: memory)
+- [x] 18.2 Implement the `memory` tool (targets, operations, `new_text` alias, `replace` refusal), validation before any write, atomic batches judged on the final state, entry matching, the per-turn retry cap, and exact duplicate adds as no-ops; verify with tool tests for each action and for re-adding a known fact (spec: memory)
+- [x] 18.3 Implement threat scanning of memory content, store enable flags, write approval with pending changes, the rule that background review cannot delete unattended, the nudge interval, and per-turn recall injection as a fenced ephemeral block; verify that recall never persists into history (spec: memory)
+- [x] 18.4 Implement the `memory` CLI (`list|show|edit|export|import`) with Markdown as the edit/export view; verify a round trip export → edit → import (spec: memory)
 
 ## 19. M1 CLI line interface
 

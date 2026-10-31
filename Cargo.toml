@@ -16,6 +16,7 @@ repository = "https://github.com/CyberdyneCorp/prometheus-agent"
 pmt-agent = { path = "crates/pmt-agent" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
+pmt-memory = { path = "crates/pmt-memory" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
 pmt-providers = { path = "crates/pmt-providers" }

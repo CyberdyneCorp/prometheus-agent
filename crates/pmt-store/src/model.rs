@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 macro_rules! store_enum {
     ($(#[$attr:meta])* $name:ident, $field:literal { $($(#[$vattr:meta])* $variant:ident = $wire:literal),+ $(,)? }) => {
         $(#[$attr])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
         #[serde(rename_all = "snake_case")]
         pub enum $name {
             $($(#[$vattr])* $variant),+
@@ -206,6 +206,74 @@ store_enum!(
         Subscription = "subscription",
         /// Not priced (`cost_usd` null).
         Unknown = "unknown",
+    }
+);
+
+store_enum!(
+    /// Which built-in memory store an entry belongs to.
+    MemoryTarget, "target" {
+        /// The agent's own notes.
+        Memory = "memory",
+        /// What the agent knows about the user.
+        User = "user",
+    }
+);
+
+store_enum!(
+    /// What a memory entry records.
+    MemoryKind, "kind" {
+        /// A fact (the default).
+        Fact = "fact",
+        /// A preference.
+        Preference = "preference",
+        /// A standing instruction.
+        Instruction = "instruction",
+        /// A project.
+        Project = "project",
+        /// A person.
+        Person = "person",
+        /// An event.
+        Event = "event",
+    }
+);
+
+store_enum!(
+    /// Where a memory entry is read: the budgeted prompt snapshot or recall.
+    MemoryTier, "tier" {
+        /// Rendered into the system prompt at session start.
+        Core = "core",
+        /// Reached by per-turn recall only.
+        Archival = "archival",
+    }
+);
+
+store_enum!(
+    /// A memory entry's lifecycle state.
+    MemoryStatus, "status" {
+        /// In use.
+        Active = "active",
+        /// Kept but excluded from recall and the snapshot.
+        Dormant = "dormant",
+        /// Matched the threat scan; kept for the user to inspect.
+        Blocked = "blocked",
+    }
+);
+
+store_enum!(
+    /// Who wrote a memory entry.
+    MemoryOrigin, "origin" {
+        /// The user (CLI, edit).
+        User = "user",
+        /// The agent's `memory` tool.
+        Agent = "agent",
+        /// A background memory review.
+        BackgroundReview = "background_review",
+        /// An external memory provider.
+        Provider = "provider",
+        /// A consolidation pass.
+        Consolidation = "consolidation",
+        /// `prometheus memory import`.
+        Import = "import",
     }
 );
 

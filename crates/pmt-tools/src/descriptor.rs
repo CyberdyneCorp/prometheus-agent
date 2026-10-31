@@ -300,6 +300,11 @@ pub type Rewriter = Arc<dyn Fn(&str, &ExposedNames) -> String + Send + Sync>;
 /// The names of the tools a session exposes.
 pub type ExposedNames = std::collections::BTreeSet<String>;
 
+/// Narrows a static argument schema to the profile's configuration when the
+/// surface is built (the `memory` tool advertises only enabled targets).
+pub type ParametersRewriter =
+    Arc<dyn Fn(&serde_json::Value, &pmt_config::schema::Config) -> serde_json::Value + Send + Sync>;
+
 /// A descriptor with its executor, availability probe and description
 /// rewriter: one registry entry.
 #[derive(Clone)]
@@ -314,6 +319,8 @@ pub struct RegisteredTool {
     pub probe: Option<Arc<dyn Probe>>,
     /// Session-time description rewriter.
     pub rewriter: Option<Rewriter>,
+    /// Session-time argument schema rewriter.
+    pub parameters: Option<ParametersRewriter>,
 }
 
 impl RegisteredTool {
@@ -326,6 +333,7 @@ impl RegisteredTool {
             executor: Executor::Handler(handler),
             probe: None,
             rewriter: None,
+            parameters: None,
         }
     }
 
@@ -338,6 +346,7 @@ impl RegisteredTool {
             executor: Executor::AgentLoop,
             probe: None,
             rewriter: None,
+            parameters: None,
         }
     }
 
@@ -353,6 +362,22 @@ impl RegisteredTool {
     pub fn with_rewriter(mut self, rewriter: Rewriter) -> Self {
         self.rewriter = Some(rewriter);
         self
+    }
+
+    /// Adds an argument schema rewriter.
+    #[must_use]
+    pub fn with_parameters(mut self, rewriter: ParametersRewriter) -> Self {
+        self.parameters = Some(rewriter);
+        self
+    }
+
+    /// The argument schema a session of `config` sees.
+    #[must_use]
+    pub fn parameters_for(&self, config: &pmt_config::schema::Config) -> serde_json::Value {
+        match &self.parameters {
+            Some(rewrite) => rewrite(&self.descriptor.parameters, config),
+            None => self.descriptor.parameters.clone(),
+        }
     }
 
     /// The tool name.

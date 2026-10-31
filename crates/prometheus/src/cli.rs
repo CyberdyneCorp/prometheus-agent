@@ -8,6 +8,7 @@ use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use pmt_store::{Role, Source};
 
 use crate::build_info;
+pub use crate::memory_cmd::args::MemoryCommand;
 pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand};
 
 // The command name is fixed rather than taken from `argv[0]`, so the `pmt`
@@ -64,6 +65,12 @@ pub enum Command {
         /// The skills subcommand.
         #[command(subcommand)]
         command: SkillsCommand,
+    },
+    /// Inspect, edit, export and import what the agent remembers (built-in memory).
+    Memory {
+        /// The memory subcommand.
+        #[command(subcommand)]
+        command: MemoryCommand,
     },
     /// List and revoke the profile's permanent capability grants and approvals.
     Grants {

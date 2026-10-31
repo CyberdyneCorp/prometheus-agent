@@ -23,6 +23,7 @@ pub mod interrupt;
 pub mod iteration;
 pub mod lease;
 pub mod model;
+mod recall;
 mod recovery;
 pub mod repair;
 mod round;
@@ -161,6 +162,9 @@ pub struct AgentSetup {
     /// skills index, plugin sections) before every prompt rebuild, so a
     /// compaction or `--now` rebuild sees the current state.
     pub refresh_prompt: Option<RefreshPrompt>,
+    /// The session's memory: per-turn recall and the `memory` tool's turn
+    /// state (pass the same port to `AgentTools::with_memory`).
+    pub memory: Option<Arc<dyn crate::tools::MemoryPort>>,
 }
 
 /// Updates a [`PromptSetup`] from the current disk state.
@@ -194,6 +198,7 @@ impl AgentSetup {
             max_iterations: None,
             summarizer: None,
             refresh_prompt: None,
+            memory: None,
         }
     }
 }

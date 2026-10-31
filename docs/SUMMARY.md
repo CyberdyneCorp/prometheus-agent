@@ -18,6 +18,7 @@
 - [Browser automation](guide/browser.md)
 - [Tools and toolsets](guide/tools.md)
 - [Skills](guide/skills.md)
+- [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)
 
 # Reference

@@ -16,6 +16,7 @@ pub mod context;
 pub mod fallback_cmd;
 pub mod grants_cmd;
 pub mod logs_cmd;
+pub mod memory_cmd;
 pub mod model_cmd;
 pub mod model_slash;
 pub mod output;

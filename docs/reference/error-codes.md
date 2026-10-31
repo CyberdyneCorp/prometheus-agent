@@ -214,3 +214,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `skill.review_running` | `conflict` | 75 | A background skill review of this session is already running (`a review is already running`); `/refine` again once it posts its summary. |
 | `skill.bundle_invalid` | `invalid_input` | 65 | A skill bundle (`<profile>/skill-bundles/<slug>.toml`) is malformed: TOML that does not parse, an unknown field, an empty `skills` list or more than 32 entries; `prometheus skills bundles list` reports each file. |
 | `skill.bundle_not_found` | `not_found` | 66 | No skill bundle has that slug; `prometheus skills bundles list` lists them. |
+| `memory.not_found` | `not_found` | 66 | No memory entry of the profile has that id; `prometheus memory list --all` shows every entry with its id. |
+| `memory.invalid` | `invalid_input` | 65 | A memory write, import file or edited Markdown view is malformed: an unknown target, kind or tier, an empty entry, an `expires_at` that is not a future RFC 3339 timestamp, or a section heading that names no known entry. |
+| `memory.over_budget` | `invalid_input` | 65 | The write would push the target's core tier past `memory.memory_char_limit` or `memory.user_char_limit` (or the archival tier past `memory.archival_max_entries`); consolidate entries in one batch or store the entry with `tier: "archival"`. |
+| `memory.blocked` | `permission_denied` | 77 | The entry matches a prompt-injection or secret-exfiltration pattern, or contains a credential; memory never stores it. |
+| `memory.pending_not_found` | `not_found` | 66 | No staged memory change has that id; `prometheus memory pending` lists them. |
+| `memory.stale` | `conflict` | 75 | The staged change was proposed against an entry that has since changed or been removed; reject it and let the agent propose again. |
+| `memory.disabled` | `config` | 78 | The target's built-in store is disabled (`memory.memory_enabled` / `memory.user_profile_enabled`); enable it with `prometheus config set`. |

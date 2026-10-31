@@ -198,6 +198,8 @@ pub(super) struct Turn<'a> {
     pub(super) compression_attempts: u32,
     /// Active rows the latest request was built from.
     pub(super) request_rows: usize,
+    /// This turn's recall block (wire only).
+    pub(super) ephemeral: Option<super::recall::Ephemeral>,
 }
 
 impl<'a> Turn<'a> {
@@ -231,6 +233,7 @@ impl<'a> Turn<'a> {
             next_trigger: Trigger::TurnStart,
             compression_attempts: 0,
             request_rows: 0,
+            ephemeral: None,
         }
     }
 
@@ -253,9 +256,10 @@ impl<'a> Turn<'a> {
         .await;
         self.emit(Event::UserMessage(MessageText {
             message_id: Some(message_id.to_string()),
-            text: wire,
+            text: wire.clone(),
         }))
         .await;
+        self.recall(&text, &wire).await;
         let ending = self.iterate(&mut frozen).await?;
         self.finish(ending, Some(&frozen)).await
     }
@@ -402,6 +406,9 @@ impl<'a> Turn<'a> {
             cache,
             reasoning: None,
         };
+        if let Some(ephemeral) = &mut self.ephemeral {
+            ephemeral.attach(&mut request.messages);
+        }
         breakpoints::plan(&mut request, route.wire_format);
         Ok(request)
     }

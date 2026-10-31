@@ -127,7 +127,13 @@ impl ToolSurface {
             .map(|(i, name)| (name.as_str(), i))
             .collect();
         candidates.sort_by_key(|tool| position.get(tool.name()).copied().unwrap_or(usize::MAX));
-        Self::freeze(registry, candidates, excluded, selection.posture)
+        Self::freeze(
+            registry,
+            candidates,
+            excluded,
+            selection.posture,
+            inputs.config,
+        )
     }
 
     fn freeze(
@@ -135,6 +141,7 @@ impl ToolSurface {
         tools: Vec<Arc<RegisteredTool>>,
         excluded: BTreeMap<String, Exclusion>,
         posture: bool,
+        config: &Config,
     ) -> Self {
         let exposed: ExposedNames = tools.iter().map(|t| t.name().to_owned()).collect();
         let absent: BTreeSet<&str> = excluded.keys().map(String::as_str).collect();
@@ -149,7 +156,7 @@ impl ToolSurface {
                 ToolDefinition {
                     name: tool.name().to_owned(),
                     description,
-                    parameters: tool.descriptor.parameters.clone(),
+                    parameters: tool.parameters_for(config),
                 }
             })
             .collect();

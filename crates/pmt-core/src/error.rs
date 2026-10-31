@@ -645,6 +645,27 @@ error_codes! {
     /// No skill bundle has that slug.
     SKILL_BUNDLE_NOT_FOUND = ("skill.bundle_not_found", NotFound,
         "No skill bundle has that slug; `prometheus skills bundles list` lists them.");
+    /// No memory entry has that id.
+    MEMORY_NOT_FOUND = ("memory.not_found", NotFound,
+        "No memory entry of the profile has that id; `prometheus memory list --all` shows every entry with its id.");
+    /// A memory write or a memory file is malformed.
+    MEMORY_INVALID = ("memory.invalid", InvalidInput,
+        "A memory write, import file or edited Markdown view is malformed: an unknown target, kind or tier, an empty entry, an `expires_at` that is not a future RFC 3339 timestamp, or a section heading that names no known entry.");
+    /// A memory write would exceed the core tier's character budget.
+    MEMORY_OVER_BUDGET = ("memory.over_budget", InvalidInput,
+        "The write would push the target's core tier past `memory.memory_char_limit` or `memory.user_char_limit` (or the archival tier past `memory.archival_max_entries`); consolidate entries in one batch or store the entry with `tier: \"archival\"`.");
+    /// A memory write was refused by the threat or secret scan.
+    MEMORY_BLOCKED = ("memory.blocked", PermissionDenied,
+        "The entry matches a prompt-injection or secret-exfiltration pattern, or contains a credential; memory never stores it.");
+    /// No pending memory change has that id.
+    MEMORY_PENDING_NOT_FOUND = ("memory.pending_not_found", NotFound,
+        "No staged memory change has that id; `prometheus memory pending` lists them.");
+    /// A staged memory change no longer matches the entry it was proposed against.
+    MEMORY_STALE = ("memory.stale", Conflict,
+        "The staged change was proposed against an entry that has since changed or been removed; reject it and let the agent propose again.");
+    /// The built-in memory store is disabled for that target.
+    MEMORY_DISABLED = ("memory.disabled", Config,
+        "The target's built-in store is disabled (`memory.memory_enabled` / `memory.user_profile_enabled`); enable it with `prometheus config set`.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

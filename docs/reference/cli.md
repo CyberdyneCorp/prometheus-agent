@@ -14,6 +14,7 @@ Commands:
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
   skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
   grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
@@ -2065,6 +2066,719 @@ Usage: prometheus skills help repair-official
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus skills help help
+```
+
+## `prometheus memory`
+
+```text
+Inspect, edit, export and import what the agent remembers (built-in memory)
+
+Usage: prometheus memory [OPTIONS] <COMMAND>
+
+Commands:
+  status   Show whether built-in memory is enabled, each store's usage and pending changes
+  list     List entries (dormant ones only with --all)
+  show     Show one entry in full (blocked entries show their raw text here)
+  add      Add an entry (from the next session's snapshot)
+  rm       Remove an entry
+  pin      Pin an entry
+  unpin    Unpin an entry
+  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export   Print every entry as Markdown (the edit view) or JSONL
+  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending  List memory changes staged for approval
+  approve  Apply a staged change (`all` for every one)
+  reject   Drop a staged change (`all` for every one)
+  reset    Delete every entry of a store
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory status`
+
+```text
+Show whether built-in memory is enabled, each store's usage and pending changes
+
+Usage: prometheus memory status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory list`
+
+```text
+List entries (dormant ones only with --all)
+
+Usage: prometheus memory list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+      --kind <KIND>
+          Only this kind
+
+          Possible values:
+          - fact:        A fact
+          - preference:  A preference
+          - instruction: A standing instruction
+          - project:     A project
+          - person:      A person
+          - event:       An event
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --tier <TIER>
+          Only this tier
+
+          Possible values:
+          - core:     Shown in the system prompt (budgeted)
+          - archival: Recalled per turn
+
+      --all
+          Include dormant entries
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory show`
+
+```text
+Show one entry in full (blocked entries show their raw text here)
+
+Usage: prometheus memory show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id (m_...)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory add`
+
+```text
+Add an entry (from the next session's snapshot)
+
+Usage: prometheus memory add [OPTIONS] <CONTENT>
+
+Arguments:
+  <CONTENT>
+          The text
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          The store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+          [default: memory]
+
+      --kind <KIND>
+          The kind
+
+          Possible values:
+          - fact:        A fact
+          - preference:  A preference
+          - instruction: A standing instruction
+          - project:     A project
+          - person:      A person
+          - event:       An event
+
+          [default: fact]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --tier <TIER>
+          The tier
+
+          Possible values:
+          - core:     Shown in the system prompt (budgeted)
+          - archival: Recalled per turn
+
+          [default: core]
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory rm`
+
+```text
+Remove an entry
+
+Usage: prometheus memory rm [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory pin`
+
+```text
+Pin an entry
+
+Usage: prometheus memory pin [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory unpin`
+
+```text
+Unpin an entry
+
+Usage: prometheus memory unpin [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory edit`
+
+```text
+Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+
+Usage: prometheus memory edit [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory export`
+
+```text
+Print every entry as Markdown (the edit view) or JSONL
+
+Usage: prometheus memory export [OPTIONS]
+
+Options:
+      --format <FORMAT>
+          The format
+
+          Possible values:
+          - md:    The Markdown view `memory edit` opens
+          - jsonl: One JSON object per entry
+
+          [default: md]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+  -o, --output <FILE>
+          Write to this file instead of stdout
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory import`
+
+```text
+Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+
+Usage: prometheus memory import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          The store a Hermes file belongs to (default: from the file name)
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --tier <TIER>
+          The tier of entries from a Hermes file
+
+          Possible values:
+          - core:     Shown in the system prompt (budgeted)
+          - archival: Recalled per turn
+
+          [default: core]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory pending`
+
+```text
+List memory changes staged for approval
+
+Usage: prometheus memory pending [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory approve`
+
+```text
+Apply a staged change (`all` for every one)
+
+Usage: prometheus memory approve [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory reject`
+
+```text
+Drop a staged change (`all` for every one)
+
+Usage: prometheus memory reject [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory reset`
+
+```text
+Delete every entry of a store
+
+Usage: prometheus memory reset [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Which store
+
+          Possible values:
+          - all:    Both stores
+          - memory: The agent's own notes
+          - user:   The user profile
+
+          [default: all]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus memory help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus memory help [COMMAND]
+
+Commands:
+  status   Show whether built-in memory is enabled, each store's usage and pending changes
+  list     List entries (dormant ones only with --all)
+  show     Show one entry in full (blocked entries show their raw text here)
+  add      Add an entry (from the next session's snapshot)
+  rm       Remove an entry
+  pin      Pin an entry
+  unpin    Unpin an entry
+  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export   Print every entry as Markdown (the edit view) or JSONL
+  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending  List memory changes staged for approval
+  approve  Apply a staged change (`all` for every one)
+  reject   Drop a staged change (`all` for every one)
+  reset    Delete every entry of a store
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus memory help status`
+
+```text
+Show whether built-in memory is enabled, each store's usage and pending changes
+
+Usage: prometheus memory help status
+```
+
+## `prometheus memory help list`
+
+```text
+List entries (dormant ones only with --all)
+
+Usage: prometheus memory help list
+```
+
+## `prometheus memory help show`
+
+```text
+Show one entry in full (blocked entries show their raw text here)
+
+Usage: prometheus memory help show
+```
+
+## `prometheus memory help add`
+
+```text
+Add an entry (from the next session's snapshot)
+
+Usage: prometheus memory help add
+```
+
+## `prometheus memory help rm`
+
+```text
+Remove an entry
+
+Usage: prometheus memory help rm
+```
+
+## `prometheus memory help pin`
+
+```text
+Pin an entry
+
+Usage: prometheus memory help pin
+```
+
+## `prometheus memory help unpin`
+
+```text
+Unpin an entry
+
+Usage: prometheus memory help unpin
+```
+
+## `prometheus memory help edit`
+
+```text
+Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+
+Usage: prometheus memory help edit
+```
+
+## `prometheus memory help export`
+
+```text
+Print every entry as Markdown (the edit view) or JSONL
+
+Usage: prometheus memory help export
+```
+
+## `prometheus memory help import`
+
+```text
+Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+
+Usage: prometheus memory help import
+```
+
+## `prometheus memory help pending`
+
+```text
+List memory changes staged for approval
+
+Usage: prometheus memory help pending
+```
+
+## `prometheus memory help approve`
+
+```text
+Apply a staged change (`all` for every one)
+
+Usage: prometheus memory help approve
+```
+
+## `prometheus memory help reject`
+
+```text
+Drop a staged change (`all` for every one)
+
+Usage: prometheus memory help reject
+```
+
+## `prometheus memory help reset`
+
+```text
+Delete every entry of a store
+
+Usage: prometheus memory help reset
+```
+
+## `prometheus memory help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus memory help help
 ```
 
 ## `prometheus grants`
@@ -5117,6 +5831,7 @@ Commands:
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
   skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
   grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
@@ -5553,6 +6268,142 @@ Usage: prometheus help skills list-modified
 Re-record the provenance of official catalog installs that match the embedded copy
 
 Usage: prometheus help skills repair-official
+```
+
+## `prometheus help memory`
+
+```text
+Inspect, edit, export and import what the agent remembers (built-in memory)
+
+Usage: prometheus help memory [COMMAND]
+
+Commands:
+  status   Show whether built-in memory is enabled, each store's usage and pending changes
+  list     List entries (dormant ones only with --all)
+  show     Show one entry in full (blocked entries show their raw text here)
+  add      Add an entry (from the next session's snapshot)
+  rm       Remove an entry
+  pin      Pin an entry
+  unpin    Unpin an entry
+  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export   Print every entry as Markdown (the edit view) or JSONL
+  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending  List memory changes staged for approval
+  approve  Apply a staged change (`all` for every one)
+  reject   Drop a staged change (`all` for every one)
+  reset    Delete every entry of a store
+```
+
+## `prometheus help memory status`
+
+```text
+Show whether built-in memory is enabled, each store's usage and pending changes
+
+Usage: prometheus help memory status
+```
+
+## `prometheus help memory list`
+
+```text
+List entries (dormant ones only with --all)
+
+Usage: prometheus help memory list
+```
+
+## `prometheus help memory show`
+
+```text
+Show one entry in full (blocked entries show their raw text here)
+
+Usage: prometheus help memory show
+```
+
+## `prometheus help memory add`
+
+```text
+Add an entry (from the next session's snapshot)
+
+Usage: prometheus help memory add
+```
+
+## `prometheus help memory rm`
+
+```text
+Remove an entry
+
+Usage: prometheus help memory rm
+```
+
+## `prometheus help memory pin`
+
+```text
+Pin an entry
+
+Usage: prometheus help memory pin
+```
+
+## `prometheus help memory unpin`
+
+```text
+Unpin an entry
+
+Usage: prometheus help memory unpin
+```
+
+## `prometheus help memory edit`
+
+```text
+Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+
+Usage: prometheus help memory edit
+```
+
+## `prometheus help memory export`
+
+```text
+Print every entry as Markdown (the edit view) or JSONL
+
+Usage: prometheus help memory export
+```
+
+## `prometheus help memory import`
+
+```text
+Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+
+Usage: prometheus help memory import
+```
+
+## `prometheus help memory pending`
+
+```text
+List memory changes staged for approval
+
+Usage: prometheus help memory pending
+```
+
+## `prometheus help memory approve`
+
+```text
+Apply a staged change (`all` for every one)
+
+Usage: prometheus help memory approve
+```
+
+## `prometheus help memory reject`
+
+```text
+Drop a staged change (`all` for every one)
+
+Usage: prometheus help memory reject
+```
+
+## `prometheus help memory reset`
+
+```text
+Delete every entry of a store
+
+Usage: prometheus help memory reset
 ```
 
 ## `prometheus help grants`

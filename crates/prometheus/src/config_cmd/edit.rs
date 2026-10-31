@@ -15,7 +15,7 @@ use pmt_core::private_fs;
 use crate::output::print_error;
 
 /// The editor when neither `VISUAL` nor `EDITOR` is set.
-const DEFAULT_EDITOR: &str = if cfg!(windows) { "notepad" } else { "vi" };
+pub(crate) const DEFAULT_EDITOR: &str = if cfg!(windows) { "notepad" } else { "vi" };
 
 /// Runs the edit loop for `profile`.
 pub(super) fn run(profile: &ProfileDir, launch: &LaunchEnv) -> Result<u8, Error> {
@@ -69,7 +69,7 @@ fn edit_until_valid(
 }
 
 /// Runs the editor command (which may carry arguments) on `path`.
-fn launch_editor(editor: &str, path: &Path) -> Result<(), Error> {
+pub(crate) fn launch_editor(editor: &str, path: &Path) -> Result<(), Error> {
     let mut words = editor.split_whitespace();
     let program = words.next().unwrap_or(DEFAULT_EDITOR);
     let status = Command::new(program)
@@ -88,7 +88,7 @@ fn launch_editor(editor: &str, path: &Path) -> Result<(), Error> {
     } else {
         Err(Error::new(
             &codes::CONFIG_EDITOR,
-            format!("editor '{program}' exited with {status}; config.toml is unchanged"),
+            format!("editor '{program}' exited with {status}; nothing was saved"),
         ))
     }
 }

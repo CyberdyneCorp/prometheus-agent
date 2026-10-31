@@ -3,7 +3,7 @@
 //! format-preserving writer, and the schema, docs and `explain` come from
 //! the typed schema.
 
-mod edit;
+pub(crate) mod edit;
 mod explain;
 
 use pmt_config::{catalog, reference};

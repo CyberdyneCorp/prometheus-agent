@@ -47,6 +47,7 @@ pub fn builtin_tools() -> Vec<RegisteredTool> {
     tools.extend(pmt_skills::tools::tools(
         &pmt_skills::SkillSessions::process(),
     ));
+    tools.push(pmt_memory::tool::registered());
     tools
 }
 

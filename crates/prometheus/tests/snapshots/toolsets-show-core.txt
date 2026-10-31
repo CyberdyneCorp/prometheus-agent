@@ -19,7 +19,7 @@ browser_dialog      unregistered
 browser_vault       unregistered
 text_to_speech      unregistered
 todo                exposed
-memory              unregistered
+memory              exposed
 session_search      exposed
 clarify             exposed
 execute_code        unregistered

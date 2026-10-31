@@ -4,6 +4,7 @@
 //! session state they need lives.
 
 pub mod clarify;
+pub mod memory;
 pub mod session_search;
 pub mod todo;
 
@@ -15,6 +16,7 @@ use pmt_tools::ToolResult;
 use serde_json::Value;
 
 pub use clarify::Clarifier;
+pub use memory::{MemoryPort, Recalled};
 pub use session_search::SessionSearch;
 pub use todo::TodoList;
 
@@ -25,6 +27,7 @@ pub struct AgentTools {
     todo: Mutex<TodoList>,
     clarify: Clarifier,
     search: SessionSearch,
+    memory: Option<Arc<dyn MemoryPort>>,
 }
 
 impl AgentTools {
@@ -47,7 +50,16 @@ impl AgentTools {
             todo: Mutex::new(todo),
             clarify: clarifier,
             search,
+            memory: None,
         })
+    }
+
+    /// Runs `memory` calls through `memory` (pass the same port as
+    /// `AgentSetup::memory`).
+    #[must_use]
+    pub fn with_memory(mut self, memory: Arc<dyn MemoryPort>) -> Self {
+        self.memory = Some(memory);
+        self
     }
 
     /// Runs `name` when it is an agent-level tool this loop executes;
@@ -57,6 +69,7 @@ impl AgentTools {
             "todo" => self.todo(arguments),
             "clarify" => self.clarify.call(arguments).await,
             "session_search" => self.search.call(arguments).await,
+            "memory" => self.memory.as_ref()?.call(arguments).await,
             _ => return None,
         })
     }
