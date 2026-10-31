@@ -115,6 +115,15 @@ impl Models {
 }
 
 /// Runs `future` on a fresh current-thread runtime.
+/// `prometheus model set <reference>` without flags (the setup wizard).
+///
+/// # Errors
+///
+/// As `model set`.
+pub(crate) fn set_model(ctx: &Context<'_>, reference: &str) -> Result<u8, Error> {
+    set::run(ctx, reference, None, None)
+}
+
 pub(crate) fn block_on<F: Future>(future: F) -> Result<F::Output, Error> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()

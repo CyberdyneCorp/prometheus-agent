@@ -207,9 +207,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 19.7 Implement composer image attachments (described for non-vision models), external editor composition (an empty file cancels), shell escape in the REPL (output kept local) and job-control suspend and resume; verify with expectrl tests (spec: cli)
 - [x] 19.8 Implement tool progress display with the focus view, display preferences (e.g. bell on approval), `chat --usage-file` written atomically on every exit path, and the flag that ignores profile config and rules; verify that the usage file is written on failure and SIGINT (spec: cli)
 - [x] 19.9 Implement local transcript and session commands (status without a model call, all-sessions views refused for non-admins), the interactive session browser with status tags, retry semantics (retry replaces the answer) and queue management commands (list, edit, reorder, drop); verify with expectrl tests (spec: cli, spec: session-storage)
-- [ ] 19.10 Implement the setup wizard (provider choice incl. subscription sign-in, writes config and secrets to the right stores); verify with a scripted run on a temp home (spec: cli, spec: configuration-and-profiles)
-- [ ] 19.11 Implement onboarding state (tips shown once), the tool configurator (unknown providers refused) and the plain-text setup summary (URL credentials redacted); verify with scripted runs on a temp home (spec: cli, spec: observability)
-- [ ] 19.12 Implement `prometheus doctor` with the check groups, `--online`, `--json`, the enumerated `--fix` repairs and `doctor security`; verify that each repair is printed and that no network request happens without `--online` (spec: workspace-architecture, spec: cli, spec: security-boundaries)
+- [x] 19.10 Implement the setup wizard (provider choice incl. subscription sign-in, writes config and secrets to the right stores); verify with a scripted run on a temp home (spec: cli, spec: configuration-and-profiles)
+- [x] 19.11 Implement onboarding state (tips shown once), the tool configurator (unknown providers refused) and the plain-text setup summary (URL credentials redacted); verify with scripted runs on a temp home (spec: cli, spec: observability)
+- [x] 19.12 Implement `prometheus doctor` with the check groups, `--online`, `--json`, the enumerated `--fix` repairs and `doctor security`; verify that each repair is printed and that no network request happens without `--online` (spec: workspace-architecture, spec: cli, spec: security-boundaries)
 
 ## 20. M1 Distribution and self-update
 

@@ -12,6 +12,9 @@ Usage: prometheus [OPTIONS] [COMMAND]
 Commands:
   chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
   skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
@@ -299,6 +302,207 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus setup`
+
+```text
+Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+
+Usage: prometheus setup [OPTIONS] [SECTION]
+
+Arguments:
+  [SECTION]
+          Only this section (all but `tools` and `gateway` when omitted)
+
+          Possible values:
+          - model:    Provider and model, or a subscription sign-in, and its API key
+          - secrets:  The secrets the configured providers need
+          - tools:    Toolsets per surface and tool providers
+          - terminal: The terminal backend
+          - memory:   The memory stores
+          - gateway:  Messaging adapters (with the gateway)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --non-interactive
+          Take values from `--set` and secrets from the environment instead of asking; a missing required value exits 78
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reset-onboarding
+          Clear the onboarding state (offered setup, shown tips, tour steps)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus doctor`
+
+```text
+Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+
+Usage: prometheus doctor [OPTIONS] [GROUP]
+
+Arguments:
+  [GROUP]
+          Only this group: home, config, secrets, store, daemon, sandbox, terminal, runtimes, plugins, observability, network, providers or security
+
+Options:
+      --fix
+          Perform the enumerated repairs (permissions, stale run files, the full-text index, pending config migrations) and print each
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --online
+          Allow network probes (provider reachability, IPv6)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --strict
+          Treat warnings as failures; `doctor security --strict` exits 77 on any downgrade
+
+      --all-profiles
+          Check every profile of the home
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug`
+
+```text
+Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+
+Usage: prometheus debug [OPTIONS] <COMMAND>
+
+Commands:
+  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug summary`
+
+```text
+A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+
+Usage: prometheus debug summary [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --show-key-prefixes
+          Show the first and last 4 characters of secrets longer than 16 characters
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus debug help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus debug help [COMMAND]
+
+Commands:
+  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus debug help summary`
+
+```text
+A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+
+Usage: prometheus debug help summary
+```
+
+## `prometheus debug help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus debug help help
 ```
 
 ## `prometheus config`
@@ -6385,10 +6589,170 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus tools [OPTIONS] <COMMAND>
 
 Commands:
-  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
-  toolsets  The toolsets, as `prometheus toolsets list`
-  help      Print this message or the help of the given subcommand(s)
+  configure  Enable or disable toolsets per surface and choose tool providers, interactively
+  enable     Enable a toolset from the next session
+  disable    Disable a toolset from the next session
+  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
+  toolsets   The toolsets, as `prometheus toolsets list`
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools configure`
+
+```text
+Enable or disable toolsets per surface and choose tool providers, interactively
+
+Usage: prometheus tools configure [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          The surface: cli, tui, cron, acp or gateway.<platform> (every surface when omitted)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools enable`
+
+```text
+Enable a toolset from the next session
+
+Usage: prometheus tools enable [OPTIONS] <TOOLSET>
+
+Arguments:
+  <TOOLSET>
+          The toolset
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Only for this surface
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools disable`
+
+```text
+Disable a toolset from the next session
+
+Usage: prometheus tools disable [OPTIONS] <TOOLSET>
+
+Arguments:
+  <TOOLSET>
+          The toolset
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --surface <SURFACE>
+          Only for this surface
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools provider`
+
+```text
+Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+
+Usage: prometheus tools provider [OPTIONS] <CATEGORY> <PROVIDER>
+
+Arguments:
+  <CATEGORY>
+          The category
+
+  <PROVIDER>
+          The provider
 
 Options:
       --home <PATH>
@@ -6533,10 +6897,46 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus tools help [COMMAND]
 
 Commands:
-  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
-  toolsets  The toolsets, as `prometheus toolsets list`
-  help      Print this message or the help of the given subcommand(s)
+  configure  Enable or disable toolsets per surface and choose tool providers, interactively
+  enable     Enable a toolset from the next session
+  disable    Disable a toolset from the next session
+  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets   The toolsets, as `prometheus toolsets list`
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus tools help configure`
+
+```text
+Enable or disable toolsets per surface and choose tool providers, interactively
+
+Usage: prometheus tools help configure
+```
+
+## `prometheus tools help enable`
+
+```text
+Enable a toolset from the next session
+
+Usage: prometheus tools help enable
+```
+
+## `prometheus tools help disable`
+
+```text
+Disable a toolset from the next session
+
+Usage: prometheus tools help disable
+```
+
+## `prometheus tools help provider`
+
+```text
+Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+
+Usage: prometheus tools help provider
 ```
 
 ## `prometheus tools help list`
@@ -6943,6 +7343,9 @@ Usage: prometheus help [COMMAND]
 Commands:
   chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
   skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
@@ -6980,6 +7383,41 @@ Usage: prometheus help chat
 Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
 
 Usage: prometheus help version
+```
+
+## `prometheus help setup`
+
+```text
+Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+
+Usage: prometheus help setup
+```
+
+## `prometheus help doctor`
+
+```text
+Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+
+Usage: prometheus help doctor
+```
+
+## `prometheus help debug`
+
+```text
+Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+
+Usage: prometheus help debug [COMMAND]
+
+Commands:
+  summary  A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+```
+
+## `prometheus help debug summary`
+
+```text
+A plain-text summary of this install and profile to paste into a support thread (secret values never appear)
+
+Usage: prometheus help debug summary
 ```
 
 ## `prometheus help config`
@@ -8068,9 +8506,45 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus help tools [COMMAND]
 
 Commands:
-  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
-  toolsets  The toolsets, as `prometheus toolsets list`
+  configure  Enable or disable toolsets per surface and choose tool providers, interactively
+  enable     Enable a toolset from the next session
+  disable    Disable a toolset from the next session
+  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets   The toolsets, as `prometheus toolsets list`
+```
+
+## `prometheus help tools configure`
+
+```text
+Enable or disable toolsets per surface and choose tool providers, interactively
+
+Usage: prometheus help tools configure
+```
+
+## `prometheus help tools enable`
+
+```text
+Enable a toolset from the next session
+
+Usage: prometheus help tools enable
+```
+
+## `prometheus help tools disable`
+
+```text
+Disable a toolset from the next session
+
+Usage: prometheus help tools disable
+```
+
+## `prometheus help tools provider`
+
+```text
+Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+
+Usage: prometheus help tools provider
 ```
 
 ## `prometheus help tools list`
@@ -8174,6 +8648,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.doctor.v1` | `prometheus doctor` |
 | `prometheus.update_status.v1` | `prometheus update --status` |
 | `prometheus.update_check.v1` | `prometheus update --check` |
 | `prometheus.grants.v1` | `prometheus grants list` |

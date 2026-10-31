@@ -319,7 +319,7 @@ impl Repl {
                 toolset,
             ));
         }
-        super::sessions::persist_toolset(&self.factory.scope, toolset, enable)?;
+        crate::tools_cmd::configure::persist_toolset(&self.factory.scope, toolset, enable)?;
         let verb = if enable { "enabled" } else { "disabled" };
         if !now {
             return Ok(deferred(&format!("Toolset '{toolset}' is {verb}")));

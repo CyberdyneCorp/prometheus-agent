@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use clap::{ArgAction, CommandFactory, Parser, Subcommand};
+use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand, ValueEnum};
 
 use pmt_store::{Role, Source};
 
@@ -64,6 +64,19 @@ pub enum Command {
     /// Print the version and build identity (`--json` for every field,
     /// `--verbose` for build details and compiled-in surfaces).
     Version,
+    /// Set up the profile: model and provider (or a subscription sign-in),
+    /// secrets, tools, terminal and memory.
+    Setup(SetupArgs),
+    /// Check the install and profile: one ok / warn / fail line per check;
+    /// `--fix` performs the enumerated repairs.
+    Doctor(DoctorArgs),
+    /// Diagnostics: `debug summary` prints a plain-text setup summary for
+    /// support threads.
+    Debug {
+        /// The debug subcommand.
+        #[command(subcommand)]
+        command: DebugCommand,
+    },
     /// Read, change, validate and explain the profile's config.toml.
     Config {
         /// The config subcommand.
@@ -214,9 +227,110 @@ pub struct UpdateArgs {
     pub yes: bool,
 }
 
+/// `prometheus setup` arguments.
+#[derive(Debug, Clone, Args)]
+pub struct SetupArgs {
+    /// Only this section (all but `tools` and `gateway` when omitted).
+    #[arg(value_enum)]
+    pub section: Option<SetupSection>,
+    /// Take values from `--set` and secrets from the environment instead
+    /// of asking; a missing required value exits 78.
+    #[arg(long)]
+    pub non_interactive: bool,
+    /// Clear the onboarding state (offered setup, shown tips, tour steps).
+    #[arg(long, conflicts_with_all = ["section", "non_interactive"])]
+    pub reset_onboarding: bool,
+}
+
+/// Sections of `prometheus setup`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum SetupSection {
+    /// Provider and model, or a subscription sign-in, and its API key.
+    Model,
+    /// The secrets the configured providers need.
+    Secrets,
+    /// Toolsets per surface and tool providers.
+    Tools,
+    /// The terminal backend.
+    Terminal,
+    /// The memory stores.
+    Memory,
+    /// Messaging adapters (with the gateway).
+    Gateway,
+}
+
+/// `prometheus doctor` arguments.
+#[derive(Debug, Clone, Args)]
+#[allow(clippy::struct_excessive_bools)] // independent switches of one command line
+pub struct DoctorArgs {
+    /// Only this group: home, config, secrets, store, daemon, sandbox,
+    /// terminal, runtimes, plugins, observability, network, providers or
+    /// security.
+    pub group: Option<String>,
+    /// Perform the enumerated repairs (permissions, stale run files, the
+    /// full-text index, pending config migrations) and print each.
+    #[arg(long)]
+    pub fix: bool,
+    /// Allow network probes (provider reachability, IPv6).
+    #[arg(long)]
+    pub online: bool,
+    /// Treat warnings as failures; `doctor security --strict` exits 77 on
+    /// any downgrade.
+    #[arg(long)]
+    pub strict: bool,
+    /// Check every profile of the home.
+    #[arg(long)]
+    pub all_profiles: bool,
+}
+
+/// `prometheus debug` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum DebugCommand {
+    /// A plain-text summary of this install and profile to paste into a
+    /// support thread (secret values never appear).
+    Summary {
+        /// Show the first and last 4 characters of secrets longer than 16
+        /// characters.
+        #[arg(long)]
+        show_key_prefixes: bool,
+    },
+}
+
 /// `prometheus tools` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ToolsCommand {
+    /// Enable or disable toolsets per surface and choose tool providers,
+    /// interactively.
+    Configure {
+        /// The surface: cli, tui, cron, acp or gateway.<platform> (every
+        /// surface when omitted).
+        #[arg(long, value_name = "SURFACE")]
+        surface: Option<String>,
+    },
+    /// Enable a toolset from the next session.
+    Enable {
+        /// The toolset.
+        toolset: String,
+        /// Only for this surface.
+        #[arg(long, value_name = "SURFACE")]
+        surface: Option<String>,
+    },
+    /// Disable a toolset from the next session.
+    Disable {
+        /// The toolset.
+        toolset: String,
+        /// Only for this surface.
+        #[arg(long, value_name = "SURFACE")]
+        surface: Option<String>,
+    },
+    /// Choose the provider of a tool category (web search, web extract,
+    /// browser, image generation, TTS, STT, video, X search).
+    Provider {
+        /// The category.
+        category: String,
+        /// The provider.
+        provider: String,
+    },
     /// Every registered tool with its toolset and exposure verdict (`exposed`
     /// or a reason code) for the profile's configured toolsets, or as a
     /// session froze them (`--session`).

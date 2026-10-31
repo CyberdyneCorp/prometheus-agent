@@ -81,11 +81,22 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface) -> Mode {
 /// exits with their code); a finished run returns its own status.
 pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
     let record = Arc::new(usage_file::RunRecord::default());
-    let outcome = run_recorded(args, ctx, ui, &record);
+    let mut outcome = run_recorded(args, ctx, ui, &record);
+    if offers_setup(args, &outcome) && crate::setup_cmd::offer(ctx)? {
+        outcome = run_recorded(args, ctx, ui, &record);
+    }
     match &args.usage_file {
         Some(path) => usage_file::finish(path, &record, outcome, ui.json),
         None => outcome,
     }
+}
+
+/// An interactive start on a profile with no model offers `setup model`
+/// (spec: cli, Setup wizard).
+fn offers_setup(args: &ChatArgs, outcome: &Result<u8, Error>) -> bool {
+    matches!(outcome, Err(err) if err.code().code == codes::MODEL_NOT_CONFIGURED.code)
+        && !args.oneshot()
+        && terminal::interactive()
 }
 
 fn run_recorded(

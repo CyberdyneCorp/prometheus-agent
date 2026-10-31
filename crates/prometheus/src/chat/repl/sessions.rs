@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use pmt_agent::prompt::frozen::Rebuild;
 use pmt_agent::turn::TurnInput;
-use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::{MessageId, SessionId};
 use pmt_store::{EndReason, ListOptions, NewMessage, Role, UsageScope, UsageTotals, Visibility};
@@ -262,42 +261,6 @@ impl Repl {
         self.live = Some(live);
         outcome
     }
-}
-
-/// Saves a toolset change for the next sessions: `tools.disabled_toolsets`
-/// gains or loses the toolset (and `tools.enabled_toolsets` gains it when
-/// enabling).
-///
-/// # Errors
-///
-/// Config write errors.
-pub(super) fn persist_toolset(
-    scope: &ProfileScope,
-    toolset: &str,
-    enable: bool,
-) -> Result<(), Error> {
-    let file = scope.profile().config_file();
-    let (text, _) = file.read()?;
-    let saved: pmt_config::Config = toml::from_str(&text).unwrap_or_default();
-    let tools = &saved.tools;
-    let mut disabled = tools.disabled_toolsets.clone();
-    let mut enabled = tools.enabled_toolsets.clone();
-    disabled.retain(|t| t != toolset);
-    if enable {
-        if !enabled.iter().any(|t| t == toolset) {
-            enabled.push(toolset.to_owned());
-        }
-    } else {
-        disabled.push(toolset.to_owned());
-    }
-    let list = |names: &[String]| {
-        let quoted: Vec<String> = names.iter().map(|n| format!("{n:?}")).collect();
-        format!("[{}]", quoted.join(", "))
-    };
-    file.set_all(&[
-        ("tools.enabled_toolsets", &list(&enabled)),
-        ("tools.disabled_toolsets", &list(&disabled)),
-    ])
 }
 
 /// `/usage`: this session and its whole lineage (compression

@@ -100,11 +100,14 @@ pub fn selection(
     config: &Config,
     interactive: bool,
 ) -> Result<Selection, Error> {
-    let selection = Selection::resolve(
-        registry,
-        &config.tools.enabled_toolsets,
-        &config.tools.disabled_toolsets,
-    )?;
+    // `toolsets.surfaces.cli` (the tool configurator's per-surface list)
+    // wins over the profile-wide `tools.enabled_toolsets`.
+    let enabled = config
+        .toolsets
+        .surfaces
+        .get("cli")
+        .unwrap_or(&config.tools.enabled_toolsets);
+    let selection = Selection::resolve(registry, enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
         selection
     } else {

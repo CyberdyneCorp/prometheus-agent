@@ -557,7 +557,7 @@ error_codes! {
         "`prometheus setup --non-interactive` needs every required value from `--set` flags or, for secrets, from the environment (`PMT_SECRET_<NAME>` or the provider's own variable); the message names the missing one.");
     /// A tool category names an unregistered provider.
     TOOLS_UNKNOWN_PROVIDER = ("tools.unknown_provider", Config,
-        "`prometheus tools provider <category> <provider>` named a category or provider that is not registered; the message lists the valid names and nothing was written.");
+        "The tool configurator (`prometheus tools provider|enable|disable|configure`) named a category, provider or surface that is not registered, or a posture toolset (chosen per session, never saved); the message lists the valid names and nothing was written.");
     /// `prometheus doctor` was given an unknown group.
     DOCTOR_UNKNOWN_GROUP = ("doctor.unknown_group", Usage,
         "`prometheus doctor <group>` names a group that does not exist; the message lists the groups.");

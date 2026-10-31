@@ -68,6 +68,9 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
     };
     let result = match &cli.command {
         Some(Command::Version) => Ok(version::run(cli.json, cli.verbose > 0)),
+        Some(Command::Setup(args)) => prometheus::setup_cmd::run(args, &ctx),
+        Some(Command::Doctor(args)) => prometheus::doctor_cmd::run(args, &ctx),
+        Some(Command::Debug { command }) => prometheus::debug_cmd::run(command, &ctx),
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),

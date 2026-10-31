@@ -357,6 +357,24 @@ impl Repl {
             self.factory.scope.name()
         );
         self.say(Role::Accent, &banner);
+        self.tip(
+            "slash-help",
+            "Tip: type /help for the commands, /status for this session",
+        );
+    }
+
+    /// Shows the one-time tip `id` unless this profile has seen it (spec:
+    /// cli, Onboarding state).
+    fn tip(&self, id: &str, text: &str) {
+        match self
+            .factory
+            .store
+            .mark_onboarding(pmt_store::onboarding::Step::Tip, id)
+        {
+            Ok(true) => self.notice(text),
+            Ok(false) => {}
+            Err(err) => tracing::warn!(error = %err, "cannot record the onboarding tip"),
+        }
     }
 
     fn recap(&self) {

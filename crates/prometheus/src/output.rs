@@ -27,6 +27,10 @@ pub struct JsonShape {
 /// here when it gains `--json`.
 pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
+        schema: "prometheus.doctor.v1",
+        command: "doctor",
+    },
+    JsonShape {
         schema: "prometheus.update_status.v1",
         command: "update --status",
     },

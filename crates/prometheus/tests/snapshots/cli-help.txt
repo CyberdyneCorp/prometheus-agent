@@ -5,6 +5,9 @@ Usage: prometheus [OPTIONS] [COMMAND]
 Commands:
   chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
   skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles

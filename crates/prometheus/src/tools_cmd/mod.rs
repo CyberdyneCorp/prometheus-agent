@@ -11,6 +11,7 @@
 //! `/toolsets` slash command renders the same listing for the session's
 //! own selection ([`slash_toolsets`]).
 
+pub mod configure;
 mod render;
 
 use std::collections::BTreeSet;
@@ -124,6 +125,16 @@ pub fn run(command: &ToolsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             print_raw(&render_explain(&explanation))
         }),
         ToolsCommand::Toolsets(args) => list_toolsets(args, ctx),
+        ToolsCommand::Configure { surface } => configure::configure(ctx, surface.as_deref()),
+        ToolsCommand::Enable { toolset, surface } => {
+            configure::enable(ctx, toolset, true, surface.as_deref())
+        }
+        ToolsCommand::Disable { toolset, surface } => {
+            configure::enable(ctx, toolset, false, surface.as_deref())
+        }
+        ToolsCommand::Provider { category, provider } => {
+            configure::provider(ctx, category, provider)
+        }
     }
 }
 

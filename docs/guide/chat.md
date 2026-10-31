@@ -92,6 +92,10 @@ error: no session to continue in <dir>
 
 ## The line interface
 
+An interactive start on a profile without a model offers `prometheus
+setup model` first; one-time tips (such as the `/help` tip) show once
+per profile (see [Setup, onboarding and doctor](setup-and-doctor.md)).
+
 A trailing `\` or Alt+Enter continues a line. History is kept in
 `<profile>/cli_history` (10,000 entries, owner-only, secrets redacted).
 `@` completes files under the working directory. Ctrl+C stops a running
