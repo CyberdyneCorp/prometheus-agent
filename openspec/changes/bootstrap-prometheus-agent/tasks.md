@@ -209,7 +209,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 19.9 Implement local transcript and session commands (status without a model call, all-sessions views refused for non-admins), the interactive session browser with status tags, retry semantics (retry replaces the answer) and queue management commands (list, edit, reorder, drop); verify with expectrl tests (spec: cli, spec: session-storage)
 - [x] 19.10 Implement the setup wizard (provider choice incl. subscription sign-in, writes config and secrets to the right stores); verify with a scripted run on a temp home (spec: cli, spec: configuration-and-profiles)
 - [x] 19.11 Implement onboarding state (tips shown once), the tool configurator (unknown providers refused) and the plain-text setup summary (URL credentials redacted); verify with scripted runs on a temp home (spec: cli, spec: observability)
-- [x] 19.12 Implement `prometheus doctor` with the check groups, `--online`, `--json`, the enumerated `--fix` repairs and `doctor security`; verify that each repair is printed and that no network request happens without `--online` (spec: workspace-architecture, spec: cli, spec: security-boundaries)
+- [ ] 19.12 Implement `prometheus doctor` with the check groups, `--online`, `--json`, the enumerated `--fix` repairs and `doctor security`; verify that each repair is printed and that no network request happens without `--online` (spec: workspace-architecture, spec: cli, spec: security-boundaries)
 
 ## 20. M1 Distribution and self-update
 
