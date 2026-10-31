@@ -105,10 +105,12 @@ impl FileSink {
     ///
     /// The I/O error.
     pub fn open(path: &Path) -> io::Result<Self> {
+        // Write mode, positioned at the end, rather than append mode:
+        // Windows refuses to truncate (reset) a handle opened for append.
         let mut file = File::options()
             .create(true)
-            .append(true)
-            .read(true)
+            .truncate(false)
+            .write(true)
             .open(path)?;
         let written = file.seek(io::SeekFrom::End(0))?;
         Ok(Self { file, written })
@@ -137,6 +139,7 @@ impl Sink for FileSink {
 
     fn reset(&mut self) -> io::Result<()> {
         self.file.set_len(0)?;
+        self.file.seek(io::SeekFrom::Start(0))?;
         self.written = 0;
         Ok(())
     }

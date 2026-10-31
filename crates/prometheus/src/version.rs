@@ -106,8 +106,17 @@ impl VersionInfo {
 /// the text form. Returns the exit status (74 when stdout is unwritable).
 #[must_use]
 pub fn run(json: bool, verbose: bool) -> u8 {
-    let info = VersionInfo::current();
     let mut stdout = std::io::stdout().lock();
+    if !json && !verbose {
+        // The identity line alone: nothing else is computed, so `--version`
+        // stays the cheapest run (it is what the startup budget measures).
+        let line = format!("prometheus {}\n", build_info::identity());
+        return match std::io::Write::write_all(&mut stdout, line.as_bytes()) {
+            Ok(()) => pmt_core::exit::SUCCESS,
+            Err(_) => pmt_core::ErrorKind::Io.exit_code(),
+        };
+    }
+    let info = VersionInfo::current();
     let written = if json {
         crate::output::write_json(&mut stdout, &info)
     } else {

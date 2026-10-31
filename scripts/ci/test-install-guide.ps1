@@ -78,7 +78,8 @@ try {
         }
         Write-Output "+ $command"
         # Input is redirected, so the installer never waits on a PATH question.
-        '' | & pwsh -NoProfile -NonInteractive -Command $command | Out-Host
+        # `-Command` reports a failing native command as 1: pass its own code on.
+        '' | & pwsh -NoProfile -NonInteractive -Command "$command; if (`$LASTEXITCODE) { exit `$LASTEXITCODE }" | Out-Host
         $code = $LASTEXITCODE
         $allowed = ($code -eq 0) -or ($code -eq 10 -and $command -eq 'prometheus update --check')
         if (-not $allowed) { Fail "``$line`` exited $code" }
