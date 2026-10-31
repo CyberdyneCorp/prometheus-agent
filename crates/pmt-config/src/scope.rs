@@ -60,6 +60,23 @@ impl ProfileScope {
         Self::with_config(profile, config, launch)
     }
 
+    /// Like [`ProfileScope::open`], but a `config.toml` older than this
+    /// build is migrated in memory only and left as it is on disk: what
+    /// `prometheus doctor` uses, so a diagnosis reports a pending migration
+    /// instead of applying it (`doctor --fix` applies it).
+    ///
+    /// # Errors
+    ///
+    /// As [`ProfileScope::open`].
+    pub fn open_unmigrated(
+        profile: ProfileDir,
+        overrides: &Overrides,
+        launch: Launch<'_>,
+    ) -> Result<Self, Error> {
+        let config = profile.config_file().load_unmigrated(overrides)?;
+        Self::with_config(profile, config, launch)
+    }
+
     /// Like [`ProfileScope::open`] with schema defaults in place of the
     /// profile's `config.toml` (`chat --ignore-user-config`); `overrides`
     /// and the profile's secrets still apply.

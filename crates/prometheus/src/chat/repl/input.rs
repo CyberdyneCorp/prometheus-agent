@@ -9,11 +9,18 @@
 //! directory. In the editor Ctrl+C is a key (no signal), reported as
 //! [`Event::Interrupt`]; Ctrl+D on an empty line is [`Event::Eof`].
 //! Ctrl+X Ctrl+E hands the buffer to the external editor
-//! ([`Event::Compose`]). Ctrl+Z at an idle prompt suspends the process the
-//! way the editor does it (terminal mode restored, SIGTSTP; on `fg` the
-//! prompt is redrawn with its buffer); while a turn runs it is refused
+//! ([`Event::Compose`]). Ctrl+Z at an idle prompt ends the read with its
+//! buffer kept, the input thread stops the process with SIGTSTP (terminal
+//! mode already restored) and, on `fg`, reads again with the prompt and
+//! the buffer redrawn; while a turn runs it is refused
 //! ([`Event::SuspendRefused`]) (spec: cli, External editor composition;
 //! Job-control suspend).
+//!
+//! Why not the editor's own suspend: it sends SIGTSTP to the process group,
+//! a process-directed signal that Linux may hand to another thread, so the
+//! input thread can redraw the prompt before the process actually stops
+//! and nothing is redrawn after `fg`. A signal raised on the input thread
+//! itself stops the process before that thread runs on.
 
 use std::borrow::Cow;
 use std::io::Write as _;
@@ -60,6 +67,8 @@ struct Shared {
     busy: AtomicBool,
     /// The buffer Ctrl+X Ctrl+E took.
     compose: Mutex<Option<String>>,
+    /// The buffer (split at the cursor) an idle Ctrl+Z took.
+    suspend: Mutex<Option<(String, String)>>,
 }
 
 /// The REPL's end of the input thread.
@@ -178,7 +187,7 @@ fn editor_thread(
         .map(|p| Box::new(p) as Box<dyn ExternalPrinter + Send>);
     let _ = printer.send(external);
     while let Ok(prompt) = wanted.recv() {
-        let event = match editor.readline(&prompt) {
+        let event = match read_line(&mut editor, shared, &prompt) {
             Ok(line) => {
                 remember(&mut editor, setup, &line);
                 Event::Line(join_continuations(&line))
@@ -266,6 +275,44 @@ fn remember(editor: &mut Editor<LineHelper, FileHistory>, setup: &Setup, line: &
     }
 }
 
+/// One line: after an idle Ctrl+Z the process stops, and on `fg` the read
+/// starts over with the buffer it had.
+fn read_line(
+    editor: &mut Editor<LineHelper, FileHistory>,
+    shared: &Shared,
+    prompt: &str,
+) -> rustyline::Result<String> {
+    let mut initial = (String::new(), String::new());
+    loop {
+        let result = editor.readline_with_initial(prompt, (&initial.0, &initial.1));
+        let suspended = shared
+            .suspend
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        match (result, suspended) {
+            (Err(ReadlineError::Interrupted), Some(buffer)) => {
+                stop_process();
+                initial = buffer;
+            }
+            (result, _) => return result,
+        }
+    }
+}
+
+/// Stops the process (job control) until it is continued. Raised on the
+/// calling thread so it takes effect before this thread returns.
+#[cfg(unix)]
+fn stop_process() {
+    use nix::sys::signal::{Signal, raise};
+    if let Err(err) = raise(Signal::SIGTSTP) {
+        tracing::warn!(error = %err, "cannot suspend");
+    }
+}
+
+#[cfg(not(unix))]
+fn stop_process() {}
+
 /// Ctrl+X Ctrl+E: keep the buffer for the editor and end the read (as an
 /// interrupt, so the line is neither validated nor remembered).
 struct ComposeKey(Arc<Shared>);
@@ -287,7 +334,7 @@ impl ConditionalEventHandler for ComposeKey {
     }
 }
 
-/// Ctrl+Z: the editor's own suspend when idle; refused while busy.
+/// Ctrl+Z: suspends when idle (see [`read_line`]); refused while busy.
 struct SuspendKey {
     shared: Arc<Shared>,
     events: mpsc::UnboundedSender<Event>,
@@ -299,13 +346,24 @@ impl ConditionalEventHandler for SuspendKey {
         _evt: &rustyline::Event,
         _n: RepeatCount,
         _positive: bool,
-        _ctx: &EventContext<'_>,
+        ctx: &EventContext<'_>,
     ) -> Option<Cmd> {
         if self.shared.busy.load(Ordering::Relaxed) {
             let _ = self.events.send(Event::SuspendRefused);
             return Some(Cmd::Noop);
         }
-        None
+        if !cfg!(unix) {
+            return None;
+        }
+        // End the read (as an interrupt: the line is neither validated nor
+        // remembered); `read_line` stops the process and reads again.
+        let (left, right) = ctx.line().split_at(ctx.pos());
+        *self
+            .shared
+            .suspend
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some((left.to_owned(), right.to_owned()));
+        Some(Cmd::Interrupt)
     }
 }
 

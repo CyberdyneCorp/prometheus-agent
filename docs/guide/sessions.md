@@ -68,7 +68,8 @@ is never pruned.
 first with their title, relative last activity, message count, source
 and a status tag: `live` (not ended), `done`, `intr` (ended
 `interrupted`), `err` (ended with an error) or `empty` (no messages).
-Type text to narrow the list to matching titles and full-text hits,
+Type text and press Enter to narrow the list to matching titles and
+full-text hits (each query narrows again),
 type a row number to resume that session in the chat, or press Enter to
 leave. It needs a terminal (exit 2 otherwise; use `sessions list`).
 

@@ -6,10 +6,18 @@ error[E0599]: no function or associated item named `current` found for struct `P
   |
 note: if you're trying to build a new `ProfileScope` consider using one of the following associated functions:
       ProfileScope::open
+      ProfileScope::open_unmigrated
       ProfileScope::open_defaults
  --> src/scope.rs
   |
   | /     pub fn open(
+  | |         profile: ProfileDir,
+  | |         overrides: &Overrides,
+  | |         launch: Launch<'_>,
+  | |     ) -> Result<Self, Error> {
+  | |____________________________^
+...
+  | /     pub fn open_unmigrated(
   | |         profile: ProfileDir,
   | |         overrides: &Overrides,
   | |         launch: Launch<'_>,
@@ -31,10 +39,18 @@ error[E0599]: no function or associated item named `default` found for struct `P
   |
 note: if you're trying to build a new `ProfileScope` consider using one of the following associated functions:
       ProfileScope::open
+      ProfileScope::open_unmigrated
       ProfileScope::open_defaults
  --> src/scope.rs
   |
   | /     pub fn open(
+  | |         profile: ProfileDir,
+  | |         overrides: &Overrides,
+  | |         launch: Launch<'_>,
+  | |     ) -> Result<Self, Error> {
+  | |____________________________^
+...
+  | /     pub fn open_unmigrated(
   | |         profile: ProfileDir,
   | |         overrides: &Overrides,
   | |         launch: Launch<'_>,

@@ -329,7 +329,7 @@ The system SHALL store, besides the typed `source`, an optional `source_tag` (`^
 - **THEN** the system SHALL resume the interactive session
 
 ### Requirement: Interactive session browser
-The system SHALL provide `prometheus sessions browse [--source <s>] [--all]`, an interactive picker listing sessions newest first with title, relative last activity, message count, source and a status tag derived from the session state (`live`, `done` for a final assistant answer, `intr` for `interrupted`, `err` for `error`, `empty` for no messages), incremental search over titles and full-text hits, and Enter resuming the selected session, exiting 2 when stdout is not a terminal.
+The system SHALL provide `prometheus sessions browse [--source <s>] [--all]`, an interactive picker listing sessions newest first with title, relative last activity, message count, source and a status tag derived from the session state (`live`, `done` for a final assistant answer, `intr` for `interrupted`, `err` for `error`, `empty` for no messages), search over titles and full-text hits that narrows the list each time a query is submitted (the line-interface picker filters on Enter; per-keystroke filtering is the TUI's), and Enter resuming the selected session, exiting 2 when stdout is not a terminal.
 **Milestone:** M1
 
 #### Scenario: Status tags

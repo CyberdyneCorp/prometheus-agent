@@ -135,6 +135,51 @@ fn fix_rebuilds_a_stale_full_text_index() {
     assert!(!again.contains("fixed "), "{again}");
 }
 
+/// A version-0 `config.toml`: doctor reports the pending migration and
+/// leaves the file alone; `--fix` migrates it after a
+/// `config.toml.bak.<timestamp>` backup and prints the repair.
+#[test]
+fn fix_applies_a_pending_config_migration_after_a_backup() {
+    let home = temp_home();
+    ok(&run(home.path(), &["profile", "list"]));
+    let config = home.path().join("profiles/default/config.toml");
+    let v0 = "schema_version = 0\n\n[agent]\nmax_turns = 7\n";
+    std::fs::write(&config, v0).unwrap();
+
+    let text = ok(&run(home.path(), &["doctor", "config"]));
+    let line = text
+        .lines()
+        .find(|l| l.contains("schema version 0"))
+        .unwrap_or_else(|| panic!("no pending migration reported:\n{text}"));
+    assert!(
+        line.starts_with("warn") && line.contains("prometheus doctor --fix"),
+        "{line}"
+    );
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), v0);
+
+    let fixed = ok(&run(home.path(), &["doctor", "config", "--fix"]));
+    let repair = fixed
+        .lines()
+        .find(|l| l.starts_with("fixed migrated config.toml from schema version 0"))
+        .unwrap_or_else(|| panic!("repair not printed:\n{fixed}"));
+    assert!(repair.contains("config.toml.bak."), "{repair}");
+    assert!(fixed.contains("schema version current"), "{fixed}");
+    let backup = std::fs::read_dir(config.parent().unwrap())
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.to_string_lossy().contains("config.toml.bak."))
+        .expect("config.toml.bak.<timestamp>");
+    assert_eq!(std::fs::read_to_string(backup).unwrap(), v0);
+    let migrated = std::fs::read_to_string(&config).unwrap();
+    assert!(
+        migrated.contains("schema_version = 1") && migrated.contains("max_iterations = 7"),
+        "{migrated}"
+    );
+
+    let again = ok(&run(home.path(), &["doctor", "config", "--fix"]));
+    assert!(!again.contains("fixed "), "{again}");
+}
+
 #[cfg(unix)]
 mod repairs {
     use std::os::unix::fs::PermissionsExt as _;

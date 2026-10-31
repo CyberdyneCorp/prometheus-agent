@@ -105,7 +105,9 @@ onboarding reset (<n> records cleared)
 secrets and database permissions; remove stale `run/` lock and record
 files whose pid is gone (`removed stale gateway lock (pid <n> not
 running)`); rebuild the full-text index; apply a pending config schema
-migration after copying `config.toml` to `config.toml.bak.<timestamp>`;
+migration after copying `config.toml` to `config.toml.bak.<timestamp>`
+(every other command migrates an older `config.toml` when it loads it;
+doctor only reports it, as `warn config ... a migration is pending`);
 reinstall managed runtimes whose hash does not match (none are installed
 by this build). Everything else is reported with a hint and left as it
 is. Note that every command tightens loose permissions of the home and

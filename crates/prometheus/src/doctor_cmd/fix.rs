@@ -15,18 +15,6 @@ use pmt_core::runtime::{LOCK_FILE, Liveness, Role, read_record, run_dir};
 use super::groups::{loose_mode, private_paths};
 use crate::context::Context;
 
-/// The pending migration's source version, when `config.toml` is older
-/// than this build.
-pub(super) fn pending_migration(file: &ConfigFile) -> Option<u32> {
-    let raw = file.raw().ok()??;
-    let version = raw
-        .lines()
-        .find_map(|l| l.trim().strip_prefix("schema_version"))
-        .and_then(|rest| rest.trim().strip_prefix('='))
-        .and_then(|v| v.trim().parse::<u32>().ok())?;
-    (version < pmt_config::schema::SCHEMA_VERSION).then_some(version)
-}
-
 /// Runs the repairs; returns one line per repair performed.
 ///
 /// # Errors
@@ -35,13 +23,13 @@ pub(super) fn pending_migration(file: &ConfigFile) -> Option<u32> {
 pub(super) fn run(ctx: &Context<'_>, root: &Path, profile: &Path) -> Result<Vec<String>, Error> {
     let mut done = tighten(root, profile)?;
     done.extend(stale_records(root)?);
-    if let Ok(scope) = ctx.scope()
+    if let Ok(dir) = ctx.profile_dir() {
+        done.extend(migrate(&dir.config_file())?);
+    }
+    if let Ok(scope) = ctx.scope_unmigrated()
         && let Ok(store) = pmt_store::Store::open(&scope)
     {
         done.extend(store.doctor_fix()?);
-    }
-    if let Ok(dir) = ctx.profile_dir() {
-        done.extend(migrate(&dir.config_file())?);
     }
     Ok(done)
 }
@@ -107,17 +95,17 @@ fn stale_records(root: &Path) -> Result<Vec<String>, Error> {
     Ok(done)
 }
 
-/// Applies a pending config migration after `config.toml.bak.<ts>`.
+/// Applies a pending config migration after `config.toml.bak.<ts>` (the
+/// migration itself also keeps its `backups/config/` copy, as at load).
 fn migrate(file: &ConfigFile) -> Result<Vec<String>, Error> {
-    let Some(from) = pending_migration(file) else {
+    let Some(from) = file.pending_migration() else {
         return Ok(Vec::new());
     };
     let path = file.path();
     let stamp = jiff::Timestamp::now().strftime("%Y%m%dT%H%M%SZ");
     let backup = path.with_file_name(format!("config.toml.bak.{stamp}"));
     std::fs::copy(path, &backup).map_err(|e| io(&backup, &e))?;
-    let (text, _) = file.read()?;
-    file.replace(&text)?;
+    file.read()?;
     Ok(vec![format!(
         "migrated config.toml from schema version {from} (backup {})",
         backup.display()

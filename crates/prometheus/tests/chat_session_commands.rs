@@ -128,6 +128,46 @@ fn the_queue_is_listed_edited_reordered_and_run_in_order() {
     exit(p);
 }
 
+/// `/queue add` starts at once when idle; `edit` replaces an item and
+/// `clear` drops the rest, so nothing else runs after the turn.
+#[test]
+fn queue_add_runs_when_idle_and_edit_and_clear_change_the_queue() {
+    let home = mock_home();
+    let script = home.path().join("slow.toml");
+    std::fs::write(
+        &script,
+        "[[rule]]\nuser = \"slow\"\nlatency_ms = 2500\ntext = \"done slowly\"\n\n[[rule]]\nuser = \"x-a\"\ntext = \"got a\"\n\n[[rule]]\nuser = \"x-b\"\ntext = \"got b\"\n",
+    )
+    .unwrap();
+    let mut p = spawn(home.path(), &["--mock-script", script.to_str().unwrap()]);
+    prompt(&mut p);
+    p.send_line("/queue add x-a").unwrap();
+    p.expect("got a").unwrap();
+    prompt(&mut p);
+    p.send_line("slow").unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    p.send_line("/queue x-a").unwrap();
+    p.expect("queued (1 in the queue)").unwrap();
+    p.send_line("/queue edit 1 x-b").unwrap();
+    p.expect("1. x-b").unwrap();
+    p.send_line("/queue x-a").unwrap();
+    p.expect("queued (2 in the queue)").unwrap();
+    p.send_line("/queue clear").unwrap();
+    p.expect("dropped 2 queued item(s)").unwrap();
+    p.expect("done slowly").unwrap();
+    prompt(&mut p);
+    p.send_line("/queue").unwrap();
+    p.expect("the queue is empty").unwrap();
+    prompt(&mut p);
+    exit(p);
+    let users: Vec<String> = common::active_messages(home.path())
+        .into_iter()
+        .filter(|m| m["role"] == "user")
+        .map(|m| m["content"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(users, ["x-a", "slow"]);
+}
+
 /// Scenario: Status tags; Enter resumes the chosen session.
 #[test]
 fn the_browser_tags_sessions_and_resumes_the_chosen_one() {

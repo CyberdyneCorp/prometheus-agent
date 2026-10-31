@@ -110,7 +110,9 @@ fn run_profile(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     if selected("home") {
         checks.extend(home_checks);
     }
-    match ctx.scope() {
+    // Opened without migrating `config.toml`: a pending migration is
+    // reported (and applied only by `--fix`), not applied by the diagnosis.
+    match ctx.scope_unmigrated() {
         Ok(scope) => {
             let inputs = Inputs {
                 ctx,

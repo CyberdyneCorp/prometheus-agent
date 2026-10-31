@@ -66,6 +66,24 @@ impl ConfigFile {
         }
     }
 
+    /// The file's `schema_version` when it is older than this build (a
+    /// migration is pending); `None` when current, missing or unreadable
+    /// (loading reports those errors).
+    #[must_use]
+    pub fn pending_migration(&self) -> Option<u32> {
+        let text = self.raw().ok()??;
+        let (version, _) = migrate::in_memory(&self.path, &text).ok()?;
+        (version < crate::schema::SCHEMA_VERSION).then_some(version)
+    }
+
+    /// Like [`ConfigFile::load`], but an older file is migrated in memory
+    /// only: nothing on disk changes.
+    pub(crate) fn load_unmigrated(&self, overrides: &Overrides) -> Result<Layered, Error> {
+        let text = self.raw()?.unwrap_or_default();
+        let (_, migrated) = migrate::in_memory(&self.path, &text)?;
+        Layered::build(&self.path, &migrated, overrides)
+    }
+
     /// Reads, migrates, validates and layers the file under `overrides`.
     ///
     /// # Errors

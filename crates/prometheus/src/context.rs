@@ -8,6 +8,9 @@ use pmt_config::{Home, Launch, Overrides, ProfileDir, ProfileScope, home};
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
 
+/// One of the [`ProfileScope`] constructors.
+type Opener = fn(ProfileDir, &Overrides, Launch<'_>) -> Result<ProfileScope, Error>;
+
 /// The process-wide inputs of a command.
 #[derive(Debug, Clone, Copy)]
 pub struct Context<'a> {
@@ -52,14 +55,17 @@ impl Context<'_> {
     ///
     /// As [`Context::profile_dir`], configuration errors.
     pub fn scope(&self) -> Result<ProfileScope, Error> {
-        let overrides = Overrides::parse(self.set)?;
-        let scope = ProfileScope::open(
-            self.profile_dir()?,
-            &overrides,
-            Launch::Profile(self.launch),
-        )?;
-        crate::startup::bind_profile(&scope);
-        Ok(scope)
+        self.open_scope(ProfileScope::open)
+    }
+
+    /// Like [`Context::scope`], leaving an older `config.toml` unmigrated
+    /// on disk (`prometheus doctor`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Context::scope`].
+    pub fn scope_unmigrated(&self) -> Result<ProfileScope, Error> {
+        self.open_scope(ProfileScope::open_unmigrated)
     }
 
     /// Like [`Context::scope`] with schema defaults in place of the
@@ -69,8 +75,12 @@ impl Context<'_> {
     ///
     /// As [`Context::profile_dir`], invalid overrides.
     pub fn scope_defaults(&self) -> Result<ProfileScope, Error> {
+        self.open_scope(ProfileScope::open_defaults)
+    }
+
+    fn open_scope(&self, open: Opener) -> Result<ProfileScope, Error> {
         let overrides = Overrides::parse(self.set)?;
-        let scope = ProfileScope::open_defaults(
+        let scope = open(
             self.profile_dir()?,
             &overrides,
             Launch::Profile(self.launch),

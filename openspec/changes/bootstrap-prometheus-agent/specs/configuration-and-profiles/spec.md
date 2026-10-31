@@ -141,7 +141,7 @@ The system SHALL resolve a secret for a `ProfileScope` from that profile's secre
 - **THEN** resolution SHALL fail with `secret.missing` for profile `home`
 
 ### Requirement: Config schema versioning and migration
-The system SHALL store `schema_version` at the top of `config.toml`, SHALL apply forward migrations at load time when the file is older (after copying it to `<profile>/backups/config/config-v<old>-<timestamp>.toml`), persisting only values that differ from the new defaults, and SHALL refuse to load a file whose `schema_version` is newer than the binary supports, exiting 78 with `config.toml schema_version <n> is newer than this prometheus supports (<m>); upgrade prometheus`.
+The system SHALL store `schema_version` at the top of `config.toml`, SHALL apply forward migrations at load time when the file is older (after copying it to `<profile>/backups/config/config-v<old>-<timestamp>.toml`), persisting only values that differ from the new defaults (except `prometheus doctor`, which migrates in memory only, reports the pending migration and applies it only with `--fix`), and SHALL refuse to load a file whose `schema_version` is newer than the binary supports, exiting 78 with `config.toml schema_version <n> is newer than this prometheus supports (<m>); upgrade prometheus`.
 **Milestone:** M1
 
 #### Scenario: Renamed key migrated

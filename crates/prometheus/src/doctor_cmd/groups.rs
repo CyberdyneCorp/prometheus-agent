@@ -126,7 +126,7 @@ pub(super) fn config(inputs: &Inputs<'_>) -> Vec<Check> {
         Status::Ok,
         format!("{} is valid", file.path().display()),
     )];
-    checks.push(match fix::pending_migration(&file) {
+    checks.push(match file.pending_migration() {
         Some(from) => Check::new(
             "config",
             "schema_version",
@@ -151,8 +151,6 @@ pub(super) fn config(inputs: &Inputs<'_>) -> Vec<Check> {
     }
     checks
 }
-
-use super::fix;
 
 /// `secrets`: store permissions and referenced-but-missing secrets.
 pub(super) fn secrets(inputs: &Inputs<'_>) -> Result<Vec<Check>, Error> {
