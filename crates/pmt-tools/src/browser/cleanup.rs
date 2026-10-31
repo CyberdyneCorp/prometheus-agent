@@ -17,6 +17,15 @@ const REMOVE_WAIT: Duration = Duration::from_secs(5);
 /// Pause between removal attempts.
 const REMOVE_PAUSE: Duration = Duration::from_millis(50);
 
+/// How many times [`kill_group`] signals the group.
+#[cfg(unix)]
+const KILL_ROUNDS: u32 = 3;
+
+/// Pause between group kill rounds: long enough for a fork that raced the
+/// previous round to finish.
+#[cfg(unix)]
+const KILL_PAUSE: Duration = Duration::from_millis(10);
+
 /// Makes the browser spawned by `command` lead a new process group, so
 /// [`kill_group`] reaches every helper it forks.
 pub fn new_group(command: &mut std::process::Command) {
@@ -42,7 +51,21 @@ pub fn kill_group(pid: u32) {
         let pid = Pid::from_raw(raw);
         // ESRCH (already gone) is fine.
         if getpgid(Some(pid)) == Ok(pid) {
-            let _ = killpg(pid, Signal::SIGKILL);
+            // A member that is forking while the group is killed can leave
+            // a child that misses the signal (macOS does not order a group
+            // kill against a concurrent fork); that child would recreate
+            // profile files after removal. It is still in the group, so a
+            // few more rounds reach it. A group ID is not reused while any
+            // member exists and the rounds stop at the first ESRCH, so they
+            // reach only the browser's processes.
+            for round in 0..KILL_ROUNDS {
+                if round > 0 {
+                    std::thread::sleep(KILL_PAUSE);
+                }
+                if killpg(pid, Signal::SIGKILL).is_err() {
+                    break;
+                }
+            }
         } else {
             let _ = kill(pid, Signal::SIGKILL);
         }

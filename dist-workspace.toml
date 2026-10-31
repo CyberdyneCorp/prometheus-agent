@@ -48,6 +48,9 @@ publish-prereleases = true
 github-build-setup = "../release-build-setup.yml"
 
 [dist.github-custom-runners]
+# dist defaults to macos-14, which GitHub retires on 2026-11-02 (its
+# scheduled brownouts cancel the job); build on the same image as CI.
+aarch64-apple-darwin = "macos-15"
 # Native ARM Windows (as in CI) instead of a cargo-xwin container.
 aarch64-pc-windows-msvc = "windows-11-arm"
 # The x86_64 Ubuntu image ships the Android NDK.
