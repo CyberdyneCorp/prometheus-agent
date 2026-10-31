@@ -160,9 +160,15 @@ async fn named_sessions_get_their_own_browser_and_idle_ones_are_closed() {
     // `browser.inactivity_timeout_secs` is read at use time.
     fixture.config.lock().unwrap().inactivity_timeout_secs = 0;
     tokio::time::sleep(Duration::from_millis(1_100)).await;
-    assert_eq!(manager.reap_idle().await, 2);
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // The background reaper may have closed them already.
+    manager.reap_idle().await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !records(&fixture.browser_cache()).is_empty() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert!(records(&fixture.browser_cache()).is_empty());
+    let fresh = manager.session("ses_b/default").await.unwrap().pid();
+    assert_ne!(fresh, default, "a closed session starts a new browser");
 }
 
 #[tokio::test]

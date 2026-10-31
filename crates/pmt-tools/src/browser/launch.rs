@@ -204,8 +204,28 @@ pub async fn launch(
 /// browser's whole life (a full pipe would block it); the tail explains a
 /// failed start (for example Chromium's `No usable sandbox!`).
 struct StderrTail {
-    lines: Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
+    lines: Arc<std::sync::Mutex<Kept>>,
     reader: Option<tokio::task::JoinHandle<()>>,
+}
+
+/// The first fatal line and the last lines of browser stderr.
+#[derive(Default)]
+struct Kept {
+    fatal: Option<String>,
+    tail: std::collections::VecDeque<String>,
+}
+
+impl Kept {
+    fn push(&mut self, line: String) {
+        let fatal = line.contains("FATAL") || line.contains("Check failed");
+        if fatal && self.fatal.is_none() {
+            self.fatal = Some(line.clone());
+        }
+        if self.tail.len() == TAIL_LINES {
+            self.tail.pop_front();
+        }
+        self.tail.push_back(line);
+    }
 }
 
 /// Lines of browser stderr kept for an error message.
@@ -214,19 +234,15 @@ const TAIL_LINES: usize = 8;
 impl StderrTail {
     fn drain(stderr: Option<tokio::process::ChildStderr>) -> Self {
         use tokio::io::AsyncBufReadExt as _;
-        let lines: Arc<std::sync::Mutex<std::collections::VecDeque<String>>> = Arc::default();
+        let lines: Arc<std::sync::Mutex<Kept>> = Arc::default();
         let reader = stderr.map(|stderr| {
             let kept = Arc::clone(&lines);
             tokio::spawn(async move {
                 let mut reader = tokio::io::BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
-                    let mut kept = kept
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    if kept.len() == TAIL_LINES {
-                        kept.pop_front();
-                    }
-                    kept.push_back(line);
+                    kept.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push(line);
                 }
             })
         });
@@ -238,15 +254,21 @@ impl StderrTail {
         if let Some(reader) = self.reader.take() {
             let _ = tokio::time::timeout(Duration::from_secs(2), reader).await;
         }
-        let lines = self
+        let kept = self
             .lines
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if lines.is_empty() {
+        let mut shown: Vec<&str> = kept.fatal.iter().map(String::as_str).collect();
+        shown.extend(
+            kept.tail
+                .iter()
+                .map(String::as_str)
+                .filter(|line| Some(*line) != kept.fatal.as_deref()),
+        );
+        if shown.is_empty() {
             return why;
         }
-        let tail: Vec<&str> = lines.iter().map(String::as_str).collect();
-        format!("{why}; browser output: {}", tail.join(" | "))
+        format!("{why}; browser output: {}", shown.join(" | "))
     }
 }
 
