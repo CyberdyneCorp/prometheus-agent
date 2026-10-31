@@ -1,0 +1,7 @@
+name: prometheus-agent
+description: Operate, configure and troubleshoot Prometheus itself.
+category: autonomous-ai-agents
+source: bundled (bundled:autonomous-ai-agents/prometheus-agent)
+provenance: builtin
+status: enabled
+files: SKILL.md

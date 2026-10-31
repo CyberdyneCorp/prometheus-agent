@@ -16,12 +16,17 @@
 //! (and a `refresh_prompt` that re-reads it), add
 //! [`session::SkillsSession::change_note`] to each turn's additions, give
 //! the terminal [`session::SkillsSession::secret_source`], and register
-//! [`tools::tools`] with the built-in tools.
+//! [`tools::tools`] with the built-in tools. Before the first turn,
+//! [`preload::preload`] gives the prompt's `pinned_skills` text; a chat
+//! message starting with `/` goes through [`dispatch::expand`] (skill
+//! stacks and bundles) after the built-in commands.
 
 pub mod activation;
 pub mod bundled;
+pub mod bundles;
 pub mod catalog;
 pub mod digest;
+pub mod dispatch;
 pub mod eject;
 pub mod frontmatter;
 pub mod gates;
@@ -29,12 +34,18 @@ pub mod hints;
 pub mod index;
 pub mod inline;
 pub mod layout;
+pub mod learn;
 pub mod lint;
 pub mod load;
 pub mod lockfile;
 pub mod manage;
 pub mod meta;
+pub mod official;
+pub mod optout;
 pub mod pending;
+pub mod preload;
+pub mod refine;
+pub mod reload;
 pub mod review;
 pub mod roots;
 pub mod scan;

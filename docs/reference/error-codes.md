@@ -211,3 +211,6 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `skill.io` | `io` | 74 | A skill file or directory could not be read or written. |
 | `skill.hub_unavailable` | `unavailable` | 69 | Installing and removing hub skills ships with the skills hub in M2; create skills with `skill_manage` or copy them into the profile's `skills/` directory. |
 | `skill.pending_not_found` | `not_found` | 66 | No staged skill write has that id; `/skills pending` lists them. |
+| `skill.review_running` | `conflict` | 75 | A background skill review of this session is already running (`a review is already running`); `/refine` again once it posts its summary. |
+| `skill.bundle_invalid` | `invalid_input` | 65 | A skill bundle (`<profile>/skill-bundles/<slug>.toml`) is malformed: TOML that does not parse, an unknown field, an empty `skills` list or more than 32 entries; `prometheus skills bundles list` reports each file. |
+| `skill.bundle_not_found` | `not_found` | 66 | No skill bundle has that slug; `prometheus skills bundles list` lists them. |

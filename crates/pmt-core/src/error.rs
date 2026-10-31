@@ -636,6 +636,15 @@ error_codes! {
     /// No pending skill write has that id.
     SKILL_PENDING_NOT_FOUND = ("skill.pending_not_found", NotFound,
         "No staged skill write has that id; `/skills pending` lists them.");
+    /// A skill review of the session is already running.
+    SKILL_REVIEW_RUNNING = ("skill.review_running", Conflict,
+        "A background skill review of this session is already running (`a review is already running`); `/refine` again once it posts its summary.");
+    /// A skill bundle file is malformed or names no skill.
+    SKILL_BUNDLE_INVALID = ("skill.bundle_invalid", InvalidInput,
+        "A skill bundle (`<profile>/skill-bundles/<slug>.toml`) is malformed: TOML that does not parse, an unknown field, an empty `skills` list or more than 32 entries; `prometheus skills bundles list` reports each file.");
+    /// No skill bundle has that slug.
+    SKILL_BUNDLE_NOT_FOUND = ("skill.bundle_not_found", NotFound,
+        "No skill bundle has that slug; `prometheus skills bundles list` lists them.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

@@ -296,7 +296,7 @@ fn patch(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {
 
 /// `current` with `old` replaced by `new`: exactly one match unless
 /// `all`.
-fn replace(current: &str, old: &str, new: &str, all: bool) -> Result<String, String> {
+pub(crate) fn replace(current: &str, old: &str, new: &str, all: bool) -> Result<String, String> {
     if old.is_empty() {
         return Err("old_string must not be empty".to_owned());
     }

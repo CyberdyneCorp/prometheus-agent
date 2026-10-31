@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use pmt_config::essential::ESSENTIAL_SKILL;
 use pmt_config::schema::SkillsConfig;
 
 use crate::bundled::Bundled;
@@ -170,13 +171,19 @@ impl Roots {
         for (plugin, dir) in inputs.plugins {
             roots.push(Tier::Plugin, dir.clone(), Some(plugin.clone()));
         }
-        if inputs.config.include_bundled {
-            roots.roots.push(Root {
-                tier: Tier::Bundled,
-                dir: RootDir::Bundled(Arc::clone(&inputs.bundled)),
-                plugin: None,
-            });
-        }
+        // An opted-out profile (`skills.include_bundled = false`) still
+        // gets the essential skill: without it the agent cannot help repair
+        // the profile.
+        let bundled = if inputs.config.include_bundled {
+            Arc::clone(&inputs.bundled)
+        } else {
+            Arc::new(inputs.bundled.only_skill(ESSENTIAL_SKILL))
+        };
+        roots.roots.push(Root {
+            tier: Tier::Bundled,
+            dir: RootDir::Bundled(bundled),
+            plugin: None,
+        });
         roots
     }
 

@@ -17,6 +17,7 @@
 - [File and web tools](guide/files-and-web.md)
 - [Browser automation](guide/browser.md)
 - [Tools and toolsets](guide/tools.md)
+- [Skills](guide/skills.md)
 - [Capabilities, grants and redaction](guide/security.md)
 
 # Reference

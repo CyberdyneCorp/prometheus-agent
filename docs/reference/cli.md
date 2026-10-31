@@ -13,7 +13,7 @@ Commands:
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
-  skills      Trust project skills and manage ejected copies of bundled skills
+  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
   grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
@@ -784,21 +784,196 @@ Usage: prometheus secrets help help
 ## `prometheus skills`
 
 ```text
-Trust project skills and manage ejected copies of bundled skills
+List, inspect, enable, lint and maintain the profile's skills and skill bundles
 
 Usage: prometheus skills [OPTIONS] <COMMAND>
 
 Commands:
-  trust   Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
-  eject   Copy a bundled skill into the profile as an editable copy that shadows it
-  diff    Show how an ejected copy differs from the current bundled version
-  reset   Remove an ejected copy so the name resolves to the bundled skill again
-  doctor  Report skills that do not load (path, line, reason) and quarantined project skills
-  help    Print this message or the help of the given subcommand(s)
+  list             List the profile's skills with category, source and status (shadowed copies marked)
+  show             Show one skill: where it comes from, its status, its files and its SKILL.md
+  enable           Enable a skill (from the next session)
+  disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+  lint             Check skills against the authoring rules (all of the profile's when no path is given)
+  trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject            Copy a bundled skill into the profile as an editable copy that shadows it
+  diff             Show how an ejected copy differs from the current bundled version
+  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+  bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+  pending          Review skill writes staged by `skills.write_approval` (default: list them)
+  opt-out          Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+  opt-in           Show bundled skills again (the default)
+  list-modified    List ejected skills whose content differs from their recorded origin
+  repair-official  Re-record the provenance of official catalog installs that match the embedded copy
+  help             Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills list`
+
+```text
+List the profile's skills with category, source and status (shadowed copies marked)
+
+Usage: prometheus skills list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --outdated
+          Only ejected skills whose bundled origin changed in this release
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills show`
+
+```text
+Show one skill: where it comes from, its status, its files and its SKILL.md
+
+Usage: prometheus skills show [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills enable`
+
+```text
+Enable a skill (from the next session)
+
+Usage: prometheus skills enable [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <P>
+          Only on this surface or adapter (`skills.platform_disabled.<P>`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills disable`
+
+```text
+Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+
+Usage: prometheus skills disable [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The skill
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <P>
+          Only on this surface or adapter (`skills.platform_disabled.<P>`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills lint`
+
+```text
+Check skills against the authoring rules (all of the profile's when no path is given)
+
+Usage: prometheus skills lint [OPTIONS] [PATHS]...
+
+Arguments:
+  [PATHS]...
+          Skill directories, SKILL.md files or directories holding skills
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --strict
+          Exit 1 when any finding exists
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -967,6 +1142,665 @@ Options:
           Print help
 ```
 
+## `prometheus skills reload`
+
+```text
+Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+
+Usage: prometheus skills reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles`
+
+```text
+Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+
+Usage: prometheus skills bundles [OPTIONS] <COMMAND>
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus skills bundles list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles show`
+
+```text
+Show one bundle
+
+Usage: prometheus skills bundles show [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles create`
+
+```text
+Write a bundle
+
+Usage: prometheus skills bundles create [OPTIONS] --skill <S> <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name (`/<slug>`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --skill <S>
+          A skill to load; repeatable, in order
+
+      --description <D>
+          One line for listings
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --instruction <I>
+          Text added after the skills
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --force
+          Replace an existing bundle
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus skills bundles delete [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus skills bundles reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus skills bundles install [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The bundle's command name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills bundles help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills bundles help [COMMAND]
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills bundles help list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus skills bundles help list
+```
+
+## `prometheus skills bundles help show`
+
+```text
+Show one bundle
+
+Usage: prometheus skills bundles help show
+```
+
+## `prometheus skills bundles help create`
+
+```text
+Write a bundle
+
+Usage: prometheus skills bundles help create
+```
+
+## `prometheus skills bundles help delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus skills bundles help delete
+```
+
+## `prometheus skills bundles help reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus skills bundles help reload
+```
+
+## `prometheus skills bundles help install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus skills bundles help install
+```
+
+## `prometheus skills bundles help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills bundles help help
+```
+
+## `prometheus skills pending`
+
+```text
+Review skill writes staged by `skills.write_approval` (default: list them)
+
+Usage: prometheus skills pending [OPTIONS] [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus skills pending list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus skills pending diff [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The pending id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus skills pending approve [OPTIONS] <TARGET>
+
+Arguments:
+  <TARGET>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus skills pending reject [OPTIONS] <TARGET>
+
+Arguments:
+  <TARGET>
+          The pending id, or `all`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills pending help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills pending help [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills pending help list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus skills pending help list
+```
+
+## `prometheus skills pending help diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus skills pending help diff
+```
+
+## `prometheus skills pending help approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus skills pending help approve
+```
+
+## `prometheus skills pending help reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus skills pending help reject
+```
+
+## `prometheus skills pending help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus skills pending help help
+```
+
+## `prometheus skills opt-out`
+
+```text
+Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+
+Usage: prometheus skills opt-out [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --remove
+          Also delete ejected copies still identical to their bundled origin
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask before deleting
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills opt-in`
+
+```text
+Show bundled skills again (the default)
+
+Usage: prometheus skills opt-in [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills list-modified`
+
+```text
+List ejected skills whose content differs from their recorded origin
+
+Usage: prometheus skills list-modified [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
+## `prometheus skills repair-official`
+
+```text
+Re-record the provenance of official catalog installs that match the embedded copy
+
+Usage: prometheus skills repair-official [OPTIONS] <TARGET>
+
+Arguments:
+  <TARGET>
+          An official skill name, or `all` for every official skill the profile holds
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --restore
+          Replace missing or modified copies (old copies move to `skills/.backups/`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask before restoring
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus skills help`
 
 ```text
@@ -975,12 +1809,64 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus skills help [COMMAND]
 
 Commands:
-  trust   Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
-  eject   Copy a bundled skill into the profile as an editable copy that shadows it
-  diff    Show how an ejected copy differs from the current bundled version
-  reset   Remove an ejected copy so the name resolves to the bundled skill again
-  doctor  Report skills that do not load (path, line, reason) and quarantined project skills
-  help    Print this message or the help of the given subcommand(s)
+  list             List the profile's skills with category, source and status (shadowed copies marked)
+  show             Show one skill: where it comes from, its status, its files and its SKILL.md
+  enable           Enable a skill (from the next session)
+  disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+  lint             Check skills against the authoring rules (all of the profile's when no path is given)
+  trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject            Copy a bundled skill into the profile as an editable copy that shadows it
+  diff             Show how an ejected copy differs from the current bundled version
+  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+  bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+  pending          Review skill writes staged by `skills.write_approval` (default: list them)
+  opt-out          Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+  opt-in           Show bundled skills again (the default)
+  list-modified    List ejected skills whose content differs from their recorded origin
+  repair-official  Re-record the provenance of official catalog installs that match the embedded copy
+  help             Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus skills help list`
+
+```text
+List the profile's skills with category, source and status (shadowed copies marked)
+
+Usage: prometheus skills help list
+```
+
+## `prometheus skills help show`
+
+```text
+Show one skill: where it comes from, its status, its files and its SKILL.md
+
+Usage: prometheus skills help show
+```
+
+## `prometheus skills help enable`
+
+```text
+Enable a skill (from the next session)
+
+Usage: prometheus skills help enable
+```
+
+## `prometheus skills help disable`
+
+```text
+Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+
+Usage: prometheus skills help disable
+```
+
+## `prometheus skills help lint`
+
+```text
+Check skills against the authoring rules (all of the profile's when no path is given)
+
+Usage: prometheus skills help lint
 ```
 
 ## `prometheus skills help trust`
@@ -1021,6 +1907,156 @@ Usage: prometheus skills help reset
 Report skills that do not load (path, line, reason) and quarantined project skills
 
 Usage: prometheus skills help doctor
+```
+
+## `prometheus skills help reload`
+
+```text
+Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+
+Usage: prometheus skills help reload
+```
+
+## `prometheus skills help bundles`
+
+```text
+Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+
+Usage: prometheus skills help bundles [COMMAND]
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+```
+
+## `prometheus skills help bundles list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus skills help bundles list
+```
+
+## `prometheus skills help bundles show`
+
+```text
+Show one bundle
+
+Usage: prometheus skills help bundles show
+```
+
+## `prometheus skills help bundles create`
+
+```text
+Write a bundle
+
+Usage: prometheus skills help bundles create
+```
+
+## `prometheus skills help bundles delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus skills help bundles delete
+```
+
+## `prometheus skills help bundles reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus skills help bundles reload
+```
+
+## `prometheus skills help bundles install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus skills help bundles install
+```
+
+## `prometheus skills help pending`
+
+```text
+Review skill writes staged by `skills.write_approval` (default: list them)
+
+Usage: prometheus skills help pending [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+```
+
+## `prometheus skills help pending list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus skills help pending list
+```
+
+## `prometheus skills help pending diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus skills help pending diff
+```
+
+## `prometheus skills help pending approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus skills help pending approve
+```
+
+## `prometheus skills help pending reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus skills help pending reject
+```
+
+## `prometheus skills help opt-out`
+
+```text
+Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+
+Usage: prometheus skills help opt-out
+```
+
+## `prometheus skills help opt-in`
+
+```text
+Show bundled skills again (the default)
+
+Usage: prometheus skills help opt-in
+```
+
+## `prometheus skills help list-modified`
+
+```text
+List ejected skills whose content differs from their recorded origin
+
+Usage: prometheus skills help list-modified
+```
+
+## `prometheus skills help repair-official`
+
+```text
+Re-record the provenance of official catalog installs that match the embedded copy
+
+Usage: prometheus skills help repair-official
 ```
 
 ## `prometheus skills help help`
@@ -1598,6 +2634,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --no-skills
+          Start without bundled skills (`skills.include_bundled = false`); the essential skill stays
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -4077,7 +5116,7 @@ Commands:
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
-  skills      Trust project skills and manage ejected copies of bundled skills
+  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
   grants      List and revoke the profile's permanent capability grants and approvals
   backup      Back up the whole home to a .tar.zst archive, or restore one
   snapshots   Snapshot and restore the selected profile's critical state
@@ -4262,16 +5301,68 @@ Usage: prometheus help secrets migrate
 ## `prometheus help skills`
 
 ```text
-Trust project skills and manage ejected copies of bundled skills
+List, inspect, enable, lint and maintain the profile's skills and skill bundles
 
 Usage: prometheus help skills [COMMAND]
 
 Commands:
-  trust   Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
-  eject   Copy a bundled skill into the profile as an editable copy that shadows it
-  diff    Show how an ejected copy differs from the current bundled version
-  reset   Remove an ejected copy so the name resolves to the bundled skill again
-  doctor  Report skills that do not load (path, line, reason) and quarantined project skills
+  list             List the profile's skills with category, source and status (shadowed copies marked)
+  show             Show one skill: where it comes from, its status, its files and its SKILL.md
+  enable           Enable a skill (from the next session)
+  disable          Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+  lint             Check skills against the authoring rules (all of the profile's when no path is given)
+  trust            Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions
+  eject            Copy a bundled skill into the profile as an editable copy that shadows it
+  diff             Show how an ejected copy differs from the current bundled version
+  reset            Remove an ejected copy so the name resolves to the bundled skill again
+  doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+  bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+  pending          Review skill writes staged by `skills.write_approval` (default: list them)
+  opt-out          Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+  opt-in           Show bundled skills again (the default)
+  list-modified    List ejected skills whose content differs from their recorded origin
+  repair-official  Re-record the provenance of official catalog installs that match the embedded copy
+```
+
+## `prometheus help skills list`
+
+```text
+List the profile's skills with category, source and status (shadowed copies marked)
+
+Usage: prometheus help skills list
+```
+
+## `prometheus help skills show`
+
+```text
+Show one skill: where it comes from, its status, its files and its SKILL.md
+
+Usage: prometheus help skills show
+```
+
+## `prometheus help skills enable`
+
+```text
+Enable a skill (from the next session)
+
+Usage: prometheus help skills enable
+```
+
+## `prometheus help skills disable`
+
+```text
+Disable a skill (from the next session); `prometheus-agent` cannot be disabled
+
+Usage: prometheus help skills disable
+```
+
+## `prometheus help skills lint`
+
+```text
+Check skills against the authoring rules (all of the profile's when no path is given)
+
+Usage: prometheus help skills lint
 ```
 
 ## `prometheus help skills trust`
@@ -4312,6 +5403,156 @@ Usage: prometheus help skills reset
 Report skills that do not load (path, line, reason) and quarantined project skills
 
 Usage: prometheus help skills doctor
+```
+
+## `prometheus help skills reload`
+
+```text
+Rescan every skill root and bundle; report added, removed and changed skills since the last reload
+
+Usage: prometheus help skills reload
+```
+
+## `prometheus help skills bundles`
+
+```text
+Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
+
+Usage: prometheus help skills bundles [COMMAND]
+
+Commands:
+  list     List the bundles and the files that do not load
+  show     Show one bundle
+  create   Write a bundle
+  delete   Delete a bundle
+  reload   Rescan the bundle directory; report added, changed and removed bundles
+  install  Install the missing skills of a bundle that name a hub `source`
+```
+
+## `prometheus help skills bundles list`
+
+```text
+List the bundles and the files that do not load
+
+Usage: prometheus help skills bundles list
+```
+
+## `prometheus help skills bundles show`
+
+```text
+Show one bundle
+
+Usage: prometheus help skills bundles show
+```
+
+## `prometheus help skills bundles create`
+
+```text
+Write a bundle
+
+Usage: prometheus help skills bundles create
+```
+
+## `prometheus help skills bundles delete`
+
+```text
+Delete a bundle
+
+Usage: prometheus help skills bundles delete
+```
+
+## `prometheus help skills bundles reload`
+
+```text
+Rescan the bundle directory; report added, changed and removed bundles
+
+Usage: prometheus help skills bundles reload
+```
+
+## `prometheus help skills bundles install`
+
+```text
+Install the missing skills of a bundle that name a hub `source`
+
+Usage: prometheus help skills bundles install
+```
+
+## `prometheus help skills pending`
+
+```text
+Review skill writes staged by `skills.write_approval` (default: list them)
+
+Usage: prometheus help skills pending [COMMAND]
+
+Commands:
+  list     List staged writes with a one-line gist
+  diff     Show the unified diff of a staged write
+  approve  Apply a staged write (or `all`) through the normal validation and scan
+  reject   Drop a staged write (or `all`)
+```
+
+## `prometheus help skills pending list`
+
+```text
+List staged writes with a one-line gist
+
+Usage: prometheus help skills pending list
+```
+
+## `prometheus help skills pending diff`
+
+```text
+Show the unified diff of a staged write
+
+Usage: prometheus help skills pending diff
+```
+
+## `prometheus help skills pending approve`
+
+```text
+Apply a staged write (or `all`) through the normal validation and scan
+
+Usage: prometheus help skills pending approve
+```
+
+## `prometheus help skills pending reject`
+
+```text
+Drop a staged write (or `all`)
+
+Usage: prometheus help skills pending reject
+```
+
+## `prometheus help skills opt-out`
+
+```text
+Hide every bundled skill from this profile across upgrades (`prometheus-agent` stays)
+
+Usage: prometheus help skills opt-out
+```
+
+## `prometheus help skills opt-in`
+
+```text
+Show bundled skills again (the default)
+
+Usage: prometheus help skills opt-in
+```
+
+## `prometheus help skills list-modified`
+
+```text
+List ejected skills whose content differs from their recorded origin
+
+Usage: prometheus help skills list-modified
+```
+
+## `prometheus help skills repair-official`
+
+```text
+Re-record the provenance of official catalog installs that match the embedded copy
+
+Usage: prometheus help skills repair-official
 ```
 
 ## `prometheus help grants`
@@ -4942,6 +6183,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.secrets.v1` | `prometheus secrets list` |
 | `prometheus.backup.v1` | `prometheus backup create` |
 | `prometheus.restore.v1` | `prometheus backup restore` |
+| `prometheus.skills.v1` | `prometheus skills list` |
+| `prometheus.skill.v1` | `prometheus skills show` |
+| `prometheus.skills_lint.v1` | `prometheus skills lint` |
 | `prometheus.snapshots.v1` | `prometheus snapshots list` |
 | `prometheus.profiles.v1` | `prometheus profile list` |
 | `prometheus.profile.v1` | `prometheus profile show` |

@@ -1,0 +1,4 @@
+<dir>/logs/SKILL.md: banned_word: description uses 'advanced'
+<dir>/wrong/SKILL.md: description_period: description should end with a period
+<dir>/wrong/SKILL.md: home_path: contains a machine-local home path
+<dir>/wrong/SKILL.md: name_matches_dir: name 'right' differs from the directory 'wrong'

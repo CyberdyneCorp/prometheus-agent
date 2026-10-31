@@ -8,6 +8,7 @@ use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use pmt_store::{Role, Source};
 
 use crate::build_info;
+pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand};
 
 // The command name is fixed rather than taken from `argv[0]`, so the `pmt`
 // alias prints exactly the same identity line as `prometheus`. `long_about`
@@ -58,7 +59,7 @@ pub enum Command {
         #[command(subcommand)]
         command: SecretsCommand,
     },
-    /// Trust project skills and manage ejected copies of bundled skills.
+    /// List, inspect, enable, lint and maintain the profile's skills and skill bundles.
     Skills {
         /// The skills subcommand.
         #[command(subcommand)]
@@ -794,33 +795,6 @@ fn parse_time(text: &str) -> Result<jiff::Timestamp, String> {
         .map_err(|_| format!("'{text}' is not an RFC 3339 time or a YYYY-MM-DD date"))
 }
 
-/// `prometheus skills` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum SkillsCommand {
-    /// Load the skills of a git checkout (`.prometheus/skills`, `.agents/skills`) in new sessions.
-    Trust {
-        /// The repository root.
-        root: std::path::PathBuf,
-    },
-    /// Copy a bundled skill into the profile as an editable copy that shadows it.
-    Eject {
-        /// The bundled skill.
-        name: String,
-    },
-    /// Show how an ejected copy differs from the current bundled version.
-    Diff {
-        /// The ejected skill.
-        name: String,
-    },
-    /// Remove an ejected copy so the name resolves to the bundled skill again.
-    Reset {
-        /// The ejected skill.
-        name: String,
-    },
-    /// Report skills that do not load (path, line, reason) and quarantined project skills.
-    Doctor,
-}
-
 /// `prometheus grants` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum GrantsCommand {
@@ -948,6 +922,9 @@ pub enum ProfileCommand {
         /// With --clone-from, also copy the secrets.
         #[arg(long, requires = "clone_from")]
         clone_secrets: bool,
+        /// Start without bundled skills (`skills.include_bundled = false`); the essential skill stays.
+        #[arg(long)]
+        no_skills: bool,
     },
     /// Make a profile the one used without -p (`use default` clears the choice).
     Use {

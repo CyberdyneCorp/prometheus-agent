@@ -30,7 +30,24 @@ static BUILTIN: LazyLock<Arc<Bundled>> = LazyLock::new(|| {
     })
 });
 
+static OFFICIAL: LazyLock<Arc<Bundled>> = LazyLock::new(|| {
+    Arc::new(Bundled {
+        files: generated::OFFICIAL_FILES
+            .iter()
+            .map(|(path, bytes)| ((*path).to_owned(), Cow::Borrowed(*bytes)))
+            .collect(),
+    })
+});
+
 impl Bundled {
+    /// The official optional catalog shipped with this binary
+    /// (`official/<category>/<name>`; installable, never active until
+    /// installed).
+    #[must_use]
+    pub fn official() -> Arc<Self> {
+        Arc::clone(&OFFICIAL)
+    }
+
     /// The tree shipped with this binary.
     #[must_use]
     pub fn builtin() -> Arc<Self> {
@@ -75,6 +92,24 @@ impl Bundled {
             format!("{dir}/{rel}")
         };
         self.files.get(&path).map(AsRef::as_ref)
+    }
+
+    /// The subtree of the skill directories named `dir_name` (a bundled
+    /// skill's directory is named after the skill): what an opted-out
+    /// profile still sees of the bundled tier.
+    #[must_use]
+    pub fn only_skill(&self, dir_name: &str) -> Self {
+        Self {
+            files: self
+                .files
+                .iter()
+                .filter(|(path, _)| {
+                    let mut dirs = path.split('/').rev().skip(1);
+                    dirs.any(|d| d == dir_name)
+                })
+                .map(|(p, c)| (p.clone(), c.clone()))
+                .collect(),
+        }
     }
 
     /// The content digest of directory `dir` ([`digest::tree`]).

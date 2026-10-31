@@ -344,7 +344,7 @@ fn disabling_the_essential_skill_fails_validation() {
     );
     // And a write through the config API is refused before it lands.
     std::fs::write(dir.config_file().path(), crate::support::BASE).unwrap();
-    let err = activation::set_disabled(&dir, "prometheus-agent", true).unwrap_err();
+    let err = activation::set_disabled(&dir, "prometheus-agent", None, true).unwrap_err();
     assert!(
         err.message().contains("skills.disabled"),
         "{}",

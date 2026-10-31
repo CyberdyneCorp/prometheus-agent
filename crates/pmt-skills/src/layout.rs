@@ -19,7 +19,7 @@ pub const SKILL_FILE: &str = "SKILL.md";
 pub const SUPPORT_DIRS: [&str; 5] = ["references", "templates", "scripts", "assets", "evals"];
 
 /// Directories never walked: version control, Prometheus' own bookkeeping
-/// (archive, backups, locks, staged writes), dependencies, virtualenvs and
+/// (archive, backups, locks), dependencies, virtualenvs and
 /// tool caches.
 pub const EXCLUDED_DIRS: &[&str] = &[
     ".git",
@@ -27,7 +27,6 @@ pub const EXCLUDED_DIRS: &[&str] = &[
     ".archive",
     ".backups",
     ".locks",
-    ".pending",
     "node_modules",
     "site-packages",
     ".venv",

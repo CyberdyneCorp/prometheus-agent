@@ -490,6 +490,7 @@ async fn background_review_creates_a_skill_in_a_hidden_child_session() {
             Arc::new(Timings::default()),
         )),
         sessions: Arc::clone(&parent.sessions),
+        focus: None,
     })
     .await
     .unwrap();

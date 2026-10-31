@@ -3,11 +3,15 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_agent::turn::model::{ProviderModel, ProviderSetup};
+use pmt_agent::turn::model::{
+    BoxFuture, DeltaSink, ModelFailure, ModelPort, ModelReply, ProviderModel, ProviderSetup,
+    RouteInfo,
+};
 use pmt_agent::turn::tools::{SessionTools, Timings};
+use pmt_agent::turn::{Agent, AgentSetup, PromptSetup, TurnInput, TurnOptions, TurnResult};
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 use pmt_core::cancel::CancelToken;
 use pmt_core::capability::{BASELINE, CapabilitySet};
@@ -15,9 +19,11 @@ use pmt_core::id::SessionId;
 use pmt_core::panic::CrashReporter;
 use pmt_core::secret::{Redactor, SecretString};
 use pmt_obs::usage::{Prices, UsageRecorder};
+use pmt_providers::cost::CallContext as ProviderCallContext;
 use pmt_providers::fallback::Healthy;
 use pmt_providers::metadata::Catalog as ModelCatalog;
 use pmt_providers::mock::{Mock, Script};
+use pmt_providers::request::Request;
 use pmt_providers::resolve::{NoExtras, SecretSource, Target, TcpProbe};
 use pmt_providers::{ModelCaller, ProviderRegistry};
 use pmt_skills::bundled::Bundled;
@@ -300,4 +306,90 @@ pub(crate) async fn mock_model(profile: &Profile, script: &str) -> Arc<ProviderM
         ..Target::default()
     };
     Arc::new(ProviderModel::start(setup, caller, &target).await.unwrap())
+}
+
+/// Records every request, then delegates.
+pub(crate) struct Recording {
+    inner: Arc<dyn ModelPort>,
+    requests: Mutex<Vec<Request>>,
+}
+
+impl Recording {
+    pub(crate) fn wrap(inner: Arc<dyn ModelPort>) -> Arc<Self> {
+        Arc::new(Self {
+            inner,
+            requests: Mutex::new(Vec::new()),
+        })
+    }
+
+    pub(crate) fn requests(&self) -> Vec<Request> {
+        self.requests.lock().unwrap().clone()
+    }
+}
+
+impl ModelPort for Recording {
+    fn route(&self) -> BoxFuture<'_, RouteInfo> {
+        self.inner.route()
+    }
+
+    fn start_turn(&self) -> BoxFuture<'_, ()> {
+        self.inner.start_turn()
+    }
+
+    fn call<'a>(
+        &'a self,
+        request: &'a Request,
+        ctx: &'a ProviderCallContext,
+        deltas: &'a dyn DeltaSink,
+    ) -> BoxFuture<'a, Result<ModelReply, ModelFailure>> {
+        self.requests.lock().unwrap().push(request.clone());
+        self.inner.call(request, ctx, deltas)
+    }
+}
+
+/// The system prompt text of a request.
+pub(crate) fn system_text(request: &Request) -> String {
+    request
+        .system
+        .iter()
+        .map(|b| b.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+/// An agent of `session` on the CLI surface over `model` and the
+/// session's skills tools.
+pub(crate) fn agent(
+    profile: &Profile,
+    session: &Session,
+    model: Arc<dyn ModelPort>,
+    prompt: PromptSetup,
+) -> Agent {
+    let setup = AgentSetup::new(
+        profile.scope.clone(),
+        Arc::clone(&profile.store),
+        session.id,
+        model,
+        session.tool_port(),
+        prompt,
+    );
+    Agent::new(setup).unwrap()
+}
+
+/// Runs one turn of `text`.
+pub(crate) async fn turn(
+    profile: &Profile,
+    agent: &Agent,
+    session: SessionId,
+    text: &str,
+) -> TurnResult {
+    agent
+        .run_turn(
+            Some(&profile.scope),
+            session,
+            TurnInput::text(text),
+            TurnOptions::default(),
+        )
+        .await
+        .unwrap()
 }

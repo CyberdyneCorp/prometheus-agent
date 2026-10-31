@@ -25,6 +25,7 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             name,
             clone_from,
             clone_secrets,
+            no_skills,
         } => {
             let source = clone_from.as_deref().map(ProfileName::parse).transpose()?;
             let clone = source.as_ref().map(|source| CloneFrom {
@@ -32,6 +33,9 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
                 secrets: *clone_secrets,
             });
             let profile = home.create_profile(name, clone)?;
+            if *no_skills {
+                pmt_skills::optout::set_included(&profile, false)?;
+            }
             eprintln!(
                 "created profile '{}' at {}",
                 profile.name(),

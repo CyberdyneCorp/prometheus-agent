@@ -63,6 +63,18 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "backup restore",
     },
     JsonShape {
+        schema: "prometheus.skills.v1",
+        command: "skills list",
+    },
+    JsonShape {
+        schema: "prometheus.skill.v1",
+        command: "skills show",
+    },
+    JsonShape {
+        schema: "prometheus.skills_lint.v1",
+        command: "skills lint",
+    },
+    JsonShape {
         schema: "prometheus.snapshots.v1",
         command: "snapshots list",
     },

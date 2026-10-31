@@ -13,6 +13,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, PoisonError, RwLock};
 
 use pmt_config::schema::Config;
@@ -28,6 +29,7 @@ use crate::gates::{self, SessionView};
 use crate::index::{self, Difference, Posture, Snapshot};
 use crate::inline::InlineShell;
 use crate::lockfile::LockFile;
+use crate::reload::{self, Scan};
 use crate::review::ReviewState;
 use crate::roots::{RootDir, RootInputs, Roots, profile_skills};
 use crate::scan::{PatternScanner, Scanner};
@@ -63,6 +65,9 @@ pub struct SessionSetup {
     pub secret_prompt: Option<Arc<dyn SecretPrompt>>,
     /// A background skill review (restricted `skill_manage`).
     pub review: bool,
+    /// The surface's longest message (messaging adapters); long command
+    /// output such as a pending diff is cut to it.
+    pub message_limit: Option<usize>,
 }
 
 impl SessionSetup {
@@ -84,6 +89,7 @@ impl SessionSetup {
             inline_shell: None,
             secret_prompt: None,
             review: false,
+            message_limit: None,
         }
     }
 }
@@ -100,6 +106,8 @@ pub struct SkillsSession {
     last_note: Mutex<Option<Difference>>,
     loaded: Mutex<BTreeMap<String, Vec<String>>>,
     review: Option<ReviewState>,
+    scanned: Mutex<Scan>,
+    reviewing: AtomicBool,
 }
 
 impl SkillsSession {
@@ -116,8 +124,13 @@ impl SkillsSession {
             last_note: Mutex::new(None),
             loaded: Mutex::new(BTreeMap::new()),
             review,
+            scanned: Mutex::new(Scan::default()),
+            reviewing: AtomicBool::new(false),
         };
-        session.refresh_now();
+        let (catalog, config) = session.catalog();
+        session.refresh_with(&catalog, &config);
+        *lock(&session.scanned) =
+            reload::scan_of(&session.visible(&catalog, &config), session.scope().dir());
         session
     }
 
@@ -214,7 +227,12 @@ impl SkillsSession {
     /// an explicit `--now`); returns the notices of the scan.
     pub fn refresh_now(&self) -> Vec<String> {
         let (catalog, config) = self.catalog();
-        let indexed = self.indexed(&catalog, &config);
+        self.refresh_with(&catalog, &config);
+        catalog.notices
+    }
+
+    fn refresh_with(&self, catalog: &Catalog, config: &Config) {
+        let indexed = self.indexed(catalog, config);
         let chars = usize::try_from(config.skills.index_description_chars).unwrap_or(usize::MAX);
         *lock(&self.frozen) = Frozen {
             text: index::render(&indexed, chars, self.setup.posture),
@@ -225,7 +243,22 @@ impl SkillsSession {
             },
         };
         *lock(&self.last_note) = None;
-        catalog.notices
+    }
+
+    /// Records `scan` as the session's latest skill scan; returns the
+    /// previous one (`/reload-skills`).
+    pub fn replace_scan(&self, scan: Scan) -> Scan {
+        std::mem::replace(&mut *lock(&self.scanned), scan)
+    }
+
+    /// Marks a background review of this session as running; `None` when
+    /// one already is. The review ends when the guard drops.
+    #[must_use]
+    pub fn begin_review(self: &Arc<Self>) -> Option<ReviewGuard> {
+        self.reviewing
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| ReviewGuard(Arc::clone(self)))
     }
 
     /// The note for the next user message when the indexable skills differ
@@ -307,6 +340,15 @@ impl SkillsSession {
     #[must_use]
     pub fn cwd(&self) -> Option<&Path> {
         self.setup.cwd.as_deref()
+    }
+}
+
+/// A running background review of a session ([`SkillsSession::begin_review`]).
+pub struct ReviewGuard(Arc<SkillsSession>);
+
+impl Drop for ReviewGuard {
+    fn drop(&mut self) {
+        self.0.reviewing.store(false, Ordering::Release);
     }
 }
 

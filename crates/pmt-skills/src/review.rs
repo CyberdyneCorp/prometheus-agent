@@ -19,7 +19,7 @@ use pmt_agent::turn::{
     Agent, AgentSetup, ExitReason, PromptSetup, TurnInput, TurnOptions, TurnResult,
 };
 use pmt_config::schema::SkillsConfig;
-use pmt_core::error::Error;
+use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_store::{LineageKind, NewSession, Role, Source, Store, Visibility};
 
@@ -125,6 +125,9 @@ covers, create a skill with skill_manage; if an existing skill was wrong or inco
 with skill_view and patch it. Keep descriptions short and concrete. If nothing is worth \
 saving, answer \"nothing to save\" without calling tools.";
 
+/// The reply to a review request while one runs.
+pub const ALREADY_RUNNING: &str = "a review is already running";
+
 /// Most characters of conversation given to a review.
 pub const EXCERPT_CHARS: usize = 24_000;
 
@@ -172,6 +175,8 @@ pub struct ReviewRun {
     pub tools: Arc<dyn ToolPort>,
     /// The table the skill tools read sessions from.
     pub sessions: Arc<SkillSessions>,
+    /// What the user asked the review to look for (`/refine <focus>`).
+    pub focus: Option<String>,
 }
 
 /// Creates the review's hidden child session (tagged `tool`, so listings
@@ -186,13 +191,31 @@ pub fn child_session(store: &Store, parent: SessionId) -> Result<SessionId, Erro
     Ok(store.create_session(&new)?.id)
 }
 
+/// The review's user message: [`REVIEW_PROMPT`], the focus, the
+/// conversation.
+#[must_use]
+pub fn instruction(focus: Option<&str>, conversation: &str) -> String {
+    let mut text = REVIEW_PROMPT.to_owned();
+    if let Some(focus) = focus.map(str::trim).filter(|f| !f.is_empty()) {
+        let _ = write!(text, "\n\nThe user asked this review to focus on: {focus}");
+    }
+    let _ = write!(text, "\n\n<conversation>\n{conversation}\n</conversation>");
+    text
+}
+
 /// Runs a background review in `review.child` with a review-mode
-/// [`SkillsSession`] attached for the call.
+/// [`SkillsSession`] attached for the call. One review per session runs
+/// at a time.
 ///
 /// # Errors
 ///
-/// Store or turn errors.
+/// `skill.review_running` while another review of the session runs;
+/// store or turn errors.
 pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
+    let _running = review
+        .parent
+        .begin_review()
+        .ok_or_else(|| Error::new(&codes::SKILL_REVIEW_RUNNING, ALREADY_RUNNING))?;
     let parent = review.parent.setup();
     let store = Arc::clone(&parent.store);
     let child = review.child;
@@ -215,12 +238,7 @@ pub async fn run(review: ReviewRun) -> Result<TurnResult, Error> {
     agent_setup.unattended = true;
     agent_setup.interactive = false;
     let agent = Agent::new(agent_setup)?;
-    let mut text = REVIEW_PROMPT.to_owned();
-    let _ = write!(
-        text,
-        "\n\n<conversation>\n{}\n</conversation>",
-        excerpt(&store, review.session)?
-    );
+    let text = instruction(review.focus.as_deref(), &excerpt(&store, review.session)?);
     agent
         .run_turn(
             Some(&scope),

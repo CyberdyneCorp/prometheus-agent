@@ -27,7 +27,7 @@ pub const DEFERRED: &str = "Skill change takes effect in your next session. Use 
 pub const APPLIED_NOW: &str =
     "Skill change applied to this session now (the prompt cache was invalidated).";
 /// `/skills` usage.
-pub const USAGE: &str = "usage: /skills [list] | enable|disable|reset <name> [--now] | install|uninstall <identifier> [--now] | pending | approve|reject <id>";
+pub const USAGE: &str = "usage: /skills [list] | enable|disable|reset <name> [--now] | pending | diff <id> | approve|reject <id>|all | approval on|off | search|inspect|install|uninstall <identifier>";
 
 /// What the session does with a `/skills` command.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,28 +53,22 @@ pub fn run(session: &SkillsSession, args: &str, core: &[&str]) -> Result<Reply, 
     let mut words: Vec<&str> = args.split_whitespace().collect();
     let now = words.contains(&"--now");
     words.retain(|w| *w != "--now");
+    if let Some(text) = review_command(session, &words)? {
+        return Ok(plain(text));
+    }
     let text = match words.as_slice() {
         [] | ["list"] => return Ok(plain(listing(session, core))),
-        ["pending"] => return Ok(plain(pending_listing(session))),
-        ["approve", id] => {
-            let outcome = pending::approve(session, id)?;
-            return Ok(plain(outcome.message));
-        }
-        ["reject", id] => {
-            pending::reject(&session.skills_dir(), id)?;
-            return Ok(plain(format!("Rejected pending skill write {id}.")));
-        }
-        ["enable", name] => set_disabled(session.scope().profile(), name, false)?,
-        ["disable", name] => set_disabled(session.scope().profile(), name, true)?,
+        ["enable", name] => set_disabled(session.scope().profile(), name, None, false)?,
+        ["disable", name] => set_disabled(session.scope().profile(), name, None, true)?,
         ["reset", name] => {
             let (catalog, _) = session.catalog();
             eject::reset(session.scope().dir(), &catalog, name)?;
             format!("Reset '{name}' to the bundled version.")
         }
-        ["install" | "uninstall", _] => {
+        ["search" | "inspect" | "install" | "uninstall", ..] => {
             return Err(Error::new(
                 &codes::SKILL_HUB_UNAVAILABLE,
-                "installing and removing hub skills ships with the skills hub (M2)",
+                "searching, inspecting, installing and removing hub skills ships with the skills hub (M2)",
             ));
         }
         _ => return Err(usage()),
@@ -89,6 +83,58 @@ pub fn run(session: &SkillsSession, args: &str, core: &[&str]) -> Result<Reply, 
     Ok(plain(format!("{text}\n{DEFERRED}")))
 }
 
+/// The write-approval commands (`pending`, `diff`, `approve`, `reject`,
+/// `approval`); `None` for any other command.
+fn review_command(session: &SkillsSession, words: &[&str]) -> Result<Option<String>, Error> {
+    let profile = session.scope().dir();
+    let text = match words {
+        ["pending"] => pending_listing(session),
+        ["diff", id] => pending::fit(
+            &pending::diff(session, id)?,
+            session.setup().message_limit,
+            id,
+        ),
+        ["approve", target] => {
+            let mut lines = Vec::new();
+            for id in pending::ids(profile, target) {
+                lines.push(pending::approve(session, &id)?.message);
+            }
+            done(&lines, "No pending skill writes.")
+        }
+        ["reject", target] => {
+            let mut lines = Vec::new();
+            for id in pending::ids(profile, target) {
+                pending::reject(profile, &id)?;
+                lines.push(format!("Rejected pending skill write {id}."));
+            }
+            done(&lines, "No pending skill writes.")
+        }
+        ["approval", state @ ("on" | "off")] => {
+            let on = *state == "on";
+            session
+                .scope()
+                .profile()
+                .config_file()
+                .set("skills.write_approval", if on { "true" } else { "false" })?;
+            if on {
+                "Skill writes are now staged for your approval (/skills pending).".to_owned()
+            } else {
+                "Skill writes now apply without approval.".to_owned()
+            }
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(text))
+}
+
+fn done(lines: &[String], empty: &str) -> String {
+    if lines.is_empty() {
+        empty.to_owned()
+    } else {
+        lines.join("\n")
+    }
+}
+
 fn plain(text: String) -> Reply {
     Reply {
         text,
@@ -96,23 +142,36 @@ fn plain(text: String) -> Reply {
     }
 }
 
-/// Adds `name` to (or removes it from) `skills.disabled`.
+/// Adds `name` to (or removes it from) `skills.disabled`, or
+/// `skills.platform_disabled.<platform>` when a platform is given.
 ///
 /// # Errors
 ///
 /// Config write errors; disabling the essential skill is `config.invalid`.
-pub fn set_disabled(profile: &ProfileDir, name: &str, disabled: bool) -> Result<String, Error> {
+pub fn set_disabled(
+    profile: &ProfileDir,
+    name: &str,
+    platform: Option<&str>,
+    disabled: bool,
+) -> Result<String, Error> {
     let file = profile.config_file();
-    let mut names = current(profile)?.skills.disabled;
+    let skills = current(profile)?.skills;
+    let (key, mut names) = match platform {
+        None => ("skills.disabled".to_owned(), skills.disabled),
+        Some(p) => (
+            format!("skills.platform_disabled.{p}"),
+            skills.platform_disabled.get(p).cloned().unwrap_or_default(),
+        ),
+    };
     names.retain(|n| n != name);
     if disabled {
         names.push(name.to_owned());
     }
-    file.set("skills.disabled", &toml_list(&names))?;
-    Ok(if disabled {
-        format!("Disabled skill '{name}'.")
-    } else {
-        format!("Enabled skill '{name}'.")
+    file.set(&key, &toml_list(&names))?;
+    let what = if disabled { "Disabled" } else { "Enabled" };
+    Ok(match platform {
+        None => format!("{what} skill '{name}'."),
+        Some(p) => format!("{what} skill '{name}' on {p}."),
     })
 }
 
@@ -187,20 +246,13 @@ fn listing(session: &SkillsSession, core: &[&str]) -> String {
 }
 
 fn pending_listing(session: &SkillsSession) -> String {
-    let all = pending::list(&session.skills_dir());
+    let all = pending::list(session.scope().dir());
     if all.is_empty() {
         return "No pending skill writes.".to_owned();
     }
     let mut text = String::new();
     for p in all {
-        let _ = writeln!(
-            text,
-            "{}  {} {}  ({})",
-            p.id,
-            p.request.action.as_str(),
-            p.request.name,
-            p.created_at
-        );
+        let _ = writeln!(text, "{}", p.gist());
     }
     text
 }

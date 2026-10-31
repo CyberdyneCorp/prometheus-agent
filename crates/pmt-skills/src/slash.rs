@@ -6,10 +6,12 @@
 //! `/skill <name>` and the `/skills` listing says why.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
+use pmt_config::schema::Config;
 use pmt_store::{CreatedBy, SkillActivity};
 
-use crate::catalog::{Missing, Skill};
+use crate::catalog::{Catalog, Missing, Skill};
 use crate::gates;
 use crate::load;
 use crate::session::SkillsSession;
@@ -71,6 +73,84 @@ pub fn table(session: &SkillsSession, core: &[&str]) -> SlashTable {
     SlashTable::new(session.visible(&catalog, &config), core)
 }
 
+/// Resolves `name` for a user invocation: found, unambiguous and not
+/// hidden by a gate.
+///
+/// # Errors
+///
+/// The message to show the user.
+pub fn resolve(
+    session: &SkillsSession,
+    catalog: &Catalog,
+    config: &Config,
+    name: &str,
+) -> Result<Arc<Skill>, String> {
+    let skill = catalog.lookup(name).map_err(|missing| match missing {
+        Missing::Ambiguous(paths) => Missing::ambiguous_message(name, &paths),
+        Missing::NotFound => format!("unknown skill '{name}'"),
+    })?;
+    if let Some(hidden) = gates::hidden(&config.skills, &session.setup().view, &skill) {
+        return Err(hidden.message(&skill.name));
+    }
+    Ok(skill)
+}
+
+/// Loads `skill` as one block of a user message and counts a use.
+pub async fn block(session: &SkillsSession, skill: &Skill, config: &Config) -> String {
+    let loaded = load::load(session, skill, config).await;
+    if let Err(err) =
+        session
+            .store()
+            .record_skill_activity(&skill.name, SkillActivity::Used, CreatedBy::User)
+    {
+        tracing::warn!(skill = %skill.name, error = %err, "skill usage not recorded");
+    }
+    format!(
+        "[The user invoked the skill \"{}\". Follow it.]\n\n{}",
+        skill.name,
+        loaded.body.trim_end()
+    )
+}
+
+/// The parts of a user message that loads skills.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Message {
+    /// Loaded skill blocks ([`block`]), in order.
+    pub blocks: Vec<String>,
+    /// A bundle's own instruction.
+    pub bundle_instruction: Option<String>,
+    /// What the user typed after the commands.
+    pub instruction: String,
+    /// Listed skills that did not load.
+    pub skipped: Vec<String>,
+}
+
+impl Message {
+    /// The user message text.
+    #[must_use]
+    pub fn render(&self) -> String {
+        let mut text = self.blocks.join("\n\n");
+        if let Some(bundle) = self
+            .bundle_instruction
+            .as_deref()
+            .filter(|t| !t.trim().is_empty())
+        {
+            text.push_str("\n\nBundle instruction: ");
+            text.push_str(bundle.trim());
+        }
+        if !self.instruction.trim().is_empty() {
+            text.push_str("\n\nUser instruction: ");
+            text.push_str(self.instruction.trim());
+        }
+        if !self.skipped.is_empty() {
+            text.push_str("\n\n(skipped: ");
+            text.push_str(&self.skipped.join(", "));
+            text.push(')');
+        }
+        text
+    }
+}
+
 /// The user message of `/<slug> args` or `/skill <name> args`: the loaded
 /// skill and the user's instruction. Counts a use.
 ///
@@ -80,31 +160,13 @@ pub fn table(session: &SkillsSession, core: &[&str]) -> SlashTable {
 /// unsupported skill).
 pub async fn invoke(session: &SkillsSession, name: &str, args: &str) -> Result<String, String> {
     let (catalog, config) = session.catalog();
-    let skill = catalog.lookup(name).map_err(|missing| match missing {
-        Missing::Ambiguous(paths) => Missing::ambiguous_message(name, &paths),
-        Missing::NotFound => format!("unknown skill '{name}'"),
-    })?;
-    if let Some(hidden) = gates::hidden(&config.skills, &session.setup().view, &skill) {
-        return Err(hidden.message(&skill.name));
-    }
-    let loaded = load::load(session, &skill, &config).await;
-    if let Err(err) =
-        session
-            .store()
-            .record_skill_activity(&skill.name, SkillActivity::Used, CreatedBy::User)
-    {
-        tracing::warn!(skill = %skill.name, error = %err, "skill usage not recorded");
-    }
-    let mut message = format!(
-        "[The user invoked the skill \"{}\". Follow it.]\n\n{}",
-        skill.name,
-        loaded.body.trim_end()
-    );
-    if !args.trim().is_empty() {
-        message.push_str("\n\nUser instruction: ");
-        message.push_str(args.trim());
-    }
-    Ok(message)
+    let skill = resolve(session, &catalog, &config, name)?;
+    let message = Message {
+        blocks: vec![block(session, &skill, &config).await],
+        instruction: args.to_owned(),
+        ..Message::default()
+    };
+    Ok(message.render())
 }
 
 #[cfg(test)]
