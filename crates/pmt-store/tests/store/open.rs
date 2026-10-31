@@ -127,10 +127,11 @@ fn newer_store_opens_read_only_and_refuses_writes() {
     let store = home.store("default");
     let existing = session(&store);
     drop(store);
+    let newer = (pmt_store::SCHEMA_VERSION + 1).to_string();
     raw(&home.database("default"))
         .execute(
-            "UPDATE store_meta SET value = '7' WHERE key = 'schema_version'",
-            [],
+            "UPDATE store_meta SET value = ?1 WHERE key = 'schema_version'",
+            [&newer],
         )
         .unwrap();
 
@@ -146,7 +147,7 @@ fn newer_store_opens_read_only_and_refuses_writes() {
         .append_message(existing.id, &NewMessage::new(Role::User, "hi"))
         .unwrap_err();
     assert_eq!(err.code().code, "store.schema_too_new");
-    assert!(err.message().contains("version 7"), "{err}");
+    assert!(err.message().contains(&format!("version {newer}")), "{err}");
     let ours = format!("version {}", pmt_store::SCHEMA_VERSION);
     assert!(err.message().contains(&ours), "{err}");
     drop(store);
@@ -157,7 +158,7 @@ fn newer_store_opens_read_only_and_refuses_writes() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(version, "7", "never downgraded");
+    assert_eq!(version, newer, "never downgraded");
 }
 
 #[test]

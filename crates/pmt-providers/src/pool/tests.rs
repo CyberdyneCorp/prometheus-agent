@@ -133,3 +133,52 @@ fn members_are_the_default_key_then_labelled_keys() {
     assert_eq!(members[2].secret, "OPENROUTER_API_KEY_WORK");
     assert!(members.iter().all(|m| m.pooled));
 }
+
+/// Regression: requests in one millisecond tied on `last_used_at` and the
+/// pool served key A twice; the use sequence keeps the rotation.
+#[test]
+fn round_robin_rotates_when_every_use_shares_a_timestamp() {
+    let ids = ids(&["A", "B", "C"]);
+    let state = MemoryState::default();
+    let now = Timestamp::from_second(1_800_000_000).unwrap();
+    let used: Vec<usize> = (0..6)
+        .map(|_| {
+            let pick = select(
+                PoolStrategy::RoundRobin,
+                &ids,
+                &state.states("p").unwrap(),
+                now,
+            )
+            .unwrap();
+            state.record_use("p", &ids[pick], now).unwrap();
+            pick
+        })
+        .collect();
+    assert_eq!(used, [0, 1, 2, 0, 1, 2]);
+}
+
+/// Rows not used since schema v7 have no sequence: they order by time,
+/// and any of them comes before a key with a sequence.
+#[test]
+fn round_robin_orders_unsequenced_rows_by_time() {
+    let ids = ids(&["A", "B", "C"]);
+    let at = |s| Timestamp::from_second(s).ok();
+    let row = |id: &String, last_used_at, use_seq| pmt_store::credential_state::CredentialState {
+        credential: id.clone(),
+        request_count: 1,
+        last_used_at,
+        use_seq,
+        benched_until: None,
+        bench_reason: None,
+    };
+    let states = [
+        row(&ids[0], at(300), Some(1)),
+        row(&ids[1], at(200), None),
+        row(&ids[2], at(100), None),
+    ];
+    let now = Timestamp::from_second(1_000).unwrap();
+    assert_eq!(
+        select(PoolStrategy::RoundRobin, &ids, &states, now),
+        Some(2)
+    );
+}

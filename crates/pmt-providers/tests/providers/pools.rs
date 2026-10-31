@@ -219,3 +219,35 @@ async fn auxiliary_calls_draw_from_the_same_pool() {
             .any(|s| s.credential == secret_id("OPENROUTER_API_KEY") && s.benched_until.is_some())
     );
 }
+
+/// Regression: two requests in the same millisecond both picked key A
+/// (`last_used_at` tied); the stored use sequence keeps A, B, A, B.
+#[test]
+fn round_robin_rotates_through_state_db_within_one_millisecond() {
+    use pmt_config::schema::PoolStrategy;
+    use pmt_providers::pool::select;
+
+    let setup = Setup::new("", KEYS);
+    let ids = [
+        secret_id("OPENROUTER_API_KEY"),
+        secret_id("OPENROUTER_API_KEY_B"),
+    ];
+    let now = Timestamp::now();
+    let reopened = setup.reopen_store();
+    let used: Vec<usize> = (0..4)
+        .map(|i| {
+            // Alternate handles: two processes sharing the profile.
+            let state: &dyn PoolState = if i % 2 == 0 { &*setup.store } else { &reopened };
+            let pick = select(
+                PoolStrategy::RoundRobin,
+                &ids,
+                &state.states("openrouter").unwrap(),
+                now,
+            )
+            .unwrap();
+            state.record_use("openrouter", &ids[pick], now).unwrap();
+            pick
+        })
+        .collect();
+    assert_eq!(used, [0, 1, 0, 1]);
+}

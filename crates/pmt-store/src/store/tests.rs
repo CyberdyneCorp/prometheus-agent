@@ -163,3 +163,34 @@ fn v1_store_upgrades_to_the_current_schema_with_indexes_and_relaxed_lineage() {
         "v2 allows a kept child without a parent"
     );
 }
+
+/// A v6 row keeps its time and gains a use sequence on its next use.
+#[test]
+fn credential_uses_from_schema_v6_survive_the_v7_upgrade() {
+    let root = tempfile::tempdir().unwrap();
+    let scope = scope(root.path());
+    let earlier = jiff::Timestamp::from_millisecond(1_700_000_000_000).unwrap();
+    {
+        let store = Store::open_with(&scope, &MIGRATIONS[..6]).unwrap();
+        store
+            .write(|tx| {
+                tx.execute(
+                "INSERT INTO credential_state (provider, credential, request_count, last_used_at) \
+                 VALUES ('p', 'secret:A', 4, ?1)",
+                [earlier.as_millisecond()],
+            )
+            .map_err(crate::error::sql)
+            })
+            .unwrap();
+    }
+    let store = Store::open(&scope).unwrap();
+    let old = &store.credential_states("p").unwrap()[0];
+    assert_eq!(
+        (old.request_count, old.last_used_at, old.use_seq),
+        (4, Some(earlier), None)
+    );
+    store
+        .record_credential_use("p", "secret:A", earlier)
+        .unwrap();
+    assert_eq!(store.credential_states("p").unwrap()[0].use_seq, Some(1));
+}

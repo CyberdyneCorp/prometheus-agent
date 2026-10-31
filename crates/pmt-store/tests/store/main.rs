@@ -4,6 +4,7 @@
 mod blobs;
 mod compaction;
 mod crash;
+mod credential_state;
 mod integrity;
 mod lifecycle;
 mod open;

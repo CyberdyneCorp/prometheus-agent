@@ -89,26 +89,35 @@ pub struct MemoryState {
 }
 
 impl MemoryState {
+    /// Runs `f` on the row of `credential` with the provider's highest use
+    /// sequence, under one lock.
     fn with_row<T>(
         &self,
         provider: &str,
         credential: &str,
-        f: impl FnOnce(&mut CredentialState) -> T,
+        f: impl FnOnce(&mut CredentialState, u64) -> T,
     ) -> T {
         let mut rows = self
             .rows
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last_seq = rows
+            .iter()
+            .filter(|((p, _), _)| p == provider)
+            .filter_map(|(_, row)| row.use_seq)
+            .max()
+            .unwrap_or(0);
         let row = rows
             .entry((provider.to_owned(), credential.to_owned()))
             .or_insert_with(|| CredentialState {
                 credential: credential.to_owned(),
                 request_count: 0,
                 last_used_at: None,
+                use_seq: None,
                 benched_until: None,
                 bench_reason: None,
             });
-        f(row)
+        f(row, last_seq)
     }
 }
 
@@ -126,9 +135,10 @@ impl PoolState for MemoryState {
     }
 
     fn record_use(&self, provider: &str, credential: &str, now: Timestamp) -> Result<(), Error> {
-        self.with_row(provider, credential, |row| {
+        self.with_row(provider, credential, |row, last_seq| {
             row.request_count += 1;
             row.last_used_at = Some(now);
+            row.use_seq = Some(last_seq + 1);
         });
         Ok(())
     }
@@ -140,7 +150,7 @@ impl PoolState for MemoryState {
         until: Option<Timestamp>,
         reason: Option<&str>,
     ) -> Result<(), Error> {
-        self.with_row(provider, credential, |row| {
+        self.with_row(provider, credential, |row, _| {
             row.benched_until = until;
             row.bench_reason = reason.map(str::to_owned);
         });
@@ -233,8 +243,10 @@ pub fn benched_until(states: &[CredentialState], id: &str, now: Timestamp) -> Op
 /// Picks one of `ids` (priority order) by `strategy`, skipping benched
 /// ones; `None` when every one is benched. `round_robin` takes the
 /// credential that served least recently (never-used first), so a fixed
-/// pool rotates A, B, A, B across processes; `least_used` the lowest
-/// request count; ties go to priority order.
+/// pool rotates A, B, A, B across processes; recency is the use sequence,
+/// not `last_used_at`, whose milliseconds tie under a burst (rows not used
+/// since schema v7 have no sequence and order by time). `least_used` takes
+/// the lowest request count; ties go to priority order.
 #[must_use]
 pub fn select(
     strategy: PoolStrategy,
@@ -251,7 +263,7 @@ pub fn select(
         PoolStrategy::RoundRobin => usable
             .iter()
             .copied()
-            .min_by_key(|&i| state(&ids[i]).and_then(|s| s.last_used_at)),
+            .min_by_key(|&i| state(&ids[i]).map(|s| (s.use_seq, s.last_used_at))),
         PoolStrategy::LeastUsed => usable
             .iter()
             .copied()

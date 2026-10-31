@@ -70,6 +70,12 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         sql: include_str!("schema/v6.sql"),
         rebuilds_tables: false,
     },
+    Migration {
+        version: 7,
+        min_read_version: 2,
+        sql: include_str!("schema/v7.sql"),
+        rebuilds_tables: false,
+    },
 ];
 
 /// Pre-migration copies kept in `<profile>/backups/state/`.

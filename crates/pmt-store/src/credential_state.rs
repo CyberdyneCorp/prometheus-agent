@@ -23,6 +23,10 @@ pub struct CredentialState {
     pub request_count: u64,
     /// When it last served one.
     pub last_used_at: Option<Timestamp>,
+    /// The provider-wide order of its last use: one more than the
+    /// provider's highest on every recorded use, so it orders uses that
+    /// share a millisecond (`None`: not used since schema v7).
+    pub use_seq: Option<u64>,
     /// Benched until then (may be in the past).
     pub benched_until: Option<Timestamp>,
     /// Why it was benched.
@@ -39,7 +43,8 @@ impl Store {
         self.read(|conn| {
             let mut stmt = conn
                 .prepare_cached(
-                    "SELECT credential, request_count, last_used_at, benched_until, bench_reason \
+                    "SELECT credential, request_count, last_used_at, benched_until, bench_reason, \
+                     use_seq \
                      FROM credential_state WHERE provider = ?1 ORDER BY credential",
                 )
                 .map_err(sql)?;
@@ -51,6 +56,9 @@ impl Store {
                         last_used_at: millis(row.get(2)?),
                         benched_until: millis(row.get(3)?),
                         bench_reason: row.get(4)?,
+                        use_seq: row
+                            .get::<_, Option<i64>>(5)?
+                            .and_then(|seq| u64::try_from(seq).ok()),
                     })
                 })
                 .map_err(sql)?;
@@ -58,7 +66,9 @@ impl Store {
         })
     }
 
-    /// Counts one request served by `credential` at `now`.
+    /// Counts one request served by `credential` at `now` and gives it the
+    /// provider's next use sequence. One statement in a `BEGIN IMMEDIATE`
+    /// transaction, so concurrent processes never share a sequence.
     ///
     /// # Errors
     ///
@@ -71,10 +81,13 @@ impl Store {
     ) -> Result<(), Error> {
         self.write(|tx| {
             tx.execute(
-                "INSERT INTO credential_state (provider, credential, request_count, last_used_at) \
-                 VALUES (?1, ?2, 1, ?3) \
+                "INSERT INTO credential_state \
+                 (provider, credential, request_count, last_used_at, use_seq) \
+                 VALUES (?1, ?2, 1, ?3, \
+                 (SELECT coalesce(max(use_seq), 0) + 1 FROM credential_state WHERE provider = ?1)) \
                  ON CONFLICT (provider, credential) DO UPDATE SET \
-                 request_count = request_count + 1, last_used_at = excluded.last_used_at",
+                 request_count = request_count + 1, last_used_at = excluded.last_used_at, \
+                 use_seq = excluded.use_seq",
                 params![provider, credential, now.as_millisecond()],
             )
             .map_err(sql)?;
