@@ -65,7 +65,9 @@ Each local browser gets a throwaway profile under
 `<profile>/cache/browser/profiles/` and is recorded under
 `<profile>/cache/browser/records/`, so a later process reaps the browser
 of an owner that crashed (after checking its pid, start time and profile
-directory). A browser that died is replaced on the next call. Sessions
+directory). On Unix each local browser leads its own process group, so
+closing or reaping it also kills its helper processes (zygote, renderers,
+crash handler) before its directories are removed. A browser that died is replaced on the next call. Sessions
 idle longer than `browser.inactivity_timeout_secs` (default 120, read when
 checked) are closed.
 

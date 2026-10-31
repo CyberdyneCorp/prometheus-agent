@@ -20,6 +20,7 @@ use tokio::process::Child;
 use tokio::time::Instant;
 
 use super::cdp::Cdp;
+use super::cleanup;
 use super::launch::{self, RuntimePolicy};
 use super::records::Records;
 use super::safety::UrlSafety;
@@ -86,18 +87,21 @@ impl LocalBrowser {
 
     fn remove_files(&self) {
         let _ = std::fs::remove_file(&self.record);
-        let _ = std::fs::remove_dir_all(&self.profile_dir);
-        let _ = std::fs::remove_dir_all(&self.temp_dir);
+        cleanup::remove_dir(&self.profile_dir);
+        cleanup::remove_dir(&self.temp_dir);
     }
 
-    /// Kills the browser, waits for it to exit (a dying browser still
-    /// writes to its profile directory) and removes its files.
+    /// Kills the browser and its helpers, waits for it to exit (a dying
+    /// browser still writes to its profile directory) and removes its files.
     async fn terminate(&self) {
         if let Some(mut child) = self.take_child() {
+            cleanup::kill_group(self.pid);
             let _ = child.start_kill();
             let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
         }
-        self.remove_files();
+        let _ = std::fs::remove_file(&self.record);
+        cleanup::remove_dir_async(&self.profile_dir).await;
+        cleanup::remove_dir_async(&self.temp_dir).await;
     }
 }
 
@@ -112,25 +116,26 @@ impl Drop for LocalBrowser {
             self.remove_files();
             return;
         };
+        cleanup::kill_group(self.pid);
         let _ = child.start_kill();
         let files = (
             std::mem::take(&mut self.record),
             std::mem::take(&mut self.profile_dir),
             std::mem::take(&mut self.temp_dir),
         );
-        let cleanup = move || {
+        let remove = move || {
             let _ = std::fs::remove_file(&files.0);
-            let _ = std::fs::remove_dir_all(&files.1);
-            let _ = std::fs::remove_dir_all(&files.2);
+            cleanup::remove_dir(&files.1);
+            cleanup::remove_dir(&files.2);
         };
         match tokio::runtime::Handle::try_current() {
             Ok(runtime) => {
                 runtime.spawn(async move {
                     let _ = tokio::time::timeout(EXIT_WAIT, child.wait()).await;
-                    cleanup();
+                    let _ = tokio::task::spawn_blocking(remove).await;
                 });
             }
-            Err(_) => cleanup(),
+            Err(_) => remove(),
         }
     }
 }

@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use tokio::process::{Child, Command};
 
+use super::cleanup;
 use crate::terminal::env::ChildEnv;
 
 /// Bound on a browser start (`browser.launch_timeout_secs` default).
@@ -142,13 +143,14 @@ pub struct Launched {
 }
 
 impl Launched {
-    /// Kills the browser, waits for it to exit and removes its profile and
-    /// temporary directories.
+    /// Kills the browser and its helpers, waits for it to exit and removes
+    /// its profile and temporary directories.
     pub async fn terminate(mut self) {
+        cleanup::kill_group(self.pid);
         let _ = self.child.start_kill();
         let _ = tokio::time::timeout(Duration::from_secs(5), self.child.wait()).await;
-        let _ = std::fs::remove_dir_all(&self.profile_dir);
-        let _ = std::fs::remove_dir_all(&self.temp_dir);
+        cleanup::remove_dir_async(&self.profile_dir).await;
+        cleanup::remove_dir_async(&self.temp_dir).await;
     }
 }
 
@@ -200,6 +202,7 @@ pub async fn launch(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    cleanup::new_group(&mut std_command);
     let mut command = Command::from(std_command);
     command.kill_on_drop(true);
     let mut child = command.spawn().map_err(|err| {
@@ -211,10 +214,11 @@ pub async fn launch(
     let endpoint = match wait_for_endpoint(&mut child, &profile_dir, timeout).await {
         Ok(endpoint) => endpoint,
         Err(why) => {
+            cleanup::kill_group(pid);
             let _ = child.start_kill();
             let _ = child.wait().await;
-            let _ = std::fs::remove_dir_all(&profile_dir);
-            let _ = std::fs::remove_dir_all(&temp_dir);
+            cleanup::remove_dir_async(&profile_dir).await;
+            cleanup::remove_dir_async(&temp_dir).await;
             return Err(log.explain(why).await);
         }
     };

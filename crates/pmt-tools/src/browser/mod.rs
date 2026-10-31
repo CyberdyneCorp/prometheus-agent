@@ -4,11 +4,13 @@
 //!
 //! [`session`] resolves and keeps browser sessions ([`launch`] starts a
 //! local Chromium, [`records`] lets a later process reap a crashed owner's
-//! browser), [`cdp`] speaks the DevTools protocol, [`supervisor`] answers
+//! browser, [`cleanup`] kills a browser's process group and removes its
+//! directories), [`cdp`] speaks the DevTools protocol, [`supervisor`] answers
 //! dialogs and reconnects, [`safety`] vets every navigation, [`tabs`] are
 //! the page helpers and [`exec`] runs the model's Python against them.
 
 pub mod cdp;
+pub mod cleanup;
 pub mod exec;
 pub mod launch;
 pub mod records;

@@ -9,6 +9,7 @@
 //! sandbox, whose Python setup is not covered here yet.
 #![cfg(unix)]
 
+mod cleanup;
 mod support;
 
 use std::collections::BTreeMap;

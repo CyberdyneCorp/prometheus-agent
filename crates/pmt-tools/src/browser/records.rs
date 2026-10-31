@@ -11,6 +11,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use super::cleanup;
 use serde::{Deserialize, Serialize};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
@@ -95,9 +96,9 @@ impl Records {
             if kill_if_same(&record) {
                 wait_for_exit(record.browser_pid, record.browser_start);
             }
-            let _ = fs::remove_dir_all(&record.profile_dir);
+            cleanup::remove_dir(&record.profile_dir);
             if let Some(temp) = &record.temp_dir {
-                let _ = fs::remove_dir_all(temp);
+                cleanup::remove_dir(temp);
             }
             let _ = fs::remove_file(&path);
             cleared += 1;
@@ -134,8 +135,8 @@ fn wait_for_exit(pid: u32, start: u64) {
     }
 }
 
-/// Kills the browser of `record` when pid, start time and profile flag
-/// all match; returns whether it did.
+/// Kills the browser of `record` with its helpers (its process group) when
+/// pid, start time and profile flag all match; returns whether it did.
 #[must_use]
 pub fn kill_if_same(record: &Record) -> bool {
     let pid = Pid::from_u32(record.browser_pid);
@@ -154,5 +155,11 @@ pub fn kill_if_same(record: &Record) -> bool {
         .cmd()
         .iter()
         .any(|arg| arg.as_os_str() == flag.as_os_str());
-    process.start_time() == record.browser_start && owns_profile && process.kill()
+    if process.start_time() != record.browser_start || !owns_profile {
+        return false;
+    }
+    cleanup::kill_group(record.browser_pid);
+    #[cfg(not(unix))]
+    process.kill();
+    true
 }
