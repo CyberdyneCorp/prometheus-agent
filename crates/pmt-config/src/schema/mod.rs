@@ -33,8 +33,8 @@ pub use agent::{
     VisionConfig,
 };
 pub use interface::{
-    CliConfig, DisplayConfig, Interface, MarkdownMode, ResumeDisplay, ToolProgress,
-    ToolProgressGrouping, UiConfig,
+    BusyConfig, BusyInputMode, CliConfig, DisplayConfig, Interface, MarkdownMode, QuickCommand,
+    QuickCommandKind, ResumeDisplay, ToolProgress, ToolProgressGrouping, UiConfig,
 };
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
@@ -81,6 +81,8 @@ pub struct Config {
     pub browser: BrowserConfig,
     /// Hard token and cost budgets (`0` = off).
     pub budgets: BudgetsConfig,
+    /// What input typed while a turn runs does.
+    pub busy: BusyConfig,
     /// Line-mode CLI behaviour.
     pub cli: CliConfig,
     /// Context compression.
@@ -116,6 +118,9 @@ pub struct Config {
     /// Per-provider overrides, keyed by provider id.
     #[schemars(extend("x-apply" = "next_session"))]
     pub providers: std::collections::BTreeMap<String, ProviderConfig>,
+    /// User slash commands (`/<name>`), keyed by name.
+    #[schemars(extend("x-apply" = "live"))]
+    pub quick_commands: std::collections::BTreeMap<String, QuickCommand>,
     /// Secrets store backend.
     pub secrets: SecretsConfig,
     /// Capabilities, sandbox, egress and redaction.
@@ -158,6 +163,7 @@ impl Default for Config {
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
             budgets: BudgetsConfig::default(),
+            busy: BusyConfig::default(),
             cli: CliConfig::default(),
             compression: CompressionConfig::default(),
             context: ContextConfig::default(),
@@ -174,6 +180,7 @@ impl Default for Config {
             prompt: PromptConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             providers: std::collections::BTreeMap::new(),
+            quick_commands: std::collections::BTreeMap::new(),
             secrets: SecretsConfig::default(),
             security: SecurityConfig::default(),
             sessions: SessionsConfig::default(),

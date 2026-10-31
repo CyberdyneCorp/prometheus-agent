@@ -5,6 +5,7 @@
 # Guides
 
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
+- [Chatting with the agent](guide/chat.md)
 - [Sessions](guide/sessions.md)
 - [Turns and the system prompt](guide/turns.md)
 - [Context compression](guide/compression.md)

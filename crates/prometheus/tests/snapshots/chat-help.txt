@@ -1,0 +1,102 @@
+Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+
+Usage: prometheus chat [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -m, --model <MODEL>
+          Model for this session (`[<provider>/]<model>` or an alias)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --provider <ID>
+          Provider for this session
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+  -t, --toolsets <LIST>
+          Toolsets for this session, comma-separated
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -r, --resume <REF>
+          Resume a session by id, id prefix, title or `latest`
+
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --query <TEXT>
+          Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
+
+      --approvals <MODE>
+          Approval mode for this session
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with an auxiliary model; ask when uncertain
+          - off:    No prompts (deny rules and hardline blocks still apply)
+
+      --yolo
+          Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --max-iterations <N>
+          Model calls allowed per turn
+
+      --cwd <DIR>
+          Working directory of the session (also scopes `-c` and `latest`)
+
+      --in-process
+          Run the session in this process (the only mode until the daemon lands)
+
+      --tui
+          Use the full-screen interface
+
+      --line
+          Use the line interface
+
+  -s, --skills <LIST>
+          Skills to load at session start, comma-separated (repeatable)
+
+      --source <TAG>
+          Integration tag recorded on the session
+
+      --pass-session-id
+          Put the session id in the system prompt
+
+      --run-budget <SECS>
+          Wall-clock budget of each turn in seconds
+
+      --no-context-files
+          Do not load project context files (AGENTS.md and friends)
+
+      --mock-script <PATH>
+          Script for the `mock` provider
+
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
+  -h, --help
+          Print help (see a summary with '-h')

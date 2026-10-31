@@ -582,3 +582,35 @@ fn listing_honours_limit_pins_and_archive() {
         "archived hidden by default"
     );
 }
+
+/// Spec (cli) scenario "Per-terminal continue": session A was last used
+/// from terminal 1, a newer session B from terminal 2; `-c` in terminal 1
+/// picks A, a terminal that used neither picks the newest.
+#[test]
+fn continue_prefers_the_session_last_used_from_the_same_terminal() {
+    let home = TestHome::new();
+    let store = home.store("default");
+    let mut new = NewSession::new(Source::Cli);
+    new.cwd = Some("/repo".to_owned());
+    let a = store.create_session(&new).unwrap();
+    store.record_terminal(a.id, "tty1").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    let b = store.create_session(&new).unwrap();
+    store.record_terminal(b.id, "tty2").unwrap();
+    store.record_activity(b.id).unwrap();
+
+    let pick = |terminal| {
+        store
+            .continue_target_from("/repo", terminal)
+            .unwrap()
+            .unwrap()
+            .id
+    };
+    assert_eq!(pick(Some("tty1")), a.id);
+    assert_eq!(pick(Some("tty2")), b.id);
+    assert_eq!(pick(Some("tty3")), b.id);
+    assert_eq!(pick(None), b.id);
+    // A later use from terminal 1 moves the preference there.
+    store.record_terminal(b.id, "tty1").unwrap();
+    assert_eq!(pick(Some("tty2")), b.id, "no session left on tty2: newest");
+}

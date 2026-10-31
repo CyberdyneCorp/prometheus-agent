@@ -5,14 +5,14 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::Parser;
 use clap::error::ErrorKind as ClapErrorKind;
+use clap::{CommandFactory, Parser};
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
-use pmt_core::{exit, panic};
+use pmt_core::panic;
 use prometheus::output::print_error;
 use prometheus::{
-    Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, config_cmd, fallback_cmd,
+    Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, chat, config_cmd, fallback_cmd,
     grants_cmd, logs_cmd, memory_cmd, model_cmd, profile_cmd, prompt_cmd, secrets_cmd,
     self_test_cmd, sessions_cmd, skills_cmd, startup, tools_cmd, trajectory_cmd, update_cmd,
     usage_cmd, version,
@@ -30,6 +30,14 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(err) => return usage_failure(&err),
     };
+    if cli.command.is_some() && !cli.chat.is_empty() {
+        let usage = Error::new(
+            &codes::CLI_USAGE,
+            "chat flags go without a subcommand or after `chat`",
+        )
+        .with_hint("run: prometheus chat --help");
+        return failure(&usage, cli.json);
+    }
     let launch = match startup::launch_env() {
         Ok(launch) => launch,
         Err(err) => return failure(&err, cli.json),
@@ -81,13 +89,22 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
-        // `chat`, the default command, arrives with the CLI chat group.
-        None => Ok(exit::SUCCESS),
+        Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
+        None => chat::run(&cli.chat, &ctx, ui(cli)),
     };
     result.unwrap_or_else(|err| {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+fn ui(cli: &Cli) -> chat::Ui {
+    chat::Ui {
+        json: cli.json,
+        quiet: cli.quiet,
+        no_color: cli.no_color,
+        verbose: cli.verbose,
+    }
 }
 
 fn failure(err: &Error, json: bool) -> ExitCode {
@@ -104,6 +121,9 @@ fn usage_failure(err: &clap::Error) -> ExitCode {
             | ClapErrorKind::DisplayVersion
             | ClapErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
     );
+    if let Some(unknown) = unknown_command(err) {
+        return failure(&unknown, json_requested());
+    }
     if display_only || !json_requested() {
         err.exit();
     }
@@ -112,6 +132,31 @@ fn usage_failure(err: &clap::Error) -> ExitCode {
     let message = first_line.strip_prefix("error: ").unwrap_or(first_line);
     let usage = Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help");
     failure(&usage, true)
+}
+
+/// `unknown command 'sesions' (did you mean 'sessions'?)` for a mistyped
+/// subcommand (spec: cli, Unknown subcommand).
+fn unknown_command(err: &clap::Error) -> Option<Error> {
+    use clap::error::{ContextKind, ContextValue};
+    if err.kind() != ClapErrorKind::InvalidSubcommand {
+        return None;
+    }
+    let Some(ContextValue::String(name)) = err.get(ContextKind::InvalidSubcommand) else {
+        return None;
+    };
+    let command = Cli::command();
+    let names = command
+        .get_subcommands()
+        .filter(|c| !c.is_hide_set())
+        .map(clap::Command::get_name);
+    let message = match pmt_core::registry::closest(name, names).as_slice() {
+        [] => format!("unknown command '{name}'"),
+        found => format!(
+            "unknown command '{name}' (did you mean {}?)",
+            pmt_core::registry::or_list(found)
+        ),
+    };
+    Some(Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help"))
 }
 
 /// Whether `--json` appears before any `--` separator. Used only when the

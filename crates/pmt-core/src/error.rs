@@ -522,6 +522,33 @@ error_codes! {
     /// The provider's wire format is implemented by a plugin that is not installed.
     PROVIDER_PLUGIN_UNAVAILABLE = ("provider.plugin_unavailable", Config,
         "The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing.");
+    /// No model, provider or launch endpoint is configured.
+    MODEL_NOT_CONFIGURED = ("model.not_configured", Config,
+        "The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`).");
+    /// `-c`/`--resume latest` found no session.
+    CHAT_NOTHING_TO_CONTINUE = ("chat.nothing_to_continue", NotFound,
+        "`-c`, `-c <name>` or `--resume latest` found no CLI session in the directory (or none in the named lineage); start a new chat instead.");
+    /// `--resume @claude-code|@codex` needs the agent-log importer.
+    CHAT_IMPORT_UNAVAILABLE = ("chat.import_unavailable", Unavailable,
+        "`--resume @claude-code` and `--resume @codex` import that agent's most recent log through the migration importer, which arrives with M2; resume a Prometheus session instead.");
+    /// A one-shot run needed an approval nobody can give.
+    CHAT_APPROVAL_REQUIRED = ("chat.approval_required", PermissionDenied,
+        "A tool call of a one-shot run (`-z`, piped) needed an approval and `approvals.single_query_mode` denies it; the run ended with exit 4. Run interactively, or pass `--approvals off` / set `approvals.single_query_mode = \"approve\"`.");
+    /// `--cwd` names no directory.
+    CHAT_CWD_MISSING = ("chat.cwd_missing", NotFound,
+        "The `--cwd` directory does not exist or is not a directory.");
+    /// `--prompt-file` names no readable file.
+    CHAT_PROMPT_FILE = ("chat.prompt_file", NotFound,
+        "The `--prompt-file` file does not exist or cannot be read.");
+    /// A one-shot run read no prompt.
+    CHAT_EMPTY_PROMPT = ("chat.empty_prompt", Usage,
+        "A one-shot run (`-z`, or stdin not a terminal) got an empty prompt from the flag, `--prompt-file` and stdin.");
+    /// A slash command collides with a built-in or another source.
+    SLASH_CONFLICT = ("slash.conflict", Config,
+        "A plugin, skill or quick command declares a slash command whose name or alias is already a built-in command; the built-in is kept and the registration fails.");
+    /// The built-in slash command table is inconsistent.
+    SLASH_INVALID = ("slash.invalid", Internal,
+        "Two built-in slash commands share a name or alias (a programming error caught by the registry test).");
     /// A `/model`, `model set` or `fallback` argument is not a model reference.
     MODEL_INVALID_REF = ("model.invalid_ref", Usage,
         "A model argument is neither a `[model.aliases]` name nor `<provider>/<model>` (or a model id of the current provider).");

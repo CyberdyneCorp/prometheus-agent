@@ -1,7 +1,7 @@
 //! The session's approval gate: the dispatcher asks it about every call.
 
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use pmt_config::grants::SessionGrants;
@@ -82,6 +82,7 @@ pub struct CommandGate {
     setup: GateSetup,
     yolo: AtomicBool,
     session: Mutex<Vec<String>>,
+    unobtainable: AtomicU32,
 }
 
 impl CommandGate {
@@ -93,7 +94,17 @@ impl CommandGate {
             setup,
             yolo,
             session: Mutex::new(Vec::new()),
+            unobtainable: AtomicU32::new(0),
         }
+    }
+
+    /// How many calls this gate denied because they needed an approval
+    /// nobody could give (a non-interactive run whose mode denies). A
+    /// one-shot run ends with exit 4 once this is non-zero (spec: cli,
+    /// One-shot and piped mode).
+    #[must_use]
+    pub fn unobtainable(&self) -> u32 {
+        self.unobtainable.load(Ordering::Relaxed)
     }
 
     /// `/yolo`: bypass on or off for the rest of the session.
@@ -244,6 +255,9 @@ impl CommandGate {
             Context::SingleQuery => self.setup.approvals.single_query_mode,
             Context::Unattended => self.setup.approvals.unattended_mode,
         };
+        if request.remember.is_none() || mode == UnattendedApproval::Deny {
+            self.unobtainable.fetch_add(1, Ordering::Relaxed);
+        }
         match (request.remember.is_some(), mode) {
             (false, _) => GateVerdict::Denied(format!(
                 "BLOCKED: {summary}. Protected instruction files need a human approval, which {context} runs cannot give."

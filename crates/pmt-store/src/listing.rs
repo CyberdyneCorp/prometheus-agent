@@ -105,6 +105,22 @@ impl Store {
     ///
     /// `store.sqlite`.
     pub fn continue_target(&self, cwd: &str) -> Result<Option<Session>, Error> {
+        self.continue_target_from(cwd, None)
+    }
+
+    /// [`Store::continue_target`] preferring, when `terminal` is given,
+    /// the newest such session last used from that terminal
+    /// ([`Store::record_terminal`]); without one used there, the newest
+    /// in `cwd`.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn continue_target_from(
+        &self,
+        cwd: &str,
+        terminal: Option<&str>,
+    ) -> Result<Option<Session>, Error> {
         let (sources, source_params) = source_list(INTERACTIVE_SOURCES);
         let mut params = vec![Value::Text(cwd.to_owned())];
         params.extend(source_params);
@@ -112,8 +128,39 @@ impl Store {
             "cwd = ? AND hidden = 0 AND {} AND {sources}",
             hidden_tags_clause()
         );
+        if let Some(terminal) = terminal {
+            let mut mine = params.clone();
+            mine.push(Value::Text(terminal.to_owned()));
+            let filter = format!(
+                "{filter} AND id IN (SELECT session_id FROM session_terminals WHERE terminal = ?)"
+            );
+            let found = self.read(|conn| query_sessions(conn, &filter, &mine, Some(1)))?;
+            if let Some(session) = found.into_iter().next() {
+                return Ok(Some(session));
+            }
+        }
         let found = self.read(|conn| query_sessions(conn, &filter, &params, Some(1)))?;
         Ok(found.into_iter().next())
+    }
+
+    /// Records that `session` was just used from `terminal` (an opaque
+    /// identity of the controlling terminal; see
+    /// [`Store::continue_target_from`]).
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.busy`, `store.sqlite`.
+    pub fn record_terminal(&self, session: SessionId, terminal: &str) -> Result<(), Error> {
+        self.write(|tx| {
+            sessions::load(tx, session)?.ok_or_else(|| sessions::not_found(session))?;
+            tx.execute(
+                "INSERT INTO session_terminals (session_id, terminal, used_at) VALUES (?1, ?2, ?3) \
+                 ON CONFLICT (session_id) DO UPDATE SET terminal = excluded.terminal, used_at = excluded.used_at",
+                params![session.to_string(), terminal, now_ms()],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
     }
 
     /// Pins or unpins a session (pinned sessions are never pruned).

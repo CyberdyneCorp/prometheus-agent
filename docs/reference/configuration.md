@@ -93,6 +93,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `budgets.turn_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per turn. |
 | `budgets.unattended_root_usd` | number | `5.0` | ≥ 0.0 | `live` | USD per root lineage of cron, unattended gateway sessions, background delegations and harness evolution. |
 | `budgets.warn_ratio` | number | `0.8` | 0.0 to 1.0 | `live` | Fraction of a limit at which a budget warning is emitted. |
+| `busy.input_mode` | one of "queue", "steer", "interrupt" | `"queue"` | `"queue"`, `"steer"`, `"interrupt"` | `live` | What plain text typed while a turn runs does: `queue` runs it as the next turn, `steer` hands it to the running turn after its current tool step, `interrupt` stops the turn and then runs it. |
 | `cli.confirm_destructive` | boolean | `true` | any | `live` | Ask `once / always / cancel` before `/clear`, `/new`, `/undo` and `/rewind`. |
 | `compression.abort_on_summary_failure` | boolean | `false` | any | `next_session` | End the turn when the summary cannot be produced. |
 | `compression.enabled` | boolean | `true` | any | `next_session` | Compact the context automatically. |
@@ -200,6 +201,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
 | `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
 | `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
+| `quick_commands.<name>.command` | string | unset | any | `live` | The shell command an `exec` entry runs, with every secret removed from its environment and its output redacted. |
+| `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
+| `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |
+| `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |

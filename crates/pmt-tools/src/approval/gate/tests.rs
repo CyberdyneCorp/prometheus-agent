@@ -404,11 +404,16 @@ async fn unattended_contexts_use_their_own_typed_mode() {
         ..Options::default()
     };
     let session = session(&fx, Channel::unattended(), options).await;
+    assert_eq!(session.gate.unobtainable(), 0);
     let text = command(&session, "git reset --hard").await.text_content();
     assert!(
         text.ends_with("set approvals.single_query_mode = \"approve\" in config.toml."),
         "{text}"
     );
+    // The one-shot driver ends the run with exit 4 on this count.
+    assert_eq!(session.gate.unobtainable(), 1);
+    command(&session, "ls").await;
+    assert_eq!(session.gate.unobtainable(), 1, "allowed calls do not count");
 }
 
 #[tokio::test(start_paused = true)]

@@ -137,10 +137,8 @@ fn json_usage_error_goes_to_stderr_as_one_document() {
     let err: Value = serde_json::from_slice(&out.stderr).expect("JSON error document");
     assert_eq!(err["error"]["kind"], "usage");
     assert_eq!(err["error"]["code"], "cli.usage");
-    assert_eq!(
-        err["error"]["message"],
-        "unrecognized subcommand 'no-such-command'"
-    );
+    // The cli spec's wording (Unknown subcommand), with no close match.
+    assert_eq!(err["error"]["message"], "unknown command 'no-such-command'");
 }
 
 #[test]

@@ -10,6 +10,7 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
+  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
@@ -49,11 +50,198 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -m, --model <MODEL>
+          Model for this session (`[<provider>/]<model>` or an alias)
+
+      --provider <ID>
+          Provider for this session
+
+  -t, --toolsets <LIST>
+          Toolsets for this session, comma-separated
+
+  -r, --resume <REF>
+          Resume a session by id, id prefix, title or `latest`
+
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
+      --query <TEXT>
+          Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
+
+      --approvals <MODE>
+          Approval mode for this session
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with an auxiliary model; ask when uncertain
+          - off:    No prompts (deny rules and hardline blocks still apply)
+
+      --yolo
+          Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --max-iterations <N>
+          Model calls allowed per turn
+
+      --cwd <DIR>
+          Working directory of the session (also scopes `-c` and `latest`)
+
+      --in-process
+          Run the session in this process (the only mode until the daemon lands)
+
+      --tui
+          Use the full-screen interface
+
+      --line
+          Use the line interface
+
+  -s, --skills <LIST>
+          Skills to load at session start, comma-separated (repeatable)
+
+      --source <TAG>
+          Integration tag recorded on the session
+
+      --pass-session-id
+          Put the session id in the system prompt
+
+      --run-budget <SECS>
+          Wall-clock budget of each turn in seconds
+
+      --no-context-files
+          Do not load project context files (AGENTS.md and friends)
+
+      --mock-script <PATH>
+          Script for the `mock` provider
+
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 
   -V, --version
           Print version
+```
+
+## `prometheus chat`
+
+```text
+Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+
+Usage: prometheus chat [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -m, --model <MODEL>
+          Model for this session (`[<provider>/]<model>` or an alias)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --provider <ID>
+          Provider for this session
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+  -t, --toolsets <LIST>
+          Toolsets for this session, comma-separated
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -r, --resume <REF>
+          Resume a session by id, id prefix, title or `latest`
+
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --query <TEXT>
+          Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
+
+      --approvals <MODE>
+          Approval mode for this session
+
+          Possible values:
+          - manual: Ask for every dangerous call
+          - smart:  Pre-screen with an auxiliary model; ask when uncertain
+          - off:    No prompts (deny rules and hardline blocks still apply)
+
+      --yolo
+          Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --max-iterations <N>
+          Model calls allowed per turn
+
+      --cwd <DIR>
+          Working directory of the session (also scopes `-c` and `latest`)
+
+      --in-process
+          Run the session in this process (the only mode until the daemon lands)
+
+      --tui
+          Use the full-screen interface
+
+      --line
+          Use the line interface
+
+  -s, --skills <LIST>
+          Skills to load at session start, comma-separated (repeatable)
+
+      --source <TAG>
+          Integration tag recorded on the session
+
+      --pass-session-id
+          Put the session id in the system prompt
+
+      --run-budget <SECS>
+          Wall-clock budget of each turn in seconds
+
+      --no-context-files
+          Do not load project context files (AGENTS.md and friends)
+
+      --mock-script <PATH>
+          Script for the `mock` provider
+
+      --base-url <URL>
+          Endpoint for this invocation only (without `--provider`: provider `custom`); never saved
+
+      --api-key-stdin
+          Read the endpoint's API key from stdin; it is held in memory only and sent to the `--base-url` host only
+
+  -h, --help
+          Print help (see a summary with '-h')
 ```
 
 ## `prometheus version`
@@ -78,6 +266,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -119,6 +313,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -145,6 +345,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -176,6 +382,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -206,6 +418,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -241,6 +459,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -272,6 +496,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -299,6 +529,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -325,6 +561,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -360,6 +602,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -387,6 +635,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -413,6 +667,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -558,6 +818,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -589,6 +855,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -615,6 +887,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -650,6 +928,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -680,6 +964,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -714,6 +1004,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -826,6 +1122,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -855,6 +1157,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -886,6 +1194,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -921,6 +1235,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -954,6 +1274,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -989,6 +1315,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1019,6 +1351,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1051,6 +1389,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1081,6 +1425,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1113,6 +1463,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1140,6 +1496,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1166,6 +1528,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1203,6 +1571,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1229,6 +1603,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1260,6 +1640,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1304,6 +1690,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1335,6 +1727,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1361,6 +1759,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1392,6 +1796,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1500,6 +1910,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1526,6 +1942,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1558,6 +1980,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1589,6 +2017,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1619,6 +2053,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1708,6 +2148,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1735,6 +2181,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -1761,6 +2213,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -1798,6 +2256,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2109,6 +2573,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -2135,6 +2605,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2191,6 +2667,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -2221,6 +2703,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2284,6 +2772,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -2314,6 +2808,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2346,6 +2846,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -2376,6 +2882,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2410,6 +2922,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -2456,6 +2974,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -2504,6 +3028,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -2530,6 +3060,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2562,6 +3098,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -2592,6 +3134,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2632,6 +3180,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -2810,6 +3364,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -2839,6 +3399,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2870,6 +3436,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -2940,6 +3512,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -2981,6 +3559,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3014,6 +3598,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3086,6 +3676,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3112,6 +3708,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3142,6 +3744,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3174,6 +3782,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3203,6 +3817,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3295,6 +3915,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3321,6 +3947,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3362,6 +3994,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3393,6 +4031,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3423,6 +4067,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3458,6 +4108,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3491,6 +4147,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3611,6 +4273,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3650,6 +4318,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3680,6 +4354,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3738,11 +4418,17 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
       --role <ROLE>
           Only these roles (repeatable: user, assistant, tool, system)
 
       --after <TIME>
           Only messages at or after this time (RFC 3339 or YYYY-MM-DD)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
       --before <TIME>
           Only messages before this time (RFC 3339 or YYYY-MM-DD)
@@ -3793,6 +4479,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3823,6 +4515,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3855,6 +4553,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3885,6 +4589,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -3917,6 +4627,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3948,6 +4664,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -3978,6 +4700,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4034,6 +4762,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -4071,6 +4805,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4106,6 +4846,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4144,6 +4890,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4174,6 +4926,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4200,6 +4958,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4421,8 +5185,14 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
       --root <ID>
           Only records of the sessions of this root lineage
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -4479,6 +5249,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -4509,6 +5285,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4547,6 +5329,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4607,6 +5395,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4659,6 +5453,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -4722,6 +5522,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4760,6 +5566,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4803,6 +5615,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -4839,6 +5657,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4865,6 +5689,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -4955,6 +5785,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -4981,6 +5817,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5013,6 +5855,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5044,6 +5892,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5070,6 +5924,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5161,6 +6021,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5208,6 +6074,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5234,6 +6106,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5265,6 +6143,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5299,6 +6183,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5339,6 +6229,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -5437,6 +6333,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5466,6 +6368,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5498,6 +6406,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5527,6 +6441,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5606,6 +6526,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5635,6 +6561,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5666,6 +6598,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help
@@ -5735,6 +6673,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5787,6 +6731,12 @@ Options:
 
   -v, --verbose...
           More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
   -h, --help
           Print help (see a summary with '-h')
@@ -5858,8 +6808,14 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
       --rollback
           Put back the binary the last update replaced (`prometheus.prev`)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
 
       --restore-snapshots
           With `--rollback`: also restore the pre-update snapshots, losing the sessions created since the update (asks first)
@@ -5894,6 +6850,12 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
   -h, --help
           Print help
 ```
@@ -5906,6 +6868,7 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
+  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
   version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
   config      Read, change, validate and explain the profile's config.toml
   secrets     Store, list and remove the profile's secrets (values never on the command line)
@@ -5928,6 +6891,14 @@ Commands:
   approvals   Check how the approval gate treats a command, without running it
   update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   help        Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus help chat`
+
+```text
+Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+
+Usage: prometheus help chat
 ```
 
 ## `prometheus help version`

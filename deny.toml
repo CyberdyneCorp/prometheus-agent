@@ -33,6 +33,17 @@ unused-allowed-license = "allow"
 crate = "webpki-root-certs"
 allow = ["CDLA-Permissive-2.0"]
 
+# The line editor's Windows clipboard support (rustyline -> clipboard-win
+# -> error-code). Boost Software License 1.0: permissive, OSI approved, no
+# attribution in binaries; allowed for these two crates only.
+[[licenses.exceptions]]
+crate = "clipboard-win"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+crate = "error-code"
+allow = ["BSL-1.0"]
+
 [licenses.private]
 # Workspace crates are `publish = false` and carry no license until one is chosen.
 ignore = true

@@ -532,6 +532,39 @@
       "type": "object",
       "x-apply": "live"
     },
+    "BusyConfig": {
+      "additionalProperties": false,
+      "description": "The `[busy]` section.",
+      "properties": {
+        "input_mode": {
+          "$ref": "#/$defs/BusyInputMode",
+          "default": "queue",
+          "description": "What plain text typed while a turn runs does: `queue` runs it as\nthe next turn, `steer` hands it to the running turn after its\ncurrent tool step, `interrupt` stops the turn and then runs it."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "BusyInputMode": {
+      "description": "Busy input modes.",
+      "oneOf": [
+        {
+          "const": "queue",
+          "description": "Run the input as the next turn (first in, first out).",
+          "type": "string"
+        },
+        {
+          "const": "steer",
+          "description": "Inject the input into the running turn.",
+          "type": "string"
+        },
+        {
+          "const": "interrupt",
+          "description": "Stop the running turn, then run the input.",
+          "type": "string"
+        }
+      ]
+    },
     "CapabilityText": {
       "description": "A capability string of the closed vocabulary (`pmt_core::capability`);\nvalidation refuses any other string with `unknown capability '<s>'`.",
       "type": "string",
@@ -2105,6 +2138,57 @@
       },
       "type": "object"
     },
+    "QuickCommand": {
+      "additionalProperties": false,
+      "description": "One `[quick_commands.<name>]` entry: a user slash command.",
+      "properties": {
+        "command": {
+          "description": "The shell command an `exec` entry runs, with every secret removed\nfrom its environment and its output redacted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "The slash command an `alias` runs (with or without the leading\n`/`); the user's arguments are appended.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 30,
+          "description": "An `exec` command is killed after this many seconds.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "type": {
+          "$ref": "#/$defs/QuickCommandKind",
+          "description": "`alias` re-dispatches `target`; `exec` runs `command` in the local\nsandbox."
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "QuickCommandKind": {
+      "description": "Quick command kinds.",
+      "oneOf": [
+        {
+          "const": "alias",
+          "description": "Re-dispatch another slash command.",
+          "type": "string"
+        },
+        {
+          "const": "exec",
+          "description": "Run a shell command.",
+          "type": "string"
+        }
+      ]
+    },
     "ReasoningLevel": {
       "description": "Reasoning effort levels, in increasing order.",
       "oneOf": [
@@ -3127,6 +3211,13 @@
       },
       "description": "Hard token and cost budgets (`0` = off)."
     },
+    "busy": {
+      "$ref": "#/$defs/BusyConfig",
+      "default": {
+        "input_mode": "queue"
+      },
+      "description": "What input typed while a turn runs does."
+    },
     "cli": {
       "$ref": "#/$defs/CliConfig",
       "default": {
@@ -3306,6 +3397,15 @@
       "description": "Per-provider overrides, keyed by provider id.",
       "type": "object",
       "x-apply": "next_session"
+    },
+    "quick_commands": {
+      "additionalProperties": {
+        "$ref": "#/$defs/QuickCommand"
+      },
+      "default": {},
+      "description": "User slash commands (`/<name>`), keyed by name.",
+      "type": "object",
+      "x-apply": "live"
     },
     "schema_version": {
       "default": 1,

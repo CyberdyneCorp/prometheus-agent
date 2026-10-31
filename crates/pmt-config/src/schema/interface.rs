@@ -169,3 +169,63 @@ pub enum ToolProgressGrouping {
     /// One line per call.
     Separate,
 }
+
+/// The `[busy]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "live"))]
+pub struct BusyConfig {
+    /// What plain text typed while a turn runs does: `queue` runs it as
+    /// the next turn, `steer` hands it to the running turn after its
+    /// current tool step, `interrupt` stops the turn and then runs it.
+    pub input_mode: BusyInputMode,
+}
+
+/// Busy input modes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BusyInputMode {
+    /// Run the input as the next turn (first in, first out).
+    #[default]
+    Queue,
+    /// Inject the input into the running turn.
+    Steer,
+    /// Stop the running turn, then run the input.
+    Interrupt,
+}
+
+/// One `[quick_commands.<name>]` entry: a user slash command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QuickCommand {
+    /// `alias` re-dispatches `target`; `exec` runs `command` in the local
+    /// sandbox.
+    #[serde(rename = "type")]
+    pub kind: QuickCommandKind,
+    /// The slash command an `alias` runs (with or without the leading
+    /// `/`); the user's arguments are appended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// The shell command an `exec` entry runs, with every secret removed
+    /// from its environment and its output redacted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// An `exec` command is killed after this many seconds.
+    #[serde(default = "default_quick_timeout")]
+    #[schemars(range(min = 1, max = 3600))]
+    pub timeout_secs: u64,
+}
+
+fn default_quick_timeout() -> u64 {
+    30
+}
+
+/// Quick command kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QuickCommandKind {
+    /// Re-dispatch another slash command.
+    Alias,
+    /// Run a shell command.
+    Exec,
+}

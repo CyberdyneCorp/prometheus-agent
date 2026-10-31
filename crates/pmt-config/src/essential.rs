@@ -41,14 +41,15 @@ pub fn check(config: &Config) -> Result<(), Error> {
     }
 }
 
-/// Every whole-config check beyond the schema: provider transports and
-/// the essential skill. Run when a profile loads and before any write.
+/// Every whole-config check beyond the schema: provider transports,
+/// quick commands and the essential skill. Run when a profile loads and before any write.
 ///
 /// # Errors
 ///
 /// The first failing check's error.
 pub fn semantic(config: &Config) -> Result<(), Error> {
     crate::provider_urls::check(config)?;
+    crate::quick_commands::check(config)?;
     check(config)
 }
 

@@ -1,5 +1,6 @@
-//! The clap command tree. The full tree and the remaining global flags
-//! arrive with M1 group 19; this holds what the process contracts need now.
+//! The clap command tree (spec: cli, Top-level command tree): the global
+//! flags, `chat` as the default command (its flags are accepted without
+//! the subcommand) and every subcommand that has landed.
 
 use std::path::PathBuf;
 
@@ -8,6 +9,7 @@ use clap::{ArgAction, CommandFactory, Parser, Subcommand};
 use pmt_store::{Role, Source};
 
 use crate::build_info;
+pub use crate::chat::args::ChatArgs;
 pub use crate::memory_cmd::args::MemoryCommand;
 pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand};
 
@@ -18,6 +20,7 @@ pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand}
 #[derive(Debug, Parser)]
 #[command(name = "prometheus", bin_name = "prometheus", version = build_info::identity())]
 #[command(about = "Prometheus Agent", long_about = None)]
+#[allow(clippy::struct_excessive_bools)] // independent global switches
 pub struct Cli {
     /// Prometheus home directory.
     #[arg(long, global = true, value_name = "PATH")]
@@ -37,6 +40,15 @@ pub struct Cli {
     /// More detail; repeatable.
     #[arg(short, long, global = true, action = ArgAction::Count)]
     pub verbose: u8,
+    /// No colour (also when `NO_COLOR` is set or stdout is not a terminal).
+    #[arg(long, global = true)]
+    pub no_color: bool,
+    /// Only the answer: no banner, spinner or tool previews.
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
+    /// `chat` flags, when the subcommand is omitted.
+    #[command(flatten)]
+    pub chat: ChatArgs,
     /// The subcommand; `chat` when omitted.
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -45,6 +57,9 @@ pub struct Cli {
 /// Top-level subcommands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Talk to the agent: interactive on a terminal, one-shot with `-z`
+    /// or when stdin or stdout is not a terminal (the default command).
+    Chat(ChatArgs),
     /// Print the version and build identity (`--json` for every field,
     /// `--verbose` for build details and compiled-in surfaces).
     Version,
@@ -375,7 +390,7 @@ pub enum ImportSourceArg {
 
 /// A launch-only endpoint (`--base-url`, `--api-key-stdin`): used for this
 /// invocation only and never saved.
-#[derive(Debug, Clone, Default, clap::Args)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, clap::Args)]
 pub struct EndpointArgs {
     /// Endpoint for this invocation only (without `--provider`: provider
     /// `custom`); never saved.

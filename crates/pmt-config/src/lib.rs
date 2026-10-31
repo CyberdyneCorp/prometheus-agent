@@ -28,6 +28,7 @@ pub mod passthrough;
 pub mod profile_id;
 pub mod profiles;
 pub mod provider_urls;
+pub mod quick_commands;
 pub mod reference;
 pub mod schema;
 pub mod scope;

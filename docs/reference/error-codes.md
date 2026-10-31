@@ -173,6 +173,15 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `model.capability_missing` | `config` | 78 | The route's model lacks a capability the request needs (tool calling, image input, or a context window large enough for the request). |
 | `model.context_too_small` | `config` | 78 | The resolved model's context window is below `model.min_context_window`; if the window is larger, set `[models."<provider>/<model>"] context_window`. |
 | `provider.plugin_unavailable` | `config` | 78 | The provider speaks a wire format that only a provider plugin implements (`gemini_native`, `bedrock_converse`, bridged plugins such as `github-copilot`) or is a virtual provider of a capability this build does not include (`moa`); the message names what is missing. |
+| `model.not_configured` | `config` | 78 | The profile names no model and no provider, and no `--model`, `--provider` or `--base-url` was given, so a chat has nothing to talk to. Run `prometheus setup model` (or `prometheus model`). |
+| `chat.nothing_to_continue` | `not_found` | 66 | `-c`, `-c <name>` or `--resume latest` found no CLI session in the directory (or none in the named lineage); start a new chat instead. |
+| `chat.import_unavailable` | `unavailable` | 69 | `--resume @claude-code` and `--resume @codex` import that agent's most recent log through the migration importer, which arrives with M2; resume a Prometheus session instead. |
+| `chat.approval_required` | `permission_denied` | 77 | A tool call of a one-shot run (`-z`, piped) needed an approval and `approvals.single_query_mode` denies it; the run ended with exit 4. Run interactively, or pass `--approvals off` / set `approvals.single_query_mode = "approve"`. |
+| `chat.cwd_missing` | `not_found` | 66 | The `--cwd` directory does not exist or is not a directory. |
+| `chat.prompt_file` | `not_found` | 66 | The `--prompt-file` file does not exist or cannot be read. |
+| `chat.empty_prompt` | `usage` | 2 | A one-shot run (`-z`, or stdin not a terminal) got an empty prompt from the flag, `--prompt-file` and stdin. |
+| `slash.conflict` | `config` | 78 | A plugin, skill or quick command declares a slash command whose name or alias is already a built-in command; the built-in is kept and the registration fails. |
+| `slash.invalid` | `internal` | 70 | Two built-in slash commands share a name or alias (a programming error caught by the registry test). |
 | `model.invalid_ref` | `usage` | 2 | A model argument is neither a `[model.aliases]` name nor `<provider>/<model>` (or a model id of the current provider). |
 | `model.requires_terminal` | `usage` | 2 | `prometheus model` (the picker) or `prometheus fallback add` without an argument ran without a terminal on stdin and stdout; use `prometheus model set <provider>/<model>` instead. |
 | `fallback.duplicate` | `conflict` | 75 | `prometheus fallback add` named a route (canonical provider, model, base URL) the chain already holds; the chain is unchanged. |
