@@ -56,13 +56,19 @@ kind of machine:
    line of its own perf job) to `perf/reference.json`, and while the pull
    request changes that file the job compares with it instead of `main`.
    The new numbers are part of the reviewed diff; the absolute budgets
-   always apply. The M1 branch did this twice. First (0.62 -> 8.49 MiB binary,
+   always apply. The M1 branch did this three times. First (0.62 -> 8.49 MiB binary,
    2.49 -> 4.28 MiB peak RSS: SQLite, the HTTP client, the keychain and
    the async runtime), measured by CI run 41021271519. Then when the
    `prometheus` binary itself started calling the HTTP client (8.49 ->
    13.05 MiB binary, 4.28 -> 4.96 MiB peak RSS: `model list --refresh`,
    local-server probes and endpoint tests link reqwest, rustls and ring,
-   which chat needs anyway), measured by CI run 41112215077. The CI line
+   which chat needs anyway), measured by CI run 41112215077. Then when the
+   tool system landed (13.05 -> 15.37 MiB binary, 4.96 -> 6.00 MiB peak
+   RSS: the `tools`, `toolsets` and `approvals` commands link the tool
+   registry, dispatcher and approval gate, which chat needs anyway, and add
+   their subcommands to the clap tree every launch builds; nothing in them
+   runs eagerly, their regexes are lazy), measured by CI run 41155059146.
+   The CI line
    prints MiB with two decimals, so the committed byte counts are those
    values times 1048576; the rounding (under 6 KiB) is far inside the 15%
    tolerance.
