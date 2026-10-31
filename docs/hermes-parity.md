@@ -1,5 +1,7 @@
 # Hermes → Prometheus feature parity
 
+<!-- tool-refs: off -- this page names Hermes tools (todo_list, cronjob_manage, ...), not Prometheus ones. -->
+
 Every user-facing Hermes Agent feature (inventoried from Hermes `main` at 088f657ecf: docs, CLI and slash-command registries, toolsets, platforms, providers, plugins and config sections) mapped to the Prometheus requirement that specifies it. Requirements live in `openspec/changes/bootstrap-prometheus-agent/specs/<capability>/spec.md`.
 
 Status: **Specified** (a requirement covers it), **N/A** (intentionally not carried over, with the reason).

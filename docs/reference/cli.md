@@ -3313,7 +3313,7 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus tools [OPTIONS] <COMMAND>
 
 Commands:
-  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
   explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
   toolsets  The toolsets, as `prometheus toolsets list`
   help      Print this message or the help of the given subcommand(s)
@@ -3341,13 +3341,16 @@ Options:
 ## `prometheus tools list`
 
 ```text
-Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
 
 Usage: prometheus tools list [OPTIONS]
 
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <SESSION>
+          Show the surface this session froze when it started (id, id prefix or title) instead of the one a new session would get
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -3434,7 +3437,7 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus tools help [COMMAND]
 
 Commands:
-  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
   explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
   toolsets  The toolsets, as `prometheus toolsets list`
   help      Print this message or the help of the given subcommand(s)
@@ -3443,7 +3446,7 @@ Commands:
 ## `prometheus tools help list`
 
 ```text
-Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
 
 Usage: prometheus tools help list
 ```
@@ -4415,7 +4418,7 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus help tools [COMMAND]
 
 Commands:
-  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+  list      Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
   explain   A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
   toolsets  The toolsets, as `prometheus toolsets list`
 ```
@@ -4423,7 +4426,7 @@ Commands:
 ## `prometheus help tools list`
 
 ```text
-Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets
+Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
 
 Usage: prometheus help tools list
 ```

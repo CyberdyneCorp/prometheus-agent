@@ -94,6 +94,7 @@ fn delete_rows(tx: &Transaction<'_>, session: &str) -> Result<(), Error> {
     for statement in [
         "DELETE FROM usage_ledger WHERE session_id = ?1",
         "DELETE FROM leases WHERE session_id = ?1",
+        "DELETE FROM session_tool_surface WHERE session_id = ?1",
         "DELETE FROM messages WHERE session_id = ?1",
         "DELETE FROM blob_refs WHERE owner_kind = 'session' AND owner_id = ?1",
         "DELETE FROM sessions WHERE id = ?1",

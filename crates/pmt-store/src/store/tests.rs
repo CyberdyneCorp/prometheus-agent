@@ -14,24 +14,9 @@ fn scope(root: &std::path::Path) -> ProfileScope {
     ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap()
 }
 
-/// The real v1 to v5 plus one trivial step.
+/// The first six real migration steps.
 fn six_versions() -> Vec<Migration> {
-    const EXTRA: [&str; 1] = ["CREATE TABLE t6 (x INTEGER) STRICT;"];
-    let mut all = MIGRATIONS.to_vec();
-    assert_eq!(
-        all.len(),
-        5,
-        "update the synthetic steps with new migrations"
-    );
-    for (version, sql) in (6..).zip(EXTRA) {
-        all.push(Migration {
-            version,
-            min_read_version: 1,
-            sql,
-            rebuilds_tables: false,
-        });
-    }
-    all
+    MIGRATIONS[..6].to_vec()
 }
 
 fn meta(path: &std::path::Path, key: &str) -> String {
@@ -76,7 +61,7 @@ fn older_store_is_upgraded_with_a_backup() {
         .query_row("SELECT count(*) FROM sessions", [], |r| r.get(0))
         .unwrap();
     assert_eq!(kept, 1, "the backup holds the pre-migration data");
-    for table in ["model_context", "credential_state", "t6"] {
+    for table in ["model_context", "credential_state", "session_tool_surface"] {
         let exists: bool = Connection::open(&db)
             .unwrap()
             .query_row(

@@ -8,6 +8,7 @@ use pmt_config::schema::{ApprovalMode, Config};
 use pmt_core::capability::Capability;
 use pmt_core::error::Error;
 use pmt_core::secret::Redactor;
+use pmt_store::tool_surface::SurfaceTool;
 use pmt_tools::budget::ResultBudget;
 use pmt_tools::descriptor::{Effect, PathClaim, ResourceClaims};
 use pmt_tools::protected::BUILTIN_FILES;
@@ -22,18 +23,9 @@ const EXPOSED: &str = "exposed";
 /// A toolset member this binary does not register (yet).
 const UNREGISTERED: &str = "unregistered";
 
-/// One `tools list` row.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ToolRow {
-    /// Tool name.
-    pub name: String,
-    /// Its toolset.
-    pub toolset: String,
-    /// Who registered it.
-    pub owner: String,
-    /// `exposed` or the exclusion reason code.
-    pub exposure: String,
-}
+/// One `tools list` row: the shape a session records, so the live listing
+/// and `--session` print the same columns.
+pub type ToolRow = SurfaceTool;
 
 /// Every registered tool with its exposure verdict for the profile's
 /// configured toolsets.
@@ -43,16 +35,21 @@ pub struct ToolRow {
 /// An unknown toolset in the configuration (exit 78).
 pub async fn list(inv: &Inventory<'_>) -> Result<Vec<ToolRow>, Error> {
     let (_, surface) = inv.surface(&inv.config.tools.enabled_toolsets).await?;
-    Ok(inv
-        .registry
+    Ok(surface_rows(inv.registry, &surface))
+}
+
+/// Every tool of `registry` with its verdict in `surface`.
+#[must_use]
+pub fn surface_rows(registry: &ToolRegistry, surface: &ToolSurface) -> Vec<ToolRow> {
+    registry
         .tools()
         .map(|tool| ToolRow {
             name: tool.name().to_owned(),
             toolset: tool.descriptor.toolset.clone(),
             owner: tool.owner.to_string(),
-            exposure: exposure(&surface, tool.name()),
+            exposure: exposure(surface, tool.name()),
         })
-        .collect())
+        .collect()
 }
 
 fn exposure(surface: &ToolSurface, name: &str) -> String {

@@ -14,7 +14,8 @@ use pmt_tools::{Builtins, RegisteredTool, Selection, ToolDescriptor, ToolRegistr
 use serde_json::{Value, json};
 
 use super::{
-    Inventory, explain, list, render_explain, render_list, render_show, show, slash_toolsets,
+    Inventory, explain, list, record_session_surface, render_explain, render_list, render_show,
+    show, slash_toolsets,
 };
 
 struct Ok;
@@ -187,4 +188,37 @@ fn slash_listing_marks_active_toolsets() {
     assert_eq!(line("video"), "  video  (1 tool)  [default-off]");
     assert_eq!(line("coding"), "  coding  (23 tools)  [posture]");
     assert!(line("file").starts_with("  file"));
+}
+
+#[tokio::test]
+async fn a_session_records_the_surface_it_built() {
+    let root = tempfile::tempdir().unwrap();
+    let home = pmt_config::Home::open(root.path()).unwrap();
+    let profile = home
+        .profile(&pmt_config::ProfileName::default_profile())
+        .unwrap();
+    let scope = pmt_config::ProfileScope::open(
+        profile,
+        &pmt_config::Overrides::default(),
+        pmt_config::Launch::Other,
+    )
+    .unwrap();
+    let store = pmt_store::Store::open(&scope).unwrap();
+    let session = store
+        .create_session(&pmt_store::NewSession::new(pmt_store::Source::Cli))
+        .unwrap();
+
+    let registry = registry();
+    let rows = with(&Config::default(), async |inv| {
+        let (_, surface) = inv.surface(&["core".to_owned()]).await.unwrap();
+        record_session_surface(&store, session.id, &registry, &surface).unwrap();
+        list(inv).await.unwrap()
+    })
+    .await;
+
+    let recorded = store.tool_surface(session.id).unwrap().unwrap();
+    assert_eq!(
+        recorded.tools, rows,
+        "the same verdicts as the live listing"
+    );
 }

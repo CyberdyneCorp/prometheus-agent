@@ -111,7 +111,7 @@ fn generate(check: bool) -> Result<(), String> {
     let root = repo_root();
     let artifacts = artifacts::all();
     reject_unowned(&root, artifacts::REFERENCE_DIR, &artifacts)?;
-    tool_refs::check(&root)?;
+    tool_refs::check(&root, &artifacts)?;
     if check {
         check_all(&root, &artifacts)
     } else {

@@ -7,6 +7,9 @@ mod common;
 use std::path::Path;
 
 use common::{ok, run, stderr, temp_home};
+use jiff::Timestamp;
+use pmt_store::tool_surface::{RecordedSurface, SurfaceTool};
+use pmt_store::{NewSession, Source, Store};
 use serde_json::Value;
 
 fn snapshot(name: &str, actual: &str) {
@@ -108,4 +111,79 @@ fn tools_list_is_a_versioned_document() {
     let doc = json(home.path(), &["tools", "list"]);
     assert_eq!(doc["schema"], "prometheus.tools.v1");
     assert!(doc["tools"].is_array());
+}
+
+/// A session in the temp home that recorded `tools`, titled `title`.
+fn session_with_surface(home: &Path, title: &str, tools: Option<Vec<SurfaceTool>>) -> String {
+    let home = pmt_config::Home::open(home).unwrap();
+    let profile = home
+        .profile(&pmt_config::ProfileName::default_profile())
+        .unwrap();
+    let scope = pmt_config::ProfileScope::open(
+        profile,
+        &pmt_config::Overrides::default(),
+        pmt_config::Launch::Other,
+    )
+    .unwrap();
+    let store = Store::open(&scope).unwrap();
+    let mut new = NewSession::new(Source::Cli);
+    new.title = Some(title.to_owned());
+    let session = store.create_session(&new).unwrap();
+    if let Some(tools) = tools {
+        let surface = RecordedSurface {
+            generation: 1,
+            recorded_at: Timestamp::from_millisecond(1_700_000_000_000).unwrap(),
+            tools,
+        };
+        store.record_tool_surface(session.id, &surface).unwrap();
+    }
+    session.id.to_string()
+}
+
+fn row(name: &str, toolset: &str, exposure: &str) -> SurfaceTool {
+    SurfaceTool {
+        name: name.into(),
+        toolset: toolset.into(),
+        owner: "builtin".into(),
+        exposure: exposure.into(),
+    }
+}
+
+#[test]
+fn tools_list_session_shows_the_frozen_surface() {
+    let home = temp_home();
+    let id = session_with_surface(
+        home.path(),
+        "refactor",
+        Some(vec![
+            row("terminal", "terminal", "exposed"),
+            row("browser_exec", "browser", "unavailable:browser not found"),
+        ]),
+    );
+    let text = ok(&run(
+        home.path(),
+        &["tools", "list", "--session", "refactor"],
+    ));
+    snapshot("tools-list-session.txt", &text.replace(&id, "<SESSION>"));
+
+    let doc = json(home.path(), &["tools", "list", "--session", &id]);
+    assert_eq!(doc["schema"], "prometheus.tools.v1");
+    assert_eq!(doc["session"], id.as_str());
+    assert_eq!(doc["generation"], 1);
+    assert_eq!(doc["tools"][1]["exposure"], "unavailable:browser not found");
+}
+
+#[test]
+fn tools_list_session_without_a_surface_or_session_exits_66() {
+    let home = temp_home();
+    session_with_surface(home.path(), "imported", None);
+    let out = run(home.path(), &["tools", "list", "--session", "imported"]);
+    assert_eq!(out.status.code(), Some(66));
+    assert!(
+        stderr(&out).contains("recorded no tool surface"),
+        "{}",
+        stderr(&out)
+    );
+    let out = run(home.path(), &["tools", "list", "--session", "nope"]);
+    assert_eq!(out.status.code(), Some(66));
 }

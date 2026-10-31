@@ -570,6 +570,9 @@ error_codes! {
     /// A tool name is not registered in this profile.
     TOOL_UNKNOWN = ("tool.unknown", Usage,
         "No tool of that name is registered in this profile (`unknown tool: <name>`); `prometheus tools list` shows the registered tools.");
+    /// `tools list --session` named a session that recorded no tool surface.
+    TOOL_SURFACE_UNRECORDED = ("tool.surface_unrecorded", NotFound,
+        "The session never recorded a tool surface: it never ran a turn (a surface is frozen when a session builds it) or was created by an import. `prometheus tools list` without `--session` shows the surface a new session would get.");
     /// Toolsets include each other in a cycle.
     TOOLSET_CYCLE = ("toolset.cycle", Config,
         "Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected.");

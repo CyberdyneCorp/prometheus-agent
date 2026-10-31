@@ -1,0 +1,4 @@
+session <SESSION> (surface generation 1, built 2023-11-14T22:13:20Z)
+TOOL          TOOLSET   EXPOSURE
+terminal      terminal  exposed
+browser_exec  browser   unavailable:browser not found

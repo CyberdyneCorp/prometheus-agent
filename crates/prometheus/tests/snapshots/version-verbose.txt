@@ -6,7 +6,7 @@ tier: <TIER>
 channel: stable
 rpc_protocol: 1.0
 config_schema_version: 1
-store_schema_version: 5
+store_schema_version: 6
 trajectory_grammar: 1
 surfaces:
   tui: yes

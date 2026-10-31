@@ -50,6 +50,8 @@ and tool name. To see them in your profile:
 $ prometheus toolsets list
 $ prometheus toolsets show core
 $ prometheus tools list
+$ prometheus tools list --session refactor   # exits 66
+error: no session matches 'refactor'
 $ prometheus toolsets show brwser   # exits 2
 error: unknown toolset 'brwser' (did you mean 'browser'?)
 ```
@@ -62,7 +64,11 @@ each `exposed` or with the reason it would not be. `tools list` prints every
 registered tool with its toolset and the same verdict, and `tools explain
 <name>` its schema, owner, capabilities, `effect`, `idempotent`, resource
 claims, timeout, result budget, the active approval mode and the approval
-rules that apply to its calls. In a session, `/toolsets` prints the same
+rules that apply to its calls. `tools list --session <id>` prints the
+surface that session froze when it built it (its id, an id prefix or its
+title), so later config, grant or runtime changes do not hide what the
+session was given; a session that never built a surface exits 66
+(`tool.surface_unrecorded`). In a session, `/toolsets` prints the same
 listing with that session's toolsets marked. An unknown toolset or tool
 name exits 2 and suggests the closest names.
 

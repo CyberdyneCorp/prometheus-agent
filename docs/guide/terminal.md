@@ -1,6 +1,6 @@
 # The local terminal
 
-On the `local` backend every `terminal` command runs in a fresh,
+On the `local` backend every [`terminal`](../reference/tools.md#terminal) command runs in a fresh,
 non-interactive, non-login shell confined by the session's OS sandbox (see
 [OS sandbox and terminal backends](sandbox.md)). This page describes what
 the shell sees and how results come back.
@@ -89,7 +89,7 @@ Secrets never enter the snapshot.
 
 ## Background processes
 
-The `process` tool lists, polls, logs, waits for, kills and writes to a
+The [`process`](../reference/tools.md#process) tool lists, polls, logs, waits for, kills and writes to a
 session's background processes (`list`, `poll`, `log`, `wait`, `kill`,
 `write`, `submit`, `close`; `handoff` arrives with subagents in M2). Ids can
 be shortened to any unique prefix. A session tracks at most 64 processes

@@ -1,11 +1,13 @@
-//! `prometheus tools list|explain` and `prometheus toolsets list|show`
+//! `prometheus tools list [--session]|explain` and `prometheus toolsets list|show`
 //! (spec: tool-system, Tool introspection commands; Toolset listing
 //! commands; Exposure requires toolset membership and capability coverage).
 //!
 //! Both answer from the profile's registry (the built-in tools of this
 //! binary and toolsets) and a tool surface built exactly as a session would
 //! build it from the profile's config, grants and availability probes, so a
-//! reason code printed here is the one a session would apply. The
+//! reason code printed here is the one a session would apply;
+//! `tools list --session` instead reads the surface a session recorded when
+//! it built it ([`record_session_surface`]). The
 //! `/toolsets` slash command renders the same listing for the session's
 //! own selection ([`slash_toolsets`]).
 
@@ -14,19 +16,23 @@ mod render;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use jiff::Timestamp;
 use pmt_config::Config;
 use pmt_config::grants::{GrantsFile, SessionGrants, Subject, baseline};
 use pmt_core::capability::CapabilitySet;
 use pmt_core::error::{Error, codes};
+use pmt_core::id::SessionId;
+use pmt_store::Store;
+use pmt_store::tool_surface::RecordedSurface;
 use pmt_tools::probe::ProbeCache;
 use pmt_tools::{Builtins, RegisteredTool, Selection, SurfaceInputs, ToolRegistry, ToolSurface};
 
 pub use render::{
     Explanation, ToolAvailability, ToolRow, ToolsetRow, ToolsetShow, explain, list, render_explain,
-    render_list, render_show, render_toolsets, show, toolset_rows,
+    render_list, render_show, render_toolsets, show, surface_rows, toolset_rows,
 };
 
-use crate::cli::{ToolsCommand, ToolsetsCommand, ToolsetsListArgs};
+use crate::cli::{ToolsCommand, ToolsListArgs, ToolsetsCommand, ToolsetsListArgs};
 use crate::context::Context;
 use crate::model_cmd::block_on;
 use crate::output::{document, print_raw};
@@ -94,7 +100,10 @@ impl Inventory<'_> {
 /// The command's failure; the caller prints it and exits with its code.
 pub fn run(command: &ToolsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
-        ToolsCommand::List => with_inventory(ctx, async |inv| {
+        ToolsCommand::List(ToolsListArgs {
+            session: Some(reference),
+        }) => list_session(reference, ctx),
+        ToolsCommand::List(ToolsListArgs { session: None }) => with_inventory(ctx, async |inv| {
             let rows = list(&inv).await?;
             if ctx.json {
                 return document("tools list", &serde_json::json!({ "tools": rows }));
@@ -110,6 +119,60 @@ pub fn run(command: &ToolsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         }),
         ToolsCommand::Toolsets(args) => list_toolsets(args, ctx),
     }
+}
+
+/// Records the surface `session` just built, so `tools list --session`
+/// reports what the session was given. Session start and every surface
+/// rebuild (compaction, `/tools reload --now`) call it.
+///
+/// # Errors
+///
+/// `session.not_found`, store errors.
+pub fn record_session_surface(
+    store: &Store,
+    session: SessionId,
+    registry: &ToolRegistry,
+    surface: &ToolSurface,
+) -> Result<(), Error> {
+    store.record_tool_surface(
+        session,
+        &RecordedSurface {
+            generation: surface.generation(),
+            recorded_at: Timestamp::now(),
+            tools: surface_rows(registry, surface),
+        },
+    )
+}
+
+/// `tools list --session`: the surface the session recorded.
+fn list_session(reference: &str, ctx: &Context<'_>) -> Result<u8, Error> {
+    let scope = ctx.scope()?;
+    let store = Store::open(&scope)?;
+    let id = store.resolve_session(reference)?;
+    let recorded = store.tool_surface(id)?.ok_or_else(|| {
+        Error::new(
+            &codes::TOOL_SURFACE_UNRECORDED,
+            format!("session {id} recorded no tool surface"),
+        )
+        .with_hint("`prometheus tools list` shows the surface a new session would get")
+    })?;
+    if ctx.json {
+        return document(
+            "tools list",
+            &serde_json::json!({
+                "session": id.to_string(),
+                "generation": recorded.generation,
+                "recorded_at": recorded.recorded_at.to_string(),
+                "tools": recorded.tools,
+            }),
+        );
+    }
+    print_raw(&format!(
+        "session {id} (surface generation {}, built {})\n{}",
+        recorded.generation,
+        recorded.recorded_at,
+        render_list(&recorded.tools)
+    ))
 }
 
 /// Runs one `toolsets` subcommand.

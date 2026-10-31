@@ -13,7 +13,8 @@
 //!   [`integrity`] the startup check and quarantine, [`rewind`] soft
 //!   deletes, [`delete`] and [`retention`] session removal, [`usage`] the
 //!   usage ledger, [`listing`] listings, pickers and size guards, and
-//!   [`credential_state`] provider credential request counts and benches.
+//!   [`credential_state`] provider credential request counts and benches,
+//!   and [`tool_surface`] the tool surface each session froze.
 
 pub mod blobs;
 pub mod compaction;
@@ -37,6 +38,7 @@ pub mod search;
 pub mod sessions;
 mod store;
 pub mod titles;
+pub mod tool_surface;
 pub mod trajectories;
 pub mod usage;
 pub mod usage_query;
@@ -66,7 +68,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 #[cfg(test)]
 mod tests {

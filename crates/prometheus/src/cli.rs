@@ -141,8 +141,9 @@ pub enum Command {
 #[derive(Debug, Subcommand)]
 pub enum ToolsCommand {
     /// Every registered tool with its toolset and exposure verdict (`exposed`
-    /// or a reason code) for the profile's configured toolsets.
-    List,
+    /// or a reason code) for the profile's configured toolsets, or as a
+    /// session froze them (`--session`).
+    List(ToolsListArgs),
     /// A tool's schema, owner, capabilities, effect, claims, timeout, result
     /// budget and the approval rules that apply to it.
     #[command(visible_alias = "show")]
@@ -152,6 +153,15 @@ pub enum ToolsCommand {
     },
     /// The toolsets, as `prometheus toolsets list`.
     Toolsets(ToolsetsListArgs),
+}
+
+/// `prometheus tools list` arguments.
+#[derive(Debug, clap::Args)]
+pub struct ToolsListArgs {
+    /// Show the surface this session froze when it started (id, id prefix
+    /// or title) instead of the one a new session would get.
+    #[arg(long, value_name = "SESSION")]
+    pub session: Option<String>,
 }
 
 /// `prometheus toolsets` subcommands.
