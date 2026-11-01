@@ -276,3 +276,21 @@ fn a_session_runs_its_turn_in_the_daemon() {
     assert_eq!(finished.data["final_response"], "mock: hello daemon");
     assert_eq!(finished.data["exit_reason"], "completed");
 }
+
+#[test]
+fn a_daemon_that_fails_to_start_reports_its_error() {
+    let home = mock_home();
+    std::fs::write(
+        home.path().join("daemon.toml"),
+        "[daemon.rpc]\nbind = \"0.0.0.0:7777\"\n",
+    )
+    .unwrap();
+    let out = run(home.path(), &["daemon", "start"]);
+    assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("the daemon exited with exit status: 78")
+            && stderr(&out).contains("the client listener is loopback-only"),
+        "{}",
+        stderr(&out)
+    );
+}

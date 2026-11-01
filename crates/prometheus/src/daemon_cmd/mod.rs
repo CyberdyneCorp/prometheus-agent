@@ -129,7 +129,11 @@ fn running_or_start(home: &Path) -> Result<(DaemonRecord, bool), Error> {
             if let Some(record) = wait_running(home, Duration::from_secs(5))? {
                 return Ok((record, false));
             }
-            return Err(start_failed(&format!("the daemon exited with {status}")));
+            let why = match last_stderr_line(home) {
+                Some(line) => format!("the daemon exited with {status}: {line}"),
+                None => format!("the daemon exited with {status}"),
+            };
+            return Err(start_failed(&why));
         }
         if std::time::Instant::now() > deadline {
             return Err(start_failed(
@@ -161,11 +165,40 @@ fn wait_running(home: &Path, wait: Duration) -> Result<Option<DaemonRecord>, Err
     }
 }
 
+/// Where a detached daemon's stderr goes: what it prints before its log
+/// file is set up (a startup error) stays readable.
+fn stderr_path(home: &Path) -> std::path::PathBuf {
+    home.join("logs").join("daemon-stderr.log")
+}
+
+fn stderr_file(home: &Path) -> std::io::Result<std::fs::File> {
+    let path = stderr_path(home);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::File::create(path)
+}
+
+/// The last non-empty line the daemon printed to stderr.
+fn last_stderr_line(home: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(stderr_path(home)).ok()?;
+    text.lines()
+        .rev()
+        .find(|line| !line.trim().is_empty() && !line.starts_with("hint:"))
+        .map(|line| line.trim_start_matches("error: ").to_owned())
+}
+
 /// `<this binary> --home <home> daemon run`, detached from this process
 /// group and terminal.
 fn spawn_detached(home: &Path) -> Result<std::process::Child, Error> {
     let exe = std::env::current_exe()
         .map_err(|e| start_failed(&format!("cannot find this binary: {e}")))?;
+    let stderr = stderr_file(home).map_err(|e| {
+        start_failed(&format!(
+            "cannot create {}: {e}",
+            stderr_path(home).display()
+        ))
+    })?;
     let mut command = Command::new(exe);
     command
         .arg("--home")
@@ -173,7 +206,7 @@ fn spawn_detached(home: &Path) -> Result<std::process::Child, Error> {
         .args(["daemon", "run"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(stderr);
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut command, 0);
     #[cfg(windows)]
