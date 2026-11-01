@@ -29,7 +29,7 @@ The system SHALL create `state.db`, `state.db-wal`, `state.db-shm` and every blo
 - **THEN** the file mode SHALL be `0600` and a WARN log entry SHALL name the path and the previous mode
 
 ### Requirement: Embedded versioned migrations
-The system SHALL record the schema version in `store_meta.schema_version`, SHALL apply embedded, ordered, forward-only migrations inside one transaction per step after copying the database to `<profile>/backups/state/state-v<old>-<timestamp>.db` (keeping the newest 3 backups), and SHALL open a store whose version is newer than the binary supports in read-only mode, refusing writes with error code `store.schema_too_new`.
+The system SHALL record the schema version in `store_meta.schema_version`, SHALL apply embedded, ordered, forward-only migrations inside one transaction per step after copying the database to `<profile>/backups/state/state-v<old>-<timestamp>.db` (keeping the newest 3 backups), and SHALL open a store whose version is newer than the binary supports in read-only mode, refusing writes with error code `store.schema_too_new`, unless the newer build recorded a `store_meta.min_read_version` beyond what the binary supports, in which case the store SHALL NOT be opened (`store.schema_unreadable`, as defined by `distribution-and-update` › Schema migrations around updates).
 **Milestone:** M1
 
 #### Scenario: Older store upgraded with backup
@@ -38,7 +38,7 @@ The system SHALL record the schema version in `store_meta.schema_version`, SHALL
 - **THEN** the system SHALL write a backup file, apply migrations 4 and 5, and record `schema_version = 5`
 
 #### Scenario: Downgraded binary cannot corrupt a newer store
-- **GIVEN** a `state.db` at schema version 7 and a binary supporting version 5
+- **GIVEN** a `state.db` at schema version 7 whose `min_read_version` is at most 5, and a binary supporting version 5
 - **WHEN** the user runs `prometheus sessions list`
 - **THEN** the system SHALL list sessions read-only and any write attempt SHALL fail with `store.schema_too_new` naming both versions
 

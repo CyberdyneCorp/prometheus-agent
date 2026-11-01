@@ -196,7 +196,14 @@ fn unknown_session_exits_66_with_a_json_error() {
     assert_eq!(out.status.code(), Some(66));
     assert!(stdout(&out).is_empty());
     let err: Value = serde_json::from_str(&stderr(&out)).unwrap();
+    assert_eq!(err["error"]["kind"], "not_found");
     assert_eq!(err["error"]["code"], "session.not_found");
+    assert!(
+        err["error"]["message"]
+            .as_str()
+            .is_some_and(|m| !m.is_empty())
+    );
+    assert!(err["error"].get("hint").is_some(), "{err}");
 }
 
 #[test]

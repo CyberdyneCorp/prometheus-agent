@@ -317,7 +317,7 @@ The platform hint SHALL be the built-in or adapter-registered hint for the sessi
 #### Scenario: Unknown key
 - **GIVEN** `prompt.platform_hints.slack = { prepend = "x" }`
 - **WHEN** config is validated
-- **THEN** the system SHALL report `unknown key 'prepend'` and exit 78
+- **THEN** the system SHALL report `unknown key 'prompt.platform_hints.slack.prepend'` (the full key path, like every unknown-key error) and exit 78
 
 ### Requirement: System prompt frozen per session
 The system SHALL persist the built system prompt bytes, its SHA-256, and the ordered tool-schema list on the session row at the first turn, and every later turn SHALL replay those exact bytes and tool order; it SHALL rebuild only when the session is new, the stored prompt is missing, the model or provider changed, a compaction commits, or the user explicitly applies a deferred change with `--now`, and every rebuild SHALL emit `prompt.rebuilt` with its reason.

@@ -805,7 +805,7 @@ capabilities = [
 
 [agent-turn-loop."Platform hint overrides"]
 "Replace and append" = ["crates/pmt-agent/tests/turn/prompt.rs::platform_hint_overrides_replace_then_append"]
-"Unknown key" = { tests = ["crates/pmt-config/src/validate.rs::unknown_platform_hint_key_is_refused"], note = "the message names the full key (`unknown key 'prompt.platform_hints.slack.prepend'`), like every unknown-key error, and exits 78" }
+"Unknown key" = ["crates/pmt-config/src/validate.rs::unknown_platform_hint_key_is_refused"]
 
 [agent-turn-loop."System prompt frozen per session"]
 "Resumed session replays bytes" = ["crates/pmt-agent/tests/turn/prompt.rs::a_resumed_session_replays_the_stored_bytes"]
@@ -1157,7 +1157,7 @@ capabilities = [
 "Missing secret reported" = ["crates/prometheus/tests/doctor_cli.rs::a_missing_provider_secret_fails_with_its_remedy"]
 
 [cli."Machine-readable output"]
-"JSON error" = { tests = ["crates/prometheus/tests/sessions_cli.rs::unknown_session_exits_66_with_a_json_error"], note = "spec conflict: workspace-architecture puts --json errors on stderr with the kind's exit code (66 for not_found); this test follows it rather than this scenario's stdout and exit 1" }
+"JSON error" = ["crates/prometheus/tests/sessions_cli.rs::unknown_session_exits_66_with_a_json_error"]
 
 [cli."Usage display"]
 "Lineage cost shown" = ["crates/prometheus/tests/chat_line.rs::usage_shows_the_session_and_its_lineage"]
@@ -1253,7 +1253,8 @@ capabilities = [
 "Rollback after compatible update" = ["crates/prometheus/tests/update_cli.rs::update_then_rollback_restores_the_previous_binary"]
 
 [distribution-and-update."Schema migrations around updates"]
-"Older binary meets newer schema" = { tests = ["crates/pmt-store/tests/store/open.rs::newer_store_opens_read_only_and_refuses_writes", "crates/pmt-config/tests/migration.rs::newer_file_is_refused_with_exit_78"], note = "exits 78 (the config kind of store.schema_too_new in the error taxonomy) rather than this scenario's 1; the database is left unmodified" }
+"Older binary meets newer schema" = ["crates/prometheus/tests/update_cli.rs::rollback_after_a_store_migration_restores_the_old_store", "crates/pmt-store/tests/store/open.rs::store_a_newer_build_locked_out_cannot_be_opened"]
+"Older binary reads a compatible newer schema" = ["crates/pmt-store/tests/store/open.rs::newer_store_opens_read_only_and_refuses_writes"]
 
 [distribution-and-update."Update receipts at the root home"]
 "Profile does not change receipt location" = ["crates/prometheus/tests/update_cli.rs::receipts_stay_at_the_root_home_with_a_profile_selected"]

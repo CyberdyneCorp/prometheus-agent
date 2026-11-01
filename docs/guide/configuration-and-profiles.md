@@ -54,7 +54,10 @@ open under any other profile (`store.profile_mismatch`, exit 78), so a
 database copied from `work` into `home` is never written to. Renaming a
 profile keeps its id. Before a newer Prometheus upgrades the database it
 copies it to `<profile>/backups/state/state-v<old>-<time>.db` (the newest 3
-are kept); an older Prometheus opens a newer database read-only.
+are kept). An older Prometheus opens a newer database read-only (writes fail
+with `store.schema_too_new`, exit 78), unless the newer build recorded that
+older builds can no longer read it: then it refuses to open it
+(`store.schema_unreadable`, exit 1) and leaves it untouched.
 
 ## Configuration
 

@@ -147,6 +147,7 @@ fn newer_store_opens_read_only_and_refuses_writes() {
         .append_message(existing.id, &NewMessage::new(Role::User, "hi"))
         .unwrap_err();
     assert_eq!(err.code().code, "store.schema_too_new");
+    assert_eq!(err.exit_code(), 78);
     assert!(err.message().contains(&format!("version {newer}")), "{err}");
     let ours = format!("version {}", pmt_store::SCHEMA_VERSION);
     assert!(err.message().contains(&ours), "{err}");
