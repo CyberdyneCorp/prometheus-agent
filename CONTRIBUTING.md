@@ -45,7 +45,8 @@ naming it:
 CI (`.github/workflows/ci.yml`) runs `scripts/check --no-perf` on every Tier 1
 target, so a green local run predicts a green check job. The budgets are
 defined for one reference runner, so CI runs them only there, with
-`scripts/check --perf` against main's baseline; timing on the shared matrix
+`scripts/check --perf` against the pull request's base branch, measured
+in the same job; timing on the shared matrix
 runners is too noisy to gate on. CI also builds the Tier 2 targets (Windows
 x86_64 and aarch64, Android aarch64).
 

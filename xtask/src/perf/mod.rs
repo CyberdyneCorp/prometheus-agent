@@ -12,7 +12,8 @@
 //! daemon (M2).
 //!
 //! `scripts/check` runs it against `perf/baseline.json`; CI's `perf` job
-//! runs it on the reference runner against main's baseline
+//! runs it on the reference runner against the pull request's base branch,
+//! measured in the same job
 //! (see `perf/README.md`).
 
 mod budget;
