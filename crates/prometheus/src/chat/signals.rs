@@ -8,7 +8,7 @@
 //! signal that arrives between two waits.
 
 /// The run's signal listeners.
-pub(super) struct Signals {
+pub(crate) struct Signals {
     #[cfg(unix)]
     listeners: Option<(tokio::signal::unix::Signal, tokio::signal::unix::Signal)>,
     #[cfg(windows)]
@@ -19,7 +19,7 @@ impl Signals {
     /// Installs the listeners (inside the Tokio runtime); a run whose
     /// listeners cannot be installed is never stopped by a signal.
     #[cfg(unix)]
-    pub(super) fn listen() -> Self {
+    pub(crate) fn listen() -> Self {
         use tokio::signal::unix::{SignalKind, signal};
         let listeners = signal(SignalKind::interrupt())
             .and_then(|int| Ok((int, signal(SignalKind::terminate())?)))
@@ -29,7 +29,7 @@ impl Signals {
 
     /// Installs the Ctrl-C listener (inside the Tokio runtime).
     #[cfg(windows)]
-    pub(super) fn listen() -> Self {
+    pub(crate) fn listen() -> Self {
         Self {
             listener: tokio::signal::windows::ctrl_c().ok(),
         }
@@ -37,7 +37,7 @@ impl Signals {
 
     /// The exit status of the next SIGINT (130) or SIGTERM (143).
     #[cfg(unix)]
-    pub(super) async fn next(&mut self) -> u8 {
+    pub(crate) async fn next(&mut self) -> u8 {
         let Some((int, term)) = self.listeners.as_mut() else {
             return std::future::pending().await;
         };
@@ -49,7 +49,7 @@ impl Signals {
 
     /// The exit status of the next Ctrl-C (130).
     #[cfg(windows)]
-    pub(super) async fn next(&mut self) -> u8 {
+    pub(crate) async fn next(&mut self) -> u8 {
         let Some(listener) = self.listener.as_mut() else {
             return std::future::pending().await;
         };

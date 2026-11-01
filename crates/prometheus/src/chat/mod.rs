@@ -16,7 +16,7 @@ pub mod remote;
 pub mod repl;
 pub mod resume;
 pub mod session;
-mod signals;
+pub(crate) mod signals;
 pub mod terminal;
 pub mod theme;
 pub mod usage_file;

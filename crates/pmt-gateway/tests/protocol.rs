@@ -309,10 +309,13 @@ async fn a_silent_connection_closes_with_4408_after_45_seconds() {
     // From here the clock jumps whenever every task waits.
     tokio::time::pause();
     let started = tokio::time::Instant::now();
+    // One-second steps: a single long timeout could let the paused clock
+    // jump past it while the close frame is still in the socket.
     let close = loop {
-        match tokio::time::timeout(Duration::from_mins(2), socket.next()).await {
+        match tokio::time::timeout(Duration::from_secs(1), socket.next()).await {
             Ok(Some(Ok(Message::Close(Some(frame))))) => break u16::from(frame.code),
             Ok(Some(Ok(_))) => {}
+            Err(_) if started.elapsed() < Duration::from_mins(2) => {}
             other => panic!("no close frame: {other:?}"),
         }
     };

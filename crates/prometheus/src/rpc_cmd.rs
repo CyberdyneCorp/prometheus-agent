@@ -157,6 +157,9 @@ async fn events(
     session: Option<&str>,
     since: Option<u64>,
 ) -> Result<u8, Error> {
+    // Listening before anything is printed: a SIGINT right after the
+    // first line must stop the stream, not kill the process.
+    let mut signals = crate::chat::signals::Signals::listen();
     let hello = crate::daemon_client::hello(false);
     let (client, mut inbox) = crate::daemon_client::connect(record, profile, &hello).await?;
     let mut seen = Watermark::default();
@@ -170,17 +173,15 @@ async fn events(
             replay(&client, session, last_seen, &mut seen).await?;
         }
     }
-    let interrupted = tokio::signal::ctrl_c();
-    tokio::pin!(interrupted);
     loop {
         tokio::select! {
             event = inbox.events.recv() => match event {
                 Some(event) => seen.print(&event)?,
                 None => return Err(closed(&client).await),
             },
-            _ = &mut interrupted => {
+            code = signals.next() => {
                 client.close();
-                return Ok(pmt_core::exit::INTERRUPTED);
+                return Ok(code);
             }
         }
     }
