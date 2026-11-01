@@ -49,7 +49,7 @@ capabilities = [
 "Misspelled hook in a plugin manifest" = ["crates/pmt-core/src/registry.rs::misspelled_hook_suggests_the_closest_name"]
 
 [workspace-architecture."Single-writer storage invariant"]
-"Chat attaches to a running daemon" = { deferred = "M2: needs the daemon and the client RPC protocol (tasks 22.x)" }
+"Second chat on a home in use" = ["crates/prometheus/tests/chat_cli.rs::a_second_chat_on_a_home_in_use_exits_75_naming_the_holder", "crates/pmt-core/src/runtime.rs::chat_holder_is_named_in_the_conflict"]
 
 [workspace-architecture."Error taxonomy"]
 "JSON error output" = ["crates/prometheus/tests/config_cli.rs::unknown_key_json_error_has_kind_and_code"]
@@ -65,7 +65,7 @@ capabilities = [
 "Interrupt during a long shell command" = ["crates/pmt-tools/tests/terminal/foreground.rs::an_interrupt_ends_a_long_command_and_terms_its_group"]
 
 [workspace-architecture."Startup time budget"]
-"Slow MCP server" = { deferred = "M2: needs MCP servers (plugin-system, M2)" }
+"Slow prompt fails the gate" = ["xtask/src/perf/budget.rs::a_slow_or_heavy_chat_breaches_its_budgets"]
 
 [workspace-architecture."Memory and size budgets"]
 "Binary too large" = ["xtask/src/perf/budget.rs::an_82_mib_binary_fails_the_size_budget"]
@@ -271,7 +271,7 @@ capabilities = [
 "Profile isolation" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_never_sees_another_profile"]
 
 [observability."One trajectory grammar for every surface"]
-"Same script, different surface" = { deferred = "M2: needs the gateway webhook adapter (messaging-gateway, M2)" }
+"Same script, interactive and one-shot" = ["crates/prometheus/tests/trajectory_surfaces.rs::the_interactive_and_one_shot_trajectories_match"]
 
 [observability."Trajectory event types"]
 "Tool failure recorded" = ["crates/pmt-obs/tests/obs/golden.rs::a_failed_read_file_is_an_observation_error_with_kind_not_found"]
@@ -390,7 +390,7 @@ capabilities = [
 "SSH misconfigured" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::ssh_misconfigured"]
 
 [execution-environments."Terminal configuration defaults"]
-"Two profiles, two backends" = { deferred = "M2: needs the container backend (reserved until M2, tasks 26.x) and a gateway serving two profiles (task 22.1)" }
+"Settings of an unselected backend" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::settings_of_an_unselected_backend_do_not_block_the_selected_one"]
 
 [execution-environments."Local backend runs under the OS sandbox"]
 "Kernel without Landlock" = ["crates/pmt-tools/tests/terminal/environment.rs::kernel_without_landlock_refuses_to_run"]
@@ -429,7 +429,7 @@ capabilities = [
 "Long job is not pruned on exit" = ["crates/pmt-tools/tests/terminal/processes.rs::a_long_job_is_kept_for_thirty_minutes_after_it_finishes"]
 
 [execution-environments."File tools route through the backend"]
-"Container backend" = { deferred = "M2: needs the container backend (reserved until M2)" }
+"Local backend checks the capabilities" = ["crates/pmt-tools/tests/file_tools/read.rs::paths_outside_the_capabilities_are_denied", "crates/pmt-tools/tests/file_tools/read.rs::list_dir_goes_through_the_backend_and_its_capabilities"]
 
 [execution-environments."read_file guards, pagination and dedup"]
 "Third identical read" = ["crates/pmt-tools/tests/file_tools/read.rs::a_third_identical_read_is_blocked"]
@@ -479,6 +479,7 @@ capabilities = [
 
 [execution-environments."Windows local shell"]
 "Only WSL bash on PATH" = ["crates/pmt-tools/tests/terminal/windows.rs::only_wsl_bash_on_path_uses_powershell"]
+"Sandboxed session on Windows" = ["crates/prometheus/tests/terminal_windows.rs::auto_runs_commands_confined_in_powershell", "crates/prometheus/tests/terminal_windows.rs::windows_powershell_runs_commands_confined", "crates/prometheus/tests/terminal_windows.rs::explicit_git_bash_under_the_sandbox_is_unavailable", "crates/pmt-tools/src/terminal/windows_shell.rs::a_confined_session_skips_git_bash_and_says_why"]
 
 [execution-environments."browser_exec tool"]
 "Batched sub-procedure" = ["crates/pmt-tools/tests/browser/main.rs::a_batched_sub_procedure_keeps_its_tab_for_the_next_call"]
@@ -1084,9 +1085,6 @@ capabilities = [
 
 [memory."Memory CLI and editing"]
 "Import a Hermes memory file" = ["crates/pmt-memory/tests/memory/import.rs::a_hermes_memory_file_imports_as_core_entries_skipping_duplicates", "crates/prometheus/tests/memory_cli.rs::a_hermes_file_imports_as_core_entries"]
-
-[memory."Context engine selection"]
-"Engine selection never rewrites stored history" = { deferred = "M2: context engine plugins run in the plugin host (M2); M1 has only the built-in engine" }
 
 [memory."Exact duplicate add is a no-op"]
 "Re-adding a known fact" = ["crates/pmt-memory/tests/memory/tool.rs::re_adding_a_known_fact_is_a_duplicate_no_op"]

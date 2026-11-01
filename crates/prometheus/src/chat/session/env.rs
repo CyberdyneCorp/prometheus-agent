@@ -166,7 +166,8 @@ fn terminal(
     env: ChildEnv,
 ) -> Result<LocalTerminal, Error> {
     let config = inputs.scope.config();
-    let shell = pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)?;
+    let shell =
+        pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)?;
     LocalTerminal::new(LocalSetup {
         terminal: config.terminal.clone(),
         max_chars: 50_000,

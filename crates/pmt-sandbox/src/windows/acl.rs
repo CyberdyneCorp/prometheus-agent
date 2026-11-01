@@ -33,12 +33,13 @@ use windows_sys::Win32::Security::Authorization::{
 };
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACE_FLAGS, ACE_HEADER, ACL, ACL_REVISION, AddAccessAllowedAceEx, AddAce,
-    CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, NO_INHERITANCE, EqualSid, GetAce, GetFileSecurityW,
+    CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, EqualSid, GetAce, GetFileSecurityW,
     GetLengthSid, GetSecurityDescriptorControl, GetSecurityDescriptorDacl, INHERITED_ACE,
-    InitializeAcl, InitializeSecurityDescriptor, OBJECT_INHERIT_ACE, OBJECT_SECURITY_INFORMATION,
-    PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_AUTO_INHERITED,
-    SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL, SetFileSecurityW,
-    SetSecurityDescriptorControl, SetSecurityDescriptorDacl, UNPROTECTED_DACL_SECURITY_INFORMATION,
+    InitializeAcl, InitializeSecurityDescriptor, NO_INHERITANCE, OBJECT_INHERIT_ACE,
+    OBJECT_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+    SE_DACL_AUTO_INHERITED, SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL,
+    SetFileSecurityW, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
+    UNPROTECTED_DACL_SECURITY_INFORMATION,
 };
 
 use super::container::wide;
@@ -233,7 +234,8 @@ fn rebuild(
     let mut grant = grant;
     for (ace, len) in entries {
         // SAFETY: every kept entry starts with an ACE_HEADER.
-        let inherited = u32::from(unsafe { (*ace.cast::<ACE_HEADER>()).AceFlags }) & INHERITED_ACE != 0;
+        let flags = unsafe { (*ace.cast::<ACE_HEADER>()).AceFlags };
+        let inherited = u32::from(flags) & INHERITED_ACE != 0;
         if inherited {
             add_grant(acl, revision, grant.take(), sid)?;
         }
@@ -246,7 +248,12 @@ fn rebuild(
     Ok(buffer)
 }
 
-fn add_grant(acl: *mut ACL, revision: u32, grant: Option<(u32, ACE_FLAGS)>, sid: PSID) -> Result<(), u32> {
+fn add_grant(
+    acl: *mut ACL,
+    revision: u32,
+    grant: Option<(u32, ACE_FLAGS)>,
+    sid: PSID,
+) -> Result<(), u32> {
     if let Some((mask, inheritance)) = grant {
         // SAFETY: room for this ACE was reserved in the buffer.
         if unsafe { AddAccessAllowedAceEx(acl, revision, inheritance, mask, sid) } == 0 {

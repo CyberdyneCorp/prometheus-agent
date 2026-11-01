@@ -61,7 +61,12 @@ impl Fixture {
             )
             .unwrap();
         }
-        writeln!(script, "[[rule]]\nstep = {}\ntext = \"done\"", commands.len()).unwrap();
+        writeln!(
+            script,
+            "[[rule]]\nstep = {}\ntext = \"done\"",
+            commands.len()
+        )
+        .unwrap();
         let path = self.home.path().join("script.toml");
         std::fs::write(&path, script).unwrap();
         let out = common::command(self.home.path())
@@ -102,10 +107,7 @@ impl Fixture {
                 "Set-Location sub".to_owned(),
                 "Get-Content ..\\data.txt".to_owned(),
                 "& ..\\script.ps1".to_owned(),
-                format!(
-                    "Set-Content -LiteralPath '{}' -Value x",
-                    escaped.display()
-                ),
+                format!("Set-Content -LiteralPath '{}' -Value x", escaped.display()),
                 "cmd.exe /c exit 3".to_owned(),
             ],
         );
@@ -120,7 +122,11 @@ impl Fixture {
             std::fs::canonicalize(self.work.join("sub")).unwrap(),
             "the session follows Set-Location: {cd:#}"
         );
-        assert_eq!(read["output"].as_str().unwrap().trim(), "ledger line", "{read:#}");
+        assert_eq!(
+            read["output"].as_str().unwrap().trim(),
+            "ledger line",
+            "{read:#}"
+        );
         assert_eq!(
             script["output"].as_str().unwrap().trim(),
             "script ran in sub",

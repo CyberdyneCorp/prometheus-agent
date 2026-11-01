@@ -111,3 +111,13 @@ do not carry over between commands. Selecting `git-bash`, `pwsh` or
 missing (`pwsh not found`, with an install hint). The CLI switches its
 console to UTF-8 (code page 65001) and restores the original code pages on
 exit.
+
+Git Bash cannot run inside the Windows sandbox: its MSYS2 runtime creates
+named objects under `\BaseNamedObjects` at startup, which an AppContainer
+may not do. While the sandbox is enforced (the default), `auto` therefore
+uses `pwsh`, then Windows PowerShell, with a notice saying why, and an
+explicit `git-bash` makes the terminal unavailable (`git-bash cannot run
+inside the Windows sandbox (AppContainer)`) rather than run unconfined.
+PowerShell runs each command from the session's directory or fails with
+exit code 126, with `-ExecutionPolicy Bypass` so the scripts the agent
+writes can run (the sandbox, not the execution policy, is the boundary).

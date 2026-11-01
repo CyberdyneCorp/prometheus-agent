@@ -387,3 +387,24 @@ fn help_matches_its_snapshots() {
     snapshot("cli-help.txt", &ok(&run(home.path(), &["--help"])));
     snapshot("chat-help.txt", &ok(&run(home.path(), &["chat", "--help"])));
 }
+
+/// Scenario: Second chat on a home in use (spec: workspace-architecture,
+/// Single-writer storage invariant). A running in-process chat holds the
+/// home's writer lock; another chat on that home exits 75 naming it, and
+/// starts once the lock is free.
+#[test]
+fn a_second_chat_on_a_home_in_use_exits_75_naming_the_holder() {
+    use pmt_core::runtime::{Role, WriterLock};
+
+    let home = mock_home();
+    let running = WriterLock::acquire(home.path(), Role::Chat, vec!["default".into()]).unwrap();
+    let out = run(home.path(), &["chat", "-z", "hi"]);
+    assert_eq!(out.status.code(), Some(75), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("in use by 'prometheus chat'"),
+        "{}",
+        stderr(&out)
+    );
+    drop(running);
+    ok(&run(home.path(), &["chat", "-z", "hi"]));
+}

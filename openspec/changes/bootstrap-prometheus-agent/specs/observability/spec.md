@@ -9,6 +9,15 @@ Defines how Prometheus makes its behaviour visible and accountable: one trajecto
 The system SHALL record every session, whatever its surface (CLI, TUI, gateway adapter, cron, ACP, MCP server, subagent, eval, harness evolution), as a trajectory of JSON-lines events at `<profile home>/trajectories/<session_id>.jsonl`, where each line has exactly the top-level keys `v`, `ts` (RFC 3339 UTC with microseconds), `seq` (per-session monotonic from 1), `session_id`, `root_session_id`, `turn_id` (null outside a turn), `span_id`, `parent_span_id`, `type` and `payload`. The surface SHALL appear only as `payload.source` of the `session.start` event. The one-shot `--output-format stream-json` stream (`cli` › Streaming JSONL output) SHALL reuse this line shape and these event types verbatim, adding only a final line of `type = "result"`, which is never written to the trajectory file.
 **Milestone:** M1
 
+#### Scenario: Same script, interactive and one-shot
+- **GIVEN** the same scripted mock-provider conversation run once through the interactive `prometheus chat` and once through `prometheus chat -z`
+- **WHEN** both trajectories are normalised by removing ids, timestamps, durations, `payload.source` and what each interface's own system-prompt hint changes (prompt and request hashes, token counts)
+- **THEN** the two event sequences SHALL be identical
+
+### Requirement: Gateway sessions share the trajectory grammar
+Sessions served by the gateway (messaging and webhook adapters, API surfaces) SHALL record the same trajectory event sequence as the same conversation run through `prometheus chat`, differing only in ids, timestamps and `payload.source`.
+**Milestone:** M2
+
 #### Scenario: Same script, different surface
 - **GIVEN** the same scripted mock-provider conversation run once through `prometheus chat` and once through a gateway webhook adapter
 - **WHEN** both trajectories are normalised by removing ids, timestamps and `payload.source`

@@ -14,6 +14,14 @@ boundary; approvals and scanners are heuristics on top of it.
 `partial` at the platform maximum is not a downgrade. Other platforms
 (Android, the BSDs) have no backend: every feature is `unavailable`.
 
+On Windows the container may also list and read the attributes of the
+directories above its granted roots (names and attributes, never contents,
+like `file-read-metadata` on macOS): PowerShell checks every component of a
+location before entering it. A directory whose permissions your account may
+not change (for example `C:\Users` without elevation) is skipped with a
+warning, and confined PowerShell may then be unable to enter locations
+below it.
+
 ## What a child may touch
 
 The built-in baseline (used when `security.capabilities` is unset) is:

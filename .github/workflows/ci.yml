@@ -147,18 +147,20 @@ jobs:
       - name: cargo build
         run: cargo build --workspace --all-targets --all-features --locked --target "${{ matrix.target }}"
 
+      # The terminal tool inside the enforced AppContainer sandbox
+      # (execution-environments, Windows local shell — Sandboxed session on
+      # Windows): commands run confined in PowerShell, move around the
+      # workspace, run a script, and cannot write outside it.
+      - name: Windows sandboxed terminal tests
+        if: runner.os == 'Windows'
+        run: cargo test -p prometheus --test terminal_windows --locked --target "${{ matrix.target }}"
+
       # The offline smoke run of a Tier 2 target (spec: workspace-architecture,
       # Supported targets and support tiers): the demo's CLI tests, then
       # `prometheus demo` with the binary's outbound traffic blocked. The
       # Android binary runs in a Termux container in the android-smoke job.
-      # KNOWN GAP (task 21.2 open): under the enforced AppContainer sandbox
-      # the terminal tool cannot run a shell yet (Git Bash fails DLL init
-      # with 0xC0000142, Windows PowerShell loads no modules, pwsh cannot
-      # enter the workspace), so the demo fails on Windows. The step stays
-      # visible and non-blocking until the sandbox grants are fixed.
       - name: Offline smoke run
         if: runner.os == 'Windows'
-        continue-on-error: true
         run: |
           cargo test -p prometheus --test demo_cli --locked --target "${{ matrix.target }}"
           scripts/ci/offline-demo "target/${{ matrix.target }}/debug/prometheus.exe"
