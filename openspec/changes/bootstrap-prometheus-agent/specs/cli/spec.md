@@ -11,7 +11,7 @@ The system SHALL install the binary as `prometheus` with the alias `pmt`, and bo
 
 #### Scenario: Alias equivalence
 - **WHEN** the user runs `pmt --version` and `prometheus --version`
-- **THEN** both SHALL print the same `prometheus <semver> (<target>, <commit>)` line and exit 0
+- **THEN** both SHALL print the same `prometheus <semver> (<channel>, <target>, <commit>, <build date>)` line (the identity line defined by `distribution-and-update` › Release identity grammar) and exit 0
 
 ### Requirement: Top-level command tree
 The system SHALL provide exactly the top-level subcommands listed by `workspace-architecture`, each arriving with its owning capability's milestone: M1 — `chat` (the default when no subcommand is given), `setup`, `config`, `secrets`, `grants`, `profile`, `sessions`, `model`, `fallback`, `auth`, `tools`, `toolsets`, `approvals`, `skills`, `memory`, `runtimes`, `usage`, `logs`, `doctor`, `prompt`, `trajectory`, `demo`, `backup`, `snapshots`, `update`, `debug`, `version`, `help`; M2 — `daemon` (process lifecycle: `run`, `start`, `stop`, `restart`, `status`, `ensure`, `install-service`, `uninstall-service`, `ticket`, `pair-device`, `revoke-device`), `gateway` (messaging adapters and outbox: `status`, `setup`, `platforms`, `list`, `pause`, `resume`, `reload`, `restart`, `stop`, `outbox`, `send`, `peer`, `proxy`, `enroll`, `selftest`, `slack-manifest`, `whatsapp pair`, `whatsapp-cloud setup`, `photon setup|status`, `telegram logout`, `feishu comment-rules`), `tui`, `console`, `webhooks`, `pairing`, `cron`, `pause`, `curator`, `plugins`, `mcp`, `bridge`, `providers`, `portal`, `local`, `moa`, `connectors`, `browser`, `vault`, `security`, `status`, `lsp`, `verify`, `worktrees`, `projects`, `journey`, `themes`, `cache`, `files`, `schema`, `rpc`, `replay`, `eval`, `migrate`, `bundle`, `uninstall`, `completions`; M3 — `identity`, `dashboard` (`register`, `pair`, `devices`), `serve`, `webapp`, `desktop` (alias `gui`), `acp`, `computer-use`, `egress`, `codex-runtime`, `kanban`, `evolve`, `harness`, `experience`, `pets`, `achievements`; subcommand groups that manage a collection of installed or stored items SHALL use plural nouns (for example `plugins test-adapter`, never `plugin`; likewise `sessions`, `skills`, `worktrees`, `projects`), while the established singular groups listed in the tree above (such as `profile`, `config`, `model`, `daemon`, `gateway`, `vault`) keep their names, nested subcommands are owned by the capability that introduces the group, and `prometheus help` SHALL additionally list the commands of enabled plugins under `plugins run <plugin_id>`. It SHALL accept the global flags `-p/--profile`, `--home`, `--set key=value` (repeatable), `--json`, `--no-color`, `-v/--verbose` (repeatable), `-q/--quiet`, `-V/--version` and `-h/--help` before or after the subcommand.
@@ -152,7 +152,7 @@ The system SHALL ask `once / always / cancel` before `/clear`, `/new`, `/undo` a
 - **THEN** the session transcript SHALL be unchanged
 
 ### Requirement: Skill invocation as user message
-The system SHALL invoke `/<skill> [instruction]` by appending a user message that loads the skill, never by editing the system prompt, and SHALL accept up to 5 stacked leading skill tokens (`/a /b do X`), rejecting a sixth with `at most 5 skills per message`.
+The system SHALL invoke `/<skill> [instruction]` by appending a user message that loads the skill, never by editing the system prompt, and SHALL accept up to 5 stacked leading skill tokens (`/a /b do X`), treating a sixth as instruction text with the notice `at most 5 skills can be stacked; use a skill bundle for more` (as defined by the `skills` capability, Stacking skills in one message).
 **Milestone:** M1
 
 #### Scenario: Stacked skills
@@ -221,12 +221,12 @@ The CLI SHALL expose `prometheus doctor` exactly as owned by `workspace-architec
 - **THEN** the output SHALL contain a `fail` line naming `ANTHROPIC_API_KEY` and `prometheus secrets set ANTHROPIC_API_KEY`, and the exit code SHALL be 1
 
 ### Requirement: Machine-readable output
-The system SHALL make every listing and status command accept `--json`, emitting a single JSON document (or JSON Lines for `--follow` streams) to stdout with no decoration, using `snake_case` field names and RFC 3339 timestamps, and SHALL emit errors under `--json` as `{"error": {"code": "<code>", "message": "<text>"}}` on stdout alongside the exit code.
+The system SHALL make every listing and status command accept `--json`, emitting a single JSON document (or JSON Lines for `--follow` streams) to stdout with no decoration, using `snake_case` field names and RFC 3339 timestamps, and SHALL emit errors under `--json` as the `workspace-architecture` › Error taxonomy document `{"error": {"kind": "<kind>", "code": "<code>", "message": "<text>", "hint": <text or null>}}` on stderr, leaving stdout empty, and exit with the code of the error's kind (`workspace-architecture` › Exit codes).
 **Milestone:** M1
 
 #### Scenario: JSON error
 - **WHEN** the user runs `prometheus sessions show nope --json`
-- **THEN** stdout SHALL be `{"error":{"code":"session.not_found","message":...}}` and the exit code SHALL be 1
+- **THEN** stdout SHALL be empty, stderr SHALL be `{"error":{"kind":"not_found","code":"session.not_found","message":...,"hint":...}}` and the exit code SHALL be 66
 
 ### Requirement: Shell completions (upgrade)
 The system SHALL provide `prometheus completions <bash|zsh|fish|powershell|elvish>` printing a completion script generated from the command tree, with dynamic completion of profile names, session ids and titles, config keys, skill names and slash commands served by the hidden command `prometheus __complete`, which SHALL read only local files, SHALL NOT start the daemon or open network connections, and SHALL return within 200 ms on a store of 10000 sessions.

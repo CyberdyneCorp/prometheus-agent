@@ -26,6 +26,24 @@ confidence-threshold = 0.93
 # The allowlist is the spec policy, not a list of licenses currently in use.
 unused-allowed-license = "allow"
 
+# Mozilla's root list as data; only a wasm32 dependency of
+# rustls-platform-verifier (never built for a supported target), but the
+# graph covers every target.
+[[licenses.exceptions]]
+crate = "webpki-root-certs"
+allow = ["CDLA-Permissive-2.0"]
+
+# The line editor's Windows clipboard support (rustyline -> clipboard-win
+# -> error-code). Boost Software License 1.0: permissive, OSI approved, no
+# attribution in binaries; allowed for these two crates only.
+[[licenses.exceptions]]
+crate = "clipboard-win"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+crate = "error-code"
+allow = ["BSL-1.0"]
+
 [licenses.private]
 # Workspace crates are `publish = false` and carry no license until one is chosen.
 ignore = true

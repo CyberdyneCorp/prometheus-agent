@@ -157,7 +157,7 @@ The tools `memory`, `todo`, `session_search`, `clarify` and `delegate_task` SHAL
 - **THEN** the result SHALL be an error and a `post_tool_call` event SHALL be emitted
 
 ### Requirement: Parallel and timed execution
-The system SHALL execute tool calls from one model response concurrently only when no call in the batch declares a write path, an exclusive resource or `interactive` (the M2 dependency planner of `agent-turn-loop` refines this using the same resource claims), bounded by `agent.tool_concurrency` (default 8), and otherwise sequentially in model order; every call SHALL be bounded by its tool's timeout (default `tools.default_timeout_secs` = 300) yielding `status = "timeout"`, and a user interrupt SHALL cancel in-flight calls within 2 seconds yielding `status = "cancelled"`; results SHALL be returned to the model in the original call order.
+The system SHALL execute tool calls from one model response concurrently only when no call in the batch declares a write path, an exclusive resource or `interactive` (the dependency planner of `agent-turn-loop` refines this using the same resource claims), bounded by `agent.tool_concurrency` (default 8), and otherwise sequentially in model order; every call SHALL be bounded by its tool's timeout (default `tools.default_timeout_secs` = 300) yielding `status = "timeout"`, and a user interrupt SHALL cancel in-flight calls within 2 seconds yielding `status = "cancelled"`; results SHALL be returned to the model in the original call order.
 **Milestone:** M1
 
 #### Scenario: Mixed batch

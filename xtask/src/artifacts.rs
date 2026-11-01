@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use pmt_core::error::{ERROR_CODES, ERROR_KINDS};
+use pmt_core::error::{ERROR_CODES, ErrorKind};
 use pmt_core::exit::EXIT_CODES;
 
 /// One generated file: its path relative to the repository root and the
@@ -27,6 +27,18 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: config_reference(),
         },
         Artifact {
+            path: "schema/daemon.schema.json",
+            contents: daemon_schema(),
+        },
+        Artifact {
+            path: "docs/reference/daemon-configuration.md",
+            contents: daemon_reference(),
+        },
+        Artifact {
+            path: "schema/trajectory/v1.json",
+            contents: pretty_schema(&pmt_obs::trajectory::schema()),
+        },
+        Artifact {
             path: "docs/reference/cli.md",
             contents: cli_reference(),
         },
@@ -34,23 +46,56 @@ pub(crate) fn all() -> Vec<Artifact> {
             path: "docs/reference/error-codes.md",
             contents: error_catalog(),
         },
+        Artifact {
+            path: TOOLS_REFERENCE,
+            contents: tools_reference(),
+        },
+        Artifact {
+            path: "docs/reference/system-prompt.md",
+            contents: system_prompt_reference(),
+        },
     ]
 }
+
+/// The generated list of tool names that documentation links to.
+pub(crate) const TOOLS_REFERENCE: &str = "docs/reference/tools.md";
 
 /// Directory whose every file is generated: hand-written reference pages
 /// would restate defaults and drift (`cargo xtask gen --check` rejects them).
 pub(crate) const REFERENCE_DIR: &str = "docs/reference";
 
 fn config_schema() -> String {
-    let schema = schemars::schema_for!(pmt_config::Config);
-    let mut json = serde_json::to_string_pretty(&schema).expect("a schema always serializes");
-    json.push('\n');
-    json
+    pretty_schema(pmt_config::catalog::schema())
 }
 
 fn config_reference() -> String {
-    let schema = schemars::schema_for!(pmt_config::Config);
-    crate::config_reference::render(schema.as_value(), HEADER)
+    pmt_config::reference::render(
+        pmt_config::catalog::schema(),
+        HEADER,
+        "Configuration reference",
+        "Every key a profile's `config.toml` accepts. Unknown keys are rejected, \
+         so a key missing here is a typo, not a silent default. Machine-wide \
+         settings live in [`daemon.toml`](daemon-configuration.md).",
+    )
+}
+
+fn daemon_schema() -> String {
+    pretty_schema(pmt_config::daemon::schema())
+}
+
+fn daemon_reference() -> String {
+    pmt_config::reference::render(
+        pmt_config::daemon::schema(),
+        HEADER,
+        "Daemon configuration reference",
+        "Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings \
+         shared by every profile of the home, never read from a profile's \
+         `config.toml`. Unknown keys are rejected.",
+    )
+}
+
+fn pretty_schema(schema: &serde_json::Value) -> String {
+    pmt_config::catalog::pretty(schema)
 }
 
 fn cli_reference() -> String {
@@ -58,7 +103,35 @@ fn cli_reference() -> String {
     command.build();
     let mut out = format!("{HEADER}# CLI reference\n");
     render_command(&mut out, &mut command, "prometheus");
+    render_json_shapes(&mut out);
     out
+}
+
+/// The machine-readable output contract and every registered JSON shape.
+fn render_json_shapes(out: &mut String) {
+    out.push_str(
+        "\n## JSON output\n\n\
+         With `--json` a command prints exactly one JSON document on stdout \
+         (JSON Lines for `--follow` streams) and nothing else; diagnostics \
+         go to stderr. A failing command prints \
+         `{\"error\": {kind, code, message, hint}}` to stderr and exits with \
+         its [exit code](error-codes.md). Listing and status documents carry \
+         a top-level `schema` naming their versioned shape; a breaking change \
+         bumps the shape's major version. `version --json` is the fixed \
+         build-identity object and has no `schema` field.\n\n",
+    );
+    if prometheus::output::JSON_SHAPES.is_empty() {
+        out.push_str("No command emits a versioned shape yet.\n");
+        return;
+    }
+    out.push_str("| Schema | Command |\n|---|---|\n");
+    for shape in prometheus::output::JSON_SHAPES {
+        let _ = writeln!(
+            out,
+            "| `{}` | `prometheus {}` |",
+            shape.schema, shape.command
+        );
+    }
 }
 
 /// Renders one command's long help, then its subcommands depth-first. The
@@ -85,17 +158,109 @@ fn error_catalog() -> String {
         let _ = writeln!(out, "| {} | `{}` | {} |", e.code, e.name, e.meaning);
     }
     out.push_str("\n## Error kinds\n\n");
-    for kind in ERROR_KINDS {
-        let _ = writeln!(out, "- `{kind}`");
+    out.push_str("Every error has exactly one kind; the kind fixes the exit code.\n\n");
+    out.push_str("| Kind | Exit code |\n|---|---:|\n");
+    for kind in ErrorKind::ALL {
+        let _ = writeln!(out, "| `{kind}` | {} |", kind.exit_code());
     }
     out.push_str("\n## Error codes\n\n");
-    if ERROR_CODES.is_empty() {
-        out.push_str("No error codes are registered yet.\n");
-        return out;
-    }
-    out.push_str("| Code | Kind | Meaning |\n|---|---|---|\n");
+    out.push_str("| Code | Kind | Exit code | Meaning |\n|---|---|---:|---|\n");
     for e in ERROR_CODES {
-        let _ = writeln!(out, "| `{}` | `{}` | {} |", e.code, e.kind, e.summary);
+        let _ = writeln!(
+            out,
+            "| `{}` | `{}` | {} | {} |",
+            e.code,
+            e.kind,
+            e.kind.exit_code(),
+            e.summary
+        );
     }
     out
+}
+
+/// The system prompt's tiers and layers in prompt order (spec:
+/// agent-turn-loop, Layered system prompt: the one documented placement).
+fn system_prompt_reference() -> String {
+    use pmt_agent::prompt::{Layer, Tier};
+    let mut out = format!(
+        "{HEADER}# System prompt layers\n\nThe system prompt is sent as one block per tier, \
+         each ending at a prompt-cache breakpoint. Layers appear in this order; \
+         empty layers are left out. See [Turns and the system prompt](../guide/turns.md).\n"
+    );
+    for tier in Tier::ALL {
+        let _ = write!(
+            out,
+            "\n## `{}`\n\n| Layer | Contents |\n|---|---|\n",
+            tier.as_str()
+        );
+        for layer in Layer::ALL.into_iter().filter(|l| l.tier() == tier) {
+            let _ = writeln!(out, "| `{}` | {} |", layer.as_str(), layer.description());
+        }
+    }
+    out
+}
+
+/// Every shipped toolset and every tool name they refer to, one heading
+/// (and so one link anchor) per tool.
+fn tools_reference() -> String {
+    let toolsets = pmt_tools::toolset::builtin();
+    let mut out = format!(
+        "{HEADER}# Tools\n\n\
+         Every tool name the shipped toolsets refer to, and every shipped \
+         toolset. Pages name a tool by linking to its entry here, for example \
+         `` [`todo`](../reference/tools.md#todo) ``; `cargo xtask gen` refuses a \
+         link to a name that is not listed or whose text differs from its \
+         target, so documentation and the tool registry cannot name a tool \
+         differently. `prometheus toolsets show <name>` prints what a \
+         toolset resolves to in a profile, with each tool's availability.\n\n\
+         ## Toolsets\n\n\
+         | Toolset | Tools | Includes | Flags | Description |\n|---|---|---|---|---|\n"
+    );
+    let code = |names: &[String]| -> String {
+        let quoted: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
+        quoted.join(", ")
+    };
+    for t in &toolsets {
+        let flags: Vec<&str> = [(t.default_off, "default-off"), (t.posture, "posture")]
+            .iter()
+            .filter_map(|&(on, flag)| on.then_some(flag))
+            .collect();
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} | {} |",
+            t.name,
+            code(&t.tools),
+            code(&t.includes),
+            flags.join(", "),
+            t.description
+        );
+    }
+    out.push_str("\n## Tool names\n");
+    for name in pmt_tools::toolset::builtin_tool_names() {
+        let homes: Vec<String> = toolsets
+            .iter()
+            .filter(|t| t.tools.contains(&name))
+            .map(|t| t.name.clone())
+            .collect();
+        let _ = write!(out, "\n### `{name}`\n\nToolsets: {}.\n", code(&homes));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_core::error::{ERROR_CODES, ErrorKind};
+
+    #[test]
+    fn error_catalog_lists_every_kind_and_code() {
+        let catalog = super::error_catalog();
+        for kind in ErrorKind::ALL {
+            let row = format!("| `{kind}` | {} |", kind.exit_code());
+            assert!(catalog.contains(&row), "missing kind row {row}");
+        }
+        for e in ERROR_CODES {
+            let row = format!("| `{}` | `{}` | {} |", e.code, e.kind, e.kind.exit_code());
+            assert!(catalog.contains(&row), "missing code row {row}");
+        }
+    }
 }

@@ -1,0 +1,228 @@
+{
+  "runtimes": {
+    "chromium": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "chrome-headless-shell-mac-arm64/chrome-headless-shell",
+          "format": "zip",
+          "sha256": "ea615baa2e9caf0d02d1898a6562b5f8fa9c35239707dae0f592178df5b986ac",
+          "size": 103982159,
+          "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/mac-arm64/chrome-headless-shell-mac-arm64.zip"
+        },
+        "darwin-x64": {
+          "exe": "chrome-headless-shell-mac-x64/chrome-headless-shell",
+          "format": "zip",
+          "sha256": "535d417d9034cbd11e7dacd1a71aa3d6e1b525e6d5dcd2671eb2532f01481228",
+          "size": 109493298,
+          "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/mac-x64/chrome-headless-shell-mac-x64.zip"
+        },
+        "linux-arm64": {
+          "exe": "chrome-headless-shell-linux-arm64/chrome-headless-shell",
+          "format": "zip",
+          "sha256": "5bb6a00a4285c13303d3f72c5afdb70f144ea7a93eed462365a52b69631c9607",
+          "size": 126679292,
+          "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/linux-arm64/chrome-headless-shell-linux-arm64.zip"
+        },
+        "linux-x64": {
+          "exe": "chrome-headless-shell-linux64/chrome-headless-shell",
+          "format": "zip",
+          "sha256": "547dcd374e02961bf998f6046a267644f8502225c36bb78ca307dab32a0b3eb4",
+          "size": 126922702,
+          "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/linux64/chrome-headless-shell-linux64.zip"
+        },
+        "windows-x64": {
+          "exe": "chrome-headless-shell-win64/chrome-headless-shell.exe",
+          "format": "zip",
+          "sha256": "10a77466005e7f64e00f1a75fd1ea81f4a38a60093c65fea6895843b26e60a9a",
+          "size": 125772546,
+          "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/win64/chrome-headless-shell-win64.zip"
+        }
+      },
+      "version": "156.0.8078.80"
+    },
+    "cpython": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "python/bin/python3",
+          "format": "tar.gz",
+          "sha256": "fbf4afef53c2a6b72bb741bc06d5671a9dfaf87bd84e5aa73ac9b3d0d589f14e",
+          "size": 25172086,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-aarch64-apple-darwin-install_only.tar.gz"
+        },
+        "darwin-x64": {
+          "exe": "python/bin/python3",
+          "format": "tar.gz",
+          "sha256": "a962e47df522889eaa7ff0d6a56203f1079f68aabb65ffdbe8455f362bc769f3",
+          "size": 24873291,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-x86_64-apple-darwin-install_only.tar.gz"
+        },
+        "linux-arm64": {
+          "exe": "python/bin/python3",
+          "format": "tar.gz",
+          "sha256": "a945427411dc6851a1393533b74a4a1ac434321ae397f2ec69897a9b4fde032b",
+          "size": 53051192,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-aarch64-unknown-linux-gnu-install_only.tar.gz"
+        },
+        "linux-arm64-musl": {
+          "exe": "python/bin/python3",
+          "format": "tar.gz",
+          "sha256": "4ae0f7e999d6823852a60baad66c4c2fd2e9e45c7c1d3e6b6efc305ad867c29c",
+          "size": 50632799,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-aarch64-unknown-linux-musl-install_only.tar.gz"
+        },
+        "linux-x64": {
+          "exe": "python/bin/python3",
+          "format": "tar.gz",
+          "sha256": "6a79e922e50006b601f29e688407659da1c2b86ebcd4e9c7254cf234be8b89de",
+          "size": 67921566,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-x86_64-unknown-linux-gnu-install_only.tar.gz"
+        },
+        "linux-x64-musl": {
+          "exe": "python/bin/python3",
+          "format": "tar.gz",
+          "sha256": "4d9432edbbf38a9d61711ba5ad6d870de3d5899d93eaf686e9cbeb5b0686de90",
+          "size": 50492049,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-x86_64-unknown-linux-musl-install_only.tar.gz"
+        },
+        "windows-arm64": {
+          "exe": "python/python.exe",
+          "format": "tar.gz",
+          "sha256": "ad585318bfe47980cbaa90be12a65319c5b4eec7472655428528068e710a6c9a",
+          "size": 44465352,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-aarch64-pc-windows-msvc-install_only.tar.gz"
+        },
+        "windows-x64": {
+          "exe": "python/python.exe",
+          "format": "tar.gz",
+          "sha256": "590dfcbe3a34c07301e6332e13e2188b98655cd072b08afa45a7998dc4c22bc5",
+          "size": 47113364,
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.12.16%2B20261026-x86_64-pc-windows-msvc-install_only.tar.gz"
+        }
+      },
+      "version": "3.12.16+20261026"
+    },
+    "node": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "node-v24.22.1-darwin-arm64/bin/node",
+          "format": "tar.gz",
+          "sha256": "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
+          "size": 53062778,
+          "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-arm64.tar.gz"
+        },
+        "darwin-x64": {
+          "exe": "node-v24.22.1-darwin-x64/bin/node",
+          "format": "tar.gz",
+          "sha256": "d132557e7ee2b85af08b0c8c34338e65c6430f2238d01f727728ef42dc83b035",
+          "size": 54382566,
+          "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-darwin-x64.tar.gz"
+        },
+        "linux-arm64": {
+          "exe": "node-v24.22.1-linux-arm64/bin/node",
+          "format": "tar.gz",
+          "sha256": "33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3",
+          "size": 58021129,
+          "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-arm64.tar.gz"
+        },
+        "linux-arm64-musl": {
+          "exe": "node-v24.22.1-linux-arm64-musl/bin/node",
+          "format": "tar.gz",
+          "sha256": "8254125825a3e5e834bd8a260dab4c8303f720464a741506ec27989b9ba1769b",
+          "size": 60139545,
+          "url": "https://unofficial-builds.nodejs.org/download/release/v24.22.1/node-v24.22.1-linux-arm64-musl.tar.gz"
+        },
+        "linux-x64": {
+          "exe": "node-v24.22.1-linux-x64/bin/node",
+          "format": "tar.gz",
+          "sha256": "eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c",
+          "size": 58290700,
+          "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.gz"
+        },
+        "linux-x64-musl": {
+          "exe": "node-v24.22.1-linux-x64-musl/bin/node",
+          "format": "tar.gz",
+          "sha256": "0a9eddce2d2e8f3addbe94fa46d751325b2d74f7fd1ce63296164d36b6dfc6e5",
+          "size": 60254227,
+          "url": "https://unofficial-builds.nodejs.org/download/release/v24.22.1/node-v24.22.1-linux-x64-musl.tar.gz"
+        },
+        "windows-arm64": {
+          "exe": "node-v24.22.1-win-arm64/node.exe",
+          "format": "zip",
+          "sha256": "a0c807319fede24c4a0d8f84564c82a619bd313b16b10c007c383c2609e99171",
+          "size": 33786263,
+          "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-win-arm64.zip"
+        },
+        "windows-x64": {
+          "exe": "node-v24.22.1-win-x64/node.exe",
+          "format": "zip",
+          "sha256": "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
+          "size": 37748064,
+          "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-win-x64.zip"
+        }
+      },
+      "version": "24.22.1"
+    },
+    "uv": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "uv-aarch64-apple-darwin/uv",
+          "format": "tar.gz",
+          "sha256": "60fbd5c8a1ed681845eea28d9d622fcde03c51e91a43465b64a1e17db1ed3472",
+          "size": 14235670,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-apple-darwin.tar.gz"
+        },
+        "darwin-x64": {
+          "exe": "uv-x86_64-apple-darwin/uv",
+          "format": "tar.gz",
+          "sha256": "63ba17fdda55ad1a230d4b37fc6017ffa10c23688c83818bd3bfdf914c652a02",
+          "size": 17004934,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-x86_64-apple-darwin.tar.gz"
+        },
+        "linux-arm64": {
+          "exe": "uv-aarch64-unknown-linux-gnu/uv",
+          "format": "tar.gz",
+          "sha256": "229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d",
+          "size": 15794886,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-unknown-linux-gnu.tar.gz"
+        },
+        "linux-arm64-musl": {
+          "exe": "uv-aarch64-unknown-linux-musl/uv",
+          "format": "tar.gz",
+          "sha256": "819692e404d23e5aae6bc44c0e260f1f5492fd1910ab4693b2c650f926dbe800",
+          "size": 16993447,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-unknown-linux-musl.tar.gz"
+        },
+        "linux-x64": {
+          "exe": "uv-x86_64-unknown-linux-gnu/uv",
+          "format": "tar.gz",
+          "sha256": "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645",
+          "size": 16799024,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-x86_64-unknown-linux-gnu.tar.gz"
+        },
+        "linux-x64-musl": {
+          "exe": "uv-x86_64-unknown-linux-musl/uv",
+          "format": "tar.gz",
+          "sha256": "5d61f26b6c7213779eda90edc6971ea6b0b796bfb8d49a574c8ad69b59838548",
+          "size": 18383831,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-x86_64-unknown-linux-musl.tar.gz"
+        },
+        "windows-arm64": {
+          "exe": "uv.exe",
+          "format": "zip",
+          "sha256": "c2426c0c8e28b53d8c440e47a18d96ad4db51e159866c0e81435b196d7f0081c",
+          "size": 15439263,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-aarch64-pc-windows-msvc.zip"
+        },
+        "windows-x64": {
+          "exe": "uv.exe",
+          "format": "zip",
+          "sha256": "a2a8820d5eea32f08ef467ef3b7f66883a9b076d5737a2fc2fbb5f458d1bb50f",
+          "size": 15239500,
+          "url": "https://github.com/astral-sh/uv/releases/download/0.13.6/uv-x86_64-pc-windows-msvc.zip"
+        }
+      },
+      "version": "0.13.6"
+    }
+  },
+  "schema": "prometheus.runtime-index.v1"
+}

@@ -1,0 +1,83 @@
+  browser  (4 tools)
+    Browser automation
+    tools: browser_exec, browser_cdp, browser_dialog, browser_vault
+  clarify  (1 tool)
+    Ask the user a question
+    tools: clarify
+  code_execution  (1 tool)
+    Run code in a sandbox
+    tools: execute_code
+  coding  (23 tools)  [posture]
+    Software work: core without media generation, speech, scheduling or computer use
+    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, todo, memory, session_search, clarify, execute_code, delegate_task, manage_connections
+  computer_use  (1 tool)
+    Desktop control
+    tools: computer_use
+  connections  (1 tool)
+    Manage connectors and MCP connections
+    tools: manage_connections
+  context_engine  (0 tools)
+    Tools of the active context engine
+* core  (27 tools)  [active]
+    The default tool set of every surface
+    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, text_to_speech, todo, memory, session_search, clarify, execute_code, delegate_task, cronjob, computer_use, manage_connections
+  cronjob  (1 tool)
+    Scheduled jobs
+    tools: cronjob
+  debugging  (8 tools)
+    Terminal, processes, web and files
+    tools: terminal, process
+    includes: web, file
+  delegation  (1 tool)
+    Delegate work to subagents
+    tools: delegate_task
+  file  (4 tools)
+    Read, write, patch and search files
+    tools: read_file, write_file, patch, search_files
+  image_gen  (1 tool)
+    Image generation
+    tools: image_generate
+  kanban  (0 tools)  [default-off]
+    Kanban boards
+  memory  (1 tool)
+    Long-term memory
+    tools: memory
+  process  (1 tool)
+    Background process management
+    tools: process
+  safe  (4 tools)
+    Web, vision and image generation; nothing that executes
+    includes: web, vision, image_gen
+  search  (1 tool)
+    Web search only
+    tools: web_search
+  session_search  (1 tool)
+    Search past sessions
+    tools: session_search
+  skills  (3 tools)
+    List, view and manage skills
+    tools: skills_list, skill_view, skill_manage
+  terminal  (2 tools)
+    Shell commands and background processes
+    tools: terminal, process
+  todo  (1 tool)
+    The session task list
+    tools: todo
+  tts  (1 tool)
+    Text to speech
+    tools: text_to_speech
+  video  (1 tool)  [default-off]
+    Video analysis
+    tools: video_analyze
+  video_gen  (1 tool)  [default-off]
+    Video generation
+    tools: video_generate
+  vision  (1 tool)
+    Image analysis
+    tools: vision_analyze
+  web  (2 tools)
+    Web search and page extraction
+    tools: web_search, web_extract
+  x_search  (1 tool)  [default-off]
+    Search posts on X
+    tools: x_search

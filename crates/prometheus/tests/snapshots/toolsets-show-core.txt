@@ -1,0 +1,29 @@
+core: The default tool set of every surface
+TOOL                AVAILABILITY
+web_search          unavailable:no web backend configured
+web_extract         unavailable:no web backend configured
+terminal            exposed
+process             exposed
+read_file           exposed
+write_file          exposed
+patch               exposed
+search_files        exposed
+vision_analyze      exposed
+image_generate      unregistered
+skills_list         exposed
+skill_view          exposed
+skill_manage        exposed
+browser_exec        exposed
+browser_cdp         unregistered
+browser_dialog      unregistered
+browser_vault       unregistered
+text_to_speech      unregistered
+todo                exposed
+memory              exposed
+session_search      exposed
+clarify             exposed
+execute_code        unregistered
+delegate_task       unregistered
+cronjob             unregistered
+computer_use        unregistered
+manage_connections  unregistered

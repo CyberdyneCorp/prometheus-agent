@@ -36,6 +36,11 @@ Every backend SHALL declare a typed descriptor with `isolation` (`os_sandbox`, `
 - **WHEN** the plugin loads
 - **THEN** the backend SHALL be rejected with `default_cwd must be absolute or '~'`
 
+#### Scenario: Container backend
+- **GIVEN** a container backend without a workspace mount
+- **WHEN** the model reads `/etc/hostname`
+- **THEN** the container's file SHALL be returned, not the host's
+
 ### Requirement: Remote sandboxes are plugins
 Remote execution providers (such as Modal, Daytona, E2B or Vercel-style sandboxes) SHALL be implemented as `terminal-backend` WASM plugins that receive only the network hosts and secrets granted in their manifest, and the host SHALL forward `execute`, `upload`, `download`, `cancel` and `teardown` calls to them; a plugin backend's `execute` result SHALL carry `exit_code`, `stdout`, `stderr` and `cwd_observed` as typed fields so a missing exit code is a contract error, not exit 0.
 **Milestone:** M2
@@ -57,6 +62,15 @@ The system SHALL check the selected backend's requirements (container runtime re
 ### Requirement: Terminal configuration defaults
 The system SHALL resolve terminal settings only from the session's ProfileScope config with these defaults: `terminal.timeout_secs` 180, `terminal.max_foreground_secs` 600, `terminal.idle_lifetime_secs` 300, `terminal.persistent_shell` true, `terminal.container.cpus` 1, `terminal.container.memory_bytes` 5368709120, `terminal.container.disk_bytes` 53687091200, `terminal.container.persistent` true, `terminal.container.shm_size` `"1g"`, `terminal.container.pids_limit` 2048, `terminal.ssh.port` 22; settings for an unselected backend SHALL be validated for type only and SHALL NOT prevent the selected backend from working; no terminal setting SHALL be read from environment variables.
 **Milestone:** M1
+
+#### Scenario: Settings of an unselected backend
+- **GIVEN** `terminal.backend = "local"` with an empty `terminal.ssh.host` and `terminal.container.cpus = 64`
+- **WHEN** the terminal backend's readiness is checked
+- **THEN** the `local` backend SHALL be ready
+
+### Requirement: Per-profile terminal backends in a shared gateway
+A gateway serving several profiles SHALL resolve each turn's terminal backend and settings from that turn's ProfileScope, never from another profile's config or from the profile the daemon was launched with.
+**Milestone:** M2
 
 #### Scenario: Two profiles, two backends
 - **GIVEN** a gateway serving profile `a` with `container` and profile `b` with `local`
@@ -218,10 +232,10 @@ The `handoff` action SHALL be available only to subagent sessions, SHALL transfe
 `read_file`, `write_file`, `patch`, `search_files` and `list_dir` SHALL operate through the session's backend and SHALL touch the host filesystem directly only when the backend descriptor declares `uses_host_filesystem = true`, in which case host access SHALL be checked against the session's `fs.read`/`fs.write` capabilities before the operation.
 **Milestone:** M1
 
-#### Scenario: Container backend
-- **GIVEN** a container backend without a workspace mount
-- **WHEN** the model reads `/etc/hostname`
-- **THEN** the container's file SHALL be returned, not the host's
+#### Scenario: Local backend checks the capabilities
+- **GIVEN** the `local` backend (`uses_host_filesystem = true`) and no `fs.read` capability covering the user's home
+- **WHEN** the model reads or lists a file in the user's home outside the workspace
+- **THEN** the call SHALL be denied naming the missing `fs.read` capability
 
 ### Requirement: read_file guards, pagination and dedup
 `read_file` SHALL default to offset 1 and limit 2,000 lines, cap formatted content at `files.read_max_chars` (default 100,000) returning `next_offset`, refuse device files (`Cannot read '<path>': this is a device file that would block or produce infinite output.`), FIFOs, sockets, `/proc/<pid>/environ|mem|maps`-style secret-leaking files and binary files (`Cannot read binary file '<path>'; use vision_analyze for images or terminal for binary inspection`), and SHALL answer an identical read (same path, range, unchanged content, same compaction generation) with an `{"status": "unchanged"}` stub the first time and a `BLOCKED:` refusal on further repeats.
@@ -430,13 +444,18 @@ For a terminal command whose executable, after optional `env` options and assign
 - **THEN** no prompt SHALL be shown and the result SHALL explain that subagents cannot prompt for sudo
 
 ### Requirement: Shell startup files
-Terminal commands SHALL run in a non-interactive, non-login shell; when `terminal.auto_source_bashrc = true` (default) and the shell is bash, the persistent shell SHALL source `~/.bashrc` once at shell start, and it SHALL then source each path in `terminal.shell_init_files` (default empty, `~` expanded, missing files skipped with a one-time notice); the whole init step SHALL be bounded by `terminal.shell_init_timeout_secs` (default 10), after which the shell SHALL be restarted without init files and the first result SHALL carry the hint `shell init timed out; guard interactive-only code in your rc file with: case $- in *i*) ;; *) return;; esac`.
+Terminal commands SHALL run in a non-interactive, non-login shell; when `terminal.auto_source_bashrc = true` (default) and the shell is bash, the persistent shell SHALL source `~/.bashrc` once at shell start, and it SHALL then source each path in `terminal.shell_init_files` (default empty, `~` expanded, missing files skipped with a one-time notice), all with stdin closed so a read of stdin gets end-of-file instead of waiting; the whole init step SHALL be bounded by `terminal.shell_init_timeout_secs` (default 10), after which the shell SHALL be restarted without init files and the first result SHALL carry the hint `shell init timed out; guard interactive-only code in your rc file with: case $- in *i*) ;; *) return;; esac`.
 **Milestone:** M1
 
 #### Scenario: rc file blocks on read
-- **GIVEN** a `~/.bashrc` that calls `read`
+- **GIVEN** an init file (`~/.bashrc` or a `terminal.shell_init_files` entry) whose `read` blocks, e.g. reading a FIFO nobody writes
 - **WHEN** the model runs `git status`
-- **THEN** after at most 10 seconds the command SHALL run in a shell without init files and the result SHALL carry the shell-init hint
+- **THEN** after at most `terminal.shell_init_timeout_secs` (default 10) seconds the command SHALL run in a shell without init files and the result SHALL carry the shell-init hint
+
+#### Scenario: rc file reads stdin
+- **GIVEN** a `~/.bashrc` that calls `read` on stdin
+- **WHEN** the model runs `git status`
+- **THEN** the `read` SHALL get end-of-file at once, the command SHALL run without waiting for the timeout and the result SHALL carry no shell-init hint
 
 ### Requirement: Non-secret environment passthrough
 The system SHALL add to every child environment the variables named in `terminal.env_passthrough` (default empty) with values taken from the launch environment, and for container backends SHALL additionally set the literal `terminal.container.env` map (default empty); a name or value that matches a stored secret name, a registered provider-native secret name or the `PMT_SECRET_*` pattern SHALL be rejected at config validation with `terminal.env_passthrough: '<NAME>' is a secret; grant it with secrets.read instead` (exit 78).
@@ -485,13 +504,18 @@ The project SHALL publish signed first-party `terminal-backend` plugins `singula
 - **THEN** it SHALL report the backend unavailable naming both missing options and exit 1
 
 ### Requirement: Windows local shell
-On Windows the `local` backend SHALL run commands through the shell chosen by `terminal.windows_shell` (`auto` default, `git-bash`, `pwsh`, `powershell`): `auto` SHALL use Git Bash resolved from `terminal.windows_bash_path`, then the Git for Windows install location, then `bash.exe` on `PATH` excluding the WSL launcher (`System32\bash.exe`) and `WindowsApps` aliases, and otherwise fall back to `pwsh`, then Windows PowerShell, with a one-time notice that POSIX shell syntax is unavailable; an explicitly selected shell that is absent SHALL make the terminal tool unavailable with `<shell> not found` and the install hint; the CLI SHALL switch its console and child consoles to UTF-8 (code page 65001) and restore the original code pages on exit; `prometheus doctor terminal` SHALL report the chosen shell and which POSIX-only features (persistent shell, `pty`, signals) are degraded.
+On Windows the `local` backend SHALL run commands through the shell chosen by `terminal.windows_shell` (`auto` default, `git-bash`, `pwsh`, `powershell`): `auto` SHALL use Git Bash resolved from `terminal.windows_bash_path`, then the Git for Windows install location, then `bash.exe` on `PATH` excluding the WSL launcher (`System32\bash.exe`) and `WindowsApps` aliases, and otherwise fall back to `pwsh`, then Windows PowerShell, with a one-time notice that POSIX shell syntax is unavailable; an explicitly selected shell that is absent SHALL make the terminal tool unavailable with `<shell> not found` and the install hint; while the OS sandbox confines commands (an AppContainer), `auto` SHALL skip Git Bash, whose MSYS2 runtime cannot start inside an AppContainer, and use `pwsh`, then Windows PowerShell, with a one-time notice that Git Bash cannot run inside the Windows sandbox, and an explicit `git-bash` SHALL make the terminal tool unavailable with `git-bash cannot run inside the Windows sandbox (AppContainer)` rather than run unconfined; confined PowerShell SHALL run each command from the session's working directory or fail with exit code 126, and the sandbox SHALL let the container list and read the attributes of the directories above its granted roots (names and attributes only, never contents) so PowerShell can enter them; the CLI SHALL switch its console and child consoles to UTF-8 (code page 65001) and restore the original code pages on exit; `prometheus doctor terminal` SHALL report the chosen shell and which POSIX-only features (persistent shell, `pty`, signals) are degraded.
 **Milestone:** M1
 
 #### Scenario: Only WSL bash on PATH
 - **GIVEN** Windows with no Git for Windows and `C:\Windows\System32\bash.exe` on PATH
 - **WHEN** a session starts with `terminal.windows_shell = "auto"`
 - **THEN** the backend SHALL use `pwsh` or Windows PowerShell and SHALL NOT use the WSL launcher
+
+#### Scenario: Sandboxed session on Windows
+- **GIVEN** Windows with Git for Windows installed and `security.sandbox.mode = "enforce"`
+- **WHEN** a session starts with `terminal.windows_shell = "auto"` and the model runs commands that change directory, read a workspace file, run a workspace script and write outside the workspace
+- **THEN** the commands SHALL run confined in `pwsh` or Windows PowerShell with the Git Bash notice, the directory change SHALL carry over to the next command, and the write outside the workspace SHALL fail
 
 ### Requirement: browser_exec tool
 The browser surface exposed to models SHALL be `browser_exec(code, session?, timeout_secs?, local?)`, which runs model-written Python 3 on the managed CPython runtime under the OS sandbox with helpers pre-imported (`new_tab`, `goto_url`, `wait_for_load`, `page_info`, `js`, `fill_input`, `click_at_xy`, `capture_screenshot`, `cdp`, `ensure_real_tab`) bound to the resolved browser session and returns what the code prints; the browser state (tabs, cookies, page) SHALL persist across calls while interpreter variables SHALL NOT; a per-session workspace directory SHALL persist across calls and be returned as `workspace`; `timeout_secs` SHALL default to 300 and be clamped to 1..1800; a named `session` SHALL get its own driver and browser; screenshots SHALL be attached as images only when the active model accepts image input and otherwise returned as paths; the tool SHALL be offered only in sessions that also have the `terminal` toolset, and `local` SHALL appear only when real-profile browsing is enabled.

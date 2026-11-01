@@ -7,7 +7,9 @@ budget; Memory and size budgets):
 | Measurement | How | Absolute budget |
 |---|---|---|
 | Startup | 30 timed runs of `prometheus --version` after 3 warm-up runs; p95 checked | 20 ms |
-| Peak RSS | `getrusage(RUSAGE_CHILDREN)` in the small `perf-sampler` binary | 120 MiB |
+| Chat prompt | 30 timed starts of `prometheus chat --provider mock` in a pseudo-terminal (fresh home under `target/`), until the `› ` prompt is drawn and accepts keystrokes; p95 checked (Unix) | 150 ms |
+| Peak RSS | `getrusage(RUSAGE_CHILDREN)` in the small `perf-sampler` binary, for the `--version` runs | 120 MiB |
+| Chat peak RSS | the same, over the chat starts and three `chat -z hi --provider mock` runs (Unix) | 120 MiB |
 | Binary size | stripped release `prometheus`, at the path cargo reports | 80 MiB |
 
 Peak RSS is sampled from `xtask/src/bin/perf-sampler.rs`, a std-only
@@ -20,7 +22,14 @@ It also fails when a measurement grows more than 15% over the entry for the
 current platform (`<os>-<arch>`) in `perf/baseline.json`. Startup uses the
 median for that comparison, and growth under 1 ms (startup) or 1 MiB (RSS)
 never counts, because a millisecond-scale run jitters by more than 15% on a
-shared runner. The chat and daemon budgets join when those commands land (M1).
+shared runner. Binary growth under 4 MiB (5% of the size budget) never counts
+either: size does not jitter, but against a near-empty binary any real
+dependency is a large percentage (M1's first runtime crates took 0.62 MiB to
+1.21 MiB, +94%), so a pure percentage gate would fail on every addition. The chat
+prompt median and the chat peak RSS follow the same rule with the startup
+and RSS floors; a baseline recorded before they were measured has no chat
+entries, and then only their absolute budgets apply. The daemon budgets
+(`/readyz` latency, idle RSS) join with the daemon in M2.
 
 ```sh
 cargo xtask perf                          # check against perf/baseline.json
@@ -48,6 +57,38 @@ kind of machine:
    `main` and run `scripts/check --perf --baseline target/perf-main.json`; a
    non-zero exit fails the job. Without an artifact the absolute budgets
    still apply, and the checked-in `perf/baseline.json` is used as a fallback.
+3. A pull request whose growth is deliberate re-baselines in the open: it
+   commits the reference runner's measurements (the `perf (linux-x86_64):`
+   line of its own perf job) to `perf/reference.json`, and while the pull
+   request changes that file the job compares with it instead of `main`.
+   The new numbers are part of the reviewed diff; the absolute budgets
+   always apply. The M1 branch did this five times. First (0.62 -> 8.49 MiB binary,
+   2.49 -> 4.28 MiB peak RSS: SQLite, the HTTP client, the keychain and
+   the async runtime), measured by CI run 41021271519. Then when the
+   `prometheus` binary itself started calling the HTTP client (8.49 ->
+   13.05 MiB binary, 4.28 -> 4.96 MiB peak RSS: `model list --refresh`,
+   local-server probes and endpoint tests link reqwest, rustls and ring,
+   which chat needs anyway), measured by CI run 41112215077. Then when the
+   tool system landed (13.05 -> 15.37 MiB binary, 4.96 -> 6.00 MiB peak
+   RSS: the `tools`, `toolsets` and `approvals` commands link the tool
+   registry, dispatcher and approval gate, which chat needs anyway, and add
+   their subcommands to the clap tree every launch builds; nothing in them
+   runs eagerly, their regexes are lazy), measured by CI run 41155059146.
+   Then when the vision and browser tools landed (15.37 -> 19.46 MiB
+   binary, 6.00 -> 6.15 MiB peak RSS: image decoding and SVG
+   rasterization for `vision_analyze` and the DevTools WebSocket client of
+   `browser_exec`, registered as built-in tools; nothing in them runs at
+   startup), measured by CI run 41169839367. Then when `prometheus chat`
+   landed (19.46 -> 31.30 MiB binary, 6.15 -> 7.62 MiB peak RSS: session
+   start links the whole runtime the earlier commands only named: the turn
+   loop with compression, every provider wire format and the streaming
+   caller, the memory and skills sessions, the local terminal, file and
+   web backends and the line editor; `--version` still runs none of it),
+   measured by CI run 41211014328.
+   The CI line
+   prints MiB with two decimals, so the committed byte counts are those
+   values times 1048576; the rounding (under 6 KiB) is far inside the 15%
+   tolerance.
 
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.

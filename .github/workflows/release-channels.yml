@@ -1,0 +1,44 @@
+# cargo-dist custom publish job (dist-workspace.toml: publish-jobs): after a
+# release is published, points its channel at it by replacing
+# `<channel>.json` and its signature in the rolling `channels` release,
+# which is where `prometheus update` and the installers read the channel
+# index (`<origin>/channels/<channel>.json`).
+
+name: Release channels
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  channels:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: artifacts-release-finalize
+          path: dist
+      - name: Publish the channel index
+        run: |
+          set -euo pipefail
+          mkdir upload
+          for index in dist/channel-*.json; do
+            channel=$(basename "$index" .json)
+            channel=${channel#channel-}
+            cp "$index" "upload/$channel.json"
+            cp "$index.minisig" "upload/$channel.json.minisig"
+          done
+          if ! gh release view channels -R "$REPO" >/dev/null 2>&1; then
+            gh release create channels -R "$REPO" --prerelease --title "Release channels" \
+              --notes "Signed channel indexes read by prometheus update and the installers."
+          fi
+          gh release upload channels upload/* --clobber -R "$REPO"

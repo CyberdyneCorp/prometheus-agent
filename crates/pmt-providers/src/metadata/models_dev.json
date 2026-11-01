@@ -1,0 +1,57 @@
+{
+  "anthropic": {
+    "id": "anthropic",
+    "models": {
+      "claude-opus-4-1": { "id": "claude-opus-4-1", "limit": { "context": 200000, "output": 32000 } },
+      "claude-sonnet-4-5": { "id": "claude-sonnet-4-5", "limit": { "context": 200000, "output": 64000 } },
+      "claude-haiku-4-5": { "id": "claude-haiku-4-5", "limit": { "context": 200000, "output": 64000 } }
+    }
+  },
+  "openai": {
+    "id": "openai",
+    "models": {
+      "gpt-5": { "id": "gpt-5", "limit": { "context": 400000, "output": 128000 } },
+      "gpt-5-mini": { "id": "gpt-5-mini", "limit": { "context": 400000, "output": 128000 } },
+      "gpt-4.1": { "id": "gpt-4.1", "limit": { "context": 1047576, "output": 32768 } },
+      "gpt-4o": { "id": "gpt-4o", "limit": { "context": 128000, "output": 16384 } }
+    }
+  },
+  "google": {
+    "id": "google",
+    "models": {
+      "gemini-2.5-pro": { "id": "gemini-2.5-pro", "limit": { "context": 1048576, "output": 65536 } },
+      "gemini-2.5-flash": { "id": "gemini-2.5-flash", "limit": { "context": 1048576, "output": 65536 } }
+    }
+  },
+  "xai": {
+    "id": "xai",
+    "models": {
+      "grok-4": { "id": "grok-4", "limit": { "context": 256000, "output": 64000 } }
+    }
+  },
+  "deepseek": {
+    "id": "deepseek",
+    "models": {
+      "deepseek-chat": { "id": "deepseek-chat", "limit": { "context": 128000, "output": 8192 } },
+      "deepseek-reasoner": { "id": "deepseek-reasoner", "limit": { "context": 128000, "output": 64000 } }
+    }
+  },
+  "moonshotai": {
+    "id": "moonshotai",
+    "models": {
+      "kimi-k2-0905-preview": { "id": "kimi-k2-0905-preview", "limit": { "context": 262144, "output": 262144 } }
+    }
+  },
+  "zai": {
+    "id": "zai",
+    "models": {
+      "glm-4.6": { "id": "glm-4.6", "limit": { "context": 204800, "output": 131072 } }
+    }
+  },
+  "mistral": {
+    "id": "mistral",
+    "models": {
+      "mistral-large-latest": { "id": "mistral-large-latest", "limit": { "context": 131072, "output": 16384 } }
+    }
+  }
+}

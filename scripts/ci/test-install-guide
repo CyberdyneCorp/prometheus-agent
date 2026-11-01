@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Runs every command of the install guide's ```sh blocks, in order, against
+# a local signed release (spec: distribution-and-update, task 20.10: the
+# documented commands are verified in CI). The guide's `console` examples
+# run in scripts/check (crates/prometheus/tests/docs_snippets.rs).
+#
+# The commands run as written, with one substitution: the release origin
+# (https://github.com/.../releases/latest/download) is the local fixture,
+# whose install.sh defaults to the fixture as the real one defaults to the
+# real origin. Release BINARY is published as its own version (signed with
+# the committed test key, which debug builds trust); before the first
+# `prometheus update` command the next patch version is published and the
+# home's daemon.toml points `update.mirror_url` at the fixture. A command
+# must exit 0, except `prometheus update --check`, which exits 10 when it
+# finds the newer release.
+#
+# usage: scripts/ci/test-install-guide GUIDE BINARY TARGET
+set -euo pipefail
+
+guide=$1 binary=$2 target=$3
+root=$(cd "$(dirname "$0")/../.." && pwd)
+real=https://github.com/CyberdyneCorp/prometheus-agent/releases/latest/download
+port=8766
+base=http://127.0.0.1:$port
+work=$root/target/install-guide
+fixture=$work/release
+fail() { echo "test-install-guide: $*" >&2; exit 1; }
+
+version=$("$binary" version --json | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+[ -n "$version" ] || fail "cannot read the version of $binary"
+next="v${version%.*}.$((${version##*.} + 1))"
+
+rm -rf "$work"
+mkdir -p "$work/home"
+"$root/scripts/ci/installer-fixture" "$fixture" "$binary" "$target" "v$version" --test-key
+sed -i.orig "s#^DEFAULT_BASE_URL=.*#DEFAULT_BASE_URL=\"$base\"#" "$fixture/install.sh"
+cp "$fixture/install.sh" "$fixture/install.sh.served"
+
+python3 -m http.server "$port" --bind 127.0.0.1 --directory "$fixture" >/dev/null 2>&1 &
+server=$!
+trap 'kill $server 2>/dev/null || true' EXIT
+sleep 1
+
+# The installed prometheus sees a fresh user home; cargo keeps its own.
+export CARGO_HOME=${CARGO_HOME:-$HOME/.cargo} RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}
+export HOME=$work/home
+export PATH="$HOME/.local/bin:$PATH"
+published=no
+
+publish_next() {
+    "$root/scripts/ci/installer-fixture" "$fixture" "$binary" "$target" "$next" --test-key --add
+    # --add re-renders the installers; keep serving the fixture-origin one.
+    cp "$fixture/install.sh.served" "$fixture/install.sh"
+    printf '\n[update]\nmirror_url = "%s"\n' "$base" >>"$HOME/.prometheus/daemon.toml"
+    published=yes
+}
+
+commands=$(awk '/^```sh$/ { inside = 1; next } /^```/ { inside = 0 } inside' "$guide")
+[ -n "$commands" ] || fail "$guide has no sh blocks"
+while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    command=${line//"$real"/"$base"}
+    case $command in
+    "prometheus update"*) [ "$published" = yes ] || publish_next ;;
+    esac
+    echo "+ $command"
+    set +e
+    bash -c "$command" </dev/null
+    status=$?
+    set -e
+    case "$status:$command" in
+    0:*) ;;
+    10:"prometheus update --check") ;;
+    *) fail "\`$line\` exited $status" ;;
+    esac
+done <<<"$commands"
+
+[ "$published" = yes ] || fail "the guide runs no update command"
+"$HOME/.local/bin/prometheus" runtimes exclude list | grep -qx chromium ||
+    fail "--without chromium was not recorded"
+echo "install guide commands passed"

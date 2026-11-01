@@ -1,2 +1,9 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+
+[env]
+# The vendored libdbus (keychain backend) is C. GCC on aarch64 Linux emits
+# outline-atomic calls (`__aarch64_ldadd4_sync`) whose helpers live in
+# libgcc, which Rust's self-contained musl target does not link; inline
+# atomics avoid the link failure. A value set in the environment wins.
+CFLAGS_aarch64_unknown_linux_musl = "-mno-outline-atomics"

@@ -1,0 +1,14 @@
+# A config.toml from the pre-release draft format (schema_version 0):
+# durations had no unit suffix and the turn limit had its old name.
+schema_version = 0
+
+[agent]
+# Long refactors need more steps.
+max_turns = 120
+
+[approvals]
+mode = "smart"
+timeout = 300
+
+[display]
+theme = "mono"

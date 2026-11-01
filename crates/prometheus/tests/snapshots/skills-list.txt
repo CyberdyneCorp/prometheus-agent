@@ -1,0 +1,6 @@
+NAME              CATEGORY              SOURCE   STATUS
+prometheus-agent  autonomous-ai-agents  bundled  shadowed
+prometheus-agent  autonomous-ai-agents  profile  enabled
+deploy            devops                profile  enabled
+journal           notes                 profile  disabled on telegram
+old-notes         notes                 profile  disabled

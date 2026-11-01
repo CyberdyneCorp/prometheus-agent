@@ -174,7 +174,7 @@ git clone https://github.com/CyberdyneCorp/prometheus-agent.git
 cd prometheus-agent
 just tools          # install the pinned cargo-deny, nextest, mdbook, openspec
 just build
-just run --version  # prometheus 0.1.0 (<target>, <commit>)
+just run --version  # prometheus 0.1.0 (<channel>, <target>, <commit>, <build date>)
 just check          # every gate CI runs
 ```
 

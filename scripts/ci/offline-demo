@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Runs `prometheus demo` with networking disabled and checks that it passes
+# end to end: exit 0, the canonical steps, `Total: 85.15`, `demo passed`,
+# within 30 s (spec: replay-and-evaluation, Offline smoke demo; task 21.2).
+# CI runs it on every Tier 1 target and, as their offline smoke run, on the
+# Tier 2 targets.
+#
+# How networking is disabled, per host:
+#   Linux    a new network namespace (`unshare --net`): no interface but a
+#            downed loopback;
+#   macOS    a pf ruleset that rejects every outbound packet not on lo0,
+#            for the duration of the run (the runner is a throwaway VM);
+#   Windows  a Windows Firewall rule blocking the binary's outbound traffic;
+#   termux   (`--termux IMAGE`, Android) the binary inside a Termux
+#            container started with `--network none`.
+# Before the demo, a control runs the same binary on a command that does
+# use the network (`model list --refresh`) and requires that it could not
+# connect, so a no-op "disable" cannot make the gate pass vacuously.
+#
+# usage: scripts/ci/offline-demo [--termux IMAGE] BINARY
+set -euo pipefail
+
+termux_image=
+if [ "${1:-}" = --termux ]; then
+    termux_image=$2
+    shift 2
+fi
+[ $# = 1 ] || { echo "usage: scripts/ci/offline-demo [--termux IMAGE] BINARY" >&2; exit 2; }
+
+fail() {
+    echo "offline-demo: $*" >&2
+    exit 1
+}
+
+binary=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+[ -x "$binary" ] || fail "$binary is not an executable"
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/offline-demo.XXXXXX")
+
+# --- per-host isolation: `offline CMD...` runs CMD without networking ------
+
+linux_offline() {
+    unshare --user --map-root-user --net -- "$@"
+}
+
+termux_offline() {
+    # The binary's directory is mounted read-only at /pmt; arguments that
+    # name it are rewritten to its path inside the container.
+    local args=() arg
+    for arg in "$@"; do
+        args+=("${arg//$binary//pmt/$(basename "$binary")}")
+    done
+    docker run --rm --network none -v "$(dirname "$binary"):/pmt:ro" "$termux_image" "${args[@]}"
+}
+
+pf_token=
+macos_restore() {
+    sudo pfctl -f /etc/pf.conf >/dev/null 2>&1 || true
+    [ -z "$pf_token" ] || sudo pfctl -X "$pf_token" >/dev/null 2>&1 || true
+}
+
+macos_block() {
+    trap macos_restore EXIT
+    pf_token=$(sudo pfctl -E 2>&1 | sed -n 's/^Token : //p')
+    printf 'pass out quick on lo0 all\nblock return out quick all\n' | sudo pfctl -f - 2>/dev/null
+}
+
+windows_rule=prometheus-offline-demo
+windows_restore() {
+    powershell -NoProfile -Command "Remove-NetFirewallRule -DisplayName $windows_rule -ErrorAction SilentlyContinue" || true
+}
+
+windows_block() {
+    trap windows_restore EXIT
+    local program
+    program=$(cygpath -w "$binary")
+    powershell -NoProfile -Command "
+        \$ErrorActionPreference = 'Stop'
+        Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+        New-NetFirewallRule -DisplayName $windows_rule -Direction Outbound -Action Block -Program '$program' | Out-Null"
+}
+
+plain() {
+    "$@"
+}
+
+if [ -n "$termux_image" ]; then
+    docker pull --quiet "$termux_image" >/dev/null
+    offline=termux_offline
+    output=/data/data/com.termux/files/home/offline-demo
+else
+    case $(uname -s) in
+    Linux) offline=linux_offline ;;
+    Darwin) macos_block && offline=plain ;;
+    MINGW* | MSYS* | CYGWIN*) windows_block && offline=plain ;;
+    *) fail "no way to disable networking on $(uname -s)" ;;
+    esac
+    output=$work/run
+fi
+
+# --- control: the same binary cannot reach the network ---------------------
+
+control=$($offline "$binary" --home "$output-control" model list --refresh --provider openrouter 2>&1 || true)
+case $control in
+*"cannot refresh the models.dev catalog"*) ;;
+*) fail "networking is not disabled: model list --refresh did not fail to connect:
+$control" ;;
+esac
+
+# --- the demo ---------------------------------------------------------------
+
+SECONDS=0
+set +e
+$offline "$binary" demo --output "$output" >"$work/demo.out" 2>"$work/demo.err"
+status=$?
+set -e
+elapsed=$SECONDS
+cat "$work/demo.out"
+cat "$work/demo.err" >&2
+
+[ "$status" = 0 ] || fail "prometheus demo exited $status"
+[ "$elapsed" -le 30 ] || fail "prometheus demo took ${elapsed} s (limit 30 s)"
+for expected in '[ACTION] terminal(' '[ACTION] patch(' '[OBSERVATION]' 'Total: 85.15' 'demo passed'; do
+    grep -qF -- "$expected" "$work/demo.out" || fail "the output lacks '$expected'"
+done
+echo "offline-demo: passed offline in ${elapsed} s"

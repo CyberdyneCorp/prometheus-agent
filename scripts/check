@@ -79,6 +79,19 @@ health_gate() {
     step cargo xtask health --base "$base_file"
 }
 
+# The dependency release-age gate: crate versions locked since the merge
+# base must be older than deps-policy.toml's minimum (it reads the crates.io
+# index, so it needs the network when the lockfile changed). Without
+# origin/main there is no base to compare with.
+deps_age_gate() {
+    local base_ref
+    if ! base_ref=$(git merge-base HEAD origin/main 2>/dev/null); then
+        echo "check: origin/main not found; the release-age gate has no base (fetch origin to run it)" >&2
+        return
+    fi
+    step cargo xtask deps-age --base "$base_ref"
+}
+
 # The documentation site. mdBook only warns on markup it cannot render (an
 # unescaped `<id>` silently disappears from the page), so any warning fails.
 docs_gate() {
@@ -100,8 +113,10 @@ run_gates() {
     # nextest does not run doctests.
     step cargo test --workspace --all-features --locked --doc
     step cargo deny check
+    deps_age_gate
     step openspec validate --all --strict --no-interactive
     step cargo xtask gen --check
+    step cargo xtask scenarios
     docs_gate
     health_gate
     if [ "$with_perf" = yes ]; then

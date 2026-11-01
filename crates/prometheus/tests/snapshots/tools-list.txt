@@ -1,0 +1,6 @@
+TOOL          TOOLSET   EXPOSURE
+browser_exec  browser   unavailable:browser not found
+terminal      terminal  exposed
+web_extract   web       missing_capability:net.connect:*
+write_file    file      exposed
+x_search      x_search  not_in_toolset

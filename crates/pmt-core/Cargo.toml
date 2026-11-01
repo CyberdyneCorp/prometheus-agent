@@ -7,5 +7,31 @@ rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[dependencies]
+# Base64 forms of known secrets in the redactor.
+base64.workspace = true
+# Path globs of fs.read / fs.write capabilities.
+glob.workspace = true
+# UTC timestamps in crash-report file names.
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Process start times for runtime records (pid reuse detection), on every OS.
+sysinfo.workspace = true
+# Panic isolation spawns tasks; cancellation is a tokio-util token tree.
+tokio.workspace = true
+tokio-util.workspace = true
+ulid.workspace = true
+
+# getrlimit/setrlimit for the open-file soft limit raise.
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+# Paused time for prompt-timeout tests.
+tokio = { workspace = true, features = ["test-util"] }
+tempfile.workspace = true
+
 [lints]
 workspace = true

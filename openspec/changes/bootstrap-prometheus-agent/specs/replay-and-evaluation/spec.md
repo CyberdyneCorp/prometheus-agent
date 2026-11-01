@@ -182,8 +182,8 @@ External benchmarks SHALL plug in as adapters (WASM plugin, Python-bridge plugin
 - **THEN** the host SHALL NOT invoke `bench.score`, and an adapter attempt to push scores during execution SHALL be rejected with `-32002`
 
 ### Requirement: Built-in smoke suite
-The binary SHALL bundle an eval suite named `smoke` of at least 12 offline tasks using the mock provider (tool calling, file edit, multi-step terminal use, approval denial, clarify, delegation, compression, skill invocation, memory write, budget refusal, interrupt, error recovery), each with an `exact` or `script` grader (tasks whose capability is not yet in the build are skipped and listed), run in CI as offline `prometheus demo`-style assertions with the mock provider so that it SHALL pass on every Tier 1 and Tier 2 target from M1; once `prometheus eval` ships, `prometheus eval run smoke && prometheus eval judge <run>` SHALL score the same suite at 100%.
-**Milestone:** M1
+The binary SHALL bundle an eval suite named `smoke` of at least 12 offline tasks using the mock provider (tool calling, file edit, multi-step terminal use, approval denial, clarify, delegation, compression, skill invocation, memory write, budget refusal, interrupt, error recovery), each with an `exact` or `script` grader (tasks whose capability is not yet in the build are skipped and listed), run in CI as offline `prometheus demo`-style assertions with the mock provider so that it SHALL pass on every Tier 1 and Tier 2 target once it ships (M2, with the golden-recording gate; until then the offline `prometheus demo` is the per-target smoke run); once `prometheus eval` ships, `prometheus eval run smoke && prometheus eval judge <run>` SHALL score the same suite at 100%.
+**Milestone:** M2
 
 #### Scenario: Regression in tool dispatch
 - **WHEN** a change breaks parallel tool-call dispatch

@@ -1,0 +1,189 @@
+{
+  "$defs": {
+    "PreUpdateBackup": {
+      "description": "`update.pre_update_backup`: what `prometheus update` saves before the\nswap.",
+      "oneOf": [
+        {
+          "const": "state",
+          "description": "A `pre-update` snapshot of each profile (config, grants, state.db).",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "The snapshots plus a full home archive under `updates/backups/`.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No backup; the pre-migration snapshot a rollback needs is still\ntaken when the new build migrates a store.",
+          "type": "string"
+        }
+      ]
+    },
+    "ProcessConfig": {
+      "additionalProperties": false,
+      "description": "The `[process]` section.",
+      "properties": {
+        "nofile_soft_limit": {
+          "default": 4096,
+          "description": "Open-file soft limit every process raises itself to at startup on\nPOSIX hosts, capped by the hard limit and never lowering a higher\nlimit; children inherit it. `0` disables the raise.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RuntimeMirrors": {
+      "additionalProperties": false,
+      "description": "`[runtimes.mirrors]`.",
+      "properties": {
+        "npm": {
+          "default": null,
+          "description": "Node package registry (used by Node-based plugins, milestone M2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pypi": {
+          "default": null,
+          "description": "Python package index for the Python bridge's packages (used by the\nbridge, milestone M2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtimes": {
+          "default": null,
+          "description": "Runtime archives: `<url>/<name>/<version>/<archive file name>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RuntimesConfig": {
+      "additionalProperties": false,
+      "description": "The `[runtimes]` section (spec: distribution-and-update, Lazy runtime\ninstallation policy; Persistent runtime opt-outs; Download mirrors).",
+      "properties": {
+        "allow_lazy_install": {
+          "default": true,
+          "description": "Install a missing pinned runtime the first time a tool needs it\n(asking first on an interactive terminal). `false` makes the tool\nfail with a `prometheus runtimes install <name>` hint instead.",
+          "type": "boolean"
+        },
+        "exclude": {
+          "default": [],
+          "description": "Runtimes nothing may install: not lazily, not `prometheus runtimes\ninstall`, not the pin refresh after an update. `install.sh\n--without <name>` records names here.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mirrors": {
+          "$ref": "#/$defs/RuntimeMirrors",
+          "default": {
+            "npm": null,
+            "pypi": null,
+            "runtimes": null
+          },
+          "description": "Mirror base URLs used in place of the default origins. Everything\ndownloaded from a mirror is still checked against the digests pinned\nin the binary, so a mirror cannot change what is installed."
+        }
+      },
+      "type": "object"
+    },
+    "UpdateConfig": {
+      "additionalProperties": false,
+      "description": "The `[update]` section (spec: distribution-and-update). The release\nchannel is not here: it belongs to the install receipt.",
+      "properties": {
+        "auto_apply": {
+          "default": false,
+          "description": "Install a release found by the background check without asking.",
+          "type": "boolean"
+        },
+        "check_interval_secs": {
+          "default": 86400,
+          "description": "Seconds between background checks for a newer release; `0` disables\nthem. A check sends only the version and target (in the user agent).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mirror_fallback": {
+          "default": false,
+          "description": "When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`)\nstill fails after the retry budget, download from the default origin\ninstead of failing.",
+          "type": "boolean"
+        },
+        "mirror_url": {
+          "default": null,
+          "description": "Base URL serving release indexes and archives in place of the\ndefault origin (`<url>/channels/<channel>.json`,\n`<url>/<tag>/release-manifest.json`, ...). Everything downloaded from\nit is still verified against the embedded release keys.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pre_update_backup": {
+          "$ref": "#/$defs/PreUpdateBackup",
+          "default": "state",
+          "description": "What to save before the binary is swapped."
+        },
+        "require_transparency_log": {
+          "default": false,
+          "description": "Also require a keyless transparency-log signature on every release\nfile, as a second check after the embedded-key signature.",
+          "type": "boolean"
+        },
+        "snapshot_keep": {
+          "default": 3,
+          "description": "How many `pre-update` snapshots each profile keeps.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Root of `daemon.toml`.",
+  "properties": {
+    "process": {
+      "$ref": "#/$defs/ProcessConfig",
+      "default": {
+        "nofile_soft_limit": 4096
+      },
+      "description": "Limits applied to every `prometheus` process of this home."
+    },
+    "runtimes": {
+      "$ref": "#/$defs/RuntimesConfig",
+      "default": {
+        "allow_lazy_install": true,
+        "exclude": [],
+        "mirrors": {
+          "npm": null,
+          "pypi": null,
+          "runtimes": null
+        }
+      },
+      "description": "The managed runtime store (`prometheus runtimes`)."
+    },
+    "update": {
+      "$ref": "#/$defs/UpdateConfig",
+      "default": {
+        "auto_apply": false,
+        "check_interval_secs": 86400,
+        "mirror_fallback": false,
+        "mirror_url": null,
+        "pre_update_backup": "state",
+        "require_transparency_log": false,
+        "snapshot_keep": 3
+      },
+      "description": "Self-update of this install (`prometheus update`)."
+    }
+  },
+  "title": "Prometheus daemon.toml",
+  "type": "object",
+  "x-apply": "restart"
+}

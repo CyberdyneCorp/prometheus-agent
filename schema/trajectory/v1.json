@@ -1,0 +1,2211 @@
+{
+  "$defs": {
+    "BatchEdge": {
+      "description": "One dependency edge of a planned batch: `call` waits for `after`.",
+      "properties": {
+        "after": {
+          "description": "The call it waits for.",
+          "type": "string"
+        },
+        "call": {
+          "description": "The waiting call.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call",
+        "after"
+      ],
+      "type": "object"
+    },
+    "Failure": {
+      "description": "A typed failure: the error taxonomy's kind and code plus a message.",
+      "properties": {
+        "code": {
+          "description": "Error code, when the failure has one (`fs.not_found`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Error kind (`not_found`, `permission_denied`, `tool`...).",
+          "type": "string"
+        },
+        "message": {
+          "description": "Human-readable message.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message"
+      ],
+      "type": "object"
+    },
+    "RejectedRoute": {
+      "description": "A candidate route `provider.route_selected` did not choose.",
+      "properties": {
+        "reason": {
+          "description": "`health`, `capability`, `price`...",
+          "type": "string"
+        },
+        "route": {
+          "description": "The route.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "route",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "StepCall": {
+      "description": "One tool call as summarised in `turn.step`.",
+      "properties": {
+        "args_digest": {
+          "description": "SHA-256 of the canonical arguments.",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "Wall time.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outcome": {
+          "description": "`ok`, `error`, `denied` or `cancelled`.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "Tool name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "args_digest",
+        "duration_ms",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "Tokens": {
+      "description": "Token counts by class, as in a usage-ledger row.",
+      "properties": {
+        "cache_read": {
+          "description": "Input tokens read from the provider's prompt cache.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cache_write": {
+          "description": "Input tokens written to the provider's prompt cache.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input": {
+          "description": "Uncached input tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output": {
+          "description": "Output tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasoning": {
+          "description": "Reasoning tokens (part of output where the provider reports them).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "cache_read",
+        "cache_write",
+        "reasoning"
+      ],
+      "type": "object"
+    },
+    "Usage": {
+      "description": "Cumulative usage carried by step and progress events.",
+      "properties": {
+        "cost_usd": {
+          "description": "Cost in USD, `null` when a call was unpriced.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tokens": {
+          "$ref": "#/$defs/Tokens",
+          "description": "Tokens by class."
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.start"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`session.start`. The surface appears only here, as `source`.",
+            "properties": {
+              "model": {
+                "description": "The model the session starts with.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "parent_session_id": {
+                "description": "The parent session, for a continuation, fork or delegation.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "description": "The surface (`cli`, `tui`, `gateway`, `cron`...).",
+                "type": "string"
+              },
+              "title": {
+                "description": "The session's title, when it has one.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.end"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`session.end`.",
+            "properties": {
+              "reason": {
+                "description": "The end reason (`user_exit`, `compression`, `error`...).",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.tools_rebuilt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`session.tools_rebuilt`.",
+            "properties": {
+              "reason": {
+                "description": "What triggered the rebuild (`delegation --now`, `tools --now`...).",
+                "type": "string"
+              },
+              "tools": {
+                "description": "The tool names now offered.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "reason",
+              "tools"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.start"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`turn.start`.",
+            "properties": {
+              "message_id": {
+                "description": "The user message that started the turn, when one did.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.step"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`turn.step`: after each loop iteration.",
+            "properties": {
+              "calls": {
+                "description": "The iteration's tool calls.",
+                "items": {
+                  "$ref": "#/$defs/StepCall"
+                },
+                "type": "array"
+              },
+              "iteration": {
+                "description": "Iteration number from 1.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage",
+                "description": "Usage of the turn so far."
+              }
+            },
+            "required": [
+              "iteration",
+              "calls",
+              "usage"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "turn.end"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`turn.end`.",
+            "properties": {
+              "cache_hit_rate": {
+                "description": "The session's cache hit rate so far: cache-read tokens over all\ninput tokens (0..1); absent before any input was counted.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "iterations": {
+                "description": "Loop iterations run.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reason": {
+                "description": "The turn's end reason (`completed`, `max_iterations`, `interrupted`...).",
+                "type": "string"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage",
+                "description": "Usage of the whole turn."
+              }
+            },
+            "required": [
+              "reason",
+              "iterations",
+              "usage"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "user.message"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`user.message` and `assistant.message`.",
+            "properties": {
+              "message_id": {
+                "description": "The stored message, when it is one.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "description": "The text.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "assistant.message"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`user.message` and `assistant.message`.",
+            "properties": {
+              "message_id": {
+                "description": "The stored message, when it is one.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "description": "The text.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "assistant.reasoning"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`assistant.reasoning`.",
+            "properties": {
+              "items": {
+                "description": "Provider reasoning items (opaque, replayed verbatim)."
+              },
+              "message_id": {
+                "description": "The stored message the reasoning belongs to.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "description": "Readable reasoning text, when the provider returned any.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "model.call"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`model.call`: one main-loop model call, mirroring its ledger row.",
+            "properties": {
+              "billing_source": {
+                "description": "The billing source of the credential used.",
+                "type": "string"
+              },
+              "cache_hit": {
+                "description": "Whether the response came from the response cache.",
+                "type": "boolean"
+              },
+              "call_id": {
+                "description": "The ledger's call id.",
+                "type": "string"
+              },
+              "cost_status": {
+                "description": "The ledger's cost status: `exact` (provider-reported), `estimated`\n(price table), `subscription` or `unknown` (unpriced).",
+                "type": "string"
+              },
+              "cost_usd": {
+                "description": "Cost in USD, `null` when unpriced.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "latency_ms": {
+                "description": "Latency to the complete response.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "model": {
+                "description": "Model id.",
+                "type": "string"
+              },
+              "provider": {
+                "description": "Provider name.",
+                "type": "string"
+              },
+              "purpose": {
+                "description": "The ledger purpose (`main`, `moa.reference`...).",
+                "type": "string"
+              },
+              "request_hash": {
+                "description": "Hash of the canonical request.",
+                "type": "string"
+              },
+              "tokens": {
+                "$ref": "#/$defs/Tokens",
+                "description": "Tokens by class."
+              }
+            },
+            "required": [
+              "call_id",
+              "provider",
+              "model",
+              "purpose",
+              "request_hash",
+              "cache_hit",
+              "latency_ms",
+              "tokens",
+              "cost_status",
+              "billing_source"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "aux_call.start"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`aux_call.start`.",
+            "properties": {
+              "attempt": {
+                "description": "Attempt number from 1.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "call_id": {
+                "description": "The ledger's call id.",
+                "type": "string"
+              },
+              "model": {
+                "description": "Model id.",
+                "type": "string"
+              },
+              "provider": {
+                "description": "Provider name.",
+                "type": "string"
+              },
+              "purpose": {
+                "description": "The ledger purpose (`auxiliary.title`, `compression`,\n`auxiliary.vision`...).",
+                "type": "string"
+              }
+            },
+            "required": [
+              "call_id",
+              "purpose",
+              "provider",
+              "model",
+              "attempt"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "aux_call.end"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`aux_call.end`.",
+            "properties": {
+              "call_id": {
+                "description": "The ledger's call id.",
+                "type": "string"
+              },
+              "cost_usd": {
+                "description": "Cost in USD, `null` when unpriced.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Failure"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The failure, when `ok` is false."
+              },
+              "latency_ms": {
+                "description": "Latency of the attempt.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "ok": {
+                "description": "Whether the attempt succeeded.",
+                "type": "boolean"
+              },
+              "tokens": {
+                "$ref": "#/$defs/Tokens",
+                "description": "Tokens by class."
+              }
+            },
+            "required": [
+              "call_id",
+              "ok",
+              "latency_ms",
+              "tokens"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.call"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`tool.call`.",
+            "properties": {
+              "arguments": {
+                "description": "Arguments as the model sent them (an object, or a raw string the\nmodel produced when it was not valid JSON)."
+              },
+              "call_id": {
+                "description": "The model's call id.",
+                "type": "string"
+              },
+              "tool": {
+                "description": "Tool name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "call_id",
+              "tool",
+              "arguments"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.result"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`tool.result`: either `output` or `error`.",
+            "properties": {
+              "call_id": {
+                "description": "The call this answers.",
+                "type": "string"
+              },
+              "duration_ms": {
+                "description": "Wall time; `null` when unknown (a trace rebuilt from the transcript).",
+                "format": "uint64",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Failure"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The failure, when not `ok`."
+              },
+              "ok": {
+                "description": "Whether the call succeeded.",
+                "type": "boolean"
+              },
+              "output": {
+                "description": "Output text, when `ok`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "tool": {
+                "description": "Tool name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "call_id",
+              "tool",
+              "ok"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "tool.batch_planned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`tool.batch_planned`.",
+            "properties": {
+              "calls": {
+                "description": "Call ids in the batch.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "edges": {
+                "description": "Dependency edges.",
+                "items": {
+                  "$ref": "#/$defs/BatchEdge"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "calls",
+              "edges"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.request"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`approval.request`.",
+            "properties": {
+              "call_id": {
+                "description": "The tool call needing approval.",
+                "type": "string"
+              },
+              "request_id": {
+                "description": "The request id.",
+                "type": "string"
+              },
+              "summary": {
+                "description": "What would run (command line, path...).",
+                "type": "string"
+              },
+              "tool": {
+                "description": "Tool name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "call_id",
+              "tool",
+              "summary"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.decision"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`approval.decision`.",
+            "properties": {
+              "by": {
+                "description": "Who decided (`user`, `policy`, `timeout`).",
+                "type": "string"
+              },
+              "decision": {
+                "description": "`once`, `session`, `always`, `deny` or `timeout`.",
+                "type": "string"
+              },
+              "request_id": {
+                "description": "The request answered.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "decision",
+              "by"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "clarify.request"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`clarify.request`.",
+            "properties": {
+              "choices": {
+                "description": "Offered choices, if any.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "question": {
+                "description": "The question.",
+                "type": "string"
+              },
+              "request_id": {
+                "description": "The request id.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "question"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "clarify.answer"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`clarify.answer`.",
+            "properties": {
+              "answer": {
+                "description": "The answer, `null` on timeout.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "request_id": {
+                "description": "The request answered.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "subagent.spawned"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`subagent.spawned`.",
+            "properties": {
+              "child_session_id": {
+                "description": "The child's session.",
+                "type": "string"
+              },
+              "depth": {
+                "description": "Delegation depth from 1.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "goal": {
+                "description": "The delegated goal.",
+                "type": "string"
+              },
+              "subagent_id": {
+                "description": "The child's id.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "subagent_id",
+              "child_session_id",
+              "depth",
+              "goal"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "subagent.progress"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`subagent.progress`.",
+            "properties": {
+              "activity": {
+                "description": "One-line activity summary (at most 120 characters).",
+                "type": "string"
+              },
+              "depth": {
+                "description": "Delegation depth from 1.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "iteration": {
+                "description": "The child's loop iteration.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "parent_id": {
+                "description": "The parent's id (session or subagent).",
+                "type": "string"
+              },
+              "subagent_id": {
+                "description": "The child's id.",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The tool it is running, if any.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage",
+                "description": "Cumulative usage."
+              }
+            },
+            "required": [
+              "subagent_id",
+              "parent_id",
+              "depth",
+              "iteration",
+              "activity",
+              "usage"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "subagent.finished"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`subagent.finished`.",
+            "properties": {
+              "duration_ms": {
+                "description": "Wall time.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "status": {
+                "description": "`completed`, `failed`, `cancelled` or `timeout`.",
+                "type": "string"
+              },
+              "subagent_id": {
+                "description": "The child's id.",
+                "type": "string"
+              },
+              "summary": {
+                "description": "The child's summary.",
+                "type": "string"
+              },
+              "usage": {
+                "$ref": "#/$defs/Usage",
+                "description": "Total usage."
+              }
+            },
+            "required": [
+              "subagent_id",
+              "status",
+              "summary",
+              "duration_ms",
+              "usage"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "compression.committed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`compression.committed`.",
+            "properties": {
+              "coverage": {
+                "description": "Preserved-reference coverage, 0 to 1, when checked.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "Wall time.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "epoch": {
+                "description": "The compaction epoch.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "summary_tokens": {
+                "description": "Tokens of the summary.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "tokens_after": {
+                "description": "Context tokens after.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "tokens_before": {
+                "description": "Context tokens before.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "trigger": {
+                "description": "`threshold`, `manual`, `overflow`...",
+                "type": "string"
+              }
+            },
+            "required": [
+              "trigger",
+              "epoch",
+              "tokens_before",
+              "tokens_after",
+              "summary_tokens",
+              "duration_ms"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "compression.failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`compression.failed`.",
+            "properties": {
+              "message": {
+                "description": "Detail.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "description": "`invalid_engine_output`, `lock_skipped`, `aux_failed`...",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "prompt.rebuilt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`prompt.rebuilt`.",
+            "properties": {
+              "prompt_hash": {
+                "description": "Hash of the new system prompt.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "description": "`new_session`, `compaction`, `model_changed`, `skills --now`...",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "cache.unexpected_break"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`cache.unexpected_break`.",
+            "properties": {
+              "actual_prefix_hash": {
+                "description": "Prefix hash actually sent.",
+                "type": "string"
+              },
+              "expected_prefix_hash": {
+                "description": "Canonical prefix hash expected (the previous request's).",
+                "type": "string"
+              },
+              "first_diff_index": {
+                "description": "Index of the first differing message, when known.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "expected_prefix_hash",
+              "actual_prefix_hash"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "provider.fallback"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`provider.fallback`.",
+            "properties": {
+              "billing_change": {
+                "description": "Whether the billing source changed (subscription vs API key).",
+                "type": "boolean"
+              },
+              "from": {
+                "description": "Route given up (`provider/model`).",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Why.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Route now used.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "reason",
+              "billing_change"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "provider.route_selected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`provider.route_selected`.",
+            "properties": {
+              "policy": {
+                "description": "The routing policy.",
+                "type": "string"
+              },
+              "rejected": {
+                "description": "Rejected candidates with their reason.",
+                "items": {
+                  "$ref": "#/$defs/RejectedRoute"
+                },
+                "type": "array"
+              },
+              "selected": {
+                "description": "The chosen route.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "policy",
+              "selected",
+              "rejected"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "provider.registry_reloaded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`provider.registry_reloaded`.",
+            "properties": {
+              "changed": {
+                "description": "Providers added, changed or removed.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "changed"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "memory.recalled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`memory.recalled`.",
+            "properties": {
+              "entry_ids": {
+                "description": "Recalled entry ids.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "entry_ids"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "budget.warning"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`budget.warning` and `budget.exceeded`.",
+            "properties": {
+              "estimate": {
+                "description": "Worst-case estimate of the refused call (`budget.exceeded` only).",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "limit": {
+                "description": "The configured limit.",
+                "format": "double",
+                "type": "number"
+              },
+              "scope": {
+                "description": "`turn`, `session`, `root`, `daily`, `monthly` or `unattended`.",
+                "type": "string"
+              },
+              "spent": {
+                "description": "Spent so far in the scope's period.",
+                "format": "double",
+                "type": "number"
+              },
+              "unit": {
+                "description": "`usd` or `tokens`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope",
+              "unit",
+              "limit",
+              "spent"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "budget.exceeded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`budget.warning` and `budget.exceeded`.",
+            "properties": {
+              "estimate": {
+                "description": "Worst-case estimate of the refused call (`budget.exceeded` only).",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "limit": {
+                "description": "The configured limit.",
+                "format": "double",
+                "type": "number"
+              },
+              "scope": {
+                "description": "`turn`, `session`, `root`, `daily`, `monthly` or `unattended`.",
+                "type": "string"
+              },
+              "spent": {
+                "description": "Spent so far in the scope's period.",
+                "format": "double",
+                "type": "number"
+              },
+              "unit": {
+                "description": "`usd` or `tokens`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope",
+              "unit",
+              "limit",
+              "spent"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "egress.denied"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`egress.denied`.",
+            "properties": {
+              "host": {
+                "description": "Destination host.",
+                "type": "string"
+              },
+              "port": {
+                "description": "Destination port.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reason": {
+                "description": "Why (`private_range`, `not_allowlisted`, `mode_none`...).",
+                "type": "string"
+              },
+              "requester": {
+                "description": "Who asked (tool name, plugin id, `browser`).",
+                "type": "string"
+              }
+            },
+            "required": [
+              "host",
+              "port",
+              "requester",
+              "reason"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "security.downgrade"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`security.downgrade`.",
+            "properties": {
+              "feature": {
+                "description": "The degraded feature (`landlock`, `seccomp`...).",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Why it is unavailable.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "feature",
+              "reason"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "harness.note"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`harness.note`: a note the active harness adds to the trajectory.",
+            "properties": {
+              "text": {
+                "description": "The note.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "harness.activated"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`harness.activated`.",
+            "properties": {
+              "from": {
+                "description": "Previous harness version.",
+                "type": "string"
+              },
+              "source": {
+                "description": "`rollback`, `adopt`, `manual`.",
+                "type": "string"
+              },
+              "to": {
+                "description": "Activated version.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "source"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.job.started"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.job.started` and `evolve.job.finished`.",
+            "properties": {
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "status": {
+                "description": "`running`, `completed`, `failed`, `cancelled`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.job.finished"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.job.started` and `evolve.job.finished`.",
+            "properties": {
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "status": {
+                "description": "`running`, `completed`, `failed`, `cancelled`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.stage.finished"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.stage.finished`.",
+            "properties": {
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "stage": {
+                "description": "The stage name.",
+                "type": "string"
+              },
+              "status": {
+                "description": "The stage's outcome.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "stage",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.rollout.finished"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.rollout.finished`.",
+            "properties": {
+              "candidate": {
+                "description": "The candidate harness.",
+                "type": "string"
+              },
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "score": {
+                "description": "The rollout's score, when graded.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "task": {
+                "description": "The task run.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "candidate",
+              "task"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.selection.finished"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.selection.finished`.",
+            "properties": {
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "selected": {
+                "description": "The selected candidate, if any.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "job_id"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.proposal.ready"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.proposal.ready` and `evolve.proposal.adopted`.",
+            "properties": {
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "proposal_id": {
+                "description": "The proposal id.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "proposal_id"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "evolve.proposal.adopted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`evolve.proposal.ready` and `evolve.proposal.adopted`.",
+            "properties": {
+              "job_id": {
+                "description": "The job id.",
+                "type": "string"
+              },
+              "proposal_id": {
+                "description": "The proposal id.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "proposal_id"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "experience.entry.added"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`experience.entry.added`, `experience.entry.evicted` and\n`experience.entry.status_changed`.",
+            "properties": {
+              "entry_id": {
+                "description": "The entry id.",
+                "type": "string"
+              },
+              "status": {
+                "description": "The entry's status after the event.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entry_id",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "experience.entry.evicted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`experience.entry.added`, `experience.entry.evicted` and\n`experience.entry.status_changed`.",
+            "properties": {
+              "entry_id": {
+                "description": "The entry id.",
+                "type": "string"
+              },
+              "status": {
+                "description": "The entry's status after the event.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entry_id",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "experience.entry.status_changed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`experience.entry.added`, `experience.entry.evicted` and\n`experience.entry.status_changed`.",
+            "properties": {
+              "entry_id": {
+                "description": "The entry id.",
+                "type": "string"
+              },
+              "status": {
+                "description": "The entry's status after the event.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entry_id",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "experience.lesson.distilled"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`experience.lesson.distilled`.",
+            "properties": {
+              "confidence": {
+                "description": "Confidence 0 to 1, `null` for none.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "job": {
+                "description": "The distillation job.",
+                "type": "string"
+              },
+              "mode": {
+                "description": "The distillation mode.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job",
+              "mode"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "experience.session_lessons.injected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`experience.session_lessons.injected`.",
+            "properties": {
+              "entry_ids": {
+                "description": "The injected entry ids.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "session": {
+                "description": "The session the lessons were injected into.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "session",
+              "entry_ids"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "error"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "description": "`error`: a failure that is not the result of one tool call.",
+            "properties": {
+              "code": {
+                "description": "Error code (for example `trajectory.size_limit`).",
+                "type": "string"
+              },
+              "kind": {
+                "description": "Error kind.",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable message.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "kind",
+              "message"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "description": "One line of <profile>/trajectories/<session_id>.jsonl. Readers preserve event types they do not know (newer minor versions) and render them as [EVENT <type>]. A payload of exactly {\"omitted_bytes\": N} was left out by the session's size limit.",
+  "properties": {
+    "parent_span_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "root_session_id": {
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "span_id": {
+      "type": "string"
+    },
+    "ts": {
+      "description": "RFC 3339 UTC with microseconds",
+      "type": "string"
+    },
+    "turn_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "type": {
+      "description": "An event type; x-event-types lists the known ones",
+      "type": "string"
+    },
+    "v": {
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "v",
+    "ts",
+    "seq",
+    "session_id",
+    "root_session_id",
+    "turn_id",
+    "span_id",
+    "parent_span_id",
+    "type",
+    "payload"
+  ],
+  "title": "Prometheus trajectory line, grammar 1.0",
+  "type": "object",
+  "x-event-types": [
+    "session.start",
+    "session.end",
+    "session.tools_rebuilt",
+    "turn.start",
+    "turn.step",
+    "turn.end",
+    "user.message",
+    "assistant.message",
+    "assistant.reasoning",
+    "model.call",
+    "aux_call.start",
+    "aux_call.end",
+    "tool.call",
+    "tool.result",
+    "tool.batch_planned",
+    "approval.request",
+    "approval.decision",
+    "clarify.request",
+    "clarify.answer",
+    "subagent.spawned",
+    "subagent.progress",
+    "subagent.finished",
+    "compression.committed",
+    "compression.failed",
+    "prompt.rebuilt",
+    "cache.unexpected_break",
+    "provider.fallback",
+    "provider.route_selected",
+    "provider.registry_reloaded",
+    "memory.recalled",
+    "budget.warning",
+    "budget.exceeded",
+    "egress.denied",
+    "security.downgrade",
+    "harness.note",
+    "harness.activated",
+    "evolve.job.started",
+    "evolve.job.finished",
+    "evolve.stage.finished",
+    "evolve.rollout.finished",
+    "evolve.selection.finished",
+    "evolve.proposal.ready",
+    "evolve.proposal.adopted",
+    "experience.entry.added",
+    "experience.entry.evicted",
+    "experience.entry.status_changed",
+    "experience.lesson.distilled",
+    "experience.session_lessons.injected",
+    "error"
+  ]
+}

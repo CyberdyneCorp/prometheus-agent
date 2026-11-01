@@ -265,8 +265,8 @@ When the configured provider is disabled in `plugins.disabled`, reports `is-avai
 - **THEN** `workspace` SHALL appear in `config.toml` and SHALL NOT appear in the secrets store
 
 ### Requirement: Context engine selection
-The memory subsystem SHALL use the context engine chosen by the `context.engine` selection rule owned by `context-compression` (default `"builtin"`, otherwise an installed plugin implementing the `context-engine` world, unknown names failing validation with exit 78); an engine that fails to initialize at session start SHALL cause that session to use the built-in engine with one WARN; engine tools SHALL be exposed under the same composite-aware toolset rule as memory provider tools (toolset `context_engine`), and an engine's per-request context selection SHALL replace only the outgoing request, never persisted history.
-**Milestone:** M1
+The memory subsystem SHALL use the context engine chosen by the `context.engine` selection rule owned by `context-compression` (default `"builtin"`, otherwise an installed plugin implementing the `context-engine` world, unknown names failing validation with exit 78); an engine that fails to initialize at session start SHALL cause that session to use the built-in engine with one WARN; engine tools SHALL be exposed under the same composite-aware toolset rule as memory provider tools (toolset `context_engine`), and an engine's per-request context selection SHALL replace only the outgoing request, never persisted history. Every clause here concerns plugin engines, which run in the plugin host (M2); the M1 selection rule itself is `context-compression` › Context engine selection.
+**Milestone:** M2
 
 #### Scenario: Engine selection never rewrites stored history
 - **GIVEN** a context engine plugin whose selection drops older turns from the request

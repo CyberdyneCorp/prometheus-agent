@@ -1,0 +1,41 @@
+[USER]
+Summarise notes.txt and list the TODOs in src/.
+
+[THINKING]
+Read the file first, then grep for TODO.
+
+[ACTION] read_file({"path":"notes.txt"})
+
+[ACTION] terminal({"command":"grep -rn TODO src/"})
+
+[OBSERVATION ERROR]
+not_found: no such file: notes.txt
+
+[APPROVAL] terminal: grep -rn TODO src/
+
+[APPROVAL] once by user
+
+[OBSERVATION]
+src/main.rs:12: // TODO: parse flags
+src/lib.rs:3: // TODO: docs
+
+[SUBAGENT sub_1] spawned: Check whether the TODOs have issues
+
+[SUBAGENT sub_1] searching the issue tracker
+
+[EVENT workspace.indexed]
+
+[SUBAGENT sub_1] completed: Both TODOs are tracked (#12, #31).
+
+[ASSISTANT]
+notes.txt does not exist. src/ has two TODOs:
+- main.rs:12 parse flags (#12)
+- lib.rs:3 docs (#31)
+
+[COMPRESSION] epoch 1 (manual): 5200 -> 1400 tokens
+
+[HARNESS] prefer grep over reading whole trees
+
+[ERROR] trajectory.size_limit: trajectory reached 1024 bytes (observability.trajectories.max_bytes_per_session); later events are recorded without their payload
+
+[EVENT tool.result] payload omitted (70000 bytes)

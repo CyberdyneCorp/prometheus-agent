@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Regenerates crates/pmt-update/runtimes/index.json, the runtime index the
+binary pins (spec: distribution-and-update, Managed runtime store).
+
+usage: scripts/pin-runtimes
+
+Every artifact is recorded with its URL, size and SHA-256. Digests come from
+the publisher's checksum files where one exists (Node, uv, CPython); Chrome
+for Testing publishes none, so its archives are downloaded and hashed here.
+Edit the versions below, run this script, review the diff and commit it:
+the binary built from that commit installs exactly these bytes.
+"""
+
+import hashlib
+import json
+import pathlib
+import sys
+import urllib.request
+
+NODE = "24.22.1"
+UV = "0.13.6"
+CPYTHON = "3.12.16"
+CPYTHON_BUILD = "20261026"
+CHROMIUM = "156.0.8078.80"
+
+OUT = pathlib.Path(__file__).resolve().parent.parent / "crates/pmt-update/runtimes/index.json"
+
+# Host platform keys (see pmt_update::runtimes::platform).
+NODE_PLATFORMS = {
+    "darwin-arm64": ("official", "darwin-arm64", "tar.gz"),
+    "darwin-x64": ("official", "darwin-x64", "tar.gz"),
+    "linux-x64": ("official", "linux-x64", "tar.gz"),
+    "linux-arm64": ("official", "linux-arm64", "tar.gz"),
+    "linux-x64-musl": ("unofficial", "linux-x64-musl", "tar.gz"),
+    "linux-arm64-musl": ("unofficial", "linux-arm64-musl", "tar.gz"),
+    "windows-x64": ("official", "win-x64", "zip"),
+    "windows-arm64": ("official", "win-arm64", "zip"),
+}
+TRIPLES = {
+    "darwin-arm64": "aarch64-apple-darwin",
+    "darwin-x64": "x86_64-apple-darwin",
+    "linux-x64": "x86_64-unknown-linux-gnu",
+    "linux-arm64": "aarch64-unknown-linux-gnu",
+    "linux-x64-musl": "x86_64-unknown-linux-musl",
+    "linux-arm64-musl": "aarch64-unknown-linux-musl",
+    "windows-x64": "x86_64-pc-windows-msvc",
+    "windows-arm64": "aarch64-pc-windows-msvc",
+}
+CHROME_PLATFORMS = {
+    "darwin-arm64": "mac-arm64",
+    "darwin-x64": "mac-x64",
+    "linux-x64": "linux64",
+    "linux-arm64": "linux-arm64",
+    "windows-x64": "win64",
+}
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={"User-Agent": "prometheus-pin-runtimes"})
+    with urllib.request.urlopen(request, timeout=120) as response:
+        return response.read()
+
+
+def size_of(url):
+    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "prometheus-pin-runtimes"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return int(response.headers["Content-Length"])
+
+
+def hash_download(url):
+    digest = hashlib.sha256()
+    size = 0
+    request = urllib.request.Request(url, headers={"User-Agent": "prometheus-pin-runtimes"})
+    with urllib.request.urlopen(request, timeout=600) as response:
+        while chunk := response.read(1 << 20):
+            digest.update(chunk)
+            size += len(chunk)
+    return size, digest.hexdigest()
+
+
+def sums(text):
+    table = {}
+    for line in text.decode().splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            table[parts[1].lstrip("*")] = parts[0]
+    return table
+
+
+def entry(url, sha256, fmt, exe):
+    print(f"  {url}", file=sys.stderr)
+    return {"url": url, "size": size_of(url), "sha256": sha256, "format": fmt, "exe": exe}
+
+
+def node():
+    roots = {
+        "official": f"https://nodejs.org/dist/v{NODE}",
+        "unofficial": f"https://unofficial-builds.nodejs.org/download/release/v{NODE}",
+    }
+    tables = {kind: sums(fetch(f"{root}/SHASUMS256.txt")) for kind, root in roots.items()}
+    artifacts = {}
+    for platform, (kind, name, fmt) in NODE_PLATFORMS.items():
+        file = f"node-v{NODE}-{name}.{fmt}"
+        top = f"node-v{NODE}-{name}"
+        exe = f"{top}/node.exe" if fmt == "zip" else f"{top}/bin/node"
+        artifacts[platform] = entry(f"{roots[kind]}/{file}", tables[kind][file], fmt, exe)
+    return {"version": NODE, "artifacts": artifacts}
+
+
+def uv():
+    root = f"https://github.com/astral-sh/uv/releases/download/{UV}"
+    artifacts = {}
+    for platform, triple in TRIPLES.items():
+        windows = platform.startswith("windows")
+        file = f"uv-{triple}.{'zip' if windows else 'tar.gz'}"
+        sha = fetch(f"{root}/{file}.sha256").decode().split()[0]
+        exe = "uv.exe" if windows else f"uv-{triple}/uv"
+        artifacts[platform] = entry(f"{root}/{file}", sha, "zip" if windows else "tar.gz", exe)
+    return {"version": UV, "artifacts": artifacts}
+
+
+def cpython():
+    root = f"https://github.com/astral-sh/python-build-standalone/releases/download/{CPYTHON_BUILD}"
+    table = sums(fetch(f"{root}/SHA256SUMS"))
+    artifacts = {}
+    for platform, triple in TRIPLES.items():
+        file = f"cpython-{CPYTHON}+{CPYTHON_BUILD}-{triple}-install_only.tar.gz"
+        exe = "python/python.exe" if platform.startswith("windows") else "python/bin/python3"
+        url = f"{root}/{file.replace('+', '%2B')}"
+        artifacts[platform] = entry(url, table[file], "tar.gz", exe)
+    return {"version": f"{CPYTHON}+{CPYTHON_BUILD}", "artifacts": artifacts}
+
+
+def chromium():
+    root = f"https://storage.googleapis.com/chrome-for-testing-public/{CHROMIUM}"
+    artifacts = {}
+    for platform, name in CHROME_PLATFORMS.items():
+        url = f"{root}/{name}/chrome-headless-shell-{name}.zip"
+        print(f"  hashing {url}", file=sys.stderr)
+        size, sha = hash_download(url)
+        suffix = ".exe" if platform.startswith("windows") else ""
+        exe = f"chrome-headless-shell-{name}/chrome-headless-shell{suffix}"
+        artifacts[platform] = {"url": url, "size": size, "sha256": sha, "format": "zip", "exe": exe}
+    return {"version": CHROMIUM, "artifacts": artifacts}
+
+
+def main():
+    index = {
+        "schema": "prometheus.runtime-index.v1",
+        "runtimes": {"node": node(), "cpython": cpython(), "uv": uv(), "chromium": chromium()},
+    }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+    print(f"wrote {OUT}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

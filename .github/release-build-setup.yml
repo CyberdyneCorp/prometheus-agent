@@ -1,0 +1,24 @@
+# Extra steps cargo-dist inserts into every build job of release.yml
+# (dist-workspace.toml: github-build-setup). Regenerate release.yml with
+# `dist generate` after editing.
+- name: Point cargo at the Android NDK
+  if: contains(join(matrix.targets, ','), 'android')
+  shell: bash
+  run: |
+    # Termux's minimum Android API level.
+    api=24
+    bin="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+    {
+      echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android$api-clang"
+      echo "CC_aarch64_linux_android=$bin/aarch64-linux-android$api-clang"
+      echo "AR_aarch64_linux_android=$bin/llvm-ar"
+    } >>"$GITHUB_ENV"
+# Locked, reproducible builds (spec: distribution-and-update, Reproducible,
+# locked builds): the build must use Cargo.lock exactly as committed, and
+# the baked-in build date is the commit's, so rebuilding the same commit
+# gives the same binary (CI's `reproducible` job compares two builds).
+- name: Locked, reproducible build inputs
+  shell: bash
+  run: |
+    cargo metadata --locked --format-version 1 >/dev/null
+    echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >>"$GITHUB_ENV"

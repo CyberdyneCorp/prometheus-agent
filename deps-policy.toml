@@ -1,0 +1,19 @@
+# Dependency release-age gate (spec: distribution-and-update, Dependency
+# release-age gate), run by `scripts/check` and the release pipeline as
+# `cargo xtask deps-age --base <merge base>`: a crate version locked since
+# the base must have been published at least `release_age_days` before the
+# lock change that added it.
+
+release_age_days = 3
+
+# Certificate-store crates: trust-root updates are not delayed.
+release_age_exempt = ["webpki-roots", "webpki-root-certs", "rustls-native-certs"]
+
+# A young version that cannot wait (a security fix, say) needs a waiver with
+# a reason and an expiry date; an expired waiver fails the gate.
+#
+# [[waiver]]
+# package = "name"
+# version = "1.2.3"
+# reason = "why it cannot wait"
+# expires = "2026-12-31"

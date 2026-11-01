@@ -1,0 +1,55 @@
+# The model side of `prometheus demo`: a deterministic mock-provider script
+# (spec: replay-and-evaluation, Offline smoke demo). Each rule answers one
+# step, and each step after the first matches only when the previous tool
+# call really produced the expected result, so the demo cannot pass unless
+# the tools ran. The demo fills in the platform's script: @SCRIPT@ (its
+# file), @RUN@ (the command that runs it), @BUG@ and @FIX@ (its debit line
+# before and after the fix).
+
+[[rule]]
+step = 0
+text = "I'll start with the repository's README."
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "README.md" }
+
+[[rule]]
+step = 1
+tool_result = '@SCRIPT@'
+text = "The README says @SCRIPT@ prints the balance. Let me run it."
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = '@RUN@' }
+
+[[rule]]
+step = 2
+tool_result = 'Total: 235.35'
+text = "235.35 is more than the credits alone (160.25), so the debits are being added. Let me read the script."
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "@SCRIPT@" }
+
+[[rule]]
+step = 3
+tool_result = '@BUG@'
+text = "Found it: the debit branch adds the amount instead of subtracting it. Fixing the sign."
+[[rule.tool_calls]]
+name = "patch"
+arguments = { path = "@SCRIPT@", old_string = '@BUG@', new_string = '@FIX@' }
+
+[[rule]]
+step = 4
+tool_result = '@FIX@'
+text = "Re-running the script to check the fix."
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = '@RUN@' }
+
+[[rule]]
+step = 5
+tool_result = 'Total: 85.15'
+text = """
+Fixed the sign bug in @SCRIPT@: debits were added to the balance instead of subtracted.
+The script now prints the right balance (credits 160.25 minus debits 75.10).
+
+Total: 85.15"""

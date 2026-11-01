@@ -217,7 +217,7 @@ The system SHALL read `[goals]` (`max_turns = 20`, `gate_timeout_secs = 300`, `g
 
 #### Scenario: Inverted self-paced bounds
 - **GIVEN** `loops.self_paced_floor_secs = 600` and `loops.self_paced_ceiling_secs = 300`
-- **WHEN** `prometheus config check` runs
+- **WHEN** `prometheus config validate` runs
 - **THEN** it SHALL report the conflict naming both keys and exit 78
 
 ### Requirement: Automation is distinct from kanban and cron

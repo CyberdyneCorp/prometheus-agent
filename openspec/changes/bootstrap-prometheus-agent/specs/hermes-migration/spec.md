@@ -101,7 +101,7 @@ The system SHALL detect YAML 1.1 boolean literals (`on`, `off`, `yes`, `no`, unq
 - **THEN** the Prometheus value SHALL be the deny-by-default mode and the report SHALL mark the key `ambiguous` with the hint to set it explicitly
 
 ### Requirement: Config references to environment values
-The system SHALL convert a Hermes `${NAME}` or `${env:NAME}` reference in a config value to a Prometheus secret reference `{ secret = "NAME" }` when `NAME` is classified as a secret, SHALL inline the value from the Hermes `.env` with disposition `transformed` when `NAME` is a non-secret, and SHALL report unresolved references and non-env sources (`${file:...}`, vault sources) as `unsupported`.
+The system SHALL convert a Hermes `${NAME}` or `${env:NAME}` reference in a config value to a Prometheus secret reference (the name `NAME` in the target key's `*_secret` field, for example `key_secret = "NAME"`) when `NAME` is classified as a secret, SHALL inline the value from the Hermes `.env` with disposition `transformed` when `NAME` is a non-secret, and SHALL report unresolved references and non-env sources (`${file:...}`, vault sources) as `unsupported`.
 **Milestone:** M2
 
 #### Scenario: Secret reference in MCP header

@@ -1,0 +1,10 @@
+id            <SES1>
+title         Refactor
+source        cli
+started       <TIME>
+last activity <TIME>
+ended         -
+messages      2
+pinned        false
+archived      none
+lineage       <SES1>

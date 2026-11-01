@@ -1,0 +1,14 @@
+{
+  "counts": [
+    {
+      "count": 2,
+      "path": "src/lib.rs"
+    },
+    {
+      "count": 1,
+      "path": "src/main.rs"
+    }
+  ],
+  "total_matches": 3,
+  "truncated": false
+}

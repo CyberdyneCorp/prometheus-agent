@@ -7,18 +7,25 @@ use std::process::Command;
 /// What one `perf-sampler` run measured.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Samples {
-    /// Wall time of each `--version` run, in milliseconds.
+    /// Wall time of each timed run (`--version`, or until the chat prompt),
+    /// in milliseconds.
     pub(crate) startup_ms: Vec<f64>,
     /// Largest resident set of any run, when it can be attributed to the
     /// measured binary.
     pub(crate) peak_rss_bytes: Option<u64>,
 }
 
-/// Runs `sampler BINARY RUNS` and parses its output.
-pub(crate) fn collect(sampler: &Path, binary: &Path, runs: usize) -> Result<Samples, String> {
+/// Runs `sampler BINARY RUNS [MODE...]` and parses its output.
+pub(crate) fn collect(
+    sampler: &Path,
+    binary: &Path,
+    runs: usize,
+    mode: &[&std::ffi::OsStr],
+) -> Result<Samples, String> {
     let output = Command::new(sampler)
         .arg(binary)
         .arg(runs.to_string())
+        .args(mode)
         .output()
         .map_err(|e| format!("{}: {e}", sampler.display()))?;
     if !output.status.success() {

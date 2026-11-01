@@ -29,7 +29,7 @@ The system SHALL create `state.db`, `state.db-wal`, `state.db-shm` and every blo
 - **THEN** the file mode SHALL be `0600` and a WARN log entry SHALL name the path and the previous mode
 
 ### Requirement: Embedded versioned migrations
-The system SHALL record the schema version in `store_meta.schema_version`, SHALL apply embedded, ordered, forward-only migrations inside one transaction per step after copying the database to `<profile>/backups/state/state-v<old>-<timestamp>.db` (keeping the newest 3 backups), and SHALL open a store whose version is newer than the binary supports in read-only mode, refusing writes with error code `store.schema_too_new`.
+The system SHALL record the schema version in `store_meta.schema_version`, SHALL apply embedded, ordered, forward-only migrations inside one transaction per step after copying the database to `<profile>/backups/state/state-v<old>-<timestamp>.db` (keeping the newest 3 backups), and SHALL open a store whose version is newer than the binary supports in read-only mode, refusing writes with error code `store.schema_too_new`, unless the newer build recorded a `store_meta.min_read_version` beyond what the binary supports, in which case the store SHALL NOT be opened (`store.schema_unreadable`, as defined by `distribution-and-update` › Schema migrations around updates).
 **Milestone:** M1
 
 #### Scenario: Older store upgraded with backup
@@ -38,7 +38,7 @@ The system SHALL record the schema version in `store_meta.schema_version`, SHALL
 - **THEN** the system SHALL write a backup file, apply migrations 4 and 5, and record `schema_version = 5`
 
 #### Scenario: Downgraded binary cannot corrupt a newer store
-- **GIVEN** a `state.db` at schema version 7 and a binary supporting version 5
+- **GIVEN** a `state.db` at schema version 7 whose `min_read_version` is at most 5, and a binary supporting version 5
 - **WHEN** the user runs `prometheus sessions list`
 - **THEN** the system SHALL list sessions read-only and any write attempt SHALL fail with `store.schema_too_new` naming both versions
 
@@ -180,7 +180,7 @@ The system SHALL treat search indexes as derived: on index corruption it SHALL r
 - **THEN** the message SHALL be stored, `index_stale` SHALL be set, and a later search SHALL still find it through the canonical scan
 
 ### Requirement: Integrity check and quarantine
-The system SHALL run `PRAGMA quick_check` when a store is first opened writable in a process, and on failure or on a structural corruption error at any time SHALL stop writing to the file, move it and its sidecars to `<profile>/quarantine/state-<timestamp>.db`, salvage every readable canonical row into a fresh `state.db` (rebuilding indexes), and report the salvaged and lost row counts at ERROR level and in `prometheus doctor`; it SHALL NOT attempt in-place repair of the corrupt file.
+The system SHALL run `PRAGMA quick_check` when a store is first opened writable in a process; on a check failure it SHALL move the file and its sidecars to `<profile>/quarantine/state-<timestamp>.db`, salvage every readable canonical row into a fresh `state.db` (rebuilding indexes), and report the salvaged and lost row counts at ERROR level and in `prometheus doctor`. On a structural corruption error at any later time it SHALL stop writing to the file at once (writes fail with `store.corrupt`) and flag it, so that the next open quarantines and salvages it even if `quick_check` passes; the move happens at open because other processes may still hold the file open. It SHALL NOT attempt in-place repair of the corrupt file.
 **Milestone:** M1
 
 #### Scenario: Corrupt file quarantined and salvaged
@@ -289,7 +289,7 @@ The system SHALL provide `prometheus sessions` subcommands `list`, `show <ref>`,
 
 #### Scenario: JSON listing
 - **WHEN** the user runs `prometheus sessions list --json --limit 5`
-- **THEN** stdout SHALL be a JSON array of at most 5 session objects containing `id`, `title`, `source`, `started_at` and `message_count`
+- **THEN** stdout SHALL be one `prometheus.sessions.v1` document whose `sessions` array holds at most 5 session objects containing `id`, `title`, `source`, `started_at` and `message_count`
 
 ### Requirement: Hybrid semantic and full-text search (upgrade)
 The system SHALL, when `sessions.search.semantic = true` (default false), embed active user and assistant messages in the background (never inside a turn) using the profile's auxiliary embedding model into a derived `message_embeddings` index, and answer `search(..., mode = "hybrid")` by fusing full-text and vector rankings with reciprocal rank fusion (k = 60), falling back to full-text only with a `degraded: "semantic_unavailable"` marker when embeddings are missing or the embedding model is unreachable.
@@ -329,7 +329,7 @@ The system SHALL store, besides the typed `source`, an optional `source_tag` (`^
 - **THEN** the system SHALL resume the interactive session
 
 ### Requirement: Interactive session browser
-The system SHALL provide `prometheus sessions browse [--source <s>] [--all]`, an interactive picker listing sessions newest first with title, relative last activity, message count, source and a status tag derived from the session state (`live`, `done` for a final assistant answer, `intr` for `interrupted`, `err` for `error`, `empty` for no messages), incremental search over titles and full-text hits, and Enter resuming the selected session, exiting 2 when stdout is not a terminal.
+The system SHALL provide `prometheus sessions browse [--source <s>] [--all]`, an interactive picker listing sessions newest first with title, relative last activity, message count, source and a status tag derived from the session state (`live`, `done` for a final assistant answer, `intr` for `interrupted`, `err` for `error`, `empty` for no messages), search over titles and full-text hits that narrows the list each time a query is submitted (the line-interface picker filters on Enter; per-keystroke filtering is the TUI's), and Enter resuming the selected session, exiting 2 when stdout is not a terminal.
 **Milestone:** M1
 
 #### Scenario: Status tags

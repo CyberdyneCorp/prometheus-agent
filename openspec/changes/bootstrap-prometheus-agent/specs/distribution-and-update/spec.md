@@ -15,8 +15,12 @@ Each release SHALL publish one self-contained `prometheus` executable per target
 - **THEN** its signature SHALL verify and it SHALL list a digest for every target archive that matches the downloaded bytes
 
 ### Requirement: Release identity grammar
-A stable release SHALL be tagged `vMAJOR.MINOR.PATCH` matching `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, and a canary SHALL be `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS` (UTC) where MAJOR.MINOR.PATCH is the next planned stable, so that semantic-version ordering places every canary after the previous stable and before its own stable; `prometheus --version` SHALL print the version, channel, target, commit and build date on one line.
+A stable release SHALL be tagged `vMAJOR.MINOR.PATCH` matching `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`, and a canary SHALL be `vMAJOR.MINOR.PATCH-canary.YYYYMMDDHHMMSS` (UTC) where MAJOR.MINOR.PATCH is the next planned stable, so that semantic-version ordering places every canary after the previous stable and before its own stable; `prometheus --version` SHALL print the version, channel, target, commit and build date on one line, as `prometheus <semver> (<channel>, <target>, <commit>, <build date>)` with the build date in RFC 3339 UTC (for example `prometheus 1.5.0-canary.20261029064100 (canary, x86_64-unknown-linux-musl, 1a2b3c4d5e6f, 2026-10-29T06:41:00Z)`).
 **Milestone:** M1
+
+#### Scenario: One-line identity
+- **WHEN** the user runs `prometheus --version`
+- **THEN** it SHALL print exactly one line `prometheus <semver> (<channel>, <target>, <commit>, <build date>)` whose values equal `version`, `channel`, `target`, `commit` and `build_date` of `prometheus version --json`
 
 #### Scenario: Canary ordering
 - **GIVEN** installed `v1.4.0` and available `v1.5.0-canary.20261029064100`
@@ -128,13 +132,18 @@ An update SHALL download and verify the new archive into `<PROMETHEUS_HOME>/upda
 - **THEN** `prometheus --version` SHALL report `v1.4.0` and the receipt SHALL say `rolled_back`
 
 ### Requirement: Schema migrations around updates
-A new binary SHALL migrate each profile's `config.toml` and `state.db` forward on first open, taking a snapshot of both before migrating (a `configuration-and-profiles` › State snapshots entry with reason `pre-update` and label `pre-<version>`), keeping the newest `update.snapshot_keep` snapshots (default 3); every binary SHALL declare the maximum storage schema it can read and SHALL refuse to open a newer `state.db` with `state.db schema <n> is newer than this build supports (<m>); update prometheus or roll back with --restore-snapshots`.
+A new binary SHALL migrate each profile's `config.toml` and `state.db` forward on first open, taking a snapshot of both before migrating (a `configuration-and-profiles` › State snapshots entry with reason `pre-update` and label `pre-<version>`), keeping the newest `update.snapshot_keep` snapshots (default 3); every binary SHALL declare the maximum storage schema it supports, and every migration SHALL record in `store_meta.min_read_version` the oldest schema a build must support to still read the store. An older binary meeting a newer `state.db` SHALL follow `session-storage` › Embedded versioned migrations: when the store's `min_read_version` is within what it supports it SHALL open the store read-only and refuse writes with `store.schema_too_new` (exit 78); otherwise it SHALL refuse to open it with `store.schema_unreadable`, exit 1 and `state.db schema <n> is newer than this build supports (<m>); update prometheus or roll back with --restore-snapshots`; in both cases it SHALL NOT modify the database.
 **Milestone:** M1
 
 #### Scenario: Older binary meets newer schema
-- **GIVEN** a profile migrated by `v1.6.0` and a manually started `v1.5.0` binary
+- **GIVEN** a profile migrated by `v1.6.0` to a schema whose `min_read_version` is newer than `v1.5.0` supports, and a manually started `v1.5.0` binary
 - **WHEN** it opens that profile
-- **THEN** it SHALL exit 1 with the `newer than this build supports` message and SHALL NOT modify the database
+- **THEN** it SHALL exit 1 with `store.schema_unreadable` and the `newer than this build supports` message and SHALL NOT modify the database
+
+#### Scenario: Older binary reads a compatible newer schema
+- **GIVEN** a profile migrated by `v1.6.0` to a newer schema whose `min_read_version` `v1.5.0` still supports
+- **WHEN** `v1.5.0` opens that profile and attempts a write
+- **THEN** reads SHALL succeed, the write SHALL fail with `store.schema_too_new` naming both versions and exit 78, and the recorded schema version SHALL be unchanged
 
 ### Requirement: Running daemon handover
 After a successful swap the update SHALL ask a running gateway daemon of the same binary path to drain (finish in-flight turns up to `update.drain_timeout_secs`, default 120) and re-exec the new binary, reporting `daemon restarted on <version>`; when `--no-restart` is passed or the drain times out, the update SHALL keep outcome `success`, record follow-up `daemon_restart_pending` and print the command to restart it.

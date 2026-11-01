@@ -1,0 +1,4 @@
+<SES1>  <MSG2>  user  <TIME>
+  Split the «parser» into modules
+<SES1>  <MSG3>  assistant  <TIME>
+  Done: the «parser» now lives in parse/ with one module per stage.
