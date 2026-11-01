@@ -124,15 +124,21 @@ fn diag_shells() {
             "$__t = [Diagnostics.Stopwatch]::StartNew(); try {{ {body}; [Console]::WriteLine('{label} ok ' + $__t.ElapsedMilliseconds) }} catch {{ [Console]::WriteLine('{label} FAIL ' + $__t.ElapsedMilliseconds + ' ' + $_.Exception.GetType().Name + ': ' + $_.Exception.Message) }}; "
         )
     };
+    let home = fixture.home.to_str().unwrap().to_owned();
+    std::fs::write(
+        fixture.work.join("nested.ps1"),
+        "Get-Content data.txt | Measure-Object -Line | ForEach-Object { 'lines=' + $_.Lines }\n",
+    )
+    .unwrap();
     let mut probes = String::from("[Console]::WriteLine('start ' + [Environment]::CurrentDirectory + ' loc=' + $ExecutionContext.SessionState.Path.CurrentLocation); ");
-    probes += &line("import-mgmt", "Import-Module Microsoft.PowerShell.Management -ErrorAction Stop");
-    probes += &line("get-content-rel", "$null = Get-Content data.txt -ErrorAction Stop");
-    probes += &line("get-content-abs", &format!("$null = Get-Content -LiteralPath '{work}\\data.txt' -ErrorAction Stop"));
+    probes += &line("autoload-get-content", "$null = Get-Content -LiteralPath data.txt -ErrorAction Stop");
+    probes += &line("autoload-convert", "$null = 1 | ConvertTo-Json -ErrorAction Stop");
+    probes += &line("net-attr-home", &format!("[Console]::WriteLine([IO.File]::GetAttributes('{home}'))"));
+    probes += &line("net-list-home", &format!("[Console]::WriteLine(([IO.Directory]::GetFileSystemEntries('{home}', 'work')).Count)"));
     probes += &line("set-location", &format!("Set-Location -LiteralPath '{work}' -ErrorAction Stop"));
-    probes += &line("psdrive", &format!("$null = New-PSDrive -Name PMTW -PSProvider FileSystem -Root '{work}' -ErrorAction Stop; Set-Location PMTW:\\ -ErrorAction Stop"));
-    probes += &line("after-psdrive-rel", "$null = Get-Content data.txt -ErrorAction Stop");
-    probes += &line("after-psdrive-gci", "$null = Get-ChildItem -ErrorAction Stop");
-    probes += &line("native-cwd", "[Console]::WriteLine((cmd.exe /c cd))");
+    probes += &line("set-location-qualified", &format!("Set-Location -LiteralPath 'Microsoft.PowerShell.Core\\FileSystem::{work}' -ErrorAction Stop"));
+    probes += &line("nested-powershell", "[Console]::WriteLine((powershell.exe -NoProfile -ExecutionPolicy Bypass -File nested.ps1 2>&1 | Out-String))");
+    probes += &line("nested-pwsh", "[Console]::WriteLine((pwsh.exe -NoProfile -File nested.ps1 2>&1 | Out-String))");
     probes += "[Console]::WriteLine('end loc=' + $ExecutionContext.SessionState.Path.CurrentLocation.ProviderPath)";
     let system_modules = r"C:\Windows\system32\WindowsPowerShell\v1.0\Modules";
     let envs: [(&str, Option<&str>); 3] = [
