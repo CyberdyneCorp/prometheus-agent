@@ -12,10 +12,10 @@ use pmt_core::error::{Error, codes};
 use pmt_core::panic;
 use prometheus::output::print_error;
 use prometheus::{
-    Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, chat, config_cmd, fallback_cmd,
-    grants_cmd, logs_cmd, memory_cmd, model_cmd, profile_cmd, prompt_cmd, runtimes_cmd,
-    secrets_cmd, self_test_cmd, sessions_cmd, skills_cmd, startup, tools_cmd, trajectory_cmd,
-    update_cmd, usage_cmd, version,
+    Cli, Command, Context, approvals_cmd, auth_cmd, backup_cmd, chat, config_cmd, demo_cmd,
+    fallback_cmd, grants_cmd, logs_cmd, memory_cmd, model_cmd, profile_cmd, prompt_cmd,
+    runtimes_cmd, secrets_cmd, self_test_cmd, sessions_cmd, skills_cmd, startup, tools_cmd,
+    trajectory_cmd, update_cmd, usage_cmd, version,
 };
 
 fn main() -> ExitCode {
@@ -46,8 +46,12 @@ fn main() -> ExitCode {
         Err(err) => return failure(&err, cli.json),
     };
     // Commands that need the home report the resolution error themselves.
-    let home = pmt_config::home::resolve(cli.home.as_deref(), &launch);
-    let home = home.as_ref().ok();
+    // `demo` runs in a temporary home of its own and never touches the
+    // user's: it writes no log files and keeps no crash reports there.
+    let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
+        .ok()
+        .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
+    let home = home.as_ref();
     startup::install_logging(home, &launch);
     // `profile` is recorded once a command selects one (startup::bind_profile).
     let command_span = tracing::info_span!("command", profile = tracing::field::Empty);
@@ -85,6 +89,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Sessions { command }) => sessions_cmd::run(command, &ctx, ui(cli)),
         Some(Command::Logs(args)) => logs_cmd::run(args, &ctx),
         Some(Command::Trajectory { command }) => trajectory_cmd::run(command, &ctx),
+        Some(Command::Demo(args)) => demo_cmd::run(args, launch),
         Some(Command::Prompt { command }) => prompt_cmd::run(command, &ctx),
         Some(Command::Usage(args)) => usage_cmd::run(args, &ctx),
         Some(Command::Model { command }) => model_cmd::run(command.as_ref(), &ctx),

@@ -27,6 +27,7 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   prompt      Measure the system prompt and tool schemas a new session would send
+  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
@@ -5646,6 +5647,45 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus prompt help help
 ```
 
+## `prometheus demo`
+
+```text
+Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+
+Usage: prometheus demo [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --output <DIR>
+          Run in DIR, which must be empty or missing (default: a fresh temporary directory)
+
+      --keep
+          Keep the demo's home and repository afterwards
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus trajectory`
 
 ```text
@@ -7958,6 +7998,7 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   prompt      Measure the system prompt and tool schemas a new session would send
+  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
@@ -8931,6 +8972,14 @@ Commands:
 Bytes and estimated tokens per prompt layer and per toolset, built as a new session would build them (no model call, no credentials)
 
 Usage: prometheus help prompt size
+```
+
+## `prometheus help demo`
+
+```text
+Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+
+Usage: prometheus help demo
 ```
 
 ## `prometheus help trajectory`

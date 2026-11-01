@@ -15,6 +15,7 @@ pub mod cli;
 pub mod config_cmd;
 pub mod context;
 pub mod debug_cmd;
+pub mod demo_cmd;
 pub mod doctor_cmd;
 pub mod fallback_cmd;
 pub mod grants_cmd;
@@ -45,8 +46,9 @@ pub mod usage_cmd;
 pub mod version;
 
 pub use cli::{
-    ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, GrantsCommand,
-    LogsArgs, ProfileCommand, SecretsCommand, SessionsCommand, SkillsCommand, SnapshotsCommand,
-    ToolsCommand, ToolsetsCommand, TrajectoryCommand, UpdateArgs, UsageArgs, command,
+    ApprovalsCommand, AuthCommand, BackupCommand, Cli, Command, ConfigCommand, DemoArgs,
+    GrantsCommand, LogsArgs, ProfileCommand, SecretsCommand, SessionsCommand, SkillsCommand,
+    SnapshotsCommand, ToolsCommand, ToolsetsCommand, TrajectoryCommand, UpdateArgs, UsageArgs,
+    command,
 };
 pub use context::Context;

@@ -1,8 +1,10 @@
 # CI runs scripts/check and nothing else on Tier 1 (`--no-perf`: the budgets
 # only apply to the reference runner), so a green local `scripts/check`
 # predicts a green check job (spec: workspace-architecture,
-# Repository health gates; Supported targets and support tiers). Tier 2 targets
-# are build-only until the offline smoke suite lands in M1. The perf job runs
+# Repository health gates; Supported targets and support tiers). Every Tier 1
+# job then runs `prometheus demo` with networking disabled, and the Tier 2
+# targets build and pass the same offline smoke run (task 21.2;
+# scripts/ci/offline-demo). The perf job runs
 # `scripts/check --perf` on one fixed reference runner, where the regression
 # check compares with main's baseline (perf/README.md).
 #
@@ -99,6 +101,13 @@ jobs:
         # The budgets apply to the reference runner only; the perf job runs them.
         run: scripts/check --no-perf
 
+      # The offline demo end to end with networking disabled (spec:
+      # replay-and-evaluation, Offline smoke demo).
+      - name: Offline demo (networking disabled)
+        run: |
+          cargo build --locked -p prometheus
+          scripts/ci/offline-demo "target/$CARGO_BUILD_TARGET/debug/prometheus"
+
   build:
     name: build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
@@ -138,6 +147,23 @@ jobs:
       - name: cargo build
         run: cargo build --workspace --all-targets --all-features --locked --target "${{ matrix.target }}"
 
+      # The offline smoke run of a Tier 2 target (spec: workspace-architecture,
+      # Supported targets and support tiers): the demo's CLI tests, then
+      # `prometheus demo` with the binary's outbound traffic blocked. The
+      # Android binary runs in a Termux container in the android-smoke job.
+      - name: Offline smoke run
+        if: runner.os == 'Windows'
+        run: |
+          cargo test -p prometheus --test demo_cli --locked --target "${{ matrix.target }}"
+          scripts/ci/offline-demo "target/${{ matrix.target }}/debug/prometheus.exe"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: matrix.target == 'aarch64-linux-android'
+        with:
+          name: prometheus-aarch64-linux-android
+          path: target/aarch64-linux-android/debug/prometheus
+          if-no-files-found: error
+
       # Windows-only code with tests of its own: owner-only DACLs and
       # no-follow opens of private files (security-boundaries, Private file
       # modes). The full suite runs on the Unix check jobs.
@@ -164,6 +190,30 @@ jobs:
       - name: Windows update tests
         if: runner.os == 'Windows'
         run: cargo test -p pmt-update --locked --target "${{ matrix.target }}"
+
+  # The Android (Termux) build's offline smoke run: `prometheus demo` in the
+  # official Termux container image for aarch64, natively on an arm64
+  # runner, with `--network none`.
+  android-smoke:
+    name: offline smoke run (aarch64-linux-android, Termux)
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: prometheus-aarch64-linux-android
+          path: target/android
+
+      - name: prometheus demo in Termux, networking disabled
+        run: |
+          chmod 755 target/android/prometheus
+          # termux/termux-docker:aarch64
+          scripts/ci/offline-demo \
+            --termux termux/termux-docker@sha256:18e2c6a633642d0806afd7abaeb0e74b2b957c92f6f30021260e5ba997579f48 \
+            target/android/prometheus
 
   # install.sh in clean Linux containers against a signed fixture release
   # (spec: distribution-and-update, Installers): Debian verifies with

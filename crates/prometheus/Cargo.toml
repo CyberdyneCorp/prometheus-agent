@@ -54,6 +54,8 @@ rpassword.workspace = true
 rustyline.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# `demo` runs in a fresh temporary directory.
+tempfile.workspace = true
 toml.workspace = true
 # `logs --follow` polls and stops on Ctrl-C.
 tokio = { workspace = true, features = ["signal"] }

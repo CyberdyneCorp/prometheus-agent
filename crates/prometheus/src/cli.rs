@@ -149,6 +149,9 @@ pub enum Command {
         #[command(subcommand)]
         command: PromptCommand,
     },
+    /// Run the offline demo: the agent fixes a bug in a small ledger
+    /// repository with the scripted mock provider, in a temporary profile.
+    Demo(DemoArgs),
     /// Render the recorded trajectory of a session.
     Trajectory {
         /// The trajectory subcommand.
@@ -206,6 +209,20 @@ pub enum Command {
         #[command(subcommand)]
         command: RuntimesCommand,
     },
+}
+
+/// `prometheus demo` flags.
+#[derive(Debug, Clone, Args)]
+pub struct DemoArgs {
+    /// Directory to run in (created when missing; must be empty).
+    #[arg(long, value_name = "DIR")]
+    #[arg(
+        help = "Run in DIR, which must be empty or missing (default: a fresh temporary directory)"
+    )]
+    pub output: Option<PathBuf>,
+    /// Keep the directory afterwards.
+    #[arg(long, help = "Keep the demo's home and repository afterwards")]
+    pub keep: bool,
 }
 
 /// `prometheus runtimes` subcommands.

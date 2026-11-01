@@ -1,0 +1,4 @@
+credit 120.00 salary
+credit 40.25 refund
+debit 50.10 groceries
+debit 25.00 transport

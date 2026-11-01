@@ -168,6 +168,13 @@ fn run(home: &Path, snippet: &Snippet, guide: &Path) {
         cmd.env_remove(var);
     }
     common::isolate_user_home(&mut cmd, home);
+    // Commands that make temporary directories (`prometheus demo`) make
+    // them inside the test's home, never in the system's.
+    let tmp = home.join("tmp");
+    std::fs::create_dir_all(&tmp).unwrap();
+    for var in ["TMPDIR", "TMP", "TEMP"] {
+        cmd.env(var, &tmp);
+    }
     cmd.env("PROMETHEUS_HOME", home).args(&args);
     let out = common::run_cmd_with_stdin(&mut cmd, stdin.as_deref().unwrap_or(""));
     let output = format!("{}{}", common::stdout(&out), common::stderr(&out));

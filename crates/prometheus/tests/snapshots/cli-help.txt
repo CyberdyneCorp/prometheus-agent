@@ -20,6 +20,7 @@ Commands:
   logs        Show structured log records of a component (`list` names them)
   usage       Totals of model and metered tool calls from the usage ledger
   prompt      Measure the system prompt and tool schemas a new session would send
+  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
   trajectory  Render the recorded trajectory of a session
   model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
   fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)

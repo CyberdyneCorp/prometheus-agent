@@ -744,6 +744,12 @@ error_codes! {
     /// The pre-update backup could not be written.
     UPDATE_BACKUP_FAILED = ("update.backup_failed", Io,
         "The pre-update backup (`update.pre_update_backup`, `--backup`) could not be written, usually because the home volume is full; the update stopped before the swap (exit 73) and the installed binary is unchanged. Free space, or rerun with `--no-backup`.");
+    /// `prometheus demo --output` names a directory that is not empty.
+    DEMO_OUTPUT_NOT_EMPTY = ("demo.output_not_empty", Usage,
+        "`prometheus demo --output DIR` names a directory that is not empty; the demo only runs in a new or empty directory, so it never removes files it did not create.");
+    /// The demo could not write its directory.
+    DEMO_IO = ("demo.io", Io,
+        "`prometheus demo` could not create its directory, home, ledger repository or mock script.");
     /// A runtime name is not in the pinned runtime index.
     RUNTIME_UNKNOWN = ("runtime.unknown", Usage,
         "The name is not a runtime of this build's pinned runtime index; `prometheus runtimes list` shows the pinned names.");
