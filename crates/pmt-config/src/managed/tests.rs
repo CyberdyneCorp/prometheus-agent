@@ -60,3 +60,21 @@ fn managed_secrets_need_owner_only_permissions() {
     let err = Managed::load(dir.path(), Owner::Root).unwrap_err();
     assert!(err.message().contains("owned by root"), "{}", err.message());
 }
+
+/// The managed directory is the machine's `ProgramData` folder, whatever
+/// the user's environment says.
+#[cfg(windows)]
+#[test]
+fn the_windows_managed_dir_is_the_machine_program_data_folder() {
+    let dir = super::platform_dir();
+    assert!(dir.is_absolute(), "{}", dir.display());
+    assert_eq!(dir.file_name().unwrap(), "Prometheus");
+    let from_env = std::env::var_os("ProgramData").map(std::path::PathBuf::from);
+    if let Some(from_env) = from_env {
+        // On a stock machine both name the same folder.
+        assert_eq!(
+            dir.parent().unwrap().as_os_str().to_ascii_lowercase(),
+            from_env.as_os_str().to_ascii_lowercase()
+        );
+    }
+}

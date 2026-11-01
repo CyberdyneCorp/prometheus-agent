@@ -1,7 +1,7 @@
 //! The administrator-managed layer (spec: configuration-and-profiles,
 //! Managed configuration layer; Managed secrets and managed visibility):
 //! `managed.toml` in the machine-wide directory (`/etc/prometheus`, or
-//! `C:\ProgramData\Prometheus` on Windows) holds configuration values that
+//! `%ProgramData%\Prometheus` on Windows) holds configuration values that
 //! override every profile's own, validated with the same schema, plus a
 //! `locked = [...]` list of keys no writer may change; `managed-secrets.toml`
 //! beside it (mode 0600 or 0640, owned by root) holds secrets that take
@@ -31,14 +31,25 @@ pub const MANAGED_FILE: &str = "managed.toml";
 /// The managed secrets file.
 pub const MANAGED_SECRETS_FILE: &str = "managed-secrets.toml";
 
-/// The machine-wide managed directory of this platform.
+/// The machine-wide managed directory of this platform:
+/// `%ProgramData%\Prometheus`, with `%ProgramData%` read through the
+/// Known Folder API (the system's registered location, not the per-user
+/// environment variable a user could point elsewhere to escape the
+/// managed layer).
+#[cfg(windows)]
 #[must_use]
 pub fn platform_dir() -> PathBuf {
-    if cfg!(windows) {
-        PathBuf::from(r"C:\ProgramData\Prometheus")
-    } else {
-        PathBuf::from("/etc/prometheus")
-    }
+    known_folders::get_known_folder_path(known_folders::KnownFolder::ProgramData)
+        // The API answers on every supported Windows; this is its default.
+        .unwrap_or_else(|| PathBuf::from(r"C:\ProgramData"))
+        .join("Prometheus")
+}
+
+/// The machine-wide managed directory of this platform.
+#[cfg(not(windows))]
+#[must_use]
+pub fn platform_dir() -> PathBuf {
+    PathBuf::from("/etc/prometheus")
 }
 
 /// The loaded layer.
@@ -326,6 +337,7 @@ fn check_secrets_file(path: &Path, owner: Owner) -> Result<(), Error> {
 /// `%ProgramData%` is writable only by administrators by default; the
 /// file's own ACL is the administrator's responsibility.
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // the same signature as the unix check
 fn check_secrets_file(_path: &Path, _owner: Owner) -> Result<(), Error> {
     Ok(())
 }

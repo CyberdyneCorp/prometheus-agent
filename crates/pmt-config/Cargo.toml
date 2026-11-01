@@ -28,6 +28,7 @@ apple-native-keyring-store.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store.workspace = true
+known-folders.workspace = true
 
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))'.dependencies]
 dbus-secret-service-keyring-store.workspace = true

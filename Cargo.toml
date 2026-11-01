@@ -104,6 +104,9 @@ libc = "0.2"
 # Plain (non-`\\?\`) Windows paths for shells that mishandle verbatim ones.
 dunce = "1.0"
 windows-sys = "0.61"
+# The machine-wide ProgramData folder (Known Folder API) for the managed
+# configuration layer on Windows.
+known-folders = "1.4"
 # Full jitter of provider retry backoff.
 fastrand = "2.3"
 # OS randomness for sign-in secrets (PKCE verifier, OAuth state).
