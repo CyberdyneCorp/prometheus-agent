@@ -786,7 +786,7 @@ error_codes! {
     RPC_INVALID_REQUEST = ("rpc.invalid_request", InvalidInput,
         "A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`).");
     /// The method is not in the catalog (-32601).
-    RPC_UNKNOWN_METHOD = ("rpc.unknown_method", NotFound,
+    RPC_UNKNOWN_METHOD = ("rpc.unknown_method", Usage,
         "The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`.");
     /// Params name a field the method does not declare (-32602).
     RPC_UNKNOWN_FIELD = ("rpc.unknown_field", InvalidInput,

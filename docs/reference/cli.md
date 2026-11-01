@@ -10,36 +10,37 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
-  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
-  config      Read, change, validate and explain the profile's config.toml
-  secrets     Store, list and remove the profile's secrets (values never on the command line)
-  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants      List and revoke the profile's permanent capability grants and approvals
-  backup      Back up the whole home to a .tar.zst archive, or restore one
-  snapshots   Snapshot and restore the selected profile's critical state
-  profile     List, create, select, rename and delete profiles
-  sessions    List, search, export and manage the profile's sessions
-  logs        Show structured log records of a component (`list` names them)
-  usage       Totals of model and metered tool calls from the usage ledger
-  prompt      Measure the system prompt and tool schemas a new session would send
-  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory  Render the recorded trajectory of a session
-  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth        Add, list and remove provider API keys and subscription sign-ins
-  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets    List toolsets and show the tools a toolset resolves to
-  approvals   Check how the approval gate treats a command, without running it
-  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  daemon      Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
-  rpc         The daemon's client protocol: `rpc schema` prints the schema this binary speaks
-  runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help        Print this message or the help of the given subcommand(s)
+  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  config       Read, change, validate and explain the profile's config.toml
+  secrets      Store, list and remove the profile's secrets (values never on the command line)
+  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants       List and revoke the profile's permanent capability grants and approvals
+  backup       Back up the whole home to a .tar.zst archive, or restore one
+  snapshots    Snapshot and restore the selected profile's critical state
+  profile      List, create, select, rename and delete profiles
+  sessions     List, search, export and manage the profile's sessions
+  logs         Show structured log records of a component (`list` names them)
+  usage        Totals of model and metered tool calls from the usage ledger
+  prompt       Measure the system prompt and tool schemas a new session would send
+  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory   Render the recorded trajectory of a session
+  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth         Add, list and remove provider API keys and subscription sign-ins
+  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets     List toolsets and show the tools a toolset resolves to
+  approvals    Check how the approval gate treats a command, without running it
+  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -7671,6 +7672,8 @@ Usage: prometheus rpc [OPTIONS] <COMMAND>
 
 Commands:
   schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+  events  Stream the daemon's event frames as JSON lines until interrupted
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -7732,6 +7735,85 @@ Options:
           Print help
 ```
 
+## `prometheus rpc call`
+
+```text
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+
+Usage: prometheus rpc call [OPTIONS] <METHOD> [PARAMS]
+
+Arguments:
+  <METHOD>
+          The method, for example `session.list`
+
+  [PARAMS]
+          Its params as a JSON object (default `{}`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc events`
+
+```text
+Stream the daemon's event frames as JSON lines until interrupted
+
+Usage: prometheus rpc events [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <ID>
+          Attach to this session and stream its events too
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --since <SEQ>
+          With --session: first replay the kept events after this sequence number (0 replays every kept event)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus rpc help`
 
 ```text
@@ -7741,6 +7823,8 @@ Usage: prometheus rpc help [COMMAND]
 
 Commands:
   schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+  events  Stream the daemon's event frames as JSON lines until interrupted
   help    Print this message or the help of the given subcommand(s)
 ```
 
@@ -7752,12 +7836,122 @@ Print the client-protocol schema (methods, server requests and events, each with
 Usage: prometheus rpc help schema
 ```
 
+## `prometheus rpc help call`
+
+```text
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+
+Usage: prometheus rpc help call
+```
+
+## `prometheus rpc help events`
+
+```text
+Stream the daemon's event frames as JSON lines until interrupted
+
+Usage: prometheus rpc help events
+```
+
 ## `prometheus rpc help help`
 
 ```text
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus rpc help help
+```
+
+## `prometheus completions`
+
+```text
+Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+
+Usage: prometheus completions [OPTIONS] <SHELL>
+
+Arguments:
+  <SHELL>
+          The shell
+
+          Possible values:
+          - bash:       GNU bash (3.2 and later)
+          - zsh:        zsh
+          - fish:       fish
+          - powershell: `PowerShell`
+          - elvish:     elvish
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus __complete`
+
+```text
+The completion candidates for a command line (called by the scripts `completions` prints; reads local files only)
+
+Usage: prometheus __complete [OPTIONS] <SHELL> [-- <WORDS>...]
+
+Arguments:
+  <SHELL>
+          The shell asking
+
+          Possible values:
+          - bash:       GNU bash (3.2 and later)
+          - zsh:        zsh
+          - fish:       fish
+          - powershell: `PowerShell`
+          - elvish:     elvish
+
+  [WORDS]...
+          The command line before the cursor, binary name first
+
+Options:
+      --current <CURRENT>
+          The word under the cursor; without it, the last word
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
 ```
 
 ## `prometheus self-test`
@@ -8394,36 +8588,37 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
-  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
-  config      Read, change, validate and explain the profile's config.toml
-  secrets     Store, list and remove the profile's secrets (values never on the command line)
-  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants      List and revoke the profile's permanent capability grants and approvals
-  backup      Back up the whole home to a .tar.zst archive, or restore one
-  snapshots   Snapshot and restore the selected profile's critical state
-  profile     List, create, select, rename and delete profiles
-  sessions    List, search, export and manage the profile's sessions
-  logs        Show structured log records of a component (`list` names them)
-  usage       Totals of model and metered tool calls from the usage ledger
-  prompt      Measure the system prompt and tool schemas a new session would send
-  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory  Render the recorded trajectory of a session
-  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth        Add, list and remove provider API keys and subscription sign-ins
-  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets    List toolsets and show the tools a toolset resolves to
-  approvals   Check how the approval gate treats a command, without running it
-  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  daemon      Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
-  rpc         The daemon's client protocol: `rpc schema` prints the schema this binary speaks
-  runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help        Print this message or the help of the given subcommand(s)
+  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  config       Read, change, validate and explain the profile's config.toml
+  secrets      Store, list and remove the profile's secrets (values never on the command line)
+  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants       List and revoke the profile's permanent capability grants and approvals
+  backup       Back up the whole home to a .tar.zst archive, or restore one
+  snapshots    Snapshot and restore the selected profile's critical state
+  profile      List, create, select, rename and delete profiles
+  sessions     List, search, export and manage the profile's sessions
+  logs         Show structured log records of a component (`list` names them)
+  usage        Totals of model and metered tool calls from the usage ledger
+  prompt       Measure the system prompt and tool schemas a new session would send
+  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory   Render the recorded trajectory of a session
+  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth         Add, list and remove provider API keys and subscription sign-ins
+  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets     List toolsets and show the tools a toolset resolves to
+  approvals    Check how the approval gate treats a command, without running it
+  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus help chat`
@@ -9764,6 +9959,8 @@ Usage: prometheus help rpc [COMMAND]
 
 Commands:
   schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+  events  Stream the daemon's event frames as JSON lines until interrupted
 ```
 
 ## `prometheus help rpc schema`
@@ -9772,6 +9969,38 @@ Commands:
 Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
 
 Usage: prometheus help rpc schema
+```
+
+## `prometheus help rpc call`
+
+```text
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+
+Usage: prometheus help rpc call
+```
+
+## `prometheus help rpc events`
+
+```text
+Stream the daemon's event frames as JSON lines until interrupted
+
+Usage: prometheus help rpc events
+```
+
+## `prometheus help completions`
+
+```text
+Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+
+Usage: prometheus help completions
+```
+
+## `prometheus help __complete`
+
+```text
+The completion candidates for a command line (called by the scripts `completions` prints; reads local files only)
+
+Usage: prometheus help __complete
 ```
 
 ## `prometheus help self-test`

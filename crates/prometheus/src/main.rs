@@ -45,6 +45,17 @@ fn main() -> ExitCode {
         Ok(launch) => launch,
         Err(err) => return failure(&err, cli.json),
     };
+    // Completion runs on every TAB: it reads local files only, before
+    // anything (logging, the home layout) could write one.
+    if let Some(Command::Complete {
+        shell,
+        current,
+        words,
+    }) = &cli.command
+    {
+        let done = prometheus::completions::complete(*shell, current.as_deref(), words, &launch);
+        return ExitCode::from(done.unwrap_or(0));
+    }
     // Commands that need the home report the resolution error themselves.
     // `demo` runs in a temporary home of its own and never touches the
     // user's: it writes no log files and keeps no crash reports there.
@@ -103,8 +114,10 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
         #[cfg(not(feature = "gateway"))]
         Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
-        Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command),
+        Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
+        Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
+        Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
         #[cfg(not(feature = "tui"))]

@@ -1428,3 +1428,8 @@ capabilities = [
 "Undeclared method" = ["crates/pmt-gateway/tests/protocol.rs::undeclared_and_unserved_methods_have_their_codes"]
 "Missing parameter" = ["crates/pmt-gateway/tests/protocol.rs::params_are_validated_before_any_handler_runs"]
 "Older minor client is accepted" = ["crates/pmt-gateway/tests/protocol.rs::an_older_minor_client_attaches_and_gets_nothing_newer"]
+
+# Group 22: tasks 22.7-22.12.
+
+[workspace-architecture."RPC debug client (upgrade)"]
+"Calling an unknown method" = ["crates/prometheus/tests/rpc_cli.rs::an_unknown_method_prints_the_32601_error_and_exits_2"]

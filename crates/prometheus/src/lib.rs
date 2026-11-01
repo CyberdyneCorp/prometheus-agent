@@ -12,8 +12,10 @@ pub mod backup_cmd;
 pub mod build_info;
 pub mod chat;
 pub mod cli;
+pub mod completions;
 pub mod config_cmd;
 pub mod context;
+pub mod daemon_client;
 #[cfg(feature = "gateway")]
 pub mod daemon_cmd;
 pub mod debug_cmd;

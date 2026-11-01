@@ -57,6 +57,10 @@ pub(crate) fn all() -> Vec<Artifact> {
     ]
     .into_iter()
     .chain(rpc_artifacts(pmt_rpc::Catalog::builtin()))
+    .chain([Artifact {
+        path: "docs/reference/rpc.md",
+        contents: pmt_rpc::reference::render(&pmt_rpc::Catalog::builtin().schema(), HEADER),
+    }])
     .collect()
 }
 

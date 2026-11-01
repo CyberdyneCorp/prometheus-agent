@@ -260,7 +260,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `runtime.io` | `io` | 74 | A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
-| `rpc.unknown_method` | `not_found` | 66 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |
+| `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |
 | `rpc.unknown_field` | `invalid_input` | 65 | The params name a field the method's contract does not declare; `data.path` is its JSON pointer (JSON-RPC `-32602`). |
 | `rpc.invalid_params` | `invalid_input` | 65 | The params are not an object, miss a required field or have a value of the wrong type; `data.path` points at it (JSON-RPC `-32602`). |
 | `rpc.handshake_required` | `protocol` | 76 | The first request on a connection must be `rpc.hello`. |

@@ -221,6 +221,27 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::rpc_cmd::RpcCommand,
     },
+    /// Print a shell completion script (load it from your shell's startup
+    /// file, for example `source <(prometheus completions zsh)`).
+    Completions {
+        /// The shell.
+        #[arg(value_enum)]
+        shell: crate::completions::Shell,
+    },
+    /// The completion candidates for a command line (called by the scripts
+    /// `completions` prints; reads local files only).
+    #[command(name = "__complete", hide = true)]
+    Complete {
+        /// The shell asking.
+        #[arg(value_enum)]
+        shell: crate::completions::Shell,
+        /// The word under the cursor; without it, the last word.
+        #[arg(long, allow_hyphen_values = true)]
+        current: Option<String>,
+        /// The command line before the cursor, binary name first.
+        #[arg(last = true, allow_hyphen_values = true)]
+        words: Vec<String>,
+    },
     /// Check this build against the home before an update installs it
     /// (run by `prometheus update` on the staged binary).
     #[command(hide = true)]

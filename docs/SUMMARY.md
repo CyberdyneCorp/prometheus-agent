@@ -24,6 +24,7 @@
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)
+- [The daemon and its client protocol](guide/client-protocol.md)
 
 # Reference
 
@@ -31,6 +32,7 @@
 - [Daemon configuration](reference/daemon-configuration.md)
 - [CLI](reference/cli.md)
 - [Error codes](reference/error-codes.md)
+- [Client protocol](reference/rpc.md)
 - [Tools](reference/tools.md)
 - [System prompt layers](reference/system-prompt.md)
 
