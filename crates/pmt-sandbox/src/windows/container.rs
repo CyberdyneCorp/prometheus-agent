@@ -125,6 +125,16 @@ impl AppContainer {
     }
 }
 
+impl AppContainer {
+    /// TEMPORARY diagnostics: list access on this directory only, without
+    /// re-propagating inheritance below it.
+    pub(super) fn grant_here(&mut self, path: &Path) -> Result<(), String> {
+        self.touched.push(path.to_path_buf());
+        acl::grant_here(path, self.sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE)
+            .map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))
+    }
+}
+
 impl Drop for AppContainer {
     fn drop(&mut self) {
         for path in &self.touched {

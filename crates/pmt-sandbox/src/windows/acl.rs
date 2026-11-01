@@ -29,7 +29,7 @@ use windows_sys::Win32::Security::Authorization::{
 };
 use windows_sys::Win32::Security::{
     ACCESS_ALLOWED_ACE, ACE_FLAGS, ACE_HEADER, ACL, ACL_REVISION, AddAccessAllowedAceEx, AddAce,
-    CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, EqualSid, GetAce, GetFileSecurityW,
+    CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, NO_INHERITANCE, EqualSid, GetAce, GetFileSecurityW,
     GetLengthSid, GetSecurityDescriptorControl, GetSecurityDescriptorDacl, INHERITED_ACE,
     InitializeAcl, InitializeSecurityDescriptor, OBJECT_INHERIT_ACE, OBJECT_SECURITY_INFORMATION,
     PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_AUTO_INHERITED,
@@ -185,6 +185,7 @@ fn entries(old: *const ACL, sid: PSID, keep_inherited: bool) -> Result<Kept, u32
             kept.dropped = true;
             kept.inheritable |= flags & (CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE) != 0;
         } else if keep_inherited || flags & INHERITED_ACE == 0 {
+            kept.inherited |= flags & INHERITED_ACE != 0;
             kept.entries
                 .push((ace.cast_const(), u32::from(header.AceSize)));
         }
@@ -223,31 +224,56 @@ fn rebuild(
     if unsafe { InitializeAcl(acl, total, revision) } == 0 {
         return Err(last_error());
     }
+    // Explicit entries come before inherited ones (canonical order), so
+    // the grant goes right before the first inherited entry.
+    let mut grant = grant;
     for (ace, len) in entries {
+        // SAFETY: every kept entry starts with an ACE_HEADER.
+        let inherited = u32::from(unsafe { (*ace.cast::<ACE_HEADER>()).AceFlags }) & INHERITED_ACE != 0;
+        if inherited {
+            add_grant(acl, revision, grant.take(), sid)?;
+        }
         // SAFETY: `ace` points to `len` bytes of a valid ACE inside `old`.
         if unsafe { AddAce(acl, revision, APPEND, *ace, *len) } == 0 {
             return Err(last_error());
         }
     }
+    add_grant(acl, revision, grant, sid)?;
+    Ok(buffer)
+}
+
+fn add_grant(acl: *mut ACL, revision: u32, grant: Option<(u32, ACE_FLAGS)>, sid: PSID) -> Result<(), u32> {
     if let Some((mask, inheritance)) = grant {
-        // SAFETY: room for this ACE was reserved in `total`.
+        // SAFETY: room for this ACE was reserved in the buffer.
         if unsafe { AddAccessAllowedAceEx(acl, revision, inheritance, mask, sid) } == 0 {
             return Err(last_error());
         }
     }
-    Ok(buffer)
+    Ok(())
+}
+
+/// Gives `sid` `mask` on `path` alone (no inheritance), rewriting only this
+/// object's DACL: nothing below it is visited.
+pub(super) fn grant_here(path: &Path, sid: PSID, mask: u32) -> Result<(), u32> {
+    rewrite(path, sid, Some((mask, NO_INHERITANCE))).map(|_| ())
 }
 
 /// Drops `sid`'s entries from `path`'s DACL in place; returns whether one of
 /// them was inheritable (so the children may hold inherited copies).
 fn strip(path: &Path, sid: PSID) -> Result<bool, u32> {
+    rewrite(path, sid, None)
+}
+
+/// Rewrites `path`'s DACL in place without `sid`'s entries, plus `grant`;
+/// returns whether a dropped entry was inheritable.
+fn rewrite(path: &Path, sid: PSID, grant: Option<(u32, ACE_FLAGS)>) -> Result<bool, u32> {
     let wide_path = wide(path.as_os_str());
     let descriptor = FileDescriptor::of(&wide_path)?;
     let kept = entries(descriptor.dacl, sid, true)?;
-    if !kept.dropped {
+    if !kept.dropped && grant.is_none() {
         return Ok(false);
     }
-    let mut acl = rebuild(descriptor.dacl, &kept.entries, sid, None)?;
+    let mut acl = rebuild(descriptor.dacl, &kept.entries, sid, grant)?;
     let mut absolute = SECURITY_DESCRIPTOR::default();
     let sd: PSECURITY_DESCRIPTOR = (&raw mut absolute).cast();
     let control_bits = SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED;

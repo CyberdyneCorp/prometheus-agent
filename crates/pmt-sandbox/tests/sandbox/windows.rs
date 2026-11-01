@@ -109,3 +109,89 @@ fn acl_entries_are_revoked_when_the_sandbox_ends() {
 fn entries(listing: &str) -> String {
     listing.replace("(I)", "")
 }
+
+/// TEMPORARY diagnostics: which shells start under the sandbox, per launcher
+/// variant. Run with --nocapture --ignored.
+#[test]
+#[ignore = "diagnostics"]
+fn diag_shells() {
+    let fixture = Fixture::new();
+    let sandbox = confine(fixture.policy(&[]));
+    let work = fixture.work.to_str().unwrap().to_owned();
+    let ps = format!(
+        "[Console]::WriteLine('start ' + [Environment]::CurrentDirectory); \
+         try {{ Set-Location -LiteralPath '{work}'; [Console]::WriteLine('cd ok') }} catch {{ [Console]::WriteLine('cd: ' + $_.Exception.ToString()) }}; \
+         try {{ Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop; [Console]::WriteLine('utility ok') }} catch {{ [Console]::WriteLine('utility: ' + $_.Exception.ToString()) }}; \
+         try {{ Write-Output 'write-output ok' }} catch {{ [Console]::WriteLine('wo: ' + $_.Exception.ToString()) }}; \
+         [Console]::WriteLine('PSModulePath=' + $env:PSModulePath)"
+    );
+    let shells: Vec<(&str, Vec<String>)> = vec![
+        ("cmd", vec!["cmd.exe".into(), "/C".into(), "echo hi && cd".into()]),
+        (
+            "usr-bash",
+            vec![
+                r"C:\Program Files\Git\usr\bin\bash.exe".into(),
+                "--noprofile".into(),
+                "--norc".into(),
+                "-c".into(),
+                "echo hi; pwd -W".into(),
+            ],
+        ),
+        (
+            "bin-bash",
+            vec![
+                r"C:\Program Files\Git\bin\bash.exe".into(),
+                "--noprofile".into(),
+                "--norc".into(),
+                "-c".into(),
+                "echo hi; pwd -W".into(),
+            ],
+        ),
+        (
+            "powershell",
+            vec![
+                "powershell.exe".into(),
+                "-NoProfile".into(),
+                "-NonInteractive".into(),
+                "-Command".into(),
+                ps.clone(),
+            ],
+        ),
+        (
+            "pwsh",
+            vec![
+                "pwsh.exe".into(),
+                "-NoProfile".into(),
+                "-NonInteractive".into(),
+                "-Command".into(),
+                ps.clone(),
+            ],
+        ),
+    ];
+    let variants: [&[&str]; 5] = [
+        &[],
+        &["PMT_DIAG_NOUI"],
+        &["PMT_DIAG_NOJOB"],
+        &["PMT_DIAG_WINSTA"],
+        &["PMT_DIAG_WINSTA", "PMT_DIAG_NOUI"],
+    ];
+    for (name, argv) in &shells {
+        for variant in variants {
+            let mut command = sandbox.command(&argv[0]).unwrap();
+            command.current_dir(&fixture.work).args(&argv[1..]);
+            for key in variant {
+                command.env(key, "1");
+            }
+            let started = std::time::Instant::now();
+            let output = command.output().unwrap();
+            println!(
+                "=== {name} {variant:?} ancestors={:?} -> {:?} in {:?}\nstdout: {}\nstderr: {}",
+                std::env::var_os("PMT_DIAG_ANCESTORS").is_some(),
+                output.status,
+                started.elapsed(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+}

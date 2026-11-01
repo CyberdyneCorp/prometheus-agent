@@ -1,0 +1,31 @@
+# TEMPORARY: Windows AppContainer shell diagnostics (task 21.2).
+name: win-diag
+on:
+  push:
+    branches: [m1-core-agent]
+    paths: [".github/workflows/win-diag.yml", "crates/pmt-sandbox/**", "crates/pmt-tools/**"]
+jobs:
+  diag:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          build-warnings: ""
+          cache-key: win-diag
+      - name: context
+        shell: pwsh
+        run: |
+          whoami /all
+          query session; $true
+          icacls D:\ ; icacls D:\a ; icacls "C:\Program Files\Git\usr\bin"; icacls C:\ ; $true
+          Get-Command bash, pwsh, powershell | Format-List Source
+          $env:PSModulePath
+      - name: diag
+        run: |
+          cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
+          PMT_DIAG_ANCESTORS=1 cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells

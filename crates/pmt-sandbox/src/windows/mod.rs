@@ -101,6 +101,16 @@ pub(crate) fn prepare(
             }
         }
     }
+    if std::env::var_os("PMT_DIAG_ANCESTORS").is_some() {
+        let roots: Vec<PathBuf> = policy.read_roots().iter().chain(policy.write_roots().iter()).map(|r| r.to_path_buf()).collect();
+        for root in roots {
+            for ancestor in root.ancestors().skip(1) {
+                if ancestor.exists() {
+                    container.grant_here(ancestor).map_err(setup_error)?;
+                }
+            }
+        }
+    }
     Ok(Prepared {
         container,
         launcher,
