@@ -53,7 +53,7 @@ pub async fn run(
     let local = listener
         .local_addr()
         .map_err(|e| Error::new(&codes::NET_LISTEN, format!("daemon rpc: {e}")))?;
-    let address = control::address(home);
+    let address = control::address(home)?;
     let control = control::Listener::bind(&address)?;
     let endpoint = Endpoint {
         instance_id: server.instance_id().to_owned(),

@@ -1,8 +1,10 @@
 //! The daemon's end of the control channel (spec: workspace-architecture,
 //! Daemon discovery file and local control channel): a Unix domain socket
-//! `<home>/run/control.sock` (mode 0600 in the 0700 `run/` directory, and a
-//! peer whose uid differs from the daemon's is refused), or on Windows a
-//! named pipe that rejects remote clients. One JSON line in, one out.
+//! `<home>/run/control.sock` (mode 0600 in the 0700 `run/` directory, or in
+//! an owner-only directory under `/tmp` when the home's path is too long
+//! for a socket; a peer whose uid differs from the daemon's is refused), or
+//! on Windows a named pipe that rejects remote clients. One JSON line in,
+//! one out.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -13,23 +15,76 @@ use tokio::io::{AsyncBufReadExt as _, AsyncRead, AsyncWrite, AsyncWriteExt as _,
 
 use crate::server::Server;
 
-/// The control channel's address for `home`.
-#[must_use]
-pub fn address(home: &Path) -> String {
+/// The longest Unix socket path every supported OS accepts (macOS allows
+/// 103 bytes, Linux 107).
+#[cfg(unix)]
+const MAX_SOCKET_PATH: usize = 100;
+
+/// A short name for `home` (pipe names, relocated sockets).
+fn home_hash(home: &Path) -> String {
+    use sha2::{Digest as _, Sha256};
+    let hash = Sha256::digest(home.to_string_lossy().as_bytes());
+    crate::tickets::hex(&hash[..8])
+}
+
+/// The control channel's address for `home`: `<home>/run/control.sock`,
+/// or, when that path is too long for a Unix socket, `<hash>.sock` in the
+/// owner-only directory `/tmp/prometheus-<uid>`.
+///
+/// # Errors
+///
+/// `home.io` when the relocated socket's directory cannot be made private.
+pub fn address(home: &Path) -> Result<String, Error> {
     #[cfg(unix)]
     {
-        pmt_core::runtime::run_dir(home)
-            .join("control.sock")
-            .to_string_lossy()
-            .into_owned()
+        address_under(home, Path::new("/tmp"))
     }
     #[cfg(windows)]
     {
-        use sha2::{Digest as _, Sha256};
-        let hash = Sha256::digest(home.to_string_lossy().as_bytes());
-        let short = crate::tickets::hex(&hash[..8]);
-        format!(r"\\.\pipe\prometheus-{short}")
+        Ok(format!(r"\\.\pipe\prometheus-{}", home_hash(home)))
     }
+}
+
+/// [`address`], relocating long paths under `short_root`.
+#[cfg(unix)]
+fn address_under(home: &Path, short_root: &Path) -> Result<String, Error> {
+    let run = pmt_core::runtime::run_dir(home);
+    let path = run.join("control.sock");
+    if path.as_os_str().len() <= MAX_SOCKET_PATH {
+        return Ok(path.to_string_lossy().into_owned());
+    }
+    let dir = private_socket_dir(&run, short_root)?;
+    Ok(dir
+        .join(format!("{}.sock", home_hash(home)))
+        .to_string_lossy()
+        .into_owned())
+}
+
+/// `<short_root>/prometheus-<uid>`, created 0700; refused unless it is a real
+/// directory owned by the owner of `run` (the home's `run/`) with no
+/// access for anyone else.
+#[cfg(unix)]
+fn private_socket_dir(run: &Path, short_root: &Path) -> Result<std::path::PathBuf, Error> {
+    use std::os::unix::fs::{DirBuilderExt as _, MetadataExt as _};
+    let io = |path: &Path, e: &std::io::Error| Error::io(&codes::HOME_IO, path, e);
+    std::fs::create_dir_all(run).map_err(|e| io(run, &e))?;
+    let uid = std::fs::metadata(run).map_err(|e| io(run, &e))?.uid();
+    let dir = short_root.join(format!("prometheus-{uid}"));
+    match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
+        Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => return Err(io(&dir, &e)),
+        _ => {}
+    }
+    let meta = std::fs::symlink_metadata(&dir).map_err(|e| io(&dir, &e))?;
+    if !meta.is_dir() || meta.uid() != uid || meta.mode() & 0o077 != 0 {
+        return Err(Error::new(
+            &codes::HOME_IO,
+            format!(
+                "{} is not a private directory of this user; remove it and retry",
+                dir.display()
+            ),
+        ));
+    }
+    Ok(dir)
 }
 
 /// Answers one request.
@@ -187,4 +242,33 @@ fn pipe_options(first: bool) -> tokio::net::windows::named_pipe::ServerOptions {
         .first_pipe_instance(first)
         .reject_remote_clients(true);
     options
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::address_under;
+
+    #[test]
+    fn a_home_too_deep_for_a_socket_gets_a_private_short_one() {
+        let base = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let short = address_under(base.path(), root.path()).unwrap();
+        assert!(short.ends_with("/run/control.sock"), "{short}");
+        let deep = base.path().join("d".repeat(120));
+        let relocated = address_under(&deep, root.path()).unwrap();
+        let expected_dir = root.path().join("prometheus-");
+        assert!(
+            relocated.starts_with(expected_dir.to_str().unwrap()),
+            "{relocated}"
+        );
+        assert_eq!(
+            address_under(&deep, root.path()).unwrap(),
+            relocated,
+            "stable per home"
+        );
+        let dir = std::path::Path::new(&relocated).parent().unwrap();
+        let mode =
+            std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(dir).unwrap().permissions());
+        assert_eq!(mode & 0o077, 0);
+    }
 }
