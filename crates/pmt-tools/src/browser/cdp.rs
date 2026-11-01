@@ -164,7 +164,15 @@ impl Cdp {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(id, reply);
-        if self.outgoing.send(message.to_string()).is_err() {
+        // The reader fails every pending call when the connection ends; a
+        // call registered after that would wait out its whole bound, so a
+        // closed connection is checked once the call is registered (the
+        // reader clears `alive` before it drains the pending calls).
+        if !self.is_alive() || self.outgoing.send(message.to_string()).is_err() {
+            self.pending
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&id);
             return Err("the browser connection is closed".to_owned());
         }
         match tokio::time::timeout(limit, answer).await {
@@ -232,5 +240,37 @@ impl Reader {
         for (_, reply) in waiting {
             let _ = reply.send(Err("the browser connection closed".to_owned()));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use super::*;
+
+    /// A DevTools endpoint that accepts one connection and closes it.
+    async fn closing_endpoint() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let _ = socket.close(None).await;
+        });
+        format!("ws://{address}/devtools/browser/test")
+    }
+
+    #[tokio::test]
+    async fn a_call_after_the_connection_closed_fails_at_once() {
+        let cdp = Cdp::connect(&closing_endpoint().await).await.unwrap();
+        cdp.closed().await;
+        let started = Instant::now();
+        let result = cdp
+            .call_within("Target.getTargets", json!({}), None, Duration::from_secs(20))
+            .await;
+        assert_eq!(result, Err("the browser connection is closed".to_owned()));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(cdp.pending.lock().unwrap().is_empty());
     }
 }
