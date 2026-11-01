@@ -33,7 +33,8 @@
 //! `deps-policy.toml`'s minimum age.
 //!
 //! `cargo xtask scenarios` checks `scenario-index.toml`: every scenario of
-//! the milestone's requirements maps to existing test functions.
+//! each complete milestone's requirements, and every indexed scenario of a
+//! milestone still in progress, maps to existing test functions.
 //!
 //! `cargo xtask release <step>` runs the release steps around cargo-dist:
 //! SBOMs, the signed manifest and channel index, rendered installers,
@@ -101,7 +102,7 @@ enum Command {
         #[arg(long)]
         base: String,
     },
-    /// Check that every scenario of the milestone maps to tests
+    /// Check that the indexed milestones' scenarios map to tests
     /// (`scenario-index.toml`).
     Scenarios,
     /// Release steps run by the Release workflow around cargo-dist.

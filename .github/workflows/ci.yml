@@ -14,8 +14,8 @@ name: CI
 
 on:
   workflow_dispatch:
+  # Every base branch: stacked milestone PRs target each other, not main.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 

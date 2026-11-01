@@ -3,14 +3,23 @@
 //!
 //! ```toml
 //! specs = "openspec/changes/<change>/specs"
-//! milestone = "M1"
+//!
+//! [milestones.M1]
 //! capabilities = ["cli"]
+//!
+//! [milestones.M2]
+//! partial = true
+//! capabilities = ["cli", "tui"]
 //!
 //! [cli."Top-level command tree"]
 //! "Unknown subcommand" = ["crates/prometheus/tests/chat_cli.rs::a_mistyped_subcommand_exits_2_with_a_suggestion"]
 //! "Default subcommand" = { tests = ["<file>::<fn>"], note = "why these tests prove it" }
-//! "Later scenario" = { deferred = "M2: needs the daemon (task 22.1)" }
+//! "Later scenario" = { deferred = "M3: needs the dashboard (task 61.1)" }
 //! ```
+//!
+//! A milestone marked `partial` is still being implemented: its scenarios
+//! are indexed as their tasks land, so an unindexed one is pending rather
+//! than a failure, while every entry it has is checked like any other.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -26,15 +35,24 @@ pub(crate) enum Entry {
     Deferred(String),
 }
 
+/// One milestone whose scenarios are indexed.
+#[derive(Debug)]
+pub(crate) struct Milestone {
+    /// Its name, as the specs' `**Milestone:**` lines spell it.
+    pub name: String,
+    /// The capabilities covered.
+    pub capabilities: Vec<String>,
+    /// Unindexed scenarios are pending, not failures.
+    pub partial: bool,
+}
+
 /// The parsed index.
 #[derive(Debug)]
 pub(crate) struct Index {
     /// The specs directory, relative to the repository root.
     pub specs: String,
-    /// The milestone whose scenarios are indexed.
-    pub milestone: String,
-    /// The capabilities covered.
-    pub capabilities: Vec<String>,
+    /// The milestones whose scenarios are indexed, in name order.
+    pub milestones: Vec<Milestone>,
     /// Entries by scenario key (`capability › requirement › scenario`).
     pub entries: BTreeMap<String, Entry>,
 }
@@ -48,10 +66,12 @@ impl Index {
     pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let mut table: Table = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
         let specs = take_string(&mut table, "specs")?;
-        let milestone = take_string(&mut table, "milestone")?;
-        let capabilities = match table.remove("capabilities") {
-            Some(Value::Array(items)) => items.iter().map(string).collect::<Result<_, _>>()?,
-            _ => return Err("`capabilities` must be an array of names".to_owned()),
+        let milestones = match table.remove("milestones") {
+            Some(Value::Table(milestones)) => milestones
+                .iter()
+                .map(|(name, value)| milestone(name, value))
+                .collect::<Result<Vec<_>, _>>()?,
+            _ => return Err("`milestones` must be a table of milestones".to_owned()),
         };
         let mut entries = BTreeMap::new();
         for (capability, requirements) in table {
@@ -64,8 +84,7 @@ impl Index {
         }
         Ok(Self {
             specs,
-            milestone,
-            capabilities,
+            milestones,
             entries,
         })
     }
@@ -80,6 +99,30 @@ impl Index {
             })
             .collect()
     }
+}
+
+fn milestone(name: &str, value: &Value) -> Result<Milestone, String> {
+    let table = as_table(value, name)?;
+    let capabilities = match table.get("capabilities") {
+        Some(Value::Array(items)) => items.iter().map(string).collect::<Result<_, _>>()?,
+        _ => return Err(format!("`milestones.{name}.capabilities` must be an array")),
+    };
+    let partial = match table.get("partial") {
+        None => false,
+        Some(Value::Boolean(partial)) => *partial,
+        Some(_) => return Err(format!("`milestones.{name}.partial` must be a boolean")),
+    };
+    if let Some(unknown) = table
+        .keys()
+        .find(|key| !["capabilities", "partial"].contains(&key.as_str()))
+    {
+        return Err(format!("`milestones.{name}` has unknown key `{unknown}`"));
+    }
+    Ok(Milestone {
+        name: name.to_owned(),
+        capabilities,
+        partial,
+    })
 }
 
 fn entry(key: &str, value: &Value) -> Result<Entry, String> {

@@ -1,15 +1,17 @@
-# The scenario-to-test index (task 21.3): every scenario of the M1
-# requirements of the capabilities below, and the tests that prove it.
+# The scenario-to-test index (task 21.3): the scenarios of each milestone's
+# requirements, for its capabilities below, and the tests that prove them.
 # `cargo xtask scenarios` (run by scripts/check, whose test suite runs every
-# named test) fails when a scenario has no entry, an entry names a scenario
-# the specs no longer have, or a named test does not exist.
+# named test) fails when a scenario of a complete (not `partial`) milestone
+# has no entry, an entry names a scenario the specs no longer have, or a
+# named test does not exist.
 #
 # Keys: [<capability>."<requirement>"] "<scenario>" = ["<file>::<test fn>", ...]
 # A `note` says how the tests prove a scenario when that is not obvious; a
 # `deferred` entry names the later-milestone component a scenario needs.
 
 specs = "openspec/changes/bootstrap-prometheus-agent/specs"
-milestone = "M1"
+
+[milestones.M1]
 capabilities = [
     "workspace-architecture",
     "configuration-and-profiles",
@@ -29,6 +31,48 @@ capabilities = [
     # Named by tasks 12.1, 12.2 and 21.1-21.2 though task 21.3 lists the
     # fifteen above; its M1 scenarios are indexed too.
     "replay-and-evaluation",
+]
+
+# M2 is being implemented (task groups 22-60): its scenarios are indexed as
+# their tasks land; unindexed ones are pending, indexed ones are checked.
+[milestones.M2]
+partial = true
+capabilities = [
+    "agent-interop",
+    "agent-turn-loop",
+    "api-server",
+    "cli",
+    "configuration-and-profiles",
+    "connectors",
+    "context-compression",
+    "distribution-and-update",
+    "execution-environments",
+    "git-worktrees",
+    "hermes-migration",
+    "i18n",
+    "local-models",
+    "lsp-diagnostics",
+    "memory",
+    "messaging-gateway",
+    "mixture-of-agents",
+    "model-providers",
+    "observability",
+    "platform-adapters",
+    "plugin-system",
+    "projects",
+    "python-bridge",
+    "replay-and-evaluation",
+    "scheduled-jobs",
+    "security-boundaries",
+    "session-automation",
+    "session-storage",
+    "skills",
+    "subagent-delegation",
+    "tool-system",
+    "tui",
+    "voice-mode",
+    "web-and-media-tools",
+    "workspace-architecture",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]

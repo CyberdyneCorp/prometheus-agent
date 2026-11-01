@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use super::index::Index;
-use super::{check, spec};
+use super::{check, collect, spec};
 
 const SPEC: &str = "\
 # demo
@@ -37,7 +37,12 @@ fn greets() {}
 fn helper() {}
 ";
 
-const HEADER: &str = "specs = \"specs\"\nmilestone = \"M1\"\ncapabilities = [\"demo\"]\n\n";
+const HEADER: &str = "specs = \"specs\"\n[milestones.M1]\ncapabilities = [\"demo\"]\n\n";
+
+/// M1 complete, M2 still being implemented.
+const PARTIAL_HEADER: &str = "specs = \"specs\"\n\
+    [milestones.M1]\ncapabilities = [\"demo\"]\n\
+    [milestones.M2]\npartial = true\ncapabilities = [\"demo\"]\n\n";
 
 fn repo(name: &str) -> PathBuf {
     let root = crate::repo_root()
@@ -51,13 +56,12 @@ fn repo(name: &str) -> PathBuf {
 }
 
 fn problems(root: &Path, entries: &str) -> Vec<String> {
-    let index = Index::parse(&format!("{HEADER}{entries}")).unwrap();
-    let scenarios = spec::collect(
-        &root.join(&index.specs),
-        &index.capabilities,
-        &index.milestone,
-    )
-    .unwrap();
+    problems_with(HEADER, root, entries)
+}
+
+fn problems_with(header: &str, root: &Path, entries: &str) -> Vec<String> {
+    let index = Index::parse(&format!("{header}{entries}")).unwrap();
+    let scenarios = collect(root, &index).unwrap();
     check(root, &index, &scenarios)
 }
 
@@ -109,4 +113,28 @@ fn every_way_an_index_drifts_is_reported() {
         );
     }
     assert_eq!(found.len(), expected.len(), "{found:#?}");
+}
+
+#[test]
+fn a_partial_milestone_checks_its_entries_but_not_its_gaps() {
+    let root = repo("partial");
+    let complete_m1 = "[demo.Greeting]\n\
+        Hello = [\"tests.rs::greets\"]\n\
+        Goodbye = [\"tests.rs::greets\"]\n";
+    assert_eq!(
+        problems_with(PARTIAL_HEADER, &root, complete_m1),
+        Vec::<String>::new(),
+        "an unindexed M2 scenario is pending"
+    );
+    let broken = format!("{complete_m1}[demo.Later]\n\"Not yet\" = [\"tests.rs::gone\"]\n");
+    assert_eq!(
+        problems_with(PARTIAL_HEADER, &root, &broken),
+        ["demo › Later › Not yet: tests.rs has no fn gone"]
+    );
+    let missing_m1 = "[demo.Greeting]\nHello = [\"tests.rs::greets\"]\n";
+    assert_eq!(
+        problems_with(PARTIAL_HEADER, &root, missing_m1),
+        ["no entry for scenario demo › Greeting › Goodbye"],
+        "the complete milestone still needs every scenario"
+    );
 }
