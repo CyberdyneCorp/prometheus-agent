@@ -27,7 +27,7 @@ jobs:
           $env:PSModulePath
       - name: diag
         shell: bash
+        timeout-minutes: 20
         run: |
           cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
           PMT_DIAG_ANCESTORS=attr cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
-          PMT_DIAG_ANCESTORS=list cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells

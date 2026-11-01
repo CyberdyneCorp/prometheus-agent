@@ -110,84 +110,70 @@ fn entries(listing: &str) -> String {
     listing.replace("(I)", "")
 }
 
-/// TEMPORARY diagnostics: which shells start under the sandbox, per launcher
-/// variant. Run with --nocapture --ignored.
+/// TEMPORARY diagnostics: how PowerShell behaves under the sandbox. Run
+/// with --nocapture --ignored.
 #[test]
 #[ignore = "diagnostics"]
 fn diag_shells() {
     let fixture = Fixture::new();
+    std::fs::write(fixture.work.join("data.txt"), "line1\nline2\n").unwrap();
     let sandbox = confine(fixture.policy(&[]));
     let work = fixture.work.to_str().unwrap().to_owned();
-    let ps = format!(
-        "[Console]::WriteLine('start ' + [Environment]::CurrentDirectory); \
-         try {{ Set-Location -LiteralPath '{work}'; [Console]::WriteLine('cd ok') }} catch {{ [Console]::WriteLine('cd: ' + $_.Exception.ToString()) }}; \
-         try {{ Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop; [Console]::WriteLine('utility ok') }} catch {{ [Console]::WriteLine('utility: ' + $_.Exception.ToString()) }}; \
-         try {{ Write-Output 'write-output ok' }} catch {{ [Console]::WriteLine('wo: ' + $_.Exception.ToString()) }}; \
-         [Console]::WriteLine('PSModulePath=' + $env:PSModulePath)"
-    );
-    let shells: Vec<(&str, Vec<String>)> = vec![
-        ("cmd", vec!["cmd.exe".into(), "/C".into(), "echo hi && cd".into()]),
-        (
-            "usr-bash",
-            vec![
-                r"C:\Program Files\Git\usr\bin\bash.exe".into(),
-                "--noprofile".into(),
-                "--norc".into(),
-                "-c".into(),
-                "echo hi; pwd -W".into(),
-            ],
-        ),
-        (
-            "bin-bash",
-            vec![
-                r"C:\Program Files\Git\bin\bash.exe".into(),
-                "--noprofile".into(),
-                "--norc".into(),
-                "-c".into(),
-                "echo hi; pwd -W".into(),
-            ],
-        ),
-        (
-            "powershell",
-            vec![
-                "powershell.exe".into(),
-                "-NoProfile".into(),
-                "-NonInteractive".into(),
-                "-Command".into(),
-                ps.clone(),
-            ],
-        ),
-        (
-            "pwsh",
-            vec![
-                "pwsh.exe".into(),
-                "-NoProfile".into(),
-                "-NonInteractive".into(),
-                "-Command".into(),
-                ps.clone(),
-            ],
-        ),
+    let line = |label: &str, body: &str| {
+        format!(
+            "$__t = [Diagnostics.Stopwatch]::StartNew(); try {{ {body}; [Console]::WriteLine('{label} ok ' + $__t.ElapsedMilliseconds) }} catch {{ [Console]::WriteLine('{label} FAIL ' + $__t.ElapsedMilliseconds + ' ' + $_.Exception.GetType().Name + ': ' + $_.Exception.Message) }}; "
+        )
+    };
+    let mut probes = String::from("[Console]::WriteLine('start ' + [Environment]::CurrentDirectory + ' loc=' + $ExecutionContext.SessionState.Path.CurrentLocation); ");
+    probes += &line("import-mgmt", "Import-Module Microsoft.PowerShell.Management -ErrorAction Stop");
+    probes += &line("get-content-rel", "$null = Get-Content data.txt -ErrorAction Stop");
+    probes += &line("get-content-abs", &format!("$null = Get-Content -LiteralPath '{work}\\data.txt' -ErrorAction Stop"));
+    probes += &line("set-location", &format!("Set-Location -LiteralPath '{work}' -ErrorAction Stop"));
+    probes += &line("psdrive", &format!("$null = New-PSDrive -Name PMTW -PSProvider FileSystem -Root '{work}' -ErrorAction Stop; Set-Location PMTW:\\ -ErrorAction Stop"));
+    probes += &line("after-psdrive-rel", "$null = Get-Content data.txt -ErrorAction Stop");
+    probes += &line("after-psdrive-gci", "$null = Get-ChildItem -ErrorAction Stop");
+    probes += &line("native-cwd", "[Console]::WriteLine((cmd.exe /c cd))");
+    probes += "[Console]::WriteLine('end loc=' + $ExecutionContext.SessionState.Path.CurrentLocation.ProviderPath)";
+    let system_modules = r"C:\Windows\system32\WindowsPowerShell\v1.0\Modules";
+    let envs: [(&str, Option<&str>); 3] = [
+        ("inherited", None),
+        ("unset", Some("")),
+        ("system-only", Some(system_modules)),
     ];
-    let variants: [&[&str]; 5] = [
-        &[],
-        &["PMT_DIAG_NOUI"],
-        &["PMT_DIAG_NOJOB"],
-        &["PMT_DIAG_WINSTA"],
-        &["PMT_DIAG_WINSTA", "PMT_DIAG_NOUI"],
-    ];
-    for (name, argv) in &shells {
-        for variant in variants {
-            let mut command = sandbox.command(&argv[0]).unwrap();
-            command.current_dir(&fixture.work).args(&argv[1..]);
-            for key in variant {
-                command.env(key, "1");
+    for exe in ["powershell.exe", "pwsh.exe"] {
+        for (label, module_path) in envs {
+            let mut command = sandbox.command(exe).unwrap();
+            command
+                .current_dir(&fixture.work)
+                .args(["-NoProfile", "-NonInteractive", "-Command", &probes])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            match module_path {
+                None => {}
+                Some("") => {
+                    command.env_remove("PSModulePath");
+                }
+                Some(value) => {
+                    command.env("PSModulePath", value);
+                }
             }
             let started = std::time::Instant::now();
-            let output = command.output().unwrap();
+            let mut child = command.spawn().unwrap();
+            let deadline = started + std::time::Duration::from_secs(90);
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break Some(status);
+                }
+                if std::time::Instant::now() > deadline {
+                    let _ = child.kill();
+                    break None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            };
+            let output = child.wait_with_output().unwrap();
             println!(
-                "=== {name} {variant:?} ancestors={:?} -> {:?} in {:?}\nstdout: {}\nstderr: {}",
-                std::env::var_os("PMT_DIAG_ANCESTORS").is_some(),
-                output.status,
+                "=== {exe} PSModulePath={label} ancestors={:?} -> {status:?} in {:?}\nstdout: {}\nstderr: {}",
+                std::env::var_os("PMT_DIAG_ANCESTORS"),
                 started.elapsed(),
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)

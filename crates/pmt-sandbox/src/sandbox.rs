@@ -123,6 +123,13 @@ impl Sandbox {
         }
     }
 
+    /// Whether children run inside the platform sandbox (on Windows, an
+    /// `AppContainer`; some programs cannot start there).
+    #[must_use]
+    pub fn confines(&self) -> bool {
+        self.prepared.is_some()
+    }
+
     /// Whether commands may run.
     ///
     /// # Errors

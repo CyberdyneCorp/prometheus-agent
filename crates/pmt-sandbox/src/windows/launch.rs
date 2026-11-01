@@ -86,19 +86,9 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
             size_of::<HANDLE>() * handles.len(),
         )?;
     }
-    let diag = |k: &str| std::env::var_os(k).is_some();
-    if diag("PMT_DIAG_WINSTA") {
-        diag_winsta(container.0)?;
-    }
-    let job = if diag("PMT_DIAG_NOJOB") {
-        None
-    } else {
-        Some(Job::new(spec.spawn, !diag("PMT_DIAG_NOUI"))?)
-    };
+    let job = Job::new(spec.spawn)?;
     let child = create(spec, &handles, &mut attributes)?;
-    if let Some(job) = &job {
-        job.assign(child.process)?;
-    }
+    job.assign(child.process)?;
     // SAFETY: a valid thread handle of the suspended child.
     if unsafe { ResumeThread(child.thread) } == u32::MAX {
         return Err(last_error("ResumeThread"));
@@ -215,7 +205,7 @@ impl Drop for Attributes {
 struct Job(HANDLE);
 
 impl Job {
-    fn new(spawn: bool, ui_limits: bool) -> Result<Self, String> {
+    fn new(spawn: bool) -> Result<Self, String> {
         // SAFETY: an anonymous job with default security.
         let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
         if handle.is_null() {
@@ -244,9 +234,6 @@ impl Job {
                 | JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS
                 | JOB_OBJECT_UILIMIT_WRITECLIPBOARD,
         };
-        if !ui_limits {
-            return Ok(job);
-        }
         job.set(
             JobObjectBasicUIRestrictions,
             &raw const ui,
@@ -365,47 +352,4 @@ fn last_error(call: &str) -> String {
         "{call} failed: {}",
         std::io::Error::from_raw_os_error(i32::try_from(code).unwrap_or(-1))
     )
-}
-
-/// TEMPORARY diagnostics: gives the container SID full access to the
-/// launcher's window station and desktop.
-fn diag_winsta(sid: PSID) -> Result<(), String> {
-    use windows_sys::Win32::Security::Authorization::{
-        EXPLICIT_ACCESS_W, GRANT_ACCESS, GetSecurityInfo, SE_WINDOW_OBJECT, SetEntriesInAclW,
-        SetSecurityInfo, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
-    };
-    use windows_sys::Win32::Security::{ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE};
-    use windows_sys::Win32::System::StationsAndDesktops::{GetProcessWindowStation, GetThreadDesktop};
-    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
-    // SAFETY: diagnostics only.
-    let handles = unsafe { [GetProcessWindowStation(), GetThreadDesktop(GetCurrentThreadId())] };
-    for handle in handles {
-        let mut dacl: *mut ACL = ptr::null_mut();
-        let mut sd = ptr::null_mut();
-        // SAFETY: diagnostics only.
-        let status = unsafe {
-            GetSecurityInfo(handle, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION, ptr::null_mut(), ptr::null_mut(), &raw mut dacl, ptr::null_mut(), &raw mut sd)
-        };
-        eprintln!("diag: GetSecurityInfo {status}");
-        let access = EXPLICIT_ACCESS_W {
-            grfAccessPermissions: 0x1000_0000,
-            grfAccessMode: GRANT_ACCESS,
-            grfInheritance: NO_INHERITANCE,
-            Trustee: TRUSTEE_W {
-                pMultipleTrustee: ptr::null_mut(),
-                MultipleTrusteeOperation: 0,
-                TrusteeForm: TRUSTEE_IS_SID,
-                TrusteeType: TRUSTEE_IS_UNKNOWN,
-                ptstrName: sid.cast(),
-            },
-        };
-        let mut new: *mut ACL = ptr::null_mut();
-        // SAFETY: diagnostics only.
-        let status = unsafe { SetEntriesInAclW(1, &raw const access, dacl, &raw mut new) };
-        eprintln!("diag: SetEntriesInAclW {status}");
-        // SAFETY: diagnostics only.
-        let status = unsafe { SetSecurityInfo(handle, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION, ptr::null_mut(), ptr::null_mut(), new, ptr::null()) };
-        eprintln!("diag: SetSecurityInfo {status}");
-    }
-    Ok(())
 }
