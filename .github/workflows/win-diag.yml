@@ -1,9 +1,9 @@
-# TEMPORARY: Windows AppContainer shell diagnostics (task 21.2).
+# TEMPORARY: Windows sandboxed terminal checks (task 21.2).
 name: win-diag
 on:
   push:
     branches: [m1-core-agent]
-    paths: [".github/workflows/win-diag.yml", "crates/pmt-sandbox/**", "crates/pmt-tools/**"]
+    paths: [".github/workflows/win-diag.yml", "crates/**"]
 jobs:
   diag:
     strategy:
@@ -17,18 +17,20 @@ jobs:
         with:
           build-warnings: ""
           cache-key: win-diag
-      - name: context
-        shell: pwsh
-        run: |
-          whoami /all
-          query session; $true
-          icacls D:\ ; icacls D:\a ; icacls "C:\Program Files\Git\usr\bin"; icacls C:\ ; $true
-          Get-Command bash, pwsh, powershell | Format-List Source
-          $env:PSModulePath
-      - name: diag
+      - name: sandbox
         shell: bash
-        timeout-minutes: 20
+        run: cargo test -p pmt-sandbox --locked
+      - name: terminal
+        shell: bash
+        if: always()
+        run: cargo test -p prometheus --locked --test terminal_windows -- --nocapture
+      - name: demo
+        shell: bash
+        if: always()
         run: |
-          cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
-          PMT_DIAG_ANCESTORS=attr cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
-          PMT_DIAG_ANCESTORS=list cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
+          cargo test -p prometheus --locked --test demo_cli
+          scripts/ci/offline-demo target/debug/prometheus.exe
+      - name: tools
+        shell: bash
+        if: always()
+        run: cargo test -p pmt-tools --locked

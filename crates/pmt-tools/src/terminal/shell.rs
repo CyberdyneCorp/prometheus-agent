@@ -270,9 +270,21 @@ fn powershell_run(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec
     } else {
         String::new()
     };
+    // Windows PowerShell's command auto-loading fails inside the Windows
+    // sandbox (it stalls for ~20 s, then `Set-Location` and friends are
+    // "not recognized"), while importing the core modules works, so they
+    // are imported up front. pwsh auto-loads fine.
+    let imports = if shell.kind == ShellKind::PowerShell {
+        "Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility\n"
+    } else {
+        ""
+    };
+    // As the POSIX script's `cd || exit 126`: a command never runs from
+    // somewhere else than its cwd.
     let script = format!(
         "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)\n\
-         Set-Location -LiteralPath {cwd}\n\
+         {imports}\
+         try {{ Set-Location -LiteralPath {cwd} -ErrorAction Stop }} catch {{ [Console]::Error.WriteLine($_.Exception.Message); exit 126 }}\n\
          $global:LASTEXITCODE = 0\n\
          {command}\n\
          $__pmt_ok = $?; $__pmt_rc = $global:LASTEXITCODE\n\
@@ -286,6 +298,10 @@ fn powershell_run(shell: &Shell, files: &StateFiles, run: &RunScript<'_>) -> Vec
         "-NoLogo".into(),
         "-NoProfile".into(),
         "-NonInteractive".into(),
+        // Scripts the model writes must run (`.\build.ps1`); the execution
+        // policy is not a security boundary, the sandbox is.
+        "-ExecutionPolicy".into(),
+        "Bypass".into(),
         // With `-EncodedCommand` and redirected streams PowerShell otherwise
         // serializes errors as CLIXML (`#< CLIXML <Objs ..>`).
         "-OutputFormat".into(),

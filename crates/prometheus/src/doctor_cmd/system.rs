@@ -63,7 +63,7 @@ pub(super) fn terminal(inputs: &Inputs<'_>) -> Vec<Check> {
         Ok(sandbox) => sandbox,
         Err(why) => return vec![Check::new("terminal", "backend", Status::Fail, why)],
     };
-    let shell = pmt_tools::terminal::doctor::local_shell(config, inputs.ctx.launch);
+    let shell = pmt_tools::terminal::doctor::local_shell(config, inputs.ctx.launch, &sandbox);
     pmt_tools::terminal::doctor::readiness(&BackendRegistry::builtin(), config, &sandbox, &shell)
         .checks
 }

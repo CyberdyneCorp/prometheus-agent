@@ -483,6 +483,9 @@ error_codes! {
     /// The shell the local terminal backend needs is not installed.
     TERMINAL_SHELL_NOT_FOUND = ("terminal.shell_not_found", Unavailable,
         "The shell selected by `terminal.windows_shell` (Git Bash, pwsh, Windows PowerShell) is not installed, so the terminal tool is unavailable.");
+    /// The selected shell cannot run inside the OS sandbox.
+    TERMINAL_SHELL_CONFINED = ("terminal.shell_confined", Unavailable,
+        "`terminal.windows_shell = \"git-bash\"` while the Windows sandbox confines commands: the MSYS2 runtime behind Git Bash cannot start inside an AppContainer, so the terminal tool is unavailable; select `auto`, `pwsh` or `powershell`.");
     /// A provider id or alias is not in the profile's provider registry.
     PROVIDER_UNKNOWN = ("provider.unknown", Config,
         "A requested or configured provider id is neither a canonical id nor an alias in this profile's registry (built-in providers, `[providers.*]` blocks and the profile's enabled provider plugins); the message suggests the closest id.");

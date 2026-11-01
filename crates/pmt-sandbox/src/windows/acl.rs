@@ -6,6 +6,10 @@
 //! object's explicit entries plus the grant and set with the object's own
 //! protection state, so the system re-inherits the parent's entries.
 //!
+//! A listing grant on a directory above the roots ([`grant_here`]) must not
+//! touch anything below it, so it rewrites that one DACL in place with
+//! `SetFileSecurityW`, like revocation does.
+//!
 //! Revoking must leave every other entry as it was. Revocation walks the
 //! granted tree itself and rewrites each DACL that names the SID with
 //! `SetFileSecurityW` (no inheritance re-computation), dropping only that

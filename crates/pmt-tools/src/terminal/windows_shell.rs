@@ -9,6 +9,13 @@
 //! unavailable. An explicitly selected shell that is absent makes the
 //! terminal tool unavailable. The logic is plain path handling so it is
 //! testable on every OS; [`Probe::from_launch`] fills in the real places.
+//!
+//! Git Bash cannot run while the sandbox confines commands: its MSYS2
+//! runtime creates directory objects under `\BaseNamedObjects` at startup,
+//! which an `AppContainer` token may not do, so it dies with
+//! `STATUS_DLL_INIT_FAILED`. A confined `auto` therefore goes straight to
+//! PowerShell (saying why), and a confined explicit `git-bash` makes the
+//! terminal tool unavailable instead of running it unconfined.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -34,6 +41,9 @@ pub struct Probe {
     pub pwsh: Vec<PathBuf>,
     /// Windows PowerShell locations tried before `PATH`.
     pub powershell: Vec<PathBuf>,
+    /// Commands run inside the OS sandbox (an `AppContainer`), where Git
+    /// Bash cannot start.
+    pub confined: bool,
 }
 
 impl Probe {
@@ -63,6 +73,7 @@ impl Probe {
                 .map(|p| p.join(r"PowerShell\7\pwsh.exe"))
                 .collect(),
             powershell: vec![system_root.join(r"System32\WindowsPowerShell\v1.0\powershell.exe")],
+            confined: false,
         }
     }
 
@@ -137,7 +148,8 @@ fn is_app_alias(path: &Path) -> bool {
 ///
 /// `terminal.shell_not_found` (exit 69) `<shell> not found` with the
 /// install hint, for an explicitly selected shell that is absent or when
-/// `auto` finds no shell at all.
+/// `auto` finds no shell at all; `terminal.shell_confined` (exit 69) for an
+/// explicit `git-bash` while commands are confined.
 pub fn resolve(choice: WindowsShell, probe: &Probe) -> Result<Shell, Error> {
     let shell = |kind, path| Shell {
         kind,
@@ -145,6 +157,7 @@ pub fn resolve(choice: WindowsShell, probe: &Probe) -> Result<Shell, Error> {
         notice: None,
     };
     match choice {
+        WindowsShell::GitBash if probe.confined => Err(git_bash_confined()),
         WindowsShell::GitBash => probe
             .git_bash()
             .map(|p| shell(ShellKind::Bash, p))
@@ -157,26 +170,48 @@ pub fn resolve(choice: WindowsShell, probe: &Probe) -> Result<Shell, Error> {
             .powershell()
             .map(|p| shell(ShellKind::PowerShell, p))
             .ok_or_else(|| not_found("powershell")),
-        WindowsShell::Auto => {
-            if let Some(path) = probe.git_bash() {
-                return Ok(shell(ShellKind::Bash, path));
-            }
-            let fallback = probe
-                .pwsh()
-                .map(|p| (ShellKind::Pwsh, p))
-                .or_else(|| probe.powershell().map(|p| (ShellKind::PowerShell, p)))
-                .ok_or_else(|| not_found("git-bash"))?;
-            Ok(Shell {
-                kind: fallback.0,
-                path: fallback.1,
-                notice: Some(format!(
-                    "Git Bash was not found, so commands run in {}: POSIX shell syntax is unavailable. {}",
-                    fallback.0.name(),
-                    GIT_HINT
-                )),
-            })
-        }
+        WindowsShell::Auto => auto(probe),
     }
+}
+
+fn auto(probe: &Probe) -> Result<Shell, Error> {
+    let git_bash = probe.git_bash();
+    if let (Some(path), false) = (&git_bash, probe.confined) {
+        return Ok(Shell {
+            kind: ShellKind::Bash,
+            path: path.clone(),
+            notice: None,
+        });
+    }
+    let (kind, path) = probe
+        .pwsh()
+        .map(|p| (ShellKind::Pwsh, p))
+        .or_else(|| probe.powershell().map(|p| (ShellKind::PowerShell, p)))
+        .ok_or_else(|| not_found("git-bash"))?;
+    let notice = if git_bash.is_some() {
+        format!(
+            "Git Bash cannot run inside the Windows sandbox (AppContainer), so commands run in {}: POSIX shell syntax is unavailable.",
+            kind.name()
+        )
+    } else {
+        format!(
+            "Git Bash was not found, so commands run in {}: POSIX shell syntax is unavailable. {GIT_HINT}",
+            kind.name()
+        )
+    };
+    Ok(Shell {
+        kind,
+        path,
+        notice: Some(notice),
+    })
+}
+
+fn git_bash_confined() -> Error {
+    Error::new(
+        &codes::TERMINAL_SHELL_CONFINED,
+        "git-bash cannot run inside the Windows sandbox (AppContainer)",
+    )
+    .with_hint("set terminal.windows_shell to auto, pwsh or powershell")
 }
 
 const GIT_HINT: &str =
@@ -281,5 +316,33 @@ mod tests {
             resolve(WindowsShell::Pwsh, &missing).unwrap_err().message(),
             "pwsh not found"
         );
+    }
+
+    #[test]
+    fn a_confined_session_skips_git_bash_and_says_why() {
+        let temp = temp();
+        let pwsh = file(&temp.path().join("PowerShell/7/pwsh.exe"));
+        let probe = Probe {
+            git_bash: vec![file(&temp.path().join("Git/bin/bash.exe"))],
+            pwsh: vec![pwsh.clone()],
+            confined: true,
+            ..Probe::default()
+        };
+        let auto = resolve(WindowsShell::Auto, &probe).unwrap();
+        assert_eq!((auto.kind, auto.path), (ShellKind::Pwsh, pwsh));
+        assert!(
+            auto.notice
+                .unwrap()
+                .starts_with("Git Bash cannot run inside the Windows sandbox")
+        );
+        let err = resolve(WindowsShell::GitBash, &probe).unwrap_err();
+        assert_eq!(
+            (err.message(), err.exit_code()),
+            (
+                "git-bash cannot run inside the Windows sandbox (AppContainer)",
+                69
+            )
+        );
+        assert_eq!(err.code().code, "terminal.shell_confined");
     }
 }

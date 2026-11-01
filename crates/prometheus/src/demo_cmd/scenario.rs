@@ -39,11 +39,14 @@ const SCRIPT: Script = Script {
     fix: "debit) total=$((total - cents))",
 };
 
+/// Run in the terminal's own PowerShell (inside the Windows sandbox the
+/// terminal always uses PowerShell): a nested Windows PowerShell would
+/// spend ~20 s failing to auto-load its modules there.
 #[cfg(windows)]
 const SCRIPT: Script = Script {
     file: "total.ps1",
     text: include_str!("scenario/total.ps1"),
-    run: "powershell -NoProfile -ExecutionPolicy Bypass -File total.ps1",
+    run: "& .\\total.ps1",
     bug: "debit { $total += $cents }",
     fix: "debit { $total -= $cents }",
 };

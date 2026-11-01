@@ -11,14 +11,23 @@ use pmt_sandbox::backend::{BackendRegistry, Readiness};
 use super::shell::{self, Shell, ShellKind};
 use super::windows_shell::{self, Probe};
 
-/// The shell the `local` backend uses on this host.
+/// The shell the `local` backend uses on this host, for commands run
+/// through `sandbox`.
 ///
 /// # Errors
 ///
-/// `terminal.shell_not_found` (Windows) for an absent selected shell.
-pub fn local_shell(config: &TerminalConfig, launch: &LaunchEnv) -> Result<Shell, Error> {
+/// `terminal.shell_not_found` (Windows) for an absent selected shell;
+/// `terminal.shell_confined` (Windows) for Git Bash under the sandbox.
+pub fn local_shell(
+    config: &TerminalConfig,
+    launch: &LaunchEnv,
+    sandbox: &Sandbox,
+) -> Result<Shell, Error> {
     if cfg!(windows) {
-        let probe = Probe::from_launch(launch, config.windows_bash_path.as_deref());
+        let probe = Probe {
+            confined: sandbox.confines(),
+            ..Probe::from_launch(launch, config.windows_bash_path.as_deref())
+        };
         windows_shell::resolve(config.windows_shell, &probe)
     } else {
         Ok(shell::resolve_unix(launch.inherited("PATH")))

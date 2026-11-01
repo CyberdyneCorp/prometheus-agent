@@ -18,8 +18,9 @@ pub(crate) mod console;
 mod container;
 pub(crate) mod launch;
 
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use pmt_config::schema::DegradedFeature;
@@ -101,21 +102,44 @@ pub(crate) fn prepare(
             }
         }
     }
-    if let Some(mode) = std::env::var_os("PMT_DIAG_ANCESTORS") {
-        let list = mode == "list";
-        let roots: Vec<PathBuf> = policy.read_roots().iter().chain(policy.write_roots().iter()).map(|r| r.to_path_buf()).collect();
-        for root in roots {
-            for ancestor in root.ancestors().skip(1) {
-                if ancestor.exists() {
-                    container.grant_here(ancestor, list).map_err(setup_error)?;
-                }
-            }
-        }
-    }
+    open_ancestors(&mut container, policy);
     Ok(Prepared {
         container,
         launcher,
     })
+}
+
+/// Lets the container list and stat the directories above its roots.
+/// PowerShell resolves a location component by component (attributes of
+/// each directory, then a listing of the parent to correct the leaf's
+/// case), so without this `Set-Location` into the workspace is denied and
+/// the shell starts at `C:\`. Only names and attributes are exposed (no
+/// file contents), as `file-read-metadata` is on macOS. Volume roots are
+/// left alone, and a directory whose DACL this user may not change (for
+/// example `C:\Users` without elevation) is skipped with a WARN: confined
+/// PowerShell cannot enter locations below it.
+fn open_ancestors(container: &mut AppContainer, policy: &Policy) {
+    let roots: Vec<&PathBuf> = policy
+        .read_roots()
+        .iter()
+        .chain(policy.write_roots())
+        .collect();
+    // A directory inside a root already has its grant (rewriting it here
+    // would replace that entry).
+    let ancestors: BTreeSet<&Path> = roots
+        .iter()
+        .flat_map(|root| root.ancestors().skip(1))
+        .filter(|dir| !roots.iter().any(|root| dir.starts_with(root)))
+        .filter(|dir| dir.parent().is_some() && dir.is_dir())
+        .collect();
+    for dir in ancestors {
+        if let Err(why) = container.grant_listing(dir) {
+            tracing::warn!(
+                directory = %dir.display(),
+                "sandboxed PowerShell cannot enter locations below this directory: {why}"
+            );
+        }
+    }
 }
 
 impl Prepared {

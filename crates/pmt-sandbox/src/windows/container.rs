@@ -5,8 +5,9 @@
 //! `ALL APPLICATION PACKAGES`, which covers the Windows and Program Files
 //! trees). Each sandbox creates a uniquely named profile, adds allow
 //! entries for its carved roots (inheritable, or list-only on directories
-//! that lead to a credential store), and on drop revokes every entry for its
-//! SID and deletes the profile, so grants never leak to another session.
+//! that lead to a credential store) and listing entries on the directories
+//! above them, and on drop revokes every entry for its SID and deletes the
+//! profile, so grants never leak to another session.
 
 #![allow(unsafe_code)]
 
@@ -26,7 +27,8 @@ use windows_sys::Win32::Security::{
     FreeSid, NO_INHERITANCE, PSID, SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    DELETE, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+    DELETE, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_LIST_DIRECTORY,
+    FILE_READ_ATTRIBUTES, FILE_TRAVERSE, SYNCHRONIZE,
 };
 
 /// Access a root grants.
@@ -123,21 +125,15 @@ impl AppContainer {
         acl::grant(path, self.sid, mask, inheritance)
             .map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))
     }
-}
 
-impl AppContainer {
-    /// TEMPORARY diagnostics: list access on this directory only, without
-    /// re-propagating inheritance below it.
-    pub(super) fn grant_here(&mut self, path: &Path, list: bool) -> Result<(), String> {
-        self.touched.push(path.to_path_buf());
-        let mask = if list {
-            FILE_GENERIC_READ | FILE_GENERIC_EXECUTE
-        } else {
-            windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES
-                | windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE
-        };
-        acl::grant_here(path, self.sid, mask)
-            .map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))
+    /// Lets this container list `dir` and read its attributes, on `dir`
+    /// alone: nothing below it is visited or inherits the entry.
+    pub(super) fn grant_listing(&mut self, dir: &Path) -> Result<(), String> {
+        let mask = FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | FILE_TRAVERSE | SYNCHRONIZE;
+        acl::grant_here(dir, self.sid, mask)
+            .map_err(|code| format!("{}: ACL update failed (error {code})", dir.display()))?;
+        self.touched.push(dir.to_path_buf());
+        Ok(())
     }
 }
 
