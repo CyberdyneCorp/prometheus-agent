@@ -15,11 +15,12 @@ pub mod configure;
 mod render;
 
 use std::collections::BTreeSet;
+use std::path::Path;
 use std::sync::Arc;
 
 use jiff::Timestamp;
-use pmt_config::Config;
 use pmt_config::grants::{GrantsFile, SessionGrants, Subject, baseline};
+use pmt_config::{Config, ProfileScope};
 use pmt_core::capability::CapabilitySet;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
@@ -39,12 +40,24 @@ use crate::model_cmd::block_on;
 use crate::output::{document, print_raw};
 
 /// The built-in tools of this binary, their handlers bound to the
-/// process-wide session environments. Each tool group registers its tools
-/// here as it lands; a toolset member that is not registered yet is shown
-/// as `unregistered`.
+/// process-wide session environments; the browser tools' availability
+/// follows the runtime store and `daemon.toml` of the home at `home`.
+/// Each tool group registers its tools here as it lands; a toolset member
+/// that is not registered yet is shown as `unregistered`.
 #[must_use]
-pub fn builtin_tools() -> Vec<RegisteredTool> {
-    let mut tools = pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process());
+pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
+    let browser = crate::runtimes_cmd::browser::probe(home.to_path_buf());
+    let mut tools: Vec<RegisteredTool> =
+        pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process())
+            .into_iter()
+            .map(|tool| {
+                if tool.descriptor.toolset == pmt_tools::browser::TOOLSET {
+                    tool.with_probe(Arc::clone(&browser))
+                } else {
+                    tool
+                }
+            })
+            .collect();
     tools.extend(pmt_skills::tools::tools(
         &pmt_skills::SkillSessions::process(),
     ));
@@ -52,16 +65,16 @@ pub fn builtin_tools() -> Vec<RegisteredTool> {
     tools
 }
 
-/// The registry of profile `profile`: this binary's built-in tools and the
+/// The registry of profile `scope`: this binary's built-in tools and the
 /// shipped toolsets.
 ///
 /// # Errors
 ///
 /// A built-in tool or toolset that does not load (a programming error).
-pub fn registry(profile: &str) -> Result<ToolRegistry, Error> {
+pub fn registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
     Ok(ToolRegistry::new(
-        profile,
-        Arc::new(Builtins::standard(builtin_tools())?),
+        scope.name().as_str(),
+        Arc::new(Builtins::standard(builtin_tools(scope.home()))?),
     ))
 }
 
@@ -213,7 +226,7 @@ pub fn toolsets(command: &ToolsetsCommand, ctx: &Context<'_>) -> Result<u8, Erro
 fn list_toolsets(args: &ToolsetsListArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let config = scope.config();
-    let registry = registry(scope.name().as_str())?;
+    let registry = registry(&scope)?;
     let enabled = args
         .surface
         .as_ref()
@@ -259,8 +272,8 @@ where
     let scope = ctx.scope()?;
     let config = scope.config();
     let secrets = scope.secrets().clone();
-    let registry = registry(scope.name().as_str())?
-        .with_secret_presence(Arc::new(move |name| secrets.resolve(name).is_ok()));
+    let registry =
+        registry(&scope)?.with_secret_presence(Arc::new(move |name| secrets.resolve(name).is_ok()));
     let grants = SessionGrants::new(baseline(&config.security), GrantsFile::of(scope.profile()));
     let capabilities = grants.capabilities(&Subject::Profile)?;
     let probes = ProbeCache::new();

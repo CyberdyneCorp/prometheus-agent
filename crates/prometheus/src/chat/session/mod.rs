@@ -5,13 +5,14 @@
 //! [`Factory::open`] builds one [`Live`] session over a new or resumed
 //! session row.
 
+pub mod browser;
 pub mod env;
 pub mod model;
 pub mod progress;
 pub mod tools;
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use jiff::Timestamp;
 use pmt_agent::tools::clarify::{Clarifier, ClarifyAnswer, ClarifyRequest};
@@ -87,6 +88,10 @@ pub struct Factory {
     /// The flags.
     pub options: Options,
     approver: Option<Arc<dyn Approver>>,
+    install_asks: Option<tokio::sync::mpsc::UnboundedSender<browser::InstallAsk>>,
+    /// The browser tools every session shares, set up by the first
+    /// session (`None`: they could not be, see the WARN).
+    browser: OnceLock<Option<browser::Shared>>,
 }
 
 /// One running session.
@@ -124,6 +129,7 @@ pub struct Live {
     agent_tools: Arc<AgentTools>,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
+    browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -144,7 +150,7 @@ impl Factory {
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
-        let registry = Arc::new(crate::tools_cmd::registry(scope.name().as_str())?);
+        let registry = Arc::new(crate::tools_cmd::registry(&scope)?);
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),
             GrantsFile::of(scope.profile()),
@@ -161,6 +167,47 @@ impl Factory {
             record: Arc::default(),
             options,
             approver: None,
+            install_asks: None,
+            browser: OnceLock::new(),
+        })
+    }
+
+    /// Sends runtime install questions (`Install <name> <version>
+    /// (<size>)? [Y/n]`) to `asks`; without it, missing runtimes are
+    /// installed without asking.
+    #[must_use]
+    pub fn with_install_asks(
+        mut self,
+        asks: tokio::sync::mpsc::UnboundedSender<browser::InstallAsk>,
+    ) -> Self {
+        self.install_asks = Some(asks);
+        self
+    }
+
+    /// The shared browser tools, set up on first use.
+    fn browser(&self) -> Option<&browser::Shared> {
+        self.browser
+            .get_or_init(|| {
+                browser::Shared::new(
+                    &self.scope,
+                    &self.launch,
+                    &self.redactor,
+                    self.install_asks.clone(),
+                )
+                .inspect_err(|err| tracing::warn!(error = %err, "browser tools unavailable"))
+                .ok()
+            })
+            .as_ref()
+    }
+
+    /// Whether the model of `target` accepts images.
+    fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
+        target.model.as_deref().is_some_and(|model| {
+            self.models
+                .catalog()
+                .metadata(&target.provider, model)
+                .0
+                .supports_vision
         })
     }
 
@@ -225,14 +272,7 @@ impl Factory {
         let skills = Arc::new(SkillsSession::new(self.skills_setup(id)));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
-        let environment = env::attach(&env::EnvInputs {
-            scope,
-            session_id: &id.to_string(),
-            launch: &self.launch,
-            cwd: &self.options.cwd,
-            capabilities: &capabilities,
-            redactor: self.redactor.clone(),
-        })?;
+        let environment = self.environment(id, target, &capabilities)?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let (agent_tools, clarify) = self.agent_tools(id, &memory)?;
         let gate = tools::gate(&GateInputs {
@@ -304,11 +344,31 @@ impl Factory {
             agent_tools,
             capabilities,
             trajectory,
-            _environment: environment,
+            browser: environment.browser,
+            _environment: environment.attachment,
             _skills: attached,
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// Attaches the session's execution environment.
+    fn environment(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        capabilities: &CapabilitySet,
+    ) -> Result<env::Attached, Error> {
+        env::attach(&env::EnvInputs {
+            scope: &self.scope,
+            session_id: &id.to_string(),
+            launch: &self.launch,
+            cwd: &self.options.cwd,
+            capabilities,
+            redactor: self.redactor.clone(),
+            browser: self.browser(),
+            image_input: self.image_input(target),
+        })
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -536,6 +596,9 @@ impl Live {
         .await;
         if let Err(err) = store.end_session(self.id, reason) {
             tracing::warn!(error = %err, session = %self.id, "could not end the session");
+        }
+        if let Some(browser) = &self.browser {
+            browser.close_session(&self.id.to_string()).await;
         }
         let trajectory = self.trajectory;
         drop(self.agent);

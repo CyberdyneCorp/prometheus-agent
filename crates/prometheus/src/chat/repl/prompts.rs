@@ -59,6 +59,8 @@ pub(super) enum Pending {
     },
     /// A memory change.
     Memory(oneshot::Sender<bool>),
+    /// A runtime install (`[Y/n]`: Enter installs).
+    Install(oneshot::Sender<bool>),
     /// A destructive command waiting for `once / always / cancel`.
     Confirm {
         /// The command line.
@@ -73,6 +75,7 @@ impl Pending {
             Self::Approval(_) => "approve? [o]nce [s]ession [a]lways [d]eny › ".to_owned(),
             Self::Clarify { .. } => "answer › ".to_owned(),
             Self::Memory(_) => "save to memory? [y/n] › ".to_owned(),
+            Self::Install(_) => "install? [Y/n] › ".to_owned(),
             Self::Confirm { .. } => "once / always / cancel › ".to_owned(),
         }
     }
@@ -82,7 +85,7 @@ impl Pending {
         match self {
             Self::Approval(prompt) => prompt.respond(Decision::Deny),
             Self::Clarify { prompt, .. } => drop(prompt),
-            Self::Memory(reply) => {
+            Self::Memory(reply) | Self::Install(reply) => {
                 let _ = reply.send(false);
             }
             Self::Confirm { .. } => {}
@@ -109,6 +112,12 @@ pub(super) fn decision(line: &str) -> Option<Decision> {
         "d" | "deny" | "n" | "no" => Decision::Deny,
         _ => return None,
     })
+}
+
+/// The answer a line gives to `Install <name> <version> (<size>)? [Y/n]`:
+/// an empty line (Enter) or yes installs.
+pub(super) fn install_answer(line: &str) -> bool {
+    matches!(line.trim().to_lowercase().as_str(), "" | "y" | "yes")
 }
 
 /// The text of clarify question `index`.

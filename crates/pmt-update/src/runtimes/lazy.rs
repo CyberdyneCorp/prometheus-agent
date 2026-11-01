@@ -15,9 +15,13 @@ use pmt_core::error::{Error, codes};
 use super::install::{Installer, excluded};
 use super::lease::Lease;
 
-/// Answers the install question; `None` (no terminal) installs without
-/// asking.
-pub type Confirm = dyn Fn(&str) -> bool + Send + Sync;
+/// Answers the install question (asynchronously, so an interactive
+/// surface can ask it while the session's turn waits); `None` (no
+/// terminal) installs without asking.
+pub type Confirm = dyn Fn(String) -> ConfirmFuture + Send + Sync;
+
+/// The answer of a [`Confirm`]: `true` installs.
+pub type ConfirmFuture = std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>;
 
 /// Why a runtime a tool needs is unavailable without an install (the
 /// `unavailable:<reason>` of the tool's availability probe).
@@ -144,7 +148,7 @@ impl Lazy {
             human_size(artifact.size)
         );
         if let Some(confirm) = &self.confirm
-            && !confirm(&question)
+            && !confirm(question).await
         {
             return Err(Error::new(
                 &codes::RUNTIME_DECLINED,

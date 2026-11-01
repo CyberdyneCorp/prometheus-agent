@@ -301,6 +301,23 @@ impl BrowserManager {
         }
     }
 
+    /// Closes every session whose key starts with `prefix` (one chat
+    /// session's browsers, keyed `<session id>/<name>`).
+    pub async fn close_prefixed(&self, prefix: &str) {
+        let closed: Vec<_> = {
+            let mut sessions = self.sessions.lock().await;
+            let keys: Vec<String> = sessions
+                .keys()
+                .filter(|key| key.starts_with(prefix))
+                .cloned()
+                .collect();
+            keys.iter().filter_map(|key| sessions.remove(key)).collect()
+        };
+        for session in closed {
+            session.terminate().await;
+        }
+    }
+
     /// Closes every session (session end): local browsers are killed and
     /// their files removed before this returns.
     pub async fn shutdown(&self) {

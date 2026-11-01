@@ -239,7 +239,7 @@ pub fn enable(
     surface: Option<&str>,
 ) -> Result<u8, Error> {
     let scope = ctx.scope()?;
-    let registry = super::registry(scope.name().as_str())?;
+    let registry = super::registry(&scope)?;
     set_toolset(&scope, &registry, toolset, on, surface)?;
     let verb = if on { "enabled" } else { "disabled" };
     let place = surface.map_or_else(String::new, |s| format!(" for {s}"));
@@ -287,7 +287,7 @@ fn toggle_toolsets(
     wizard: &mut Wizard<'_>,
 ) -> Result<(), Error> {
     let scope = ctx.scope()?;
-    let registry = super::registry(scope.name().as_str())?;
+    let registry = super::registry(&scope)?;
     let enabled = surface_toolsets(&scope, surface);
     let toolsets: Vec<String> = registry
         .toolsets()

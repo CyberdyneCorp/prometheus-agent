@@ -42,6 +42,7 @@ pub use self::prompts::{MemoryApprover, MemoryAsk};
 use super::Ui;
 use super::session::{Factory, Live};
 use super::theme::{Role, Theme};
+use crate::chat::session::browser::InstallAsk;
 use crate::slash::{self, Registry};
 
 /// A second Ctrl+C within this long exits an idle REPL.
@@ -96,6 +97,8 @@ struct Repl {
     progress: Option<mpsc::UnboundedReceiver<crate::chat::session::progress::Progress>>,
     view: progress::TurnView,
     memory: mpsc::UnboundedReceiver<MemoryAsk>,
+    /// Runtime install questions (`Install <name> <version> (<size>)?`).
+    installs: mpsc::UnboundedReceiver<InstallAsk>,
     /// Messages background work posts to the chat (`/refine` summaries).
     posted: mpsc::UnboundedSender<String>,
     to_post: mpsc::UnboundedReceiver<String>,
@@ -118,6 +121,25 @@ pub fn memory_channel() -> (Arc<MemoryApprover>, mpsc::UnboundedReceiver<MemoryA
     (Arc::new(MemoryApprover::new(tx)), rx)
 }
 
+/// The REPL's ends of the session's yes/no questions.
+pub struct Asks {
+    /// Memory changes needing approval.
+    pub memory: mpsc::UnboundedReceiver<MemoryAsk>,
+    /// Runtime installs.
+    pub installs: mpsc::UnboundedReceiver<InstallAsk>,
+}
+
+impl Asks {
+    /// Receivers nothing sends to.
+    #[must_use]
+    pub fn none() -> Self {
+        Self {
+            memory: memory_channel().1,
+            installs: mpsc::unbounded_channel().1,
+        }
+    }
+}
+
 /// Runs the line interface over `live` until the user leaves; returns the
 /// exit status.
 ///
@@ -131,7 +153,7 @@ pub fn memory_channel() -> (Arc<MemoryApprover>, mpsc::UnboundedReceiver<MemoryA
 pub async fn run(
     factory: Factory,
     live: Live,
-    memory: mpsc::UnboundedReceiver<MemoryAsk>,
+    asks: Asks,
     start: Start,
     ui: Ui,
 ) -> Result<u8, Error> {
@@ -172,7 +194,8 @@ pub async fn run(
         clarify: None,
         progress: None,
         view: progress::TurnView::default(),
-        memory,
+        memory: asks.memory,
+        installs: asks.installs,
         posted,
         to_post,
         last_interrupt: None,

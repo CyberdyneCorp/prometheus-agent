@@ -15,7 +15,7 @@ use std::sync::Arc;
 use pmt_config::daemon::{self, DaemonConfig};
 use pmt_core::error::Error;
 use pmt_update::runtimes::gc::{self, GcReport};
-use pmt_update::runtimes::install::{Installer, Sources};
+use pmt_update::runtimes::install::Installer;
 use pmt_update::runtimes::lazy::human_size;
 use pmt_update::runtimes::{Listed, Store};
 use serde_json::json;
@@ -66,16 +66,11 @@ pub fn installer(
     store: Store,
     config: &DaemonConfig,
 ) -> Result<Installer, Error> {
-    let sources = Sources {
-        mirror: config.runtimes.mirrors.runtimes.clone(),
-        fallback: config.update.mirror_fallback,
-        exclude: config.runtimes.exclude.clone(),
-    };
     let progress: pmt_update::runtimes::install::Progress = Arc::new(|line| eprintln!("{line}"));
-    Installer::new(
+    browser::installer(
         store,
+        config,
         &crate::update_cmd::outbound_policy(ctx),
-        sources,
         progress,
     )
 }

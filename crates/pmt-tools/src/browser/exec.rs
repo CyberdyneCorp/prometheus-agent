@@ -78,6 +78,15 @@ impl BrowserExec {
         Self { setup }
     }
 
+    /// Closes the browsers of session `session_id` (its end); other
+    /// sessions sharing the profile's manager keep theirs.
+    pub async fn close_session(&self, session_id: &str) {
+        self.setup
+            .manager
+            .close_prefixed(&format!("{session_id}/"))
+            .await;
+    }
+
     /// Runs one call of session `session_id`.
     pub async fn exec(&self, session_id: &str, args: &ExecArgs) -> ToolResult {
         let name = args.session.as_deref().unwrap_or("default");

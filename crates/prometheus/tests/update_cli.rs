@@ -639,26 +639,72 @@ fn a_flaky_release_origin_is_retried() {
     assert_eq!(index_requests, 3);
 }
 
-#[test]
-fn an_excluded_runtime_is_not_refreshed_after_an_update() {
+/// An update over a store holding an older Chromium (a valid record, so
+/// the refresh sees it in use); `exclude` lists `runtimes.exclude`.
+fn update_with_old_chromium(exclude: &str) -> (Fixture, PathBuf) {
     let f = Fixture::self_install();
     f.daemon(&format!(
-        "[runtimes]\nexclude = [\"chromium\"]\n[runtimes.mirrors]\nruntimes = \"{}/rt\"\n",
+        "[runtimes]\nexclude = [{exclude}]\n[runtimes.mirrors]\nruntimes = \"{}/rt\"\n",
         f.server.uri()
     ));
     // Chromium was used before: an older version is in the store.
-    let old = f.home.join("runtimes/chromium/100.0-aaaaaaaaaaaa");
-    std::fs::create_dir_all(&old).unwrap();
-    std::fs::write(old.join("chrome"), b"old").unwrap();
+    let old = common::fake_runtime(
+        &f.home,
+        "chromium",
+        "100.0-aaaaaaaaaaaa",
+        &[("chrome", b"old")],
+    );
     let newer = next_patch(f.version);
     f.publish(&newer, Channel::Stable, &f.bytes(), None);
     common::ok(&f.run(&["update"]));
-    assert!(
-        !f.requests()
-            .iter()
-            .any(|r| r.url.path().starts_with("/rt/")),
+    (f, old)
+}
+
+fn runtime_requests(f: &Fixture) -> Vec<String> {
+    f.requests()
+        .iter()
+        .map(|r| r.url.path().to_owned())
+        .filter(|p| p.starts_with("/rt/"))
+        .collect()
+}
+
+/// Scenario: Browser opted out at install time (the update half).
+#[test]
+fn an_excluded_runtime_is_not_refreshed_after_an_update() {
+    let (f, old) = update_with_old_chromium("\"chromium\"");
+    assert_eq!(
+        runtime_requests(&f),
+        Vec::<String>::new(),
         "nothing is downloaded for an excluded runtime"
     );
     assert_eq!(f.latest_receipt()["follow_ups"], serde_json::json!([]));
     assert!(!old.exists(), "the unpinned version is collected");
+}
+
+/// The control of the opt-out: without the exclusion the refresh fetches
+/// this build's Chromium pin (the mirror has none, so it is a follow-up).
+#[test]
+fn a_runtime_in_use_is_refreshed_after_an_update() {
+    let (f, _old) = update_with_old_chromium("");
+    let index = pmt_update::runtimes::index::RuntimeIndex::embedded();
+    let pin = index.pin("chromium").unwrap();
+    let follow_ups = f.latest_receipt()["follow_ups"].to_string();
+    assert!(
+        follow_ups.contains("runtime refresh failed"),
+        "{follow_ups}"
+    );
+    if pin
+        .artifacts
+        .contains_key(&pmt_update::runtimes::platform())
+    {
+        let wanted = format!("/rt/chromium/{}/", pin.version);
+        let requests = runtime_requests(&f);
+        assert!(
+            requests.iter().any(|p| p.starts_with(&wanted)),
+            "{requests:?}"
+        );
+    } else {
+        // No Chromium build for this host (musl): the refresh still tried it.
+        assert!(follow_ups.contains("chromium"), "{follow_ups}");
+    }
 }

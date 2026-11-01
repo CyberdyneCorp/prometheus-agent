@@ -106,6 +106,11 @@ impl Repl {
                     self.say(Role::Notice, &ask.preview);
                     self.ask(Pending::Memory(ask.reply));
                 }
+                Some(ask) = self.installs.recv() => {
+                    self.ring_bell();
+                    self.say(Role::Notice, &ask.question);
+                    self.ask(Pending::Install(ask.reply));
+                }
             }
         }
     }
@@ -241,6 +246,9 @@ impl Repl {
             Pending::Memory(reply) => {
                 let yes = matches!(line.trim().to_lowercase().as_str(), "y" | "yes");
                 let _ = reply.send(yes);
+            }
+            Pending::Install(reply) => {
+                let _ = reply.send(prompts::install_answer(line));
             }
             Pending::Confirm { .. } => {}
         }

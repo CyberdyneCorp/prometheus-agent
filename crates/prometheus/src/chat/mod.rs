@@ -201,10 +201,13 @@ async fn start(
         Some(id) => id,
         None => factory.create_session(None)?,
     };
-    let memory = if mode == Mode::Line {
-        let (approver, asks) = repl::memory_channel();
-        factory = factory.with_memory_approver(approver);
-        Some(asks)
+    let asks = if mode == Mode::Line {
+        let (approver, memory) = repl::memory_channel();
+        let (install_asks, installs) = tokio::sync::mpsc::unbounded_channel();
+        factory = factory
+            .with_memory_approver(approver)
+            .with_install_asks(install_asks);
+        Some(repl::Asks { memory, installs })
     } else {
         None
     };
@@ -231,7 +234,7 @@ async fn start(
             Ok(status)
         }
         Mode::Line => {
-            let memory = memory.unwrap_or_else(|| repl::memory_channel().1);
+            let asks = asks.unwrap_or_else(repl::Asks::none);
             let start = repl::Start {
                 resumed: resumed.is_some(),
                 seed: first.text,
@@ -239,7 +242,7 @@ async fn start(
                 run_budget,
                 terminal,
             };
-            repl::run(factory, live, memory, start, ui).await
+            repl::run(factory, live, asks, start, ui).await
         }
     }
 }

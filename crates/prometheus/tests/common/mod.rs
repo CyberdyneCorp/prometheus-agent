@@ -174,3 +174,32 @@ pub fn active_messages(home: &Path) -> Vec<serde_json::Value> {
         .filter(|m| m["active"] == true)
         .collect()
 }
+
+/// A fake installed version `dir` of `name` whose record matches `files`.
+pub fn fake_runtime(
+    home: &Path,
+    name: &str,
+    dir: &str,
+    files: &[(&str, &[u8])],
+) -> std::path::PathBuf {
+    let root = home.join("runtimes").join(name).join(dir);
+    let mut digests = std::collections::BTreeMap::new();
+    for (path, bytes) in files {
+        let file = root.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, bytes).unwrap();
+        digests.insert((*path).to_owned(), pmt_update::manifest::sha256_hex(bytes));
+    }
+    let record = serde_json::json!({
+        "schema": "prometheus.runtime.v1", "name": name, "version": dir.split('-').next().unwrap(),
+        "sha256": "0".repeat(64), "url": "https://example.invalid/a.tar.gz", "source": "origin",
+        "installed_at": "2026-10-31T00:00:00Z", "retries": 0, "resumed": false,
+        "exe": files[0].0, "files": digests,
+    });
+    std::fs::write(
+        root.join(pmt_update::runtimes::RECORD_FILE),
+        record.to_string(),
+    )
+    .unwrap();
+    root
+}

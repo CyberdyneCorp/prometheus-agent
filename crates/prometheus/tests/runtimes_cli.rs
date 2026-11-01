@@ -6,42 +6,22 @@
 mod common;
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use pmt_config::daemon::DaemonConfig;
 use pmt_update::download::Budget;
 use pmt_update::manifest::sha256_hex;
+use pmt_update::runtimes::Store;
 use pmt_update::runtimes::index::{Format, Pin, PinnedArtifact, RuntimeIndex};
 use pmt_update::runtimes::install::{Installer, Sources};
 use pmt_update::runtimes::lease::Lease;
-use pmt_update::runtimes::{RECORD_FILE, Store};
 use prometheus::runtimes_cmd::browser;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn code(out: &std::process::Output) -> i32 {
     out.status.code().unwrap()
-}
-
-/// A fake installed version `dir` of `name` whose record matches `files`.
-fn fake_runtime(home: &Path, name: &str, dir: &str, files: &[(&str, &[u8])]) -> PathBuf {
-    let root = home.join("runtimes").join(name).join(dir);
-    let mut digests = BTreeMap::new();
-    for (path, bytes) in files {
-        let file = root.join(path);
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&file, bytes).unwrap();
-        digests.insert((*path).to_owned(), sha256_hex(bytes));
-    }
-    let record = serde_json::json!({
-        "schema": "prometheus.runtime.v1", "name": name, "version": dir.split('-').next().unwrap(),
-        "sha256": "0".repeat(64), "url": "https://example.invalid/a.tar.gz", "source": "origin",
-        "installed_at": "2026-10-31T00:00:00Z", "retries": 0, "resumed": false,
-        "exe": files[0].0, "files": digests,
-    });
-    std::fs::write(root.join(RECORD_FILE), record.to_string()).unwrap();
-    root
 }
 
 #[test]
@@ -98,7 +78,7 @@ fn exclusions_are_edited_persisted_and_refuse_installs() {
 fn a_corrupted_runtime_is_reported_by_verify_and_doctor() {
     let home = common::temp_home();
     let h = home.path();
-    let dir = fake_runtime(h, "node", "1.0.0-aaaaaaaaaaaa", &[("bin/node", b"node")]);
+    let dir = common::fake_runtime(h, "node", "1.0.0-aaaaaaaaaaaa", &[("bin/node", b"node")]);
     let out = common::run(h, &["runtimes", "verify"]);
     assert_eq!(code(&out), 0, "{}", common::stdout(&out));
     std::fs::write(dir.join("bin/node"), b"tampered").unwrap();
@@ -118,7 +98,7 @@ fn a_corrupted_runtime_is_reported_by_verify_and_doctor() {
 fn in_use_runtime_survives_gc() {
     let home = common::temp_home();
     let h = home.path();
-    let old = fake_runtime(
+    let old = common::fake_runtime(
         h,
         "cpython",
         "3.11.0-cccccccccccc",
@@ -292,7 +272,6 @@ fn lazy_install_disabled_fails_the_browser_and_downloads_nothing() {
     let policy = no_host(browser::policy(
         origin.installer(&[]),
         &daemon_config(false, &[]),
-        false,
     ));
     assert_eq!(
         policy.availability("chromium"),
@@ -316,7 +295,6 @@ fn an_excluded_browser_runtime_is_never_lazily_installed() {
     let policy = no_host(browser::policy(
         origin.installer(&excluded),
         &daemon_config(true, &excluded),
-        false,
     ));
     assert_eq!(policy.availability("chromium"), Err("excluded"));
     let err = origin
@@ -336,7 +314,6 @@ fn a_missing_browser_runtime_is_installed_on_first_use() {
     let policy = no_host(browser::policy(
         origin.installer(&[]),
         &daemon_config(true, &[]),
-        false,
     ));
     assert_eq!(policy.availability("chromium"), Ok(()));
     let exe = origin

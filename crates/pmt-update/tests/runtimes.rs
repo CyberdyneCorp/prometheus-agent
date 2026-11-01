@@ -401,10 +401,10 @@ async fn lazy_installs_follow_the_policy() {
     let declined = Lazy::new(
         f.installer(Sources::default()),
         true,
-        Some(Box::new(|q: &str| {
+        Some(Box::new(|q: String| {
             assert!(q.starts_with("Install node 1.0.0 ("), "{q}");
             assert!(q.ends_with(")? [Y/n]"), "{q}");
-            false
+            Box::pin(async { false })
         })),
     );
     assert_eq!(

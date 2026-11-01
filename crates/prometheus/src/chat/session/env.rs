@@ -1,7 +1,7 @@
 //! The session's local execution environment (spec: execution-
 //! environments, tool-system): the file tools' backend, the terminal on
-//! the local sandbox and the web tools, attached to the process-wide
-//! table the built-in tools look their session up in.
+//! the local sandbox, the web tools and `browser_exec`, attached to the
+//! process-wide table the built-in tools look their session up in.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,12 +14,15 @@ use pmt_core::error::Error;
 use pmt_core::secret::Redactor;
 use pmt_net::OutboundPolicy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
+use pmt_tools::browser::BrowserExec;
 use pmt_tools::environments::{Attachment, Environments, SessionEnv};
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
 use pmt_tools::terminal::{LocalSetup, LocalTerminal, spill};
 use pmt_tools::web::{FullTextStore, WebSession};
+
+use super::browser::Shared;
 
 /// Where the session's environment lives.
 pub struct EnvInputs<'a> {
@@ -35,17 +38,30 @@ pub struct EnvInputs<'a> {
     pub capabilities: &'a CapabilitySet,
     /// Known secret values to keep out of tool output.
     pub redactor: Redactor,
+    /// The process's browser tools, when they could be set up.
+    pub browser: Option<&'a Shared>,
+    /// The session's model accepts images (browser screenshots).
+    pub image_input: bool,
+}
+
+/// An attached environment.
+pub struct Attached {
+    /// Detaches the environment when dropped.
+    pub attachment: Attachment,
+    /// The session's `browser_exec` (its browsers close at session end).
+    pub browser: Option<Arc<BrowserExec>>,
 }
 
 /// Builds and attaches the environment of one session; the returned
-/// attachment detaches it when dropped. The terminal is left out (with a
-/// WARN) when no shell or sandbox can be set up, so the other tools still
-/// work.
+/// attachment detaches it when dropped. The terminal and the browser,
+/// which runs its interpreter on the terminal's sandbox, are left out
+/// (with a WARN) when no shell or sandbox can be set up, so the other
+/// tools still work.
 ///
 /// # Errors
 ///
 /// The scratch directory cannot be created.
-pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attachment, Error> {
+pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let scope = inputs.scope;
     let scratch = scope.path("cache/scratch").join(inputs.session_id);
     std::fs::create_dir_all(&scratch).map_err(|e| {
@@ -61,17 +77,39 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attachment, Error> {
         scratch: vec![scratch.clone()],
         toolchain: Vec::new(),
     };
+    let process = processes(inputs, &scratch, user_home.as_ref())
+        .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
+        .ok();
+    let browser = process.as_ref().and_then(|(sandbox, env)| {
+        let shared = inputs.browser?;
+        let exec = shared.exec(
+            Arc::clone(sandbox),
+            env.clone(),
+            &scratch,
+            inputs.image_input,
+        );
+        Some(Arc::new(exec))
+    });
+    let terminal = process
+        .and_then(|(sandbox, env)| {
+            terminal(inputs, &scratch, user_home.clone(), sandbox, env)
+                .inspect_err(
+                    |err| tracing::warn!(error = %err, "terminal unavailable this session"),
+                )
+                .ok()
+        })
+        .map(Arc::new);
     let env = SessionEnv {
-        files: Some(Arc::new(files(inputs, places, user_home.clone()))),
-        terminal: terminal(inputs, &scratch, user_home)
-            .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
-            .ok()
-            .map(Arc::new),
+        files: Some(Arc::new(files(inputs, places, user_home))),
+        terminal,
         web: web(scope).map(Arc::new),
         vision: None,
-        browser: None,
+        browser: browser.clone(),
     };
-    Ok(Environments::process().attach(inputs.session_id, env))
+    Ok(Attached {
+        attachment: Environments::process().attach(inputs.session_id, env),
+        browser,
+    })
 }
 
 fn files(inputs: &EnvInputs<'_>, places: Places, user_home: Option<PathBuf>) -> FileSession {
@@ -88,14 +126,16 @@ fn files(inputs: &EnvInputs<'_>, places: Places, user_home: Option<PathBuf>) -> 
     })
 }
 
-fn terminal(
+/// The session's OS sandbox and the environment of the processes it
+/// starts (terminal commands, `browser_exec`'s interpreter).
+fn processes(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
-    user_home: Option<PathBuf>,
-) -> Result<LocalTerminal, Error> {
+    user_home: Option<&PathBuf>,
+) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let paths = Paths {
-        user_home: user_home.clone().unwrap_or_default(),
+        user_home: user_home.cloned().unwrap_or_default(),
         prometheus_home: inputs.scope.home().to_path_buf(),
         workspace: inputs.cwd.to_path_buf(),
         scratch: vec![scratch.to_path_buf()],
@@ -115,6 +155,17 @@ fn terminal(
     if pmt_net::tls::write_child_bundle(&bundle, extra_ca).is_ok() {
         env.set_ca_bundle(&bundle);
     }
+    Ok((sandbox, env))
+}
+
+fn terminal(
+    inputs: &EnvInputs<'_>,
+    scratch: &Path,
+    user_home: Option<PathBuf>,
+    sandbox: Arc<Sandbox>,
+    env: ChildEnv,
+) -> Result<LocalTerminal, Error> {
+    let config = inputs.scope.config();
     let shell = pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch)?;
     LocalTerminal::new(LocalSetup {
         terminal: config.terminal.clone(),

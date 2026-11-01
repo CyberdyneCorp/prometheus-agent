@@ -59,7 +59,22 @@ The first call of a session key resolves a browser, in this order:
    installed on first use when lazy installs are allowed
    (`runtimes.allow_lazy_install`, part of the managed runtime store);
    otherwise the call fails with `chromium is not installed and lazy
-   installs are disabled: run 'prometheus runtimes install chromium'`.
+   installs are disabled: run 'prometheus runtimes install chromium'`
+   (or, for a runtime listed in `runtimes.exclude`, `chromium is excluded
+   by runtimes.exclude: run 'prometheus runtimes exclude remove chromium'
+   to allow it`). A one-shot run installs without asking; the line
+   interface asks `Install chromium <version> (<size>)? [Y/n]` first
+   (Enter installs, `n` declines).
+
+The interpreter of [`browser_exec`](../reference/tools.md#browser_exec) resolves the same way through the
+`cpython` runtime (the managed one, else `python3`/`python` on `PATH`,
+else a lazy install).
+
+When a session starts, the browser tools are offered only if these
+runtimes can be had without an install the policy forbids: with Chromium
+(for a local browser) or CPython missing, `tools list` and the session's
+surface show them as `unavailable:lazy installs disabled` or
+`unavailable:excluded`, and the model cannot call them.
 
 Each local browser gets a throwaway profile under
 `<profile>/cache/browser/profiles/` and is recorded under
