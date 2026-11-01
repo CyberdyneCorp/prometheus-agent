@@ -7,8 +7,8 @@ use std::io::Write as _;
 use pmt_core::error::{Error, codes};
 use serde::Serialize;
 
-use super::render::{self, View};
-use super::turn::{self, Asker};
+use super::render::{self, Plain};
+use super::turn::{self, Asker, Prompt};
 use super::{Attached, Start};
 use crate::chat::oneshot::APPROVAL_MESSAGE;
 use crate::chat::signals::Signals;
@@ -29,7 +29,7 @@ struct Report<'a> {
 /// The submission's refusal and a lost connection.
 pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8, Error> {
     let json = start.ui.json;
-    let view = View {
+    let out = Plain {
         quiet: start.ui.quiet,
         json,
     };
@@ -37,8 +37,11 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
     let mut asker = Asker::OneShot {
         approve: start.approve_unattended,
     };
-    let text = start.first.clone().unwrap_or_default();
-    let outcome = turn::run(attached, text, &mut asker, view, &mut signals).await?;
+    let prompt = Prompt {
+        text: start.first.clone().unwrap_or_default(),
+        images: start.first_images(),
+    };
+    let outcome = turn::run(attached, prompt, &mut asker, &out, &mut signals).await?;
     if outcome.approval_needed {
         let err = Error::new(&codes::CHAT_APPROVAL_REQUIRED, APPROVAL_MESSAGE);
         crate::output::print_error(&err, json);
@@ -65,7 +68,7 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
             crate::output::print_error(&error.to_error(), true);
         }
     } else {
-        view.finished(&finished);
+        render::finished(&out, &finished);
     }
     Ok(outcome.signal.unwrap_or_else(|| render::status(&finished)))
 }

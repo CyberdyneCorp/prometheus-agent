@@ -156,6 +156,33 @@ export interface ContextUsage {
 /** An approval answer. */
 export type Decision = "once" | "session" | "always" | "deny";
 
+/** `command.dispatch` params: a slash command the client does not handle itself (spec: tui, Slash command flow). */
+export interface DispatchParams {
+  /** The rest of the line, case kept. */
+  args?: string;
+  /** The command name without `/` (an alias or unique prefix resolves). */
+  name: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** `command.dispatch` result. */
+export type Dispatched = {
+  /** What to show (may be empty). */
+  notice: string;
+  type: "done";
+} | {
+  /** Images that go with it. */
+  images?: Array<PromptImage>;
+  /** The prompt. */
+  message: string;
+  type: "send";
+} | {
+  /** Why. */
+  reason: string;
+  type: "refused";
+};
+
 /** No params. */
 export type Empty = Record<string, unknown>;
 
@@ -257,6 +284,13 @@ export interface PlatformSupport {
   tier: string;
 }
 
+/** An image attached to a prompt: a file the daemon reads (checked like `chat --image`), or an image the session already holds (as `command.dispatch` returns them for `/retry`). */
+export type PromptImage = {
+  path: string;
+} | {
+  blob: string;
+};
+
 /** `request.cancel` payload: a server request timed out or was cancelled. */
 export interface RequestCancel {
   /** `srq-<12 hex>`. */
@@ -294,6 +328,8 @@ export interface ResumeParams {
   exclusive?: boolean;
   /** `ses_<ULID>`. */
   session_id: string;
+  /** How the session runs from now on; a loaded, idle session is reloaded with it. Absent: as it is (or the profile's defaults). */
+  setup?: SessionSetup | null;
 }
 
 /** `secret.request` result. */
@@ -328,12 +364,10 @@ export interface SessionCreateParams {
   cwd?: string | null;
   /** Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. */
   exclusive?: boolean;
-  /** The model for this session (`[<provider>/]<model>` or an alias) instead of the profile's. */
-  model?: string | null;
   /** The profile; required only when the ticket grants several. */
   profile?: string | null;
-  /** The provider for this session instead of the profile's. */
-  provider?: string | null;
+  /** How the session runs (a chat's flags). */
+  setup?: SessionSetup;
   /** A source tag recorded on the session. */
   source_tag?: string | null;
 }
@@ -358,6 +392,34 @@ export interface SessionRef {
   session_id: string;
 }
 
+/** How a daemon session runs: the session-shaping flags of `prometheus chat`, applied when the session loads (spec: cli, Daemon attachment with in-process fallback). */
+export interface SessionSetup {
+  /** That endpoint's API key (`--api-key-stdin`), held in memory only. */
+  api_key?: string | null;
+  /** An endpoint for this session only (`--base-url`). */
+  base_url?: string | null;
+  /** No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). */
+  ignore_rules?: boolean;
+  /** Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). */
+  ignore_user_config?: boolean;
+  /** A mock provider script on the daemon's machine (`--mock-script`). */
+  mock_script?: string | null;
+  /** The model (`[<provider>/]<model>` or an alias) instead of the profile's (`-m`). */
+  model?: string | null;
+  /** No `AGENTS.md`-style context files (`--no-context-files`). */
+  no_context_files?: boolean;
+  /** The system prompt names the session id (`--pass-session-id`). */
+  pass_session_id?: boolean;
+  /** The provider instead of the profile's (`--provider`). */
+  provider?: string | null;
+  /** `key=value` configuration overrides for this session only (`--set`, `--approvals`, `--max-iterations`, `--toolsets`). */
+  set?: Array<string>;
+  /** Skills preloaded into the session (`--skills`). */
+  skills?: Array<string>;
+  /** Approval-gated calls run without asking (`--yolo`). */
+  yolo?: boolean;
+}
+
 /** One listed session. */
 export interface SessionSummary {
   /** Whether a turn is running in the daemon. */
@@ -372,6 +434,10 @@ export interface SessionSummary {
 
 /** `prompt.submit` params. */
 export interface SubmitParams {
+  /** Images that go with it. */
+  images?: Array<PromptImage>;
+  /** Wall-clock budget of this turn in seconds (`--run-budget`). */
+  run_budget_secs?: number | null;
   /** The session. */
   session_id: string;
   /** The prompt. */
@@ -434,6 +500,8 @@ export interface TurnFinished {
   exit_reason: string;
   /** The final answer, when there is one. */
   final_response?: string | null;
+  /** The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). */
+  report?: unknown;
   /** The turn. */
   turn_id: string;
   /** The turn's token and cost totals, as the turn loop reports them. */
@@ -450,6 +518,7 @@ export interface Version {
 
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
+  "command.dispatch": { params: DispatchParams; result: Dispatched };
   "prompt.submit": { params: SubmitParams; result: Submitted };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
@@ -489,7 +558,6 @@ export const UNDECLARED = [
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "command.dispatch",
   "commands.catalog",
   "complete.path",
   "complete.slash",

@@ -10,7 +10,7 @@ use pmt_core::error::Error;
 use pmt_rpc::client::{Client, error_of};
 use pmt_rpc::contracts::{
     ForkParams, ResolveKind, ResolveParams, ResumeParams, SessionCreate, SessionCreateParams,
-    SessionFork, SessionRef, SessionResolve, SessionResume,
+    SessionFork, SessionRef, SessionResolve, SessionResume, SessionSetup,
 };
 
 use super::Start;
@@ -54,7 +54,7 @@ pub(super) async fn claim(
     start: &Start<'_>,
 ) -> Result<String, Error> {
     if let Some(session_id) = target {
-        resume(client, session_id).await?;
+        resume(client, session_id, &start.setup).await?;
         return Ok(session_id.to_owned());
     }
     let args = start.args;
@@ -65,9 +65,8 @@ pub(super) async fn claim(
         profile: None,
         cwd: Some(start.cwd.to_string_lossy().into_owned()),
         source_tag,
-        model: args.model.clone(),
-        provider: args.provider.clone(),
         exclusive: true,
+        setup: start.setup.clone(),
     };
     let created: SessionRef = client
         .call_typed::<SessionCreate>(&params)
@@ -76,10 +75,17 @@ pub(super) async fn claim(
     Ok(created.session_id)
 }
 
-async fn resume(client: &Client, session_id: &str) -> Result<(), Error> {
+/// Resumes `session_id` as its owner, with `setup` when the chat's flags
+/// ask for one (otherwise the session runs as it is).
+pub(super) async fn resume(
+    client: &Client,
+    session_id: &str,
+    setup: &SessionSetup,
+) -> Result<(), Error> {
     let params = ResumeParams {
         session_id: session_id.to_owned(),
         exclusive: true,
+        setup: (*setup != SessionSetup::default()).then(|| setup.clone()),
     };
     client
         .call_typed::<SessionResume>(&params)
@@ -136,7 +142,11 @@ fn read_error(e: &dyn std::fmt::Display) -> Error {
 /// # Errors
 ///
 /// Fork and resume errors.
-pub(super) async fn fork(client: &Client, session: &str) -> Result<String, Error> {
+pub(super) async fn fork(
+    client: &Client,
+    session: &str,
+    setup: &SessionSetup,
+) -> Result<String, Error> {
     let params = ForkParams {
         session_id: session.to_owned(),
         at_message_id: None,
@@ -146,6 +156,6 @@ pub(super) async fn fork(client: &Client, session: &str) -> Result<String, Error
         .call_typed::<SessionFork>(&params)
         .await
         .map_err(|e| error_of(&e))?;
-    resume(client, &forked.session_id).await?;
+    resume(client, &forked.session_id, setup).await?;
     Ok(forked.session_id)
 }

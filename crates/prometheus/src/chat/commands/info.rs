@@ -9,7 +9,7 @@ use pmt_core::error::{Error, codes};
 use pmt_store::{ListOptions, Message, Role, SearchOptions, Session, UsageScope, Visibility};
 use serde_json::Value;
 
-use super::Repl;
+use super::Ctx;
 use crate::chat::session::Live;
 use crate::slash::Surface;
 
@@ -71,127 +71,128 @@ pub fn sessions_query(args: &str, caller: Caller) -> Result<SessionsQuery, Error
     Ok(query)
 }
 
-impl Repl {
-    /// `/history [N]`: the last N (default all) active user and assistant
-    /// messages.
-    pub(super) fn history(&self, live: &Live, args: &str) -> Result<String, Error> {
-        let limit = match args.trim() {
-            "" => usize::MAX,
-            n => n.parse::<usize>().ok().filter(|n| *n > 0).ok_or_else(|| {
-                Error::new(&codes::CLI_USAGE, "usage: /history [N] (a positive number)")
-            })?,
-        };
-        let messages: Vec<Message> = self
-            .factory
-            .store
-            .messages(live.id, Visibility::Active)?
-            .into_iter()
-            .filter(|m| matches!(m.role, Role::User | Role::Assistant) && !authored(m))
-            .filter(|m| !text_of(m).trim().is_empty())
-            .collect();
-        if messages.is_empty() {
-            return Ok("no messages yet".to_owned());
+/// `/history [N]`: the last N (default all) active user and assistant
+/// messages.
+pub(super) fn history(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
+    let live = ctx.live;
+    let limit = match args.trim() {
+        "" => usize::MAX,
+        n => n.parse::<usize>().ok().filter(|n| *n > 0).ok_or_else(|| {
+            Error::new(&codes::CLI_USAGE, "usage: /history [N] (a positive number)")
+        })?,
+    };
+    let messages: Vec<Message> = ctx
+        .factory
+        .store
+        .messages(live.id, Visibility::Active)?
+        .into_iter()
+        .filter(|m| matches!(m.role, Role::User | Role::Assistant) && !authored(m))
+        .filter(|m| !text_of(m).trim().is_empty())
+        .collect();
+    if messages.is_empty() {
+        return Ok("no messages yet".to_owned());
+    }
+    let format = &ctx.scope.config().display.timestamp_format;
+    let skip = messages.len().saturating_sub(limit);
+    let mut text = String::new();
+    for message in &messages[skip..] {
+        if !text.is_empty() {
+            text.push('\n');
         }
-        let format = &self.factory.scope.config().display.timestamp_format;
-        let skip = messages.len().saturating_sub(limit);
-        let mut text = String::new();
-        for message in &messages[skip..] {
-            if !text.is_empty() {
-                text.push('\n');
-            }
-            if self.display.timestamps {
-                let local = message.created_at.to_zoned(jiff::tz::TimeZone::system());
-                let _ = write!(text, "[{}] ", local.strftime(format.as_str()));
-            }
-            let who = if message.role == Role::User {
-                "you"
-            } else {
-                "assistant"
+        if ctx.timestamps {
+            let local = message.created_at.to_zoned(jiff::tz::TimeZone::system());
+            let _ = write!(text, "[{}] ", local.strftime(format.as_str()));
+        }
+        let who = if message.role == Role::User {
+            "you"
+        } else {
+            "assistant"
+        };
+        let _ = write!(text, "{who}: {}", text_of(message).trim());
+    }
+    Ok(text)
+}
+
+/// `/status`: the session's details and a recap, from the store only.
+pub(super) fn status(ctx: &Ctx<'_>) -> Result<String, Error> {
+    let live = ctx.live;
+    let store = &ctx.factory.store;
+    let session = store.session(live.id)?;
+    let messages = store.messages(live.id, Visibility::Active)?;
+    let totals = store.usage_totals(UsageScope::Session(live.id))?;
+    let target = live.model.target();
+    let mut text = String::new();
+    let mut field = |name: &str, value: &dyn std::fmt::Display| {
+        let _ = writeln!(text, "{name:<14}{value}");
+    };
+    field("model", &target.model.as_deref().unwrap_or("default"));
+    field("provider", &target.provider);
+    field("profile", &ctx.scope.name());
+    field("session", &session.id);
+    field("title", &session.title.as_deref().unwrap_or("-"));
+    field("cwd", &session.cwd.as_deref().unwrap_or("-"));
+    field("started", &minute(session.started_at));
+    field("last activity", &minute(session.last_activity_at));
+    let t = &totals.tokens;
+    field(
+        "tokens",
+        &format!(
+            "input {} output {} cache read {} cache write {} reasoning {}",
+            t.input, t.output, t.cache_read, t.cache_write, t.reasoning
+        ),
+    );
+    field("cost", &pmt_obs::usage::format_total_cost(&totals));
+    field("state", &if ctx.running { "running" } else { "idle" });
+    text.push_str(&recap(&messages));
+    Ok(text.trim_end().to_owned())
+}
+
+/// `/sessions [all] [search <query>]`.
+pub(super) fn sessions(ctx: &Ctx<'_>, args: &str) -> Result<String, Error> {
+    let live = ctx.live;
+    let caller = Caller {
+        surface: ctx.surface,
+        admin: true,
+    };
+    let store = &ctx.factory.store;
+    let (heading, sessions) = match sessions_query(args, caller)? {
+        SessionsQuery::Here => {
+            let cwd = ctx.factory.options.cwd.to_string_lossy().into_owned();
+            let here = store
+                .list_sessions(&ListOptions::default())?
+                .into_iter()
+                .filter(|s| s.cwd.as_deref() == Some(cwd.as_str()))
+                .take(LISTED)
+                .collect();
+            ("sessions in this directory", here)
+        }
+        SessionsQuery::All => {
+            let all = store.list_sessions(&ListOptions {
+                limit: Some(u32::try_from(LISTED).unwrap_or(10)),
+                ..ListOptions::default()
+            })?;
+            ("sessions of this profile", all)
+        }
+        SessionsQuery::Search(query) => {
+            let options = SearchOptions {
+                limit: 50,
+                ..SearchOptions::default()
             };
-            let _ = write!(text, "{who}: {}", text_of(message).trim());
-        }
-        Ok(text)
-    }
-
-    /// `/status`: the session's details and a recap, from the store only.
-    pub(super) fn status(&self, live: &Live) -> Result<String, Error> {
-        let store = &self.factory.store;
-        let session = store.session(live.id)?;
-        let messages = store.messages(live.id, Visibility::Active)?;
-        let totals = store.usage_totals(UsageScope::Session(live.id))?;
-        let target = live.model.target();
-        let mut text = String::new();
-        let mut field = |name: &str, value: &dyn std::fmt::Display| {
-            let _ = writeln!(text, "{name:<14}{value}");
-        };
-        field("model", &target.model.as_deref().unwrap_or("default"));
-        field("provider", &target.provider);
-        field("profile", &self.factory.scope.name());
-        field("session", &session.id);
-        field("title", &session.title.as_deref().unwrap_or("-"));
-        field("cwd", &session.cwd.as_deref().unwrap_or("-"));
-        field("started", &minute(session.started_at));
-        field("last activity", &minute(session.last_activity_at));
-        let t = &totals.tokens;
-        field(
-            "tokens",
-            &format!(
-                "input {} output {} cache read {} cache write {} reasoning {}",
-                t.input, t.output, t.cache_read, t.cache_write, t.reasoning
-            ),
-        );
-        field("cost", &pmt_obs::usage::format_total_cost(&totals));
-        field("state", &if self.running { "running" } else { "idle" });
-        text.push_str(&recap(&messages));
-        Ok(text.trim_end().to_owned())
-    }
-
-    /// `/sessions [all] [search <query>]`.
-    pub(super) fn sessions(&self, live: &Live, args: &str) -> Result<String, Error> {
-        let caller = Caller {
-            surface: Surface::Cli,
-            admin: true,
-        };
-        let store = &self.factory.store;
-        let (heading, sessions) = match sessions_query(args, caller)? {
-            SessionsQuery::Here => {
-                let cwd = self.factory.options.cwd.to_string_lossy().into_owned();
-                let here = store
-                    .list_sessions(&ListOptions::default())?
-                    .into_iter()
-                    .filter(|s| s.cwd.as_deref() == Some(cwd.as_str()))
-                    .take(LISTED)
-                    .collect();
-                ("sessions in this directory", here)
-            }
-            SessionsQuery::All => {
-                let all = store.list_sessions(&ListOptions {
-                    limit: Some(u32::try_from(LISTED).unwrap_or(10)),
-                    ..ListOptions::default()
-                })?;
-                ("sessions of this profile", all)
-            }
-            SessionsQuery::Search(query) => {
-                let options = SearchOptions {
-                    limit: 50,
-                    ..SearchOptions::default()
-                };
-                let mut ids = Vec::new();
-                for hit in store.search(&query, &options)?.hits {
-                    if !ids.contains(&hit.session_id) {
-                        ids.push(hit.session_id);
-                    }
+            let mut ids = Vec::new();
+            for hit in store.search(&query, &options)?.hits {
+                if !ids.contains(&hit.session_id) {
+                    ids.push(hit.session_id);
                 }
-                let found = ids
-                    .into_iter()
-                    .take(LISTED)
-                    .filter_map(|id| store.session(id).ok())
-                    .collect();
-                ("sessions matching the search", found)
             }
-        };
-        Ok(listing(heading, &sessions, live))
-    }
+            let found = ids
+                .into_iter()
+                .take(LISTED)
+                .filter_map(|id| store.session(id).ok())
+                .collect();
+            ("sessions matching the search", found)
+        }
+    };
+    Ok(listing(heading, &sessions, live))
 }
 
 fn listing(heading: &str, sessions: &[Session], live: &Live) -> String {

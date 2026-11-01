@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
-    CompactParams, Compacted, ContextUsage, Event, ForkParams, ResolveParams, ServerRequest,
-    SessionCreateParams, SessionList, SessionListParams, SessionRef, SubmitParams, Submitted,
-    Transcript,
+    CompactParams, Compacted, ContextUsage, DispatchParams, Dispatched, Event, ForkParams,
+    ResolveParams, ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef,
+    SessionSetup, SubmitParams, Submitted, Transcript,
 };
 
 use crate::hub::Hub;
@@ -43,8 +43,14 @@ pub trait Host: Send + Sync + 'static {
         params: SessionListParams,
     ) -> HostFuture<'a, SessionList>;
 
-    /// Loads an existing session (a no-op when it is loaded).
-    fn resume<'a>(&'a self, profile: &'a str, link: Link) -> HostFuture<'a, ()>;
+    /// Loads an existing session (a no-op when it is loaded, unless
+    /// `setup` asks for another one: an idle session is then reloaded).
+    fn resume<'a>(
+        &'a self,
+        profile: &'a str,
+        setup: Option<SessionSetup>,
+        link: Link,
+    ) -> HostFuture<'a, ()>;
 
     /// The session's active messages.
     fn transcript<'a>(
@@ -71,6 +77,15 @@ pub trait Host: Send + Sync + 'static {
         params: SubmitParams,
         link: Link,
     ) -> HostFuture<'a, Submitted>;
+
+    /// Runs a slash command in the session (`command.dispatch`); its
+    /// notices and any turn it starts reach the clients through `link`.
+    fn dispatch<'a>(
+        &'a self,
+        profile: &'a str,
+        params: DispatchParams,
+        link: Link,
+    ) -> HostFuture<'a, Dispatched>;
 
     /// Stops the session's running turn at its next safe point; a no-op
     /// when none runs.

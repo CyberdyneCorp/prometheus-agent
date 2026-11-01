@@ -110,6 +110,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::SessionEventsSince>()
         .method::<c::SessionContextUsage>()
         .method::<c::PromptSubmit>()
+        .method::<c::CommandDispatch>()
         .method::<c::ApprovalRespond>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()

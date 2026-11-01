@@ -66,13 +66,28 @@ The system SHALL decide the interactive interface by first checking that both st
 - **THEN** the system SHALL run in one-shot mode
 
 ### Requirement: Daemon attachment with in-process fallback
-The interactive CLI SHALL attach to the running gateway daemon of the home as a client when one is running and serves the selected profile, SHALL otherwise run the agent in-process, SHALL run in-process when `--in-process` is given, and SHALL answer commands whose state lives in the daemon (session handoff, gateway status, reload) through the daemon connection.
+The interactive CLI SHALL attach to the running gateway daemon of the home as a client when one is running and serves the selected profile, SHALL run the agent in-process when no daemon runs or when `--in-process` is given, and SHALL exit 75 naming the daemon (`home.locked`) when a running daemon holds the home but does not serve the selected profile, or when `--in-process` is given while a daemon holds the home (the daemon holds the home's writer lock, so the session cannot run in this process). An attached chat SHALL carry its session-shaping flags (`-m`, `--provider`, `--set`, `--toolsets`, `--skills`, `--approvals`, `--yolo`, `--max-iterations`, `--pass-session-id`, `--no-context-files`, `--ignore-user-config`, `--ignore-rules`, `--mock-script`, `--base-url`) to the daemon's session in `session.create`/`session.resume`, SHALL send `--image` attachments and `--run-budget` with its prompts and SHALL write `--usage-file` from the daemon's turn reports. It SHALL run the slash commands that change only what its terminal shows or which session it drives itself and SHALL answer every other command, including the commands whose state lives in the daemon (reload, session handoff, gateway status), through the daemon connection (`command.dispatch`).
 **Milestone:** M2
 
 #### Scenario: Session shared with gateway
 - **GIVEN** a running daemon serving profile `default`
 - **WHEN** the user starts `prometheus chat`
 - **THEN** the session SHALL be created by the daemon and visible to `prometheus sessions list` and the dashboard while it runs
+
+#### Scenario: Reload answered through the daemon
+- **GIVEN** a chat attached to the running daemon
+- **WHEN** the user types `/reload-secrets`
+- **THEN** the daemon's session SHALL reload its secrets and the chat SHALL show `secrets reloaded; no value changed`
+
+#### Scenario: Session flags reach the daemon
+- **GIVEN** a running daemon serving profile `default`
+- **WHEN** the user runs `prometheus chat --max-iterations 1 -z "loop"` with a model that calls a tool on every step
+- **THEN** the daemon's turn SHALL stop after one model call and the chat SHALL exit 3
+
+#### Scenario: Profile the daemon does not serve
+- **GIVEN** a running daemon that serves only profile `default`
+- **WHEN** the user runs `prometheus -p late chat -z "hi"`
+- **THEN** the chat SHALL exit 75 naming the daemon's pid and saying that it does not serve profile `late`
 
 ### Requirement: Process identity from runtime records
 The system SHALL identify Prometheus daemons and clients through runtime records in `<home>/run/` (JSON with pid, process start time, version, role and served profiles, plus an exclusive lock file), SHALL treat a record whose pid is dead or whose start time differs as stale, and SHALL NOT classify processes by scanning command-line strings.

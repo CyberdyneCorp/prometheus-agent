@@ -16,9 +16,9 @@ use pmt_gateway::{Exit, Host, HostFuture, Identity, Link, Server, ServerOptions}
 use pmt_rpc::client::{Client, Inbox, Socket, dial, subprotocols};
 use pmt_rpc::contracts::{
     ApprovalAsk, ApprovalRequestParams, ClientCapabilities, ClientKind, CompactParams, Compacted,
-    ContextUsage, Decision, ForkParams, HelloParams, ResolveParams, SessionCreateParams,
-    SessionEvent, SessionList, SessionListParams, SessionRef, SessionSummary, SubmitParams,
-    Submitted, Transcript, TurnEnded, TurnFinished, Version,
+    ContextUsage, Decision, DispatchParams, Dispatched, ForkParams, HelloParams, ResolveParams,
+    SessionCreateParams, SessionEvent, SessionList, SessionListParams, SessionRef, SessionSetup,
+    SessionSummary, SubmitParams, Submitted, Transcript, TurnEnded, TurnFinished, Version,
 };
 use pmt_rpc::control::{self, ControlRequest, Purpose};
 use pmt_rpc::discovery::{Discovery, Endpoint, discover};
@@ -58,6 +58,7 @@ fn finish(link: &Link, turn: &str, answer: &str) {
         final_response: Some(answer.to_owned()),
         error: None,
         usage: None,
+        report: None,
     });
 }
 
@@ -127,8 +128,30 @@ impl Host for FakeHost {
         Box::pin(async move { Ok(SessionList { sessions }) })
     }
 
-    fn resume<'a>(&'a self, _: &'a str, _: Link) -> HostFuture<'a, ()> {
+    fn resume<'a>(&'a self, _: &'a str, _: Option<SessionSetup>, _: Link) -> HostFuture<'a, ()> {
         Box::pin(async { Ok(()) })
+    }
+
+    fn dispatch<'a>(
+        &'a self,
+        _: &'a str,
+        params: DispatchParams,
+        _: Link,
+    ) -> HostFuture<'a, Dispatched> {
+        Box::pin(async move {
+            Ok(match params.name.as_str() {
+                "echo" => Dispatched::Done {
+                    notice: params.args,
+                },
+                "say" => Dispatched::Send {
+                    message: params.args,
+                    images: Vec::new(),
+                },
+                other => Dispatched::Refused {
+                    reason: format!("/{other} is not a command here"),
+                },
+            })
+        })
     }
 
     fn transcript<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, Transcript> {

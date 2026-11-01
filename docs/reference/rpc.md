@@ -54,7 +54,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `bot.relay.deliver` | `agent-interop` | 1.0 | not served yet | |
 | `bot.relay.drain` | `agent-interop` | 1.0 | not served yet | |
 | `bot.roster.list` | `bot-mode` | 1.0 | not served yet | |
-| `command.dispatch` | `workspace-architecture` | 1.0 | not served yet | |
+| `command.dispatch` | `workspace-architecture` | 1.0 | [`DispatchParams`](#dispatchparams) | [`Dispatched`](#dispatched) |
 | `commands.catalog` | `tui` | 1.0 | not served yet | |
 | `complete.path` | `tui` | 1.0 | not served yet | |
 | `complete.slash` | `tui` | 1.0 | not served yet | |
@@ -301,6 +301,26 @@ An approval answer.
 | `always` | Allow matching calls from now on (recorded in `grants.toml`). |
 | `deny` | Refuse. |
 
+### `DispatchParams`
+
+`command.dispatch` params: a slash command the client does not handle itself (spec: tui, Slash command flow).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `args` | string | no | The rest of the line, case kept. |
+| `name` | string | yes | The command name without `/` (an alias or unique prefix resolves). |
+| `session_id` | string | yes | The session. |
+
+### `Dispatched`
+
+`command.dispatch` result.
+
+| Value | Meaning |
+|---|---|
+| `` | The command ran; `notice` is its output to show. |
+| `` | Submit `message` as a prompt (with `images`). |
+| `` | The command did not run. |
+
 ### `Empty`
 
 No params.
@@ -395,6 +415,15 @@ The daemon's build target and its support tier.
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
 
+### `PromptImage`
+
+An image attached to a prompt: a file the daemon reads (checked like `chat --image`), or an image the session already holds (as `command.dispatch` returns them for `/retry`).
+
+| Value | Meaning |
+|---|---|
+| `` | An absolute path on the daemon's machine. |
+| `` | A blob reference (`blob:sha256:<hex>`) of one of the session's earlier user messages. |
+
 ### `RequestCancel`
 
 `request.cancel` payload: a server request timed out or was cancelled.
@@ -441,6 +470,7 @@ What `session.resolve` looks up.
 |---|---|---|---|
 | `exclusive` | boolean | no | Become the session's interactive owner; fails with `-32004 session.in_use` naming the owner's pid while another connection is. |
 | `session_id` | string | yes | `ses_<ULID>`. |
+| `setup` | [`SessionSetup`](#sessionsetup) or null | no | How the session runs from now on; a loaded, idle session is reloaded with it. Absent: as it is (or the profile's defaults). |
 
 ### `SecretAnswer`
 
@@ -478,9 +508,8 @@ What the daemon serves.
 |---|---|---|---|
 | `cwd` | string or null | no | The working directory of the session. |
 | `exclusive` | boolean | no | Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. |
-| `model` | string or null | no | The model for this session (`[<provider>/]<model>` or an alias) instead of the profile's. |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
-| `provider` | string or null | no | The provider for this session instead of the profile's. |
+| `setup` | [`SessionSetup`](#sessionsetup) | no | How the session runs (a chat's flags). |
 | `source_tag` | string or null | no | A source tag recorded on the session. |
 
 ### `SessionList`
@@ -508,6 +537,25 @@ A session named by id.
 |---|---|---|---|
 | `session_id` | string | yes | `ses_<ULID>`. |
 
+### `SessionSetup`
+
+How a daemon session runs: the session-shaping flags of `prometheus chat`, applied when the session loads (spec: cli, Daemon attachment with in-process fallback).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `api_key` | string or null | no | That endpoint's API key (`--api-key-stdin`), held in memory only. |
+| `base_url` | string or null | no | An endpoint for this session only (`--base-url`). |
+| `ignore_rules` | boolean | no | No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). |
+| `ignore_user_config` | boolean | no | Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). |
+| `mock_script` | string or null | no | A mock provider script on the daemon's machine (`--mock-script`). |
+| `model` | string or null | no | The model (`[<provider>/]<model>` or an alias) instead of the profile's (`-m`). |
+| `no_context_files` | boolean | no | No `AGENTS.md`-style context files (`--no-context-files`). |
+| `pass_session_id` | boolean | no | The system prompt names the session id (`--pass-session-id`). |
+| `provider` | string or null | no | The provider instead of the profile's (`--provider`). |
+| `set` | array of string | no | `key=value` configuration overrides for this session only (`--set`, `--approvals`, `--max-iterations`, `--toolsets`). |
+| `skills` | array of string | no | Skills preloaded into the session (`--skills`). |
+| `yolo` | boolean | no | Approval-gated calls run without asking (`--yolo`). |
+
 ### `SessionSummary`
 
 One listed session.
@@ -525,6 +573,8 @@ One listed session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `images` | array of [`PromptImage`](#promptimage) | no | Images that go with it. |
+| `run_budget_secs` | integer or null | no | Wall-clock budget of this turn in seconds (`--run-budget`). |
 | `session_id` | string | yes | The session. |
 | `text` | string | yes | The prompt. |
 
@@ -591,6 +641,7 @@ Why a turn ended in error.
 | `error` | [`TurnError`](#turnerror) or null | no | The error that ended the turn. |
 | `exit_reason` | string | yes | The turn's exit reason (`completed`, `interrupted_by_user`, ...). |
 | `final_response` | string or null | no | The final answer, when there is one. |
+| `report` | any | no | The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). |
 | `turn_id` | string | yes | The turn. |
 | `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
 

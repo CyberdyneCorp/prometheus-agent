@@ -6,24 +6,34 @@
 //! prompts, renders the session's events and answers its approval and
 //! clarify requests at the terminal.
 //!
+//! The session-shaping flags (`-m`, `--provider`, `--set`, `--toolsets`,
+//! `--skills`, `--approvals`, `--yolo`, `--max-iterations`, ...) travel as
+//! the session's setup in `session.create`/`session.resume`; `--image`
+//! and `--run-budget` go with the prompts; `--usage-file` is written here
+//! from the turns' reports.
+//!
 //! The session is opened exclusively: while this chat is attached no other
 //! interactive client may resume it; one that tries is offered to follow
 //! it read-only or to fork it.
 
 mod line;
+mod local;
 mod oneshot;
 mod open;
 mod render;
 mod turn;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
 use pmt_rpc::client::{Client, Inbox};
+use pmt_rpc::contracts::{PromptImage, SessionSetup};
 use pmt_rpc::discovery::DaemonRecord;
 
 use super::args::ChatArgs;
+use super::usage_file::RunRecord;
 use super::{Mode, Ui};
 
 /// An attached connection and the session it drives.
@@ -33,6 +43,10 @@ pub(super) struct Attached {
     pub(super) session: String,
     /// The daemon's pid, for messages.
     pub(super) daemon_pid: u32,
+    /// `--run-budget` seconds, per turn.
+    pub(super) run_budget: Option<u64>,
+    /// What the run did (`--usage-file`).
+    pub(super) record: Arc<RunRecord>,
 }
 
 /// What the attached chat starts with.
@@ -52,18 +66,76 @@ pub struct Start<'a> {
     pub ui: Ui,
     /// `approvals.single_query_mode` approves (one-shot runs).
     pub approve_unattended: bool,
-    /// `--set` overrides were given.
-    pub overrides: bool,
+    /// How the daemon runs the session (the chat's flags).
+    pub setup: SessionSetup,
+    /// `--image` files (checked already) for the first prompt.
+    pub images: Vec<PathBuf>,
+    /// `--run-budget` seconds, per turn.
+    pub run_budget: Option<u64>,
+    /// What the run did (`--usage-file`).
+    pub record: Arc<RunRecord>,
+    /// The client's configuration (display preferences).
+    pub scope: &'a ProfileScope,
+    /// The launch environment (`$EDITOR`, `NO_COLOR`).
+    pub launch: &'a pmt_core::env::LaunchEnv,
+}
+
+impl Start<'_> {
+    /// The `--image` files as prompt attachments (absolute, for the
+    /// daemon, which may work elsewhere).
+    pub(super) fn first_images(&self) -> Vec<PromptImage> {
+        self.images
+            .iter()
+            .map(|path| PromptImage::Path(absolute(self.cwd, path)))
+            .collect()
+    }
+}
+
+/// `path` resolved against `cwd`.
+fn absolute(cwd: &Path, path: &Path) -> String {
+    cwd.join(path).to_string_lossy().into_owned()
+}
+
+/// The session setup of a chat's flags: `-m`/`--provider`, every `--set`
+/// (the global ones and those the chat flags stand for), the switches and
+/// the ad-hoc endpoint (its key read from stdin when asked).
+///
+/// # Errors
+///
+/// `--api-key-stdin` cannot read the key.
+pub fn setup_of(args: &ChatArgs, set: &[String], cwd: &Path) -> Result<SessionSetup, Error> {
+    let api_key = if args.endpoint.api_key_stdin {
+        Some(
+            crate::prompt::read_secret("the --base-url API key")?
+                .expose()
+                .to_owned(),
+        )
+    } else {
+        None
+    };
+    Ok(SessionSetup {
+        model: args.model.clone(),
+        provider: args.provider.clone(),
+        set: set.to_vec(),
+        skills: args.skills.clone(),
+        yolo: args.yolo,
+        pass_session_id: args.pass_session_id,
+        no_context_files: args.no_context_files,
+        ignore_user_config: args.ignore_user_config,
+        ignore_rules: args.ignore_rules,
+        mock_script: args.mock_script.as_deref().map(|p| absolute(cwd, p)),
+        base_url: args.endpoint.base_url.clone(),
+        api_key,
+    })
 }
 
 /// Runs the chat attached to `record`'s daemon.
 ///
 /// # Errors
 ///
-/// `cli.usage` (2) for a flag the daemon cannot honour, `rpc.ticket` when
-/// the daemon does not serve the profile, connection and session errors.
+/// `home.locked` (75) when the daemon does not serve the profile,
+/// connection and session errors.
 pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Result<u8, Error> {
-    refuse_local_flags(start.args, start.overrides, record.process.pid)?;
     crate::model_cmd::block_on(async {
         let hello = crate::daemon_client::hello(true);
         let (client, inbox) = crate::daemon_client::connect(record, scope.name().as_str(), &hello)
@@ -74,6 +146,8 @@ pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Re
             inbox,
             session: String::new(),
             daemon_pid: record.process.pid,
+            run_budget: start.run_budget,
+            record: Arc::clone(&start.record),
         };
         let status = match open_session(&mut attached, start).await? {
             Opened::Session(session) => {
@@ -110,7 +184,7 @@ async fn open_session(attached: &mut Attached, start: &Start<'_>) -> Result<Open
     let session = target.unwrap_or_default();
     match open::offer(&owned).await? {
         open::Choice::Fork => {
-            let fork = open::fork(client, &session).await?;
+            let fork = open::fork(client, &session, &start.setup).await?;
             println!("forked session {session} as {fork}");
             Ok(Opened::Session(fork))
         }
@@ -139,37 +213,4 @@ fn not_served(err: &Error, record: &DaemonRecord, scope: &ProfileScope) -> Error
     .with_hint(
         "serve it with 'gateway.multiplex = true' in the daemon's launch profile, or stop the daemon with 'prometheus daemon stop'",
     )
-}
-
-/// Flags that shape a session in this process (its configuration, tools
-/// or attachments) cannot reach a session the daemon runs; refusing them
-/// says so instead of dropping them.
-fn refuse_local_flags(args: &ChatArgs, overrides: bool, daemon_pid: u32) -> Result<(), Error> {
-    let given: &[(&str, bool)] = &[
-        ("--set", overrides),
-        ("--image", !args.image.is_empty()),
-        ("--approvals", args.approvals.is_some()),
-        ("--yolo", args.yolo),
-        ("--max-iterations", args.max_iterations.is_some()),
-        ("--toolsets", !args.toolsets.is_empty()),
-        ("--skills", !args.skills.is_empty()),
-        ("--pass-session-id", args.pass_session_id),
-        ("--run-budget", args.run_budget.is_some()),
-        ("--no-context-files", args.no_context_files),
-        ("--ignore-user-config", args.ignore_user_config),
-        ("--ignore-rules", args.ignore_rules),
-        ("--usage-file", args.usage_file.is_some()),
-        ("--mock-script", args.mock_script.is_some()),
-        ("--base-url", args.endpoint.base_url.is_some()),
-    ];
-    let Some((flag, _)) = given.iter().find(|(_, on)| *on) else {
-        return Ok(());
-    };
-    Err(Error::new(
-        &codes::CLI_USAGE,
-        format!(
-            "{flag} cannot be used while the gateway daemon (pid {daemon_pid}) runs this home's sessions"
-        ),
-    )
-    .with_hint("drop the flag, or stop the daemon with 'prometheus daemon stop' to run the chat in this process"))
 }

@@ -42,7 +42,7 @@ pub use daemon::DaemonConfig;
 pub use layers::{Layered, Overrides, Source};
 pub use layout::{Home, ProfileDir, ProfileName};
 pub use schema::{Config, SCHEMA_VERSION};
-pub use scope::{Launch, ProfileScope};
+pub use scope::{Launch, ProfileScope, SharedScope};
 pub use secrets::{SecretStore, SecretsHandle};
 pub use write::ConfigFile;
 

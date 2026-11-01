@@ -22,8 +22,8 @@ use pmt_agent::tools::{AgentTools, SessionSearch};
 use pmt_agent::turn::{
     Agent, AgentSetup, EventSink, NoEvents, PromptSetup, RefreshPrompt, SessionTools,
 };
-use pmt_config::ProfileScope;
 use pmt_config::grants::{GrantsFile, SessionGrants, Subject, baseline};
+use pmt_config::{ProfileScope, SharedScope};
 use pmt_core::capability::CapabilitySet;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
@@ -97,6 +97,9 @@ pub struct Factory {
     /// The browser tools every session shares, set up by the first
     /// session (`None`: they could not be, see the WARN).
     browser: OnceLock<Option<browser::Shared>>,
+    /// The profile's configuration as it is now: `scope` until a daemon
+    /// reload replaces it (shared tools read their `live` keys from it).
+    current: SharedScope,
 }
 
 /// One running session.
@@ -123,14 +126,20 @@ pub struct Live {
     pub memory: Arc<MemorySession>,
     /// Counts tool-calling iterations towards a background skill review.
     pub skill_nudge: Mutex<Nudge>,
-    /// The toolset selection the surface was built from.
-    pub selection: Selection,
+    /// The toolset selection the session's tools are built from (`/tools
+    /// --now` replaces it).
+    selection: Mutex<Selection>,
     /// Notices to show once at start.
     pub notices: Vec<String>,
     /// What this run did (`--usage-file`).
     pub record: Arc<crate::chat::usage_file::RunRecord>,
     /// Tool activity to render (taken by the interface).
     pub progress: Option<tokio::sync::mpsc::UnboundedReceiver<progress::Progress>>,
+    /// The configuration the session runs with now: `scope`, with the
+    /// `live` keys of each reload a daemon applies (spec: configuration-
+    /// and-profiles, Live reload with apply classes). Turns and tools
+    /// read it at use.
+    pub config: SharedScope,
     agent_tools: Arc<AgentTools>,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
@@ -168,6 +177,7 @@ impl Factory {
         ));
         let redactor = scope.secrets().redactor().unwrap_or_default();
         Ok(Self {
+            current: SharedScope::new(scope.clone()),
             scope,
             store,
             models,
@@ -183,6 +193,14 @@ impl Factory {
             install_asks: None,
             browser: OnceLock::new(),
         })
+    }
+
+    /// Reads the profile's `live` keys from `current` (a daemon's
+    /// reloaded configuration) instead of the snapshot it was built with.
+    #[must_use]
+    pub fn with_current(mut self, current: SharedScope) -> Self {
+        self.current = current;
+        self
     }
 
     /// Sends runtime install questions (`Install <name> <version>
@@ -203,6 +221,7 @@ impl Factory {
             .get_or_init(|| {
                 browser::Shared::new(
                     &self.scope,
+                    &self.current,
                     &self.launch,
                     &self.redactor,
                     self.install_asks.clone(),
@@ -342,7 +361,8 @@ impl Factory {
         )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
-        let environment = self.environment(id, target, &capabilities)?;
+        let live_config = SharedScope::new(scope.clone());
+        let environment = self.environment(id, target, &capabilities, &live_config)?;
         if let Some(terminal) = &environment.terminal {
             terminal.set_secret_source(skills.secret_source());
         }
@@ -404,9 +424,10 @@ impl Factory {
             skills,
             memory,
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
-            selection,
+            selection: Mutex::new(selection),
             notices,
             progress,
+            config: live_config,
             record: Arc::clone(&self.record),
             agent_tools,
             capabilities,
@@ -450,9 +471,11 @@ impl Factory {
         id: SessionId,
         target: &pmt_providers::resolve::Target,
         capabilities: &CapabilitySet,
+        config: &SharedScope,
     ) -> Result<env::Attached, Error> {
         env::attach(&env::EnvInputs {
             scope: &self.scope,
+            config,
             session_id: &id.to_string(),
             launch: &self.launch,
             cwd: &self.options.cwd,
@@ -675,6 +698,23 @@ fn refresher(
 }
 
 impl Live {
+    /// The toolset selection the session's tools are built from.
+    #[must_use]
+    pub fn selection(&self) -> Selection {
+        self.selection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Records the selection the session's tools were rebuilt from.
+    pub fn set_selection(&self, selection: Selection) {
+        *self
+            .selection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = selection;
+    }
+
     /// Records `session.start` for `session` on `target`'s route.
     async fn emit_start(
         &self,

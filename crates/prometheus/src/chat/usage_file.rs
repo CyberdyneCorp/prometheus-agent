@@ -11,7 +11,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_providers::resolve::Target;
 use pmt_store::{CostStatus, Store, UsageEvent};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// What a run did, filled in as it goes.
 #[derive(Debug)]
@@ -27,6 +27,8 @@ struct Inner {
     root: Option<SessionId>,
     target: Option<Target>,
     turns: u32,
+    /// The reports of turns a gateway daemon ran (an attached chat).
+    remote: Vec<Report>,
 }
 
 impl Default for RunRecord {
@@ -62,10 +64,18 @@ impl RunRecord {
     pub fn turn(&self) {
         self.lock().turns += 1;
     }
+
+    /// A turn the gateway daemon ran, with its report (`turn.finished`
+    /// `report`); unreadable reports are skipped.
+    pub fn remote_turn(&self, report: &serde_json::Value) {
+        if let Ok(report) = serde_json::from_value::<Report>(report.clone()) {
+            self.lock().remote.push(report);
+        }
+    }
 }
 
 /// The document.
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Report {
     /// The newest session of the run.
     pub session_id: Option<String>,
@@ -91,7 +101,7 @@ pub struct Report {
     pub cost: f64,
     /// How the cost is known (`exact`, `estimated`, `subscription`,
     /// `unknown`).
-    pub cost_status: &'static str,
+    pub cost_status: String,
     /// Turns started.
     pub turns: u32,
     /// Why the run ended.
@@ -105,6 +115,9 @@ impl RunRecord {
     #[must_use]
     pub fn report(&self, outcome: &Result<u8, Error>) -> Report {
         let inner = self.lock();
+        if inner.store.is_none() && !inner.remote.is_empty() {
+            return merged(&inner.remote, outcome);
+        }
         let events = run_events(&inner, self.started);
         let mut report = Report {
             session_id: inner.sessions.last().map(ToString::to_string),
@@ -123,7 +136,7 @@ impl RunRecord {
             cache_write_tokens: 0,
             reasoning_tokens: 0,
             cost: 0.0,
-            cost_status: cost_status(&events),
+            cost_status: cost_status(&events).to_owned(),
             turns: inner.turns,
             exit_reason: exit_reason(outcome),
             exit_code: match outcome {
@@ -142,6 +155,52 @@ impl RunRecord {
         }
         report
     }
+}
+
+/// The reports of the turns a daemon ran, as one run that ended with
+/// `outcome`: the last turn's session and route, the sums of tokens and
+/// cost, the weakest cost status.
+fn merged(turns: &[Report], outcome: &Result<u8, Error>) -> Report {
+    let last = turns.last().expect("at least one turn");
+    let has = |status: &str| turns.iter().any(|t| t.cost_status == status);
+    let cost_status = if has("unknown") {
+        "unknown"
+    } else if has("estimated") {
+        "estimated"
+    } else if turns.iter().all(|t| t.cost_status == "subscription") {
+        "subscription"
+    } else {
+        "exact"
+    };
+    let mut report = Report {
+        session_id: last.session_id.clone(),
+        root_session_id: last.root_session_id.clone(),
+        model: last.model.clone(),
+        provider: last.provider.clone(),
+        billing_source: turns.iter().rev().find_map(|t| t.billing_source.clone()),
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        reasoning_tokens: 0,
+        cost: 0.0,
+        cost_status: cost_status.to_owned(),
+        turns: u32::try_from(turns.len()).unwrap_or(u32::MAX),
+        exit_reason: exit_reason(outcome),
+        exit_code: match outcome {
+            Ok(code) => *code,
+            Err(err) => err.exit_code(),
+        },
+    };
+    for turn in turns {
+        report.input_tokens += turn.input_tokens;
+        report.output_tokens += turn.output_tokens;
+        report.cache_read_tokens += turn.cache_read_tokens;
+        report.cache_write_tokens += turn.cache_write_tokens;
+        report.reasoning_tokens += turn.reasoning_tokens;
+        report.cost += turn.cost;
+    }
+    report
 }
 
 /// The run's model calls: the sessions' events since the run started.

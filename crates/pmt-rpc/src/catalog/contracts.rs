@@ -235,17 +235,13 @@ pub struct SessionCreateParams {
     /// A source tag recorded on the session.
     #[serde(default)]
     pub source_tag: Option<String>,
-    /// The model for this session (`[<provider>/]<model>` or an alias)
-    /// instead of the profile's.
-    #[serde(default)]
-    pub model: Option<String>,
-    /// The provider for this session instead of the profile's.
-    #[serde(default)]
-    pub provider: Option<String>,
     /// Make this connection the session's interactive owner: another
     /// connection resuming it exclusively is refused while it is attached.
     #[serde(default)]
     pub exclusive: bool,
+    /// How the session runs (a chat's flags).
+    #[serde(default)]
+    pub setup: SessionSetup,
 }
 
 /// `session.resume` params.
@@ -258,6 +254,78 @@ pub struct ResumeParams {
     /// session.in_use` naming the owner's pid while another connection is.
     #[serde(default)]
     pub exclusive: bool,
+    /// How the session runs from now on; a loaded, idle session is
+    /// reloaded with it. Absent: as it is (or the profile's defaults).
+    #[serde(default)]
+    pub setup: Option<SessionSetup>,
+}
+
+/// How a daemon session runs: the session-shaping flags of `prometheus
+/// chat`, applied when the session loads (spec: cli, Daemon attachment
+/// with in-process fallback).
+#[derive(Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent chat switches
+pub struct SessionSetup {
+    /// The model (`[<provider>/]<model>` or an alias) instead of the
+    /// profile's (`-m`).
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The provider instead of the profile's (`--provider`).
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// `key=value` configuration overrides for this session only (`--set`,
+    /// `--approvals`, `--max-iterations`, `--toolsets`).
+    #[serde(default)]
+    pub set: Vec<String>,
+    /// Skills preloaded into the session (`--skills`).
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// Approval-gated calls run without asking (`--yolo`).
+    #[serde(default)]
+    pub yolo: bool,
+    /// The system prompt names the session id (`--pass-session-id`).
+    #[serde(default)]
+    pub pass_session_id: bool,
+    /// No `AGENTS.md`-style context files (`--no-context-files`).
+    #[serde(default)]
+    pub no_context_files: bool,
+    /// Schema defaults instead of the profile's `config.toml`
+    /// (`--ignore-user-config`).
+    #[serde(default)]
+    pub ignore_user_config: bool,
+    /// No rule files, identity file, memory snapshot or preloaded skills
+    /// (`--ignore-rules`).
+    #[serde(default)]
+    pub ignore_rules: bool,
+    /// A mock provider script on the daemon's machine (`--mock-script`).
+    #[serde(default)]
+    pub mock_script: Option<String>,
+    /// An endpoint for this session only (`--base-url`).
+    #[serde(default)]
+    pub base_url: Option<String>,
+    /// That endpoint's API key (`--api-key-stdin`), held in memory only.
+    #[serde(default)]
+    pub api_key: Option<String>,
+}
+
+impl std::fmt::Debug for SessionSetup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionSetup")
+            .field("model", &self.model)
+            .field("provider", &self.provider)
+            .field("set", &self.set)
+            .field("skills", &self.skills)
+            .field("yolo", &self.yolo)
+            .field("pass_session_id", &self.pass_session_id)
+            .field("no_context_files", &self.no_context_files)
+            .field("ignore_user_config", &self.ignore_user_config)
+            .field("ignore_rules", &self.ignore_rules)
+            .field("mock_script", &self.mock_script)
+            .field("base_url", &self.base_url)
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
 }
 
 /// What `session.resolve` looks up.
@@ -469,6 +537,68 @@ pub struct SubmitParams {
     pub session_id: String,
     /// The prompt.
     pub text: String,
+    /// Images that go with it.
+    #[serde(default)]
+    pub images: Vec<PromptImage>,
+    /// Wall-clock budget of this turn in seconds (`--run-budget`).
+    #[serde(default)]
+    pub run_budget_secs: Option<u64>,
+}
+
+/// An image attached to a prompt: a file the daemon reads (checked like
+/// `chat --image`), or an image the session already holds (as
+/// `command.dispatch` returns them for `/retry`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum PromptImage {
+    /// An absolute path on the daemon's machine.
+    Path(String),
+    /// A blob reference (`blob:sha256:<hex>`) of one of the session's
+    /// earlier user messages.
+    Blob(String),
+}
+
+/// The `session.event` type of a notice a command posts after it answered
+/// (`/refine`'s summary, a skill's load notice): `payload.text` is the
+/// text to show. Every other `session.event` is a trajectory event.
+pub const COMMAND_NOTICE: &str = "command.notice";
+
+/// `command.dispatch` params: a slash command the client does not handle
+/// itself (spec: tui, Slash command flow).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DispatchParams {
+    /// The session.
+    pub session_id: String,
+    /// The command name without `/` (an alias or unique prefix resolves).
+    pub name: String,
+    /// The rest of the line, case kept.
+    #[serde(default)]
+    pub args: String,
+}
+
+/// `command.dispatch` result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Dispatched {
+    /// The command ran; `notice` is its output to show.
+    Done {
+        /// What to show (may be empty).
+        notice: String,
+    },
+    /// Submit `message` as a prompt (with `images`).
+    Send {
+        /// The prompt.
+        message: String,
+        /// Images that go with it.
+        #[serde(default)]
+        images: Vec<PromptImage>,
+    },
+    /// The command did not run.
+    Refused {
+        /// Why.
+        reason: String,
+    },
 }
 
 /// `prompt.submit` result: the turn started; its output arrives as events.
@@ -688,6 +818,10 @@ pub struct TurnFinished {
     /// The turn's token and cost totals, as the turn loop reports them.
     #[serde(default)]
     pub usage: Option<Value>,
+    /// The turn's `--usage-file` report (session, lineage root, route,
+    /// billing source, tokens, cost and cost status of its model calls).
+    #[serde(default)]
+    pub report: Option<Value>,
 }
 
 impl JsonSchema for crate::frame::ErrorData {
@@ -741,6 +875,8 @@ method!(/// `session.context_usage`.
     SessionContextUsage = "session.context_usage" (SessionRef) -> ContextUsage);
 method!(/// `prompt.submit`.
     PromptSubmit = "prompt.submit" (SubmitParams) -> Submitted);
+method!(/// `command.dispatch`: runs a slash command in the session.
+    CommandDispatch = "command.dispatch" (DispatchParams) -> Dispatched);
 method!(/// `approval.respond`.
     ApprovalRespond = "approval.respond" (ApprovalRespondParams) -> Ack);
 

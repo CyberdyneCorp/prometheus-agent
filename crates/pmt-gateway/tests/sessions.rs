@@ -341,3 +341,38 @@ async fn the_discovery_file_names_the_endpoint_and_goes_away_on_stop() {
     assert!(!std::path::Path::new(&control_path).exists());
     let _ = control_path;
 }
+
+#[tokio::test]
+async fn command_dispatch_answers_done_send_or_refused_to_an_attached_client() {
+    let daemon = Daemon::start().await;
+    let (owner, _inbox) = daemon.client("default", false).await;
+    let session = create(&owner).await;
+    let dispatch =
+        |name: &str, args: &str| json!({"session_id": session, "name": name, "args": args});
+    let done = owner
+        .call("command.dispatch", dispatch("echo", "Hi There"))
+        .await
+        .unwrap();
+    assert_eq!(done, json!({"type": "done", "notice": "Hi There"}));
+    let send = owner
+        .call("command.dispatch", dispatch("say", "go on"))
+        .await
+        .unwrap();
+    assert_eq!(
+        send,
+        json!({"type": "send", "message": "go on", "images": []})
+    );
+    let refused = owner
+        .call("command.dispatch", dispatch("nope", ""))
+        .await
+        .unwrap();
+    assert_eq!(refused["type"], "refused");
+    // Dispatching changes the session: a connection that is not attached
+    // gets the same -32002 as for a session it cannot see.
+    let (other, _inbox) = daemon.client("default", false).await;
+    let err = other
+        .call("command.dispatch", dispatch("echo", "x"))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, -32_002);
+}

@@ -109,12 +109,29 @@ exclusive resume fails with `-32004` `session <id> is open in another
 client (pid <n>)` (attaching read-only and forking still work). A session of another
 profile is refused with `-32002` exactly like a session that does not
 exist, and methods that change a session (`prompt.submit`,
-`session.compact`, `session.interrupt`, `approval.respond`,
-`session.detach`) need the connection attached to it.
+`command.dispatch`, `session.compact`, `session.interrupt`,
+`approval.respond`, `session.detach`) need the connection attached to it.
+
+`session.create` and `session.resume` take a `setup`: the session-shaping
+flags of a chat (`model`, `provider`, `set` overrides, `skills`, `yolo`,
+...), applied when the session loads (resuming a loaded, idle session with
+another setup reloads it). `prompt.submit` takes `images` (`{"path":
+"/abs/file.png"}` read by the daemon, or `{"blob": "blob:sha256:..."}` of
+an image the session already holds) and `run_budget_secs`.
+
+`command.dispatch {session_id, name, args}` runs a slash command on the
+session with the same implementation as the line interface, following the
+command's busy policy while a turn runs, and answers `{"type": "done",
+"notice"}` (its output), `{"type": "send", "message", "images"}` (submit
+it as a prompt: `/retry`, `/learn`, skill commands) or `{"type":
+"refused", "reason"}` (commands that belong to the client, such as
+`/exit` or `/theme`, and usage errors). A notice a command posts later
+(`/refine`'s summary) arrives as a `session.event` of type
+`command.notice` with `payload.text`.
 
 `prompt.submit` returns a `turn_id` at once; the turn's output arrives as
 `session.event` events (one per trajectory event) and ends with
-`turn.finished`. Every event carries a per-session `seq` and the daemon's
+`turn.finished`, whose `report` is the turn's `--usage-file` document. Every event carries a per-session `seq` and the daemon's
 `epoch`. After a dropped connection, `session.events.since {session_id,
 last_seen}` returns the kept events after `last_seen` (the newest 512
 events or 4 MiB per session), whether older ones were evicted

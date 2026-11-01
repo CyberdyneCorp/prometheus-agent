@@ -35,6 +35,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionContextUsage, _, _>(catalog, context_usage)?
         .register::<c::SessionCompact, _, _>(catalog, compact)?
         .register::<c::PromptSubmit, _, _>(catalog, submit)?
+        .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     // `rpc.hello` runs in the read loop (it must come first), but it is
     // registered so its contract is checked like every other result.
@@ -171,7 +172,7 @@ async fn resume(call: Call, params: c::ResumeParams) -> Result<c::Attached, RpcE
     let link = call.server.link(&params.session_id);
     call.server
         .host()
-        .resume(&profile, link)
+        .resume(&profile, params.setup, link)
         .await
         .map_err(|e| rpc(&e))?;
     Ok(attached(&call, &params.session_id))
@@ -270,6 +271,16 @@ async fn submit(call: Call, params: c::SubmitParams) -> Result<c::Submitted, Rpc
     call.server
         .host()
         .submit(&profile, params, link)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn dispatch(call: Call, params: c::DispatchParams) -> Result<c::Dispatched, RpcError> {
+    let profile = access(&call, &params.session_id, true).await?;
+    let link = call.server.link(&params.session_id);
+    call.server
+        .host()
+        .dispatch(&profile, params, link)
         .await
         .map_err(|e| rpc(&e))
 }

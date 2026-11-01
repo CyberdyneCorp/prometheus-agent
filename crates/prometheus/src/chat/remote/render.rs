@@ -1,47 +1,92 @@
 //! What an attached chat shows of a turn the daemon runs: one progress
-//! line per tool call (from the session's `session.event` stream) on
-//! stderr, and the final answer on stdout.
+//! line per tool call and the notices of the session's commands (from its
+//! `session.event` stream), the questions it asks, the final answer and
+//! its error. A one-shot run writes them plainly ([`Plain`]); the line
+//! interface paints them above its prompt.
 
 use std::io::Write as _;
 
+use pmt_core::error::Error;
 use pmt_rpc::contracts::TurnFinished;
 use serde_json::Value;
 
-/// How much the chat shows.
+use pmt_rpc::contracts::COMMAND_NOTICE;
+
+/// Where an attached chat shows things.
+pub(super) trait Out {
+    /// A tool progress line.
+    fn tool(&self, text: &str);
+    /// A notice (a command's output, a status line).
+    fn notice(&self, text: &str);
+    /// A question to answer on the next line.
+    fn ask(&self, text: &str);
+    /// The assistant's final answer.
+    fn answer(&self, text: &str);
+    /// An error.
+    fn error(&self, err: &Error);
+}
+
+/// A one-shot run: progress, notices and errors on stderr, the answer on
+/// stdout; `-q` shows the answer only, `--json` no progress.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct View {
-    /// `-q`: the answer only.
+pub(super) struct Plain {
+    /// `-q`.
     pub quiet: bool,
-    /// `--json`: no progress lines.
+    /// `--json`.
     pub json: bool,
 }
 
-impl View {
-    /// Shows one trajectory event of the session.
-    pub(super) fn event(self, data: &Value) {
-        if self.quiet || self.json {
-            return;
-        }
-        if data["type"] == "tool.call" {
-            let tool = data["payload"]["tool"].as_str().unwrap_or("tool");
-            eprintln!("· {tool}");
+impl Out for Plain {
+    fn tool(&self, text: &str) {
+        if !self.quiet && !self.json {
+            eprintln!("{text}");
         }
     }
 
-    /// Prints the turn's answer, and its error on stderr.
-    pub(super) fn finished(self, finished: &TurnFinished) {
-        if let Some(answer) = &finished.final_response {
-            let mut out = std::io::stdout().lock();
-            let _ = if answer.ends_with('\n') {
-                write!(out, "{answer}")
-            } else {
-                writeln!(out, "{answer}")
-            };
-            let _ = out.flush();
+    fn notice(&self, text: &str) {
+        if !self.quiet && !self.json {
+            eprintln!("{text}");
         }
-        if let Some(error) = &finished.error {
-            crate::output::print_error(&error.to_error(), self.json);
+    }
+
+    fn ask(&self, text: &str) {
+        eprintln!("{text}");
+    }
+
+    fn answer(&self, text: &str) {
+        let mut out = std::io::stdout().lock();
+        let _ = if text.ends_with('\n') {
+            write!(out, "{text}")
+        } else {
+            writeln!(out, "{text}")
+        };
+        let _ = out.flush();
+    }
+
+    fn error(&self, err: &Error) {
+        crate::output::print_error(err, self.json);
+    }
+}
+
+/// Shows one `session.event` of the session.
+pub(super) fn event(out: &dyn Out, data: &Value) {
+    match data["type"].as_str() {
+        Some("tool.call") => {
+            let tool = data["payload"]["tool"].as_str().unwrap_or("tool");
+            out.tool(&format!("· {tool}"));
         }
+        Some(COMMAND_NOTICE) => out.notice(data["payload"]["text"].as_str().unwrap_or_default()),
+        _ => {}
+    }
+}
+
+/// Shows the turn's answer, then its error.
+pub(super) fn finished(out: &dyn Out, finished: &TurnFinished) {
+    if let Some(answer) = &finished.final_response {
+        out.answer(answer);
+    }
+    if let Some(error) = &finished.error {
+        out.error(&error.to_error());
     }
 }
 

@@ -270,6 +270,81 @@ impl Layered {
     }
 }
 
+impl Layered {
+    /// This snapshot with every `live` key that differs in `current` taken
+    /// from `current` (value and source); every other key keeps this
+    /// snapshot's value. A running session's effective configuration
+    /// after a reload (spec: configuration-and-profiles, Live reload with
+    /// apply classes).
+    ///
+    /// # Errors
+    ///
+    /// `config.invalid` if the merged values do not form a valid
+    /// configuration (both inputs are valid, so this means a schema bug).
+    pub fn with_live(&self, current: &Self) -> Result<Self, Error> {
+        let live: Vec<String> = crate::reload::changes(&self.config, &current.config)
+            .into_iter()
+            .filter(|c| c.apply == catalog::ApplyClass::Live)
+            .map(|c| c.key)
+            .collect();
+        if live.is_empty() {
+            return Ok(self.clone());
+        }
+        let mut merged = self.clone();
+        for key in &live {
+            set_path(&mut merged.effective, key, current.value(key).cloned());
+            merged.file_keys.remove(key);
+            merged.override_keys.remove(key);
+            merged.managed_keys.remove(key);
+            if let Some(line) = current.file_keys.get(key) {
+                merged.file_keys.insert(key.clone(), *line);
+            }
+            if current.override_keys.contains(key) {
+                merged.override_keys.insert(key.clone());
+            }
+            if current.managed_keys.contains(key) {
+                merged.managed_keys.insert(key.clone());
+            }
+        }
+        merged.config = serde_json::from_value(merged.effective.clone()).map_err(|e| {
+            Error::new(
+                &codes::CONFIG_INVALID,
+                format!("live keys {live:?} do not merge: {e}"),
+            )
+        })?;
+        Ok(merged)
+    }
+}
+
+/// Sets the dotted `key` of `root` to `value`, creating tables on the
+/// way; `None` removes it, and with it any table it leaves empty.
+fn set_path(root: &mut Value, key: &str, value: Option<Value>) {
+    let segments: Vec<&str> = key.split('.').collect();
+    set_in(root, &segments, value);
+}
+
+/// [`set_path`] below `node`; whether `node` is left an empty table.
+fn set_in(node: &mut Value, segments: &[&str], value: Option<Value>) -> bool {
+    let (Value::Object(map), Some((first, rest))) = (node, segments.split_first()) else {
+        return false;
+    };
+    let name = (*first).to_owned();
+    if rest.is_empty() {
+        match value {
+            Some(value) => map.insert(name, value),
+            None => map.remove(&name),
+        };
+    } else if value.is_some() || map.contains_key(&name) {
+        let child = map
+            .entry(name.clone())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        if set_in(child, rest, value) {
+            map.remove(&name);
+        }
+    }
+    map.is_empty()
+}
+
 /// The file with the overrides, then the managed values, applied, as a
 /// typed config.
 fn apply(
@@ -333,6 +408,38 @@ mod tests {
             &Overrides::parse(sets).unwrap(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn a_session_takes_the_reloaded_live_keys_and_keeps_the_rest() {
+        let started = layered(
+            "[budgets]\nturn_usd = 1.0\n[prompt]\nload_identity = true\n[quick_commands.gone]\ntype = \"alias\"\ntarget = \"/help\"\n",
+            &[],
+        );
+        let reloaded = layered(
+            "[budgets]\nturn_usd = 2.0\n[tool_output]\nmax_chars = 10\n[prompt]\nload_identity = false\n",
+            &[],
+        );
+        let merged = started.with_live(&reloaded).unwrap();
+        let config = merged.config();
+        assert!((config.budgets.turn_usd - 2.0).abs() < f64::EPSILON);
+        assert_eq!(config.tool_output.max_chars, 10);
+        assert!(
+            config.prompt.load_identity,
+            "next_session keys keep the start value"
+        );
+        assert!(
+            config.quick_commands.is_empty(),
+            "a removed live entry goes"
+        );
+        assert!(matches!(
+            merged.source("tool_output.max_chars"),
+            Source::File { line: 4, .. }
+        ));
+        assert_eq!(
+            merged.value("budgets.turn_usd"),
+            Some(&serde_json::json!(2.0))
+        );
     }
 
     #[test]

@@ -65,7 +65,7 @@ impl Home {
             control: ControlPaths {
                 prometheus_home: self.home.join(".prometheus"),
             },
-            read_max_chars: 100_000,
+            read_max_chars: pmt_tools::setting::fixed(100_000),
             linter: Linter::builtin(),
         })
     }

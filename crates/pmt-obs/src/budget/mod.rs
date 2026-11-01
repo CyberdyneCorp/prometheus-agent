@@ -21,7 +21,7 @@ mod scope;
 pub use scope::{Limit, Place, Scope, Unit, limits, set_usd};
 
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -87,7 +87,8 @@ pub struct Refused {
 /// were already given. Limits are passed to every check.
 #[derive(Debug)]
 pub struct Budgets {
-    zone: TimeZone,
+    /// `cron.timezone`, a live key: a reload replaces it ([`Budgets::set_zone`]).
+    zone: Mutex<TimeZone>,
     warned: Mutex<HashSet<(Scope, Unit, String)>>,
     unpriced_warned: Mutex<HashSet<String>>,
 }
@@ -97,10 +98,15 @@ impl Budgets {
     #[must_use]
     pub fn new(zone: TimeZone) -> Self {
         Self {
-            zone,
+            zone: Mutex::new(zone),
             warned: Mutex::new(HashSet::new()),
             unpriced_warned: Mutex::new(HashSet::new()),
         }
+    }
+
+    /// Evaluates days and months in `zone` from now on.
+    pub fn set_zone(&self, zone: TimeZone) {
+        *self.zone.lock().unwrap_or_else(PoisonError::into_inner) = zone;
     }
 
     /// Checks a call against every applicable limit of `config`.
@@ -201,7 +207,12 @@ impl Budgets {
         place: &Place,
         now: Timestamp,
     ) -> Result<(f64, String), Error> {
-        let (filter, period) = scope::window(limit.scope, place, now, &self.zone)?;
+        let zone = self
+            .zone
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let (filter, period) = scope::window(limit.scope, place, now, &zone)?;
         let totals = store.usage_sum(&filter)?;
         Ok((amount(&totals, limit.unit), period))
     }

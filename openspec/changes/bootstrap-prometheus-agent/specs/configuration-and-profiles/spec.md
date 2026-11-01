@@ -150,13 +150,18 @@ The system SHALL store `schema_version` at the top of `config.toml`, SHALL apply
 - **THEN** the file SHALL contain the new key name with the same value, `schema_version = 2`, and a backup of the version-1 file
 
 ### Requirement: Live reload with apply classes
-The system SHALL, in a long-running process, watch each served profile's `config.toml`, validate a changed file before using it, keep the previous snapshot and log an ERROR (also surfaced by `prometheus doctor` and the gateway status) when it is invalid, and otherwise apply `live` keys immediately, `next_session` keys only to sessions created afterwards, and mark `restart` keys as pending restart; a running session SHALL keep the config snapshot it started with for every `next_session` key.
+The system SHALL, in a long-running process, watch each served profile's `config.toml`, validate a changed file before using it, keep the previous snapshot and log an ERROR (also surfaced by `prometheus doctor` and the gateway status) when it is invalid, and otherwise apply `live` keys immediately, also to running sessions (from their next turn or tool call, through the session's own overrides), `next_session` keys only to sessions created afterwards, and mark `restart` keys as pending restart; a running session SHALL keep the config snapshot it started with for every `next_session` key.
 **Milestone:** M2
 
 #### Scenario: Prompt-affecting key deferred
 - **GIVEN** an active gateway session and a change to `prompt.load_identity` (apply class `next_session`)
 - **WHEN** the file is saved
 - **THEN** the active session's system prompt SHALL be unchanged and the next new session SHALL use the new identity setting
+
+#### Scenario: Live key applies to a running session
+- **GIVEN** an active gateway session that finished a turn
+- **WHEN** `budgets.turn_tokens` (apply class `live`) is set to `1` in `config.toml`
+- **THEN** the session's next turn SHALL stop at its first model call with `token_budget_exhausted`
 
 #### Scenario: Invalid edit keeps the daemon running
 - **WHEN** the user saves `config.toml` with a syntax error while the gateway runs

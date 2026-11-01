@@ -12,65 +12,77 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_agent::turn::{Interrupt, Issuer, TurnInput, TurnOptions};
-use pmt_config::ProfileScope;
+use pmt_agent::turn::{Interrupt, Issuer, TurnOptions};
+use pmt_config::{ProfileScope, SharedScope};
 use pmt_core::cancel::CancelToken;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_gateway::{Host, HostFuture, Link};
 use pmt_rpc::contracts::{
-    CompactParams, Compacted, ContextUsage, ForkParams, ResolveKind, ResolveParams,
-    SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSummary, SubmitParams,
-    Submitted, Transcript, TranscriptMessage, TurnEnded, TurnError, TurnFinished,
+    CompactParams, Compacted, ContextUsage, DispatchParams, Dispatched, ForkParams, ResolveKind,
+    ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
+    SessionSummary, SubmitParams, Submitted, Transcript, TranscriptMessage, TurnEnded, TurnError,
+    TurnFinished,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 
 use super::turn::{ToClients, approvals, clarify};
 
+mod commands;
 mod reload;
+mod setup;
 
 use crate::chat::resume;
-use crate::chat::session::model::RouteFlags;
-use crate::chat::session::{Factory, Live, Options};
+use crate::chat::session::{Factory, Live};
 pub(super) use reload::watch;
 
 /// A loaded session.
 struct Loaded {
     live: Live,
+    /// The machinery it was opened with (its commands run on it).
+    factory: Arc<Factory>,
+    /// How its client asked it to run (re-applied to each reload).
+    setup: SessionSetup,
     busy: AtomicBool,
+    /// Wakes those waiting for the running turn to end.
+    idle: tokio::sync::Notify,
     /// Stops the running turn (`session.interrupt`).
     interrupt: Mutex<Option<Interrupt>>,
 }
 
-/// How a client asked for a session to run (`session.create`), kept until
-/// the session loads.
-#[derive(Debug, Clone, Default)]
-struct Setup {
-    model: Option<String>,
-    provider: Option<String>,
-}
+impl Loaded {
+    /// Waits until no turn runs.
+    async fn until_idle(&self) {
+        loop {
+            let ended = self.idle.notified();
+            if !self.busy.load(Ordering::Acquire) {
+                return;
+            }
+            ended.await;
+        }
+    }
 
-impl Setup {
-    fn flags(&self) -> RouteFlags<'_> {
-        RouteFlags {
-            provider: self.provider.as_deref(),
-            model: self.model.as_deref(),
-            mock_script: None,
+    /// Stops the running turn, if any.
+    fn stop(&self) {
+        let running = self.interrupt.lock().expect("interrupt poisoned").clone();
+        if let Some(interrupt) = running {
+            interrupt.stop(Issuer::User);
         }
     }
 }
 
 /// One served profile.
 struct Profile {
-    /// The configuration new sessions start with, replaced by a reload.
-    current: std::sync::RwLock<ProfileScope>,
+    /// The configuration new sessions start with, replaced by a reload
+    /// (shared with every factory, whose shared tools read it).
+    current: SharedScope,
     store: Arc<Store>,
     /// What the reloads did, for `daemon status`.
     config: Mutex<reload::State>,
-    /// Session machinery per working directory.
-    factories: Mutex<HashMap<PathBuf, Arc<Factory>>>,
-    setups: Mutex<HashMap<SessionId, Setup>>,
+    /// Session machinery per working directory and setup.
+    factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
+    setups: Mutex<HashMap<SessionId, SessionSetup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
 }
 
@@ -99,10 +111,7 @@ fn busy(id: SessionId) -> Error {
 impl Profile {
     /// The configuration new sessions start with.
     fn scope(&self) -> ProfileScope {
-        self.current
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        self.current.get()
     }
 }
 
@@ -125,7 +134,7 @@ impl DaemonHost {
             profiles.insert(
                 scope.name().to_string(),
                 Profile {
-                    current: std::sync::RwLock::new(scope),
+                    current: SharedScope::new(scope),
                     config: Mutex::new(state),
                     store,
                     factories: Mutex::default(),
@@ -155,28 +164,6 @@ impl DaemonHost {
                 format!("profile '{name}' is not served"),
             )
         })
-    }
-
-    /// The profile's session machinery for `cwd`.
-    fn factory(&self, profile: &Profile, cwd: PathBuf) -> Result<Arc<Factory>, Error> {
-        let mut factories = profile.factories.lock().expect("factories poisoned");
-        if let Some(factory) = factories.get(&cwd) {
-            return Ok(Arc::clone(factory));
-        }
-        let options = Options {
-            interactive: true,
-            cwd: cwd.clone(),
-            ..Options::default()
-        };
-        let factory = Arc::new(Factory::new(
-            profile.scope(),
-            &self.launch,
-            &RouteFlags::default(),
-            None,
-            options,
-        )?);
-        factories.insert(cwd, Arc::clone(&factory));
-        Ok(factory)
     }
 
     /// Where a session works: its recorded directory, else the profile's
@@ -213,10 +200,13 @@ impl DaemonHost {
             .expect("setups poisoned")
             .remove(&id)
             .unwrap_or_default();
-        let factory = self.factory(profile, cwd)?;
-        let target = factory.models.primary(&setup.flags()).await?;
+        let factory = self.factory(profile, cwd, &setup)?;
+        let target = factory.models.primary(&setup::flags(&setup)).await?;
         let clients = Arc::new(ToClients { link: link.clone() });
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
+        if let Some(effective) = self.effective(profile, &setup, &live.scope) {
+            live.config.replace(effective);
+        }
         let timeout = Duration::from_secs(profile.scope().config().approvals.timeout_secs);
         if let Some(prompts) = live.approvals.take() {
             tokio::spawn(approvals(prompts, link.clone(), timeout));
@@ -228,7 +218,10 @@ impl DaemonHost {
         drop(live.progress.take());
         let session = Arc::new(Loaded {
             live,
+            factory,
+            setup,
             busy: AtomicBool::new(false),
+            idle: tokio::sync::Notify::new(),
             interrupt: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
@@ -278,23 +271,37 @@ impl DaemonHost {
         if session.busy.swap(true, Ordering::AcqRel) {
             return Err(busy(id));
         }
+        let input = match setup::input(&session.factory, &session.live, &params).await {
+            Ok(input) => input,
+            Err(err) => {
+                session.busy.store(false, Ordering::Release);
+                session.idle.notify_waiters();
+                return Err(err);
+            }
+        };
         let turn_id = pmt_agent::turn::TurnId::new().to_string();
-        // The session's own snapshot: a reload changes new sessions only.
-        let scope = session.live.scope.clone();
+        // The session's configuration: its start snapshot with the live
+        // keys of every reload since.
+        let scope = session.live.config.get();
         let turns = Arc::clone(&self.turns);
         turns.fetch_add(1, Ordering::AcqRel);
         let finished_id = turn_id.clone();
-        let options = TurnOptions::new(&CancelToken::new());
+        let mut options = TurnOptions::new(&CancelToken::new());
+        options.run_budget = params.run_budget_secs.map(Duration::from_secs);
         *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
+        let record = setup::record(&session.factory, &session.live)?;
         tokio::spawn(async move {
             let outcome = session
                 .live
                 .agent
-                .run_turn(Some(&scope), id, TurnInput::text(params.text), options)
+                .run_turn(Some(&scope), id, input, options)
                 .await;
-            link.emit::<TurnEnded>(&finished(finished_id, outcome));
+            let mut finished = finished(finished_id, outcome);
+            finished.report = serde_json::to_value(record.report(&Ok(0))).ok();
+            link.emit::<TurnEnded>(&finished);
             session.interrupt.lock().expect("interrupt poisoned").take();
             session.busy.store(false, Ordering::Release);
+            session.idle.notify_waiters();
             turns.fetch_sub(1, Ordering::AcqRel);
         });
         Ok(Submitted { turn_id })
@@ -309,6 +316,7 @@ fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>
             final_response: result.final_response,
             error: result.error.as_ref().map(TurnError::of),
             usage: serde_json::to_value(result.usage).ok(),
+            report: None,
         },
         Err(err) => TurnFinished {
             turn_id,
@@ -316,6 +324,7 @@ fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>
             final_response: None,
             error: Some(TurnError::of(&err)),
             usage: None,
+            report: None,
         },
     }
 }
@@ -344,12 +353,9 @@ impl Host for DaemonHost {
             let profile = self.profile(profile)?;
             let cwd = Self::cwd_of(profile, params.cwd.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
-            let setup = Setup {
-                model: params.model.clone(),
-                provider: params.provider.clone(),
-            };
-            let factory = self.factory(profile, cwd.clone())?;
-            let target = factory.models.primary(&setup.flags()).await?;
+            let setup = params.setup.clone();
+            let factory = self.factory(profile, cwd.clone(), &setup)?;
+            let target = factory.models.primary(&setup::flags(&setup)).await?;
             let mut new = NewSession::new(Source::Cli);
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
@@ -399,11 +405,31 @@ impl Host for DaemonHost {
         })
     }
 
-    fn resume<'a>(&'a self, profile: &'a str, link: Link) -> HostFuture<'a, ()> {
+    fn resume<'a>(
+        &'a self,
+        profile: &'a str,
+        setup: Option<SessionSetup>,
+        link: Link,
+    ) -> HostFuture<'a, ()> {
         Box::pin(async move {
             let profile = self.profile(profile)?;
             let id = session_id(link.session_id())?;
+            if let Some(setup) = setup {
+                Self::set_up(profile, id, setup).await?;
+            }
             self.load(profile, id, &link).await.map(|_| ())
+        })
+    }
+
+    fn dispatch<'a>(
+        &'a self,
+        profile: &'a str,
+        params: DispatchParams,
+        link: Link,
+    ) -> HostFuture<'a, Dispatched> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            self.dispatch_command(profile, params, link).await
         })
     }
 
@@ -472,7 +498,7 @@ impl Host for DaemonHost {
             let outcome = session
                 .live
                 .agent
-                .compress(&session.live.scope, &manual)
+                .compress(&session.live.config.get(), &manual)
                 .await?;
             Ok(Compacted {
                 status: format!("{:?}", outcome.status).to_lowercase(),
@@ -498,11 +524,8 @@ impl Host for DaemonHost {
         Box::pin(async move {
             let profile = self.profile(profile)?;
             let id = self::session_id(session_id)?;
-            let loaded = profile.loaded.lock().await.get(&id).cloned();
-            let running =
-                loaded.and_then(|l| l.interrupt.lock().expect("interrupt poisoned").clone());
-            if let Some(interrupt) = running {
-                interrupt.stop(Issuer::User);
+            if let Some(session) = profile.loaded.lock().await.get(&id).cloned() {
+                session.stop();
             }
             Ok(())
         })

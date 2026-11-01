@@ -3,12 +3,12 @@
 //! `config.toml` is polled; a changed file is validated before use. An
 //! invalid one keeps the previous snapshot (logged at ERROR and shown by
 //! `daemon status` and `doctor`). A valid one becomes the snapshot new
-//! sessions start with (`next_session` keys), is pushed into running
-//! sessions for the `live` keys they read at run time (the approval
-//! settings; the daemon's own budget and resume checks always read the
-//! current snapshot), and leaves `restart` keys at their old values,
-//! listed as pending until the daemon restarts. A running session keeps
-//! the snapshot it started with for everything else.
+//! sessions start with (`next_session` keys), is pushed into every running
+//! session for its `live` keys (the session's start snapshot with the new
+//! live values, through its own overrides: what its turns, tools and
+//! approval gate read from then on), and leaves `restart` keys at their
+//! old values, listed as pending until the daemon restarts. A running
+//! session keeps the snapshot it started with for everything else.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -32,6 +32,8 @@ pub(super) struct State {
     reloads: u64,
     error: Option<String>,
     pending_restart: BTreeSet<String>,
+    /// The `--set` pins holding `restart` keys at their start values.
+    pins: Vec<String>,
 }
 
 impl State {
@@ -40,6 +42,11 @@ impl State {
             last: std::fs::read(config_path(scope)).ok(),
             ..Self::default()
         }
+    }
+
+    /// The `--set` pins holding `restart` keys at their start values.
+    pub(super) fn pins(&self) -> Vec<String> {
+        self.pins.clone()
     }
 }
 
@@ -86,11 +93,7 @@ impl DaemonHost {
             state.last = text;
         }
         let name = current.name().to_string();
-        let launch = if name == self.launch_profile {
-            Launch::Profile(&self.launch)
-        } else {
-            Launch::Other
-        };
+        let launch = self.launch_of(&name);
         let opened = Overrides::parse(&self.set).and_then(|overrides| {
             ProfileScope::open(current.profile().clone(), &overrides, launch)
         });
@@ -118,7 +121,7 @@ impl DaemonHost {
         launch: Launch<'_>,
     ) {
         let found = changes(old.config(), new.config());
-        let new = self.pinned(&found, new, launch);
+        let (new, pins) = self.pinned(&found, new, launch);
         {
             let mut state = profile.config.lock().expect("config state poisoned");
             state.error = None;
@@ -126,6 +129,7 @@ impl DaemonHost {
                 return;
             }
             state.reloads += 1;
+            state.pins.extend(pins);
             state.pending_restart.extend(
                 found
                     .iter()
@@ -133,25 +137,24 @@ impl DaemonHost {
                     .map(|c| c.key.clone()),
             );
         }
-        *profile
-            .current
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = new.clone();
+        profile.current.replace(new.clone());
         // New sessions are built from the new snapshot.
         profile
             .factories
             .lock()
             .expect("factories poisoned")
             .clear();
-        if found
-            .iter()
-            .any(|c| c.apply == ApplyClass::Live && c.key.starts_with("approvals."))
-        {
+        if found.iter().any(|c| c.apply == ApplyClass::Live) {
             for session in profile.loaded.lock().await.values() {
-                session
-                    .live
-                    .gate
-                    .set_approvals(new.config().approvals.clone());
+                if let Some(effective) =
+                    self.effective(profile, &session.setup, &session.live.scope)
+                {
+                    session
+                        .live
+                        .gate
+                        .set_approvals(effective.config().approvals.clone());
+                    session.live.config.replace(effective);
+                }
             }
         }
         let keys = |class: ApplyClass| -> Vec<&str> {
@@ -171,20 +174,28 @@ impl DaemonHost {
     }
 
     /// `new` with its `restart` keys held at their old values (they apply
-    /// after a restart); `new` itself when nothing needs holding or the
-    /// held values do not load.
-    fn pinned(&self, found: &[Change], new: ProfileScope, launch: Launch<'_>) -> ProfileScope {
+    /// after a restart) and the pins that hold them; `new` itself when
+    /// nothing needs holding or the held values do not load.
+    fn pinned(
+        &self,
+        found: &[Change],
+        new: ProfileScope,
+        launch: Launch<'_>,
+    ) -> (ProfileScope, Vec<String>) {
         let (pins, unpinnable) = pin_restart_keys(found);
         if !unpinnable.is_empty() {
             tracing::warn!(keys = ?unpinnable, "restart keys that were unset apply to new sessions at once");
         }
         if pins.is_empty() {
-            return new;
+            return (new, pins);
         }
         let mut set = self.set.clone();
-        set.extend(pins);
-        Overrides::parse(&set)
+        set.extend(pins.iter().cloned());
+        match Overrides::parse(&set)
             .and_then(|overrides| ProfileScope::open(new.profile().clone(), &overrides, launch))
-            .unwrap_or(new)
+        {
+            Ok(pinned) => (pinned, pins),
+            Err(_) => (new, Vec::new()),
+        }
     }
 }

@@ -267,7 +267,12 @@ mod tests {
         cdp.closed().await;
         let started = Instant::now();
         let result = cdp
-            .call_within("Target.getTargets", json!({}), None, Duration::from_secs(20))
+            .call_within(
+                "Target.getTargets",
+                json!({}),
+                None,
+                Duration::from_secs(20),
+            )
             .await;
         assert_eq!(result, Err("the browser connection is closed".to_owned()));
         assert!(started.elapsed() < Duration::from_secs(5));

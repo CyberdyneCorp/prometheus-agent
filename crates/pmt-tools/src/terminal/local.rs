@@ -43,7 +43,7 @@ pub struct LocalSetup {
     /// The session's `[terminal]` settings.
     pub terminal: TerminalConfig,
     /// `tool_output.max_chars`.
-    pub max_chars: usize,
+    pub max_chars: crate::setting::Limit,
     /// `tools.kill_grace_secs`.
     pub kill_grace: Duration,
     /// The session sandbox (built from its effective capability set).
@@ -175,7 +175,7 @@ impl LocalTerminal {
         }
         let processes = ProcessRegistry::new(process::Options {
             kill_grace: setup.kill_grace,
-            max_chars: setup.max_chars,
+            max_chars: Arc::clone(&setup.max_chars),
             redactor: setup.redactor.clone(),
             notify: setup.notify.clone(),
             clock: setup
@@ -463,7 +463,7 @@ impl LocalTerminal {
         };
         let (status, capture) = self.wait_foreground(spawned, timeout_secs).await;
         let shaped = capture.finish(
-            self.setup.max_chars,
+            (self.setup.max_chars)(),
             &self.setup.hooks,
             &self.setup.redactor,
         );

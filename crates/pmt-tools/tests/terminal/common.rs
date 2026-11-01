@@ -118,7 +118,7 @@ impl Fixture {
         let path = env.get("PATH").map(ToOwned::to_owned);
         LocalSetup {
             terminal,
-            max_chars: 50_000,
+            max_chars: pmt_tools::setting::fixed(50_000),
             kill_grace: Duration::from_secs(2),
             sandbox,
             env,

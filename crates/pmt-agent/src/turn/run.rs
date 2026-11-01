@@ -123,6 +123,10 @@ pub(super) async fn run(
 ) -> Result<TurnResult, Error> {
     let setup = &agent.setup;
     let id = TurnId::new();
+    // `cron.timezone` is live: a reloaded zone counts from this turn on.
+    agent
+        .budgets
+        .set_zone(pmt_obs::time::profile_zone(&scope.config().cron)?);
     // `@` references are expanded before admission: the admitted message
     // is the expanded one.
     let (input, notices) = expand(agent, input).await;

@@ -37,6 +37,7 @@ pub mod registry;
 pub mod result;
 pub mod sanitize;
 pub mod selection;
+pub mod setting;
 pub mod spillover;
 pub mod surface;
 pub mod terminal;

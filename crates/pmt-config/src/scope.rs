@@ -10,7 +10,7 @@
 //! `Default`, so a scope cannot be conjured without loading a profile.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError, RwLock};
 
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
@@ -165,6 +165,51 @@ impl ProfileScope {
     #[must_use]
     pub fn secrets(&self) -> &SecretsHandle {
         &self.inner.secrets
+    }
+
+    /// This scope with the `live` keys of `current` (the same profile's
+    /// newer snapshot) and every other key unchanged: what a running
+    /// session reads after a reload. Secrets stay shared.
+    ///
+    /// # Errors
+    ///
+    /// As [`Layered::with_live`].
+    pub fn with_live(&self, current: &Self) -> Result<Self, Error> {
+        Ok(Self {
+            inner: Arc::new(Inner {
+                profile: self.inner.profile.clone(),
+                config: self.inner.config.with_live(&current.inner.config)?,
+                secrets: self.inner.secrets.clone(),
+            }),
+        })
+    }
+}
+
+/// A profile scope a long-running process replaces when it reloads the
+/// configuration, read by components that hold it for a whole session
+/// (clones share it). A one-run process holds one that never changes.
+#[derive(Debug, Clone)]
+pub struct SharedScope(Arc<RwLock<ProfileScope>>);
+
+impl SharedScope {
+    /// Holds `scope`.
+    #[must_use]
+    pub fn new(scope: ProfileScope) -> Self {
+        Self(Arc::new(RwLock::new(scope)))
+    }
+
+    /// The scope as it is now.
+    #[must_use]
+    pub fn get(&self) -> ProfileScope {
+        self.0
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Replaces the scope for every holder.
+    pub fn replace(&self, scope: ProfileScope) {
+        *self.0.write().unwrap_or_else(PoisonError::into_inner) = scope;
     }
 }
 

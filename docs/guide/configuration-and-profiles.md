@@ -100,14 +100,17 @@ saved change is validated first: an invalid file is reported (in the
 daemon's log, `prometheus daemon status` and `prometheus doctor`) and the
 daemon keeps serving the previous configuration. A valid one applies by
 each key's apply class (`config explain <key>` shows it): `live` keys at
-once, `next_session` keys to sessions created afterwards (a running
-session keeps what it started with), and `restart` keys after `prometheus
-daemon restart` (`daemon status` lists them as pending).
+once, running sessions included (budgets, `tool_output.max_chars`,
+`files.read_max_chars`, approvals and the rest apply from the session's
+next turn or tool call, over the session's own `--set` overrides),
+`next_session` keys to sessions created afterwards (a running session
+keeps what it started with), and `restart` keys after `prometheus daemon
+restart` (`daemon status` lists them as pending).
 
 ### Settings your administrator manages
 
 An administrator can manage settings for every user of a machine in
-`/etc/prometheus/managed.toml` (`C:\ProgramData\Prometheus\managed.toml`
+`/etc/prometheus/managed.toml` (`%ProgramData%\Prometheus\managed.toml`
 on Windows). It uses the same keys as `config.toml`, its values win over
 every profile's, and the keys it lists in `locked = [...]` cannot be
 changed: `config set`, `config unset`, `config edit` and `--set` refuse

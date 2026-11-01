@@ -2,20 +2,27 @@
 //! until `turn.finished`, answering the turn's approval and clarify
 //! requests and turning Ctrl-C into `session.interrupt`.
 
-use std::io::Write as _;
-
 use pmt_core::error::{Error, codes};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
-    Envelope, PromptSubmit, SessionInterrupt, SessionRef, SubmitParams, TurnFinished,
+    Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef, SubmitParams, TurnFinished,
 };
 use serde_json::{Value, json};
 
 use super::Attached;
-use super::line::Input;
-use super::render::View;
+use super::line::{Lines, Typed};
+use super::render::{self, Out};
 use crate::chat::signals::Signals;
+
+/// A prompt to submit.
+#[derive(Debug, Default)]
+pub(super) struct Prompt {
+    /// Its text.
+    pub text: String,
+    /// The images that go with it.
+    pub images: Vec<PromptImage>,
+}
 
 /// Who answers the turn's requests.
 pub(super) enum Asker<'a> {
@@ -26,7 +33,7 @@ pub(super) enum Asker<'a> {
         approve: bool,
     },
     /// The person at the line interface.
-    Line(&'a mut Input),
+    Line(&'a mut Lines),
 }
 
 /// How a turn ended.
@@ -60,7 +67,7 @@ impl Asking {
     }
 }
 
-/// Runs `text` as a turn of the attached session.
+/// Runs `prompt` as a turn of the attached session.
 ///
 /// # Errors
 ///
@@ -68,14 +75,16 @@ impl Asking {
 /// `rpc.connection` when the connection ends before the turn does.
 pub(super) async fn run(
     attached: &mut Attached,
-    text: String,
+    prompt: Prompt,
     asker: &mut Asker<'_>,
-    view: View,
+    out: &dyn Out,
     signals: &mut Signals,
 ) -> Result<Outcome, Error> {
     let params = SubmitParams {
         session_id: attached.session.clone(),
-        text,
+        text: prompt.text,
+        images: prompt.images,
+        run_budget_secs: attached.run_budget,
     };
     let turn_id = attached
         .client
@@ -91,29 +100,37 @@ pub(super) async fn run(
                 let Some(event) = event else {
                     return Err(lost(attached.daemon_pid));
                 };
-                if let Some(finished) = on_event(&event, &turn_id, view, &mut asking) {
+                if let Some(finished) = on_event(&event, &turn_id, out, &mut asking) {
+                    if let Some(report) = &finished.report {
+                        attached.record.remote_turn(report);
+                    }
                     outcome.finished = Some(finished);
                     return Ok(outcome);
                 }
             }
             Some(call) = attached.inbox.requests.recv() => {
-                asking = ask(attached, call, asker, &mut outcome).await;
+                asking = ask(attached, call, asker, out, &mut outcome).await;
             }
             code = signals.next(), if outcome.signal.is_none() => {
                 outcome.signal = Some(code);
                 interrupt(attached).await;
             }
-            line = next_line(asker) => {
-                asking = on_line(attached, asking, line, asker);
+            typed = next_typed(asker) => {
+                if matches!(typed, Typed::Interrupt) {
+                    interrupt(attached).await;
+                } else {
+                    asking = on_line(attached, asking, typed, asker, out);
+                }
             }
         }
     }
 }
 
-/// The next typed line, for the line interface (never for a one-shot).
-async fn next_line(asker: &mut Asker<'_>) -> Option<String> {
+/// What the person does next at the line interface (never for a
+/// one-shot); Ctrl+C there interrupts the turn.
+async fn next_typed(asker: &mut Asker<'_>) -> Typed {
     match asker {
-        Asker::Line(input) if !input.closed => input.next().await,
+        Asker::Line(lines) if !lines.closed => lines.next().await,
         _ => std::future::pending().await,
     }
 }
@@ -130,11 +147,11 @@ fn lost(daemon_pid: u32) -> Error {
 fn on_event(
     event: &Envelope,
     turn_id: &str,
-    view: View,
+    out: &dyn Out,
     asking: &mut Option<Asking>,
 ) -> Option<TurnFinished> {
     match event.event.as_str() {
-        "session.event" => view.event(&event.data),
+        "session.event" => render::event(out, &event.data),
         "turn.finished" => {
             let finished: TurnFinished = serde_json::from_value(event.data.clone()).ok()?;
             return (finished.turn_id == turn_id).then_some(finished);
@@ -143,7 +160,7 @@ fn on_event(
             let id = event.data["id"].as_str().unwrap_or_default();
             if asking.as_ref().is_some_and(|a| a.id() == id) {
                 *asking = None;
-                println!("(the question was answered elsewhere or timed out)");
+                out.notice("(the question was answered elsewhere or timed out)");
             }
         }
         _ => {}
@@ -174,6 +191,7 @@ async fn ask(
     attached: &Attached,
     call: ServerCall,
     asker: &mut Asker<'_>,
+    out: &dyn Out,
     outcome: &mut Outcome,
 ) -> Option<Asking> {
     let client = &attached.client;
@@ -189,7 +207,7 @@ async fn ask(
             None
         }
         (Asker::Line(_), "approval.request") => {
-            show_approval(&call.params);
+            out.ask(&approval_text(&call.params));
             Some(Asking::Approval { id: call.id })
         }
         (Asker::Line(_), "clarify.request") => {
@@ -197,7 +215,7 @@ async fn ask(
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
-            show_question(questions.first());
+            show_question(out, questions.first());
             Some(Asking::Clarify {
                 id: call.id,
                 questions,
@@ -215,22 +233,31 @@ async fn ask(
 fn on_line(
     attached: &Attached,
     asking: Option<Asking>,
-    line: Option<String>,
+    typed: Typed,
     asker: &mut Asker<'_>,
+    out: &dyn Out,
 ) -> Option<Asking> {
-    let Asker::Line(input) = asker else {
+    let Asker::Line(lines) = asker else {
         return asking;
     };
-    let Some(line) = line else {
-        input.closed = true;
-        if let Some(open) = asking {
-            attached.client.respond(open.id(), Err(unanswered()));
+    let line = match typed {
+        Typed::Line(line) => line,
+        // Composed in the editor while the turn runs: sent after it.
+        Typed::Compose(buffer) => {
+            lines.queue.push_back(format!("/prompt {buffer}"));
+            return asking;
         }
-        return None;
+        Typed::Interrupt | Typed::Eof => {
+            lines.closed = true;
+            if let Some(open) = asking {
+                attached.client.respond(open.id(), Err(unanswered()));
+            }
+            return None;
+        }
     };
     match asking {
         None => {
-            input.queue.push_back(line);
+            lines.queue.push_back(line);
             None
         }
         Some(Asking::Approval { id }) => {
@@ -240,7 +267,7 @@ fn on_line(
                     .respond(&id, Ok(json!({ "decision": decision })));
                 None
             } else {
-                prompt("allow? [o]nce, [s]ession, [a]lways, [d]eny: ");
+                out.ask(ALLOW);
                 Some(Asking::Approval { id })
             }
         }
@@ -252,7 +279,7 @@ fn on_line(
             let question = &questions[answers.len()];
             answers.push(clarify_answer(question, &line));
             if answers.len() < questions.len() {
-                show_question(questions.get(answers.len()));
+                show_question(out, questions.get(answers.len()));
                 return Some(Asking::Clarify {
                     id,
                     questions,
@@ -267,25 +294,25 @@ fn on_line(
     }
 }
 
-fn prompt(text: &str) {
-    let mut out = std::io::stdout().lock();
-    let _ = write!(out, "{text}");
-    let _ = out.flush();
-}
+/// The approval choices.
+const ALLOW: &str = "allow? [o]nce, [s]ession, [a]lways, [d]eny";
 
-fn show_approval(params: &Value) {
+fn approval_text(params: &Value) -> String {
+    use std::fmt::Write as _;
     let tool = params["tool"].as_str().unwrap_or("tool");
     let subject = params["subject"].as_str().unwrap_or_default();
-    println!("approval needed: {tool} {subject}");
+    let mut text = format!("approval needed: {tool} {subject}");
     for finding in params["findings"].as_array().into_iter().flatten() {
-        println!(
-            "  {}: {} ({})",
+        let _ = write!(
+            text,
+            "\n  {}: {} ({})",
             finding["detector"].as_str().unwrap_or_default(),
             finding["reason"].as_str().unwrap_or_default(),
             finding["fragment"].as_str().unwrap_or_default()
         );
     }
-    prompt("allow? [o]nce, [s]ession, [a]lways, [d]eny: ");
+    let _ = write!(text, "\n{ALLOW}");
+    text
 }
 
 fn decision(line: &str) -> Option<&'static str> {
@@ -298,18 +325,25 @@ fn decision(line: &str) -> Option<&'static str> {
     }
 }
 
-fn show_question(question: Option<&Value>) {
+fn show_question(out: &dyn Out, question: Option<&Value>) {
+    use std::fmt::Write as _;
     let Some(question) = question else { return };
-    println!("? {}", question["question"].as_str().unwrap_or_default());
+    let mut text = format!("? {}", question["question"].as_str().unwrap_or_default());
     for (n, choice) in question["choices"]
         .as_array()
         .into_iter()
         .flatten()
         .enumerate()
     {
-        println!("  {}. {}", n + 1, choice.as_str().unwrap_or_default());
+        let _ = write!(
+            text,
+            "\n  {}. {}",
+            n + 1,
+            choice.as_str().unwrap_or_default()
+        );
     }
-    prompt("answer (a number, your own text, or empty to skip): ");
+    text.push_str("\nanswer (a number, your own text, or empty to skip)");
+    out.ask(&text);
 }
 
 /// The `clarify` answer a typed line stands for: choice numbers (several,

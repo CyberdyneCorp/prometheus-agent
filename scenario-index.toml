@@ -1247,7 +1247,7 @@ capabilities = [
 
 [cli."Local transcript and session commands"]
 "Status without model call" = ["crates/prometheus/tests/chat_session_commands.rs::local_commands_answer_without_a_model_call"]
-"All sessions refused for non-admin" = ["crates/prometheus/src/chat/repl/info.rs::all_sessions_need_an_admin_on_messaging_only"]
+"All sessions refused for non-admin" = ["crates/prometheus/src/chat/commands/info.rs::all_sessions_need_an_admin_on_messaging_only"]
 
 [cli."Retry semantics"]
 "Retry replaces the answer" = ["crates/prometheus/tests/chat_session_commands.rs::retry_replaces_the_answer"]
@@ -1439,6 +1439,9 @@ capabilities = [
 
 [cli."Daemon attachment with in-process fallback"]
 "Session shared with gateway" = ["crates/prometheus/tests/chat_daemon.rs::a_chat_runs_as_a_client_of_the_running_daemon"]
+"Reload answered through the daemon" = ["crates/prometheus/tests/chat_daemon.rs::slash_commands_run_on_the_daemon_session", "crates/pmt-gateway/tests/sessions.rs::command_dispatch_answers_done_send_or_refused_to_an_attached_client"]
+"Session flags reach the daemon" = ["crates/prometheus/tests/chat_daemon.rs::session_flags_shape_the_session_the_daemon_runs", "crates/prometheus/tests/chat_daemon.rs::images_and_the_usage_file_work_while_attached"]
+"Profile the daemon does not serve" = ["crates/prometheus/tests/chat_daemon.rs::a_profile_the_daemon_does_not_serve_cannot_chat_while_it_runs"]
 
 [cli."Single interactive owner per session"]
 "Second terminal offered a fork" = ["crates/prometheus/tests/chat_daemon.rs::a_second_terminal_forks_the_owned_session_at_its_last_message", "crates/pmt-gateway/tests/ownership.rs::a_second_exclusive_resume_names_the_owner_until_it_detaches"]
@@ -1448,6 +1451,7 @@ capabilities = [
 
 [configuration-and-profiles."Live reload with apply classes"]
 "Prompt-affecting key deferred" = ["crates/prometheus/tests/daemon_config.rs::a_next_session_key_leaves_the_live_session_and_reaches_new_ones", "crates/pmt-config/src/reload.rs::changed_keys_carry_their_apply_class"]
+"Live key applies to a running session" = ["crates/prometheus/tests/daemon_config.rs::a_live_key_changed_mid_session_applies_on_the_next_turn", "crates/pmt-config/src/layers.rs::a_session_takes_the_reloaded_live_keys_and_keeps_the_rest"]
 "Invalid edit keeps the daemon running" = ["crates/prometheus/tests/daemon_config.rs::an_invalid_edit_is_reported_and_the_previous_configuration_serves"]
 
 [configuration-and-profiles."Managed configuration layer"]

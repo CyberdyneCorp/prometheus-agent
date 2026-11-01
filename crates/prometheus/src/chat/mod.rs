@@ -9,6 +9,8 @@
 
 pub mod args;
 pub mod attach;
+pub mod commands;
+pub mod display;
 pub mod markdown;
 pub mod oneshot;
 pub mod recap;
@@ -113,10 +115,15 @@ fn run_recorded(
         .iter()
         .map(|path| attach::load(path))
         .collect::<Result<Vec<_>, _>>()?;
+    // Before `--cwd` moves: the paths are relative to where the chat ran.
+    let image_paths = args
+        .image
+        .iter()
+        .map(|path| std::path::absolute(path).unwrap_or_else(|_| path.clone()))
+        .collect();
     if let Some(dir) = &args.cwd {
         change_dir(dir)?;
     }
-    let global_set = !ctx.set.is_empty();
     let mut set = ctx.set.to_vec();
     set.extend(args.overrides());
     let ctx = Context { set: &set, ..*ctx };
@@ -135,21 +142,27 @@ fn run_recorded(
         (Mode::Line, PromptSource::None) => None,
     };
     if !args.in_process
-        && let Some(record) = crate::daemon_client::running(scope.home())?
+        && let Some(daemon) = crate::daemon_client::running(scope.home())?
     {
         let config = scope.config();
+        let cwd = current_dir()?;
         let start = remote::Start {
             args,
             mode,
             first,
-            cwd: &current_dir()?,
+            cwd: &cwd,
             terminal: terminal::identity().filter(|_| config.sessions.terminal_continue),
             ui,
             approve_unattended: config.approvals.single_query_mode
                 == pmt_config::schema::UnattendedApproval::Approve,
-            overrides: global_set,
+            setup: remote::setup_of(args, &set, &cwd)?,
+            images: image_paths,
+            run_budget: args.run_budget,
+            record: Arc::clone(record),
+            scope: &scope,
+            launch: ctx.launch,
         };
-        return remote::run(&record, &scope, &start);
+        return remote::run(&daemon, &scope, &start);
     }
     let _lock = WriterLock::acquire(scope.home(), Role::Chat, vec![scope.name().to_string()])?;
     let ad_hoc = crate::model_cmd::explain::ad_hoc(&args.endpoint)?;

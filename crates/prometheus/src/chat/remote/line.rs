@@ -1,69 +1,165 @@
-//! The line interface attached to the daemon: prompts become turns of the
-//! daemon's session, lines typed while a turn runs wait their turn, Ctrl-C
-//! interrupts a running turn (twice at the prompt leaves), and the slash
-//! commands whose state lives in the daemon go through the connection.
+//! The line interface attached to the daemon (spec: cli, Daemon
+//! attachment with in-process fallback; Interactive input handling): the
+//! same line editor as the in-process interface ([`Input`]), prompts that
+//! become turns of the daemon's session, lines typed while a turn runs
+//! that wait their turn, and Ctrl-C that interrupts a running turn (twice
+//! at the prompt leaves).
+//!
+//! Slash commands that change what this terminal shows or which session
+//! it drives run here ([`super::local`]); every other command goes to the
+//! daemon's `command.dispatch`, which runs it on the session and answers
+//! with its output, a message to send, or why it did not run.
 
 use std::collections::VecDeque;
-use std::io::Write as _;
 use std::time::Instant;
 
+use pmt_config::schema::MarkdownMode;
 use pmt_core::error::Error;
 use pmt_rpc::client::error_of;
-use pmt_rpc::contracts::{
-    CompactParams, SessionCompact, SessionCreate, SessionCreateParams, SessionDetach, SessionRef,
-};
-use tokio::sync::mpsc;
+use pmt_rpc::contracts::{CommandDispatch, DispatchParams, Dispatched, SessionRef};
 
-use super::render::View;
-use super::turn::{self, Asker};
+use super::render::{self, Out};
+use super::turn::{self, Asker, Prompt};
 use super::{Attached, Start};
+use crate::chat::display::Display;
+use crate::chat::markdown;
 use crate::chat::repl::DOUBLE_CTRL_C;
+use crate::chat::repl::input::{Event, Input, Printer, Setup};
 use crate::chat::signals::Signals;
+use crate::chat::theme::Role;
 
-/// Lines typed at the terminal, read on a thread of their own so the
-/// interface keeps rendering while it waits.
-pub(super) struct Input {
-    lines: mpsc::UnboundedReceiver<String>,
+/// What the person did at the prompt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Typed {
+    /// A line.
+    Line(String),
+    /// Ctrl+C.
+    Interrupt,
+    /// The end of input.
+    Eof,
+    /// Ctrl+X Ctrl+E with the buffer so far.
+    Compose(String),
+}
+
+/// The line editor and what waits to run.
+pub(super) struct Lines {
+    editor: Input,
+    /// The prompt each read shows.
+    prompt: String,
     /// Lines typed while a turn ran, run after it in order.
     pub queue: VecDeque<String>,
-    /// Stdin reached its end.
+    /// Input reached its end.
     pub closed: bool,
 }
 
-impl Input {
-    fn spawn() -> Self {
-        let (tx, lines) = mpsc::unbounded_channel();
-        std::thread::spawn(move || {
-            let stdin = std::io::stdin();
-            let mut line = String::new();
-            loop {
-                line.clear();
-                match stdin.read_line(&mut line) {
-                    Ok(0) | Err(_) => return,
-                    Ok(_) => {
-                        let text = line.trim_end_matches(['\n', '\r']).to_owned();
-                        if tx.send(text).is_err() {
-                            return;
-                        }
-                    }
-                }
-            }
-        });
-        Self {
-            lines,
+impl Lines {
+    fn start(start: &Start<'_>) -> Result<Self, Error> {
+        let scope = start.scope;
+        let editor = Input::start(Setup {
+            history: scope.dir().join("cli_history"),
+            cwd: start.cwd.to_path_buf(),
+            redactor: scope.secrets().redactor().unwrap_or_default(),
+            vim_mode: scope.config().display.vim_mode,
+        })?;
+        Ok(Self {
+            editor,
+            prompt: "› ".to_owned(),
             queue: VecDeque::new(),
             closed: false,
+        })
+    }
+
+    /// What the person does next.
+    pub(super) async fn next(&mut self) -> Typed {
+        loop {
+            self.editor.request(&self.prompt);
+            return match self.editor.next().await {
+                Event::Line(line) => Typed::Line(line),
+                Event::Interrupt => Typed::Interrupt,
+                Event::Eof => {
+                    self.closed = true;
+                    Typed::Eof
+                }
+                Event::Compose(buffer) => Typed::Compose(buffer),
+                Event::SuspendRefused => continue,
+            };
         }
     }
 
-    /// The next typed line; `None` at the end of input.
-    pub(super) async fn next(&mut self) -> Option<String> {
-        self.lines.recv().await
+    /// Waits until everything printed so far is out.
+    pub(super) fn flush(&self) {
+        self.editor.flush();
     }
 }
 
+/// The attached interface's output: painted with the profile's theme,
+/// above the prompt.
+pub(super) struct Screen {
+    printer: Printer,
+    pub(super) display: Display,
+    markdown: MarkdownMode,
+    scope: pmt_config::ProfileScope,
+}
+
+impl Screen {
+    fn say(&self, role: Role, text: &str) {
+        self.printer.print(&self.display.paint(role, text));
+    }
+
+    /// Writes `text` as it is (control sequences included).
+    pub(super) fn raw(&self, text: &str) {
+        self.printer.print(text);
+    }
+}
+
+impl Out for Screen {
+    fn tool(&self, text: &str) {
+        if !self.display.quiet && self.display.progress != pmt_config::schema::ToolProgress::Off {
+            self.say(Role::Tool, text);
+        }
+    }
+
+    fn notice(&self, text: &str) {
+        if !text.is_empty() {
+            self.say(Role::Notice, text);
+        }
+    }
+
+    fn ask(&self, text: &str) {
+        self.say(Role::Notice, text);
+    }
+
+    fn answer(&self, text: &str) {
+        let text = match self.markdown {
+            MarkdownMode::Render => markdown::render(text, self.display.color),
+            MarkdownMode::Raw => text.to_owned(),
+        };
+        self.say(Role::Assistant, &self.display.stamped(&self.scope, &text));
+    }
+
+    fn error(&self, err: &Error) {
+        let text = crate::output::render_error(err, false);
+        self.say(Role::Error, text.trim_end());
+    }
+}
+
+/// The attached interface.
+pub(super) struct Chat<'a, 'b> {
+    pub(super) attached: &'a mut Attached,
+    pub(super) start: &'a Start<'b>,
+    /// Declared before `lines`: fields drop in order, and the editor's
+    /// printer thread ends only once the screen's printer is gone.
+    pub(super) screen: Screen,
+    pub(super) lines: Lines,
+    pub(super) signals: Signals,
+    /// `/image` attachments for the next prompt (absolute paths).
+    pub(super) images: Vec<std::path::PathBuf>,
+    /// `cli.confirm_destructive`.
+    pub(super) confirm_destructive: bool,
+}
+
 /// What the loop does after a line.
-enum Flow {
+pub(super) enum Flow {
     Continue,
     Exit,
 }
@@ -72,169 +168,186 @@ enum Flow {
 ///
 /// # Errors
 ///
-/// A lost connection.
+/// The editor cannot start; a lost connection.
 pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8, Error> {
-    let view = View {
-        quiet: start.ui.quiet,
-        json: false,
+    let lines = Lines::start(start)?;
+    let no_color = start.ui.no_color
+        || start
+            .launch
+            .inherited("NO_COLOR")
+            .is_some_and(|v| !v.is_empty());
+    let screen = Screen {
+        printer: lines.editor.printer(),
+        display: Display::new(start.scope, no_color, start.ui.quiet),
+        markdown: start.scope.config().display.final_response_markdown,
+        scope: start.scope.clone(),
     };
-    let mut input = Input::spawn();
-    let mut signals = Signals::listen();
-    println!(
-        "attached to the gateway daemon (pid {}) · session {}",
-        attached.daemon_pid, attached.session
+    let mut chat = Chat {
+        confirm_destructive: start.scope.config().cli.confirm_destructive,
+        attached,
+        start,
+        lines,
+        screen,
+        signals: Signals::listen(),
+        images: start.images.clone(),
+    };
+    chat.screen.say(
+        Role::Accent,
+        &format!(
+            "attached to the gateway daemon (pid {}) · session {} · /help for commands",
+            chat.attached.daemon_pid, chat.attached.session
+        ),
     );
-    println!("type /help for the commands available here, /exit to leave");
     if let Some(first) = &start.first {
-        run_turn(attached, first.clone(), &mut input, view, &mut signals).await?;
+        chat.submit(first.clone()).await?;
     }
-    let mut last_interrupt: Option<Instant> = None;
-    loop {
-        let line = if let Some(line) = input.queue.pop_front() {
-            Some(line)
-        } else {
-            prompt();
-            tokio::select! {
-                line = input.next() => line,
-                _ = signals.next() => {
+    chat.main_loop().await
+}
+
+impl Chat<'_, '_> {
+    async fn main_loop(&mut self) -> Result<u8, Error> {
+        let mut last_interrupt: Option<Instant> = None;
+        loop {
+            let typed = if let Some(line) = self.lines.queue.pop_front() {
+                Typed::Line(line)
+            } else {
+                tokio::select! {
+                    typed = self.lines.next() => typed,
+                    _ = self.signals.next() => Typed::Interrupt,
+                    Some(event) = self.attached.inbox.events.recv() => {
+                        // Notices posted between turns (`/refine`).
+                        if event.event == "session.event" {
+                            render::event(&self.screen, &event.data);
+                        }
+                        continue;
+                    }
+                }
+            };
+            let line = match typed {
+                Typed::Line(line) => line,
+                Typed::Compose(buffer) => format!("/prompt {buffer}"),
+                Typed::Eof => return Ok(0),
+                Typed::Interrupt => {
                     if last_interrupt.is_some_and(|t| t.elapsed() < DOUBLE_CTRL_C) {
                         return Ok(0);
                     }
                     last_interrupt = Some(Instant::now());
-                    println!("\n(press Ctrl+C again to leave)");
+                    self.screen.notice("(press Ctrl+C again or Ctrl+D to exit)");
                     continue;
                 }
-            }
-        };
-        let Some(line) = line else {
-            println!();
-            return Ok(0);
-        };
-        let text = line.trim();
-        if text.is_empty() {
-            continue;
-        }
-        if text.starts_with('/') {
-            if let Flow::Exit = slash(attached, text).await? {
+            };
+            last_interrupt = None;
+            if let Flow::Exit = self.line(line).await? {
                 return Ok(0);
             }
-            continue;
-        }
-        run_turn(attached, line.clone(), &mut input, view, &mut signals).await?;
-    }
-}
-
-fn prompt() {
-    let mut out = std::io::stdout().lock();
-    let _ = write!(out, "› ");
-    let _ = out.flush();
-}
-
-async fn run_turn(
-    attached: &mut Attached,
-    text: String,
-    input: &mut Input,
-    view: View,
-    signals: &mut Signals,
-) -> Result<(), Error> {
-    let mut asker = Asker::Line(input);
-    match turn::run(attached, text, &mut asker, view, signals).await {
-        Ok(outcome) => {
-            if let Some(finished) = &outcome.finished {
-                view.finished(finished);
-                if finished.exit_reason == "interrupted_by_user" {
-                    println!("(interrupted)");
-                }
-            }
-            Ok(())
-        }
-        // A refused submission (a busy or over-budget session) leaves the
-        // interface running; a lost connection ends it.
-        Err(err) if err.code().code == pmt_core::error::codes::RPC_CONNECTION.code => Err(err),
-        Err(err) => {
-            crate::output::print_error(&err, false);
-            Ok(())
         }
     }
-}
 
-/// The commands an attached chat runs. Every other registered command
-/// needs the session in this process.
-const HELP: &str = "commands while attached to the gateway daemon:
-  /new (/reset)        start a new session
-  /fork                fork this session and continue in the fork
-  /compress [focus]    compact this session's context now (/compact)
-  /help                this list
-  /exit (/quit)        leave (the session stays in the daemon)
-Ctrl+C interrupts a running turn; twice at the prompt leaves.";
-
-async fn slash(attached: &mut Attached, text: &str) -> Result<Flow, Error> {
-    let (name, rest) = text[1..].split_once(' ').unwrap_or((&text[1..], ""));
-    match name {
-        "exit" | "quit" => return Ok(Flow::Exit),
-        "help" => println!("{HELP}"),
-        "new" | "reset" => switch(attached, new_session(attached).await).await,
-        "fork" => {
-            let fork = super::open::fork(&attached.client, &attached.session).await;
-            switch(attached, fork).await;
+    async fn line(&mut self, line: String) -> Result<Flow, Error> {
+        let text = line.trim();
+        if text.is_empty() {
+            return Ok(Flow::Continue);
         }
-        "compress" | "compact" => compact(attached, rest.trim()).await,
-        _ => println!("{}", unavailable(name, attached.daemon_pid)),
+        if text.starts_with('/') {
+            return self.slash(text.to_owned()).await;
+        }
+        if text.starts_with('!') {
+            self.screen.notice(
+                "the shell escape runs in the session's terminal, which the gateway daemon holds; it is not available while attached",
+            );
+            return Ok(Flow::Continue);
+        }
+        self.submit(line).await?;
+        Ok(Flow::Continue)
     }
-    Ok(Flow::Continue)
-}
 
-fn unavailable(name: &str, daemon_pid: u32) -> String {
-    let known = crate::slash::builtins::BUILTINS
-        .iter()
-        .any(|c| c.name == name || c.aliases.contains(&name));
-    if known {
-        format!(
-            "/{name} needs the session in this process; it is not available while attached to the gateway daemon (pid {daemon_pid}). Stop the daemon with 'prometheus daemon stop' to use it."
+    /// Sends `text` (with the pending images) as a turn.
+    pub(super) async fn submit(&mut self, text: String) -> Result<(), Error> {
+        let images = std::mem::take(&mut self.images)
+            .into_iter()
+            .map(|path| pmt_rpc::contracts::PromptImage::Path(path.to_string_lossy().into_owned()))
+            .collect();
+        self.run_turn(Prompt { text, images }).await
+    }
+
+    pub(super) async fn run_turn(&mut self, prompt: Prompt) -> Result<(), Error> {
+        let mut asker = Asker::Line(&mut self.lines);
+        let outcome = turn::run(
+            self.attached,
+            prompt,
+            &mut asker,
+            &self.screen,
+            &mut self.signals,
         )
-    } else {
-        format!("unknown command '/{name}' (see /help)")
-    }
-}
-
-async fn new_session(attached: &Attached) -> Result<String, Error> {
-    let params = SessionCreateParams {
-        exclusive: true,
-        ..SessionCreateParams::default()
-    };
-    attached
-        .client
-        .call_typed::<SessionCreate>(&params)
-        .await
-        .map(|created| created.session_id)
-        .map_err(|e| error_of(&e))
-}
-
-/// Leaves the current session for `next` (or reports why not).
-async fn switch(attached: &mut Attached, next: Result<String, Error>) {
-    match next {
-        Ok(next) => {
-            let old = SessionRef {
-                session_id: std::mem::replace(&mut attached.session, next),
-            };
-            let _ = attached.client.call_typed::<SessionDetach>(&old).await;
-            println!("session {}", attached.session);
+        .await;
+        match outcome {
+            Ok(outcome) => {
+                if let Some(finished) = &outcome.finished {
+                    render::finished(&self.screen, finished);
+                    if finished.exit_reason == "interrupted_by_user" {
+                        self.screen.notice("(interrupted)");
+                    }
+                }
+                Ok(())
+            }
+            // A refused submission (a busy or over-budget session) leaves
+            // the interface running; a lost connection ends it.
+            Err(err) if err.code().code == pmt_core::error::codes::RPC_CONNECTION.code => Err(err),
+            Err(err) => {
+                self.screen.error(&err);
+                Ok(())
+            }
         }
-        Err(err) => crate::output::print_error(&err, false),
     }
-}
 
-async fn compact(attached: &Attached, focus: &str) {
-    let params = CompactParams {
-        session_id: attached.session.clone(),
-        focus: (!focus.is_empty()).then(|| focus.to_owned()),
-    };
-    match attached.client.call_typed::<SessionCompact>(&params).await {
-        Ok(done) => println!(
-            "compaction {}: {} -> {} tokens",
-            done.status, done.tokens_before, done.tokens_after
-        ),
-        Err(err) => crate::output::print_error(&error_of(&err), false),
+    /// Runs `name` on the daemon's session (`command.dispatch`).
+    pub(super) async fn dispatch(&mut self, name: &str, args: &str) -> Result<(), Error> {
+        let params = DispatchParams {
+            session_id: self.attached.session.clone(),
+            name: name.to_owned(),
+            args: args.to_owned(),
+        };
+        let answer = self
+            .attached
+            .client
+            .call_typed::<CommandDispatch>(&params)
+            .await
+            .map_err(|e| error_of(&e));
+        match answer {
+            Ok(Dispatched::Done { notice }) => self.screen.notice(&notice),
+            Ok(Dispatched::Refused { reason }) => self.screen.notice(&reason),
+            Ok(Dispatched::Send { message, images }) => {
+                self.run_turn(Prompt {
+                    text: message,
+                    images,
+                })
+                .await?;
+            }
+            Err(err) if err.code().code == pmt_core::error::codes::RPC_CONNECTION.code => {
+                return Err(err);
+            }
+            Err(err) => self.screen.error(&err),
+        }
+        Ok(())
+    }
+
+    /// Leaves the current session for `next` (or reports why not).
+    pub(super) async fn switch(&mut self, next: Result<String, Error>) {
+        match next {
+            Ok(next) => {
+                let old = SessionRef {
+                    session_id: std::mem::replace(&mut self.attached.session, next),
+                };
+                let _ = self
+                    .attached
+                    .client
+                    .call_typed::<pmt_rpc::contracts::SessionDetach>(&old)
+                    .await;
+                self.screen
+                    .notice(&format!("session {}", self.attached.session));
+            }
+            Err(err) => self.screen.error(&err),
+        }
     }
 }
 
@@ -253,36 +366,36 @@ pub(super) async fn follow(attached: &mut Attached, start: &Start<'_>) -> Result
         .call_typed::<pmt_rpc::contracts::SessionAttach>(&params)
         .await
         .map_err(|e| error_of(&e))?;
-    println!(
-        "following session {} read-only; Ctrl+C leaves",
-        attached.session
-    );
-    let view = View {
+    let out = render::Plain {
         quiet: start.ui.quiet,
         json: false,
     };
+    out.notice(&format!(
+        "following session {} read-only; Ctrl+C leaves",
+        attached.session
+    ));
     let mut signals = Signals::listen();
     loop {
         tokio::select! {
             event = attached.inbox.events.recv() => {
                 let Some(event) = event else { return Ok(0) };
-                show_followed(&event, view);
+                show_followed(&event, &out);
             }
             _ = signals.next() => return Ok(0),
         }
     }
 }
 
-fn show_followed(event: &pmt_rpc::contracts::Envelope, view: View) {
+fn show_followed(event: &pmt_rpc::contracts::Envelope, out: &dyn Out) {
     match event.event.as_str() {
         "session.event" if event.data["type"] == "user.message" => {
             let text = event.data["payload"]["text"].as_str().unwrap_or_default();
-            println!("› {text}");
+            out.notice(&format!("› {text}"));
         }
-        "session.event" => view.event(&event.data),
+        "session.event" => render::event(out, &event.data),
         "turn.finished" => {
             if let Ok(finished) = serde_json::from_value(event.data.clone()) {
-                view.finished(&finished);
+                render::finished(out, &finished);
             }
         }
         _ => {}

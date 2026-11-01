@@ -102,6 +102,21 @@ pub struct Input {
     printing: Option<std::thread::JoinHandle<()>>,
 }
 
+/// Prints through the input's printer thread (above the prompt while a
+/// line is being read).
+#[derive(Clone)]
+pub struct Printer(Option<std_mpsc::Sender<Output>>);
+
+impl Printer {
+    /// Prints `text` (one or more lines) after everything printed before.
+    pub fn print(&self, text: &str) {
+        let text = text.strip_suffix('\n').unwrap_or(text);
+        if let Some(output) = &self.0 {
+            let _ = output.send(Output::Text(format!("{text}\n")));
+        }
+    }
+}
+
 /// What the editor needs.
 pub struct Setup {
     /// `<profile>/cli_history`.
@@ -195,6 +210,12 @@ impl Input {
         if let Some(output) = &self.output {
             let _ = output.send(Output::Text(format!("{text}\n")));
         }
+    }
+
+    /// A handle that prints like [`Input::print`] from anywhere.
+    #[must_use]
+    pub fn printer(&self) -> Printer {
+        Printer(self.output.clone())
     }
 
     /// Waits (at most [`FLUSH_WAIT`]) until everything printed so far is

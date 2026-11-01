@@ -11,7 +11,7 @@ use serde_json::Value;
 
 #[cfg(unix)]
 use self::common::pty;
-use self::common::{daemon, mock_home, ok, run, stderr};
+use self::common::{PNG, daemon, mock_home, ok, run, session_messages, stderr};
 #[cfg(unix)]
 use expectrl::Expect as _;
 
@@ -63,22 +63,90 @@ fn a_chat_runs_as_a_client_of_the_running_daemon() {
     );
 }
 
+/// A mock script whose model calls a tool forever.
+fn looping_script(home: &std::path::Path) -> String {
+    let path = home.join("loop.toml");
+    std::fs::write(
+        &path,
+        "[[rule]]\nrepeat = true\n[[rule.tool_calls]]\nname = \"todo\"\narguments = { todos = [] }\n",
+    )
+    .unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+/// The chat's session-shaping flags reach the session the daemon runs:
+/// `--mock-script` with `--max-iterations` (or the same limit through
+/// `--set`) stops the daemon's turn after one call with exit 3, and
+/// `--run-budget` ends a slow turn.
 #[test]
-fn flags_the_daemon_cannot_honour_are_refused_by_name() {
+fn session_flags_shape_the_session_the_daemon_runs() {
     let home = mock_home();
     let _daemon = daemon::start(home.path(), &[]);
-    let out = run(home.path(), &["-z", "hi", "--yolo"]);
-    assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
-    assert!(
-        stderr(&out).contains("--yolo cannot be used while the gateway daemon"),
-        "{}",
-        stderr(&out)
-    );
+    let script = looping_script(home.path());
+    for limit in [
+        ["--max-iterations", "1"],
+        ["--set", "agent.max_iterations=1"],
+    ] {
+        let mut args = vec!["--mock-script", script.as_str(), "-z", "loop"];
+        args.extend(limit);
+        let out = run(home.path(), &args);
+        assert_eq!(out.status.code(), Some(3), "{args:?}: {}", stderr(&out));
+    }
+    let slow = home.path().join("slow.toml");
+    std::fs::write(
+        &slow,
+        "[[rule]]\nrepeat = true\nlatency_ms = 20000\ntext = \"slow\"\n",
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
     let out = run(
         home.path(),
-        &["--set", "agent.max_iterations=3", "-z", "hi"],
+        &[
+            "--mock-script",
+            slow.to_str().unwrap(),
+            "--run-budget",
+            "1",
+            "-z",
+            "wait",
+        ],
     );
-    assert_eq!(out.status.code(), Some(2), "{}", stderr(&out));
+    assert_eq!(out.status.code(), Some(3), "{}", stderr(&out));
+    assert!(started.elapsed() < std::time::Duration::from_secs(15));
+}
+
+/// `--image` goes with the prompt (the daemon stores it with the user
+/// message) and `--usage-file` is written from the daemon's turn report.
+#[test]
+fn images_and_the_usage_file_work_while_attached() {
+    let home = mock_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let shot = home.path().join("shot.png");
+    std::fs::write(&shot, PNG).unwrap();
+    let file = home.path().join("usage.json");
+    let out = ok(&run(
+        home.path(),
+        &[
+            "--json",
+            "-z",
+            "describe",
+            "--image",
+            shot.to_str().unwrap(),
+            "--usage-file",
+            file.to_str().unwrap(),
+        ],
+    ));
+    let session = json_of(&out)["session_id"].as_str().unwrap().to_owned();
+    let user = session_messages(home.path(), &session)
+        .into_iter()
+        .find(|m| m["role"] == "user")
+        .unwrap();
+    assert_eq!(user["metadata"]["images"][0]["name"], "shot.png", "{user}");
+    let report = json_of(&std::fs::read_to_string(&file).unwrap());
+    assert_eq!(report["session_id"], session.as_str(), "{report}");
+    assert_eq!(report["turns"], 1);
+    assert_eq!(report["provider"], "mock");
+    assert_eq!(report["exit_code"], 0);
+    assert_eq!(report["exit_reason"], "completed");
 }
 
 #[test]
@@ -123,8 +191,44 @@ fn the_line_interface_attaches_to_the_daemon() {
     p.send_line("hello there").unwrap();
     p.expect("mock: hello there").unwrap();
     pty::prompt(&mut p);
-    p.send_line("/model").unwrap();
-    p.expect("not available while attached").unwrap();
+    pty::exit(p);
+}
+
+/// Scenario: Reload answered through the daemon. Slash commands whose
+/// state lives in the daemon's session run there (`command.dispatch`):
+/// the reloads, `/model`, `/title`, `/history`, `/yolo`; a session flag
+/// (`--yolo`) shaped the session the daemon runs.
+#[cfg(unix)]
+#[test]
+fn slash_commands_run_on_the_daemon_session() {
+    let home = mock_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let mut p = pty::spawn(home.path(), &["--yolo"]);
+    p.expect("attached to the gateway daemon").unwrap();
+    pty::prompt(&mut p);
+    for (line, expected) in [
+        ("/reload-secrets", "secrets reloaded; no value changed"),
+        ("/reload-skills", "Skills reloaded"),
+        ("/approvals", "YOLO: every call allowed"),
+        ("/model", "mock"),
+        ("/title Daemon Work", "title set to Daemon Work"),
+        ("/title", "title: Daemon Work"),
+        ("/help", "/reload-secrets"),
+    ] {
+        p.send_line(line).unwrap();
+        p.expect(expected)
+            .unwrap_or_else(|e| panic!("{line}: {e:?}"));
+        pty::prompt(&mut p);
+    }
+    p.send_line("remember this").unwrap();
+    p.expect("mock: remember this").unwrap();
+    pty::prompt(&mut p);
+    p.send_line("/history").unwrap();
+    p.expect("you: remember this").unwrap();
+    pty::prompt(&mut p);
+    p.send_line("/retry").unwrap();
+    p.expect("mock: remember this").unwrap();
+    pty::prompt(&mut p);
     pty::exit(p);
 }
 
@@ -150,7 +254,9 @@ fn ctrl_c_interrupts_the_turn_running_in_the_daemon() {
     let mut p = pty::spawn(home.path(), &[]);
     pty::prompt(&mut p);
     p.send_line("take your time").unwrap();
-    common::wait_for_turn_start(home.path());
+    // The line editor talks to the terminal while it reads: the test
+    // keeps reading it meanwhile, as for the in-process interface.
+    pty::wait_for_turns(&mut p, home.path(), 1);
     let sent = std::time::Instant::now();
     p.send("\x03").unwrap();
     p.expect("(interrupted)").unwrap();

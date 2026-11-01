@@ -50,7 +50,7 @@ pub struct FileSetup {
     /// Prometheus' own state, for the write guard.
     pub control: ControlPaths,
     /// `files.read_max_chars`.
-    pub read_max_chars: usize,
+    pub read_max_chars: crate::setting::Limit,
     /// Post-write syntax checks.
     pub linter: Linter,
 }

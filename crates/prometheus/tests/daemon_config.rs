@@ -32,7 +32,8 @@ fn wait_config(home: &Path, done: impl Fn(&Value) -> bool) -> Value {
     }
 }
 
-async fn turn(client: &Client, inbox: &mut Inbox, session: &str, text: &str) {
+/// Runs one turn of `session`; its `turn.finished` payload.
+async fn turn(client: &Client, inbox: &mut Inbox, session: &str, text: &str) -> Value {
     client
         .call(
             "prompt.submit",
@@ -46,7 +47,7 @@ async fn turn(client: &Client, inbox: &mut Inbox, session: &str, text: &str) {
             .unwrap()
             .unwrap();
         if event.event == "turn.finished" && event.session_id.as_deref() == Some(session) {
-            return;
+            return event.data;
         }
     }
 }
@@ -100,6 +101,30 @@ fn a_next_session_key_leaves_the_live_session_and_reaches_new_ones() {
     });
     assert!(prompt_of(home.path(), &live).contains("Zorblax"));
     assert!(!prompt_of(home.path(), &next).contains("Zorblax"));
+}
+
+/// Scenario: Live key applies to a running session. A `live` key changed
+/// while a session runs takes effect on its next turn: a turn token budget
+/// set after the first turn stops the second one at its first call.
+#[test]
+fn a_live_key_changed_mid_session_applies_on_the_next_turn() {
+    let home = mock_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (client, mut inbox) = runtime.block_on(daemon::connect(home.path(), "default"));
+    let (session, before) = runtime.block_on(async {
+        let session = new_session(&client).await;
+        let before = turn(&client, &mut inbox, &session, "before").await;
+        (session, before)
+    });
+    assert_eq!(before["exit_reason"], "completed", "{before}");
+    ok(&run(
+        home.path(),
+        &["config", "set", "budgets.turn_tokens", "1"],
+    ));
+    wait_config(home.path(), |c| c["reloads"] == 1);
+    let after = runtime.block_on(turn(&client, &mut inbox, &session, "after"));
+    assert_eq!(after["exit_reason"], "token_budget_exhausted", "{after}");
 }
 
 /// Scenario: Invalid edit keeps the daemon running.

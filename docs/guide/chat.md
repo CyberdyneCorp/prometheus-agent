@@ -226,17 +226,30 @@ while it runs. Without a daemon the chat runs in-process as above;
 home. A profile the daemon does not serve cannot chat while it runs
 (exit 75; see `gateway.multiplex`).
 
+The chat's flags shape the daemon's session as they would an in-process
+one: `-m`, `--provider`, `--set`, `--toolsets`, `--skills`, `--approvals`,
+`--yolo`, `--max-iterations`, `--pass-session-id`, `--no-context-files`,
+`--ignore-user-config`, `--ignore-rules`, `--mock-script` and `--base-url`
+(with `--api-key-stdin`, the key held in the daemon's memory only) go to
+the daemon with the session; `--image` files go with the prompt (the
+daemon reads them, so give paths it can reach), `--run-budget` applies to
+each turn and `--usage-file` is written from the daemon's turn reports.
+
 One-shot runs behave as they do in-process (the answer on stdout, the same
-`--json` document and exit statuses). The line interface shows
+`--json` document and exit statuses). The line interface uses the same
+line editor, theme and Markdown rendering as in-process and shows
 `attached to the gateway daemon (pid <n>) · session <id>`; Ctrl+C
-interrupts the running turn, lines typed during a turn run after it,
-approval and clarify questions are answered at the prompt, and `/new`,
-`/fork`, `/compress` and `/exit` work over the connection. The other slash
-commands need the session in this process and say so. Flags that change
-the session's configuration in this process (`--set`, `--yolo`,
-`--approvals`, `--toolsets`, `--skills`, `--image` and the like) are
-refused by name while the daemon runs; `-m` and `--provider` are passed
-to the daemon.
+interrupts the running turn, lines typed during a turn run after it, and
+approval and clarify questions are answered at the prompt. Commands that
+change only what your terminal shows or which session it drives run in
+the chat (`/exit`, `/new`, `/clear`, `/fork`, `/resume`, `/stop`,
+`/image`, `/queue`, `/prompt`, `/theme`, `/verbose`, `/focus`,
+`/timestamps`); every other command, skill and quick command runs on the
+daemon's session (`/model`, `/usage`, `/title`, `/history`,
+`/reload-secrets`, `/reload-skills`, `/compress`, `/retry`, `/undo`...)
+with the same output as in-process. `/snapshot restore` is refused while
+the daemon serves the store; `!` shell escapes are not available while
+attached.
 
 A session has one interactive owner at a time. Resuming a session that
 another chat has open prints `session <id> is open in another client (pid
