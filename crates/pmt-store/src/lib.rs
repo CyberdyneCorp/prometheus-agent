@@ -40,6 +40,7 @@ pub mod model;
 pub mod model_context;
 pub mod onboarding;
 pub mod prompts;
+pub mod rebind;
 pub mod retention;
 pub mod rewind;
 pub mod search;

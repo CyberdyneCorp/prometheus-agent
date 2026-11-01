@@ -1,11 +1,14 @@
 //! `prometheus daemon run` (spec: messaging-gateway, One gateway daemon per
 //! home; workspace-architecture, One daemon per Prometheus home). The
 //! home's writer lock is taken before anything else, so a second daemon
-//! exits 75 without opening any `state.db`; then `daemon.toml` and every
-//! profile are loaded (a profile whose configuration is invalid is logged
-//! and skipped; when none is left the daemon exits 78), and the daemon
-//! serves until it is stopped (exit 0) or restarted (exit 75, so a
-//! supervisor starts the new binary).
+//! exits 75 without opening any `state.db`; then `daemon.toml` and the
+//! served profiles are loaded (spec: configuration-and-profiles, Served
+//! profile set): the launch profile, whose invalid configuration exits 78,
+//! and with its `gateway.multiplex = true` every other profile of the home
+//! except those with `gateway.standalone = true` (one whose configuration
+//! is invalid is logged and skipped). The daemon serves until it is
+//! stopped (exit 0) or restarted (exit 75, so a supervisor starts the new
+//! binary), reloading each profile's `config.toml` when it changes.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -34,8 +37,8 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
         .collect();
     let lock = WriterLock::acquire(home, Role::Daemon, names)?;
     let config = DaemonConfig::load(home)?;
-    let launch_profile = layout.select_profile(ctx.profile).ok();
-    let scopes = load_profiles(&layout, launch_profile.as_ref(), ctx)?;
+    let launch_profile = layout.select_profile(ctx.profile)?;
+    let scopes = served_profiles(&layout, &launch_profile, ctx)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -46,12 +49,20 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
             )
         })?;
     let exit = runtime.block_on(async {
-        let host = DaemonHost::new(scopes, ctx.launch.clone())?;
+        let host = Arc::new(DaemonHost::new(
+            scopes,
+            ctx.launch.clone(),
+            ctx.set.to_vec(),
+            launch_profile.as_str().to_owned(),
+        )?);
         let mut options = ServerOptions::new(identity(), host.names());
         options.rpc = config.daemon.rpc.clone();
-        let server = Server::new(options, Arc::new(host))?;
+        let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
+        let server = Server::new(options, host)?;
         let drain = Duration::from_secs(config.daemon.restart_drain_secs);
-        pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await
+        let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
+        watcher.abort();
+        exit
     })?;
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
@@ -72,44 +83,40 @@ fn identity() -> Identity {
     }
 }
 
-/// Every profile that loads; the launch profile sees the launch
-/// environment's secrets. With none left, the first error.
-fn load_profiles(
+/// The served profiles: the launch profile (it alone sees the launch
+/// environment's secrets), and with its `gateway.multiplex` every other
+/// profile that loads and is not `gateway.standalone`. Profile
+/// directories are only read here, never created.
+fn served_profiles(
     layout: &pmt_config::Home,
-    launch_profile: Option<&pmt_config::ProfileName>,
+    launch_profile: &pmt_config::ProfileName,
     ctx: &Context<'_>,
 ) -> Result<Vec<ProfileScope>, Error> {
     let overrides = Overrides::parse(ctx.set)?;
-    let mut scopes = Vec::new();
-    let mut first_error = None;
+    let open = |name: &pmt_config::ProfileName, launch| {
+        layout
+            .existing_profile(name)
+            .and_then(|dir| ProfileScope::open(dir, &overrides, launch))
+    };
+    let first = open(launch_profile, Launch::Profile(ctx.launch))?;
+    crate::startup::bind_profile(&first);
+    if !first.config().gateway.multiplex {
+        return Ok(vec![first]);
+    }
+    let mut scopes = vec![first];
     for name in layout.profiles()? {
-        let launch = if Some(&name) == launch_profile {
-            Launch::Profile(ctx.launch)
-        } else {
-            Launch::Other
-        };
-        let opened = layout
-            .existing_profile(&name)
-            .and_then(|dir| ProfileScope::open(dir, &overrides, launch));
-        match opened {
-            Ok(scope) => {
-                crate::startup::bind_profile(&scope);
-                scopes.push(scope);
+        if &name == launch_profile {
+            continue;
+        }
+        match open(&name, Launch::Other) {
+            Ok(scope) if scope.config().gateway.standalone => {
+                tracing::info!(profile = name.as_str(), "not served: gateway.standalone");
             }
-            Err(err) => {
-                tracing::error!(profile = name.as_str(), "profile not served: {err}");
-                first_error.get_or_insert(err);
-            }
+            Ok(scope) => scopes.push(scope),
+            Err(err) => tracing::error!(profile = name.as_str(), "profile not served: {err}"),
         }
     }
-    match (scopes.is_empty(), first_error) {
-        (true, Some(err)) => Err(err),
-        (true, None) => Err(Error::new(
-            &pmt_core::error::codes::DAEMON_NO_PROFILE,
-            "the home has no profile to serve",
-        )),
-        _ => Ok(scopes),
-    }
+    Ok(scopes)
 }
 
 /// SIGINT, or SIGTERM on Unix: a graceful stop.

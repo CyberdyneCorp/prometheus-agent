@@ -1,6 +1,10 @@
 //! `prometheus profile` (spec: configuration-and-profiles, Profile
 //! lifecycle commands, Safe profile deletion, Profile selection at process
-//! start).
+//! start, Profile creation options, Profile alias launchers, Profile export
+//! excludes credentials by default).
+
+mod alias;
+mod archive;
 
 use pmt_config::profiles::{CloneFrom, user_of};
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
@@ -24,13 +28,36 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         ProfileCommand::Create {
             name,
             clone_from,
+            clone_all,
             clone_secrets,
+            clone_channels,
+            sync_imports,
             no_skills,
+            description,
+            no_alias,
         } => {
-            let source = clone_from.as_deref().map(ProfileName::parse).transpose()?;
+            let source = match (clone_from, clone_all) {
+                (Some(from), _) => Some(ProfileName::parse(from)?),
+                (None, true) => Some(home.select_profile(ctx.profile)?),
+                (None, false) => None,
+            };
+            let flags = [
+                ("--clone-secrets", *clone_secrets),
+                ("--clone-channels", *clone_channels),
+                ("--sync-imports", *sync_imports),
+            ];
+            if let (None, Some((flag, _))) = (&source, flags.iter().find(|(_, on)| *on)) {
+                return Err(Error::new(
+                    &pmt_core::error::codes::CLI_USAGE,
+                    format!("{flag} needs --clone-from or --clone-all"),
+                ));
+            }
             let clone = source.as_ref().map(|source| CloneFrom {
-                source,
                 secrets: *clone_secrets,
+                all: *clone_all,
+                channels: *clone_channels,
+                sync_imports: *sync_imports,
+                ..CloneFrom::of(source)
             });
             let profile = home.create_profile(name, clone)?;
             if let Some(source) = &source {
@@ -39,12 +66,38 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             if *no_skills {
                 pmt_skills::optout::set_included(&profile, false)?;
             }
+            if let Some(text) = description {
+                let path = profile.path().join(pmt_config::profiles::DESCRIPTION_FILE);
+                pmt_core::private_fs::write_atomic(&path, text.trim().as_bytes())
+                    .map_err(|e| Error::io(&pmt_core::error::codes::HOME_IO, &path, &e))?;
+            }
             eprintln!(
                 "created profile '{}' at {}",
                 profile.name(),
                 profile.path().display()
             );
+            if !*no_alias {
+                default_alias(profile.name(), ctx);
+            }
             Ok(0)
+        }
+        ProfileCommand::Alias { name, alias } => {
+            let name = ProfileName::parse(name)?;
+            home.existing_profile(&name)?;
+            let alias = alias.as_deref().unwrap_or(name.as_str());
+            let path = alias::run(&name, alias, ctx.launch)?;
+            eprintln!("wrote {} (runs prometheus -p {name})", path.display());
+            note_path(&path, ctx);
+            Ok(0)
+        }
+        ProfileCommand::Export {
+            name,
+            output,
+            with_sessions,
+            with_secrets,
+        } => archive::export(&home, name, output, *with_sessions, *with_secrets, ctx.json),
+        ProfileCommand::Import { file, name } => {
+            archive::import(&home, file, name.as_deref(), ctx.json)
         }
         ProfileCommand::Use { name } => {
             let name = ProfileName::parse(name)?;
@@ -67,6 +120,38 @@ struct Row {
     name: String,
     active: bool,
     path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+}
+
+/// The default launcher of a new profile; a refusal is a note, not a
+/// failure (spec: configuration-and-profiles, Profile creation options).
+fn default_alias(name: &ProfileName, ctx: &Context<'_>) {
+    match alias::run(name, name.as_str(), ctx.launch) {
+        Ok(path) => {
+            eprintln!("alias launcher: {} (skip with --no-alias)", path.display());
+            note_path(&path, ctx);
+        }
+        Err(err) => eprintln!("no alias launcher: {}", err.message()),
+    }
+}
+
+fn note_path(launcher: &std::path::Path, ctx: &Context<'_>) {
+    if let Some(dir) = launcher.parent()
+        && !alias::dir_on_path(dir, ctx.launch)
+    {
+        eprintln!("note: {} is not on PATH", dir.display());
+    }
+}
+
+fn description(home: &Home, name: &ProfileName) -> Option<String> {
+    let path = home
+        .profile_path(name)
+        .join(pmt_config::profiles::DESCRIPTION_FILE);
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|t| t.trim().to_owned())
+        .filter(|t| !t.is_empty())
 }
 
 fn list(home: &Home, json: bool) -> Result<u8, Error> {
@@ -82,6 +167,7 @@ fn list(home: &Home, json: bool) -> Result<u8, Error> {
         .map(|name| Row {
             active: name == active,
             path: home.profile_path(&name).display().to_string(),
+            description: description(home, &name),
             name: name.to_string(),
         })
         .collect();
@@ -91,7 +177,20 @@ fn list(home: &Home, json: bool) -> Result<u8, Error> {
     }
     let text: String = profiles
         .iter()
-        .map(|row| [if row.active { "* " } else { "  " }, &row.name, "\n"].concat())
+        .map(|row| {
+            let about = row
+                .description
+                .as_deref()
+                .map(|d| format!("  {d}"))
+                .unwrap_or_default();
+            [
+                if row.active { "* " } else { "  " },
+                &row.name,
+                &about,
+                "\n",
+            ]
+            .concat()
+        })
         .collect();
     print_raw(&text)
 }
@@ -118,6 +217,7 @@ fn show(home: &Home, ctx: &Context<'_>, name: Option<&str>) -> Result<u8, Error>
         row: Row {
             active: home.active_profile()? == name,
             path: scope.dir().display().to_string(),
+            description: description(home, &name),
             name: name.to_string(),
         },
         secrets_backend: match scope.secrets().backend() {
@@ -133,8 +233,14 @@ fn show(home: &Home, ctx: &Context<'_>, name: Option<&str>) -> Result<u8, Error>
     let in_use = shown
         .in_use_by_pid
         .map_or_else(|| "no".to_owned(), |pid| format!("yes (pid {pid})"));
+    let about = shown
+        .row
+        .description
+        .as_deref()
+        .map(|d| format!("description: {d}\n"))
+        .unwrap_or_default();
     print_raw(&format!(
-        "name: {}\npath: {}\nactive: {}\nsecrets: {} ({} backend)\nin use: {in_use}\n",
+        "name: {}\n{about}path: {}\nactive: {}\nsecrets: {} ({} backend)\nin use: {in_use}\n",
         shown.row.name,
         shown.row.path,
         if shown.row.active { "yes" } else { "no" },

@@ -10,7 +10,7 @@
 //! of a running session; launch-environment values are fixed for the
 //! process lifetime. Values are only ever held as [`SecretString`].
 
-mod file;
+pub(crate) mod file;
 pub mod keychain;
 
 use std::collections::BTreeMap;
@@ -212,6 +212,9 @@ pub enum Source {
     Keychain,
     /// The launch environment (`PMT_SECRET_<NAME>` or provider-native).
     Env,
+    /// The administrator's `managed-secrets.toml` (read-only, first in
+    /// the resolution order).
+    Managed,
 }
 
 impl From<SecretsBackend> for Source {
@@ -326,10 +329,7 @@ impl SecretsHandle {
     /// `secret.invalid_name`; store errors.
     pub fn resolve(&self, name: &str) -> Result<SecretString, Error> {
         check_name(name)?;
-        let value = match self.stored(name)? {
-            Some(value) => Some(value),
-            None => self.launch_env_secret(name).cloned(),
-        };
+        let value = self.lookup(name)?;
         self.lock()
             .seen
             .insert(name.to_owned(), digest(value.as_ref()));
@@ -351,10 +351,7 @@ impl SecretsHandle {
         };
         let mut changed = Vec::new();
         for (name, before) in seen {
-            let now = match self.stored(&name)? {
-                Some(value) => Some(value),
-                None => self.launch_env_secret(&name).cloned(),
-            };
+            let now = self.lookup(&name)?;
             let now = digest(now.as_ref());
             if now != before {
                 changed.push(name.clone());
@@ -372,15 +369,24 @@ impl SecretsHandle {
     /// Store errors.
     pub fn list(&self) -> Result<Vec<Listed>, Error> {
         let stored = self.store.names()?;
-        let mut rows: Vec<Listed> = stored
+        let managed = crate::managed::current()?
+            .map(crate::managed::Managed::secret_names)
+            .unwrap_or_default();
+        let mut rows: Vec<Listed> = managed
             .iter()
             .map(|name| Listed {
                 name: name.clone(),
-                source: self.store.kind().into(),
+                source: Source::Managed,
                 variable: None,
                 shadowed: false,
             })
             .collect();
+        rows.extend(stored.iter().map(|name| Listed {
+            name: name.clone(),
+            source: self.store.kind().into(),
+            variable: None,
+            shadowed: managed.contains(name),
+        }));
         for (variable, _) in self.launch_env.iter().flatten() {
             let name = variable
                 .strip_prefix(pmt_core::env::SECRET_PREFIX)
@@ -390,7 +396,8 @@ impl SecretsHandle {
                 name: name.to_owned(),
                 source: Source::Env,
                 variable: Some(variable.clone()),
-                shadowed: stored.iter().any(|s| s == name) || winner.as_deref() != Some(variable),
+                shadowed: stored.iter().chain(&managed).any(|s| s == name)
+                    || winner.as_deref() != Some(variable),
             });
         }
         rows.sort_by(|a, b| a.name.cmp(&b.name).then(a.shadowed.cmp(&b.shadowed)));
@@ -405,7 +412,11 @@ impl SecretsHandle {
     ///
     /// Store errors.
     pub fn redactor(&self) -> Result<pmt_core::secret::Redactor, Error> {
-        let mut values: Vec<(String, SecretString)> = Vec::new();
+        let mut values: Vec<(String, SecretString)> = crate::managed::current()?
+            .into_iter()
+            .flat_map(crate::managed::Managed::secrets)
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
         for name in self.store.names()? {
             if let Some(value) = self.stored(&name)? {
                 values.push((name, value));
@@ -420,6 +431,18 @@ impl SecretsHandle {
         Ok(pmt_core::secret::Redactor::named(
             values.iter().map(|(name, value)| (name.as_str(), value)),
         ))
+    }
+
+    /// The value of `name`: the administrator's managed secret, else the
+    /// store, else the launch environment.
+    fn lookup(&self, name: &str) -> Result<Option<SecretString>, Error> {
+        if let Some(value) = crate::managed::current()?.and_then(|m| m.secret(name)) {
+            return Ok(Some(value.clone()));
+        }
+        Ok(match self.stored(name)? {
+            Some(value) => Some(value),
+            None => self.launch_env_secret(name).cloned(),
+        })
     }
 
     fn stored(&self, name: &str) -> Result<Option<SecretString>, Error> {

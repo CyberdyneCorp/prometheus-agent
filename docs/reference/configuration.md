@@ -139,6 +139,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
+| `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | Platform user ids with the admin command tier. |
+| `gateway.platforms.<name>.allow_all` | boolean | `false` | any | `next_session` | Admit everyone (logged at WARN on every start). |
+| `gateway.platforms.<name>.allow_chats` | array of string | `[]` | any | `next_session` | Chats every member of which is admitted. |
+| `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing. |
+| `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
+| `gateway.platforms.<name>.home_channel` | string | unset | any | `next_session` | The chat that receives notifications and scheduled output. |
+| `gateway.platforms.<name>.token_secret` | string | unset | a secret name | `next_session` | The secret holding the adapter's credential (never the value). |
+| `gateway.standalone` | boolean | `false` | any | `restart` | Never serve this profile from a multiplexing daemon (it gets a daemon of its own home). |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |

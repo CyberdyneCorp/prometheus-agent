@@ -1133,6 +1133,33 @@
       },
       "type": "object"
     },
+    "GatewayConfig": {
+      "additionalProperties": false,
+      "description": "The `[gateway]` section.",
+      "properties": {
+        "multiplex": {
+          "default": false,
+          "description": "In the daemon's launch profile: serve every profile of the home\n(each in its own scope) instead of the launch profile only.",
+          "type": "boolean"
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformConfig"
+          },
+          "default": {},
+          "description": "Messaging platforms this profile answers on, keyed by platform\n(`telegram`, `discord`, ...). A profile clone leaves them out\nunless `--clone-channels` is given, so two profiles never answer\nthe same bot account.",
+          "type": "object",
+          "x-apply": "next_session"
+        },
+        "standalone": {
+          "default": false,
+          "description": "Never serve this profile from a multiplexing daemon (it gets a\ndaemon of its own home).",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
     "GuardrailThresholds": {
       "additionalProperties": false,
       "description": "Repetition thresholds of the tool loop guardrails.",
@@ -1787,6 +1814,65 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "PlatformConfig": {
+      "additionalProperties": false,
+      "description": "One `[gateway.platforms.<name>]` table: the keys every adapter shares.",
+      "properties": {
+        "admins": {
+          "default": [],
+          "description": "Platform user ids with the admin command tier.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_all": {
+          "default": false,
+          "description": "Admit everyone (logged at WARN on every start).",
+          "type": "boolean"
+        },
+        "allow_chats": {
+          "default": [],
+          "description": "Chats every member of which is admitted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_users": {
+          "default": [],
+          "description": "Platform user ids admitted without pairing.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Start this adapter with the daemon.",
+          "type": "boolean"
+        },
+        "home_channel": {
+          "description": "The chat that receives notifications and scheduled output.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the adapter's credential (never the value)."
+        }
+      },
+      "type": "object"
     },
     "PlatformHint": {
       "additionalProperties": false,
@@ -3303,6 +3389,15 @@
         "read_max_chars": 100000
       },
       "description": "`read_file` limits."
+    },
+    "gateway": {
+      "$ref": "#/$defs/GatewayConfig",
+      "default": {
+        "multiplex": false,
+        "platforms": {},
+        "standalone": false
+      },
+      "description": "The profile's part in the home's gateway daemon."
     },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",

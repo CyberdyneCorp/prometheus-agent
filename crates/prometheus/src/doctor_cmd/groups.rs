@@ -149,7 +149,49 @@ pub(super) fn config(inputs: &Inputs<'_>) -> Vec<Check> {
             ignored.doctor_message(),
         ));
     }
+    checks.extend(managed());
     checks
+}
+
+/// The administrator-managed layer: its resolved paths and whether each
+/// file was loaded (spec: configuration-and-profiles, Managed secrets and
+/// managed visibility).
+fn managed() -> Vec<Check> {
+    let managed = match pmt_config::managed::current() {
+        Ok(Some(managed)) => managed,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            return vec![Check::new(
+                "config",
+                "managed",
+                Status::Fail,
+                err.message().to_owned(),
+            )];
+        }
+    };
+    let state = |loaded: bool| if loaded { "loaded" } else { "not present" };
+    vec![
+        Check::new(
+            "config",
+            "managed",
+            Status::Ok,
+            format!(
+                "managed configuration {}: {}",
+                managed.config_path().display(),
+                state(managed.config_loaded())
+            ),
+        ),
+        Check::new(
+            "config",
+            "managed_secrets",
+            Status::Ok,
+            format!(
+                "managed secrets {}: {}",
+                managed.secrets_path().display(),
+                state(managed.secrets_loaded())
+            ),
+        ),
+    ]
 }
 
 /// `secrets`: store permissions and referenced-but-missing secrets.
@@ -243,7 +285,59 @@ pub(super) fn daemon(inputs: &Inputs<'_>) -> Vec<Check> {
         .with_hint("restart the daemon to run this build"),
         Err(err) => Check::new("daemon", "running", Status::Warn, err.message().to_owned()),
     };
-    vec![check]
+    let mut checks = vec![check];
+    checks.extend(daemon_config(inputs.scope.home()));
+    checks
+}
+
+/// What the running daemon reports of each served profile's
+/// configuration: an invalid edit it ignored fails, changes waiting for a
+/// restart warn (spec: configuration-and-profiles, Live reload with apply
+/// classes).
+fn daemon_config(home: &std::path::Path) -> Vec<Check> {
+    let Ok(Some(record)) = crate::daemon_client::running(home) else {
+        return Vec::new();
+    };
+    let request = pmt_rpc::control::ControlRequest::Status;
+    let control = record.endpoint.control.clone();
+    let status =
+        crate::model_cmd::block_on(async move { pmt_rpc::control::call(&control, &request).await });
+    let Ok(Ok(response)) = status else {
+        return Vec::new();
+    };
+    let mut checks = Vec::new();
+    for profile in response.status.map(|s| s.config).unwrap_or_default() {
+        if let Some(error) = &profile.error {
+            checks.push(
+                Check::new(
+                    "daemon",
+                    "config",
+                    Status::Fail,
+                    format!(
+                        "{}: the daemon ignored an invalid config.toml and serves the previous one: {error}",
+                        profile.profile
+                    ),
+                )
+                .with_hint("fix the file; the daemon reloads it when it is saved"),
+            );
+        }
+        if !profile.pending_restart.is_empty() {
+            checks.push(
+                Check::new(
+                    "daemon",
+                    "config",
+                    Status::Warn,
+                    format!(
+                        "{}: changed keys apply after a restart: {}",
+                        profile.profile,
+                        profile.pending_restart.join(", ")
+                    ),
+                )
+                .with_hint("prometheus daemon restart"),
+            );
+        }
+    }
+    checks
 }
 
 /// `runtimes`: the store policy and the verification state of every

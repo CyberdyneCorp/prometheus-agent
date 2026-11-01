@@ -27,9 +27,13 @@ use pmt_rpc::contracts::{
 use pmt_store::{NewSession, Source, Store, Visibility};
 
 use super::turn::{ToClients, approvals, clarify};
+
+mod reload;
+
 use crate::chat::resume;
 use crate::chat::session::model::RouteFlags;
 use crate::chat::session::{Factory, Live, Options};
+pub(super) use reload::watch;
 
 /// A loaded session.
 struct Loaded {
@@ -59,8 +63,11 @@ impl Setup {
 
 /// One served profile.
 struct Profile {
-    scope: ProfileScope,
+    /// The configuration new sessions start with, replaced by a reload.
+    current: std::sync::RwLock<ProfileScope>,
     store: Arc<Store>,
+    /// What the reloads did, for `daemon status`.
+    config: Mutex<reload::State>,
     /// Session machinery per working directory.
     factories: Mutex<HashMap<PathBuf, Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, Setup>>,
@@ -71,6 +78,10 @@ struct Profile {
 pub(super) struct DaemonHost {
     profiles: BTreeMap<String, Profile>,
     launch: LaunchEnv,
+    /// The daemon's `--set` overrides, kept for reloads.
+    set: Vec<String>,
+    /// The profile that sees the launch environment's secrets.
+    launch_profile: String,
     turns: Arc<AtomicUsize>,
 }
 
@@ -85,20 +96,37 @@ fn busy(id: SessionId) -> Error {
     )
 }
 
+impl Profile {
+    /// The configuration new sessions start with.
+    fn scope(&self) -> ProfileScope {
+        self.current
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
 impl DaemonHost {
     /// Opens every profile's store.
     ///
     /// # Errors
     ///
     /// Store errors.
-    pub(super) fn new(scopes: Vec<ProfileScope>, launch: LaunchEnv) -> Result<Self, Error> {
+    pub(super) fn new(
+        scopes: Vec<ProfileScope>,
+        launch: LaunchEnv,
+        set: Vec<String>,
+        launch_profile: String,
+    ) -> Result<Self, Error> {
         let mut profiles = BTreeMap::new();
         for scope in scopes {
             let store = Arc::new(Store::open(&scope)?);
+            let state = reload::State::new(&scope);
             profiles.insert(
                 scope.name().to_string(),
                 Profile {
-                    scope,
+                    current: std::sync::RwLock::new(scope),
+                    config: Mutex::new(state),
                     store,
                     factories: Mutex::default(),
                     setups: Mutex::default(),
@@ -109,6 +137,8 @@ impl DaemonHost {
         Ok(Self {
             profiles,
             launch,
+            set,
+            launch_profile,
             turns: Arc::default(),
         })
     }
@@ -139,7 +169,7 @@ impl DaemonHost {
             ..Options::default()
         };
         let factory = Arc::new(Factory::new(
-            profile.scope.clone(),
+            profile.scope(),
             &self.launch,
             &RouteFlags::default(),
             None,
@@ -155,7 +185,7 @@ impl DaemonHost {
         recorded
             .map(PathBuf::from)
             .filter(|dir| dir.is_dir())
-            .unwrap_or_else(|| profile.scope.dir().join("workspace"))
+            .unwrap_or_else(|| profile.scope().dir().join("workspace"))
     }
 
     /// The loaded session `id`, loading it (with `link`) when needed.
@@ -170,7 +200,7 @@ impl DaemonHost {
             return Ok(Arc::clone(session));
         }
         let row = profile.store.session(id)?;
-        let max = profile.scope.config().sessions.max_resume_messages;
+        let max = profile.scope().config().sessions.max_resume_messages;
         profile.store.check_resumable(id, max)?;
         if row.ended_at.is_some() {
             profile.store.reopen_session(id)?;
@@ -187,7 +217,7 @@ impl DaemonHost {
         let target = factory.models.primary(&setup.flags()).await?;
         let clients = Arc::new(ToClients { link: link.clone() });
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
-        let timeout = Duration::from_secs(profile.scope.config().approvals.timeout_secs);
+        let timeout = Duration::from_secs(profile.scope().config().approvals.timeout_secs);
         if let Some(prompts) = live.approvals.take() {
             tokio::spawn(approvals(prompts, link.clone(), timeout));
         }
@@ -209,7 +239,8 @@ impl DaemonHost {
     /// (spec: workspace-architecture, JSON-RPC framing and error codes,
     /// Budget refusal over RPC).
     fn check_budget(profile: &Profile, id: SessionId) -> Result<(), Error> {
-        let config = profile.scope.config();
+        let scope = profile.scope();
+        let config = scope.config();
         let zone = pmt_obs::time::profile_zone(&config.cron)?;
         let place = pmt_obs::budget::Place::of(&profile.store, id, None)?;
         let spent = pmt_obs::budget::Budgets::new(zone).status(
@@ -248,7 +279,8 @@ impl DaemonHost {
             return Err(busy(id));
         }
         let turn_id = pmt_agent::turn::TurnId::new().to_string();
-        let scope = profile.scope.clone();
+        // The session's own snapshot: a reload changes new sessions only.
+        let scope = session.live.scope.clone();
         let turns = Arc::clone(&self.turns);
         turns.fetch_add(1, Ordering::AcqRel);
         let finished_id = turn_id.clone();
@@ -437,7 +469,11 @@ impl Host for DaemonHost {
                 focus: params.focus,
                 ..pmt_agent::compress::manual::Manual::default()
             };
-            let outcome = session.live.agent.compress(&profile.scope, &manual).await?;
+            let outcome = session
+                .live
+                .agent
+                .compress(&session.live.scope, &manual)
+                .await?;
             Ok(Compacted {
                 status: format!("{:?}", outcome.status).to_lowercase(),
                 tokens_before: outcome.tokens_before,
@@ -485,7 +521,7 @@ impl Host for DaemonHost {
             };
             let cwd = params
                 .cwd
-                .map_or_else(|| profile.scope.dir().join("workspace"), PathBuf::from);
+                .map_or_else(|| profile.scope().dir().join("workspace"), PathBuf::from);
             let place = resume::Place {
                 cwd: &cwd,
                 terminal: params.terminal.as_deref(),
@@ -518,6 +554,10 @@ impl Host for DaemonHost {
                 session_id: fork.id.to_string(),
             })
         })
+    }
+
+    fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
+        self.config_states()
     }
 
     fn load(&self) -> (usize, usize) {

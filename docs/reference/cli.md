@@ -4126,6 +4126,9 @@ Usage: prometheus profile [OPTIONS] <COMMAND>
 Commands:
   list    List the profiles; the active one is marked
   create  Create a profile, optionally copying another one once
+  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import  Create a profile from an archive `profile export` wrote
   use     Make a profile the one used without -p (`use default` clears the choice)
   show    Show a profile (default: the selected one)
   rename  Rename a profile
@@ -4209,14 +4212,155 @@ Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
-      --clone-secrets
-          With --clone-from, also copy the secrets
+      --clone-all
+          Copy everything from the source profile (--clone-from, else the selected profile) except sessions, state.db, logs, snapshots and backups
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
+      --clone-secrets
+          With a clone, also copy the secrets
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --clone-channels
+          With a clone, also copy the messaging adapter configuration and pairing data (left out by default so two profiles never answer the same bot account)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --sync-imports
+          With a clone, also copy the import sync registry
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
       --no-skills
           Start without bundled skills (`skills.include_bundled = false`); the essential skill stays
+
+      --description <TEXT>
+          A description shown by `profile show` and `profile list`
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --no-alias
+          Do not write the alias launcher `<name>` (see `profile alias`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile alias`
+
+```text
+Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+
+Usage: prometheus profile alias [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --as <ALIAS>
+          The launcher's name (default: the profile name)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile export`
+
+```text
+Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+
+Usage: prometheus profile export [OPTIONS] --output <FILE> <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          The archive to write
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --with-sessions
+          Also include the sessions (state.db and its blobs)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --with-secrets
+          Also include the secrets, encrypted with a passphrase read at a hidden prompt (or from stdin)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile import`
+
+```text
+Create a profile from an archive `profile export` wrote
+
+Usage: prometheus profile import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The archive
+
+Options:
+      --as <NAME>
+          The new profile's name (default: the exported profile's)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -4401,6 +4545,9 @@ Usage: prometheus profile help [COMMAND]
 Commands:
   list    List the profiles; the active one is marked
   create  Create a profile, optionally copying another one once
+  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import  Create a profile from an archive `profile export` wrote
   use     Make a profile the one used without -p (`use default` clears the choice)
   show    Show a profile (default: the selected one)
   rename  Rename a profile
@@ -4422,6 +4569,30 @@ Usage: prometheus profile help list
 Create a profile, optionally copying another one once
 
 Usage: prometheus profile help create
+```
+
+## `prometheus profile help alias`
+
+```text
+Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+
+Usage: prometheus profile help alias
+```
+
+## `prometheus profile help export`
+
+```text
+Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+
+Usage: prometheus profile help export
+```
+
+## `prometheus profile help import`
+
+```text
+Create a profile from an archive `profile export` wrote
+
+Usage: prometheus profile help import
 ```
 
 ## `prometheus profile help use`
@@ -9332,6 +9503,9 @@ Usage: prometheus help profile [COMMAND]
 Commands:
   list    List the profiles; the active one is marked
   create  Create a profile, optionally copying another one once
+  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import  Create a profile from an archive `profile export` wrote
   use     Make a profile the one used without -p (`use default` clears the choice)
   show    Show a profile (default: the selected one)
   rename  Rename a profile
@@ -9352,6 +9526,30 @@ Usage: prometheus help profile list
 Create a profile, optionally copying another one once
 
 Usage: prometheus help profile create
+```
+
+## `prometheus help profile alias`
+
+```text
+Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+
+Usage: prometheus help profile alias
+```
+
+## `prometheus help profile export`
+
+```text
+Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+
+Usage: prometheus help profile export
+```
+
+## `prometheus help profile import`
+
+```text
+Create a profile from an archive `profile export` wrote
+
+Usage: prometheus help profile import
 ```
 
 ## `prometheus help profile use`
@@ -10135,6 +10333,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.profile_export.v1` | `prometheus profile export` |
 | `prometheus.doctor.v1` | `prometheus doctor` |
 | `prometheus.update_status.v1` | `prometheus update --status` |
 | `prometheus.update_check.v1` | `prometheus update --check` |

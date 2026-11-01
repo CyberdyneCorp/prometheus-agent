@@ -1,7 +1,9 @@
 //! Configuration layering (spec: configuration-and-profiles, Configuration
-//! layering): schema defaults < the profile `config.toml` < `--set
-//! key=value` overrides, which are never persisted. Every effective value
-//! records the layer that supplied it, for `config explain`.
+//! layering; Managed configuration layer): schema defaults < the profile
+//! `config.toml` < `--set key=value` overrides, which are never persisted
+//! < the administrator's `managed.toml`, whose values win and whose locked
+//! keys `--set` may not touch. Every effective value records the layer
+//! that supplied it, for `config explain`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -31,6 +33,8 @@ pub enum Source {
     },
     /// A `--set` override of this invocation.
     Override,
+    /// The administrator-managed `managed.toml`.
+    Managed,
 }
 
 impl fmt::Display for Source {
@@ -45,6 +49,7 @@ impl fmt::Display for Source {
                 write!(f, "{name}:{line}")
             }
             Self::Override => f.write_str("--set"),
+            Self::Managed => f.write_str(crate::managed::MANAGED_FILE),
         }
     }
 }
@@ -164,6 +169,7 @@ pub struct Layered {
     path: PathBuf,
     file_keys: BTreeMap<String, usize>,
     override_keys: BTreeSet<String>,
+    managed_keys: BTreeSet<String>,
 }
 
 impl Layered {
@@ -183,10 +189,19 @@ impl Layered {
             text,
             &mut file_keys,
         );
-        let config = if overrides.is_empty() {
+        let managed: &[(String, toml_edit::Value)] = match crate::managed::current()? {
+            Some(managed) => {
+                if let Some((key, _)) = overrides.entries.iter().find(|(k, _)| managed.locks(k)) {
+                    return Err(crate::managed::locked_error(key));
+                }
+                managed.values()
+            }
+            None => &[],
+        };
+        let config = if overrides.is_empty() && managed.is_empty() {
             file_config
         } else {
-            apply(text, overrides)?
+            apply(text, overrides, managed)?
         };
         let effective = serde_json::to_value(&config).expect("a config serializes");
         Ok(Self {
@@ -195,6 +210,7 @@ impl Layered {
             path: path.to_owned(),
             file_keys,
             override_keys: overrides.entries.iter().map(|(k, _)| k.clone()).collect(),
+            managed_keys: managed.iter().map(|(k, _)| k.clone()).collect(),
         })
     }
 
@@ -219,6 +235,9 @@ impl Layered {
     #[must_use]
     pub fn source(&self, key: &str) -> Source {
         let covers = |k: &String| k == key || k.starts_with(&format!("{key}."));
+        if self.managed_keys.iter().any(covers) {
+            return Source::Managed;
+        }
         if self.override_keys.iter().any(covers) {
             return Source::Override;
         }
@@ -231,11 +250,16 @@ impl Layered {
         }
     }
 
-    /// Every key set by the file or an override whose effective value
-    /// differs from its default, in key order.
+    /// Every key set by the file, an override or the managed layer whose
+    /// effective value differs from its default, in key order.
     #[must_use]
     pub fn changed(&self) -> Vec<String> {
-        let keys: BTreeSet<&String> = self.file_keys.keys().chain(&self.override_keys).collect();
+        let keys: BTreeSet<&String> = self
+            .file_keys
+            .keys()
+            .chain(&self.override_keys)
+            .chain(&self.managed_keys)
+            .collect();
         keys.into_iter()
             .filter(|key| {
                 let default = catalog::lookup(key).and_then(|info| info.default);
@@ -246,14 +270,23 @@ impl Layered {
     }
 }
 
-/// The file with the overrides applied, as a typed config.
-fn apply(text: &str, overrides: &Overrides) -> Result<Config, Error> {
+/// The file with the overrides, then the managed values, applied, as a
+/// typed config.
+fn apply(
+    text: &str,
+    overrides: &Overrides,
+    managed: &[(String, toml_edit::Value)],
+) -> Result<Config, Error> {
     let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
         Error::new(&codes::CONFIG_PARSE, e.message().to_owned())
     })?;
     for (key, value) in &overrides.entries {
         edit::set(&mut doc, key, value.clone())
             .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?;
+    }
+    for (key, value) in managed {
+        edit::set(&mut doc, key, value.clone())
+            .map_err(|message| Error::new(&codes::CONFIG_MANAGED_INVALID, message))?;
     }
     toml::from_str(&doc.to_string()).map_err(|e| {
         Error::new(

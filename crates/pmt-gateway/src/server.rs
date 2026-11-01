@@ -389,6 +389,7 @@ impl Server {
             sessions,
             active_turns,
             retiring: self.retiring(),
+            config: self.host.config(),
         }
     }
 }

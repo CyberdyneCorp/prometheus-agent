@@ -1445,3 +1445,25 @@ capabilities = [
 
 [cli."Shell completions (upgrade)"]
 "Config key completion" = ["crates/prometheus/tests/completions_cli.rs::zsh_completes_a_config_key_on_tab"]
+
+[configuration-and-profiles."Live reload with apply classes"]
+"Prompt-affecting key deferred" = ["crates/prometheus/tests/daemon_config.rs::a_next_session_key_leaves_the_live_session_and_reaches_new_ones", "crates/pmt-config/src/reload.rs::changed_keys_carry_their_apply_class"]
+"Invalid edit keeps the daemon running" = ["crates/prometheus/tests/daemon_config.rs::an_invalid_edit_is_reported_and_the_previous_configuration_serves"]
+
+[configuration-and-profiles."Managed configuration layer"]
+"Locked key refused" = ["crates/prometheus/tests/managed_cli.rs::a_locked_key_is_refused_by_every_writer_with_exit_77"]
+
+[configuration-and-profiles."Profile alias launchers"]
+"Alias collision" = ["crates/prometheus/tests/profile_options.rs::an_alias_shadowing_an_executable_on_path_is_refused"]
+
+[configuration-and-profiles."Served profile set"]
+"Standalone profile excluded" = ["crates/prometheus/tests/daemon_config.rs::multiplexing_serves_every_profile_except_standalone_ones"]
+
+[configuration-and-profiles."Profile export excludes credentials by default"]
+"Default export has no secrets" = ["crates/prometheus/tests/profile_options.rs::a_default_export_holds_no_secrets_and_no_sessions"]
+
+[configuration-and-profiles."Managed secrets and managed visibility"]
+"Managed key shown" = ["crates/prometheus/tests/managed_cli.rs::config_show_names_the_managed_file_and_its_keys"]
+
+[configuration-and-profiles."Profile creation options"]
+"Channels not cloned by default" = ["crates/prometheus/tests/profile_options.rs::clone_all_leaves_messaging_channels_behind", "crates/pmt-config/src/profiles/tests.rs::clone_all_copies_everything_but_sessions_and_channels"]

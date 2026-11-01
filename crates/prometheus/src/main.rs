@@ -59,6 +59,16 @@ fn main() -> ExitCode {
     // Commands that need the home report the resolution error themselves.
     // `demo` runs in a temporary home of its own and never touches the
     // user's: it writes no log files and keeps no crash reports there.
+    // The administrator's managed layer is machine-wide: loaded once, for
+    // every profile this process touches.
+    let (managed_dir, owner) = match launch.test_managed_dir() {
+        Some(dir) => (dir.clone(), pmt_config::managed::Owner::CurrentUser),
+        None => (
+            pmt_config::managed::platform_dir(),
+            pmt_config::managed::Owner::Root,
+        ),
+    };
+    pmt_config::managed::init(&managed_dir, owner);
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));

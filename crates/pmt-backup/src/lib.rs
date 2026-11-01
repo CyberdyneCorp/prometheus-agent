@@ -14,7 +14,9 @@ pub mod create;
 mod fsutil;
 pub mod manifest;
 pub mod members;
+pub mod profile_archive;
 pub mod restore;
+pub mod sealed;
 pub mod snapshot;
 pub mod sqlite;
 

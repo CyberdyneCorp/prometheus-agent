@@ -23,13 +23,70 @@ pub const IDENTITY_FILE: &str = "SOUL.md";
 /// (built-in memory lives in `state.db`; the CLI copies its entries).
 pub const CLONED_DIRS: &[&str] = &["memories", "skills", "themes", "plugins"];
 
-/// What a new profile starts from.
+/// The free-text description `profile create --description` records.
+pub const DESCRIPTION_FILE: &str = "description";
+
+/// The import sync registry (spec: hermes-migration, Keeping imports in
+/// sync), copied by a clone only with `--sync-imports`.
+pub const IMPORT_SYNC_FILE: &str = "migrations/import-sync.toml";
+
+/// Per-profile pairing data kept outside `state.db`, copied by a clone
+/// only with `--clone-channels`.
+pub const PAIRING_DIR: &str = "pairing";
+
+/// What `--clone-all` never copies: the source's sessions and their
+/// indexes, logs, snapshots, backups, caches, its identity and secrets
+/// (secrets go through the store with `--clone-secrets`).
+const NEVER_CLONED: &[&str] = &[
+    "state.db",
+    "state.db-wal",
+    "state.db-shm",
+    "blobs",
+    "trajectories",
+    "logs",
+    "snapshots",
+    "backups",
+    "cache",
+    "run",
+    "profile_id",
+    "secrets.toml",
+    "secrets.toml.lock",
+    DESCRIPTION_FILE,
+];
+
+/// What a new profile starts from (spec: configuration-and-profiles,
+/// Profile lifecycle commands; Profile creation options).
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_excessive_bools)] // independent copy options of one command line
 pub struct CloneFrom<'a> {
     /// The source profile.
     pub source: &'a ProfileName,
     /// Also copy the source's secrets.
     pub secrets: bool,
+    /// Copy everything except sessions, `state.db`, logs, snapshots and
+    /// backups, instead of config, identity, memory, skills, themes and
+    /// plugins only.
+    pub all: bool,
+    /// Keep the messaging adapter configuration (`gateway.platforms`) and
+    /// pairing data, which a clone otherwise drops so two profiles never
+    /// answer the same bot account.
+    pub channels: bool,
+    /// Also copy the import sync registry.
+    pub sync_imports: bool,
+}
+
+impl<'a> CloneFrom<'a> {
+    /// A `--clone-from` copy without secrets, channels or imports.
+    #[must_use]
+    pub fn of(source: &'a ProfileName) -> Self {
+        Self {
+            source,
+            secrets: false,
+            all: false,
+            channels: false,
+            sync_imports: false,
+        }
+    }
 }
 
 /// A running process that uses a profile, if any: `(role, pid)`.
@@ -115,7 +172,7 @@ impl Home {
         remove_file_if_exists(&self.tombstone(&name))?;
         let profile = self.profile(&name)?;
         if let (Some(source), Some(clone)) = (source, clone) {
-            copy_profile(&source, &profile, clone.secrets)?;
+            copy_profile(&source, &profile, clone)?;
         }
         Ok(profile)
     }
@@ -217,37 +274,94 @@ fn profile_store(profile: &ProfileDir) -> Result<SecretStore, Error> {
     Ok(scope.secrets().store().clone())
 }
 
-/// One-time copy of config, identity, memory, skills, themes and plugins
-/// (and secrets when asked) from `source` into the new `target`.
-fn copy_profile(source: &ProfileDir, target: &ProfileDir, secrets: bool) -> Result<(), Error> {
+/// One-time copy from `source` into the new `target`: config, identity,
+/// skills, themes and plugins (or everything with `all`), then the
+/// adjustments `clone` asks for.
+fn copy_profile(
+    source: &ProfileDir,
+    target: &ProfileDir,
+    clone: CloneFrom<'_>,
+) -> Result<(), Error> {
     let source_store = profile_store(source)?;
-    let copy = |from: &Path, to: &Path| -> Result<(), Error> {
-        if from.is_dir() {
-            private_fs::copy_tree(from, to).map_err(|e| Error::io(&codes::HOME_IO, to, &e))
-        } else if from.is_file() {
-            private_fs::copy_file(from, to).map_err(|e| Error::io(&codes::HOME_IO, to, &e))
-        } else {
-            Ok(())
+    if clone.all {
+        copy_all(source.path(), target.path())?;
+    } else {
+        copy(
+            &source.path().join("config.toml"),
+            &target.path().join("config.toml"),
+        )?;
+        copy(
+            &source.path().join(IDENTITY_FILE),
+            &target.path().join(IDENTITY_FILE),
+        )?;
+        for dir in CLONED_DIRS {
+            copy(&source.path().join(dir), &target.path().join(dir))?;
         }
-    };
-    copy(
-        &source.path().join("config.toml"),
-        &target.path().join("config.toml"),
-    )?;
-    copy(
-        &source.path().join(IDENTITY_FILE),
-        &target.path().join(IDENTITY_FILE),
-    )?;
-    for dir in CLONED_DIRS {
-        copy(&source.path().join(dir), &target.path().join(dir))?;
     }
-    if secrets {
+    let imports = target.path().join(IMPORT_SYNC_FILE);
+    if clone.sync_imports {
+        copy(&source.path().join(IMPORT_SYNC_FILE), &imports)?;
+    } else {
+        remove_file_if_exists(&imports)?;
+    }
+    if !clone.channels {
+        drop_channels(target)?;
+    }
+    if clone.secrets {
         let target_store = profile_store(target)?;
         for name in source_store.names()? {
             if let Some(value) = source_store.get(&name)? {
                 target_store.set(&name, &value)?;
             }
         }
+    }
+    Ok(())
+}
+
+fn copy(from: &Path, to: &Path) -> Result<(), Error> {
+    if let Some(parent) = to.parent() {
+        private_dir(parent)?;
+    }
+    if from.is_dir() {
+        private_fs::copy_tree(from, to).map_err(|e| Error::io(&codes::HOME_IO, to, &e))
+    } else if from.is_file() {
+        private_fs::copy_file(from, to).map_err(|e| Error::io(&codes::HOME_IO, to, &e))
+    } else {
+        Ok(())
+    }
+}
+
+/// Every top-level entry of `from` except [`NEVER_CLONED`].
+fn copy_all(from: &Path, to: &Path) -> Result<(), Error> {
+    let entries = std::fs::read_dir(from).map_err(|e| Error::io(&codes::HOME_IO, from, &e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| Error::io(&codes::HOME_IO, from, &e))?;
+        let name = entry.file_name();
+        if NEVER_CLONED.iter().any(|n| name == *n) {
+            continue;
+        }
+        copy(&entry.path(), &to.join(&name))?;
+    }
+    Ok(())
+}
+
+/// Removes the clone's messaging adapters and pairing data.
+fn drop_channels(target: &ProfileDir) -> Result<(), Error> {
+    let pairing = target.path().join(PAIRING_DIR);
+    if pairing.exists() {
+        std::fs::remove_dir_all(&pairing).map_err(|e| Error::io(&codes::HOME_IO, &pairing, &e))?;
+    }
+    let file = target.config_file();
+    let Some(text) = file.raw()? else {
+        return Ok(());
+    };
+    let mut doc: toml_edit::DocumentMut = match text.parse() {
+        Ok(doc) => doc,
+        Err(_) => return Ok(()),
+    };
+    if crate::edit::remove(&mut doc, "gateway.platforms") {
+        private_fs::write_atomic(file.path(), doc.to_string().as_bytes())
+            .map_err(|e| Error::io(&codes::HOME_IO, file.path(), &e))?;
     }
     Ok(())
 }

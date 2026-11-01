@@ -56,10 +56,7 @@ fn clone_copies_config_once_and_no_secrets() {
         .set("TOKEN", &SecretString::new("secret-value"))
         .unwrap();
     let source = name("default");
-    let clone = CloneFrom {
-        source: &source,
-        secrets: false,
-    };
+    let clone = CloneFrom::of(&source);
     let coder = home.create_profile("coder", Some(clone)).unwrap();
     let read = |p: &std::path::Path| std::fs::read_to_string(p).unwrap();
     assert_eq!(
@@ -77,8 +74,8 @@ fn clone_copies_config_once_and_no_secrets() {
     assert!(read(&coder.path().join("config.toml")).contains("max_iterations = 7"));
 
     let with_secrets = CloneFrom {
-        source: &source,
         secrets: true,
+        ..CloneFrom::of(&source)
     };
     let copy = home.create_profile("copy", Some(with_secrets)).unwrap();
     assert!(read(&copy.path().join("secrets.toml")).contains("secret-value"));
@@ -156,4 +153,61 @@ fn default_and_in_use_profiles_are_not_deleted() {
     assert!(home.profile_path(&name("busy")).is_dir());
     drop(lock);
     home.delete_profile(&name("busy")).unwrap();
+}
+
+/// Scenario: Channels not cloned by default (spec: configuration-and-
+/// profiles, Profile creation options).
+#[test]
+fn clone_all_copies_everything_but_sessions_and_channels() {
+    let (_t, home) = home();
+    let work = home.create_profile("work", None).unwrap();
+    work.config_file()
+        .set_all(&[
+            ("gateway.platforms.telegram.enabled", "true"),
+            (
+                "gateway.platforms.telegram.token_secret",
+                "TELEGRAM_BOT_TOKEN",
+            ),
+            ("agent.max_iterations", "9"),
+        ])
+        .unwrap();
+    let write = |rel: &str, text: &str| {
+        let path = work.path().join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write("cron/jobs.toml", "# jobs");
+    write("pairing/telegram.json", "{}");
+    write("logs/agent.log", "log");
+    write("state.db", "db");
+    write("migrations/import-sync.toml", "# registry");
+    let source = name("work");
+    let all = CloneFrom {
+        all: true,
+        ..CloneFrom::of(&source)
+    };
+    let work2 = home.create_profile("work2", Some(all)).unwrap();
+    let config = std::fs::read_to_string(work2.path().join("config.toml")).unwrap();
+    assert!(!config.contains("telegram"), "{config}");
+    assert!(config.contains("max_iterations = 9"), "{config}");
+    assert!(work2.path().join("cron/jobs.toml").is_file());
+    for gone in [
+        "pairing",
+        "logs/agent.log",
+        "state.db",
+        "migrations/import-sync.toml",
+    ] {
+        assert!(!work2.path().join(gone).exists(), "{gone} was cloned");
+    }
+    let with = CloneFrom {
+        all: true,
+        channels: true,
+        sync_imports: true,
+        ..CloneFrom::of(&source)
+    };
+    let work3 = home.create_profile("work3", Some(with)).unwrap();
+    let config = std::fs::read_to_string(work3.path().join("config.toml")).unwrap();
+    assert!(config.contains("[gateway.platforms.telegram]"), "{config}");
+    assert!(work3.path().join("pairing/telegram.json").is_file());
+    assert!(work3.path().join("migrations/import-sync.toml").is_file());
 }

@@ -17,6 +17,7 @@
 //! the whole file validates in one place.
 
 mod agent;
+mod gateway;
 mod interface;
 mod models;
 mod operations;
@@ -32,6 +33,7 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
+pub use gateway::{GatewayConfig, PlatformConfig};
 pub use interface::{
     BusyConfig, BusyInputMode, CliConfig, DisplayConfig, Interface, MarkdownMode, QuickCommand,
     QuickCommandKind, ResumeDisplay, ToolProgress, ToolProgressGrouping, UiConfig,
@@ -97,6 +99,8 @@ pub struct Config {
     pub fallback: FallbackConfig,
     /// `read_file` limits.
     pub files: FilesConfig,
+    /// The profile's part in the home's gateway daemon.
+    pub gateway: GatewayConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
     /// Built-in memory.
@@ -171,6 +175,7 @@ impl Default for Config {
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
+            gateway: GatewayConfig::default(),
             logging: LoggingConfig::default(),
             memory: MemoryConfig::default(),
             model: ModelConfig::default(),

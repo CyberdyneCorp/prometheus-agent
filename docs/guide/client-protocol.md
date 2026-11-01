@@ -38,10 +38,15 @@ from `<home>/daemon.toml`, never from a profile.
 
 ## Which profiles it serves
 
-The daemon serves every profile of the home whose configuration loads,
-each through its own isolated scope (a profile that fails to load is
-logged and skipped). A client asking for a profile the daemon does not
-serve gets no ticket.
+By default the daemon serves its launch profile only (`-p NAME`, else the
+home's `active_profile`, else `default`). With `gateway.multiplex = true` in
+the launch profile it serves every profile of the home except those with
+`gateway.standalone = true`, each through its own isolated scope (one whose
+configuration does not load is logged and skipped). A client asking for a
+profile the daemon does not serve gets no ticket; since the daemon holds
+the home, a chat on such a profile exits 75 until the daemon serves it or
+stops. Each served profile's `config.toml` is reloaded when it changes (see
+[live reload](configuration-and-profiles.md#live-reload)).
 
 ## Finding and attaching to the daemon
 

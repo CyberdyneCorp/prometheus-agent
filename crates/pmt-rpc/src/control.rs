@@ -105,6 +105,26 @@ pub struct DaemonStatus {
     pub active_turns: usize,
     /// It is draining to stop or restart.
     pub retiring: bool,
+    /// Each served profile's configuration: reloads, the error of an
+    /// invalid edit it ignored, keys waiting for a restart.
+    #[serde(default)]
+    pub config: Vec<ProfileConfig>,
+}
+
+/// A served profile's configuration state.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileConfig {
+    /// The profile.
+    pub profile: String,
+    /// Changed files applied since the daemon started.
+    pub reloads: u64,
+    /// Why the current `config.toml` was not applied (the daemon serves
+    /// the previous configuration meanwhile).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Changed `restart` keys that apply after a daemon restart.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_restart: Vec<String>,
 }
 
 /// An error answered on the control channel.

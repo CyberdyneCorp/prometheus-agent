@@ -690,12 +690,64 @@ pub enum ProfileCommand {
         /// Copy config, identity, memory, skills, themes and plugins from this profile.
         #[arg(long, value_name = "NAME")]
         clone_from: Option<String>,
-        /// With --clone-from, also copy the secrets.
-        #[arg(long, requires = "clone_from")]
+        /// Copy everything from the source profile (--clone-from, else the
+        /// selected profile) except sessions, state.db, logs, snapshots and
+        /// backups.
+        #[arg(long)]
+        clone_all: bool,
+        /// With a clone, also copy the secrets.
+        #[arg(long)]
         clone_secrets: bool,
+        /// With a clone, also copy the messaging adapter configuration and
+        /// pairing data (left out by default so two profiles never answer
+        /// the same bot account).
+        #[arg(long)]
+        clone_channels: bool,
+        /// With a clone, also copy the import sync registry.
+        #[arg(long)]
+        sync_imports: bool,
         /// Start without bundled skills (`skills.include_bundled = false`); the essential skill stays.
         #[arg(long)]
         no_skills: bool,
+        /// A description shown by `profile show` and `profile list`.
+        #[arg(long, value_name = "TEXT")]
+        description: Option<String>,
+        /// Do not write the alias launcher `<name>` (see `profile alias`).
+        #[arg(long)]
+        no_alias: bool,
+    },
+    /// Write a launcher that runs `prometheus -p <name> "$@"` into your bin
+    /// directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin).
+    Alias {
+        /// Profile name.
+        name: String,
+        /// The launcher's name (default: the profile name).
+        #[arg(long = "as", value_name = "ALIAS")]
+        alias: Option<String>,
+    },
+    /// Export a profile as a .tar.zst archive (no secrets, sessions or logs
+    /// unless asked).
+    Export {
+        /// Profile name.
+        name: String,
+        /// The archive to write.
+        #[arg(short, long, value_name = "FILE")]
+        output: std::path::PathBuf,
+        /// Also include the sessions (state.db and its blobs).
+        #[arg(long)]
+        with_sessions: bool,
+        /// Also include the secrets, encrypted with a passphrase read at a
+        /// hidden prompt (or from stdin).
+        #[arg(long)]
+        with_secrets: bool,
+    },
+    /// Create a profile from an archive `profile export` wrote.
+    Import {
+        /// The archive.
+        file: std::path::PathBuf,
+        /// The new profile's name (default: the exported profile's).
+        #[arg(long = "as", value_name = "NAME")]
+        name: Option<String>,
     },
     /// Make a profile the one used without -p (`use default` clears the choice).
     Use {

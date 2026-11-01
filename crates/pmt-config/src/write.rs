@@ -115,6 +115,7 @@ impl ConfigFile {
     /// the argument; the file's own errors otherwise. Nothing is written on
     /// error.
     pub fn set(&self, key: &str, raw: &str) -> Result<(), Error> {
+        crate::managed::check_writable(key)?;
         let value = typed_value(key, raw)?;
         self.modify(|doc| {
             edit::set(doc, key, value)
@@ -128,6 +129,9 @@ impl ConfigFile {
     ///
     /// As [`set`](Self::set), for the first failing pair.
     pub fn set_all(&self, pairs: &[(&str, &str)]) -> Result<(), Error> {
+        for (key, _) in pairs {
+            crate::managed::check_writable(key)?;
+        }
         let typed = pairs
             .iter()
             .map(|(key, raw)| typed_value(key, raw).map(|value| (*key, value)))
@@ -148,6 +152,7 @@ impl ConfigFile {
     ///
     /// The file's own errors and validation of the result.
     pub fn set_fallback_chain(&self, chain: &[FallbackEntry]) -> Result<(), Error> {
+        crate::managed::check_writable("fallback.chain")?;
         self.modify(|doc| {
             edit::set_fallback_chain(doc, chain);
             Ok(())
@@ -162,6 +167,7 @@ impl ConfigFile {
     /// `config.invalid_argument` (exit 2) for an unknown key; the file's
     /// own errors otherwise.
     pub fn unset(&self, key: &str) -> Result<bool, Error> {
+        crate::managed::check_writable(key)?;
         if catalog::lookup(key).is_none() {
             return Err(Error::new(
                 &codes::CONFIG_INVALID_ARGUMENT,
@@ -186,6 +192,7 @@ impl ConfigFile {
     pub fn replace(&self, text: &str) -> Result<(), Error> {
         check_document(&self.path, text)?;
         let old = self.raw()?;
+        refuse_locked_changes(old.as_deref().unwrap_or_default(), text)?;
         self.commit(old.as_deref(), text)
     }
 
@@ -213,6 +220,31 @@ impl ConfigFile {
         private_fs::write_atomic(&self.path, new.as_bytes())
             .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &self.path, &e))
     }
+}
+
+/// `config edit` may not change a key the administrator locked.
+fn refuse_locked_changes(old: &str, new: &str) -> Result<(), Error> {
+    let Some(managed) = crate::managed::current()? else {
+        return Ok(());
+    };
+    let (Ok(old), Ok(new)) = (old.parse::<DocumentMut>(), new.parse::<DocumentMut>()) else {
+        return Ok(());
+    };
+    for key in managed.locked() {
+        if value_at(&old, key) != value_at(&new, key) {
+            return Err(crate::managed::locked_error(key));
+        }
+    }
+    Ok(())
+}
+
+/// The TOML text of `key`'s item in `doc`, when set.
+fn value_at(doc: &DocumentMut, key: &str) -> Option<String> {
+    let mut item = doc.as_item();
+    for segment in key.split('.') {
+        item = item.get(segment)?;
+    }
+    Some(item.to_string().trim().to_owned())
 }
 
 /// Everything a written file must satisfy: current schema version and a

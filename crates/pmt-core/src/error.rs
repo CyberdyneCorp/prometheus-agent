@@ -214,6 +214,12 @@ error_codes! {
     /// `config.toml` was written by a newer prometheus.
     CONFIG_TOO_NEW = ("config.too_new", Config,
         "`config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus.");
+    /// A writer tried to change a key the administrator locked.
+    CONFIG_MANAGED_KEY = ("config.managed_key", PermissionDenied,
+        "The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it.");
+    /// The administrator-managed configuration layer is invalid.
+    CONFIG_MANAGED_INVALID = ("config.managed_invalid", Config,
+        "`managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it.");
     /// The configuration editor could not be started or failed.
     CONFIG_EDITOR = ("config.editor", Unavailable,
         "The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error.");
@@ -242,6 +248,9 @@ error_codes! {
     /// The OS keychain backend is not available on this machine.
     SECRET_KEYCHAIN_UNAVAILABLE = ("secret.keychain_unavailable", Unavailable,
         "`secrets.backend = \"keychain\"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend.");
+    /// `prometheus secrets` tried to change an administrator-managed secret.
+    SECRET_MANAGED = ("secret.managed", PermissionDenied,
+        "The secret comes from the administrator-managed `managed-secrets.toml`, which takes precedence over every profile store and the environment; it cannot be set or unset per profile.");
     /// Revealing a secret was refused because stdout is not a terminal.
     SECRET_REVEAL_REFUSED = ("secret.reveal_refused", PermissionDenied,
         "`prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file.");
@@ -254,6 +263,15 @@ error_codes! {
     /// The operation is not allowed on the default profile.
     PROFILE_PROTECTED = ("profile.protected", Usage,
         "The `default` profile cannot be deleted or renamed.");
+    /// An alias launcher would shadow something or has a bad name.
+    PROFILE_ALIAS_REFUSED = ("profile.alias_refused", Usage,
+        "`profile alias` refuses a launcher name that is reserved, is a `prometheus` subcommand, would shadow an existing executable on `PATH`, or is not a valid profile-style name.");
+    /// A profile archive is not one `profile export` wrote, or is damaged.
+    PROFILE_ARCHIVE_INVALID = ("profile.archive_invalid", InvalidInput,
+        "The file is not a profile archive written by `prometheus profile export`, a member is outside the allowed set, or it is damaged; nothing was imported.");
+    /// The passphrase does not open an archive's secrets.
+    PROFILE_ARCHIVE_PASSPHRASE = ("profile.archive_passphrase", Auth,
+        "The archive's secrets are encrypted with another passphrase (Argon2id key, XChaCha20-Poly1305); nothing was imported.");
     /// A running process uses the profile.
     PROFILE_IN_USE = ("profile.in_use", Conflict,
         "A running daemon or interactive client uses the profile; stop it and retry.");

@@ -55,10 +55,10 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let root = home.root().to_path_buf();
     match command {
         DaemonCommand::Run => serve::run(&root, ctx),
-        DaemonCommand::Start => start(&root, ctx.json),
-        DaemonCommand::Ensure => ensure(&root, ctx.json),
+        DaemonCommand::Start => start(&root, ctx),
+        DaemonCommand::Ensure => ensure(&root, ctx),
         DaemonCommand::Stop => stop(&root, ctx.json),
-        DaemonCommand::Restart => restart(&root, ctx.json),
+        DaemonCommand::Restart => restart(&root, ctx),
         DaemonCommand::Status => status(&root, ctx.json),
     }
 }
@@ -73,9 +73,9 @@ struct EnsureOutput<'a> {
     rpc_protocol: &'a str,
 }
 
-fn start(home: &Path, json: bool) -> Result<u8, Error> {
-    let (record, started) = running_or_start(home)?;
-    if json {
+fn start(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+    let (record, started) = running_or_start(home, ctx.profile)?;
+    if ctx.json {
         return ensure_output(&record);
     }
     let pid = record.process.pid;
@@ -89,9 +89,9 @@ fn start(home: &Path, json: bool) -> Result<u8, Error> {
     }
 }
 
-fn ensure(home: &Path, json: bool) -> Result<u8, Error> {
-    let (record, _) = running_or_start(home)?;
-    if json {
+fn ensure(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+    let (record, _) = running_or_start(home, ctx.profile)?;
+    if ctx.json {
         return ensure_output(&record);
     }
     let e = &record.endpoint;
@@ -114,11 +114,11 @@ fn ensure_output(record: &DaemonRecord) -> Result<u8, Error> {
 
 /// The running daemon, starting one when there is none; `true` when this
 /// call started it.
-fn running_or_start(home: &Path) -> Result<(DaemonRecord, bool), Error> {
+fn running_or_start(home: &Path, profile: Option<&str>) -> Result<(DaemonRecord, bool), Error> {
     if let Some(record) = wait_running(home, Duration::from_secs(5))? {
         return Ok((record, false));
     }
-    let mut child = spawn_detached(home)?;
+    let mut child = spawn_detached(home, profile)?;
     let deadline = std::time::Instant::now() + START_TIMEOUT;
     loop {
         if let Discovery::Running(record) = discover(home)? {
@@ -188,9 +188,9 @@ fn last_stderr_line(home: &Path) -> Option<String> {
         .map(|line| line.trim_start_matches("error: ").to_owned())
 }
 
-/// `<this binary> --home <home> daemon run`, detached from this process
-/// group and terminal.
-fn spawn_detached(home: &Path) -> Result<std::process::Child, Error> {
+/// `<this binary> --home <home> [-p <profile>] daemon run`, detached from
+/// this process group and terminal.
+fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Child, Error> {
     let exe = std::env::current_exe()
         .map_err(|e| start_failed(&format!("cannot find this binary: {e}")))?;
     let stderr = stderr_file(home).map_err(|e| {
@@ -200,9 +200,11 @@ fn spawn_detached(home: &Path) -> Result<std::process::Child, Error> {
         ))
     })?;
     let mut command = Command::new(exe);
+    command.arg("--home").arg(home);
+    if let Some(profile) = profile {
+        command.args(["--profile", profile]);
+    }
     command
-        .arg("--home")
-        .arg(home)
         .args(["daemon", "run"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -272,9 +274,9 @@ fn stop(home: &Path, json: bool) -> Result<u8, Error> {
     })
 }
 
-fn restart(home: &Path, json: bool) -> Result<u8, Error> {
+fn restart(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
     stop_and_wait(home, true, drain_wait(home))?;
-    start(home, json)
+    start(home, ctx)
 }
 
 /// `daemon status --json`.
@@ -319,6 +321,24 @@ fn status(home: &Path, json: bool) -> Result<u8, Error> {
     }
     if d.retiring {
         text.push_str("\nretiring: draining running turns before it stops");
+    }
+    for profile in &d.config {
+        if let Some(error) = &profile.error {
+            let _ = write!(
+                text,
+                "\nconfig error ({}): {error}; serving the previous configuration",
+                profile.profile
+            );
+        }
+        if !profile.pending_restart.is_empty() {
+            let _ = write!(
+                text,
+                "\nrestart pending ({}): {} change(s) apply after 'prometheus daemon restart': {}",
+                profile.profile,
+                profile.pending_restart.len(),
+                profile.pending_restart.join(", ")
+            );
+        }
     }
     crate::output::print(&text)
 }

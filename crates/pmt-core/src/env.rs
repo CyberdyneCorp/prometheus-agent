@@ -30,6 +30,9 @@ pub const SECRET_PREFIX: &str = "PMT_SECRET_";
 
 const HOME_VAR: &str = "PROMETHEUS_HOME";
 const PMT_LOG: &str = "PMT_LOG";
+/// Debug builds only: the managed configuration directory to use instead
+/// of the machine-wide one (a test seam; release builds ignore it).
+const TEST_MANAGED_DIR: &str = "PMT_TEST_MANAGED_DIR";
 const RUST_LOG: &str = "RUST_LOG";
 const OWNED_PREFIXES: [&str; 2] = ["PMT_", "PROMETHEUS_"];
 
@@ -113,6 +116,7 @@ pub struct LaunchEnv {
     /// Neither secret nor Prometheus-owned: forwardable to children only.
     inherited: BTreeMap<String, OsString>,
     ignored: Vec<IgnoredVar>,
+    test_managed_dir: Option<PathBuf>,
 }
 
 impl LaunchEnv {
@@ -157,6 +161,7 @@ impl LaunchEnv {
                 Var::Home => env.home = non_blank(value).map(PathBuf::from),
                 Var::UserHome => env.user_home = non_blank(value).map(PathBuf::from),
                 Var::LocalAppData => env.local_app_data = non_blank(value).map(PathBuf::from),
+                Var::TestManagedDir => env.test_managed_dir = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
                 Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
@@ -189,6 +194,14 @@ impl LaunchEnv {
             reason: IgnoreReason::NotUnicode,
         });
         None
+    }
+
+    /// Debug builds: `PMT_TEST_MANAGED_DIR`, the managed configuration
+    /// directory the test suite uses instead of the machine-wide one.
+    /// Always `None` in release builds.
+    #[must_use]
+    pub fn test_managed_dir(&self) -> Option<&PathBuf> {
+        self.test_managed_dir.as_ref()
     }
 
     /// `PROMETHEUS_HOME` when set and not blank (`~` is expanded by home
@@ -299,6 +312,7 @@ enum Var {
     RustLog,
     Visual,
     Editor,
+    TestManagedDir,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -323,6 +337,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         "LOCALAPPDATA" => return Var::LocalAppData,
         "VISUAL" => return Var::Visual,
         "EDITOR" => return Var::Editor,
+        TEST_MANAGED_DIR if cfg!(debug_assertions) => return Var::TestManagedDir,
         _ => {}
     }
     if is_user_home_var(name) {

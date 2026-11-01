@@ -108,6 +108,10 @@ windows-sys = "0.61"
 fastrand = "2.3"
 # OS randomness for sign-in secrets (PKCE verifier, OAuth state).
 getrandom = "0.4"
+# Profile export: passphrase key derivation and authenticated encryption of
+# the exported secrets.
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc"] }
 # URL parsing and form encoding of sign-in requests and callbacks.
 url = "2.5"
 # Test-only HTTP mock server (recorded provider stream fixtures).
@@ -141,6 +145,13 @@ unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
+
+# Argon2id runs a real key derivation in the profile-export tests.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
 
 [profile.release]
 lto = "thin"

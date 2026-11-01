@@ -83,6 +83,11 @@ pub trait Host: Send + Sync + 'static {
     /// Forks a session (the parent is unchanged).
     fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef>;
 
+    /// Each served profile's configuration state, for `daemon status`.
+    fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
+        Vec::new()
+    }
+
     /// Sessions loaded and turns running, for `daemon status`.
     fn load(&self) -> (usize, usize);
 
