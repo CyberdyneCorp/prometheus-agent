@@ -1,5 +1,9 @@
-//! `perf-sampler BINARY RUNS`: runs `BINARY --version` and prints one
+//! `perf-sampler BINARY RUNS [chat HOME]`: runs `BINARY --version` (or,
+//! with `chat HOME`, starts `BINARY --home HOME chat --provider mock` in a
+//! pseudo-terminal until its prompt appears) and prints one
 //! `startup_ms <ms>` line per timed run, then `peak_rss_bytes <n|none>`.
+//! The chat mode then also runs `chat -z` with the mock provider, so the
+//! peak covers the one-shot run the memory budget names.
 //!
 //! This is a separate, std-and-nix-only binary rather than an xtask
 //! subcommand because peak RSS is read with `getrusage(RUSAGE_CHILDREN)`,
@@ -19,17 +23,24 @@ use std::time::Instant;
 /// for page-cache misses and, on macOS, the code-signature check.
 const WARMUP_RUNS: usize = 3;
 
+/// One-shot chat runs whose peak RSS is measured in chat mode.
+const ONE_SHOT_RUNS: usize = 3;
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let [binary, runs] = args.as_slice() else {
-        eprintln!("usage: perf-sampler BINARY RUNS");
-        return ExitCode::FAILURE;
+    let (binary, runs, home) = match args.as_slice() {
+        [binary, runs] => (binary, runs, None),
+        [binary, runs, mode, home] if mode == "chat" => (binary, runs, Some(Path::new(home))),
+        _ => {
+            eprintln!("usage: perf-sampler BINARY RUNS [chat HOME]");
+            return ExitCode::FAILURE;
+        }
     };
     let Ok(runs) = runs.parse::<usize>() else {
         eprintln!("perf-sampler: RUNS must be a number, got {runs}");
         return ExitCode::FAILURE;
     };
-    match sample(Path::new(binary), runs) {
+    match sample(Path::new(binary), runs, home) {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("perf-sampler: {message}");
@@ -38,12 +49,21 @@ fn main() -> ExitCode {
     }
 }
 
-fn sample(binary: &Path, runs: usize) -> Result<(), String> {
+fn sample(binary: &Path, runs: usize, chat_home: Option<&Path>) -> Result<(), String> {
+    let run_once = |binary: &Path| match chat_home {
+        Some(home) => chat::prompt_once(binary, home),
+        None => version_once(binary),
+    };
     for _ in 0..WARMUP_RUNS {
         run_once(binary)?;
     }
     for _ in 0..runs {
         println!("startup_ms {}", run_once(binary)?);
+    }
+    if let Some(home) = chat_home {
+        for _ in 0..ONE_SHOT_RUNS {
+            chat::one_shot(binary, home)?;
+        }
     }
     // Read after the runs: the floor only grows, so the final value bounds
     // the floor every run inherited.
@@ -54,7 +74,7 @@ fn sample(binary: &Path, runs: usize) -> Result<(), String> {
     Ok(())
 }
 
-fn run_once(binary: &Path) -> Result<f64, String> {
+fn version_once(binary: &Path) -> Result<f64, String> {
     let start = Instant::now();
     let output = Command::new(binary)
         .arg("--version")
@@ -70,6 +90,94 @@ fn run_once(binary: &Path) -> Result<f64, String> {
         ));
     }
     Ok(elapsed.as_secs_f64() * 1_000.0)
+}
+
+/// `prometheus chat` with the mock provider (spec: Startup time budget;
+/// Memory and size budgets).
+mod chat {
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+
+    /// The line interface's idle prompt.
+    #[cfg(unix)]
+    const PROMPT: &[u8] = "› ".as_bytes();
+
+    /// Starts an interactive chat in a pseudo-terminal and returns the
+    /// milliseconds until its prompt is shown (and so accepts keystrokes).
+    #[cfg(unix)]
+    pub(super) fn prompt_once(binary: &Path, home: &Path) -> Result<f64, String> {
+        use std::io::Read as _;
+        use std::sync::mpsc;
+        use std::time::{Duration, Instant};
+
+        let size = nix::pty::Winsize {
+            ws_row: 24,
+            ws_col: 80,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        let pty = nix::pty::openpty(Some(&size), None).map_err(|e| format!("openpty: {e}"))?;
+        let tty = |fd: &std::os::fd::OwnedFd| {
+            fd.try_clone()
+                .map(Stdio::from)
+                .map_err(|e| format!("pty: {e}"))
+        };
+        let start = Instant::now();
+        let mut child = Command::new(binary)
+            .arg("--home")
+            .arg(home)
+            .args(["chat", "--provider", "mock"])
+            .env("TERM", "xterm")
+            .stdin(tty(&pty.slave)?)
+            .stdout(tty(&pty.slave)?)
+            .stderr(tty(&pty.slave)?)
+            .spawn()
+            .map_err(|e| format!("{}: {e}", binary.display()))?;
+        drop(pty.slave);
+        let (ready, shown) = mpsc::channel();
+        let mut master = std::fs::File::from(pty.master);
+        std::thread::spawn(move || {
+            let (mut seen, mut buf) = (Vec::new(), [0u8; 4096]);
+            while let Ok(read @ 1..) = master.read(&mut buf) {
+                seen.extend_from_slice(&buf[..read]);
+                if seen.windows(PROMPT.len()).any(|w| w == PROMPT) {
+                    let _ = ready.send(());
+                    return;
+                }
+            }
+        });
+        let outcome = shown.recv_timeout(Duration::from_secs(10));
+        let elapsed = start.elapsed();
+        let _ = child.kill();
+        let _ = child.wait();
+        outcome.map_err(|_| "chat showed no prompt within 10 s".to_owned())?;
+        Ok(elapsed.as_secs_f64() * 1_000.0)
+    }
+
+    #[cfg(not(unix))]
+    pub(super) fn prompt_once(_: &Path, _: &Path) -> Result<f64, String> {
+        Err("chat startup is measured on Unix only".to_owned())
+    }
+
+    /// `chat -z hi` with the mock provider.
+    pub(super) fn one_shot(binary: &Path, home: &Path) -> Result<(), String> {
+        let output = Command::new(binary)
+            .arg("--home")
+            .arg(home)
+            .args(["chat", "-z", "hi", "--provider", "mock"])
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("{}: {e}", binary.display()))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(format!(
+                "chat -z failed ({}): {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ))
+        }
+    }
 }
 
 /// The children's peak, unless it does not exceed the floor every child

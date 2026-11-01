@@ -40,7 +40,8 @@ toml.workspace = true
 
 # Peak RSS of the measured binary in perf-sampler (getrusage of reaped children).
 [target.'cfg(unix)'.dependencies]
-nix.workspace = true
+# perf-sampler starts `chat` in a pseudo-terminal to time its prompt.
+nix = { workspace = true, features = ["term"] }
 
 [lints]
 workspace = true

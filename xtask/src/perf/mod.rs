@@ -6,8 +6,10 @@
 //! the small `perf-sampler` binary, and fails when a measurement exceeds its
 //! absolute budget or regresses more than 15% against the entry for this
 //! platform in the baseline file (growth under small noise/size floors never
-//! counts). The chat and daemon budgets join when
-//! those commands exist (M1).
+//! counts). It also starts `prometheus chat` with the mock provider in a
+//! pseudo-terminal and times its prompt, and measures the peak RSS of chat
+//! starts and `chat -z` runs (Unix). The daemon budgets join with the
+//! daemon (M2).
 //!
 //! `scripts/check` runs it against `perf/baseline.json`; CI's `perf` job
 //! runs it on the reference runner against main's baseline
@@ -105,29 +107,60 @@ fn measure(root: &Path, runs: usize) -> Result<Metrics, String> {
         &["--package", "xtask", "--bin", "perf-sampler"],
         "perf-sampler",
     )?;
-    let measured = sample::collect(&sampler, &binary, runs)?;
+    let measured = sample::collect(&sampler, &binary, runs, &[])?;
     let (startup_median_ms, startup_p95_ms) = budget::summarize(measured.startup_ms);
     let binary_bytes = std::fs::metadata(&binary)
         .map_err(|e| format!("{}: {e}", binary.display()))?
         .len();
+    let chat = if cfg!(unix) {
+        Some(measure_chat(root, &sampler, &binary, runs)?)
+    } else {
+        None
+    };
     Ok(Metrics {
         startup_median_ms: round2(startup_median_ms),
         startup_p95_ms: round2(startup_p95_ms),
         peak_rss_bytes: measured.peak_rss_bytes,
         binary_bytes,
+        chat_prompt_median_ms: chat.as_ref().map(|c| round2(c.0)),
+        chat_prompt_p95_ms: chat.as_ref().map(|c| round2(c.1)),
+        chat_peak_rss_bytes: chat.and_then(|c| c.2),
     })
 }
 
+/// `prometheus chat` with the mock provider in a fresh home: the median and
+/// p95 milliseconds until the prompt, and the peak RSS of those starts and
+/// of `chat -z` runs.
+fn measure_chat(
+    root: &Path,
+    sampler: &Path,
+    binary: &Path,
+    runs: usize,
+) -> Result<(f64, f64, Option<u64>), String> {
+    let home = root.join("target/perf-chat-home");
+    let _ = std::fs::remove_dir_all(&home);
+    let chat = sample::collect(sampler, binary, runs, &["chat".as_ref(), home.as_os_str()])?;
+    let (median, p95) = budget::summarize(chat.startup_ms);
+    Ok((median, p95, chat.peak_rss_bytes))
+}
+
 fn report(platform: &str, current: &Metrics, stored: Option<&Metrics>) {
-    let rss = current
-        .peak_rss_bytes
-        .map_or_else(|| "not measurable".to_owned(), budget::mib);
+    let rss = |bytes: Option<u64>| bytes.map_or_else(|| "not measurable".to_owned(), budget::mib);
     println!(
-        "perf ({platform}): startup median {}, p95 {}; peak RSS {rss}; binary {}",
+        "perf ({platform}): startup median {}, p95 {}; peak RSS {}; binary {}",
         budget::ms(current.startup_median_ms),
         budget::ms(current.startup_p95_ms),
+        rss(current.peak_rss_bytes),
         budget::mib(current.binary_bytes),
     );
+    if let (Some(median), Some(p95)) = (current.chat_prompt_median_ms, current.chat_prompt_p95_ms) {
+        println!(
+            "perf ({platform}): chat prompt median {}, p95 {}; chat peak RSS {}",
+            budget::ms(median),
+            budget::ms(p95),
+            rss(current.chat_peak_rss_bytes),
+        );
+    }
     if stored.is_none() {
         println!("perf: no baseline for {platform}; only the absolute budgets apply");
     }

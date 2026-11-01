@@ -7,7 +7,9 @@ budget; Memory and size budgets):
 | Measurement | How | Absolute budget |
 |---|---|---|
 | Startup | 30 timed runs of `prometheus --version` after 3 warm-up runs; p95 checked | 20 ms |
-| Peak RSS | `getrusage(RUSAGE_CHILDREN)` in the small `perf-sampler` binary | 120 MiB |
+| Chat prompt | 30 timed starts of `prometheus chat --provider mock` in a pseudo-terminal (fresh home under `target/`), until the `› ` prompt is drawn and accepts keystrokes; p95 checked (Unix) | 150 ms |
+| Peak RSS | `getrusage(RUSAGE_CHILDREN)` in the small `perf-sampler` binary, for the `--version` runs | 120 MiB |
+| Chat peak RSS | the same, over the chat starts and three `chat -z hi --provider mock` runs (Unix) | 120 MiB |
 | Binary size | stripped release `prometheus`, at the path cargo reports | 80 MiB |
 
 Peak RSS is sampled from `xtask/src/bin/perf-sampler.rs`, a std-only
@@ -23,7 +25,11 @@ never counts, because a millisecond-scale run jitters by more than 15% on a
 shared runner. Binary growth under 4 MiB (5% of the size budget) never counts
 either: size does not jitter, but against a near-empty binary any real
 dependency is a large percentage (M1's first runtime crates took 0.62 MiB to
-1.21 MiB, +94%), so a pure percentage gate would fail on every addition. The chat and daemon budgets join when those commands land (M1).
+1.21 MiB, +94%), so a pure percentage gate would fail on every addition. The chat
+prompt median and the chat peak RSS follow the same rule with the startup
+and RSS floors; a baseline recorded before they were measured has no chat
+entries, and then only their absolute budgets apply. The daemon budgets
+(`/readyz` latency, idle RSS) join with the daemon in M2.
 
 ```sh
 cargo xtask perf                          # check against perf/baseline.json
