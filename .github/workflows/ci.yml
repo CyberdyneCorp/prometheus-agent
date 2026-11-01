@@ -154,6 +154,7 @@ jobs:
       - name: Offline smoke run
         if: runner.os == 'Windows'
         run: |
+          scripts/ci/windows-terminal-diag "target/${{ matrix.target }}/debug/prometheus.exe"
           cargo test -p prometheus --test demo_cli --locked --target "${{ matrix.target }}"
           scripts/ci/offline-demo "target/${{ matrix.target }}/debug/prometheus.exe"
 
