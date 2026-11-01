@@ -305,10 +305,12 @@ async fn a_budget_refusal_is_32005_with_its_kind() {
 async fn a_silent_connection_closes_with_4408_after_45_seconds() {
     let daemon = Daemon::start().await;
     let mut socket = daemon.socket("default").await;
+    // Before the hello: the daemon's idle deadline counts from its last
+    // frame, which is the hello's answer.
+    let started = tokio::time::Instant::now();
     assert!(say_hello(&mut socket).await["result"].is_object());
     // From here the clock jumps whenever every task waits.
     tokio::time::pause();
-    let started = tokio::time::Instant::now();
     // One-second steps: a single long timeout could let the paused clock
     // jump past it while the close frame is still in the socket.
     let close = loop {
