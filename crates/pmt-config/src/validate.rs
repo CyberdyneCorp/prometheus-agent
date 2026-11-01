@@ -518,6 +518,34 @@ mod tests {
         assert_eq!(found[0].span, Some(19..23));
     }
 
+    /// Scenario: Invalid strategy fails validation (spec: model-providers).
+    #[test]
+    fn unknown_pool_strategy_names_the_key_and_allowed_values() {
+        let found = messages("[providers.openrouter]\npool_strategy = \"weighted\"\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0].starts_with(
+                "providers.openrouter.pool_strategy: unknown value \"weighted\" (allowed: "
+            ),
+            "{found:?}"
+        );
+        assert!(found[0].contains("\"round_robin\""), "{found:?}");
+    }
+
+    /// Scenario: Unknown key in a platform hint (spec: agent-turn-loop,
+    /// Platform hint overrides): only `replace` and `append` exist; the
+    /// message names the full key, like every unknown-key error.
+    #[test]
+    fn unknown_platform_hint_key_is_refused() {
+        let found = issues("[prompt.platform_hints.slack]\nprepend = \"x\"\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(
+            found[0].message,
+            "unknown key 'prompt.platform_hints.slack.prepend'"
+        );
+        assert_eq!(found[0].code.kind.exit_code(), 78);
+    }
+
     #[test]
     fn boolean_is_not_an_approval_mode() {
         assert_eq!(

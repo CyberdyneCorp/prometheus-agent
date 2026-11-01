@@ -32,6 +32,9 @@
 //! crate versions locked since `<rev>` must be older than
 //! `deps-policy.toml`'s minimum age.
 //!
+//! `cargo xtask scenarios` checks `scenario-index.toml`: every scenario of
+//! the milestone's requirements maps to existing test functions.
+//!
 //! `cargo xtask release <step>` runs the release steps around cargo-dist:
 //! SBOMs, the signed manifest and channel index, rendered installers,
 //! minisign signatures and the end-to-end check of a release directory.
@@ -41,6 +44,7 @@ mod deps_age;
 mod health;
 mod perf;
 mod release;
+mod scenarios;
 mod tool_refs;
 
 use std::path::{Path, PathBuf};
@@ -97,6 +101,9 @@ enum Command {
         #[arg(long)]
         base: String,
     },
+    /// Check that every scenario of the milestone maps to tests
+    /// (`scenario-index.toml`).
+    Scenarios,
     /// Release steps run by the Release workflow around cargo-dist.
     Release {
         #[command(subcommand)]
@@ -120,6 +127,7 @@ fn main() -> ExitCode {
             perf::run(&root, runs.into(), &baseline, update_baseline)
         }
         Command::DepsAge { base } => deps_age::run(&repo_root(), &base),
+        Command::Scenarios => scenarios::run(&repo_root()),
         Command::Release { step } => release::run(step),
     };
     match result {

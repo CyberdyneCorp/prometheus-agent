@@ -1,0 +1,1318 @@
+# The scenario-to-test index (task 21.3): every scenario of the M1
+# requirements of the capabilities below, and the tests that prove it.
+# `cargo xtask scenarios` (run by scripts/check, whose test suite runs every
+# named test) fails when a scenario has no entry, an entry names a scenario
+# the specs no longer have, or a named test does not exist.
+#
+# Keys: [<capability>."<requirement>"] "<scenario>" = ["<file>::<test fn>", ...]
+# A `note` says how the tests prove a scenario when that is not obvious; a
+# `deferred` entry names the later-milestone component a scenario needs.
+
+specs = "openspec/changes/bootstrap-prometheus-agent/specs"
+milestone = "M1"
+capabilities = [
+    "workspace-architecture",
+    "configuration-and-profiles",
+    "session-storage",
+    "observability",
+    "security-boundaries",
+    "execution-environments",
+    "model-providers",
+    "tool-system",
+    "agent-turn-loop",
+    "context-compression",
+    "skills",
+    "memory",
+    "cli",
+    "distribution-and-update",
+    "web-and-media-tools",
+]
+
+[workspace-architecture."Single binary with subcommand surfaces"]
+"Alias invocation" = ["crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_identity_line", "crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_version_json"]
+"Unknown subcommand" = ["crates/prometheus/tests/chat_cli.rs::a_mistyped_subcommand_exits_2_with_a_suggestion"]
+
+[workspace-architecture."Version and build identity"]
+"Machine-readable version" = ["crates/prometheus/tests/output_contract.rs::version_json_values_have_their_shapes"]
+"Minimal build without dashboard" = { tests = ["crates/prometheus/src/surface.rs::missing_surface_exits_69_with_the_spec_message", "crates/prometheus/src/surface.rs::gate_follows_the_compiled_features"], note = "the `dashboard` command arrives in M3; every surface command goes through this gate" }
+
+[workspace-architecture."Supported targets and support tiers"]
+"Tier reported at runtime" = ["crates/prometheus/src/build_info.rs::every_listed_target_has_its_tier"]
+
+[workspace-architecture."No mandatory external runtime"]
+"Fresh machine without Python" = ["crates/prometheus/tests/chat_cli.rs::a_host_without_python_answers_a_mock_one_shot"]
+
+[workspace-architecture."Launch environment is read once"]
+"Non-secret env var has no effect" = ["crates/pmt-core/src/env.rs::non_secret_pmt_var_has_no_effect_and_is_reported"]
+
+[workspace-architecture."Typed registries reject unknown names"]
+"Misspelled hook in a plugin manifest" = ["crates/pmt-core/src/registry.rs::misspelled_hook_suggests_the_closest_name"]
+
+[workspace-architecture."Single-writer storage invariant"]
+"Chat attaches to a running daemon" = { deferred = "M2: needs the daemon and the client RPC protocol (tasks 22.x)" }
+
+[workspace-architecture."Error taxonomy"]
+"JSON error output" = ["crates/prometheus/tests/config_cli.rs::unknown_key_json_error_has_kind_and_code"]
+
+[workspace-architecture."Exit codes"]
+"Invalid config value" = ["crates/pmt-config/src/validate.rs::unknown_enum_value_lists_allowed_values"]
+"Ctrl-C during a one-shot query" = ["crates/prometheus/tests/chat_cli.rs::sigint_stops_a_one_shot_run_with_exit_130"]
+
+[workspace-architecture."Panic isolation and crash reports"]
+"Adapter panic" = { tests = ["crates/pmt-core/src/panic.rs::panicking_tool_task_does_not_affect_other_tasks"], note = "messaging adapters arrive in M2; they run under the same spawn_isolated wrapper this test proves (the other task continues, a crash report is written)" }
+
+[workspace-architecture."Cancellation latency"]
+"Interrupt during a long shell command" = ["crates/pmt-tools/tests/terminal/foreground.rs::an_interrupt_ends_a_long_command_and_terms_its_group"]
+
+[workspace-architecture."Startup time budget"]
+"Slow MCP server" = { deferred = "M2: needs MCP servers (plugin-system, M2)" }
+
+[workspace-architecture."Memory and size budgets"]
+"Binary too large" = ["xtask/src/perf/budget.rs::an_82_mib_binary_fails_the_size_budget"]
+"Small binary growth from a near-empty baseline" = ["xtask/src/perf/budget.rs::binary_growth_under_the_size_floor_is_not_a_regression"]
+
+[workspace-architecture."Repository health gates"]
+"Dependency with a disallowed license" = { tests = ["xtask/tests/supply_chain.rs::a_gpl_dependency_is_outside_the_license_allowlist"], note = "cargo deny (run by scripts/check) enforces the allowlist this test pins to the spec list" }
+
+[workspace-architecture."Complexity and unsafe-code ratchet"]
+"Function grows past the limit" = ["xtask/tests/health.rs::function_over_budget_fails_naming_it_and_the_limit"]
+
+[workspace-architecture."Generated reference documentation"]
+"Default changed in code only" = ["xtask/src/main.rs::check_flags_only_files_that_differ_from_generation"]
+
+[workspace-architecture."Doctor"]
+"Offline doctor" = ["crates/prometheus/tests/doctor_cli.rs::no_connection_is_made_without_online"]
+"World-readable secrets store" = ["crates/prometheus/tests/doctor_cli.rs::a_world_readable_secrets_store_fails_until_fixed"]
+
+[workspace-architecture."Doctor repairs are explicit and enumerated"]
+"Stale lock repaired" = ["crates/prometheus/tests/doctor_cli.rs::a_stale_gateway_lock_is_removed_and_printed"]
+
+[workspace-architecture."Machine-readable output contract"]
+"Scriptable session list" = ["crates/prometheus/tests/sessions_cli.rs::json_listing_has_the_session_fields"]
+
+[workspace-architecture."IPv6 reachability check and IPv4-only outbound"]
+"Blackholed IPv6" = ["crates/pmt-net/tests/ipv6.rs::blackholed_ipv6_is_reported_naming_force_ipv4"]
+"Forced IPv4" = ["crates/pmt-net/tests/ipv6.rs::forced_ipv4_connects_only_to_a_records"]
+
+[workspace-architecture."File-descriptor soft limit"]
+"Low default limit raised" = ["crates/prometheus/tests/startup_nofile.rs::low_default_limit_is_raised_to_4096_unless_disabled"]
+
+[configuration-and-profiles."Home resolution"]
+"Environment override" = ["crates/prometheus/tests/config_cli.rs::environment_home_holds_every_profile"]
+"Flag wins over environment" = ["crates/prometheus/tests/config_cli.rs::home_flag_wins_over_environment"]
+
+[configuration-and-profiles."Home and profile layout"]
+"Default profile is a regular profile directory" = ["crates/pmt-config/src/layout.rs::fresh_home_has_the_d13_layout"]
+
+[configuration-and-profiles."Explicit ProfileScope"]
+"Deferred callback keeps its profile" = ["crates/pmt-config/src/scope.rs::deferred_work_keeps_its_own_profile"]
+
+[configuration-and-profiles."Environment is secrets-only"]
+"Behaviour env var ignored" = ["crates/pmt-core/src/env.rs::behaviour_var_warning_names_the_replacing_key"]
+
+[configuration-and-profiles."Typed configuration schema is the single source of defaults"]
+"Schema export" = ["crates/prometheus/tests/config_cli.rs::schema_lists_every_key_with_default_and_description"]
+
+[configuration-and-profiles."Strict validation"]
+"Unknown enum value" = ["crates/pmt-config/src/parse.rs::unknown_enum_names_key_line_and_allowed_values"]
+"Misspelled key" = ["crates/pmt-config/src/validate.rs::misspelled_key_suggests_the_closest_key"]
+
+[configuration-and-profiles."Configuration layering"]
+"Per-invocation override not persisted" = ["crates/prometheus/tests/config_cli.rs::per_invocation_override_is_typed_and_not_persisted"]
+
+[configuration-and-profiles."Config explain (upgrade)"]
+"Explain shows provenance" = ["crates/prometheus/tests/config_cli.rs::explain_names_default_effective_source_line_and_apply_class"]
+
+[configuration-and-profiles."Format-preserving atomic config writes"]
+"Comment preserved" = ["crates/prometheus/tests/config_cli.rs::set_keeps_comments_and_untouched_keys"]
+"Invalid value never written" = ["crates/prometheus/tests/config_cli.rs::out_of_range_value_exits_2_and_writes_nothing"]
+
+[configuration-and-profiles."Config CLI"]
+"Edit loop rejects invalid result" = ["crates/prometheus/tests/config_cli.rs::invalid_edit_is_rejected_and_abort_keeps_the_file"]
+
+[configuration-and-profiles."Secrets are not configuration"]
+"API key pasted into config" = ["crates/prometheus/tests/config_cli.rs::pasted_api_key_is_refused"]
+"Credential written into the file by hand" = ["crates/prometheus/tests/config_cli.rs::credential_in_the_file_is_invalid_for_validate_and_every_load"]
+
+[configuration-and-profiles."Secrets store"]
+"Value never on argv" = ["crates/prometheus/tests/secrets_cli.rs::value_from_stdin_is_stored_and_never_echoed"]
+"Reveal refused without TTY" = ["crates/prometheus/tests/secrets_cli.rs::reveal_is_refused_without_a_terminal"]
+
+[configuration-and-profiles."Secret resolution precedence and scope"]
+"Launch environment does not leak to another profile" = ["crates/pmt-config/src/secrets/tests.rs::launch_environment_does_not_leak_to_another_profile"]
+
+[configuration-and-profiles."Config schema versioning and migration"]
+"Renamed key migrated" = ["crates/pmt-config/src/migrate.rs::v0_renames_keep_comments_and_drop_defaults", "crates/pmt-config/tests/migration.rs::version_zero_file_is_migrated_with_a_backup"]
+
+[configuration-and-profiles."Profile name rules"]
+"Invalid name" = ["crates/prometheus/tests/profile_cli.rs::invalid_name_exits_2_and_creates_nothing"]
+
+[configuration-and-profiles."Profiles are islands"]
+"Skill installed in one profile only" = ["crates/pmt-skills/tests/skills/manage.rs::gateway_serves_two_profiles_without_crossover"]
+
+[configuration-and-profiles."Profile lifecycle commands"]
+"Clone without secrets" = ["crates/prometheus/tests/profile_cli.rs::clone_without_secrets"]
+
+[configuration-and-profiles."Safe profile deletion"]
+"Concurrent writer cannot resurrect" = ["crates/pmt-store/tests/store/open.rs::deleted_profile_store_is_not_opened"]
+
+[configuration-and-profiles."Profile selection at process start"]
+"Flag beats sticky selection" = ["crates/prometheus/tests/profile_cli.rs::flag_beats_sticky_selection"]
+
+[configuration-and-profiles."Whole-home backup"]
+"Live database captured consistently" = ["crates/pmt-backup/tests/backup_restore.rs::live_database_is_captured_consistently"]
+"Retention" = ["crates/pmt-backup/tests/backup_restore.rs::retention_keeps_the_newest"]
+
+[configuration-and-profiles."Home restore"]
+"Corrupt archive writes nothing" = ["crates/pmt-backup/tests/backup_restore.rs::corrupt_archive_writes_nothing", "crates/prometheus/tests/backup_cli.rs::corrupt_archive_exits_65"]
+
+[configuration-and-profiles."State snapshots"]
+"Restore pre-update snapshot" = ["crates/pmt-backup/tests/snapshots.rs::pre_update_snapshot_restores"]
+
+[configuration-and-profiles."Secrets are resolved per use"]
+"Rotated key used next request" = ["crates/prometheus/tests/secret_rotation.rs::rotated_key_is_used_by_the_next_request"]
+
+[session-storage."Store opened only through ProfileScope"]
+"Copied database refused under another profile" = ["crates/pmt-store/tests/store/open.rs::copied_database_is_refused_under_another_profile"]
+"Two profiles in one gateway use separate stores" = ["crates/pmt-store/tests/store/open.rs::two_profiles_in_one_process_use_separate_stores"]
+
+[session-storage."Owner-only file permissions"]
+"Loose permissions tightened" = ["crates/pmt-store/tests/store/open.rs::loose_permissions_are_tightened_with_a_warning"]
+
+[session-storage."Embedded versioned migrations"]
+"Older store upgraded with backup" = ["crates/pmt-store/src/store/tests.rs::older_store_is_upgraded_with_a_backup"]
+"Downgraded binary cannot corrupt a newer store" = ["crates/pmt-store/tests/store/open.rs::newer_store_opens_read_only_and_refuses_writes"]
+
+[session-storage."Single session identity format"]
+"Cron session id" = ["crates/pmt-store/tests/store/sessions.rs::cron_session_has_a_plain_ulid_id_and_typed_origin"]
+
+[session-storage."Session record and source enum"]
+"Unknown source rejected" = ["crates/pmt-store/tests/store/sessions.rs::unknown_source_is_rejected_by_the_store_too"]
+
+[session-storage."First end reason wins"]
+"Second end call ignored" = ["crates/pmt-store/tests/store/sessions.rs::first_end_reason_wins_and_resume_clears_it"]
+
+[session-storage."Transactional message persistence"]
+"Batch failure leaves no partial rows" = ["crates/pmt-store/tests/store/sessions.rs::batch_failure_leaves_no_partial_rows"]
+"Large tool output spilled to blob" = ["crates/pmt-store/tests/store/sessions.rs::large_tool_output_is_spilled_to_a_blob"]
+
+[session-storage."Content-addressed blob store with garbage collection"]
+"Freshly written blob not collected" = ["crates/pmt-store/tests/store/blobs.rs::freshly_written_blob_is_not_collected"]
+
+[session-storage."Typed session lineage"]
+"Compression chain tip" = ["crates/pmt-store/tests/store/sessions.rs::compression_chain_lineage_and_tip"]
+"Fork not mistaken for continuation" = ["crates/pmt-store/tests/store/sessions.rs::fork_is_not_mistaken_for_a_continuation"]
+
+[session-storage."Non-destructive in-place compaction"]
+"Concurrent append during compaction" = ["crates/pmt-store/tests/store/compaction.rs::append_during_compaction_is_sequenced_after_the_summary"]
+"Rewritten source row aborts compaction" = ["crates/pmt-store/tests/store/compaction.rs::rewritten_source_row_aborts_the_compaction"]
+
+[session-storage."Turn lease and compaction lock"]
+"Dead holder reclaimed" = ["crates/pmt-store/tests/store/compaction.rs::dead_holder_is_reclaimed_without_waiting_for_expiry"]
+
+[session-storage."Session titles with provenance"]
+"Auto title does not overwrite user title" = ["crates/pmt-store/tests/store/titles.rs::auto_title_does_not_overwrite_a_user_title"]
+"Duplicate title" = ["crates/pmt-store/tests/store/titles.rs::duplicate_title_names_the_holder"]
+
+[session-storage."Title lineage numbering and resolution"]
+"Resume by base title" = ["crates/pmt-store/tests/store/titles.rs::resume_by_base_title_picks_the_newest_number"]
+
+[session-storage."Full-text session search"]
+"Rewound message hidden" = ["crates/pmt-store/tests/store/search.rs::rewound_message_is_hidden_unless_inactive_rows_are_asked_for"]
+"CJK query" = ["crates/pmt-store/tests/store/search.rs::cjk_query_is_answered_from_the_trigram_index"]
+
+[session-storage."Search query sanitisation"]
+"Hyphenated term" = ["crates/pmt-store/src/search/query.rs::hyphenated_term_becomes_a_phrase"]
+
+[session-storage."Derived indexes fail open and rebuild offline"]
+"Corrupt word index does not lose a message" = ["crates/pmt-store/tests/store/search.rs::dropped_index_fails_open_and_doctor_fix_rebuilds_it"]
+
+[session-storage."Integrity check and quarantine"]
+"Corrupt file quarantined and salvaged" = ["crates/pmt-store/tests/store/integrity.rs::corrupt_file_is_quarantined_and_salvaged"]
+
+[session-storage."Out-of-band file replacement detection"]
+"File restored from backup while running" = ["crates/pmt-store/tests/store/integrity.rs::file_restored_from_backup_while_open_refuses_writes"]
+
+[session-storage."Write contention policy"]
+"Activity write gives up fast" = ["crates/pmt-store/tests/store/integrity.rs::activity_write_gives_up_fast_with_store_busy"]
+
+[session-storage."WAL mode, bounded readers and checkpoints"]
+"Readers do not block the writer" = ["crates/pmt-store/tests/store/open.rs::readers_do_not_block_the_writer"]
+
+[session-storage."Rewind is a soft delete"]
+"Undo last turn" = ["crates/pmt-store/tests/store/lifecycle.rs::undo_hides_the_last_turn_but_keeps_it_restorable"]
+
+[session-storage."Usage events keyed by root lineage"]
+"Continuation usage counted in lineage total" = ["crates/pmt-store/tests/store/lifecycle.rs::continuation_usage_counts_in_the_lineage_total"]
+
+[session-storage."Resume and export size guards"]
+"Oversized resume refused" = ["crates/pmt-store/tests/store/lifecycle.rs::oversized_lineage_is_refused_for_resume_and_in_memory_export"]
+
+[session-storage."Deletion semantics"]
+"Deleting a forked parent keeps the fork" = ["crates/pmt-store/tests/store/lifecycle.rs::deleting_a_forked_parent_keeps_the_fork"]
+
+[session-storage."Retention, pruning and auto-archive"]
+"Pinned session survives retention" = ["crates/pmt-store/tests/store/lifecycle.rs::retention_prunes_only_eligible_sessions"]
+
+[session-storage."Session management CLI"]
+"JSON listing" = ["crates/prometheus/tests/sessions_cli.rs::json_listing_has_the_session_fields"]
+
+[session-storage."Integration source tag"]
+"Integration session hidden from continue" = ["crates/pmt-store/tests/store/lifecycle.rs::continue_skips_integration_sessions"]
+
+[session-storage."Interactive session browser"]
+"Status tags" = ["crates/prometheus/tests/chat_session_commands.rs::the_browser_tags_sessions_and_resumes_the_chosen_one"]
+
+[session-storage."Export formats and save command"]
+"Redacted save" = ["crates/prometheus/tests/sessions_cli.rs::redacted_save_contains_no_secret"]
+
+[session-storage."Session search tool"]
+"Window around a hit" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_returns_the_window_around_a_hit"]
+"Profile isolation" = ["crates/pmt-agent/tests/agent_tools.rs::session_search_never_sees_another_profile"]
+
+[observability."One trajectory grammar for every surface"]
+"Same script, different surface" = { deferred = "M2: needs the gateway webhook adapter (messaging-gateway, M2)" }
+
+[observability."Trajectory event types"]
+"Tool failure recorded" = ["crates/pmt-obs/tests/obs/golden.rs::a_failed_read_file_is_an_observation_error_with_kind_not_found"]
+
+[observability."Grammar versioning and forward compatibility"]
+"Older binary reads newer minor" = ["crates/pmt-obs/tests/obs/golden.rs::an_older_reader_renders_unknown_events_of_a_newer_minor_as_markers"]
+
+[observability."Canonical text rendering"]
+"Oversized observation" = ["crates/pmt-obs/src/trajectory/render.rs::an_oversized_observation_is_clipped_to_50000_characters"]
+
+[observability."Trajectories are lossless and redacted"]
+"Secret echoed by a tool" = ["crates/pmt-obs/tests/obs/writer.rs::a_secret_echoed_by_a_tool_is_redacted_before_it_reaches_the_file"]
+
+[observability."Trajectory retention and size limits"]
+"Retention sweep" = ["crates/pmt-obs/tests/obs/retention.rs::an_unpinned_session_ended_91_days_ago_loses_its_trajectory"]
+
+[observability."Structured logs"]
+"Turn context on every record" = ["crates/pmt-obs/tests/obs/logs.rs::a_tool_record_inside_a_turn_carries_the_turn_context"]
+
+[observability."Log viewer"]
+"Following a session's records" = ["crates/prometheus/tests/obs_cli.rs::following_a_session_prints_old_and_new_records_until_interrupted_then_exits_130"]
+
+[observability."Per-call usage ledger"]
+"Auxiliary call is recorded" = ["crates/pmt-obs/tests/obs/usage.rs::an_auxiliary_title_call_is_one_more_row_beside_the_main_call"]
+
+[observability."Totals keyed by root lineage"]
+"No undercount across lineage" = ["crates/prometheus/tests/usage_cli.rs::a_root_session_counts_its_continuation_and_subagents"]
+
+[observability."Pricing and unpriced calls"]
+"Local model without a price" = ["crates/prometheus/tests/usage_cli.rs::a_local_model_without_a_price_is_an_unpriced_call_not_zero_cost"]
+
+[observability."Usage command"]
+"Breakdown by purpose" = ["crates/prometheus/tests/usage_cli.rs::a_breakdown_by_purpose_sums_to_the_total_within_the_window"]
+
+[observability."Hard budgets"]
+"Root budget stops a delegation tree" = ["crates/pmt-obs/tests/obs/budget.rs::a_root_budget_stops_a_subagent_call_in_the_delegation_tree"]
+"Unpriced calls under a USD budget" = ["crates/pmt-obs/tests/obs/budget.rs::an_unpriced_model_under_a_usd_budget_is_refused_unless_allowed"]
+
+[observability."Budget warnings and overrides"]
+"Model cannot raise its own budget" = ["crates/pmt-obs/tests/obs/budget.rs::the_model_cannot_raise_its_own_budget"]
+
+[observability."No outbound telemetry by default"]
+"Fresh install network audit" = ["crates/prometheus/tests/no_telemetry.rs::a_mock_chat_session_makes_no_connection"]
+
+[observability."Plain-text setup summary"]
+"URL credentials redacted" = ["crates/prometheus/src/debug_cmd.rs::url_credentials_are_replaced"]
+
+[security-boundaries."Declared trust model"]
+"Approval regex bypass report" = ["crates/prometheus/tests/security_policy.rs::every_spec_boundary_and_heuristic_is_classified"]
+
+[security-boundaries."In-scope findings and private reporting"]
+"Silent downgrade is a vulnerability" = ["crates/prometheus/tests/security_policy.rs::in_scope_findings_and_the_private_channel_are_declared"]
+
+[security-boundaries."Typed capability vocabulary"]
+"Unknown capability" = ["crates/pmt-core/src/capability/tests.rs::unknown_capability_is_a_load_error_naming_the_string"]
+"Symlink escape" = ["crates/pmt-core/src/capability/tests.rs::a_symlink_out_of_the_workspace_is_checked_at_its_target"]
+
+[security-boundaries."Capability resolution never broadens"]
+"Subagent asks for more" = ["crates/pmt-core/src/capability/tests.rs::a_child_cannot_ask_for_more_than_its_parent"]
+
+[security-boundaries."Grants are stored, reviewable and revocable"]
+"Revocation mid-session" = ["crates/prometheus/tests/grants_cli.rs::revoking_through_the_cli_reaches_a_running_session"]
+
+[security-boundaries."Grant prompts fail closed"]
+"Prompt-injected approval" = ["crates/pmt-tools/src/grants/tests.rs::a_pending_request_waits_for_the_surface_answer"]
+
+[security-boundaries."OS sandbox per platform"]
+"Reading SSH keys" = ["crates/pmt-sandbox/tests/sandbox/unix.rs::reading_ssh_keys_is_denied_with_the_default_capabilities"]
+"Doctor report" = ["crates/pmt-sandbox/tests/sandbox/macos.rs::doctor_report_lists_seatbelt_levels", "crates/prometheus/tests/doctor_cli.rs::doctor_security_lists_every_sandbox_feature"]
+
+[security-boundaries."Default sandbox denies credential stores"]
+"Broad read grant" = ["crates/pmt-sandbox/tests/sandbox/unix.rs::broad_read_grant_still_denies_credential_stores", "crates/pmt-sandbox/tests/sandbox/windows.rs::credential_stores_stay_denied_under_a_broad_read_grant"]
+
+[security-boundaries."Hardening downgrades are never silent"]
+"Explicit downgrade" = ["crates/pmt-sandbox/tests/sandbox/degrade.rs::allowed_downgrade_runs_and_warns_on_every_start"]
+
+[security-boundaries."Private and metadata destinations"]
+"Mapped metadata address" = ["crates/pmt-net/src/destination.rs::metadata_endpoints_and_their_mapped_forms"]
+
+[security-boundaries."Secrets storage"]
+"Secret written by setup" = ["crates/prometheus/tests/setup_cli.rs::the_wizard_writes_config_and_the_key_to_the_secrets_store"]
+
+[security-boundaries."Known-secret redaction everywhere"]
+"Secret echoed by a command" = ["crates/prometheus/tests/redaction.rs::a_command_printing_the_key_reaches_the_model_redacted"]
+
+[security-boundaries."Signed releases"]
+"Bad signature" = ["crates/prometheus/tests/update_cli.rs::tampered_archive_fails_signature_verification_and_keeps_the_binary"]
+
+[security-boundaries."Skill scanning fails closed"]
+"Scanner crashes" = ["crates/pmt-skills/tests/skills/manage.rs::scanner_crash_does_not_let_a_write_through"]
+
+[security-boundaries."External surfaces fail closed"]
+"Adapter without allowlist" = { tests = ["crates/pmt-net/src/listen.rs::adapter_without_allowlist_dispatches_nothing_and_logs_once_per_sender"], note = "messaging adapters arrive in M2; the inbound allowlist gate they use is tested here" }
+
+[security-boundaries."Private file modes"]
+"Loose permissions" = ["crates/pmt-config/src/layout.rs::loose_secret_and_grant_files_are_tightened_with_a_warning"]
+
+[security-boundaries."Telemetry is opt-in and HTTPS-only"]
+"Plaintext endpoint" = ["crates/prometheus/tests/no_telemetry.rs::a_plaintext_telemetry_endpoint_is_refused_and_logged"]
+
+[security-boundaries."In-process fetch SSRF protection"]
+"Redirect to metadata" = ["crates/pmt-net/tests/fetch.rs::redirect_to_the_metadata_endpoint_is_refused"]
+"DNS failure" = ["crates/pmt-net/tests/fetch.rs::dns_failure_is_reported_as_blocked"]
+
+[security-boundaries."Platform trust store for TLS"]
+"Corporate root CA" = ["crates/pmt-net/tests/fetch.rs::corporate_root_in_the_os_store_is_trusted"]
+
+[security-boundaries."Protected instruction files configuration"]
+"Extra pattern under yolo" = ["crates/pmt-tools/tests/protected.rs::extra_pattern_still_needs_approval_under_yolo"]
+
+[execution-environments."Typed backend registry and selection"]
+"Unknown backend" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::unknown_backend_exits_78_with_the_available_list"]
+"Reserved backend selected before it ships" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::reserved_backends_are_available_in_m2"]
+
+[execution-environments."Backend readiness checks"]
+"SSH misconfigured" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::ssh_misconfigured"]
+
+[execution-environments."Terminal configuration defaults"]
+"Two profiles, two backends" = { deferred = "M2: needs the container backend (reserved until M2, tasks 26.x) and a gateway serving two profiles (task 22.1)" }
+
+[execution-environments."Local backend runs under the OS sandbox"]
+"Kernel without Landlock" = ["crates/pmt-tools/tests/terminal/environment.rs::kernel_without_landlock_refuses_to_run"]
+"Write outside workspace" = ["crates/pmt-tools/tests/terminal/environment.rs::writing_outside_the_workspace_fails_under_the_sandbox"]
+
+[execution-environments."Working directory resolution"]
+"Host path on a remote backend" = ["crates/pmt-tools/src/terminal/cwd.rs::host_path_on_a_remote_backend_uses_the_default_with_a_notice"]
+
+[execution-environments."Session cwd tracking"]
+"workdir does not move the session" = ["crates/pmt-tools/tests/terminal/environment.rs::workdir_does_not_move_the_session_but_cd_does"]
+
+[execution-environments."Terminal argument validation"]
+"PTY in foreground" = ["crates/pmt-tools/src/terminal/args.rs::pty_in_foreground_is_refused"]
+
+[execution-environments."Foreground cap, promotion and server guard"]
+"Dev server in foreground" = ["crates/pmt-tools/tests/terminal/foreground.rs::a_dev_server_in_the_foreground_is_refused"]
+"Long test run" = ["crates/pmt-tools/tests/terminal/foreground.rs::a_long_timeout_is_promoted_to_a_tracked_background_process"]
+
+[execution-environments."Pre-execution guards fail closed"]
+"Wedged guard" = ["crates/pmt-tools/tests/terminal/environment.rs::a_wedged_guard_fails_closed"]
+
+[execution-environments."Foreground result shaping"]
+"Oversized output" = ["crates/pmt-tools/tests/terminal/foreground.rs::oversized_output_keeps_head_and_tail_around_one_marker"]
+
+[execution-environments."Spilled full output is redacted and private"]
+"Redaction fails" = ["crates/pmt-tools/src/terminal/spill.rs::an_unreadable_raw_spill_leaves_no_path_and_no_file"]
+
+[execution-environments."Infrastructure failures are degraded results"]
+"Container runtime down" = { tests = ["crates/pmt-tools/tests/terminal/foreground.rs::a_broken_environment_is_degraded_and_recreated_on_the_next_call"], note = "the container backend arrives in M2; the degraded-result contract is the same for the local backend tested here" }
+
+[execution-environments."Child environments are built from an allowlist"]
+"Bot token never reaches a shell" = ["crates/pmt-tools/tests/terminal/environment.rs::the_parents_secrets_never_reach_a_shell"]
+"Declared skill secret" = ["crates/pmt-tools/tests/terminal/environment.rs::a_declared_and_granted_secret_is_the_only_one_present"]
+
+[execution-environments."Background process registry"]
+"Long job is not pruned on exit" = ["crates/pmt-tools/tests/terminal/processes.rs::a_long_job_is_kept_for_thirty_minutes_after_it_finishes"]
+
+[execution-environments."File tools route through the backend"]
+"Container backend" = { deferred = "M2: needs the container backend (reserved until M2)" }
+
+[execution-environments."read_file guards, pagination and dedup"]
+"Third identical read" = ["crates/pmt-tools/tests/file_tools/read.rs::a_third_identical_read_is_blocked"]
+
+[execution-environments."Write guards"]
+"Self-edit of grants" = ["crates/pmt-tools/tests/file_tools/write.rs::control_files_of_every_profile_are_refused"]
+"Instruction file under yolo" = ["crates/pmt-tools/src/approval/gate/tests.rs::protected_files_ask_under_yolo_every_time"]
+
+[execution-environments."Stale overwrite protection"]
+"External edit" = ["crates/pmt-tools/tests/file_tools/write.rs::an_edit_after_an_out_of_band_change_is_refused"]
+
+[execution-environments."Browser session resolution"]
+"Cloud quota exhausted" = ["crates/pmt-tools/tests/browser/main.rs::a_failing_cloud_provider_falls_back_to_a_local_browser"]
+
+[execution-environments."Browser URL safety"]
+"Metadata endpoint locally" = ["crates/pmt-tools/src/browser/safety.rs::metadata_is_refused_even_where_private_addresses_are_allowed"]
+
+[execution-environments."Browser supervision, dialogs and cleanup"]
+"Crashed browser" = ["crates/pmt-tools/tests/browser/main.rs::a_crashed_browser_is_replaced_and_its_record_removed"]
+
+[execution-environments."read_file encoding, conflict markers and path suggestions"]
+"UTF-16 log file" = ["crates/pmt-tools/tests/file_tools/read.rs::binary_files_are_refused_and_utf16_is_decoded"]
+"Typo in path" = ["crates/pmt-tools/tests/file_tools/read.rs::a_typo_suggests_similar_paths"]
+
+[execution-environments."Protected secret files and device-namespace paths"]
+"Read project .env" = ["crates/pmt-tools/tests/file_tools/read.rs::project_dotenv_files_are_never_read_but_may_be_written"]
+"UNC path" = ["crates/pmt-tools/tests/file_tools/read.rs::unc_and_device_paths_are_refused_before_any_access"]
+
+[execution-environments."patch tool contract"]
+"Ambiguous match" = ["crates/pmt-tools/tests/file_tools/patch.rs::an_ambiguous_match_names_the_locations_and_changes_nothing"]
+"V4A with one failing hunk" = ["crates/pmt-tools/tests/file_tools/patch.rs::a_v4a_patch_with_one_failing_hunk_changes_no_file_and_names_it"]
+
+[execution-environments."search_files contract"]
+"Count mode" = ["crates/pmt-tools/tests/file_tools/search.rs::count_mode_lists_per_file_counts_and_no_content"]
+
+[execution-environments."Post-write diagnostics"]
+"Syntax error introduced" = ["crates/pmt-tools/tests/file_tools/write.rs::a_syntax_error_is_reported_and_the_file_is_still_written"]
+"Checker crashes" = ["crates/pmt-tools/tests/file_tools/write.rs::a_crashing_checker_degrades_to_skipped"]
+
+[execution-environments."Shell startup files"]
+"rc file blocks on read" = ["crates/pmt-tools/tests/terminal/startup.rs::an_rc_file_that_blocks_on_read_times_out_into_a_plain_shell"]
+"rc file reads stdin" = ["crates/pmt-tools/tests/terminal/startup.rs::an_rc_file_reading_stdin_does_not_hang_a_command"]
+
+[execution-environments."Non-secret environment passthrough"]
+"Pass a toolchain variable" = ["crates/pmt-tools/tests/terminal/environment.rs::a_passthrough_variable_carries_its_launch_value"]
+"Secret in passthrough" = ["crates/pmt-config/src/scope.rs::a_secret_listed_for_passthrough_fails_validation"]
+
+[execution-environments."Windows local shell"]
+"Only WSL bash on PATH" = ["crates/pmt-tools/tests/terminal/windows.rs::only_wsl_bash_on_path_uses_powershell"]
+
+[execution-environments."browser_exec tool"]
+"Batched sub-procedure" = ["crates/pmt-tools/tests/browser/main.rs::a_batched_sub_procedure_keeps_its_tab_for_the_next_call"]
+"No terminal toolset" = ["crates/pmt-tools/tests/toolsets.rs::browser_exec_needs_the_terminal_toolset"]
+
+[model-providers."Typed profile-scoped provider registry"]
+"Plugin provider is invisible to another profile" = ["crates/pmt-providers/src/registry.rs::plugin_provider_is_invisible_to_another_profile"]
+"Alias resolves to canonical id" = ["crates/pmt-providers/src/registry.rs::alias_resolves_to_the_canonical_id"]
+
+[model-providers."Provider descriptor contract"]
+"Plain HTTP to a public host refused" = ["crates/pmt-config/src/provider_urls.rs::plain_http_to_a_public_host_is_refused_naming_the_key_and_remedy"]
+"Local HTTP endpoint accepted" = ["crates/pmt-config/src/provider_urls.rs::local_http_and_opt_in_are_accepted"]
+
+[model-providers."Wire formats, selection and normalised event stream"]
+"Same tool call across wire formats" = ["crates/pmt-providers/tests/providers/wire.rs::same_tool_call_across_wire_formats"]
+"Anthropic-declared provider behind a foreign relay" = ["crates/pmt-providers/src/wire/mod.rs::anthropic_declared_provider_behind_a_foreign_relay_speaks_chat_completions"]
+"Unknown wire format value" = ["crates/pmt-providers/tests/providers/wire.rs::unknown_wire_format_value_lists_the_accepted_values"]
+
+[model-providers."Requested provider precedence without ambient environment"]
+"Stale shell export is ignored" = ["crates/prometheus/tests/model_cli.rs::stale_shell_export_is_ignored"]
+
+[model-providers."Deterministic explainable resolution (upgrade)"]
+"Explain shows the winning credential source" = ["crates/pmt-providers/src/resolve/tests.rs::explain_names_the_pool_credential_and_no_key_material", "crates/prometheus/tests/model_cli.rs::explain_prints_every_step_and_no_key_material"]
+
+[model-providers."Auto provider detection"]
+"Nothing configured in a one-shot run" = ["crates/prometheus/tests/model_cli.rs::nothing_configured_prints_the_not_connected_message_and_exits_78"]
+
+[model-providers."Unknown and disabled providers fail with typed errors"]
+"Typo in --provider" = ["crates/prometheus/tests/model_cli.rs::typo_in_provider_suggests_the_closest_id_and_exits_78"]
+"Disabled built-in provider" = ["crates/prometheus/tests/model_cli.rs::disabled_provider_fails_before_credential_resolution"]
+
+[model-providers."Local endpoints never fall back to remote providers"]
+"vLLM without an endpoint" = ["crates/pmt-providers/src/resolve/tests.rs::resolution_table"]
+"Ollama default endpoint unreachable" = ["crates/pmt-providers/src/resolve/tests.rs::ollama_default_endpoint_unreachable_never_reaches_openrouter"]
+
+[model-providers."Credentials are bound to their authoritative hosts"]
+"Lookalike host does not receive a vendor key" = ["crates/pmt-providers/src/resolve/tests.rs::lookalike_host_does_not_receive_a_vendor_key"]
+"OpenAI key never reaches an aggregator" = ["crates/pmt-providers/src/resolve/tests.rs::openai_key_never_reaches_an_aggregator"]
+
+[model-providers."Credential management commands"]
+"Key supplied on argv refused" = ["crates/prometheus/tests/auth_cli.rs::key_supplied_on_argv_is_refused"]
+"Listing never prints secrets" = ["crates/prometheus/tests/auth_cli.rs::listing_never_prints_secrets"]
+
+[model-providers."Subscription and OAuth sign-in registry"]
+"Subscription preferred over an API key" = ["crates/pmt-providers/tests/providers/auth.rs::subscription_is_preferred_over_an_api_key_unless_configured"]
+"Plan caveats shown before sign-in" = ["crates/prometheus/tests/auth_cli.rs::plan_caveats_are_shown_before_the_sign_in_url"]
+"Caveat text comes from data" = ["crates/prometheus/tests/auth_cli.rs::caveat_text_comes_from_data"]
+
+[model-providers."Device-code and browser PKCE sign-in flows"]
+"Forged callback rejected" = ["crates/pmt-providers/src/auth/loopback.rs::forged_callback_is_answered_400_and_the_wait_goes_on"]
+"Remote machine guidance" = ["crates/prometheus/tests/auth_cli.rs::remote_session_prints_the_tunnel_hint"]
+"Transient polling errors tolerated" = ["crates/pmt-providers/tests/providers/auth.rs::transient_polling_errors_are_tolerated"]
+
+[model-providers."Anthropic Claude Max sign-in"]
+"Ineligible plan reported clearly" = ["crates/pmt-providers/tests/providers/auth.rs::ineligible_claude_plan_is_reported_clearly_and_never_dead"]
+
+[model-providers."Borrowed CLI logins"]
+"Owned grant beats borrowed login" = ["crates/pmt-providers/tests/providers/borrowed.rs::owned_grant_beats_borrowed_login_which_is_never_read"]
+"Borrowing disabled" = ["crates/prometheus/tests/borrowed_cli.rs::borrowing_disabled_ignores_the_login", "crates/pmt-providers/tests/providers/borrowed.rs::borrowing_disabled_never_reads_and_fails_missing_credential"]
+"Unrelated borrowed login is not rotated" = ["crates/pmt-providers/tests/providers/borrowed.rs::an_owned_401_never_rotates_the_borrowed_login"]
+
+[model-providers."OpenAI Codex ChatGPT plan sign-in"]
+"Browser flow port busy" = ["crates/prometheus/tests/auth_cli.rs::browser_flow_port_busy_continues_with_the_device_code"]
+"Incomplete external file refused" = ["crates/prometheus/tests/auth_cli.rs::incomplete_external_file_is_refused"]
+"Picker offers ChatGPT sign-in" = ["crates/prometheus/src/model_cmd/picker.rs::picker_offers_the_chatgpt_sign_in_first"]
+
+[model-providers."Subscription tokens live only in the secrets store"]
+"Concurrent refresh uses the token once" = ["crates/pmt-providers/tests/providers/refresh.rs::concurrent_refresh_uses_the_token_once"]
+"Tokens absent from the trajectory" = { tests = ["crates/pmt-providers/src/auth/credentials.rs::a_sign_in_is_three_secrets_and_a_new_sign_in_revives_it", "crates/prometheus/tests/redaction.rs::store_log_and_trajectory_hold_the_marker"], note = "subscription tokens are stored as profile secrets (first test), and every profile secret is redacted from the store, the log and the trajectory before anything is written (second test)" }
+
+[model-providers."Token refresh and dead-token quarantine"]
+"Revoked refresh token quarantined" = ["crates/pmt-providers/tests/providers/refresh.rs::a_revoked_refresh_token_is_quarantined_until_a_new_sign_in"]
+"Quarantine cleared by a new sign-in" = ["crates/pmt-providers/src/auth/credentials.rs::a_sign_in_is_three_secrets_and_a_new_sign_in_revives_it"]
+
+[model-providers."Credential pool selection strategies"]
+"Invalid strategy fails validation" = ["crates/pmt-config/src/validate.rs::unknown_pool_strategy_names_the_key_and_allowed_values"]
+"Round robin rotates" = ["crates/pmt-providers/src/pool/tests.rs::round_robin_rotates"]
+
+[model-providers."Exhausted credential cooldowns"]
+"Sole credential throttled recovers quickly" = ["crates/pmt-providers/tests/providers/pools.rs::a_sole_throttled_key_is_benched_a_minute_and_refuses_requests_meanwhile"]
+"Billing failure keeps the full bench" = ["crates/pmt-providers/tests/providers/pools.rs::a_billing_failure_keeps_the_full_bench_even_for_a_sole_key"]
+
+[model-providers."Error classification and same-route retries"]
+"Misconfiguration is never rerouted" = ["crates/pmt-providers/tests/providers/faults.rs::misconfiguration_is_never_rerouted"]
+"Plan entitlement is not a dead token" = ["crates/pmt-providers/tests/providers/faults.rs::plan_entitlement_is_classified_and_explained"]
+"Idle stream times out" = ["crates/pmt-providers/tests/providers/faults.rs::idle_stream_times_out"]
+
+[model-providers."Fallback chain configuration"]
+"Alias and canonical duplicates collapse" = ["crates/pmt-providers/src/fallback.rs::alias_and_canonical_duplicates_collapse_and_unknown_ids_are_refused"]
+
+[model-providers."In-turn fallback activation and turn-scoped restore"]
+"Candidate with an exhausted pool is skipped" = ["crates/pmt-providers/tests/providers/faults.rs::candidate_with_an_exhausted_pool_is_skipped"]
+"Chain exhausted" = ["crates/pmt-providers/tests/providers/faults.rs::chain_exhausted_surfaces_the_primary_error_and_arms_a_short_cooldown"]
+"Backoff caps at four hours" = ["crates/pmt-providers/src/fallback.rs::backoff_doubles_from_a_minute_and_caps_at_four_hours"]
+"Primary in cooldown stays on fallback" = ["crates/pmt-providers/tests/providers/faults.rs::rate_limited_primary_stays_on_fallback_while_cooling_and_backs_off"]
+
+[model-providers."Prompt caching and stable prefix across route changes"]
+"Cache key stable across turns" = ["crates/pmt-providers/tests/providers/caching.rs::cache_key_is_stable_across_turns_and_only_sent_where_supported"]
+"Restored primary replays the original prefix" = ["crates/pmt-providers/tests/providers/faults.rs::restored_primary_replays_the_original_prefix"]
+
+[model-providers."Model metadata catalog"]
+"Explicit override wins without network access" = ["crates/pmt-providers/src/metadata/tests.rs::explicit_override_wins_without_network_access"]
+"Provider without a catalog" = ["crates/pmt-providers/src/metadata/tests.rs::provider_without_a_catalog_makes_no_listing_request"]
+
+[model-providers."Capability-aware route validation and minimum context window"]
+"Vision request skips a text-only fallback" = ["crates/pmt-providers/tests/providers/faults.rs::vision_request_skips_a_text_only_fallback"]
+"Small local window refused" = ["crates/prometheus/tests/model_cli.rs::small_local_window_is_refused"]
+
+[model-providers."Per-call cost accounting"]
+"Unknown price" = ["crates/prometheus/tests/usage_cli.rs::a_local_model_without_a_price_is_an_unpriced_call_not_zero_cost", "crates/pmt-obs/src/usage/price.rs::provider_cost_then_price_table_then_unpriced"]
+
+[model-providers."Auxiliary task routing"]
+"Per-task model pin" = ["crates/pmt-providers/src/auxiliary/tests.rs::per_task_model_pin_routes_to_that_provider_and_model"]
+"Misspelled task section" = ["crates/pmt-providers/src/auxiliary/tests.rs::misspelled_task_section_fails_validation_naming_it"]
+"Aux call emits aux events only" = ["crates/pmt-providers/tests/providers/auxiliary.rs::aux_call_emits_aux_events_only_retries_and_records_its_purpose"]
+
+[model-providers."Auxiliary auto route never guesses another account"]
+"Main provider down without a chain" = ["crates/pmt-providers/src/auxiliary/tests.rs::main_provider_down_without_a_chain_never_uses_an_unrelated_key"]
+
+[model-providers."/model switch command"]
+"Invalid target leaves the route unchanged" = ["crates/pmt-providers/src/switch/tests.rs::invalid_target_leaves_the_route_unchanged"]
+"First pick on a fresh profile persists" = ["crates/pmt-providers/src/switch/tests.rs::first_pick_on_a_fresh_profile_persists"]
+
+[model-providers."prometheus model command"]
+"Piped invocation" = ["crates/prometheus/tests/model_commands.rs::piped_invocation_of_the_picker_exits_2"]
+"Non-interactive set validates first" = ["crates/prometheus/tests/model_commands.rs::non_interactive_set_validates_first"]
+
+[model-providers."Built-in provider catalog"]
+"Plan key preferred over shared key" = ["crates/pmt-providers/src/builtin/tests.rs::plan_key_preferred_over_shared_key"]
+"Shared key fallback" = ["crates/pmt-providers/src/builtin/tests.rs::shared_key_fallback_reaches_the_plan_endpoint"]
+"Every built-in id listed" = ["crates/prometheus/tests/model_commands.rs::every_built_in_id_listed_without_secret_values"]
+
+[model-providers."Local server detection and context probes"]
+"llama.cpp context from /props" = ["crates/pmt-providers/tests/providers/local.rs::llama_cpp_context_from_props"]
+"Root URL normalised" = ["crates/pmt-providers/tests/providers/local.rs::root_url_normalised_to_the_v1_prefix", "crates/prometheus/tests/model_commands.rs::root_url_normalised_and_saved_when_the_endpoint_is_tested"]
+"Small Ollama context warned" = ["crates/pmt-providers/tests/providers/local.rs::small_ollama_context_is_warned_before_the_minimum_window_check"]
+
+[model-providers."Context length detection chain"]
+"Pinned window labelled" = ["crates/pmt-providers/src/metadata/window.rs::pinned_windows_are_labelled"]
+"Discovered value reused offline" = ["crates/pmt-providers/tests/providers/local.rs::discovered_value_reused_offline_without_warning"]
+
+[model-providers."Reasoning effort defaults, overrides and display"]
+"Override matched despite spelling" = ["crates/pmt-providers/src/reasoning.rs::override_matched_despite_spelling"]
+"Clamp downward" = ["crates/pmt-providers/src/reasoning.rs::clamp_downward_never_upward"]
+
+[model-providers."Launch-only ad-hoc endpoint"]
+"Ad-hoc key never persisted" = ["crates/prometheus/tests/model_commands.rs::ad_hoc_key_never_reaches_disk"]
+
+[model-providers."User model aliases"]
+"Alias switches provider and key" = ["crates/pmt-providers/src/switch/tests.rs::alias_switches_provider_and_key"]
+
+[model-providers."Fallback chain commands"]
+"Duplicate entry refused" = ["crates/prometheus/tests/model_commands.rs::fallback_commands_edit_the_chain_and_refuse_duplicates"]
+
+[tool-system."Typed tool registry"]
+"Schema root is not an object" = ["crates/pmt-tools/src/registry/tests.rs::schema_root_that_is_an_array_is_rejected_and_not_exposed"]
+"Unknown toolset in a registration" = ["crates/pmt-tools/src/registry/tests.rs::unknown_toolset_is_named_and_not_created"]
+
+[tool-system."Shadowing is rejected unless granted"]
+"Two MCP servers produce the same tool name" = ["crates/pmt-tools/src/registry/tests.rs::second_mcp_server_cannot_take_a_name_and_doctor_reports_it"]
+"Plugin override without grant" = ["crates/pmt-tools/src/registry/tests.rs::plugin_override_needs_the_grant"]
+
+[tool-system."Registry is scoped per profile"]
+"Plugin tool does not leak across profiles" = ["crates/pmt-tools/src/registry/tests.rs::plugin_tool_does_not_leak_across_profiles"]
+
+[tool-system."Built-in toolsets and composition"]
+"Include cycle" = ["crates/pmt-tools/src/toolset.rs::include_cycle_is_reported_with_its_path", "crates/pmt-tools/src/registry/tests.rs::toolset_cycle_rejects_the_whole_batch"]
+
+[tool-system."Toolset selection is validated"]
+"Typo in enabled toolsets" = ["crates/pmt-tools/src/selection.rs::typo_in_enabled_toolsets_fails_with_the_closest_name"]
+"Disable wins over composite" = ["crates/pmt-tools/src/selection.rs::disable_wins_over_composite"]
+
+[tool-system."Exposure requires toolset membership and capability coverage"]
+"Missing capability hides a tool" = ["crates/pmt-tools/src/surface/tests.rs::missing_capability_hides_a_tool"]
+
+[tool-system."Availability probes are cached per profile with flake grace"]
+"Transient container daemon failure" = ["crates/pmt-tools/src/surface/tests.rs::transient_container_failure_keeps_terminal"]
+"Persistent outage" = ["crates/pmt-tools/src/probe.rs::persistent_outage_is_cached_as_unavailable"]
+
+[tool-system."Tool surface is frozen for the session"]
+"Credential added mid-session" = ["crates/pmt-tools/src/surface/tests.rs::credential_added_mid_session_waits_for_the_next_session"]
+"Deterministic ordering" = ["crates/pmt-tools/src/surface/tests.rs::identical_inputs_serialize_byte_identically"]
+
+[tool-system."Descriptions reference only present tools"]
+"Vision absent" = ["crates/pmt-tools/src/surface/tests.rs::descriptions_reference_only_present_tools"]
+
+[tool-system."Dispatch pipeline"]
+"Schema violation" = ["crates/pmt-tools/src/dispatch/tests.rs::schema_violation_lists_the_pointer_and_skips_the_handler"]
+"Hook blocks a call" = ["crates/pmt-tools/src/dispatch/tests.rs::hook_block_skips_the_handler_and_post_sees_blocked"]
+
+[tool-system."Typed tool result contract"]
+"Plugin traps" = { tests = ["crates/pmt-tools/src/dispatch/tests.rs::panicking_handler_becomes_a_tool_error_and_the_turn_continues"], note = "WASM plugin tools arrive in M2; a trapping handler reaches the dispatcher as the failing handler this test uses" }
+
+[tool-system."Error bodies are bounded and sanitized"]
+"Huge error" = ["crates/pmt-tools/src/dispatch/tests.rs::huge_error_body_is_truncated_to_the_bound"]
+
+[tool-system."Agent-level tools are owned by the turn loop"]
+"Direct dispatch" = ["crates/pmt-tools/src/dispatch/tests.rs::agent_level_tool_is_refused_and_post_hook_fires"]
+
+[tool-system."Parallel and timed execution"]
+"Mixed batch" = { tests = ["crates/pmt-tools/src/dispatch/tests/batch.rs::a_writer_waits_for_the_reader_of_its_path_only", "crates/pmt-tools/src/dispatch/tests/batch.rs::two_writes_to_one_path_do_not_overlap"], note = "as the requirement says, the agent-turn-loop dependency planner refines the order: the write waits for the reads of its path, results come back in call order" }
+"Interrupt" = ["crates/pmt-tools/src/dispatch/tests/batch.rs::interrupt_cancels_in_flight_calls_within_two_seconds"]
+
+[tool-system."Result budget and spillover"]
+"Small context model" = ["crates/pmt-tools/src/budget/tests.rs::small_context_model_spills_at_fifteen_percent"]
+"Spill write fails" = ["crates/pmt-tools/src/budget/tests.rs::spill_write_failure_truncates_inline"]
+
+[tool-system."Spillover retention"]
+"Session deleted" = ["crates/pmt-store/tests/store/lifecycle.rs::deleting_and_pruning_sessions_removes_their_spillover"]
+
+[tool-system."Approval modes are typed"]
+"Boolean is rejected" = ["crates/pmt-config/src/validate.rs::boolean_is_not_an_approval_mode", "crates/prometheus/tests/approvals_cli.rs::a_boolean_unattended_mode_fails_validation"]
+
+[tool-system."Approval floors cannot be bypassed"]
+"Hardline under yolo in a container" = ["crates/pmt-tools/src/approval/gate/tests.rs::hardline_under_yolo_is_blocked_without_executing"]
+
+[tool-system."Human approval choices and grants file"]
+"Hand-removed entry stays removed" = ["crates/pmt-tools/src/approval/gate/tests.rs::always_is_merged_into_grants_and_hand_removed_entries_stay_removed", "crates/pmt-config/src/grants/tests.rs::a_hand_removed_approval_is_never_written_back"]
+
+[tool-system."Unattended contexts never wait"]
+"Cron default" = ["crates/pmt-tools/src/approval/gate/tests.rs::cron_default_denies_with_guidance_and_never_waits"]
+
+[tool-system."Approval channel fails closed"]
+"Headless plugin escalation" = ["crates/pmt-tools/src/approval/gate/tests.rs::headless_plugin_escalation_is_denied_naming_the_rule"]
+
+[tool-system."Tool introspection commands"]
+"Explaining a tool" = ["crates/prometheus/src/tools_cmd/tests.rs::explaining_a_tool"]
+
+[tool-system."Core toolset membership"]
+"Core listing" = ["crates/prometheus/tests/tools_cli.rs::core_listing_shows_the_27_tools_in_order"]
+"Browser unavailable keeps the rest" = ["crates/pmt-tools/src/surface/tests.rs::browser_unavailable_keeps_the_rest_of_core"]
+
+[tool-system."Single-purpose toolsets and default-off toolsets"]
+"Disabling browser keeps search" = ["crates/pmt-tools/tests/toolsets.rs::disabling_browser_keeps_search"]
+"Default-off toolset needs explicit naming" = ["crates/pmt-tools/tests/toolsets.rs::default_off_toolset_needs_explicit_naming"]
+
+[tool-system."Composite toolsets and the coding posture"]
+"Safe has no execution" = ["crates/pmt-tools/tests/toolsets.rs::safe_has_no_execution"]
+"Coding drops media and scheduling" = ["crates/pmt-tools/tests/toolsets.rs::coding_drops_media_and_scheduling"]
+
+[tool-system."Toolset listing commands"]
+"Slash listing marks active toolsets" = ["crates/prometheus/src/tools_cmd/tests.rs::slash_listing_marks_active_toolsets"]
+
+[tool-system."Content-level dangerous-command detectors"]
+"Exfiltrating a key" = ["crates/pmt-tools/src/approval/detectors.rs::exfiltrating_a_key_is_flagged"]
+"Header use is normal" = ["crates/pmt-tools/src/approval/detectors.rs::header_use_is_normal"]
+
+[tool-system."Approval dry-run test command"]
+"Testing a hardline command" = ["crates/prometheus/tests/approvals_cli.rs::testing_a_hardline_command"]
+
+[agent-turn-loop."Turn entry contract"]
+"CLI and gateway share the loop" = ["crates/pmt-agent/tests/turn/exits.rs::cli_and_gateway_sessions_share_the_loop"]
+"Missing profile scope" = ["crates/pmt-agent/tests/turn/exits.rs::a_turn_without_a_profile_scope_is_refused"]
+
+[agent-turn-loop."Typed exit reasons"]
+"Text answer" = ["crates/pmt-agent/tests/turn/exits.rs::a_text_answer_completes_the_turn"]
+"Unknown reason is unrepresentable" = ["crates/pmt-agent/tests/turn/exits.rs::exit_reasons_are_a_closed_set"]
+
+[agent-turn-loop."Single active turn per session"]
+"Concurrent turn from a second process" = ["crates/pmt-agent/tests/turn/exits.rs::a_busy_lease_ends_the_turn_without_a_model_call"]
+"Lease lost" = ["crates/pmt-agent/tests/turn/exits.rs::a_lost_lease_interrupts_the_turn"]
+
+[agent-turn-loop."Iteration phases"]
+"Tool calls loop back" = ["crates/pmt-agent/tests/turn/exits.rs::tool_calls_loop_back_until_the_answer"]
+
+[agent-turn-loop."Single documented iteration limit"]
+"Default limit" = ["crates/pmt-agent/tests/turn/budgets.rs::the_default_limit_is_500_and_strings_are_refused"]
+"String spelling rejected" = ["crates/pmt-agent/tests/turn/budgets.rs::the_default_limit_is_500_and_strings_are_refused"]
+"Explicit unlimited" = ["crates/pmt-agent/tests/turn/budgets.rs::zero_iterations_means_unlimited"]
+
+[agent-turn-loop."Per-agent iteration budget"]
+"Child exhausts its own budget" = ["crates/pmt-agent/tests/turn/budgets.rs::a_child_exhausts_its_own_budget_only"]
+
+[agent-turn-loop."Budget-exhaustion summary handoff"]
+"Iteration limit mid-task" = ["crates/pmt-agent/tests/turn/budgets.rs::the_iteration_limit_hands_off_to_a_toolless_summary"]
+
+[agent-turn-loop."Per-turn and per-session token and cost budgets (upgrade)"]
+"Cost cap hit" = ["crates/pmt-agent/tests/turn/budgets.rs::a_cost_cap_skips_the_request_and_hands_off"]
+"Child spend counts" = ["crates/pmt-agent/tests/turn/budgets.rs::child_spend_counts_toward_the_turn_token_budget"]
+
+[agent-turn-loop."Unpriced models fail closed under a cost budget (upgrade)"]
+"Local model with a cost budget" = ["crates/pmt-agent/tests/turn/budgets.rs::an_unpriced_model_under_a_cost_budget_is_never_called"]
+
+[agent-turn-loop."Interrupts"]
+"Stop with a child running" = ["crates/pmt-agent/tests/turn/steering.rs::stopping_a_turn_interrupts_its_running_child"]
+"Other sessions unaffected" = ["crates/pmt-agent/tests/turn/steering.rs::interrupting_one_session_leaves_another_running"]
+
+[agent-turn-loop."Steer placement preserves the cache prefix"]
+"Steer arrives during the first request" = ["crates/pmt-agent/tests/turn/steering.rs::a_steer_during_a_final_answer_opens_the_next_user_message"]
+
+[agent-turn-loop."Transcript repair before each request"]
+"Consecutive user rows" = ["crates/pmt-agent/tests/turn/recovery.rs::consecutive_user_rows_are_merged_on_the_wire_only"]
+
+[agent-turn-loop."Dependency-planned parallel tool batches (upgrade)"]
+"Independent reads run together" = ["crates/pmt-tools/src/dispatch/tests/batch.rs::independent_reads_run_together_in_call_order"]
+"Writer after reader of the same path" = ["crates/pmt-tools/src/dispatch/tests/batch.rs::a_writer_waits_for_the_reader_of_its_path_only"]
+"Interactive barrier" = ["crates/pmt-tools/src/dispatch/tests/batch.rs::an_interactive_call_is_a_barrier"]
+
+[agent-turn-loop."Undeclared tools are sequential"]
+"MCP tool without claims" = ["crates/pmt-tools/src/dispatch/tests/batch.rs::a_tool_without_claims_runs_alone"]
+
+[agent-turn-loop."Model call retries and auto-recovery"]
+"Auth error" = ["crates/pmt-agent/tests/turn/exits.rs::an_auth_error_ends_with_provider_failed_at_once"]
+"Single attempt configured" = ["crates/pmt-agent/tests/turn/recovery.rs::a_single_configured_attempt_is_not_retried"]
+
+[agent-turn-loop."Failed-turn boundary row"]
+"Retries exhausted" = ["crates/pmt-agent/tests/turn/recovery.rs::recovery_cycles_end_with_provider_failed_and_a_boundary_row"]
+
+[agent-turn-loop."Layered system prompt"]
+"Runtime block last" = ["crates/pmt-agent/tests/turn/prompt.rs::the_runtime_block_is_last"]
+"Skills index tier" = ["crates/pmt-agent/tests/turn/prompt.rs::static_and_profile_tiers_are_shared_across_working_directories"]
+
+[agent-turn-loop."Identity file independent of context files"]
+"Context files disabled" = ["crates/pmt-agent/tests/turn/prompt.rs::disabling_context_files_keeps_the_identity"]
+"Two profiles in one process" = ["crates/pmt-agent/tests/turn/prompt.rs::two_profiles_in_one_process_use_their_own_identity"]
+
+[agent-turn-loop."Project context discovery"]
+"Override in a subdirectory" = ["crates/pmt-agent/tests/turn/context.rs::an_override_in_a_subdirectory_follows_the_root_file"]
+"PROMETHEUS.md wins" = ["crates/pmt-agent/tests/turn/context.rs::prometheus_md_wins_and_loses_its_frontmatter"]
+
+[agent-turn-loop."Context file scanning and size cap"]
+"Hostile repo instructions" = ["crates/pmt-agent/tests/turn/context.rs::hostile_repo_instructions_are_blocked"]
+
+[agent-turn-loop."Platform hint overrides"]
+"Replace and append" = ["crates/pmt-agent/tests/turn/prompt.rs::platform_hint_overrides_replace_then_append"]
+"Unknown key" = { tests = ["crates/pmt-config/src/validate.rs::unknown_platform_hint_key_is_refused"], note = "the message names the full key (`unknown key 'prompt.platform_hints.slack.prepend'`), like every unknown-key error, and exits 78" }
+
+[agent-turn-loop."System prompt frozen per session"]
+"Resumed session replays bytes" = ["crates/pmt-agent/tests/turn/prompt.rs::a_resumed_session_replays_the_stored_bytes"]
+"Skill installed mid-session" = ["crates/pmt-skills/tests/skills/index.rs::installing_a_skill_mid_session_waits_for_the_next_session"]
+
+[agent-turn-loop."Request-time additions never touch history"]
+"Plugin context" = ["crates/pmt-agent/tests/turn/prompt.rs::request_time_additions_ride_the_current_user_message_only"]
+
+[agent-turn-loop."Cache-hit reporting and break detection (upgrade)"]
+"Usage shows hit rate" = ["crates/prometheus/tests/usage_cli.rs::the_usage_command_shows_the_session_cache_hit_rate"]
+"Accidental mutation detected" = ["crates/pmt-agent/tests/turn/cache.rs::an_edited_earlier_tool_result_is_detected_with_its_index"]
+
+[agent-turn-loop."Generated tool names in documentation"]
+"Renamed tool" = ["xtask/src/tool_refs.rs::renamed_tool_fails_the_check"]
+
+[agent-turn-loop."Step events per iteration"]
+"Subscriber error" = ["crates/pmt-agent/tests/turn/cache.rs::a_failing_step_subscriber_does_not_abort_the_turn"]
+
+[agent-turn-loop."Context references in user input"]
+"Line range" = ["crates/pmt-agent/tests/turn/references.rs::a_line_range_is_stored_with_the_user_message"]
+"Hard limit" = ["crates/pmt-agent/tests/turn/references.rs::above_half_the_window_nothing_is_attached"]
+
+[agent-turn-loop."Context reference safety and completion"]
+"Credential file refused" = ["crates/pmt-agent/tests/turn/references.rs::credential_files_are_refused_inline"]
+"Traversal refused" = ["crates/pmt-agent/tests/turn/references.rs::traversal_out_of_the_workspace_is_refused"]
+
+[agent-turn-loop."Personality overlays"]
+"Deferred switch" = ["crates/pmt-agent/tests/turn/prompt.rs::a_personality_switch_waits_for_the_next_session_unless_now"]
+"Custom override of a built-in" = ["crates/pmt-agent/tests/turn/prompt.rs::a_custom_personality_overrides_a_builtin"]
+
+[agent-turn-loop."Tool loop guardrails"]
+"Interactive warning only" = ["crates/pmt-agent/tests/turn/guardrails.rs::an_interactive_session_only_warns_about_repeated_failures"]
+"Cron hard stop" = ["crates/pmt-agent/tests/turn/guardrails.rs::a_cron_run_stops_at_the_fifth_identical_failure"]
+"Search cap" = ["crates/pmt-agent/tests/turn/guardrails.rs::the_51st_web_search_of_a_turn_is_refused_unrun"]
+
+[agent-turn-loop."Empty-response and narration guards"]
+"Expensive empty retried once" = ["crates/pmt-agent/tests/turn/guardrails.rs::an_expensive_empty_reply_is_retried_once"]
+
+[agent-turn-loop."Image input routing"]
+"Text-only model gets a description" = ["crates/pmt-agent/tests/vision.rs::a_text_only_main_model_gets_the_auxiliary_description"]
+
+[agent-turn-loop."Session id in the system prompt"]
+"Flag adds the id" = ["crates/pmt-agent/tests/turn/prompt.rs::the_session_id_is_added_on_request"]
+
+[agent-turn-loop."Offline prompt size report"]
+"JSON breakdown" = ["crates/prometheus/tests/prompt_cli.rs::the_json_breakdown_sums_to_the_request_size_without_network"]
+
+[agent-turn-loop."Wall-clock run budget"]
+"Wrap-up notice" = ["crates/pmt-agent/tests/turn/guardrails.rs::the_wrap_up_notice_rides_one_tool_result_at_80_percent"]
+
+[agent-turn-loop."Context file read timeout"]
+"Hung mount" = ["crates/pmt-agent/tests/turn/context.rs::a_hung_context_file_is_skipped_after_the_timeout"]
+
+[agent-turn-loop."todo tool contract"]
+"Merge updates status only" = ["crates/pmt-agent/tests/agent_tools.rs::todo_merge_updates_status_only"]
+
+[agent-turn-loop."clarify tool contract"]
+"Too many questions" = ["crates/pmt-agent/tests/agent_tools.rs::clarify_refuses_six_questions_and_asks_nothing"]
+"Timeout" = ["crates/pmt-agent/tests/agent_tools.rs::clarify_times_out_after_the_configured_wait"]
+
+[context-compression."Context engine selection"]
+"Unknown engine" = ["crates/pmt-agent/src/compress/engine.rs::an_unknown_engine_is_a_config_error_not_a_fallback", "crates/prometheus/tests/config_cli.rs::unknown_context_engine_fails_validation_instead_of_falling_back"]
+"Plugin engine not auto-activated" = ["crates/pmt-agent/src/compress/engine.rs::a_plugin_engine_is_used_only_when_named"]
+
+[context-compression."Compaction is the only sanctioned cache break"]
+"Memory grew during the session" = ["crates/pmt-memory/tests/memory/prompt.rs::a_mid_session_write_keeps_the_prompt_and_compaction_picks_it_up"]
+
+[context-compression."Compression configuration schema"]
+"Out-of-range attempts" = ["crates/pmt-config/src/validate.rs::range_errors_use_the_spec_wording"]
+"Unknown tail mode" = ["crates/pmt-config/src/validate.rs::unknown_tail_mode_names_lean_and_ratio"]
+
+[context-compression."Threshold from the main model's input budget"]
+"Absolute cap" = ["crates/pmt-agent/src/compress/threshold.rs::trigger_table"]
+"Output reservation" = ["crates/pmt-agent/src/compress/threshold.rs::trigger_table"]
+
+[context-compression."Small-window threshold floor"]
+"Switch from 200K to 1M" = ["crates/pmt-agent/src/compress/threshold.rs::the_small_window_floor_follows_every_switch"]
+
+[context-compression."Trigger decision and blocking reasons"]
+"Cooldown armed" = ["crates/pmt-agent/src/compress/decision.rs::decision_table"]
+
+[context-compression."Provider usage beats rough estimates"]
+"Resumed session first request" = ["crates/pmt-agent/tests/turn/compression.rs::a_resumed_session_sends_its_first_request_uncompressed"]
+
+[context-compression."Trigger points and attempt budget"]
+"Tool output pushes over threshold" = ["crates/pmt-agent/tests/turn/compression.rs::tool_output_over_the_threshold_compacts_post_tool_in_place"]
+"Attempts exhausted" = ["crates/pmt-agent/tests/turn/compression.rs::an_overflow_after_the_attempts_ends_with_context_exhausted"]
+
+[context-compression."Context overflow recovery"]
+"Huge pasted file" = ["crates/pmt-agent/tests/turn/compression.rs::an_overflow_compacts_and_retries_despite_an_armed_cooldown"]
+
+[context-compression."One compaction at a time per session"]
+"Gateway hygiene races a manual compress" = { tests = ["crates/pmt-agent/tests/turn/compression.rs::preview_and_lock_skipped_leave_the_transcript_unchanged"], note = "gateway hygiene arrives in M2; the lock_skipped outcome of a compaction racing another holder is tested here" }
+
+[context-compression."Deterministic recoverable prune"]
+"Large old output" = ["crates/pmt-agent/src/compress/prune.rs::golden_prune"]
+
+[context-compression."Protected head"]
+"Second compaction" = ["crates/pmt-agent/src/compress/split.rs::the_head_protects_n_rows_only_on_the_first_compaction"]
+
+[context-compression."Token-budgeted tail"]
+"Small local model" = ["crates/pmt-agent/src/compress/threshold.rs::tail_budget_table"]
+"Tool group at the cut" = ["crates/pmt-agent/src/compress/split.rs::the_tail_never_splits_a_call_from_its_results"]
+
+[context-compression."Orphan handling stubs missing results"]
+"Result fell into the summary" = ["crates/pmt-agent/src/compress/assemble.rs::a_call_whose_result_was_summarized_gets_the_stub"]
+
+[context-compression."Summary budget"]
+"100K middle on a 200K model" = ["crates/pmt-agent/src/compress/threshold.rs::summary_budget_table"]
+
+[context-compression."Handoff summary shape"]
+"Tail starts with a user message" = ["crates/pmt-agent/src/compress/assemble.rs::a_tail_starting_with_a_user_row_gets_an_assistant_summary"]
+
+[context-compression."Iterative summary update"]
+"Second compaction" = ["crates/pmt-agent/tests/turn/compression.rs::a_second_compaction_updates_the_previous_summary"]
+
+[context-compression."Summary failure handling"]
+"Three timeouts" = ["crates/pmt-agent/src/compress/decision.rs::three_timeouts_escalate_the_cooldown"]
+"Manual retry" = ["crates/pmt-agent/tests/turn/compression.rs::manual_compress_clears_the_cooldown_and_asks_for_a_summary"]
+
+[context-compression."Compaction is always in place"]
+"Default compaction" = ["crates/pmt-store/tests/store/compaction.rs::compaction_keeps_the_session_and_the_originals"]
+
+[context-compression."Manual compaction command"]
+"Preview" = ["crates/pmt-agent/tests/turn/compression.rs::preview_and_lock_skipped_leave_the_transcript_unchanged"]
+"Keep last two exchanges" = ["crates/pmt-agent/tests/turn/compression.rs::compress_here_keeps_the_last_two_exchanges_verbatim"]
+
+[context-compression."Cache breakpoint plan"]
+"Tiered prompt with long history" = ["crates/pmt-agent/src/turn/breakpoints.rs::a_tiered_prompt_with_long_history_gets_four_breakpoints"]
+
+[context-compression."Prompt cache TTL"]
+"Auto for cron" = ["crates/pmt-agent/src/turn/breakpoints.rs::auto_ttl_by_surface"]
+"Auto for the CLI" = ["crates/pmt-agent/src/turn/breakpoints.rs::auto_ttl_by_surface"]
+
+[skills."SKILL.md format and agentskills.io compatibility"]
+"Hermes skill loads unchanged" = ["crates/pmt-skills/tests/skills/format.rs::hermes_skill_loads_unchanged"]
+"Malformed frontmatter is reported, not guessed" = ["crates/pmt-skills/tests/skills/format.rs::malformed_frontmatter_is_reported_not_guessed"]
+
+[skills."Skill directory layout and scanner exclusions"]
+"Nested SKILL.md in references is ignored" = ["crates/pmt-skills/tests/skills/format.rs::nested_skill_md_in_references_is_ignored"]
+
+[skills."Search roots and single precedence order"]
+"Profile skill shadows bundled skill" = ["crates/pmt-skills/tests/skills/format.rs::profile_skill_shadows_bundled_skill"]
+"Same-tier collision is refused" = ["crates/pmt-skills/tests/skills/format.rs::same_tier_collision_is_refused"]
+
+[skills."Bundled skills are read-only and ejectable (upgrade)"]
+"Upgrade never overwrites a user edit" = ["crates/pmt-skills/tests/skills/format.rs::upgrade_never_overwrites_a_user_edit"]
+"Deleted ejected copy falls back to bundled" = ["crates/pmt-skills/tests/skills/format.rs::deleted_ejected_copy_falls_back_to_bundled"]
+
+[skills."Project-local skills require explicit trust"]
+"Untrusted repository skills do not load" = ["crates/pmt-skills/tests/skills/trust.rs::untrusted_repository_skills_do_not_load"]
+"Scanner failure quarantines a trusted project skill" = ["crates/pmt-skills/tests/skills/trust.rs::scanner_failure_quarantines_a_trusted_project_skill"]
+
+[skills."Platform, environment and conditional gates"]
+"Fallback skill hidden when primary tool exists" = ["crates/pmt-skills/tests/skills/trust.rs::fallback_skill_hidden_when_primary_tool_exists"]
+
+[skills."Disabled skills"]
+"Disabling the essential skill fails validation" = ["crates/pmt-skills/tests/skills/trust.rs::disabling_the_essential_skill_fails_validation"]
+
+[skills."Skills index in the system prompt"]
+"Long description is clipped" = ["crates/pmt-skills/tests/skills/index.rs::long_description_is_clipped_and_grouped_by_category"]
+
+[skills."Prompt-cache preservation for skill changes"]
+"Agent-created skill does not rebuild the prompt" = ["crates/pmt-skills/tests/skills/index.rs::agent_created_skill_does_not_rebuild_the_prompt"]
+
+[skills."Deferred versus immediate activation of skill changes"]
+"--now invalidates once and records it" = ["crates/pmt-skills/tests/skills/index.rs::skills_change_is_deferred_unless_now"]
+
+[skills."skills_list and skill_view tools"]
+"Path traversal through a symlink is refused" = ["crates/pmt-skills/tests/skills/view.rs::path_traversal_through_a_symlink_is_refused"]
+
+[skills."Load-time template substitution and inline shell"]
+"Community skill never runs inline shell" = ["crates/pmt-skills/tests/skills/view.rs::community_skill_never_runs_inline_shell"]
+
+[skills."Skill secrets and settings"]
+"Secret value never reaches the transcript" = ["crates/pmt-skills/tests/skills/view.rs::secret_value_never_reaches_the_transcript"]
+
+[skills."Skill slash commands"]
+"Built-in name wins" = ["crates/pmt-skills/tests/skills/view.rs::built_in_name_wins"]
+
+[skills."skill_manage tool validation"]
+"Supporting file outside allowed dirs is refused" = ["crates/pmt-skills/src/manage/request.rs::support_paths_stay_in_the_allowed_dirs"]
+
+[skills."Description budget and advisory lint on agent writes"]
+"Body patch on a legacy skill succeeds" = ["crates/pmt-skills/tests/skills/manage.rs::description_budget_applies_to_new_descriptions_only"]
+
+[skills."Skill mutation safety and fail-closed scanning"]
+"Scanner crash does not let a write through" = ["crates/pmt-skills/tests/skills/manage.rs::scanner_crash_does_not_let_a_write_through"]
+
+[skills."Skill lookup and wrong-profile hints"]
+"Skill in another profile is pointed to" = ["crates/pmt-skills/tests/skills/manage.rs::skill_in_another_profile_is_pointed_to"]
+
+[skills."Autonomous skill creation and improvement"]
+"Review cannot clobber unseen content" = ["crates/pmt-skills/tests/skills/manage.rs::review_cannot_clobber_unseen_content"]
+
+[skills."Skill usage records"]
+"View bumps the counter" = ["crates/pmt-skills/tests/skills/view.rs::view_bumps_the_counter"]
+
+[skills."Skill authoring lint"]
+"Marketing word fails strict lint" = ["crates/prometheus/tests/skills_commands.rs::marketing_word_fails_strict_lint"]
+
+[skills."Profile-scoped skill state"]
+"Gateway serves two profiles without crossover" = ["crates/pmt-skills/tests/skills/manage.rs::gateway_serves_two_profiles_without_crossover"]
+
+[skills."Skill preload at launch and per-profile auto-load"]
+"Preloaded skills are in the first request" = ["crates/pmt-skills/tests/skills/invoke.rs::preloaded_skills_are_in_the_first_request"]
+"Missing auto-load entry is skipped" = ["crates/pmt-skills/tests/skills/invoke.rs::missing_auto_load_entry_is_skipped_with_one_warning"]
+
+[skills."Stacking skills in one message"]
+"Two skills and an instruction" = ["crates/pmt-skills/src/dispatch.rs::two_skills_and_an_instruction", "crates/prometheus/tests/chat_line.rs::stacked_skills_become_one_user_message"]
+"Path argument is not swallowed" = ["crates/pmt-skills/src/dispatch.rs::path_argument_is_not_swallowed"]
+
+[skills."Skill bundles"]
+"Bundle loads three skills" = ["crates/pmt-skills/tests/skills/invoke.rs::bundle_loads_its_skills_and_skips_missing_ones"]
+"Missing skill is skipped, not fatal" = ["crates/pmt-skills/tests/skills/invoke.rs::bundle_loads_its_skills_and_skips_missing_ones"]
+
+[skills."/learn distils a skill from sources"]
+"Learn from a docs URL" = ["crates/pmt-skills/tests/skills/surface.rs::learn_writes_one_lint_clean_skill_through_skill_manage"]
+"Book becomes a knowledge base" = { tests = ["crates/pmt-skills/tests/skills/surface.rs::learn_writes_one_lint_clean_skill_through_skill_manage", "crates/pmt-skills/tests/skills/manage.rs::supporting_files_round_trip"], note = "the structure is the model's work: the tests prove /learn instructs a knowledge-base skill (SKILL.md index plus references/) beyond 50,000 characters and that skill_manage writes reference files" }
+
+[skills."/refine runs self-improvement review on demand"]
+"Focused refine saves a workflow" = ["crates/pmt-skills/tests/skills/surface.rs::focused_refine_saves_a_workflow_and_leaves_the_session_alone", "crates/prometheus/tests/chat_line.rs::refine_reviews_in_the_background_and_posts_its_summary"]
+
+[skills."Skill write-approval review surface"]
+"Staged write applied on approval" = ["crates/pmt-skills/tests/skills/surface.rs::staged_write_applies_only_on_approval"]
+
+[skills."/reload-skills rescans roots"]
+"Newly copied skill becomes invocable" = ["crates/pmt-skills/tests/skills/surface.rs::newly_copied_skill_becomes_invocable_after_reload"]
+
+[skills."Bundled skill opt-out and official catalog repair"]
+"Blank-slate profile stays blank across upgrades" = ["crates/pmt-skills/tests/skills/optout.rs::blank_slate_profile_stays_blank_across_upgrades"]
+
+[memory."Built-in store of typed entries"]
+"Add returns a stable id" = ["crates/pmt-memory/tests/memory/tool.rs::add_returns_a_stable_id_and_records_the_session"]
+
+[memory."Core tier character budgets"]
+"Over-budget add points at archival" = ["crates/pmt-memory/src/batch.rs::over_budget_add_names_usage_and_archival"]
+
+[memory."Frozen system-prompt snapshot"]
+"Mid-session write keeps the prompt hash" = ["crates/pmt-memory/tests/memory/prompt.rs::a_mid_session_write_keeps_the_prompt_and_compaction_picks_it_up"]
+
+[memory."Snapshot refresh only at compression or new session"]
+"Compression picks up new memory" = ["crates/pmt-memory/tests/memory/prompt.rs::a_mid_session_write_keeps_the_prompt_and_compaction_picks_it_up"]
+
+[memory."Memory tool surface"]
+"replace is redirected" = ["crates/pmt-memory/src/ops.rs::replace_is_redirected_to_patch"]
+
+[memory."Validation before any write"]
+"Mixed-target batch is refused whole" = ["crates/pmt-memory/src/ops.rs::a_mixed_target_batch_names_the_operation", "crates/pmt-memory/tests/memory/tool.rs::replace_and_mixed_targets_write_nothing"]
+
+[memory."Atomic batches judged on the final state"]
+"Remove-then-add fits the budget" = ["crates/pmt-memory/src/batch.rs::remove_then_add_is_judged_on_the_final_state", "crates/pmt-memory/tests/memory/tool.rs::a_full_tier_takes_remove_then_add_in_one_call_and_refuses_growth"]
+
+[memory."Entry matching for patch and remove"]
+"Ambiguous old_text fails" = ["crates/pmt-memory/src/batch.rs::ambiguous_old_text_lists_both_ids"]
+
+[memory."Per-turn retry cap"]
+"Fourth attempt is cut off" = ["crates/pmt-memory/tests/memory/tool.rs::the_fourth_failure_in_a_turn_is_terminal_and_success_resets"]
+
+[memory."Threat scanning of memory content"]
+"Injected instruction never reaches the prompt" = ["crates/pmt-memory/tests/memory/prompt.rs::an_injected_entry_is_blocked_in_the_prompt_and_kept_for_inspection"]
+
+[memory."Store enable flags and tool availability"]
+"User profile disabled narrows the schema" = ["crates/pmt-memory/tests/memory/tool.rs::disabled_stores_narrow_the_schema_and_refuse_writes"]
+
+[memory."Write approval and pending changes"]
+"Stale pending patch is refused" = ["crates/pmt-memory/tests/memory/approval.rs::approval_stages_without_a_person_and_a_stale_patch_is_refused"]
+
+[memory."Background review cannot delete unattended"]
+"Background remove becomes a proposal" = ["crates/pmt-memory/tests/memory/approval.rs::a_background_remove_becomes_a_proposal_while_adds_commit"]
+
+[memory."Memory nudge interval"]
+"Tenth turn triggers review" = ["crates/pmt-memory/src/review.rs::the_tenth_turn_without_a_memory_call_is_due", "crates/pmt-memory/tests/memory/approval.rs::the_nudge_counts_user_turns_without_memory_calls"]
+
+[memory."Per-turn recall injection"]
+"Recall stays out of history" = ["crates/pmt-memory/tests/memory/prompt.rs::recall_rides_on_the_request_and_never_reaches_history"]
+
+[memory."Memory CLI and editing"]
+"Import a Hermes memory file" = ["crates/pmt-memory/tests/memory/import.rs::a_hermes_memory_file_imports_as_core_entries_skipping_duplicates", "crates/prometheus/tests/memory_cli.rs::a_hermes_file_imports_as_core_entries"]
+
+[memory."Context engine selection"]
+"Engine selection never rewrites stored history" = { deferred = "M2: context engine plugins run in the plugin host (M2); M1 has only the built-in engine" }
+
+[memory."Exact duplicate add is a no-op"]
+"Re-adding a known fact" = ["crates/pmt-memory/tests/memory/tool.rs::re_adding_a_known_fact_is_a_duplicate_no_op"]
+
+[cli."Binary names"]
+"Alias equivalence" = ["crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_identity_line"]
+
+[cli."Top-level command tree"]
+"Default subcommand" = ["crates/prometheus/tests/chat_line.rs::no_subcommand_on_a_terminal_starts_an_interactive_chat"]
+"Unknown subcommand" = ["crates/prometheus/tests/chat_cli.rs::a_mistyped_subcommand_exits_2_with_a_suggestion"]
+
+[cli."Chat flags"]
+"Continue in current directory" = ["crates/prometheus/tests/chat_cli.rs::continue_resumes_the_newest_cli_session_of_this_directory"]
+
+[cli."Stable exit codes"]
+"Missing provider configuration" = ["crates/prometheus/tests/chat_cli.rs::a_fresh_profile_without_a_model_exits_78"]
+
+[cli."One-shot and piped mode"]
+"Piped prompt" = ["crates/prometheus/tests/chat_cli.rs::a_piped_prompt_prints_only_the_answer"]
+"Approval in unattended run" = ["crates/prometheus/tests/chat_cli.rs::an_approval_in_a_one_shot_run_ends_it_with_exit_4"]
+
+[cli."Interface selection is TTY-first"]
+"Config cannot force TUI into a pipe" = ["crates/prometheus/tests/chat_cli.rs::a_pipe_runs_one_shot_whatever_the_interface_setting"]
+
+[cli."Process identity from runtime records"]
+"Stale record after crash" = { tests = ["crates/pmt-core/src/runtime.rs::reused_pid_with_another_start_time_is_stale", "crates/prometheus/tests/doctor_cli.rs::a_stale_gateway_lock_is_removed_and_printed"], note = "`prometheus daemon status` arrives in M2; the stale-record detection it reports is tested here" }
+
+[cli."Single typed slash-command registry"]
+"Plugin command collides with built-in" = ["crates/prometheus/src/slash/tests.rs::a_plugin_redeclaring_a_built_in_fails_and_the_built_in_stays"]
+
+[cli."Command resolution"]
+"Unique prefix" = ["crates/prometheus/src/slash/tests.rs::a_unique_prefix_runs_the_command"]
+"Arguments keep their case" = ["crates/prometheus/src/slash/tests.rs::arguments_keep_their_case"]
+
+[cli."Precedence for non-built-in slash commands"]
+"Skill shadowed by quick command" = ["crates/prometheus/src/slash/tests.rs::a_quick_command_shadows_a_skill_of_the_same_name", "crates/prometheus/tests/chat_line.rs::quick_commands_alias_exec_and_shadow_skills"]
+
+[cli."Built-in slash command set"]
+"Gateway-unavailable command hidden from help" = ["crates/prometheus/src/slash/tests.rs::a_command_of_other_surfaces_is_hidden_and_refused"]
+
+[cli."Busy policy enforcement"]
+"Rejected while busy" = ["crates/prometheus/tests/chat_line.rs::a_command_typed_while_busy_follows_its_busy_policy"]
+
+[cli."Deferred effects with `--now`"]
+"Toolset change deferred" = ["crates/prometheus/tests/chat_line.rs::a_toolset_change_waits_for_the_next_session_unless_now"]
+"Toolset change now" = ["crates/prometheus/tests/chat_line.rs::a_toolset_change_waits_for_the_next_session_unless_now"]
+
+[cli."Destructive command confirmation"]
+"Cancel keeps history" = ["crates/prometheus/tests/chat_line.rs::destructive_commands_ask_first"]
+
+[cli."Skill invocation as user message"]
+"Stacked skills" = ["crates/prometheus/tests/chat_line.rs::stacked_skills_become_one_user_message"]
+
+[cli."Quick commands"]
+"Exec quick command timeout" = ["crates/prometheus/tests/chat_line.rs::quick_commands_alias_exec_and_shadow_skills"]
+
+[cli."Interactive input handling"]
+"Ctrl+C interrupts the turn, not the process" = ["crates/prometheus/tests/chat_line.rs::ctrl_c_stops_the_turn_and_twice_when_idle_exits"]
+
+[cli."Themes are data"]
+"Unknown theme" = ["crates/prometheus/tests/chat_line.rs::themes_list_switch_and_refuse_unknown_names"]
+
+[cli."Setup wizard"]
+"Re-run is idempotent" = ["crates/prometheus/tests/setup_cli.rs::accepting_every_default_leaves_config_byte_identical"]
+
+[cli."Log viewer"]
+"Header names the real file" = ["crates/prometheus/tests/obs_cli.rs::the_header_names_the_home_level_file_of_update"]
+
+[cli."Doctor"]
+"Missing secret reported" = ["crates/prometheus/tests/doctor_cli.rs::a_missing_provider_secret_fails_with_its_remedy"]
+
+[cli."Machine-readable output"]
+"JSON error" = { tests = ["crates/prometheus/tests/sessions_cli.rs::unknown_session_exits_66_with_a_json_error"], note = "spec conflict: workspace-architecture puts --json errors on stderr with the kind's exit code (66 for not_found); this test follows it rather than this scenario's stdout and exit 1" }
+
+[cli."Usage display"]
+"Lineage cost shown" = ["crates/prometheus/tests/chat_line.rs::usage_shows_the_session_and_its_lineage"]
+
+[cli."Resume and continue resolution"]
+"Continue by name picks newest numbered session" = ["crates/prometheus/tests/chat_cli.rs::continue_by_name_picks_the_newest_numbered_session"]
+"Per-terminal continue" = ["crates/prometheus/tests/chat_line.rs::continue_prefers_the_session_last_used_from_this_terminal"]
+"Explicit cwd overrides restore" = ["crates/prometheus/tests/chat_cli.rs::an_explicit_cwd_overrides_the_restored_one"]
+
+[cli."Conversation recap on resume"]
+"Tool-only messages skipped" = ["crates/prometheus/tests/chat_line.rs::the_recap_on_resume_skips_tool_only_messages"]
+
+[cli."Seed prompt and prompt file"]
+"Seed text starting with a slash" = ["crates/prometheus/tests/chat_line.rs::a_seed_query_is_sent_verbatim_and_quiet_drops_the_banner"]
+"Untrusted body from a file" = ["crates/prometheus/tests/chat_cli.rs::a_prompt_file_is_sent_verbatim_and_never_run"]
+
+[cli."Usage report file"]
+"Usage written on failure" = ["crates/prometheus/tests/chat_usage_file.rs::the_usage_file_is_written_when_the_provider_is_unreachable"]
+
+[cli."Image attachments"]
+"Non-vision model" = ["crates/prometheus/tests/chat_attach.rs::a_model_without_vision_and_no_vision_route_refuses_before_any_call"]
+
+[cli."Ignore profile config and rules"]
+"Rules skipped" = ["crates/prometheus/tests/chat_usage_file.rs::ignore_rules_skips_rule_files_identity_and_memory_and_is_recorded"]
+
+[cli."Shell escape in the REPL"]
+"Output kept local" = ["crates/prometheus/tests/chat_compose.rs::shell_escape_output_stays_local_unless_doubled"]
+
+[cli."Job-control suspend"]
+"Resume after fg" = ["crates/prometheus/tests/chat_compose.rs::ctrl_z_suspends_and_fg_redraws_the_buffer"]
+
+[cli."Tool progress display and focus view"]
+"Focus restores previous mode" = ["crates/prometheus/tests/chat_display.rs::focus_hides_tool_lines_and_restores_the_previous_mode"]
+
+[cli."Display preferences"]
+"Bell on approval" = ["crates/prometheus/tests/chat_display.rs::an_approval_prompt_rings_the_bell_when_asked_to"]
+
+[cli."External editor composition"]
+"Empty file cancels" = ["crates/prometheus/tests/chat_compose.rs::an_editor_that_saves_nothing_sends_nothing"]
+
+[cli."Local transcript and session commands"]
+"Status without model call" = ["crates/prometheus/tests/chat_session_commands.rs::local_commands_answer_without_a_model_call"]
+"All sessions refused for non-admin" = ["crates/prometheus/src/chat/repl/info.rs::all_sessions_need_an_admin_on_messaging_only"]
+
+[cli."Retry semantics"]
+"Retry replaces the answer" = ["crates/prometheus/tests/chat_session_commands.rs::retry_replaces_the_answer"]
+
+[cli."Queue management commands"]
+"Reorder queue" = ["crates/prometheus/tests/chat_session_commands.rs::the_queue_is_listed_edited_reordered_and_run_in_order"]
+
+[cli."Onboarding state"]
+"Tip shown once" = ["crates/prometheus/tests/onboarding_line.rs::a_one_time_tip_is_shown_once_per_profile"]
+
+[cli."Tool configurator"]
+"Unknown provider refused" = ["crates/prometheus/tests/tools_configure_cli.rs::an_unknown_provider_is_refused_without_writing"]
+
+[distribution-and-update."Release artifacts and targets"]
+"Manifest covers every artifact" = ["xtask/src/release/manifest.rs::manifest_covers_every_artifact_and_verifies"]
+
+[distribution-and-update."Release identity grammar"]
+"One-line identity" = ["crates/prometheus/tests/version.rs::version_line_names_version_channel_target_commit_and_build_date"]
+"Canary ordering" = ["crates/pmt-update/src/version.rs::canary_orders_between_the_previous_and_its_own_stable"]
+
+[distribution-and-update."Signature trust root"]
+"Tampered archive" = ["crates/prometheus/tests/update_cli.rs::tampered_archive_fails_signature_verification_and_keeps_the_binary"]
+
+[distribution-and-update."Installers"]
+"Unknown channel" = ["crates/pmt-update/tests/update.rs::installer_rejects_an_unknown_channel_before_downloading"]
+
+[distribution-and-update."Install receipt"]
+"Built from source" = ["crates/prometheus/tests/update_cli.rs::source_build_status_says_it_does_not_self_update"]
+
+[distribution-and-update."Uniform refusal for installs owned elsewhere"]
+"Same exit code for every foreign owner" = ["crates/prometheus/tests/update_cli.rs::every_foreign_owner_is_refused_with_69_before_any_request"]
+
+[distribution-and-update."Update exit codes"]
+"Check finds a newer release" = ["crates/prometheus/tests/update_cli.rs::check_finds_a_newer_release_and_exits_10_without_identifiers"]
+
+[distribution-and-update."Release channels"]
+"Leaving canary does not downgrade" = ["crates/pmt-update/src/flow/check.rs::canary_on_stable_stays"]
+
+[distribution-and-update."Update check without telemetry"]
+"Checks disabled" = ["crates/pmt-update/tests/update.rs::disabled_checks_make_no_request"]
+
+[distribution-and-update."Single-writer update lock"]
+"Concurrent updates" = ["crates/prometheus/tests/update_cli.rs::concurrent_update_exits_75_and_changes_nothing"]
+
+[distribution-and-update."Atomic binary swap with health check"]
+"Broken build never goes live" = ["crates/prometheus/tests/update_cli.rs::broken_build_never_goes_live"]
+"Power loss during swap" = ["crates/pmt-update/src/swap.rs::swap_keeps_the_previous_binary_and_never_rewrites_in_place"]
+
+[distribution-and-update."Rollback"]
+"Rollback after compatible update" = ["crates/prometheus/tests/update_cli.rs::update_then_rollback_restores_the_previous_binary"]
+
+[distribution-and-update."Schema migrations around updates"]
+"Older binary meets newer schema" = { tests = ["crates/pmt-store/tests/store/open.rs::newer_store_opens_read_only_and_refuses_writes", "crates/pmt-config/tests/migration.rs::newer_file_is_refused_with_exit_78"], note = "exits 78 (the config kind of store.schema_too_new in the error taxonomy) rather than this scenario's 1; the database is left unmodified" }
+
+[distribution-and-update."Update receipts at the root home"]
+"Profile does not change receipt location" = ["crates/prometheus/tests/update_cli.rs::receipts_stay_at_the_root_home_with_a_profile_selected"]
+
+[distribution-and-update."Managed runtime store"]
+"Interrupted download leaves no half runtime" = ["crates/pmt-update/tests/runtimes.rs::an_interrupted_download_resumes_and_is_verified"]
+
+[distribution-and-update."Lazy runtime installation policy"]
+"Lazy install disabled in an image" = ["crates/prometheus/tests/browser_runtime_chat.rs::with_lazy_installs_disabled_the_browser_is_unavailable_and_nothing_downloads", "crates/prometheus/tests/runtimes_cli.rs::lazy_install_disabled_fails_the_browser_and_downloads_nothing"]
+
+[distribution-and-update."Runtime CLI"]
+"Corrupted runtime detected" = ["crates/prometheus/tests/runtimes_cli.rs::a_corrupted_runtime_is_reported_by_verify_and_doctor"]
+
+[distribution-and-update."Runtime leases and garbage collection"]
+"In-use runtime survives gc" = ["crates/prometheus/tests/runtimes_cli.rs::in_use_runtime_survives_gc"]
+
+[distribution-and-update."Download retry budget"]
+"Flaky mirror" = ["crates/pmt-update/tests/runtimes.rs::a_flaky_origin_is_retried_and_the_record_counts_the_retries"]
+
+[distribution-and-update."Doctor reports distribution health"]
+"Interrupted update surfaced" = ["crates/prometheus/tests/runtimes_cli.rs::doctor_surfaces_an_interrupted_update"]
+
+[distribution-and-update."Reproducible, locked builds"]
+"Unwaived advisory blocks the release" = ["xtask/tests/supply_chain.rs::an_unwaived_advisory_fails_the_release_before_anything_is_published"]
+
+[distribution-and-update."Persistent runtime opt-outs"]
+"Browser opted out at install time" = ["crates/prometheus/tests/browser_runtime_chat.rs::an_excluded_browser_is_unavailable_and_nothing_downloads", "crates/prometheus/tests/update_cli.rs::an_excluded_runtime_is_not_refreshed_after_an_update"]
+
+[distribution-and-update."Pre-update backup"]
+"Full backup requested" = ["crates/prometheus/tests/update_cli.rs::full_backup_is_written_before_the_swap_and_listed_in_the_receipt"]
+"Disk full" = ["crates/prometheus/tests/update_cli.rs::a_full_backup_that_cannot_be_written_stops_before_the_swap_with_73"]
+
+[distribution-and-update."Dependency release-age gate"]
+"Day-old crate rejected" = ["xtask/src/deps_age.rs::a_day_old_crate_is_rejected_with_its_publish_time"]
+
+[distribution-and-update."Download mirrors"]
+"Mirror serves a tampered archive" = ["crates/pmt-update/tests/runtimes.rs::a_mirror_serving_a_tampered_archive_installs_nothing"]
+
+[web-and-media-tools."web_search tool contract"]
+"Limit bounds the result list" = ["crates/pmt-tools/tests/web.rs::search_goes_to_the_configured_backend_and_the_limit_bounds_the_list"]
+"Backend outage is an error" = ["crates/pmt-tools/tests/web.rs::a_backend_outage_is_an_error_naming_the_backend"]
+
+[web-and-media-tools."web_extract tool contract"]
+"Long page is windowed deterministically" = ["crates/pmt-tools/tests/web.rs::a_long_page_is_windowed_deterministically_over_a_stored_full_text"]
+"Per-URL failure is isolated" = ["crates/pmt-tools/tests/web.rs::one_failing_url_does_not_fail_the_others"]
+
+[web-and-media-tools."Extracted full text is stored and capped"]
+"Huge page capped on disk" = ["crates/pmt-tools/src/web/full_text.rs::a_huge_page_is_capped_on_disk"]
+
+[web-and-media-tools."Web backend selection precedence"]
+"Per-capability split" = ["crates/pmt-tools/tests/web.rs::each_capability_uses_its_own_backend"]
+"xAI key does not reroute web search" = ["crates/pmt-tools/src/web/select.rs::an_xai_key_does_not_reroute_web_search"]
+
+[web-and-media-tools."vision_analyze tool"]
+"Region crop keeps resolution" = ["crates/pmt-agent/tests/vision.rs::a_region_crop_keeps_the_original_resolution"]
+"Text-only main model" = ["crates/pmt-agent/tests/vision.rs::a_text_only_main_model_gets_the_auxiliary_description"]
+
+[web-and-media-tools."Image input routing"]
+"Text mode keeps pixels out" = ["crates/pmt-agent/tests/vision.rs::text_mode_keeps_pixels_out_of_the_request"]
+"SVG on a raster-only route" = ["crates/pmt-agent/tests/vision.rs::an_svg_on_a_raster_only_route_is_sent_as_png"]

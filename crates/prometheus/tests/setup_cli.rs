@@ -21,6 +21,8 @@ fn config(home: &Path) -> String {
 }
 
 /// Provider names come from the picker list; a name is accepted too.
+/// Scenario: Secret written by setup (security-boundaries): the key is in
+/// the owner-only (0600) secrets store and not in `config.toml`.
 #[test]
 fn the_wizard_writes_config_and_the_key_to_the_secrets_store() {
     let home = temp_home();
@@ -36,9 +38,15 @@ fn the_wizard_writes_config_and_the_key_to_the_secrets_store() {
     assert!(!text.contains(KEY), "the key never lands in config.toml");
     let listed = ok(&run(home.path(), &["secrets", "list"]));
     assert!(listed.contains("ANTHROPIC_API_KEY"), "{listed}");
-    let secrets =
-        std::fs::read_to_string(home.path().join("profiles/default/secrets.toml")).unwrap();
+    let store = home.path().join("profiles/default/secrets.toml");
+    let secrets = std::fs::read_to_string(&store).unwrap();
     assert!(secrets.contains(KEY), "stored in the secrets store");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = std::fs::metadata(&store).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "secrets.toml mode {mode:o}");
+    }
 }
 
 /// Scenario: Re-run is idempotent.

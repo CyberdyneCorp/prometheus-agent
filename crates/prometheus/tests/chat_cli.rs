@@ -73,6 +73,23 @@ fn a_piped_prompt_prints_only_the_answer() {
     assert_eq!(ok(&out), "mock: summarise\n\nline one\n");
 }
 
+/// Scenario: Fresh machine without Python (spec: workspace-architecture, No
+/// mandatory external runtime): with nothing on `PATH` at all, so no Python,
+/// Node.js or browser, a mock one-shot run answers and exits 0.
+#[test]
+fn a_host_without_python_answers_a_mock_one_shot() {
+    let home = temp_home();
+    let empty_path = home.path().join("empty-path");
+    std::fs::create_dir_all(&empty_path).unwrap();
+    let out = command(home.path())
+        .args(["chat", "-z", "hello", "--provider", "mock"])
+        .env("PATH", &empty_path)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(ok(&out), "mock: hello\n");
+}
+
 /// Scenario: Missing provider configuration.
 #[test]
 fn a_fresh_profile_without_a_model_exits_78() {

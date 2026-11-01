@@ -116,6 +116,7 @@ run_gates() {
     deps_age_gate
     step openspec validate --all --strict --no-interactive
     step cargo xtask gen --check
+    step cargo xtask scenarios
     docs_gate
     health_gate
     if [ "$with_perf" = yes ]; then

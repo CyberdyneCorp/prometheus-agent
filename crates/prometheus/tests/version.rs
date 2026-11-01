@@ -12,9 +12,13 @@ fn version_line(exe: &Path, flag: &str) -> String {
     String::from_utf8(out.stdout).expect("utf-8 output")
 }
 
-/// A hard-linked `pmt` next to the built binary, the same shape `scripts/dev-install` creates.
-fn pmt_alias() -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("alias");
+/// A hard-linked `pmt` next to the built binary, the same shape
+/// `scripts/dev-install` creates; one directory per test, since tests run
+/// concurrently.
+fn pmt_alias(test: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("alias")
+        .join(test);
     std::fs::create_dir_all(&dir).expect("alias dir");
     let alias = dir.join(format!("pmt{}", std::env::consts::EXE_SUFFIX));
     let _ = std::fs::remove_file(&alias);
@@ -55,9 +59,24 @@ fn short_flag_matches_long_flag() {
 
 #[test]
 fn pmt_alias_prints_the_same_identity_line() {
-    let alias = pmt_alias();
+    let alias = pmt_alias("identity");
     assert_eq!(
         version_line(&alias, "--version"),
         version_line(Path::new(BIN), "--version")
     );
+}
+
+/// Scenario: Alias invocation (`pmt version --json` prints the same object).
+#[test]
+fn pmt_alias_prints_the_same_version_json() {
+    let alias = pmt_alias("json");
+    let json = |exe: &Path| {
+        let out = Command::new(exe)
+            .args(["version", "--json"])
+            .output()
+            .expect("binary runs");
+        assert!(out.status.success());
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).expect("version --json")
+    };
+    assert_eq!(json(&alias), json(Path::new(BIN)));
 }
