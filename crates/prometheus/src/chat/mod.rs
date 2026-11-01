@@ -12,6 +12,7 @@ pub mod attach;
 pub mod markdown;
 pub mod oneshot;
 pub mod recap;
+pub mod remote;
 pub mod repl;
 pub mod resume;
 pub mod session;
@@ -115,6 +116,7 @@ fn run_recorded(
     if let Some(dir) = &args.cwd {
         change_dir(dir)?;
     }
+    let global_set = !ctx.set.is_empty();
     let mut set = ctx.set.to_vec();
     set.extend(args.overrides());
     let ctx = Context { set: &set, ..*ctx };
@@ -132,6 +134,23 @@ fn run_recorded(
         (Mode::Line, PromptSource::File(path)) => Some(oneshot::read_prompt_file(path)?),
         (Mode::Line, PromptSource::None) => None,
     };
+    if !args.in_process
+        && let Some(record) = crate::daemon_client::running(scope.home())?
+    {
+        let config = scope.config();
+        let start = remote::Start {
+            args,
+            mode,
+            first,
+            cwd: &current_dir()?,
+            terminal: terminal::identity().filter(|_| config.sessions.terminal_continue),
+            ui,
+            approve_unattended: config.approvals.single_query_mode
+                == pmt_config::schema::UnattendedApproval::Approve,
+            overrides: global_set,
+        };
+        return remote::run(&record, &scope, &start);
+    }
     let _lock = WriterLock::acquire(scope.home(), Role::Chat, vec![scope.name().to_string()])?;
     let ad_hoc = crate::model_cmd::explain::ad_hoc(&args.endpoint)?;
     let options = Options {

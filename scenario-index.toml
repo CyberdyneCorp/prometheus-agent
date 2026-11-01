@@ -1433,3 +1433,15 @@ capabilities = [
 
 [workspace-architecture."RPC debug client (upgrade)"]
 "Calling an unknown method" = ["crates/prometheus/tests/rpc_cli.rs::an_unknown_method_prints_the_32601_error_and_exits_2"]
+
+[workspace-architecture."Clients attach to a running daemon"]
+"Chat attaches to a running daemon" = { tests = ["crates/prometheus/tests/chat_daemon.rs::a_chat_runs_as_a_client_of_the_running_daemon", "crates/prometheus/tests/chat_daemon.rs::the_line_interface_attaches_to_the_daemon"], note = "the daemon holds the home's writer lock, so a chat that opened state.db itself would exit 75 (as `--in-process` does in the same test); the turn's transcript is the daemon's" }
+
+[cli."Daemon attachment with in-process fallback"]
+"Session shared with gateway" = ["crates/prometheus/tests/chat_daemon.rs::a_chat_runs_as_a_client_of_the_running_daemon"]
+
+[cli."Single interactive owner per session"]
+"Second terminal offered a fork" = ["crates/prometheus/tests/chat_daemon.rs::a_second_terminal_forks_the_owned_session_at_its_last_message", "crates/pmt-gateway/tests/ownership.rs::a_second_exclusive_resume_names_the_owner_until_it_detaches"]
+
+[cli."Shell completions (upgrade)"]
+"Config key completion" = ["crates/prometheus/tests/completions_cli.rs::zsh_completes_a_config_key_on_tab"]

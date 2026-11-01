@@ -117,7 +117,11 @@ impl Client {
         profiles: Vec<String>,
         hello: &HelloParams,
     ) -> Result<(Self, Inbox), Error> {
-        let request = ControlRequest::Ticket { purpose, profiles };
+        let request = ControlRequest::Ticket {
+            purpose,
+            profiles,
+            pid: Some(std::process::id()),
+        };
         let ticket = control::ticket_of(control::call(&endpoint.control, &request).await?)?;
         let socket = dial(
             &endpoint.rpc_url,

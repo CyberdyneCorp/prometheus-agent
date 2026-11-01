@@ -94,11 +94,18 @@ the daemon closes an idle connection with 4408.
 
 `session.create` creates a session in the ticket's profile and attaches the
 connection to it; `session.resume` loads a stored one and attaches;
-`session.attach` and `session.detach` join and leave. A session of another
+`session.attach` and `session.detach` join and leave. `session.resolve`
+turns a chat's `-r`/`-c` reference into a session id, `session.fork` copies
+a session's active messages up to a chosen one into a new session (the
+parent is unchanged) and `session.interrupt` stops the running turn.
+Creating or resuming with `exclusive: true` makes the connection the
+session's interactive owner: until it detaches or disconnects, another
+exclusive resume fails with `-32004` `session <id> is open in another
+client (pid <n>)` (attaching read-only and forking still work). A session of another
 profile is refused with `-32002` exactly like a session that does not
 exist, and methods that change a session (`prompt.submit`,
-`session.compact`, `approval.respond`, `session.detach`) need the
-connection attached to it.
+`session.compact`, `session.interrupt`, `approval.respond`,
+`session.detach`) need the connection attached to it.
 
 `prompt.submit` returns a `turn_id` at once; the turn's output arrives as
 `session.event` events (one per trajectory event) and ends with

@@ -105,8 +105,11 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.create` | `workspace-architecture` | 1.0 | [`SessionCreateParams`](#sessioncreateparams) | [`SessionRef`](#sessionref) |
 | `session.detach` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Ack`](#ack) |
 | `session.events.since` | `workspace-architecture` | 1.0 | [`EventsSinceParams`](#eventssinceparams) | [`EventsSince`](#eventssince) |
+| `session.fork` | `session-storage` | 1.0 | [`ForkParams`](#forkparams) | [`SessionRef`](#sessionref) |
+| `session.interrupt` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Ack`](#ack) |
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
-| `session.resume` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Attached`](#attached) |
+| `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
+| `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
 | `subagent.list` | `tui` | 1.0 | not served yet | |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
@@ -315,15 +318,6 @@ One event frame: the notification params and the replay item.
 | `seq` | integer | yes | Per-session monotonic sequence number (per daemon for daemon-wide events). |
 | `session_id` | string or null | no | The session it belongs to; `None` for daemon-wide events. |
 
-### `ErrorData`
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `code` | string | yes |  |
-| `hint` | string or null | no |  |
-| `kind` | string | yes |  |
-| `path` | string or null | no |  |
-
 ### `EventsSince`
 
 `session.events.since` result.
@@ -344,6 +338,16 @@ One event frame: the notification params and the replay item.
 |---|---|---|---|
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
+
+### `ForkParams`
+
+`session.fork` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `at_message_id` | string or null | no | The last message the fork keeps (`msg_<ULID>`); default the session's last active message. |
+| `session_id` | string | yes | The session to fork. |
+| `title` | string or null | no | The fork's title; default `<parent title> #<n>`. |
 
 ### `HelloParams`
 
@@ -408,6 +412,36 @@ The daemon's build target and its support tier.
 |---|---|---|---|
 | `id` | string | yes | `srq-<12 hex>`. |
 
+### `ResolveKind`
+
+What `session.resolve` looks up.
+
+| Value | Meaning |
+|---|---|
+| `resume` | `-r <ref>`: an id, an id prefix, a title or `latest`. |
+| `continue` | `-c [<name>]`: the newest CLI session of the directory (empty reference) or the newest session of the lineage titled `name`. |
+
+### `ResolveParams`
+
+`session.resolve` params: a chat's `-r`/`-c` reference.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cwd` | string or null | no | The client's working directory (scopes `-c` and `latest`). |
+| `kind` | [`ResolveKind`](#resolvekind) | yes | Resume or continue. |
+| `profile` | string or null | no | The profile; required only when the ticket grants several. |
+| `reference` | string | yes | The reference (empty for a bare `-c`). |
+| `terminal` | string or null | no | The client terminal's identity (prefers the session last used from it for a bare `-c`). |
+
+### `ResumeParams`
+
+`session.resume` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `exclusive` | boolean | no | Become the session's interactive owner; fails with `-32004 session.in_use` naming the owner's pid while another connection is. |
+| `session_id` | string | yes | `ses_<ULID>`. |
+
 ### `SecretAnswer`
 
 `secret.request` result.
@@ -443,7 +477,10 @@ What the daemon serves.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `cwd` | string or null | no | The working directory of the session. |
+| `exclusive` | boolean | no | Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. |
+| `model` | string or null | no | The model for this session (`[<provider>/]<model>` or an alias) instead of the profile's. |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
+| `provider` | string or null | no | The provider for this session instead of the profile's. |
 | `source_tag` | string or null | no | A source tag recorded on the session. |
 
 ### `SessionList`
@@ -534,16 +571,28 @@ One message of a transcript.
 | `role` | string | yes | `user`, `assistant`, `tool` or `system`. |
 | `text` | string or null | no | Its text, when it has any. |
 
+### `TurnError`
+
+Why a turn ended in error.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `code` | string | yes | The stable dotted error code. |
+| `hint` | string or null | no | The command that fixes it. |
+| `kind` | string | yes | The error taxonomy kind (it fixes a CLI's exit status). |
+| `message` | string | yes | One line. |
+
 ### `TurnFinished`
 
 `turn.finished` payload.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `error` | [`ErrorData`](#errordata) or null | no | The error that ended the turn. |
+| `error` | [`TurnError`](#turnerror) or null | no | The error that ended the turn. |
 | `exit_reason` | string | yes | The turn's exit reason (`completed`, `interrupted_by_user`, ...). |
 | `final_response` | string or null | no | The final answer, when there is one. |
 | `turn_id` | string | yes | The turn. |
+| `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
 
 ### `Version`
 

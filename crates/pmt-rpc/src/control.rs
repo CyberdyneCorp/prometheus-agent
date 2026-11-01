@@ -51,6 +51,11 @@ pub enum ControlRequest {
         purpose: Purpose,
         /// The profiles it grants: exactly one unless `profile-admin`.
         profiles: Vec<String>,
+        /// The requesting client's pid, named to a second client refused a
+        /// session this one owns (`session <id> is open in another client
+        /// (pid <n>)`). Only the owning user can reach this channel.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pid: Option<u32>,
     },
     /// The daemon's process state.
     Status,
@@ -221,6 +226,7 @@ mod tests {
         let request = ControlRequest::Ticket {
             purpose: Purpose::ProfileAdmin,
             profiles: vec!["work".into()],
+            pid: None,
         };
         assert_eq!(
             serde_json::to_value(&request).unwrap(),

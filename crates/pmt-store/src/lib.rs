@@ -26,6 +26,7 @@ pub mod credential_state;
 pub mod delete;
 mod error;
 mod files;
+pub mod fork;
 mod index;
 pub mod inspect;
 pub mod integrity;

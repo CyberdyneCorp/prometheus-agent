@@ -140,6 +140,8 @@ struct State {
     order: VecDeque<(String, u64)>,
     total_bytes: usize,
     requests: HashMap<String, Pending>,
+    /// Each session's interactive owner: the connection and its pid.
+    owners: HashMap<String, (ConnId, Option<u32>)>,
 }
 
 /// Sessions, their event logs and the open server requests.
@@ -224,6 +226,30 @@ impl Hub {
             .is_some_and(|log| log.attached.contains_key(&conn))
     }
 
+    /// Makes `conn` (whose client reported `pid`) the interactive owner of
+    /// `session_id`. Fails with the owner's pid while another connection
+    /// owns it (spec: cli, Single interactive owner per session); the
+    /// ownership ends when the owner detaches or disconnects.
+    ///
+    /// # Errors
+    ///
+    /// The current owner's pid (`None` when it reported none).
+    pub fn claim(
+        &self,
+        conn: ConnId,
+        session_id: &str,
+        pid: Option<u32>,
+    ) -> Result<(), Option<u32>> {
+        let mut state = self.state();
+        match state.owners.get(session_id) {
+            Some((owner, owner_pid)) if *owner != conn => Err(*owner_pid),
+            _ => {
+                state.owners.insert(session_id.to_owned(), (conn, pid));
+                Ok(())
+            }
+        }
+    }
+
     /// Detaches `conn` from `session_id`; requests only it could answer
     /// resolve unanswered.
     pub fn detach(&self, conn: ConnId, session_id: &str) {
@@ -231,6 +257,13 @@ impl Hub {
             let mut state = self.state();
             if let Some(log) = state.sessions.get_mut(session_id) {
                 log.attached.remove(&conn);
+            }
+            if state
+                .owners
+                .get(session_id)
+                .is_some_and(|(o, _)| *o == conn)
+            {
+                state.owners.remove(session_id);
             }
             orphan_requests(&mut state, conn)
         };
@@ -246,6 +279,7 @@ impl Hub {
             for log in state.sessions.values_mut() {
                 log.attached.remove(&conn);
             }
+            state.owners.retain(|_, (owner, _)| *owner != conn);
             orphan_requests(&mut state, conn)
         };
         for (session, id) in orphaned {

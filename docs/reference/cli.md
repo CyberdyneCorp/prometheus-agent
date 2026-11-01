@@ -112,7 +112,7 @@ Options:
           Working directory of the session (also scopes `-c` and `latest`)
 
       --in-process
-          Run the session in this process (the only mode until the daemon lands)
+          Run the session in this process instead of attaching to the home's running gateway daemon (which then holds the home: exit 75)
 
       --tui
           Use the full-screen interface
@@ -231,7 +231,7 @@ Options:
           Working directory of the session (also scopes `-c` and `latest`)
 
       --in-process
-          Run the session in this process (the only mode until the daemon lands)
+          Run the session in this process instead of attaching to the home's running gateway daemon (which then holds the home: exit 75)
 
       --tui
           Use the full-screen interface

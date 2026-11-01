@@ -338,6 +338,9 @@ error_codes! {
     /// A rewind target is missing or not a user message.
     STORE_REWIND_TARGET_INVALID = ("store.rewind_target_invalid", InvalidInput,
         "Rewind targets an active user message of the session; the given message is missing, inactive or not a user message.");
+    /// The fork point is not an active message of the session.
+    STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
+        "`session.fork` names an `at_message_id` that is not an active message of the forked session.");
     /// The transcript changed since the rewind or restore was planned.
     STORE_REWIND_CONFLICT = ("store.rewind_conflict", Conflict,
         "The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry.");

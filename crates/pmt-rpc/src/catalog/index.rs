@@ -86,8 +86,12 @@ pub const INDEX: &[IndexEntry] = &[
     method("session.events.since", WA),
     method("session.context_usage", WA),
     method("prompt.submit", WA),
+    method("session.interrupt", WA),
+    method("session.resolve", WA),
     method("command.dispatch", WA),
     method("daemon.update", WA),
+    // session-storage
+    method("session.fork", "session-storage"),
     // tui
     method("commands.catalog", "tui"),
     method("complete.slash", "tui"),

@@ -6,6 +6,7 @@ mod compaction;
 mod compression_state;
 mod crash;
 mod credential_state;
+mod fork;
 mod integrity;
 mod lifecycle;
 mod open;

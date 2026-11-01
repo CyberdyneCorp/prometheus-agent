@@ -25,6 +25,9 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionCreate, _, _>(catalog, create)?
         .register::<c::SessionAttach, _, _>(catalog, attach)?
         .register::<c::SessionResume, _, _>(catalog, resume)?
+        .register::<c::SessionInterrupt, _, _>(catalog, interrupt)?
+        .register::<c::SessionResolve, _, _>(catalog, resolve)?
+        .register::<c::SessionFork, _, _>(catalog, fork)?
         .register::<c::SessionDetach, _, _>(catalog, detach)?
         .register::<c::SessionListing, _, _>(catalog, list)?
         .register::<c::SessionEventsSince, _, _>(catalog, events_since)?
@@ -123,6 +126,7 @@ fn attached(call: &Call, session_id: &str) -> c::Attached {
 
 async fn create(call: Call, params: c::SessionCreateParams) -> Result<c::SessionRef, RpcError> {
     let profile = profile_for(&call, params.profile.as_deref())?;
+    let exclusive = params.exclusive;
     let server = &call.server;
     let created = server
         .host()
@@ -131,7 +135,27 @@ async fn create(call: Call, params: c::SessionCreateParams) -> Result<c::Session
         .map_err(|e| rpc(&e))?;
     server.hub().register(&created.session_id, &profile);
     attached(&call, &created.session_id);
+    if exclusive {
+        claim(&call, &created.session_id)?;
+    }
     Ok(created)
+}
+
+/// Makes the connection the session's interactive owner (spec: cli,
+/// Single interactive owner per session).
+fn claim(call: &Call, session_id: &str) -> Result<(), RpcError> {
+    let pid = call.conn.grant.pid;
+    call.server
+        .hub()
+        .claim(call.conn.id, session_id, pid)
+        .map_err(|owner| {
+            let owner = owner.map_or_else(|| "pid unknown".to_owned(), |p| format!("pid {p}"));
+            rpc(&Error::new(
+                &codes::SESSION_IN_USE,
+                format!("session {session_id} is open in another client ({owner})"),
+            )
+            .with_hint("follow it read-only (session.attach) or fork it (session.fork)"))
+        })
 }
 
 async fn attach(call: Call, params: c::SessionRef) -> Result<c::Attached, RpcError> {
@@ -139,8 +163,11 @@ async fn attach(call: Call, params: c::SessionRef) -> Result<c::Attached, RpcErr
     Ok(attached(&call, &params.session_id))
 }
 
-async fn resume(call: Call, params: c::SessionRef) -> Result<c::Attached, RpcError> {
+async fn resume(call: Call, params: c::ResumeParams) -> Result<c::Attached, RpcError> {
     let profile = access(&call, &params.session_id, false).await?;
+    if params.exclusive {
+        claim(&call, &params.session_id)?;
+    }
     let link = call.server.link(&params.session_id);
     call.server
         .host()
@@ -148,6 +175,40 @@ async fn resume(call: Call, params: c::SessionRef) -> Result<c::Attached, RpcErr
         .await
         .map_err(|e| rpc(&e))?;
     Ok(attached(&call, &params.session_id))
+}
+
+async fn interrupt(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError> {
+    let profile = access(&call, &params.session_id, true).await?;
+    call.server
+        .host()
+        .interrupt(&profile, &params.session_id)
+        .await
+        .map_err(|e| rpc(&e))?;
+    Ok(c::Ack::YES)
+}
+
+async fn resolve(call: Call, params: c::ResolveParams) -> Result<c::SessionRef, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    let found = call
+        .server
+        .host()
+        .resolve(&profile, params)
+        .await
+        .map_err(|e| rpc(&e))?;
+    call.server.hub().register(&found.session_id, &profile);
+    Ok(found)
+}
+
+async fn fork(call: Call, params: c::ForkParams) -> Result<c::SessionRef, RpcError> {
+    let profile = access(&call, &params.session_id, false).await?;
+    let forked = call
+        .server
+        .host()
+        .fork(&profile, params)
+        .await
+        .map_err(|e| rpc(&e))?;
+    call.server.hub().register(&forked.session_id, &profile);
+    Ok(forked)
 }
 
 async fn detach(call: Call, params: c::SessionRef) -> Result<c::Ack, RpcError> {

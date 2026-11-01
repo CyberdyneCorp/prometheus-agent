@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_agent::turn::{TurnInput, TurnOptions};
+use pmt_agent::turn::{Interrupt, Issuer, TurnInput, TurnOptions};
 use pmt_config::ProfileScope;
 use pmt_core::cancel::CancelToken;
 use pmt_core::env::LaunchEnv;
@@ -20,14 +20,14 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_gateway::{Host, HostFuture, Link};
 use pmt_rpc::contracts::{
-    CompactParams, Compacted, ContextUsage, SessionCreateParams, SessionList, SessionListParams,
-    SessionRef, SessionSummary, SubmitParams, Submitted, Transcript, TranscriptMessage, TurnEnded,
-    TurnFinished,
+    CompactParams, Compacted, ContextUsage, ForkParams, ResolveKind, ResolveParams,
+    SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSummary, SubmitParams,
+    Submitted, Transcript, TranscriptMessage, TurnEnded, TurnError, TurnFinished,
 };
-use pmt_rpc::frame::ErrorData;
 use pmt_store::{NewSession, Source, Store, Visibility};
 
 use super::turn::{ToClients, approvals, clarify};
+use crate::chat::resume;
 use crate::chat::session::model::RouteFlags;
 use crate::chat::session::{Factory, Live, Options};
 
@@ -35,6 +35,26 @@ use crate::chat::session::{Factory, Live, Options};
 struct Loaded {
     live: Live,
     busy: AtomicBool,
+    /// Stops the running turn (`session.interrupt`).
+    interrupt: Mutex<Option<Interrupt>>,
+}
+
+/// How a client asked for a session to run (`session.create`), kept until
+/// the session loads.
+#[derive(Debug, Clone, Default)]
+struct Setup {
+    model: Option<String>,
+    provider: Option<String>,
+}
+
+impl Setup {
+    fn flags(&self) -> RouteFlags<'_> {
+        RouteFlags {
+            provider: self.provider.as_deref(),
+            model: self.model.as_deref(),
+            mock_script: None,
+        }
+    }
 }
 
 /// One served profile.
@@ -43,6 +63,7 @@ struct Profile {
     store: Arc<Store>,
     /// Session machinery per working directory.
     factories: Mutex<HashMap<PathBuf, Arc<Factory>>>,
+    setups: Mutex<HashMap<SessionId, Setup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
 }
 
@@ -80,6 +101,7 @@ impl DaemonHost {
                     scope,
                     store,
                     factories: Mutex::default(),
+                    setups: Mutex::default(),
                     loaded: tokio::sync::Mutex::default(),
                 },
             );
@@ -155,8 +177,14 @@ impl DaemonHost {
         }
         let cwd = Self::cwd_of(profile, row.cwd.as_deref());
         std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
+        let setup = profile
+            .setups
+            .lock()
+            .expect("setups poisoned")
+            .remove(&id)
+            .unwrap_or_default();
         let factory = self.factory(profile, cwd)?;
-        let target = factory.models.primary(&RouteFlags::default()).await?;
+        let target = factory.models.primary(&setup.flags()).await?;
         let clients = Arc::new(ToClients { link: link.clone() });
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
         let timeout = Duration::from_secs(profile.scope.config().approvals.timeout_secs);
@@ -171,6 +199,7 @@ impl DaemonHost {
         let session = Arc::new(Loaded {
             live,
             busy: AtomicBool::new(false),
+            interrupt: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
         Ok(session)
@@ -223,27 +252,20 @@ impl DaemonHost {
         let turns = Arc::clone(&self.turns);
         turns.fetch_add(1, Ordering::AcqRel);
         let finished_id = turn_id.clone();
+        let options = TurnOptions::new(&CancelToken::new());
+        *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
         tokio::spawn(async move {
-            let options = TurnOptions::new(&CancelToken::new());
             let outcome = session
                 .live
                 .agent
                 .run_turn(Some(&scope), id, TurnInput::text(params.text), options)
                 .await;
             link.emit::<TurnEnded>(&finished(finished_id, outcome));
+            session.interrupt.lock().expect("interrupt poisoned").take();
             session.busy.store(false, Ordering::Release);
             turns.fetch_sub(1, Ordering::AcqRel);
         });
         Ok(Submitted { turn_id })
-    }
-}
-
-fn error_data(err: &Error) -> ErrorData {
-    ErrorData {
-        kind: err.kind().as_str().to_owned(),
-        code: err.code().code.to_owned(),
-        hint: err.hint().map(str::to_owned),
-        path: None,
     }
 }
 
@@ -253,13 +275,15 @@ fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>
             turn_id,
             exit_reason: result.exit_reason.as_str().to_owned(),
             final_response: result.final_response,
-            error: result.error.as_ref().map(error_data),
+            error: result.error.as_ref().map(TurnError::of),
+            usage: serde_json::to_value(result.usage).ok(),
         },
         Err(err) => TurnFinished {
             turn_id,
             exit_reason: "error".to_owned(),
             final_response: None,
-            error: Some(error_data(&err)),
+            error: Some(TurnError::of(&err)),
+            usage: None,
         },
     }
 }
@@ -288,8 +312,12 @@ impl Host for DaemonHost {
             let profile = self.profile(profile)?;
             let cwd = Self::cwd_of(profile, params.cwd.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
+            let setup = Setup {
+                model: params.model.clone(),
+                provider: params.provider.clone(),
+            };
             let factory = self.factory(profile, cwd.clone())?;
-            let target = factory.models.primary(&RouteFlags::default()).await?;
+            let target = factory.models.primary(&setup.flags()).await?;
             let mut new = NewSession::new(Source::Cli);
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
@@ -299,6 +327,11 @@ impl Host for DaemonHost {
             }
             new.cwd = Some(cwd.to_string_lossy().into_owned());
             let session = profile.store.create_session(&new)?;
+            profile
+                .setups
+                .lock()
+                .expect("setups poisoned")
+                .insert(session.id, setup);
             Ok(SessionRef {
                 session_id: session.id.to_string(),
             })
@@ -422,6 +455,68 @@ impl Host for DaemonHost {
         Box::pin(async move {
             let profile = self.profile(profile)?;
             self.submit_turn(profile, params, link).await
+        })
+    }
+
+    fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            let id = self::session_id(session_id)?;
+            let loaded = profile.loaded.lock().await.get(&id).cloned();
+            let running =
+                loaded.and_then(|l| l.interrupt.lock().expect("interrupt poisoned").clone());
+            if let Some(interrupt) = running {
+                interrupt.stop(Issuer::User);
+            }
+            Ok(())
+        })
+    }
+
+    fn resolve<'a>(
+        &'a self,
+        profile: &'a str,
+        params: ResolveParams,
+    ) -> HostFuture<'a, SessionRef> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            let request = match params.kind {
+                ResolveKind::Resume => resume::Request::Resume(&params.reference),
+                ResolveKind::Continue => resume::Request::Continue(&params.reference),
+            };
+            let cwd = params
+                .cwd
+                .map_or_else(|| profile.scope.dir().join("workspace"), PathBuf::from);
+            let place = resume::Place {
+                cwd: &cwd,
+                terminal: params.terminal.as_deref(),
+            };
+            let found = resume::resolve(&profile.store, &request, place)?.ok_or_else(|| {
+                Error::new(
+                    &codes::SESSION_NOT_FOUND,
+                    "no session matches the reference",
+                )
+            })?;
+            Ok(SessionRef {
+                session_id: found.to_string(),
+            })
+        })
+    }
+
+    fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let at = params
+                .at_message_id
+                .as_deref()
+                .map(str::parse::<pmt_core::id::MessageId>)
+                .transpose()?;
+            let fork = profile
+                .store
+                .fork_session(id, at, params.title.as_deref())?;
+            Ok(SessionRef {
+                session_id: fork.id.to_string(),
+            })
         })
     }
 

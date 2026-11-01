@@ -252,3 +252,20 @@ fn a_payload_that_breaks_its_contract_is_counted_not_sent() {
     assert_eq!(violations.count(), 1);
     assert!(frames(&mut rx).is_empty());
 }
+
+#[test]
+fn one_connection_owns_a_session_until_it_detaches_or_disconnects() {
+    let hub = hub();
+    hub.register(S, "default");
+    assert_eq!(hub.claim(1, S, Some(41)), Ok(()));
+    assert_eq!(
+        hub.claim(1, S, Some(41)),
+        Ok(()),
+        "the owner may claim again"
+    );
+    assert_eq!(hub.claim(2, S, Some(42)), Err(Some(41)));
+    hub.detach(1, S);
+    assert_eq!(hub.claim(2, S, Some(42)), Ok(()));
+    hub.detach_all(2);
+    assert_eq!(hub.claim(3, S, None), Ok(()));
+}

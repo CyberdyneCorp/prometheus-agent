@@ -79,8 +79,8 @@ pub struct ChatArgs {
     /// Working directory of the session (also scopes `-c` and `latest`).
     #[arg(long, value_name = "DIR")]
     pub cwd: Option<PathBuf>,
-    /// Run the session in this process (the only mode until the daemon
-    /// lands).
+    /// Run the session in this process instead of attaching to the
+    /// home's running gateway daemon (which then holds the home: exit 75).
     #[arg(long)]
     pub in_process: bool,
     /// Use the full-screen interface.

@@ -16,9 +16,9 @@ use pmt_gateway::{Exit, Host, HostFuture, Identity, Link, Server, ServerOptions}
 use pmt_rpc::client::{Client, Inbox, Socket, dial, subprotocols};
 use pmt_rpc::contracts::{
     ApprovalAsk, ApprovalRequestParams, ClientCapabilities, ClientKind, CompactParams, Compacted,
-    ContextUsage, Decision, HelloParams, SessionCreateParams, SessionEvent, SessionList,
-    SessionListParams, SessionRef, SessionSummary, SubmitParams, Submitted, Transcript, TurnEnded,
-    TurnFinished, Version,
+    ContextUsage, Decision, ForkParams, HelloParams, ResolveParams, SessionCreateParams,
+    SessionEvent, SessionList, SessionListParams, SessionRef, SessionSummary, SubmitParams,
+    Submitted, Transcript, TurnEnded, TurnFinished, Version,
 };
 use pmt_rpc::control::{self, ControlRequest, Purpose};
 use pmt_rpc::discovery::{Discovery, Endpoint, discover};
@@ -57,6 +57,7 @@ fn finish(link: &Link, turn: &str, answer: &str) {
         exit_reason: "completed".into(),
         final_response: Some(answer.to_owned()),
         error: None,
+        usage: None,
     });
 }
 
@@ -180,6 +181,37 @@ impl Host for FakeHost {
         })
     }
 
+    fn interrupt<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn resolve<'a>(
+        &'a self,
+        profile: &'a str,
+        params: ResolveParams,
+    ) -> HostFuture<'a, SessionRef> {
+        let owned = self
+            .sessions
+            .lock()
+            .unwrap()
+            .get(&params.reference)
+            .is_some_and(|p| p == profile);
+        Box::pin(async move {
+            if owned {
+                Ok(SessionRef {
+                    session_id: params.reference,
+                })
+            } else {
+                Err(Error::new(&codes::SESSION_NOT_FOUND, "no such session"))
+            }
+        })
+    }
+
+    fn fork<'a>(&'a self, profile: &'a str, _: ForkParams) -> HostFuture<'a, SessionRef> {
+        let session_id = self.add(profile);
+        Box::pin(async move { Ok(SessionRef { session_id }) })
+    }
+
     fn load(&self) -> (usize, usize) {
         (
             self.sessions.lock().unwrap().len(),
@@ -276,6 +308,7 @@ impl Daemon {
         let request = ControlRequest::Ticket {
             purpose: Purpose::Interactive,
             profiles: vec![profile.into()],
+            pid: Some(std::process::id()),
         };
         control::ticket_of(
             control::call(&self.endpoint.control, &request)

@@ -10,8 +10,9 @@ use std::time::Duration;
 
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
-    CompactParams, Compacted, ContextUsage, Event, ServerRequest, SessionCreateParams, SessionList,
-    SessionListParams, SessionRef, SubmitParams, Submitted, Transcript,
+    CompactParams, Compacted, ContextUsage, Event, ForkParams, ResolveParams, ServerRequest,
+    SessionCreateParams, SessionList, SessionListParams, SessionRef, SubmitParams, Submitted,
+    Transcript,
 };
 
 use crate::hub::Hub;
@@ -70,6 +71,17 @@ pub trait Host: Send + Sync + 'static {
         params: SubmitParams,
         link: Link,
     ) -> HostFuture<'a, Submitted>;
+
+    /// Stops the session's running turn at its next safe point; a no-op
+    /// when none runs.
+    fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
+
+    /// The session a chat's `-r`/`-c` reference names.
+    fn resolve<'a>(&'a self, profile: &'a str, params: ResolveParams)
+    -> HostFuture<'a, SessionRef>;
+
+    /// Forks a session (the parent is unchanged).
+    fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef>;
 
     /// Sessions loaded and turns running, for `daemon status`.
     fn load(&self) -> (usize, usize);

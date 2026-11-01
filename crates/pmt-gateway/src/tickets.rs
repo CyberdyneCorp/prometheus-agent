@@ -29,6 +29,8 @@ pub struct Grant {
     pub profiles: Vec<String>,
     /// What the connection is for.
     pub purpose: Purpose,
+    /// The client's pid, as it reported it.
+    pub pid: Option<u32>,
 }
 
 /// The outcome of presenting a ticket.
@@ -89,12 +91,8 @@ impl TicketBook {
     /// # Panics
     ///
     /// When the ticket book's lock is poisoned (a panic while holding it).
-    pub fn issue(
-        &self,
-        purpose: Purpose,
-        profiles: Vec<String>,
-        served: &[String],
-    ) -> Result<Ticket, Error> {
+    pub fn issue(&self, grant: Grant, served: &[String]) -> Result<Ticket, Error> {
+        let (purpose, profiles) = (grant.purpose, &grant.profiles);
         let several = profiles.len() > 1 && purpose != Purpose::ProfileAdmin;
         if profiles.is_empty() || several {
             return Err(Error::new(
@@ -116,8 +114,7 @@ impl TicketBook {
         let now = Instant::now();
         book.live
             .retain(|_, (_, issued)| now.duration_since(*issued) < TTL);
-        book.live
-            .insert(hash(&ticket), (Grant { profiles, purpose }, now));
+        book.live.insert(hash(&ticket), (grant, now));
         Ok(Ticket {
             ticket,
             expires_in_secs: TTL.as_secs(),
@@ -159,11 +156,19 @@ mod tests {
         vec!["default".into(), "work".into()]
     }
 
+    fn grant(purpose: Purpose, profiles: Vec<String>) -> super::Grant {
+        super::Grant {
+            profiles,
+            purpose,
+            pid: None,
+        }
+    }
+
     #[test]
     fn a_ticket_is_single_use() {
         let book = TicketBook::default();
         let ticket = book
-            .issue(Purpose::Interactive, vec!["work".into()], &served())
+            .issue(grant(Purpose::Interactive, vec!["work".into()]), &served())
             .unwrap();
         assert_eq!(ticket.expires_in_secs, 30);
         assert!(
@@ -177,7 +182,7 @@ mod tests {
     async fn a_ticket_expires_after_30_seconds() {
         let book = TicketBook::default();
         let ticket = book
-            .issue(Purpose::Interactive, vec!["work".into()], &served())
+            .issue(grant(Purpose::Interactive, vec!["work".into()]), &served())
             .unwrap();
         tokio::time::advance(std::time::Duration::from_secs(31)).await;
         assert_eq!(book.redeem(&ticket.ticket), Redeemed::Expired);
@@ -187,16 +192,19 @@ mod tests {
     fn only_profile_admin_grants_several_profiles() {
         let book = TicketBook::default();
         assert!(
-            book.issue(Purpose::Interactive, served(), &served())
-                .is_err()
-        );
-        assert!(book.issue(Purpose::Interactive, vec![], &served()).is_err());
-        assert!(
-            book.issue(Purpose::Interactive, vec!["other".into()], &served())
+            book.issue(grant(Purpose::Interactive, served()), &served())
                 .is_err()
         );
         assert!(
-            book.issue(Purpose::ProfileAdmin, served(), &served())
+            book.issue(grant(Purpose::Interactive, vec![]), &served())
+                .is_err()
+        );
+        assert!(
+            book.issue(grant(Purpose::Interactive, vec!["other".into()]), &served())
+                .is_err()
+        );
+        assert!(
+            book.issue(grant(Purpose::ProfileAdmin, served()), &served())
                 .is_ok()
         );
     }

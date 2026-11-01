@@ -14,6 +14,7 @@ use pmt_rpc::control::{ControlError, ControlRequest, ControlResponse};
 use tokio::io::{AsyncBufReadExt as _, AsyncRead, AsyncWrite, AsyncWriteExt as _, BufReader};
 
 use crate::server::Server;
+use crate::tickets::Grant;
 
 /// The longest Unix socket path every supported OS accepts (macOS allows
 /// 103 bytes, Linux 107).
@@ -90,8 +91,17 @@ fn private_socket_dir(run: &Path, short_root: &Path) -> Result<std::path::PathBu
 /// Answers one request.
 pub(crate) fn answer(server: &Server, request: ControlRequest) -> ControlResponse {
     match request {
-        ControlRequest::Ticket { purpose, profiles } => {
-            match server.tickets.issue(purpose, profiles, server.profiles()) {
+        ControlRequest::Ticket {
+            purpose,
+            profiles,
+            pid,
+        } => {
+            let grant = Grant {
+                profiles,
+                purpose,
+                pid,
+            };
+            match server.tickets.issue(grant, server.profiles()) {
                 Ok(ticket) => ControlResponse {
                     ticket: Some(ticket),
                     ..ControlResponse::default()

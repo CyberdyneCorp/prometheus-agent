@@ -422,34 +422,6 @@
       ],
       "type": "object"
     },
-    "ErrorData": {
-      "additionalProperties": false,
-      "properties": {
-        "code": {
-          "type": "string"
-        },
-        "hint": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "kind": {
-          "type": "string"
-        },
-        "path": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "code"
-      ],
-      "type": "object"
-    },
     "EventsSince": {
       "additionalProperties": false,
       "description": "`session.events.since` result.",
@@ -510,6 +482,36 @@
       "required": [
         "session_id",
         "last_seen"
+      ],
+      "type": "object"
+    },
+    "ForkParams": {
+      "additionalProperties": false,
+      "description": "`session.fork` params.",
+      "properties": {
+        "at_message_id": {
+          "default": null,
+          "description": "The last message the fork keeps (`msg_<ULID>`); default the\nsession's last active message.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session to fork.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "The fork's title; default `<parent title> #<n>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id"
       ],
       "type": "object"
     },
@@ -677,6 +679,83 @@
       ],
       "type": "object"
     },
+    "ResolveKind": {
+      "description": "What `session.resolve` looks up.",
+      "oneOf": [
+        {
+          "const": "resume",
+          "description": "`-r <ref>`: an id, an id prefix, a title or `latest`.",
+          "type": "string"
+        },
+        {
+          "const": "continue",
+          "description": "`-c [<name>]`: the newest CLI session of the directory (empty\nreference) or the newest session of the lineage titled `name`.",
+          "type": "string"
+        }
+      ]
+    },
+    "ResolveParams": {
+      "additionalProperties": false,
+      "description": "`session.resolve` params: a chat's `-r`/`-c` reference.",
+      "properties": {
+        "cwd": {
+          "default": null,
+          "description": "The client's working directory (scopes `-c` and `latest`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/ResolveKind",
+          "description": "Resume or continue."
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile; required only when the ticket grants several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference": {
+          "description": "The reference (empty for a bare `-c`).",
+          "type": "string"
+        },
+        "terminal": {
+          "default": null,
+          "description": "The client terminal's identity (prefers the session last used from\nit for a bare `-c`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "type": "object"
+    },
+    "ResumeParams": {
+      "additionalProperties": false,
+      "description": "`session.resume` params.",
+      "properties": {
+        "exclusive": {
+          "default": false,
+          "description": "Become the session's interactive owner; fails with `-32004\nsession.in_use` naming the owner's pid while another connection is.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "`ses_<ULID>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
     "SecretAnswer": {
       "additionalProperties": false,
       "description": "`secret.request` result.",
@@ -762,9 +841,30 @@
             "null"
           ]
         },
+        "exclusive": {
+          "default": false,
+          "description": "Make this connection the session's interactive owner: another\nconnection resuming it exclusively is refused while it is attached.",
+          "type": "boolean"
+        },
+        "model": {
+          "default": null,
+          "description": "The model for this session (`[<provider>/]<model>` or an alias)\ninstead of the profile's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "profile": {
           "default": null,
           "description": "The profile; required only when the ticket grants several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "default": null,
+          "description": "The provider for this session instead of the profile's.",
           "type": [
             "string",
             "null"
@@ -977,6 +1077,37 @@
       ],
       "type": "object"
     },
+    "TurnError": {
+      "additionalProperties": false,
+      "description": "Why a turn ended in error.",
+      "properties": {
+        "code": {
+          "description": "The stable dotted error code.",
+          "type": "string"
+        },
+        "hint": {
+          "description": "The command that fixes it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "The error taxonomy kind (it fixes a CLI's exit status).",
+          "type": "string"
+        },
+        "message": {
+          "description": "One line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
     "TurnFinished": {
       "additionalProperties": false,
       "description": "`turn.finished` payload.",
@@ -984,7 +1115,7 @@
         "error": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ErrorData"
+              "$ref": "#/$defs/TurnError"
             },
             {
               "type": "null"
@@ -1006,6 +1137,10 @@
         "turn_id": {
           "description": "The turn.",
           "type": "string"
+        },
+        "usage": {
+          "default": null,
+          "description": "The turn's token and cost totals, as the turn loop reports them."
         }
       },
       "required": [
@@ -1497,6 +1632,26 @@
       },
       "since": "1.0"
     },
+    "session.fork": {
+      "owner": "session-storage",
+      "params": {
+        "$ref": "#/$defs/ForkParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "since": "1.0"
+    },
+    "session.interrupt": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
     "session.list": {
       "owner": "workspace-architecture",
       "params": {
@@ -1507,10 +1662,20 @@
       },
       "since": "1.0"
     },
+    "session.resolve": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/ResolveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "since": "1.0"
+    },
     "session.resume": {
       "owner": "workspace-architecture",
       "params": {
-        "$ref": "#/$defs/SessionRef"
+        "$ref": "#/$defs/ResumeParams"
       },
       "result": {
         "$ref": "#/$defs/Attached"

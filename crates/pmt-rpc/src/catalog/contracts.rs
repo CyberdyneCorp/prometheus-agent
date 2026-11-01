@@ -235,6 +235,75 @@ pub struct SessionCreateParams {
     /// A source tag recorded on the session.
     #[serde(default)]
     pub source_tag: Option<String>,
+    /// The model for this session (`[<provider>/]<model>` or an alias)
+    /// instead of the profile's.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The provider for this session instead of the profile's.
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// Make this connection the session's interactive owner: another
+    /// connection resuming it exclusively is refused while it is attached.
+    #[serde(default)]
+    pub exclusive: bool,
+}
+
+/// `session.resume` params.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResumeParams {
+    /// `ses_<ULID>`.
+    pub session_id: String,
+    /// Become the session's interactive owner; fails with `-32004
+    /// session.in_use` naming the owner's pid while another connection is.
+    #[serde(default)]
+    pub exclusive: bool,
+}
+
+/// What `session.resolve` looks up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolveKind {
+    /// `-r <ref>`: an id, an id prefix, a title or `latest`.
+    Resume,
+    /// `-c [<name>]`: the newest CLI session of the directory (empty
+    /// reference) or the newest session of the lineage titled `name`.
+    Continue,
+}
+
+/// `session.resolve` params: a chat's `-r`/`-c` reference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveParams {
+    /// The profile; required only when the ticket grants several.
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// Resume or continue.
+    pub kind: ResolveKind,
+    /// The reference (empty for a bare `-c`).
+    pub reference: String,
+    /// The client's working directory (scopes `-c` and `latest`).
+    #[serde(default)]
+    pub cwd: Option<String>,
+    /// The client terminal's identity (prefers the session last used from
+    /// it for a bare `-c`).
+    #[serde(default)]
+    pub terminal: Option<String>,
+}
+
+/// `session.fork` params.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ForkParams {
+    /// The session to fork.
+    pub session_id: String,
+    /// The last message the fork keeps (`msg_<ULID>`); default the
+    /// session's last active message.
+    #[serde(default)]
+    pub at_message_id: Option<String>,
+    /// The fork's title; default `<parent title> #<n>`.
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// `session.attach` / `session.resume` result.
@@ -561,6 +630,49 @@ pub struct RequestResolved {
     pub id: String,
 }
 
+/// Why a turn ended in error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TurnError {
+    /// The error taxonomy kind (it fixes a CLI's exit status).
+    pub kind: String,
+    /// The stable dotted error code.
+    pub code: String,
+    /// One line.
+    pub message: String,
+    /// The command that fixes it.
+    pub hint: Option<String>,
+}
+
+impl TurnError {
+    /// The wire form of `err`.
+    #[must_use]
+    pub fn of(err: &pmt_core::Error) -> Self {
+        Self {
+            kind: err.kind().as_str().to_owned(),
+            code: err.code().code.to_owned(),
+            message: err.message().to_owned(),
+            hint: err.hint().map(str::to_owned),
+        }
+    }
+
+    /// Back to an error of its catalog code (`rpc.connection` for a code
+    /// this build does not know).
+    #[must_use]
+    pub fn to_error(&self) -> pmt_core::Error {
+        let catalog = pmt_core::error::ERROR_CODES
+            .iter()
+            .find(|c| c.code == self.code)
+            .copied()
+            .unwrap_or(&pmt_core::error::codes::RPC_CONNECTION);
+        let err = pmt_core::Error::new(catalog, self.message.clone());
+        match &self.hint {
+            Some(hint) => err.with_hint(hint.clone()),
+            None => err,
+        }
+    }
+}
+
 /// `turn.finished` payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -572,7 +684,10 @@ pub struct TurnFinished {
     /// The final answer, when there is one.
     pub final_response: Option<String>,
     /// The error that ended the turn.
-    pub error: Option<crate::frame::ErrorData>,
+    pub error: Option<TurnError>,
+    /// The turn's token and cost totals, as the turn loop reports them.
+    #[serde(default)]
+    pub usage: Option<Value>,
 }
 
 impl JsonSchema for crate::frame::ErrorData {
@@ -607,7 +722,15 @@ method!(/// `session.detach`.
 method!(/// `session.list`.
     SessionListing = "session.list" (SessionListParams) -> SessionList);
 method!(/// `session.resume`: loads the session into the daemon and attaches.
-    SessionResume = "session.resume" (SessionRef) -> Attached);
+    SessionResume = "session.resume" (ResumeParams) -> Attached);
+method!(/// `session.interrupt`: stops the session's running turn at its next
+    /// safe point (the partial turn is kept, marked interrupted).
+    SessionInterrupt = "session.interrupt" (SessionRef) -> Ack);
+method!(/// `session.resolve`: the session a `-r`/`-c` reference names.
+    SessionResolve = "session.resolve" (ResolveParams) -> SessionRef);
+method!(/// `session.fork`: a new session with the parent's active messages up
+    /// to `at_message_id`, the parent unchanged.
+    SessionFork = "session.fork" (ForkParams) -> SessionRef);
 method!(/// `session.compact`.
     SessionCompact = "session.compact" (CompactParams) -> Compacted);
 method!(/// `session.transcript`.

@@ -214,6 +214,35 @@ manage the queue, with 1-based indexes (`no queued item <n>` otherwise).
 Text typed during a turn with `busy.input_mode = "queue"` joins the same
 queue.
 
+## With a running gateway daemon
+
+When the home's gateway daemon runs (`prometheus daemon start`, see
+[the daemon and its client protocol](client-protocol.md)), `prometheus
+chat` attaches to it as a client instead of running the agent in this
+process: the daemon creates or resumes the session, runs its turns and
+owns the session store, so the session is visible to every other client
+while it runs. Without a daemon the chat runs in-process as above;
+`--in-process` insists on that, and exits 75 while a daemon holds the
+home. A profile the daemon does not serve cannot chat while it runs
+(exit 75; see `gateway.multiplex`).
+
+One-shot runs behave as they do in-process (the answer on stdout, the same
+`--json` document and exit statuses). The line interface shows
+`attached to the gateway daemon (pid <n>) · session <id>`; Ctrl+C
+interrupts the running turn, lines typed during a turn run after it,
+approval and clarify questions are answered at the prompt, and `/new`,
+`/fork`, `/compress` and `/exit` work over the connection. The other slash
+commands need the session in this process and say so. Flags that change
+the session's configuration in this process (`--set`, `--yolo`,
+`--approvals`, `--toolsets`, `--skills`, `--image` and the like) are
+refused by name while the daemon runs; `-m` and `--provider` are passed
+to the daemon.
+
+A session has one interactive owner at a time. Resuming a session that
+another chat has open prints `session <id> is open in another client (pid
+<n>)` and offers to follow it read-only or fork it at its last message (a
+one-shot run exits 75 instead).
+
 ## Themes
 
 `display.theme` picks `default`, `mono`, `daylight`, `slate` or a file

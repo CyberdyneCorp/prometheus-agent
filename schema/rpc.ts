@@ -173,13 +173,6 @@ export interface Envelope {
   session_id?: string | null;
 }
 
-export interface ErrorData {
-  code: string;
-  hint?: string | null;
-  kind: string;
-  path?: string | null;
-}
-
 /** `session.events.since` result. */
 export interface EventsSince {
   /** The daemon epoch; a different one than the client's means the daemon restarted and the client resets its watermark. */
@@ -200,6 +193,16 @@ export interface EventsSinceParams {
   last_seen: number;
   /** The session. */
   session_id: string;
+}
+
+/** `session.fork` params. */
+export interface ForkParams {
+  /** The last message the fork keeps (`msg_<ULID>`); default the session's last active message. */
+  at_message_id?: string | null;
+  /** The session to fork. */
+  session_id: string;
+  /** The fork's title; default `<parent title> #<n>`. */
+  title?: string | null;
 }
 
 /** `rpc.hello` params: the first request on every connection. */
@@ -268,6 +271,31 @@ export interface RequestResolved {
   id: string;
 }
 
+/** What `session.resolve` looks up. */
+export type ResolveKind = "resume" | "continue";
+
+/** `session.resolve` params: a chat's `-r`/`-c` reference. */
+export interface ResolveParams {
+  /** The client's working directory (scopes `-c` and `latest`). */
+  cwd?: string | null;
+  /** Resume or continue. */
+  kind: ResolveKind;
+  /** The profile; required only when the ticket grants several. */
+  profile?: string | null;
+  /** The reference (empty for a bare `-c`). */
+  reference: string;
+  /** The client terminal's identity (prefers the session last used from it for a bare `-c`). */
+  terminal?: string | null;
+}
+
+/** `session.resume` params. */
+export interface ResumeParams {
+  /** Become the session's interactive owner; fails with `-32004 session.in_use` naming the owner's pid while another connection is. */
+  exclusive?: boolean;
+  /** `ses_<ULID>`. */
+  session_id: string;
+}
+
 /** `secret.request` result. */
 export interface SecretAnswer {
   /** The value; `None` declines. */
@@ -298,8 +326,14 @@ export interface ServerCapabilities {
 export interface SessionCreateParams {
   /** The working directory of the session. */
   cwd?: string | null;
+  /** Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. */
+  exclusive?: boolean;
+  /** The model for this session (`[<provider>/]<model>` or an alias) instead of the profile's. */
+  model?: string | null;
   /** The profile; required only when the ticket grants several. */
   profile?: string | null;
+  /** The provider for this session instead of the profile's. */
+  provider?: string | null;
   /** A source tag recorded on the session. */
   source_tag?: string | null;
 }
@@ -380,16 +414,30 @@ export interface TranscriptMessage {
   text?: string | null;
 }
 
+/** Why a turn ended in error. */
+export interface TurnError {
+  /** The stable dotted error code. */
+  code: string;
+  /** The command that fixes it. */
+  hint?: string | null;
+  /** The error taxonomy kind (it fixes a CLI's exit status). */
+  kind: string;
+  /** One line. */
+  message: string;
+}
+
 /** `turn.finished` payload. */
 export interface TurnFinished {
   /** The error that ended the turn. */
-  error?: ErrorData | null;
+  error?: TurnError | null;
   /** The turn's exit reason (`completed`, `interrupted_by_user`, ...). */
   exit_reason: string;
   /** The final answer, when there is one. */
   final_response?: string | null;
   /** The turn. */
   turn_id: string;
+  /** The turn's token and cost totals, as the turn loop reports them. */
+  usage?: unknown;
 }
 
 /** A `<major>.<minor>` protocol version on the wire. */
@@ -411,8 +459,11 @@ export interface Methods {
   "session.create": { params: SessionCreateParams; result: SessionRef };
   "session.detach": { params: SessionRef; result: Ack };
   "session.events.since": { params: EventsSinceParams; result: EventsSince };
+  "session.fork": { params: ForkParams; result: SessionRef };
+  "session.interrupt": { params: SessionRef; result: Ack };
   "session.list": { params: SessionListParams; result: SessionList };
-  "session.resume": { params: SessionRef; result: Attached };
+  "session.resolve": { params: ResolveParams; result: SessionRef };
+  "session.resume": { params: ResumeParams; result: Attached };
   "session.transcript": { params: SessionRef; result: Transcript };
 }
 
