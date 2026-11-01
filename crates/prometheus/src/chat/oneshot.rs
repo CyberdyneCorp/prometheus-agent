@@ -129,6 +129,8 @@ async fn drive<F>(
 where
     F: std::future::Future<Output = Result<TurnResult, Error>>,
 {
+    // Before the turn is first polled: a signal is handled from its start.
+    let mut signals = super::signals::Signals::listen();
     let mut turn = std::pin::pin!(turn);
     let mut signal = None;
     let mut stopped = false;
@@ -136,7 +138,7 @@ where
     loop {
         tokio::select! {
             result = &mut turn => return (result, signal),
-            code = super::signals::next(), if signal.is_none() => {
+            code = signals.next(), if signal.is_none() => {
                 signal = Some(code);
                 interrupt.stop(Issuer::User);
             }

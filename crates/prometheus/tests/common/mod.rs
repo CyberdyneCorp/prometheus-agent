@@ -243,7 +243,9 @@ pub fn read_http_request(reader: &mut impl std::io::BufRead) -> Vec<u8> {
 
 /// Waits (at most 30 s) until a turn has started in the default profile:
 /// its `turn.start` event is in a trajectory file. Tests that signal a
-/// running one-shot turn wait on this instead of sleeping.
+/// running one-shot turn wait on this instead of sleeping. A finished
+/// session's trajectory is compressed (`.jsonl.zst`), so turns of runs that
+/// already ended are not counted.
 pub fn wait_for_turn_start(home: &Path) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while turns_started(home) == 0 {
