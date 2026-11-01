@@ -271,6 +271,17 @@ pub struct SwitchableModel {
     current: RwLock<(Target, Arc<ProviderModel>)>,
     session: std::sync::Mutex<SessionModel>,
     watch: std::sync::Mutex<Option<CredentialWatch>>,
+    /// The route a `/model --once` switch replaced, put back when the turn
+    /// that used the switch ends.
+    restore: std::sync::Mutex<Option<Restore>>,
+}
+
+/// The route to go back to after a `--once` turn.
+struct Restore {
+    route: (Target, Arc<ProviderModel>),
+    /// Set when a turn starts on the `--once` route: that turn's end
+    /// restores `route`, not the end of a turn already running.
+    used: bool,
 }
 
 impl SwitchableModel {
@@ -281,6 +292,7 @@ impl SwitchableModel {
             current: RwLock::new((target, model)),
             session: std::sync::Mutex::default(),
             watch: std::sync::Mutex::default(),
+            restore: std::sync::Mutex::default(),
         }
     }
 
@@ -297,9 +309,48 @@ impl SwitchableModel {
         self.read().0.clone()
     }
 
-    /// Serves `model` (for `target`) from the next call, keeping the
-    /// session's reasoning level.
+    /// Serves `model` (for `target`) from the next call until the session
+    /// switches again, keeping the session's reasoning level; a pending
+    /// `--once` switch is dropped.
     pub fn switch(&self, target: Target, model: Arc<ProviderModel>) {
+        *self.restore() = None;
+        self.replace(target, model);
+    }
+
+    /// Serves `model` (for `target`) for the next turn only: when that turn
+    /// ends, [`Self::end_turn`] puts back the route (and its reasoning
+    /// level) the session had before the first pending `--once` switch.
+    pub fn switch_once(&self, target: Target, model: Arc<ProviderModel>) {
+        let mut restore = self.restore();
+        if restore.is_none() {
+            let previous = self.read().clone();
+            *restore = Some(Restore {
+                route: previous,
+                used: false,
+            });
+        }
+        drop(restore);
+        self.replace(target, model);
+    }
+
+    /// Ends a turn: after a turn on a `--once` route, the session goes back
+    /// to the route it had before and its target is returned.
+    pub fn end_turn(&self) -> Option<Target> {
+        let mut restore = self.restore();
+        if !restore.as_ref().is_some_and(|r| r.used) {
+            return None;
+        }
+        let (target, model) = restore.take()?.route;
+        drop(restore);
+        *self.current.write().unwrap_or_else(PoisonError::into_inner) = (target.clone(), model);
+        Some(target)
+    }
+
+    fn restore(&self) -> std::sync::MutexGuard<'_, Option<Restore>> {
+        self.restore.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn replace(&self, target: Target, model: Arc<ProviderModel>) {
         model.set_reasoning(self.model().reasoning());
         if let Some(watch) = self
             .watch
@@ -349,6 +400,9 @@ impl ModelPort for SwitchableModel {
     }
 
     fn start_turn(&self) -> BoxFuture<'_, ()> {
+        if let Some(restore) = self.restore().as_mut() {
+            restore.used = true;
+        }
         let model = self.model();
         Box::pin(async move { model.start_turn().await })
     }

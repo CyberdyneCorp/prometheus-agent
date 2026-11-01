@@ -127,6 +127,13 @@ impl SessionModel {
         (choice.map(|c| c.target), reasoning)
     }
 
+    /// Whether the next turn uses a `--once` choice, after which the
+    /// session goes back to the route it had before.
+    #[must_use]
+    pub fn once_pending(&self) -> bool {
+        self.once.is_some()
+    }
+
     /// The session's reasoning level (`/reasoning <level>`).
     #[must_use]
     pub fn reasoning(&self) -> Option<ReasoningLevel> {

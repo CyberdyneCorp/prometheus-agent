@@ -66,6 +66,13 @@ impl Repl {
         let calls = self.end_progress();
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
+        if let Some(back) = live.model.end_turn() {
+            self.notice(&format!(
+                "model: back to {}/{}",
+                back.provider,
+                back.model.as_deref().unwrap_or("default")
+            ));
+        }
         self.spacer();
         self.live = Some(live);
     }

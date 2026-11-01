@@ -252,10 +252,11 @@ passes over them. Gemini also answers OpenAI-style requests: set
 
 `/model [<provider>/]<model> [--provider ID] [--reasoning LEVEL]
 [--once|--session|--global]` switches the model of a running session from
-its next turn: `--once` for one turn, `--session` (the default once a model
-is configured) until the session ends, `--global` also saves it as the
-profile default (the default on a profile without a model). The target is
-checked first; if it cannot be used the session keeps its route. Moving to
+its next turn: `--once` for one turn, after which the session goes back
+to the route and reasoning level it had before (`model: back to ...`),
+`--session` (the default once a model is configured) until the session
+ends, `--global` also saves it as the profile default (the default on a
+profile without a model). The target is checked first; if it cannot be used the session keeps its route. Moving to
 another model restarts the provider's prompt cache, which the notice says.
 
 ### Aliases

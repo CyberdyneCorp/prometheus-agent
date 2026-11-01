@@ -188,6 +188,7 @@ impl Repl {
         };
         let mut session = live.model.session();
         let text = crate::model_slash::model(&self.factory.scope, &mut session, &ctx, args).await?;
+        let once = session.once_pending();
         let (next, reasoning) = session.next_turn();
         if let Some(next) = next {
             let route = resolver
@@ -195,10 +196,18 @@ impl Repl {
                 .await?;
             let next = target_of(&route);
             let port = models.port(&next).await?;
-            self.factory
-                .store
-                .set_session_route(live.id, &next.provider, next.model.as_deref())?;
-            live.model.switch(next, port);
+            if once {
+                // The stored route stays the lasting one, so a resume
+                // after the `--once` turn is back on it.
+                live.model.switch_once(next, port);
+            } else {
+                self.factory.store.set_session_route(
+                    live.id,
+                    &next.provider,
+                    next.model.as_deref(),
+                )?;
+                live.model.switch(next, port);
+            }
         }
         live.model.set_session(session);
         if reasoning.is_some() {
