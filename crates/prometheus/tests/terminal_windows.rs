@@ -53,10 +53,11 @@ impl Fixture {
     fn terminal(&self, shell: &str, commands: &[String]) -> Vec<Value> {
         let mut script = String::new();
         for (step, command) in commands.iter().enumerate() {
-            let command = command.replace('\'', "''");
+            // A JSON string is also a TOML basic string.
+            let command = serde_json::to_string(command).unwrap();
             write!(
                 script,
-                "[[rule]]\nstep = {step}\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = {{ command = '{command}' }}\n\n"
+                "[[rule]]\nstep = {step}\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = {{ command = {command} }}\n\n"
             )
             .unwrap();
         }
