@@ -12,7 +12,7 @@ The system SHALL run at most one gateway daemon per Prometheus home, guarded by 
 #### Scenario: Second foreground daemon refused
 - **GIVEN** a gateway daemon is running for home `~/.prometheus` with pid 4242
 - **WHEN** the user runs `prometheus daemon run` against the same home
-- **THEN** the system SHALL exit with code 75 and print "gateway already running for ~/.prometheus (pid 4242)"
+- **THEN** the system SHALL exit with code 75 and print "gateway already running (pid 4242); attach with 'prometheus tui' or stop it with 'prometheus daemon stop'" (the message of workspace-architecture › One daemon per Prometheus home)
 
 #### Scenario: Idempotent start
 - **GIVEN** a gateway daemon is already running

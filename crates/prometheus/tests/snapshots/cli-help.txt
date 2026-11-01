@@ -29,6 +29,8 @@ Commands:
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
   update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon      Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  rpc         The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
   help        Print this message or the help of the given subcommand(s)
 

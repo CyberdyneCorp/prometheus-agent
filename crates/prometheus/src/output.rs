@@ -202,6 +202,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         schema: "prometheus.approvals_test.v1",
         command: "approvals test",
     },
+    JsonShape {
+        schema: "prometheus.daemon_status.v1",
+        command: "daemon status",
+    },
 ];
 
 /// Writes `value` as one compact JSON document and a newline.

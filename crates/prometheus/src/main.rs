@@ -99,6 +99,11 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
+        #[cfg(feature = "gateway")]
+        Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
+        #[cfg(not(feature = "gateway"))]
+        Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
+        Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),

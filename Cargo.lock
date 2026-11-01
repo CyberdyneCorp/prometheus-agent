@@ -1977,6 +1977,24 @@ version = "0.1.0"
 [[package]]
 name = "pmt-gateway"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-net",
+ "pmt-rpc",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "pmt-kanban"
@@ -2089,6 +2107,22 @@ dependencies = [
 [[package]]
 name = "pmt-pybridge"
 version = "0.1.0"
+
+[[package]]
+name = "pmt-rpc"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "pmt-core",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+]
 
 [[package]]
 name = "pmt-sandbox"
@@ -2305,10 +2339,12 @@ dependencies = [
  "pmt-backup",
  "pmt-config",
  "pmt-core",
+ "pmt-gateway",
  "pmt-memory",
  "pmt-net",
  "pmt-obs",
  "pmt-providers",
+ "pmt-rpc",
  "pmt-sandbox",
  "pmt-skills",
  "pmt-store",
@@ -4202,6 +4238,7 @@ dependencies = [
  "pmt-core",
  "pmt-net",
  "pmt-obs",
+ "pmt-rpc",
  "pmt-tools",
  "pmt-update",
  "proc-macro2",

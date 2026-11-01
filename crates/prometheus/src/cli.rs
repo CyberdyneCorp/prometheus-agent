@@ -206,6 +206,21 @@ pub enum Command {
     /// Update this install to its channel's newest signed release, check
     /// for one (exit 10 when available), change the channel, or roll back.
     Update(UpdateArgs),
+    /// Run, start, stop and inspect the gateway daemon that owns this
+    /// home's sessions (one per home; clients attach to it).
+    #[cfg(feature = "gateway")]
+    Daemon {
+        /// The daemon subcommand.
+        #[command(subcommand)]
+        command: crate::daemon_cmd::DaemonCommand,
+    },
+    /// The daemon's client protocol: `rpc schema` prints the schema this
+    /// binary speaks.
+    Rpc {
+        /// The rpc subcommand.
+        #[command(subcommand)]
+        command: crate::rpc_cmd::RpcCommand,
+    },
     /// Check this build against the home before an update installs it
     /// (run by `prometheus update` on the staged binary).
     #[command(hide = true)]
@@ -228,6 +243,10 @@ pub enum Command {
     #[cfg(not(feature = "gateway"))]
     #[command(hide = true)]
     Gateway(crate::surface::MissingArgs),
+    /// `daemon` (the gateway surface), left out of this build (exit 69).
+    #[cfg(not(feature = "gateway"))]
+    #[command(hide = true)]
+    Daemon(crate::surface::MissingArgs),
     /// `dashboard`, left out of this build (exit 69).
     #[cfg(not(feature = "dashboard"))]
     #[command(hide = true)]

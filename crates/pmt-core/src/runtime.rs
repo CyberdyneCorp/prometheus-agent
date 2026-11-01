@@ -234,6 +234,34 @@ impl WriterLock {
     pub fn record(&self) -> &RuntimeRecord {
         &self.record
     }
+
+    /// Rewrites this process's record with the fields of `extra` added
+    /// (the daemon's endpoint, once its listeners are bound); readers of a
+    /// plain [`RuntimeRecord`] ignore them.
+    ///
+    /// # Errors
+    ///
+    /// `home.io` when the record cannot be written.
+    ///
+    /// # Panics
+    ///
+    /// When `extra` does not serialize to a JSON object (a programming
+    /// error: every caller passes a struct).
+    pub fn publish(&self, extra: &impl Serialize) -> Result<(), Error> {
+        let mut fields = serde_json::to_value(&self.record).expect("a record always serializes");
+        let serde_json::Value::Object(extra) =
+            serde_json::to_value(extra).expect("extra fields serialize")
+        else {
+            panic!("published record fields must be a JSON object");
+        };
+        if let serde_json::Value::Object(fields) = &mut fields {
+            fields.extend(extra);
+        }
+        let path = run_dir(&self.home).join(self.record.role.record_file());
+        let json = serde_json::to_vec_pretty(&fields).expect("a JSON value always serializes");
+        private_fs::write_atomic(&path, &json)
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot access", &path, &e))
+    }
 }
 
 impl Drop for WriterLock {
@@ -350,6 +378,20 @@ mod tests {
         assert_eq!(record.liveness(), Liveness::Alive);
         drop(lock);
         assert_eq!(read_record(home.path(), Role::Daemon).unwrap(), None);
+    }
+
+    #[test]
+    fn published_fields_extend_the_record_readers_still_parse() {
+        let home = tempfile::tempdir().unwrap();
+        let lock = WriterLock::acquire(home.path(), Role::Daemon, vec![]).unwrap();
+        lock.publish(&serde_json::json!({"rpc_url": "ws://127.0.0.1:1/"}))
+            .unwrap();
+        let raw = std::fs::read(run_dir(home.path()).join("gateway.json")).unwrap();
+        let raw: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(raw["rpc_url"], "ws://127.0.0.1:1/");
+        assert_eq!(raw["pid"], std::process::id());
+        let record = live_record(home.path(), Role::Daemon).unwrap().unwrap();
+        assert_eq!(&record, lock.record());
     }
 
     #[test]

@@ -20,6 +20,8 @@ pmt-memory = { path = "crates/pmt-memory" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
 pmt-providers = { path = "crates/pmt-providers" }
+pmt-rpc = { path = "crates/pmt-rpc" }
+pmt-gateway = { path = "crates/pmt-gateway" }
 pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-skills = { path = "crates/pmt-skills" }
 pmt-store = { path = "crates/pmt-store" }

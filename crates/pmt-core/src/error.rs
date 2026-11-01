@@ -779,6 +779,60 @@ error_codes! {
     /// A runtime store file could not be read or written.
     RUNTIME_IO = ("runtime.io", Io,
         "A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed.");
+    /// A client frame is not JSON (JSON-RPC -32700).
+    RPC_PARSE = ("rpc.parse", InvalidInput,
+        "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");
+    /// A frame is JSON but not a JSON-RPC 2.0 request (-32600).
+    RPC_INVALID_REQUEST = ("rpc.invalid_request", InvalidInput,
+        "A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`).");
+    /// The method is not in the catalog (-32601).
+    RPC_UNKNOWN_METHOD = ("rpc.unknown_method", NotFound,
+        "The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`.");
+    /// Params name a field the method does not declare (-32602).
+    RPC_UNKNOWN_FIELD = ("rpc.unknown_field", InvalidInput,
+        "The params name a field the method's contract does not declare; `data.path` is its JSON pointer (JSON-RPC `-32602`).");
+    /// Params miss a field or have the wrong type (-32602).
+    RPC_INVALID_PARAMS = ("rpc.invalid_params", InvalidInput,
+        "The params are not an object, miss a required field or have a value of the wrong type; `data.path` points at it (JSON-RPC `-32602`).");
+    /// A request came before `rpc.hello`.
+    RPC_HANDSHAKE_REQUIRED = ("rpc.handshake_required", Protocol,
+        "The first request on a connection must be `rpc.hello`.");
+    /// Client and daemon speak different protocol majors.
+    RPC_PROTOCOL_MISMATCH = ("rpc.protocol_mismatch", Protocol,
+        "The client and the daemon speak different major versions of the client protocol; update the older side (`prometheus update`).");
+    /// The method is declared by a capability this build does not serve yet.
+    RPC_NOT_SERVED = ("rpc.not_served", Unavailable,
+        "The method is declared in the RPC catalog by a capability this daemon does not serve yet.");
+    /// The daemon produced a result or payload that breaks its contract.
+    RPC_CONTRACT_VIOLATION = ("rpc.contract_violation", Internal,
+        "The daemon produced a result or event payload that does not match its contract (a bug; it is logged and counted in `prometheus.rpc.contract_violations`).");
+    /// A server-to-client request is no longer open.
+    RPC_REQUEST_CLOSED = ("rpc.request_closed", NotFound,
+        "The answered server-to-client request is not open any more (answered elsewhere, timed out or cancelled); the answer was dropped.");
+    /// The daemon is restarting and accepts no new work.
+    RPC_RETIRING = ("rpc.retiring", Unavailable,
+        "The daemon is restarting and refuses new work; reconnect to continue.");
+    /// A session is not visible to, or not attached by, the connection.
+    RPC_SESSION_DENIED = ("rpc.session_denied", PermissionDenied,
+        "The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere.");
+    /// The connection to the daemon failed or closed.
+    RPC_CONNECTION = ("rpc.connection", Unavailable,
+        "The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message).");
+    /// No ticket, an unknown, expired or reused one, or a bad request on the control channel.
+    RPC_TICKET = ("rpc.ticket", Auth,
+        "The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`).");
+    /// No daemon runs for the home.
+    DAEMON_NOT_RUNNING = ("daemon.not_running", Unavailable,
+        "No gateway daemon runs for this home; start it with `prometheus daemon start`.");
+    /// The daemon did not become ready.
+    DAEMON_START_FAILED = ("daemon.start_failed", Unavailable,
+        "`prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message.");
+    /// No profile of the home can be served.
+    DAEMON_NO_PROFILE = ("daemon.no_profile", Config,
+        "Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve.");
+    /// A turn is already running in the session.
+    SESSION_BUSY = ("session.busy", Conflict,
+        "The session is running a turn; submit again when it finishes.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

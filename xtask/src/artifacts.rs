@@ -55,7 +55,30 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: system_prompt_reference(),
         },
     ]
+    .into_iter()
+    .chain(rpc_artifacts(pmt_rpc::Catalog::builtin()))
+    .collect()
 }
+
+/// `schema/rpc.json` and its TypeScript bindings, rendered from `catalog`.
+pub(crate) fn rpc_artifacts(catalog: &pmt_rpc::Catalog) -> [Artifact; 2] {
+    let schema = catalog.schema();
+    [
+        Artifact {
+            path: RPC_SCHEMA,
+            contents: pretty_schema(&schema),
+        },
+        Artifact {
+            path: RPC_BINDINGS,
+            contents: pmt_rpc::typescript::render(&schema),
+        },
+    ]
+}
+
+/// The client protocol schema.
+pub(crate) const RPC_SCHEMA: &str = "schema/rpc.json";
+/// Its TypeScript bindings, for the dashboard and the desktop app.
+pub(crate) const RPC_BINDINGS: &str = "schema/rpc.ts";
 
 /// The generated list of tool names that documentation links to.
 pub(crate) const TOOLS_REFERENCE: &str = "docs/reference/tools.md";

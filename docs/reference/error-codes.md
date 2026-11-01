@@ -258,3 +258,21 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `runtime.not_installed` | `unavailable` | 69 | The runtime is not in the store and `runtimes.allow_lazy_install = false`; install it with `prometheus runtimes install <name>`. |
 | `runtime.declined` | `cancelled` | 130 | The install prompt was answered no; nothing was downloaded. |
 | `runtime.io` | `io` | 74 | A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed. |
+| `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
+| `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
+| `rpc.unknown_method` | `not_found` | 66 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |
+| `rpc.unknown_field` | `invalid_input` | 65 | The params name a field the method's contract does not declare; `data.path` is its JSON pointer (JSON-RPC `-32602`). |
+| `rpc.invalid_params` | `invalid_input` | 65 | The params are not an object, miss a required field or have a value of the wrong type; `data.path` points at it (JSON-RPC `-32602`). |
+| `rpc.handshake_required` | `protocol` | 76 | The first request on a connection must be `rpc.hello`. |
+| `rpc.protocol_mismatch` | `protocol` | 76 | The client and the daemon speak different major versions of the client protocol; update the older side (`prometheus update`). |
+| `rpc.not_served` | `unavailable` | 69 | The method is declared in the RPC catalog by a capability this daemon does not serve yet. |
+| `rpc.contract_violation` | `internal` | 70 | The daemon produced a result or event payload that does not match its contract (a bug; it is logged and counted in `prometheus.rpc.contract_violations`). |
+| `rpc.request_closed` | `not_found` | 66 | The answered server-to-client request is not open any more (answered elsewhere, timed out or cancelled); the answer was dropped. |
+| `rpc.retiring` | `unavailable` | 69 | The daemon is restarting and refuses new work; reconnect to continue. |
+| `rpc.session_denied` | `permission_denied` | 77 | The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere. |
+| `rpc.connection` | `unavailable` | 69 | The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message). |
+| `rpc.ticket` | `auth` | 78 | The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`). |
+| `daemon.not_running` | `unavailable` | 69 | No gateway daemon runs for this home; start it with `prometheus daemon start`. |
+| `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
+| `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |
+| `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |

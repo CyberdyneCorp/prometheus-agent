@@ -19,6 +19,7 @@ pmt-agent.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-obs.workspace = true
+pmt-rpc.workspace = true
 prometheus.workspace = true
 pmt-tools.workspace = true
 pmt-update.workspace = true

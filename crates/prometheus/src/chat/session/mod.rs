@@ -307,6 +307,21 @@ impl Factory {
         id: SessionId,
         target: &pmt_providers::resolve::Target,
     ) -> Result<Live, Error> {
+        self.open_with(id, target, None).await
+    }
+
+    /// Like [`Factory::open`], also sending every trajectory event to
+    /// `clients` (a daemon session's attached clients).
+    ///
+    /// # Errors
+    ///
+    /// As [`Factory::open`].
+    pub async fn open_with(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        clients: Option<Arc<dyn EventSink>>,
+    ) -> Result<Live, Error> {
         let scope = &self.scope;
         let config = scope.config();
         let interactive = self.options.interactive;
@@ -361,9 +376,12 @@ impl Factory {
             Arc::clone(&tool_port) as _,
             prompt,
         );
-        let events = trajectory
+        let mut events = trajectory
             .clone()
             .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
+        if let Some(clients) = clients {
+            events = Arc::new(progress::Both(events, clients));
+        }
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
         setup.events = Arc::new(tee);

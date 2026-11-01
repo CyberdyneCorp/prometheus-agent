@@ -14,6 +14,8 @@ pub mod chat;
 pub mod cli;
 pub mod config_cmd;
 pub mod context;
+#[cfg(feature = "gateway")]
+pub mod daemon_cmd;
 pub mod debug_cmd;
 pub mod demo_cmd;
 pub mod doctor_cmd;
@@ -27,6 +29,7 @@ pub mod output;
 pub mod profile_cmd;
 pub mod prompt;
 pub mod prompt_cmd;
+pub mod rpc_cmd;
 pub mod runtimes_cmd;
 pub mod secrets_cmd;
 pub mod self_test_cmd;

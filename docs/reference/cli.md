@@ -36,6 +36,8 @@ Commands:
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
   update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon      Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  rpc         The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
   help        Print this message or the help of the given subcommand(s)
 
@@ -7347,6 +7349,417 @@ Options:
           Print help
 ```
 
+## `prometheus daemon`
+
+```text
+Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+
+Usage: prometheus daemon [OPTIONS] <COMMAND>
+
+Commands:
+  run      Run the daemon in the foreground (what `start` launches)
+  start    Start the daemon in the background; does nothing when it runs
+  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop     Stop the daemon after its running turns finish
+  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status   Print the daemon's process state
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon run`
+
+```text
+Run the daemon in the foreground (what `start` launches)
+
+Usage: prometheus daemon run [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon start`
+
+```text
+Start the daemon in the background; does nothing when it runs
+
+Usage: prometheus daemon start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon ensure`
+
+```text
+Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+
+Usage: prometheus daemon ensure [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon stop`
+
+```text
+Stop the daemon after its running turns finish
+
+Usage: prometheus daemon stop [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon restart`
+
+```text
+Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+
+Usage: prometheus daemon restart [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon status`
+
+```text
+Print the daemon's process state
+
+Usage: prometheus daemon status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus daemon help [COMMAND]
+
+Commands:
+  run      Run the daemon in the foreground (what `start` launches)
+  start    Start the daemon in the background; does nothing when it runs
+  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop     Stop the daemon after its running turns finish
+  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status   Print the daemon's process state
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus daemon help run`
+
+```text
+Run the daemon in the foreground (what `start` launches)
+
+Usage: prometheus daemon help run
+```
+
+## `prometheus daemon help start`
+
+```text
+Start the daemon in the background; does nothing when it runs
+
+Usage: prometheus daemon help start
+```
+
+## `prometheus daemon help ensure`
+
+```text
+Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+
+Usage: prometheus daemon help ensure
+```
+
+## `prometheus daemon help stop`
+
+```text
+Stop the daemon after its running turns finish
+
+Usage: prometheus daemon help stop
+```
+
+## `prometheus daemon help restart`
+
+```text
+Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+
+Usage: prometheus daemon help restart
+```
+
+## `prometheus daemon help status`
+
+```text
+Print the daemon's process state
+
+Usage: prometheus daemon help status
+```
+
+## `prometheus daemon help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus daemon help help
+```
+
+## `prometheus rpc`
+
+```text
+The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+
+Usage: prometheus rpc [OPTIONS] <COMMAND>
+
+Commands:
+  schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc schema`
+
+```text
+Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+
+Usage: prometheus rpc schema [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus rpc help [COMMAND]
+
+Commands:
+  schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus rpc help schema`
+
+```text
+Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+
+Usage: prometheus rpc help schema
+```
+
+## `prometheus rpc help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus rpc help help
+```
+
 ## `prometheus self-test`
 
 ```text
@@ -8007,6 +8420,8 @@ Commands:
   toolsets    List toolsets and show the tools a toolset resolves to
   approvals   Check how the approval gate treats a command, without running it
   update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon      Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  rpc         The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
   help        Print this message or the help of the given subcommand(s)
 ```
@@ -9276,6 +9691,89 @@ Update this install to its channel's newest signed release, check for one (exit 
 Usage: prometheus help update
 ```
 
+## `prometheus help daemon`
+
+```text
+Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+
+Usage: prometheus help daemon [COMMAND]
+
+Commands:
+  run      Run the daemon in the foreground (what `start` launches)
+  start    Start the daemon in the background; does nothing when it runs
+  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop     Stop the daemon after its running turns finish
+  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status   Print the daemon's process state
+```
+
+## `prometheus help daemon run`
+
+```text
+Run the daemon in the foreground (what `start` launches)
+
+Usage: prometheus help daemon run
+```
+
+## `prometheus help daemon start`
+
+```text
+Start the daemon in the background; does nothing when it runs
+
+Usage: prometheus help daemon start
+```
+
+## `prometheus help daemon ensure`
+
+```text
+Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+
+Usage: prometheus help daemon ensure
+```
+
+## `prometheus help daemon stop`
+
+```text
+Stop the daemon after its running turns finish
+
+Usage: prometheus help daemon stop
+```
+
+## `prometheus help daemon restart`
+
+```text
+Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+
+Usage: prometheus help daemon restart
+```
+
+## `prometheus help daemon status`
+
+```text
+Print the daemon's process state
+
+Usage: prometheus help daemon status
+```
+
+## `prometheus help rpc`
+
+```text
+The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+
+Usage: prometheus help rpc [COMMAND]
+
+Commands:
+  schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+```
+
+## `prometheus help rpc schema`
+
+```text
+Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+
+Usage: prometheus help rpc schema
+```
+
 ## `prometheus help self-test`
 
 ```text
@@ -9452,3 +9950,4 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.toolsets.v1` | `prometheus toolsets list` |
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
+| `prometheus.daemon_status.v1` | `prometheus daemon status` |

@@ -16,11 +16,13 @@
 //!   refer to (`pmt-tools`); links to it from any page under `docs/` must
 //!   name a listed tool (both `gen` and `gen --check` refuse others)
 //!
+//! - `schema/rpc.json` and `schema/rpc.ts`: the client protocol's typed
+//!   catalog (`pmt-rpc`) and its TypeScript bindings for the frontends
+//!
 //! `cargo xtask gen --check` writes nothing and exits 1 naming every stale
 //! file, and also fails on any file in `docs/reference/` it does not
 //! generate, so the documentation site's reference pages are generated
-//! only. The RPC schema `schema/rpc.json` and its TypeScript bindings join
-//! this list when the RPC catalog lands in M2 (tasks group 22).
+//! only.
 //!
 //! `cargo xtask health` enforces the complexity and unsafe-code ratchet
 //! described in `health.toml`.
@@ -206,8 +208,9 @@ fn check_all(root: &Path, artifacts: &[Artifact]) -> Result<(), String> {
         eprintln!("stale: {path}");
     }
     Err(format!(
-        "{} generated file(s) differ from a fresh generation; run `cargo xtask gen`",
-        stale.len()
+        "{} generated file(s) differ from a fresh generation ({}); run `cargo xtask gen`",
+        stale.len(),
+        stale.join(", ")
     ))
 }
 
@@ -235,6 +238,38 @@ mod tests {
         std::fs::write(dir.join("b.md"), "hand edit\n").unwrap();
         let err = check_all(&dir, &artifacts).unwrap_err();
         assert!(err.starts_with("1 generated file(s)"), "{err}");
+    }
+
+    /// A param type change made without regenerating (spec:
+    /// workspace-architecture, Stale generated bindings).
+    #[test]
+    fn a_changed_param_type_without_regenerating_names_each_stale_file() {
+        use pmt_rpc::Catalog;
+        use pmt_rpc::catalog::{INDEX, declare_builtin};
+
+        struct Changed;
+        impl pmt_rpc::contracts::Method for Changed {
+            const NAME: &'static str = "worktree.new";
+            type Params = pmt_rpc::contracts::SessionRef;
+            type Result = pmt_rpc::contracts::Ack;
+        }
+        let dir = repo_root().join("target/xtask-test/rpc-stale");
+        let _ = std::fs::remove_dir_all(&dir);
+        let checked_in = crate::artifacts::rpc_artifacts(Catalog::builtin());
+        write_all(&dir, &checked_in).unwrap();
+        assert!(check_all(&dir, &checked_in).is_ok());
+        let changed = Catalog::build(Catalog::builtin().protocol(), INDEX, |d| {
+            declare_builtin(d);
+            d.method::<Changed>();
+        })
+        .unwrap();
+        let err = check_all(&dir, &crate::artifacts::rpc_artifacts(&changed)).unwrap_err();
+        assert!(
+            err.contains("2 generated file(s)")
+                && err.contains("schema/rpc.json")
+                && err.contains("schema/rpc.ts"),
+            "{err}"
+        );
     }
 
     #[test]

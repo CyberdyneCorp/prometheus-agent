@@ -1,0 +1,1665 @@
+{
+  "$defs": {
+    "Ack": {
+      "additionalProperties": false,
+      "description": "`{\"ok\": true}`.",
+      "properties": {
+        "ok": {
+          "description": "Always true.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    },
+    "ApprovalAnswer": {
+      "additionalProperties": false,
+      "description": "The answer to `approval.request` (also `approval.respond` params,\nwith its `id`).",
+      "properties": {
+        "accepted_hunks": {
+          "default": null,
+          "description": "For a diff approval: the hunks accepted.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "decision": {
+          "$ref": "#/$defs/Decision",
+          "description": "The decision."
+        },
+        "replacement": {
+          "default": null,
+          "description": "An edited command to run instead.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "decision"
+      ],
+      "type": "object"
+    },
+    "ApprovalFinding": {
+      "additionalProperties": false,
+      "description": "Why a call needs approval.",
+      "properties": {
+        "detector": {
+          "description": "The detector (`dangerous-pattern`, `protected-file`, ...).",
+          "type": "string"
+        },
+        "fragment": {
+          "description": "The offending part, invisible characters escaped.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "What it found.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "detector",
+        "reason",
+        "fragment"
+      ],
+      "type": "object"
+    },
+    "ApprovalRequestParams": {
+      "additionalProperties": false,
+      "description": "`approval.request` params.",
+      "properties": {
+        "call_id": {
+          "description": "The model's call id.",
+          "type": "string"
+        },
+        "findings": {
+          "description": "Why approval is needed.",
+          "items": {
+            "$ref": "#/$defs/ApprovalFinding"
+          },
+          "type": "array"
+        },
+        "remember": {
+          "description": "What `session` and `always` record.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "The command line or written path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "description": "The tool called.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "tool",
+        "call_id",
+        "findings"
+      ],
+      "type": "object"
+    },
+    "ApprovalRespondParams": {
+      "additionalProperties": false,
+      "description": "`approval.respond` params.",
+      "properties": {
+        "accepted_hunks": {
+          "default": null,
+          "description": "For a diff approval: the hunks accepted.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "decision": {
+          "$ref": "#/$defs/Decision",
+          "description": "The decision."
+        },
+        "id": {
+          "description": "The `approval.request` id (`srq-<12 hex>`).",
+          "type": "string"
+        },
+        "replacement": {
+          "default": null,
+          "description": "An edited command to run instead.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "decision"
+      ],
+      "type": "object"
+    },
+    "Attached": {
+      "additionalProperties": false,
+      "description": "`session.attach` / `session.resume` result.",
+      "properties": {
+        "epoch": {
+          "description": "The daemon epoch the sequence numbers belong to.",
+          "type": "string"
+        },
+        "latest_seq": {
+          "description": "The newest event sequence number kept for it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "latest_seq",
+        "epoch"
+      ],
+      "type": "object"
+    },
+    "ClarifyAnswers": {
+      "additionalProperties": false,
+      "description": "`clarify.request` result.",
+      "properties": {
+        "answers": {
+          "description": "One answer per question, as the `clarify` tool defines them.",
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "answers"
+      ],
+      "type": "object"
+    },
+    "ClarifyRequestParams": {
+      "additionalProperties": false,
+      "description": "`clarify.request` params.",
+      "properties": {
+        "allow_other": {
+          "description": "Surfaces render a free-text `Other` option.",
+          "type": "boolean"
+        },
+        "questions": {
+          "description": "The questions, as the `clarify` tool defines them.",
+          "items": true,
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "questions",
+        "allow_other"
+      ],
+      "type": "object"
+    },
+    "ClientCapabilities": {
+      "additionalProperties": false,
+      "description": "What the client can handle.",
+      "properties": {
+        "events": {
+          "default": [],
+          "description": "Events introduced after the client's minor version that it\nunderstands anyway.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "server_requests": {
+          "default": false,
+          "description": "The client answers server-to-client requests (approvals, clarify,\nsecrets, sudo). Without it they resolve unanswered at once.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ClientKind": {
+      "description": "Which client is attaching.",
+      "oneOf": [
+        {
+          "const": "cli",
+          "description": "`prometheus chat` attached to the daemon.",
+          "type": "string"
+        },
+        {
+          "const": "tui",
+          "description": "`prometheus tui`.",
+          "type": "string"
+        },
+        {
+          "const": "desktop",
+          "description": "The desktop app.",
+          "type": "string"
+        },
+        {
+          "const": "dashboard",
+          "description": "The web dashboard.",
+          "type": "string"
+        },
+        {
+          "const": "acp",
+          "description": "The ACP adapter.",
+          "type": "string"
+        },
+        {
+          "const": "eval",
+          "description": "`prometheus eval`.",
+          "type": "string"
+        }
+      ]
+    },
+    "CompactParams": {
+      "additionalProperties": false,
+      "description": "`session.compact` params.",
+      "properties": {
+        "focus": {
+          "default": null,
+          "description": "What the summary should keep in focus.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "Compacted": {
+      "additionalProperties": false,
+      "description": "`session.compact` result.",
+      "properties": {
+        "status": {
+          "description": "How the compaction ended.",
+          "type": "string"
+        },
+        "tokens_after": {
+          "description": "Context tokens after.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tokens_before": {
+          "description": "Context tokens before.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "tokens_before",
+        "tokens_after"
+      ],
+      "type": "object"
+    },
+    "ContextUsage": {
+      "additionalProperties": false,
+      "description": "`session.context_usage` result.",
+      "properties": {
+        "context_window": {
+          "description": "The model's context window, when known.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tokens": {
+          "description": "Estimated tokens of the active context.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "type": "object"
+    },
+    "Decision": {
+      "description": "An approval answer.",
+      "oneOf": [
+        {
+          "const": "once",
+          "description": "Allow this call.",
+          "type": "string"
+        },
+        {
+          "const": "session",
+          "description": "Allow matching calls for the rest of the session.",
+          "type": "string"
+        },
+        {
+          "const": "always",
+          "description": "Allow matching calls from now on (recorded in `grants.toml`).",
+          "type": "string"
+        },
+        {
+          "const": "deny",
+          "description": "Refuse.",
+          "type": "string"
+        }
+      ]
+    },
+    "Empty": {
+      "additionalProperties": false,
+      "description": "No params.",
+      "type": "object"
+    },
+    "Envelope": {
+      "additionalProperties": false,
+      "description": "One event frame: the notification params and the replay item.",
+      "properties": {
+        "data": {
+          "description": "The payload, as the event's contract defines it."
+        },
+        "epoch": {
+          "description": "The daemon epoch.",
+          "type": "string"
+        },
+        "event": {
+          "description": "The event name.",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Per-session monotonic sequence number (per daemon for daemon-wide\nevents).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session it belongs to; `None` for daemon-wide events.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "event",
+        "seq",
+        "epoch",
+        "data"
+      ],
+      "type": "object"
+    },
+    "ErrorData": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "code"
+      ],
+      "type": "object"
+    },
+    "EventsSince": {
+      "additionalProperties": false,
+      "description": "`session.events.since` result.",
+      "properties": {
+        "epoch": {
+          "description": "The daemon epoch; a different one than the client's means the\ndaemon restarted and the client resets its watermark.",
+          "type": "string"
+        },
+        "events": {
+          "description": "The kept events after `last_seen`, oldest first.",
+          "items": {
+            "$ref": "#/$defs/Envelope"
+          },
+          "type": "array"
+        },
+        "latest_seq": {
+          "description": "The newest sequence number of the session.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open_requests": {
+          "description": "Requests of the session still waiting for an answer.",
+          "items": {
+            "$ref": "#/$defs/OpenRequest"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "description": "Events after `last_seen` were evicted.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "events",
+        "latest_seq",
+        "truncated",
+        "epoch",
+        "open_requests"
+      ],
+      "type": "object"
+    },
+    "EventsSinceParams": {
+      "additionalProperties": false,
+      "description": "`session.events.since` params.",
+      "properties": {
+        "last_seen": {
+          "description": "The last sequence number the client saw (0 for none).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "last_seen"
+      ],
+      "type": "object"
+    },
+    "HelloParams": {
+      "additionalProperties": false,
+      "description": "`rpc.hello` params: the first request on every connection.",
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/ClientCapabilities",
+          "default": {
+            "events": [],
+            "server_requests": false
+          },
+          "description": "What it can handle."
+        },
+        "client": {
+          "$ref": "#/$defs/ClientKind",
+          "description": "The attaching client."
+        },
+        "client_version": {
+          "description": "Its version.",
+          "type": "string"
+        },
+        "protocol": {
+          "$ref": "#/$defs/Version",
+          "description": "The protocol it speaks."
+        }
+      },
+      "required": [
+        "client",
+        "client_version",
+        "protocol"
+      ],
+      "type": "object"
+    },
+    "HelloResult": {
+      "additionalProperties": false,
+      "description": "`rpc.hello` result.",
+      "properties": {
+        "build_id": {
+          "description": "The daemon's build id; a client with another one shows the\nstale-build notice.",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/ServerCapabilities",
+          "description": "What the daemon serves."
+        },
+        "epoch": {
+          "description": "Random per daemon start; event sequence numbers restart with it.",
+          "type": "string"
+        },
+        "instance_id": {
+          "description": "Random per daemon start; tickets are bound to it.",
+          "type": "string"
+        },
+        "methods_digest": {
+          "description": "Hash of the daemon's `schema/rpc.json`.",
+          "type": "string"
+        },
+        "platform_support": {
+          "$ref": "#/$defs/PlatformSupport",
+          "description": "The daemon's target and tier."
+        },
+        "profiles": {
+          "description": "The profiles the connection's ticket grants.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "protocol": {
+          "$ref": "#/$defs/Version",
+          "description": "The protocol the daemon speaks."
+        },
+        "server_version": {
+          "description": "The daemon's semantic version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server_version",
+        "build_id",
+        "instance_id",
+        "epoch",
+        "protocol",
+        "profiles",
+        "methods_digest",
+        "capabilities",
+        "platform_support"
+      ],
+      "type": "object"
+    },
+    "OpenRequest": {
+      "additionalProperties": false,
+      "description": "A server-to-client request still waiting for an answer.",
+      "properties": {
+        "id": {
+          "description": "`srq-<12 hex>`.",
+          "type": "string"
+        },
+        "method": {
+          "description": "The request name (`approval.request`, ...).",
+          "type": "string"
+        },
+        "params": {
+          "description": "Its params."
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "PlatformSupport": {
+      "additionalProperties": false,
+      "description": "The daemon's build target and its support tier.",
+      "properties": {
+        "target": {
+          "description": "The Rust target triple.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "`tier1`, `tier2` or `unsupported`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "tier"
+      ],
+      "type": "object"
+    },
+    "RequestCancel": {
+      "additionalProperties": false,
+      "description": "`request.cancel` payload: a server request timed out or was cancelled.",
+      "properties": {
+        "id": {
+          "description": "`srq-<12 hex>`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "`timeout` or `cancelled`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "RequestResolved": {
+      "additionalProperties": false,
+      "description": "`request.resolved` payload: another client answered.",
+      "properties": {
+        "id": {
+          "description": "`srq-<12 hex>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "SecretAnswer": {
+      "additionalProperties": false,
+      "description": "`secret.request` result.",
+      "properties": {
+        "value": {
+          "description": "The value; `None` declines.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SecretRequestParams": {
+      "additionalProperties": false,
+      "description": "`secret.request` params.",
+      "properties": {
+        "name": {
+          "description": "The secret's name.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it is needed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ServerCapabilities": {
+      "additionalProperties": false,
+      "description": "What the daemon serves.",
+      "properties": {
+        "events": {
+          "description": "The events it may send this client.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "methods": {
+          "description": "The methods with a handler (the rest of the catalog answers\n`rpc.not_served`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "server_requests": {
+          "description": "The server-to-client requests it may send.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "methods",
+        "server_requests",
+        "events"
+      ],
+      "type": "object"
+    },
+    "SessionCreateParams": {
+      "additionalProperties": false,
+      "description": "`session.create` params.",
+      "properties": {
+        "cwd": {
+          "default": null,
+          "description": "The working directory of the session.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile; required only when the ticket grants several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_tag": {
+          "default": null,
+          "description": "A source tag recorded on the session.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SessionList": {
+      "additionalProperties": false,
+      "description": "`session.list` result.",
+      "properties": {
+        "sessions": {
+          "description": "The sessions.",
+          "items": {
+            "$ref": "#/$defs/SessionSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessions"
+      ],
+      "type": "object"
+    },
+    "SessionListParams": {
+      "additionalProperties": false,
+      "description": "`session.list` params.",
+      "properties": {
+        "limit": {
+          "default": null,
+          "description": "At most this many, newest activity first (default 50).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile; required only when the ticket grants several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SessionRef": {
+      "additionalProperties": false,
+      "description": "A session named by id.",
+      "properties": {
+        "session_id": {
+          "description": "`ses_<ULID>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "SessionSummary": {
+      "additionalProperties": false,
+      "description": "One listed session.",
+      "properties": {
+        "live": {
+          "description": "Whether a turn is running in the daemon.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "`ses_<ULID>`.",
+          "type": "string"
+        },
+        "started_at": {
+          "description": "When it started (RFC 3339).",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title, when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "started_at",
+        "live"
+      ],
+      "type": "object"
+    },
+    "SubmitParams": {
+      "additionalProperties": false,
+      "description": "`prompt.submit` params.",
+      "properties": {
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The prompt.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "Submitted": {
+      "additionalProperties": false,
+      "description": "`prompt.submit` result: the turn started; its output arrives as events.",
+      "properties": {
+        "turn_id": {
+          "description": "The turn.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turn_id"
+      ],
+      "type": "object"
+    },
+    "SudoAnswer": {
+      "additionalProperties": false,
+      "description": "`sudo.request` result.",
+      "properties": {
+        "password": {
+          "description": "The password; `None` declines.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SudoRequestParams": {
+      "additionalProperties": false,
+      "description": "`sudo.request` params.",
+      "properties": {
+        "command": {
+          "description": "The command that needs the password.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "command"
+      ],
+      "type": "object"
+    },
+    "Transcript": {
+      "additionalProperties": false,
+      "description": "`session.transcript` result.",
+      "properties": {
+        "messages": {
+          "description": "The active messages, oldest first.",
+          "items": {
+            "$ref": "#/$defs/TranscriptMessage"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "messages"
+      ],
+      "type": "object"
+    },
+    "TranscriptMessage": {
+      "additionalProperties": false,
+      "description": "One message of a transcript.",
+      "properties": {
+        "id": {
+          "description": "`msg_<ULID>`.",
+          "type": "string"
+        },
+        "role": {
+          "description": "`user`, `assistant`, `tool` or `system`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its text, when it has any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "role"
+      ],
+      "type": "object"
+    },
+    "TurnFinished": {
+      "additionalProperties": false,
+      "description": "`turn.finished` payload.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorData"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The error that ended the turn."
+        },
+        "exit_reason": {
+          "description": "The turn's exit reason (`completed`, `interrupted_by_user`, ...).",
+          "type": "string"
+        },
+        "final_response": {
+          "description": "The final answer, when there is one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "turn_id": {
+          "description": "The turn.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "turn_id",
+        "exit_reason"
+      ],
+      "type": "object"
+    },
+    "Version": {
+      "additionalProperties": false,
+      "description": "A `<major>.<minor>` protocol version on the wire.",
+      "properties": {
+        "major": {
+          "description": "Incompatible revisions.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "minor": {
+          "description": "Backward-compatible additions.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "major",
+        "minor"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "close_codes": {
+    "1000": "normal",
+    "1001": "shutting_down",
+    "1011": "internal",
+    "4401": "bad_credential",
+    "4403": "not_allowed",
+    "4404": "endpoint_disabled",
+    "4408": "heartbeat_timeout",
+    "4410": "session_ended",
+    "4413": "frame_too_large",
+    "4426": "protocol_unsupported"
+  },
+  "error_codes": {
+    "-32001": "auth",
+    "-32002": "permission_denied",
+    "-32003": "not_found",
+    "-32004": "conflict",
+    "-32005": "budget_exceeded",
+    "-32006": "unavailable",
+    "-32007": "cancelled",
+    "-32008": "protocol",
+    "-32010": "invalid_input",
+    "-32011": "provider",
+    "-32012": "tool",
+    "-32013": "sandbox",
+    "-32014": "config",
+    "-32099": "internal",
+    "-32600": "invalid_request",
+    "-32601": "unknown_method",
+    "-32602": "invalid_params",
+    "-32700": "parse_error"
+  },
+  "events": {
+    "achievement.unlocked": {
+      "declared": false,
+      "owner": "pets",
+      "since": "1.0"
+    },
+    "adapter.state": {
+      "declared": false,
+      "owner": "messaging-gateway",
+      "since": "1.0"
+    },
+    "automation.state": {
+      "declared": false,
+      "owner": "session-automation",
+      "since": "1.0"
+    },
+    "health.changed": {
+      "declared": false,
+      "owner": "observability",
+      "since": "1.0"
+    },
+    "local_model.context_grown": {
+      "declared": false,
+      "owner": "local-models",
+      "since": "1.0"
+    },
+    "message.delivery": {
+      "declared": false,
+      "owner": "messaging-gateway",
+      "since": "1.0"
+    },
+    "message.reaction": {
+      "declared": false,
+      "owner": "desktop-app",
+      "since": "1.0"
+    },
+    "request.cancel": {
+      "owner": "workspace-architecture",
+      "payload": {
+        "$ref": "#/$defs/RequestCancel"
+      },
+      "since": "1.0"
+    },
+    "request.resolved": {
+      "owner": "workspace-architecture",
+      "payload": {
+        "$ref": "#/$defs/RequestResolved"
+      },
+      "since": "1.0"
+    },
+    "session.event": {
+      "owner": "workspace-architecture",
+      "payload": true,
+      "since": "1.0"
+    },
+    "session.presence": {
+      "declared": false,
+      "owner": "messaging-gateway",
+      "since": "1.0"
+    },
+    "turn.finished": {
+      "owner": "workspace-architecture",
+      "payload": {
+        "$ref": "#/$defs/TurnFinished"
+      },
+      "since": "1.0"
+    },
+    "usage.updated": {
+      "declared": false,
+      "owner": "observability",
+      "since": "1.0"
+    },
+    "wake.detected": {
+      "declared": false,
+      "owner": "voice-mode",
+      "since": "1.0"
+    }
+  },
+  "methods": {
+    "approval.respond": {
+      "owner": "tool-system",
+      "params": {
+        "$ref": "#/$defs/ApprovalRespondParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "bot.chat.ensure": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "bot.create": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "bot.meta.get": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "bot.meta.update": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "bot.relay.deliver": {
+      "declared": false,
+      "owner": "agent-interop",
+      "since": "1.0"
+    },
+    "bot.relay.drain": {
+      "declared": false,
+      "owner": "agent-interop",
+      "since": "1.0"
+    },
+    "bot.roster.list": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "command.dispatch": {
+      "declared": false,
+      "owner": "workspace-architecture",
+      "since": "1.0"
+    },
+    "commands.catalog": {
+      "declared": false,
+      "owner": "tui",
+      "since": "1.0"
+    },
+    "complete.path": {
+      "declared": false,
+      "owner": "tui",
+      "since": "1.0"
+    },
+    "complete.slash": {
+      "declared": false,
+      "owner": "tui",
+      "since": "1.0"
+    },
+    "cron.blueprints.fill": {
+      "declared": false,
+      "owner": "scheduled-jobs",
+      "since": "1.0"
+    },
+    "cron.blueprints.list": {
+      "declared": false,
+      "owner": "scheduled-jobs",
+      "since": "1.0"
+    },
+    "daemon.update": {
+      "declared": false,
+      "owner": "workspace-architecture",
+      "since": "1.0"
+    },
+    "egress.set": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "evolve.cancel": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.choose": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.list": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.proposals.adopt": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.proposals.list": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.proposals.reject": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.start": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "evolve.status": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "experience.domains": {
+      "declared": false,
+      "owner": "experience-library",
+      "since": "1.0"
+    },
+    "experience.forget": {
+      "declared": false,
+      "owner": "experience-library",
+      "since": "1.0"
+    },
+    "experience.list": {
+      "declared": false,
+      "owner": "experience-library",
+      "since": "1.0"
+    },
+    "experience.pin": {
+      "declared": false,
+      "owner": "experience-library",
+      "since": "1.0"
+    },
+    "experience.restore": {
+      "declared": false,
+      "owner": "experience-library",
+      "since": "1.0"
+    },
+    "experience.show": {
+      "declared": false,
+      "owner": "experience-library",
+      "since": "1.0"
+    },
+    "files.rollback": {
+      "declared": false,
+      "owner": "execution-environments",
+      "since": "1.0"
+    },
+    "files.undo": {
+      "declared": false,
+      "owner": "execution-environments",
+      "since": "1.0"
+    },
+    "grants.list": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "grants.revoke": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "groups.capabilities": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "groups.log": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "groups.replica_state": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "groups.replicate": {
+      "declared": false,
+      "owner": "bot-mode",
+      "since": "1.0"
+    },
+    "harness.diff": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "harness.log": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "harness.rollback": {
+      "declared": false,
+      "owner": "harness-evolution",
+      "since": "1.0"
+    },
+    "journey.list": {
+      "declared": false,
+      "owner": "memory",
+      "since": "1.0"
+    },
+    "lsp.status": {
+      "declared": false,
+      "owner": "lsp-diagnostics",
+      "since": "1.0"
+    },
+    "moa.presets.delete": {
+      "declared": false,
+      "owner": "mixture-of-agents",
+      "since": "1.0"
+    },
+    "moa.presets.list": {
+      "declared": false,
+      "owner": "mixture-of-agents",
+      "since": "1.0"
+    },
+    "moa.presets.put": {
+      "declared": false,
+      "owner": "mixture-of-agents",
+      "since": "1.0"
+    },
+    "model.options": {
+      "declared": false,
+      "owner": "tui",
+      "since": "1.0"
+    },
+    "pairing.approve": {
+      "declared": false,
+      "owner": "messaging-gateway",
+      "since": "1.0"
+    },
+    "prompt.submit": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SubmitParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Submitted"
+      },
+      "since": "1.0"
+    },
+    "rpc.hello": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/HelloParams"
+      },
+      "result": {
+        "$ref": "#/$defs/HelloResult"
+      },
+      "since": "1.0"
+    },
+    "rpc.ping": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/Empty"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "screen.handback": {
+      "declared": false,
+      "owner": "execution-environments",
+      "since": "1.0"
+    },
+    "screen.takeover": {
+      "declared": false,
+      "owner": "execution-environments",
+      "since": "1.0"
+    },
+    "session.attach": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Attached"
+      },
+      "since": "1.0"
+    },
+    "session.compact": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/CompactParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Compacted"
+      },
+      "since": "1.0"
+    },
+    "session.context_usage": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/ContextUsage"
+      },
+      "since": "1.0"
+    },
+    "session.create": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionCreateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "since": "1.0"
+    },
+    "session.detach": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "session.events.since": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/EventsSinceParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EventsSince"
+      },
+      "since": "1.0"
+    },
+    "session.list": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionList"
+      },
+      "since": "1.0"
+    },
+    "session.resume": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Attached"
+      },
+      "since": "1.0"
+    },
+    "session.transcript": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Transcript"
+      },
+      "since": "1.0"
+    },
+    "subagent.list": {
+      "declared": false,
+      "owner": "tui",
+      "since": "1.0"
+    },
+    "subagent.subscribe": {
+      "declared": false,
+      "owner": "tui",
+      "since": "1.0"
+    },
+    "system.health": {
+      "declared": false,
+      "owner": "observability",
+      "since": "1.0"
+    },
+    "system.metrics": {
+      "declared": false,
+      "owner": "observability",
+      "since": "1.0"
+    },
+    "tools.call": {
+      "declared": false,
+      "owner": "tool-system",
+      "since": "1.0"
+    },
+    "tools.list": {
+      "declared": false,
+      "owner": "tool-system",
+      "since": "1.0"
+    },
+    "ui.prefs.get": {
+      "declared": false,
+      "owner": "desktop-app",
+      "since": "1.0"
+    },
+    "ui.prefs.patch": {
+      "declared": false,
+      "owner": "desktop-app",
+      "since": "1.0"
+    },
+    "vault.add": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "vault.list": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "vault.remove": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "vault.sources": {
+      "declared": false,
+      "owner": "security-boundaries",
+      "since": "1.0"
+    },
+    "voice.client_config": {
+      "declared": false,
+      "owner": "voice-mode",
+      "since": "1.0"
+    },
+    "wake.feed": {
+      "declared": false,
+      "owner": "voice-mode",
+      "since": "1.0"
+    },
+    "worktree.list": {
+      "declared": false,
+      "owner": "git-worktrees",
+      "since": "1.0"
+    },
+    "worktree.new": {
+      "declared": false,
+      "owner": "git-worktrees",
+      "since": "1.0"
+    },
+    "worktree.prune": {
+      "declared": false,
+      "owner": "git-worktrees",
+      "since": "1.0"
+    },
+    "worktree.status": {
+      "declared": false,
+      "owner": "git-worktrees",
+      "since": "1.0"
+    }
+  },
+  "protocol": "1.0",
+  "server_requests": {
+    "approval.request": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/ApprovalRequestParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ApprovalAnswer"
+      },
+      "since": "1.0"
+    },
+    "clarify.request": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/ClarifyRequestParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ClarifyAnswers"
+      },
+      "since": "1.0"
+    },
+    "secret.request": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SecretRequestParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SecretAnswer"
+      },
+      "since": "1.0"
+    },
+    "sudo.request": {
+      "owner": "workspace-architecture",
+      "params": {
+        "$ref": "#/$defs/SudoRequestParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SudoAnswer"
+      },
+      "since": "1.0"
+    }
+  },
+  "title": "Prometheus client protocol"
+}

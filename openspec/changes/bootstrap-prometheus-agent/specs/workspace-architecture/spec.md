@@ -68,12 +68,12 @@ Every name-keyed registry (subcommands, slash commands, RPC methods, RPC events,
 - **THEN** loading SHALL fail with `unknown hook 'pre_tool_cal' (did you mean 'pre_tool_call'?)` and the plugin SHALL NOT be enabled
 
 ### Requirement: One daemon per Prometheus home
-The system SHALL allow at most one gateway daemon per Prometheus home, enforced by an exclusive OS file lock on `<PROMETHEUS_HOME>/run/gateway.lock`, and SHALL read daemon-wide settings (`daemon.rpc.*`, `gateway.http.*`, `gateway.relay.*`, `gateway.on_all_adapters_down`, `daemon.autostart`, `daemon.restart_drain_secs`, `daemon.watchdog.*`, `dashboard.*` listener settings, and the machine-wide `update.*`, `runtimes.*` and `process.*` sections) only from `<PROMETHEUS_HOME>/daemon.toml`, never from a profile's `config.toml`; a second `prometheus daemon start` for the same home SHALL exit 75 with `gateway already running (pid <pid>); attach with 'prometheus tui' or stop it with 'prometheus daemon stop'`. The daemon SHALL serve every profile of that home, each through its own ProfileScope.
+The system SHALL allow at most one gateway daemon per Prometheus home, enforced by an exclusive OS file lock on `<PROMETHEUS_HOME>/run/gateway.lock`, and SHALL read daemon-wide settings (`daemon.rpc.*`, `gateway.http.*`, `gateway.relay.*`, `gateway.on_all_adapters_down`, `daemon.autostart`, `daemon.restart_drain_secs`, `daemon.watchdog.*`, `dashboard.*` listener settings, and the machine-wide `update.*`, `runtimes.*` and `process.*` sections) only from `<PROMETHEUS_HOME>/daemon.toml`, never from a profile's `config.toml`; a second daemon process for the same home (`prometheus daemon run`; `prometheus daemon start` instead reports the running daemon and exits 0) SHALL exit 75 with `gateway already running (pid <pid>); attach with 'prometheus tui' or stop it with 'prometheus daemon stop'`. The daemon SHALL serve every profile of that home, each through its own ProfileScope.
 **Milestone:** M2
 
 #### Scenario: Second daemon refused
 - **GIVEN** a running daemon for `~/.prometheus`
-- **WHEN** the user runs `prometheus daemon start` again
+- **WHEN** a second daemon process starts for the same home (`prometheus daemon run`; `prometheus daemon start` finds the running daemon and exits 0 without starting one, as messaging-gateway › Idempotent start specifies)
 - **THEN** the second process SHALL exit 75 without opening any `state.db` as a writer
 
 ### Requirement: Single-writer storage invariant
@@ -110,7 +110,7 @@ A client SHALL obtain a ticket over the control channel before dialing the RPC W
 #### Scenario: Reused ticket
 - **GIVEN** a ticket already used to open one connection
 - **WHEN** a second connection presents the same ticket
-- **THEN** the daemon SHALL reject the upgrade with HTTP 401 and log the attempt without the ticket value
+- **THEN** the daemon SHALL close the connection with 4401 (bad credential) without processing any frame from it and log the attempt without the ticket value
 
 ### Requirement: JSON-RPC framing and error codes
 This capability SHALL be the single owner of the local client protocol used by the CLI, TUI, desktop, dashboard and ACP; other capabilities SHALL reference its handshake, error codes and close codes rather than define their own. The local protocol SHALL be JSON-RPC 2.0 with one message per WebSocket text frame (and one message per line on stdio transports such as ACP), and a frame larger than `daemon.rpc.max_frame_bytes` (default 16 MiB) SHALL close the connection with 4413. An unparseable frame SHALL be answered with code `-32700` and `id: null` without closing the connection; a non-object request with `-32600`; non-object params with `-32602`; an unregistered method with `-32601` and message `unknown method: <method>`. Application errors SHALL use exactly these codes mapped from the error taxonomy: `-32001` auth, `-32002` permission_denied, `-32003` not_found, `-32004` conflict, `-32005` budget_exceeded, `-32006` unavailable (including a retiring daemon), `-32007` cancelled, `-32008` protocol, `-32010` invalid_input, `-32011` provider, `-32012` tool, `-32013` sandbox, `-32014` config, `-32099` internal; every error SHALL carry `data: {kind, code, hint?}` where `code` is a stable dotted identifier. Every client listener (RPC, dashboard, ACP bridge) SHALL use exactly these WebSocket close codes: 1000 normal, 1001 shutting down, 1011 internal, 4401 bad credential, 4403 not allowed (Host, Origin, peer or profile), 4404 endpoint disabled on this surface, 4408 heartbeat timeout, 4410 session ended, 4413 frame too large, 4426 protocol version unsupported.

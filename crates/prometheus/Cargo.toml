@@ -25,7 +25,7 @@ dist = true
 [features]
 default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
 tui = []
-gateway = []
+gateway = ["dep:pmt-gateway"]
 dashboard = []
 acp = []
 mcp = []
@@ -39,10 +39,12 @@ pmt-agent.workspace = true
 pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
+pmt-gateway = { workspace = true, optional = true }
 pmt-memory.workspace = true
 pmt-net.workspace = true
 pmt-obs.workspace = true
 pmt-providers.workspace = true
+pmt-rpc.workspace = true
 pmt-sandbox.workspace = true
 pmt-skills.workspace = true
 pmt-store.workspace = true

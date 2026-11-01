@@ -1,5 +1,29 @@
 {
   "$defs": {
+    "DaemonSection": {
+      "additionalProperties": false,
+      "description": "The `[daemon]` section (spec: workspace-architecture, One daemon per\nPrometheus home; Stale daemon build detection).",
+      "properties": {
+        "restart_drain_secs": {
+          "default": 120,
+          "description": "Seconds `prometheus daemon restart` waits for running turns to reach\na turn boundary before it replaces the daemon anyway.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rpc": {
+          "$ref": "#/$defs/RpcListenerConfig",
+          "default": {
+            "bind": "127.0.0.1:0",
+            "max_frame_bytes": 16777216,
+            "request_timeout_secs": 600,
+            "workers": 8
+          },
+          "description": "The local client protocol listener."
+        }
+      },
+      "type": "object"
+    },
     "PreUpdateBackup": {
       "description": "`update.pre_update_backup`: what `prometheus update` saves before the\nswap.",
       "oneOf": [
@@ -29,6 +53,40 @@
           "description": "Open-file soft limit every process raises itself to at startup on\nPOSIX hosts, capped by the hard limit and never lowering a higher\nlimit; children inherit it. `0` disables the raise.",
           "format": "uint64",
           "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RpcListenerConfig": {
+      "additionalProperties": false,
+      "description": "`[daemon.rpc]`: the loopback WebSocket every local client attaches to\n(spec: workspace-architecture, Ticket-authenticated loopback attachment;\nJSON-RPC framing and error codes; Server-to-client requests; Connection\nliveness and backpressure).",
+      "properties": {
+        "bind": {
+          "default": "127.0.0.1:0",
+          "description": "Listen address. Loopback only (`127.0.0.1`, `::1`); port `0` picks\na free port, recorded as `rpc_url` in `run/gateway.json`. Remote\naccess goes through the gateway relay, never this listener.",
+          "type": "string"
+        },
+        "max_frame_bytes": {
+          "default": 16777216,
+          "description": "Largest accepted frame; a larger one closes the connection with 4413.",
+          "format": "uint64",
+          "minimum": 1024,
+          "type": "integer"
+        },
+        "request_timeout_secs": {
+          "default": 600,
+          "description": "Deadline of server-to-client requests other than approvals (which\nuse the profile's `approvals.timeout_secs`).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "workers": {
+          "default": 8,
+          "description": "Requests run concurrently per connection; `rpc.ping` never waits\nfor one.",
+          "format": "uint32",
+          "maximum": 256,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -149,6 +207,19 @@
   "additionalProperties": false,
   "description": "Root of `daemon.toml`.",
   "properties": {
+    "daemon": {
+      "$ref": "#/$defs/DaemonSection",
+      "default": {
+        "restart_drain_secs": 120,
+        "rpc": {
+          "bind": "127.0.0.1:0",
+          "max_frame_bytes": 16777216,
+          "request_timeout_secs": 600,
+          "workers": 8
+        }
+      },
+      "description": "The gateway daemon: its client listener and lifecycle."
+    },
     "process": {
       "$ref": "#/$defs/ProcessConfig",
       "default": {
