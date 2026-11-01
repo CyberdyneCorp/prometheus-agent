@@ -76,6 +76,25 @@ pub fn run(args: &DemoArgs, launch: &LaunchEnv) -> Result<u8, Error> {
     status
 }
 
+/// Whether this platform has an OS sandbox backend (pmt-sandbox: Linux,
+/// macOS, Windows).
+const HAS_OS_SANDBOX: bool = cfg!(any(target_os = "linux", target_os = "macos", windows));
+
+/// On a platform without an OS sandbox (Android/Termux), commands only run
+/// with `security.sandbox.allow_degraded = ["all"]`. The demo's own
+/// throwaway profile takes that downgrade for its two scripted commands,
+/// and says so: it is never silent, and the user's profiles are untouched.
+fn unconfined_override() -> Vec<String> {
+    if HAS_OS_SANDBOX {
+        return Vec::new();
+    }
+    println!(
+        "note: {} has no OS sandbox; the demo's scripted commands run unconfined in its temporary directory",
+        std::env::consts::OS
+    );
+    vec![r#"security.sandbox.allow_degraded=["all"]"#.to_owned()]
+}
+
 /// What the demo's session produced.
 struct Session {
     id: SessionId,
@@ -85,11 +104,12 @@ struct Session {
 /// Runs the scenario's one turn in the demo's home.
 fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
     let home = place.home();
+    let set = unconfined_override();
     let ctx = Context {
         home_flag: Some(&home),
         launch,
         profile: None,
-        set: &[],
+        set: &set,
         json: false,
     };
     let scope = ctx.scope()?;

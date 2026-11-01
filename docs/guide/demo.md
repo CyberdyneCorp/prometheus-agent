@@ -51,6 +51,11 @@ steps:
 prometheus --home DIR/home trajectory show <session-id>
 ```
 
+On a platform without an OS sandbox backend (Android/Termux), commands
+run only with `security.sandbox.allow_degraded = ["all"]`; the demo sets
+that on its own temporary profile and prints a `note:` line saying its
+scripted commands run unconfined.
+
 The balance script is POSIX `sh` (integer arithmetic only) and PowerShell
 on Windows, so the demo needs no Python, Node.js or other runtime. CI runs
 it with networking disabled on every Tier 1 target and as the offline smoke
