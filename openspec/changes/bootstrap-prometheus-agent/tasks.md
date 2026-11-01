@@ -229,7 +229,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 21.1 Implement `prometheus demo [--output DIR] [--keep]` with the bundled ledger scenario and mock script, run in a temporary profile; verify that it prints canonical trajectory steps, `demo passed`, reports `Total: 85.15` and exits 0 within 30 s offline (spec: replay-and-evaluation)
 - [ ] 21.2 M1 exit: in CI, on every Tier 1 target and with networking disabled, `prometheus demo` passes end to end and the Tier 2 targets pass the offline smoke run (spec: replay-and-evaluation, spec: workspace-architecture)
 - [ ] 21.3 M1 exit: every M1 scenario in workspace-architecture, configuration-and-profiles, session-storage, observability, security-boundaries, execution-environments, model-providers, tool-system, agent-turn-loop, context-compression, skills, memory, cli, distribution-and-update and web-and-media-tools maps to a passing test (a scenario-to-test index checked by `scripts/check`)
-- [ ] 21.4 M1 exit: the startup, memory and size gates pass on the reference runner, and `scripts/check` is green on main
+- [x] 21.4 M1 exit: the startup, memory and size gates pass on the reference runner, and `scripts/check` is green on main
 
 ## 22. M2 Daemon and client RPC protocol
 
