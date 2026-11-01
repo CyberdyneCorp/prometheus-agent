@@ -54,7 +54,9 @@ capabilities = [
 Known limits: on Linux and Windows the sandbox can only grant, so a granted
 directory that contains a credential store is granted entry by entry: files
 created directly in it after the child starts are not reachable, and the
-store's name stays listable. On
+store's name stays listable. Symbolic links in such a directory are not
+granted (a link such as `~/.ssh -> ~/dotfiles/ssh` would otherwise expose
+its target); a link whose target lies in a granted directory still works. On
 Windows, listening sockets are never granted (loopback needs a
 per-container exemption), and the session adds then revokes ACL entries for
 its container on the granted directories. Below a directory whose ACL is not
@@ -88,8 +90,9 @@ the level, for example `sandbox: partial:landlock_net`.
 `terminal.backend` selects where commands run: `local` (the sandboxed host)
 in this release; `container` and `ssh` are reserved and fail with
 `terminal backend 'container' is available in M2` (exit 69). Any other name
-fails validation (exit 78) and lists the available backends; Prometheus never
-falls back to another backend. Defaults: `timeout_secs = 180`,
+fails validation (exit 78) and lists the available backends. `prometheus
+chat` (and every session start) checks the setting before the first turn,
+with the same exits; Prometheus never falls back to another backend. Defaults: `timeout_secs = 180`,
 `max_foreground_secs = 600`, `idle_lifetime_secs = 300`,
 `persistent_shell = true`; container and SSH settings are only type-checked
 while another backend is selected.

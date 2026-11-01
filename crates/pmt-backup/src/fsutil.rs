@@ -54,9 +54,9 @@ impl<R: Read> Read for Hashing<R> {
 ///
 /// `backup.io`.
 pub(crate) fn hash_file(path: &Path) -> Result<(u64, String), Error> {
-    let file = std::fs::File::open(path).map_err(|e| io_error(path, &e))?;
+    let file = std::fs::File::open(path).map_err(|e| Error::io(&codes::BACKUP_IO, path, &e))?;
     let mut reader = Hashing::new(file);
-    io::copy(&mut reader, &mut io::sink()).map_err(|e| io_error(path, &e))?;
+    io::copy(&mut reader, &mut io::sink()).map_err(|e| Error::io(&codes::BACKUP_IO, path, &e))?;
     Ok(reader.finish())
 }
 
@@ -69,10 +69,4 @@ pub(crate) fn private_file(path: &Path) {
     }
     #[cfg(not(unix))]
     let _ = path;
-}
-
-/// A `backup.io` error for `path`.
-#[must_use]
-pub(crate) fn io_error(path: &Path, e: &dyn std::fmt::Display) -> Error {
-    Error::new(&codes::BACKUP_IO, format!("{}: {e}", path.display()))
 }

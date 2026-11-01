@@ -13,8 +13,8 @@ pub(super) async fn next() -> u8 {
         return std::future::pending().await;
     };
     tokio::select! {
-        _ = int.recv() => super::oneshot::INTERRUPTED,
-        _ = term.recv() => super::oneshot::TERMINATED,
+        _ = int.recv() => pmt_core::exit::INTERRUPTED,
+        _ = term.recv() => pmt_core::exit::TERMINATED,
     }
 }
 
@@ -24,5 +24,5 @@ pub(super) async fn next() -> u8 {
     if tokio::signal::ctrl_c().await.is_err() {
         return std::future::pending().await;
     }
-    super::oneshot::INTERRUPTED
+    pmt_core::exit::INTERRUPTED
 }

@@ -11,7 +11,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::private_fs;
 use serde::{Deserialize, Serialize};
 
-use crate::install::{create_dirs, io_error};
+use crate::install::create_dirs;
 
 /// The lock file name in `<home>/updates/`.
 pub const LOCK_FILE: &str = "update.lock";
@@ -56,14 +56,14 @@ impl UpdateLock {
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => File::options()
                 .write(true)
                 .open(&path)
-                .map_err(|e| io_error(&path, &e))?,
-            Err(e) => return Err(io_error(&path, &e)),
+                .map_err(|e| Error::io(&codes::UPDATE_FAILED, &path, &e))?,
+            Err(e) => return Err(Error::io(&codes::UPDATE_FAILED, &path, &e)),
         };
         let holder_path = dir.join(HOLDER_FILE);
         match file.try_lock() {
             Ok(()) => {}
             Err(TryLockError::WouldBlock) => return Err(held(&holder_path)),
-            Err(TryLockError::Error(e)) => return Err(io_error(&path, &e)),
+            Err(TryLockError::Error(e)) => return Err(Error::io(&codes::UPDATE_FAILED, &path, &e)),
         }
         let holder = Holder {
             pid: std::process::id(),
@@ -71,7 +71,8 @@ impl UpdateLock {
             binary: binary.to_owned(),
         };
         let json = serde_json::to_vec(&holder).expect("holder serializes");
-        private_fs::write_atomic(&holder_path, &json).map_err(|e| io_error(&holder_path, &e))?;
+        private_fs::write_atomic(&holder_path, &json)
+            .map_err(|e| Error::io(&codes::UPDATE_FAILED, &holder_path, &e))?;
         Ok(Self {
             _file: file,
             holder_path,

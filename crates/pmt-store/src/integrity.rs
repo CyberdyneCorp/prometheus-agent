@@ -10,6 +10,7 @@
 //! per table) is logged at ERROR and kept beside the quarantined file for
 //! `prometheus doctor`.
 
+use pmt_core::error::codes;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -20,7 +21,7 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, params_from_iter};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{self, sql};
+use crate::error::sql;
 use crate::files;
 use crate::store::Store;
 
@@ -147,7 +148,7 @@ fn quarantine(database: &Path, quarantine_dir: &Path) -> Result<PathBuf, Error> 
         let from = with_suffix(database, suffix);
         if from.exists() {
             let to = with_suffix(&target, suffix);
-            std::fs::rename(&from, &to).map_err(|e| error::io(&from, &e))?;
+            std::fs::rename(&from, &to).map_err(|e| Error::io(&codes::STORE_IO, &from, &e))?;
         }
     }
     Ok(target)
@@ -321,7 +322,7 @@ fn recount(tx: &Transaction<'_>) -> Result<(), Error> {
 fn save_report(report: &QuarantineReport) -> Result<(), Error> {
     let path = report.quarantined.with_extension("json");
     let text = serde_json::to_vec_pretty(report).expect("reports serialize");
-    private_fs::write_atomic(&path, &text).map_err(|e| error::io(&path, &e))
+    private_fs::write_atomic(&path, &text).map_err(|e| Error::io(&codes::STORE_IO, &path, &e))
 }
 
 /// Every salvage report in `quarantine_dir`, oldest first.
@@ -333,7 +334,7 @@ pub fn quarantine_reports(quarantine_dir: &Path) -> Result<Vec<QuarantineReport>
     let entries = match std::fs::read_dir(quarantine_dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(error::io(quarantine_dir, &e)),
+        Err(e) => return Err(Error::io(&codes::STORE_IO, quarantine_dir, &e)),
     };
     let mut reports: Vec<QuarantineReport> = entries
         .filter_map(Result::ok)

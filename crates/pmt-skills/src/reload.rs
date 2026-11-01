@@ -8,6 +8,8 @@
 //! changes: the model learns of the change through the per-turn note, and
 //! the next session's index reflects it.
 
+use pmt_core::error::Error;
+use pmt_core::error::codes;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -181,10 +183,10 @@ pub fn read_state(file: &Path) -> Scan {
 /// `skill.io`.
 pub fn write_state(file: &Path, scan: &Scan) -> Result<(), pmt_core::Error> {
     if let Some(dir) = file.parent() {
-        private_fs::create_dir(dir).map_err(|e| crate::lockfile::io(dir, &e))?;
+        private_fs::create_dir(dir).map_err(|e| Error::io(&codes::SKILL_IO, dir, &e))?;
     }
     let bytes = serde_json::to_vec(scan).unwrap_or_default();
-    private_fs::write_atomic(file, &bytes).map_err(|e| crate::lockfile::io(file, &e))
+    private_fs::write_atomic(file, &bytes).map_err(|e| Error::io(&codes::SKILL_IO, file, &e))
 }
 
 #[cfg(test)]

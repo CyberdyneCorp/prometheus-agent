@@ -62,7 +62,12 @@ impl ConfigFile {
         match std::fs::read_to_string(&self.path) {
             Ok(text) => Ok(Some(text)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(io_error(&self.path, &e)),
+            Err(e) => Err(Error::io_doing(
+                &codes::HOME_IO,
+                "cannot write",
+                &self.path,
+                &e,
+            )),
         }
     }
 
@@ -205,7 +210,8 @@ impl ConfigFile {
             backups::save(&self.backups, "config", old)?;
             backups::prune(&self.backups);
         }
-        private_fs::write_atomic(&self.path, new.as_bytes()).map_err(|e| io_error(&self.path, &e))
+        private_fs::write_atomic(&self.path, new.as_bytes())
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &self.path, &e))
     }
 }
 
@@ -224,13 +230,6 @@ pub(crate) fn check_document(path: &Path, text: &str) -> Result<(), Error> {
         ));
     }
     crate::essential::semantic(&parse::config(path, text)?)
-}
-
-fn io_error(path: &Path, e: &io::Error) -> Error {
-    Error::new(
-        &codes::HOME_IO,
-        format!("cannot write {}: {e}", path.display()),
-    )
 }
 
 #[cfg(test)]

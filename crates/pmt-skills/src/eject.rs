@@ -21,7 +21,7 @@ use similar::TextDiff;
 
 use crate::bundled::Bundled;
 use crate::catalog::Catalog;
-use crate::lockfile::{self, BUNDLED_SOURCE, Contents, Entry, LockFile, Trust, io};
+use crate::lockfile::{self, BUNDLED_SOURCE, Contents, Entry, LockFile, Trust};
 use crate::roots::{RootInputs, Roots, Tier, profile_skills};
 use crate::scan::PatternScanner;
 use crate::source::SkillDir;
@@ -126,9 +126,10 @@ pub fn eject(profile_dir: &Path, catalog: &Catalog, name: &str) -> Result<Ejecte
         let bytes = tree.read(&prefix, &rel).unwrap_or_default();
         let path = rel.split('/').fold(target.clone(), |p, c| p.join(c));
         if let Some(parent) = path.parent() {
-            private_fs::create_dir(parent).map_err(|e| io(parent, &e))?;
+            private_fs::create_dir(parent).map_err(|e| Error::io(&codes::SKILL_IO, parent, &e))?;
         }
-        private_fs::write_atomic(&path, bytes).map_err(|e| io(&path, &e))?;
+        private_fs::write_atomic(&path, bytes)
+            .map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
     }
     LockFile::in_dir(&skills).upsert(Entry {
         name: name.to_owned(),
@@ -243,7 +244,7 @@ pub fn reset(profile_dir: &Path, catalog: &Catalog, name: &str) -> Result<(), Er
         .and_then(|s| s.dir.path())
         .filter(|dir| crate::manage::inside(&skills, dir));
     if let Some(dir) = copy {
-        fs::remove_dir_all(dir).map_err(|e| io(dir, &e))?;
+        fs::remove_dir_all(dir).map_err(|e| Error::io(&codes::SKILL_IO, dir, &e))?;
     }
     LockFile::in_dir(&skills).remove(name)
 }

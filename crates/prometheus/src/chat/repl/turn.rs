@@ -12,6 +12,7 @@ use pmt_config::schema::BusyInputMode;
 use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
 use pmt_core::human::Surface as Prompts;
+use pmt_core::secret::SecretString;
 
 use super::input::Event;
 use super::prompts::{self, Pending};
@@ -111,6 +112,12 @@ impl Repl {
                     self.say(Role::Notice, &ask.question);
                     self.ask(Pending::Install(ask.reply));
                 }
+                Some(ask) = self.secrets.recv() => {
+                    self.ring_bell();
+                    self.say(Role::Notice, &ask.question);
+                    self.input.set_masked(true);
+                    self.ask(Pending::Secret(ask.reply));
+                }
             }
         }
     }
@@ -141,6 +148,7 @@ impl Repl {
         match event {
             Event::Interrupt | Event::Eof => {
                 if let Some(pending) = self.pending.take() {
+                    self.input.set_masked(false);
                     pending.cancel();
                 }
                 interrupt.stop(Issuer::User);
@@ -249,6 +257,11 @@ impl Repl {
             }
             Pending::Install(reply) => {
                 let _ = reply.send(prompts::install_answer(line));
+            }
+            Pending::Secret(reply) => {
+                self.input.set_masked(false);
+                let value = (!line.is_empty()).then(|| SecretString::new(line));
+                let _ = reply.send(value);
             }
             Pending::Confirm { .. } => {}
         }

@@ -7,8 +7,6 @@
 
 mod common;
 
-use std::time::Duration;
-
 use common::pty::{exit, prompt, spawn};
 use common::{command, mock_home, newest_session, ok, run, session_messages};
 use expectrl::Expect;
@@ -102,7 +100,7 @@ fn the_queue_is_listed_edited_reordered_and_run_in_order() {
     let mut p = spawn(home.path(), &["--mock-script", script.to_str().unwrap()]);
     prompt(&mut p);
     p.send_line("slow").unwrap();
-    std::thread::sleep(Duration::from_millis(300));
+    common::pty::wait_for_turns(&mut p, home.path(), 1);
     for item in ["/queue x-a", "/q x-b", "/queue x-c", "/queue zzz"] {
         p.send_line(item).unwrap();
         p.expect("queued (").unwrap();
@@ -145,7 +143,8 @@ fn queue_add_runs_when_idle_and_edit_and_clear_change_the_queue() {
     p.expect("got a").unwrap();
     prompt(&mut p);
     p.send_line("slow").unwrap();
-    std::thread::sleep(Duration::from_millis(300));
+    // The `/queue add x-a` turn ran first.
+    common::pty::wait_for_turns(&mut p, home.path(), 2);
     p.send_line("/queue x-a").unwrap();
     p.expect("queued (1 in the queue)").unwrap();
     p.send_line("/queue edit 1 x-b").unwrap();
@@ -198,7 +197,7 @@ fn the_browser_tags_sessions_and_resumes_the_chosen_one() {
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
-    std::thread::sleep(Duration::from_secs(2));
+    common::wait_for_turn_start(home.path());
     kill(
         Pid::from_raw(i32::try_from(child.id()).unwrap()),
         Signal::SIGINT,

@@ -33,6 +33,9 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
                 secrets: *clone_secrets,
             });
             let profile = home.create_profile(name, clone)?;
+            if let Some(source) = &source {
+                clone_memory(&home, source, &profile)?;
+            }
             if *no_skills {
                 pmt_skills::optout::set_included(&profile, false)?;
             }
@@ -152,7 +155,7 @@ fn delete(home: &Home, name: &str, yes: bool) -> Result<u8, Error> {
         match prompt::confirm_typed(&what, name.as_str())? {
             None => {
                 eprintln!("error: deleting profile '{name}' needs confirmation; rerun with --yes");
-                return Ok(prompt::NEEDS_CONFIRMATION);
+                return Ok(pmt_core::exit::APPROVAL_REQUIRED);
             }
             Some(false) => {
                 eprintln!("not deleted");
@@ -164,4 +167,27 @@ fn delete(home: &Home, name: &str, yes: bool) -> Result<u8, Error> {
     home.delete_profile(&name)?;
     eprintln!("deleted profile '{name}'");
     Ok(0)
+}
+
+/// Copies `source`'s built-in memory (it lives in `state.db`) into the new
+/// `target`: every entry keeps its id, store, tier and pin; changes still
+/// waiting for approval stay behind (spec: configuration-and-profiles,
+/// Profile lifecycle commands).
+fn clone_memory(
+    home: &Home,
+    source: &ProfileName,
+    target: &pmt_config::ProfileDir,
+) -> Result<(), Error> {
+    let open = |profile: pmt_config::ProfileDir| -> Result<pmt_store::Store, Error> {
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other)?;
+        pmt_store::Store::open(&scope)
+    };
+    let entries = open(home.existing_profile(source)?)?.memory_entries(None)?;
+    if entries.is_empty() {
+        return Ok(());
+    }
+    open(target.clone())?.memory_batch(None, |batch| {
+        batch.entries.clone_from(&entries);
+        Ok(())
+    })
 }

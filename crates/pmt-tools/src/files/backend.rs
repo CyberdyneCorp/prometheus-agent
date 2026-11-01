@@ -5,7 +5,10 @@
 //! session's [`FileBackend`]. Only a backend whose descriptor says
 //! `uses_host_filesystem` reaches host paths, and [`LocalBackend`] (the
 //! only one in M1) checks every host access against the session's
-//! `fs.read`/`fs.write` capabilities first. Container and remote backends
+//! `fs.read`/`fs.write` capabilities first, and then refuses the
+//! credential stores and `PROMETHEUS_HOME` the OS sandbox denies, however
+//! broad the grant, unless a grant names a path inside the store (spec:
+//! security-boundaries, Default sandbox denies credential stores). Container and remote backends
 //! (M2) implement the same trait inside their environment.
 
 use std::fs;
@@ -13,7 +16,10 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use std::sync::Arc;
+
 use pmt_core::capability::{Access, CapabilitySet, Places};
+use pmt_sandbox::Policy;
 
 /// What a path is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +113,7 @@ pub trait FileBackend: Send + Sync {
 pub struct LocalBackend {
     capabilities: CapabilitySet,
     places: Places,
+    stores: Option<Arc<Policy>>,
 }
 
 impl LocalBackend {
@@ -117,7 +124,39 @@ impl LocalBackend {
         Self {
             capabilities,
             places,
+            stores: None,
         }
+    }
+
+    /// Also refuses the credential stores `policy` (the session sandbox's
+    /// policy over the same capabilities) denies.
+    #[must_use]
+    pub fn denying_stores(mut self, policy: Arc<Policy>) -> Self {
+        self.stores = Some(policy);
+        self
+    }
+
+    /// The denied store holding `path`, unless a grant rooted inside that
+    /// store gives `access` to it (the sandbox's re-grant rule).
+    fn store_of(&self, access: Access, path: &Path) -> Option<PathBuf> {
+        let policy = self.stores.as_deref()?;
+        let path = pmt_core::capability::canonical(path);
+        let store = policy
+            .denied()
+            .into_iter()
+            .find(|store| path.starts_with(store))?;
+        let roots: Vec<&PathBuf> = match access {
+            Access::Read => policy
+                .read_roots()
+                .iter()
+                .chain(policy.write_roots())
+                .collect(),
+            Access::Write => policy.write_roots().iter().collect(),
+        };
+        let regranted = roots
+            .iter()
+            .any(|root| root.starts_with(store) && path.starts_with(root));
+        (!regranted).then(|| store.to_path_buf())
     }
 }
 
@@ -174,7 +213,17 @@ impl FileBackend for LocalBackend {
         }
         self.capabilities
             .require_path(access, path, &self.places)
-            .map_err(|err| io::Error::new(io::ErrorKind::PermissionDenied, err.message()))
+            .map_err(|err| io::Error::new(io::ErrorKind::PermissionDenied, err.message()))?;
+        match self.store_of(access, path) {
+            Some(store) => Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "{} is a credential store the sandbox denies; grant that path explicitly to use it",
+                    store.display()
+                ),
+            )),
+            None => Ok(()),
+        }
     }
 }
 

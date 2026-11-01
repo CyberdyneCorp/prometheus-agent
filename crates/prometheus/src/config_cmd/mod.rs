@@ -3,6 +3,8 @@
 //! format-preserving writer, and the schema, docs and `explain` come from
 //! the typed schema.
 
+pub mod args;
+
 pub(crate) mod edit;
 mod explain;
 

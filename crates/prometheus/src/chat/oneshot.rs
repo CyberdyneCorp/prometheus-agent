@@ -15,14 +15,7 @@ use serde::Serialize;
 use super::args::PromptSource;
 use super::session::Live;
 
-/// Exit status when a call needed an approval nobody could give.
-pub const NEEDS_APPROVAL: u8 = 4;
-/// Exit status of a run that ran out of budget before a final answer.
-pub const BUDGET_EXHAUSTED: u8 = 3;
-/// SIGINT.
-pub const INTERRUPTED: u8 = 130;
-/// SIGTERM.
-pub const TERMINATED: u8 = 143;
+use pmt_core::exit::{APPROVAL_REQUIRED, BUDGET_EXHAUSTED, INTERRUPTED};
 
 /// The message of a run that stopped on an approval.
 pub const APPROVAL_MESSAGE: &str = "a tool call needed an approval, which a one-shot run cannot ask for; run interactively, or allow it with --approvals off or approvals.single_query_mode = \"approve\"";
@@ -120,7 +113,7 @@ pub async fn run(live: &Live, input: TurnInput, json: bool, run_budget: Option<D
     if live.gate.unobtainable() > 0 {
         let err = Error::new(&codes::CHAT_APPROVAL_REQUIRED, APPROVAL_MESSAGE);
         print_message(&err, json);
-        return NEEDS_APPROVAL;
+        return APPROVAL_REQUIRED;
     }
     report(live, &result, json);
     signal.unwrap_or_else(|| status(&result))
@@ -167,6 +160,10 @@ fn report(live: &Live, result: &TurnResult, json: bool) {
             exit_reason: result.exit_reason.as_str(),
         };
         let _ = writeln!(out, "{}", serde_json::to_string(&body).unwrap_or_default());
+        drop(out);
+        if let Some(err) = &result.error {
+            crate::output::print_error(err, true);
+        }
         return;
     }
     if let Some(answer) = &result.final_response {

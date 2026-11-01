@@ -9,6 +9,7 @@
 //! `--remove` deletes only the copies still byte-identical to their
 //! bundled origin.
 
+use pmt_core::error::codes;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -17,7 +18,7 @@ use pmt_core::error::Error;
 
 use crate::catalog::Catalog;
 use crate::digest;
-use crate::lockfile::{Contents, Entry, LockFile, io};
+use crate::lockfile::{Contents, Entry, LockFile};
 use crate::roots::{Tier, profile_skills};
 
 /// Sets `skills.include_bundled` of the profile.
@@ -111,7 +112,7 @@ pub fn remove_identical(profile_dir: &Path, catalog: &Catalog) -> Result<Vec<Str
         if !crate::manage::inside(&skills, &copy.path) {
             continue;
         }
-        fs::remove_dir_all(&copy.path).map_err(|e| io(&copy.path, &e))?;
+        fs::remove_dir_all(&copy.path).map_err(|e| Error::io(&codes::SKILL_IO, &copy.path, &e))?;
         lock.remove(&copy.name)?;
         removed.push(copy.name);
     }

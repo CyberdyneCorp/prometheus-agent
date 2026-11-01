@@ -163,6 +163,31 @@ impl Store {
         })
     }
 
+    /// Records the route a session now runs on (a `/model` switch).
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.busy`, `store.sqlite`.
+    pub fn set_session_route(
+        &self,
+        id: SessionId,
+        provider: &str,
+        model: Option<&str>,
+    ) -> Result<(), Error> {
+        self.write(|tx| {
+            let changed = tx
+                .execute(
+                    "UPDATE sessions SET provider = ?2, model = ?3 WHERE id = ?1",
+                    params![id.to_string(), provider, model],
+                )
+                .map_err(sql)?;
+            if changed == 0 {
+                return Err(sessions::not_found(id));
+            }
+            Ok(())
+        })
+    }
+
     /// Pins or unpins a session (pinned sessions are never pruned).
     ///
     /// # Errors

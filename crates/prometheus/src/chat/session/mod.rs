@@ -9,6 +9,8 @@ pub mod browser;
 pub mod env;
 pub mod model;
 pub mod progress;
+pub mod skills;
+pub mod summarize;
 pub mod tools;
 
 use std::path::PathBuf;
@@ -33,6 +35,7 @@ use pmt_obs::trajectory::events::Event;
 use pmt_obs::trajectory::payload::{SessionEnd, SessionStart};
 use pmt_obs::trajectory::writer::{Emit, TrajectoryWriter};
 use pmt_skills::review::Nudge;
+use pmt_skills::secrets::SecretPrompt;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
 use pmt_store::{EndReason, NewSession, Source, Store};
 use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
@@ -88,6 +91,8 @@ pub struct Factory {
     /// The flags.
     pub options: Options,
     approver: Option<Arc<dyn Approver>>,
+    secret_prompt: Option<Arc<dyn SecretPrompt>>,
+    maintained: std::sync::atomic::AtomicBool,
     install_asks: Option<tokio::sync::mpsc::UnboundedSender<browser::InstallAsk>>,
     /// The browser tools every session shares, set up by the first
     /// session (`None`: they could not be, see the WARN).
@@ -147,6 +152,12 @@ impl Factory {
         ad_hoc: Option<pmt_providers::resolve::AdHoc>,
         options: Options,
     ) -> Result<Self, Error> {
+        let config = scope.config();
+        // Settings only a session acts on fail here, before any turn
+        // (spec: execution-environments, Typed backend registry and
+        // selection; memory, Context engine selection).
+        pmt_sandbox::backend::BackendRegistry::builtin().select(&config.terminal.backend)?;
+        pmt_agent::compress::engine::select(&config.context, &[])?;
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
@@ -167,6 +178,8 @@ impl Factory {
             record: Arc::default(),
             options,
             approver: None,
+            secret_prompt: None,
+            maintained: std::sync::atomic::AtomicBool::new(false),
             install_asks: None,
             browser: OnceLock::new(),
         })
@@ -211,6 +224,36 @@ impl Factory {
         })
     }
 
+    /// Asks the person for a skill's missing secrets with `prompt`
+    /// (interactive surfaces).
+    #[must_use]
+    pub fn with_secret_prompt(mut self, prompt: Arc<dyn SecretPrompt>) -> Self {
+        self.secret_prompt = Some(prompt);
+        self
+    }
+
+    /// Starts the profile's daily maintenance (session pruning and
+    /// auto-archiving, blob collection, trajectory retention) once per
+    /// process, off the prompt's path; it throttles itself to once a day.
+    fn maintain(&self) {
+        use std::sync::atomic::Ordering;
+        if self.maintained.swap(true, Ordering::Relaxed) {
+            return;
+        }
+        let (store, scope) = (Arc::clone(&self.store), self.scope.clone());
+        tokio::task::spawn_blocking(move || {
+            match pmt_obs::trajectory::retention::daily(&store, &scope) {
+                Ok(Some(swept)) => tracing::debug!(
+                    purged = swept.purged.len(),
+                    orphans = swept.orphans.len(),
+                    "daily maintenance ran"
+                ),
+                Ok(None) => {}
+                Err(err) => tracing::warn!(error = %err, "daily maintenance failed"),
+            }
+        });
+    }
+
     /// Asks `approver` before memory changes that need approval.
     #[must_use]
     pub fn with_memory_approver(mut self, approver: Arc<dyn Approver>) -> Self {
@@ -230,16 +273,22 @@ impl Factory {
         &self.redactor
     }
 
-    /// A new session row for this process's sessions.
+    /// A new session row for this process's sessions on `target`'s route.
     ///
     /// # Errors
     ///
     /// Store errors, `session.invalid_source_tag`.
-    pub fn create_session(&self, parent: Option<SessionId>) -> Result<SessionId, Error> {
+    pub fn create_session(
+        &self,
+        parent: Option<SessionId>,
+        target: &pmt_providers::resolve::Target,
+    ) -> Result<SessionId, Error> {
         let mut new = match parent {
             Some(parent) => NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork),
             None => NewSession::new(Source::Cli),
         };
+        new.provider = Some(target.provider.clone());
+        new.model.clone_from(&target.model);
         if let Some(tag) = &self.options.source_tag {
             pmt_store::sessions::check_source_tag(tag)?;
             new.source_tag = Some(tag.clone());
@@ -261,29 +310,32 @@ impl Factory {
         let scope = &self.scope;
         let config = scope.config();
         let interactive = self.options.interactive;
-        let user_home = self.launch.user_home().map(PathBuf::as_path);
         let model = Arc::new(SwitchableModel::new(
             target.clone(),
             self.models.port(target).await?,
         ));
+        self.maintain();
         let session = self.store.session(id)?;
         self.record.session(id, session.root_session_id, target);
         self.record_launch_flags(id)?;
-        let skills = Arc::new(SkillsSession::new(self.skills_setup(id)));
+        let selection = tools::selection(&self.registry, config, interactive)?;
+        let inline_shell = Arc::new(skills::DeferredShell::default());
+        let skills = Arc::new(SkillsSession::new(self.skills_setup(
+            id,
+            &selection,
+            &inline_shell,
+        )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
         let environment = self.environment(id, target, &capabilities)?;
+        if let Some(terminal) = &environment.terminal {
+            terminal.set_secret_source(skills.secret_source());
+        }
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
-        let (agent_tools, clarify) = self.agent_tools(id, &memory)?;
-        let gate = tools::gate(&GateInputs {
-            scope,
-            grants: &self.grants,
-            cwd: &self.options.cwd,
-            user_home,
-            interactive,
-            yolo: self.options.yolo,
-        })?;
-        let selection = tools::selection(&self.registry, config, interactive)?;
+        let summarizer = self.models.summarizer(&model, id);
+        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer)?;
+        let gate = self.gate()?;
+        skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let session_tools = tools::session_tools(&SurfaceInputsOwned {
             scope,
             store: &self.store,
@@ -298,12 +350,7 @@ impl Factory {
         })
         .await?;
         let tool_port = Arc::new(SwappableTools::new(session_tools));
-        let trajectory = pmt_obs::trajectory::writer::open_for_session(
-            scope,
-            &id.to_string(),
-            &session.root_session_id.to_string(),
-        )?
-        .map(Arc::new);
+        let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
         let prompt = self.prompt_setup(&skills, &memory, &mut notices).await;
         let mut setup = AgentSetup::new(
@@ -317,9 +364,11 @@ impl Factory {
         let events = trajectory
             .clone()
             .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
-        let (tee, progress) = progress::Tee::new(events);
+        let (tee, progress) = progress::Tee::new(events, interactive);
+        model.watch_credentials(borrowed_watch(tee.notices()));
         setup.events = Arc::new(tee);
         setup.redactor = self.redactor.clone();
+        setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(&memory) as _);
         setup.interactive = interactive;
         setup.unattended = !interactive;
@@ -339,7 +388,7 @@ impl Factory {
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
             selection,
             notices,
-            progress: interactive.then_some(progress),
+            progress,
             record: Arc::clone(&self.record),
             agent_tools,
             capabilities,
@@ -350,6 +399,31 @@ impl Factory {
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// The session's command approval gate.
+    fn gate(&self) -> Result<tools::Gate, Error> {
+        tools::gate(&GateInputs {
+            scope: &self.scope,
+            grants: &self.grants,
+            cwd: &self.options.cwd,
+            user_home: self.launch.user_home().map(PathBuf::as_path),
+            interactive: self.options.interactive,
+            yolo: self.options.yolo,
+        })
+    }
+
+    /// The trajectory writer of `session`, when trajectories are on.
+    fn trajectory(
+        &self,
+        session: &pmt_store::Session,
+    ) -> Result<Option<Arc<TrajectoryWriter>>, Error> {
+        Ok(pmt_obs::trajectory::writer::open_for_session(
+            &self.scope,
+            &session.id.to_string(),
+            &session.root_session_id.to_string(),
+        )?
+        .map(Arc::new))
     }
 
     /// Attaches the session's execution environment.
@@ -387,6 +461,7 @@ impl Factory {
         &self,
         id: SessionId,
         memory: &Arc<MemorySession>,
+        summarizer: &Arc<summarize::RouteSummarizer>,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -399,17 +474,29 @@ impl Factory {
             Arc::clone(&self.store),
             id,
             clarifier,
-            SessionSearch::new(Arc::clone(&self.store), id),
+            SessionSearch::new(Arc::clone(&self.store), id)
+                .with_summarizer(Arc::clone(summarizer) as _),
         )?
         .with_memory(Arc::clone(memory) as _);
         Ok((Arc::new(tools), clarify))
     }
 
-    fn skills_setup(&self, id: SessionId) -> SessionSetup {
+    /// The skills' view of the session: the CLI surface and its tools,
+    /// snippets run in the session sandbox, and on an interactive session
+    /// missing secrets asked for locally.
+    fn skills_setup(
+        &self,
+        id: SessionId,
+        selection: &Selection,
+        inline_shell: &Arc<skills::DeferredShell>,
+    ) -> SessionSetup {
         let mut setup =
             SessionSetup::new(self.scope.clone(), Arc::clone(&self.store), id.to_string());
         setup.cwd = Some(self.options.cwd.clone());
         setup.user_home = self.launch.user_home().cloned();
+        setup.view = skills::view(selection);
+        setup.inline_shell = Some(Arc::clone(inline_shell) as _);
+        setup.secret_prompt.clone_from(&self.secret_prompt);
         setup
     }
 
@@ -535,6 +622,21 @@ impl Factory {
         })
         .await
     }
+}
+
+/// Announces each borrowed login's first use in the session (spec:
+/// model-providers, Borrowed CLI logins).
+fn borrowed_watch(notices: progress::Notices) -> pmt_agent::turn::model::CredentialWatch {
+    let announced = Mutex::new(pmt_providers::auth::borrowed::Announcements::default());
+    Arc::new(move |credential| {
+        let notice = announced
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .first_use(credential);
+        if let Some(notice) = notice {
+            notices.show(notice);
+        }
+    })
 }
 
 /// Re-reads the skills index and the memory snapshot before every prompt

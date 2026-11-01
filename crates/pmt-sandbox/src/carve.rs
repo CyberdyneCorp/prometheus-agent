@@ -6,6 +6,9 @@
 //! are skipped, entries with a store further down recurse, the rest are
 //! granted whole. Entries created later in a listed-only directory are
 //! therefore not reachable, and a store's name stays visible in a listing.
+//! A symbolic link is never granted: the grant would attach to its target,
+//! which may be a store (`~/.ssh -> ~/dotfiles/ssh`) or lie outside the
+//! root; a link whose target is in a granted root still works through it.
 
 use std::path::{Path, PathBuf};
 
@@ -42,6 +45,9 @@ fn carve_into(root: &Path, denied: &[&Path], grants: &mut Vec<(PathBuf, Reach)>)
         return;
     };
     for entry in entries.flatten() {
+        if entry.file_type().is_ok_and(|t| t.is_symlink()) {
+            continue;
+        }
         let path = entry.path();
         if !inside.iter().any(|d| path.starts_with(d)) {
             carve_into(&path, &inside, grants);
@@ -83,5 +89,32 @@ mod tests {
             carve(&home.join("notes"), &denied),
             [(home.join("notes"), Reach::Subtree)]
         );
+    }
+
+    /// A dotfiles manager's `~/.ssh -> ~/dotfiles/ssh`: the store is the
+    /// link's target, and the link itself is never granted.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_store_is_not_granted() {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
+        std::fs::create_dir_all(&base).unwrap();
+        let dir = tempfile::tempdir_in(base).unwrap();
+        let home = std::fs::canonicalize(dir.path()).unwrap();
+        std::fs::create_dir_all(home.join("dotfiles/ssh")).unwrap();
+        std::fs::create_dir_all(home.join("notes")).unwrap();
+        std::os::unix::fs::symlink(home.join("dotfiles/ssh"), home.join(".ssh")).unwrap();
+        std::os::unix::fs::symlink(home.join("notes"), home.join("notes-link")).unwrap();
+        let store = std::fs::canonicalize(home.join(".ssh")).unwrap();
+        let grants = carve(&home, &[store.as_path()]);
+        assert!(
+            !grants.iter().any(|(p, _)| p.starts_with(home.join(".ssh"))),
+            "{grants:?}"
+        );
+        assert!(
+            !grants.iter().any(|(p, _)| p.starts_with(&store)),
+            "{grants:?}"
+        );
+        assert!(!grants.iter().any(|(p, _)| *p == home.join("notes-link")));
+        assert!(grants.contains(&(home.join("notes"), Reach::Subtree)));
     }
 }

@@ -160,7 +160,8 @@ fn snapshot_profile(
 
 fn full_archive(step: &Step<'_>) -> Result<BackupRef, Error> {
     let dir = backups_dir(step.install.home.root());
-    pmt_core::private_fs::create_dir(&dir).map_err(|e| crate::install::io_error(&dir, &e))?;
+    pmt_core::private_fs::create_dir(&dir)
+        .map_err(|e| Error::io(&codes::UPDATE_FAILED, &dir, &e))?;
     let path = dir.join(format!(
         "pre-update-{}-{}.tar.zst",
         step.install.version, step.to

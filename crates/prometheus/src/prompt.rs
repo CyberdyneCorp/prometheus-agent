@@ -69,10 +69,6 @@ pub fn confirm_typed(what: &str, expected: &str) -> Result<Option<bool>, Error> 
     Ok(Some(answer.trim() == expected))
 }
 
-/// Exit status when a confirmation is required but no terminal can give
-/// it (design: shared exit codes).
-pub const NEEDS_CONFIRMATION: u8 = 4;
-
 fn read_error(e: &io::Error) -> Error {
     Error::new(&codes::OUTPUT_IO, format!("cannot read from stdin: {e}"))
 }

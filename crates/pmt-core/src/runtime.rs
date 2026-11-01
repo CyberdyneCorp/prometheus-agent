@@ -145,7 +145,7 @@ pub fn read_record(home: &Path, role: Role) -> Result<Option<RuntimeRecord>, Err
     match fs::read(&path) {
         Ok(bytes) => Ok(serde_json::from_slice(&bytes).ok()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(io_error(&path, e)),
+        Err(e) => Err(Error::io_doing(&codes::HOME_IO, "cannot access", &path, &e)),
     }
 }
 
@@ -169,7 +169,9 @@ pub fn live_record(home: &Path, role: Role) -> Result<Option<RuntimeRecord>, Err
 fn remove_record(home: &Path, role: Role) -> Result<(), Error> {
     let path = run_dir(home).join(role.record_file());
     match fs::remove_file(&path) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(io_error(&path, e)),
+        Err(e) if e.kind() != io::ErrorKind::NotFound => {
+            Err(Error::io_doing(&codes::HOME_IO, "cannot access", &path, &e))
+        }
         _ => Ok(()),
     }
 }
@@ -197,15 +199,18 @@ impl WriterLock {
     /// Never: a record holds only strings and numbers.
     pub fn acquire(home: &Path, role: Role, profiles: Vec<String>) -> Result<Self, Error> {
         let dir = run_dir(home);
-        private_fs::create_dir(&dir).map_err(|e| io_error(&dir, e))?;
+        private_fs::create_dir(&dir)
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot access", &dir, &e))?;
         let path = dir.join(LOCK_FILE);
         let file = lock_file_options()
             .open(&path)
-            .map_err(|e| io_error(&path, e))?;
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot access", &path, &e))?;
         match file.try_lock() {
             Ok(()) => {}
             Err(TryLockError::WouldBlock) => return Err(held_error(home)),
-            Err(TryLockError::Error(e)) => return Err(io_error(&path, e)),
+            Err(TryLockError::Error(e)) => {
+                return Err(Error::io_doing(&codes::HOME_IO, "cannot access", &path, &e));
+            }
         }
         // Holding the lock proves no other writer runs: every record left
         // in `run/` is from a process that died without cleaning up.
@@ -215,7 +220,8 @@ impl WriterLock {
         let record = RuntimeRecord::current(role, profiles);
         let record_path = dir.join(role.record_file());
         let json = serde_json::to_vec_pretty(&record).expect("a record always serializes");
-        private_fs::write_atomic(&record_path, &json).map_err(|e| io_error(&record_path, e))?;
+        private_fs::write_atomic(&record_path, &json)
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot access", &record_path, &e))?;
         Ok(Self {
             _file: file,
             home: home.to_owned(),
@@ -278,14 +284,6 @@ fn held_error(home: &Path) -> Error {
         )
         .with_hint("retry in a moment"),
     }
-}
-
-fn io_error(path: &Path, e: io::Error) -> Error {
-    Error::new(
-        &codes::HOME_IO,
-        format!("cannot access {}: {e}", path.display()),
-    )
-    .with_source(e)
 }
 
 #[cfg(test)]

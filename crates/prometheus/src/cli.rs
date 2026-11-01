@@ -4,13 +4,21 @@
 
 use std::path::PathBuf;
 
-use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
 
-use pmt_store::{Role, Source};
-
+pub use crate::auth_cmd::args::{AuthCommand, AuthTypeArg, ImportSourceArg};
 pub use crate::chat::args::ChatArgs;
+pub use crate::config_cmd::args::ConfigCommand;
+pub use crate::doctor_cmd::args::DoctorArgs;
 pub use crate::memory_cmd::args::MemoryCommand;
+pub use crate::model_cmd::args::{EndpointArgs, FallbackCommand, ModelCommand, WireFormatArg};
+pub use crate::runtimes_cmd::args::{ExcludeCommand, RuntimesCommand};
+pub use crate::sessions_cmd::args::{
+    ExportArgs, ExportFormat, SearchArgs, SessionsCommand, SortArg,
+};
+pub use crate::setup_cmd::args::{SetupArgs, SetupSection};
 pub use crate::skills_cmd::args::{BundlesCommand, PendingCommand, SkillsCommand};
+pub use crate::tools_cmd::args::{ToolsCommand, ToolsListArgs, ToolsetsCommand, ToolsetsListArgs};
 
 // The command name is fixed rather than taken from `argv[0]`, so the `pmt`
 // alias prints exactly the same identity line as `prometheus`. `long_about`
@@ -209,6 +217,37 @@ pub enum Command {
         #[command(subcommand)]
         command: RuntimesCommand,
     },
+    // A surface whose cargo feature is off still answers to its name, with
+    // `surface '<name>' is not included in this build` (spec:
+    // workspace-architecture, Version and build identity).
+    /// `tui`, left out of this build (exit 69).
+    #[cfg(not(feature = "tui"))]
+    #[command(hide = true)]
+    Tui(crate::surface::MissingArgs),
+    /// `gateway`, left out of this build (exit 69).
+    #[cfg(not(feature = "gateway"))]
+    #[command(hide = true)]
+    Gateway(crate::surface::MissingArgs),
+    /// `dashboard`, left out of this build (exit 69).
+    #[cfg(not(feature = "dashboard"))]
+    #[command(hide = true)]
+    Dashboard(crate::surface::MissingArgs),
+    /// `acp`, left out of this build (exit 69).
+    #[cfg(not(feature = "acp"))]
+    #[command(hide = true)]
+    Acp(crate::surface::MissingArgs),
+    /// `mcp`, left out of this build (exit 69).
+    #[cfg(not(feature = "mcp"))]
+    #[command(hide = true)]
+    Mcp(crate::surface::MissingArgs),
+    /// `evolve`, left out of this build (exit 69).
+    #[cfg(not(feature = "evolve"))]
+    #[command(hide = true)]
+    Evolve(crate::surface::MissingArgs),
+    /// `eval`, left out of this build (exit 69).
+    #[cfg(not(feature = "eval"))]
+    #[command(hide = true)]
+    Eval(crate::surface::MissingArgs),
 }
 
 /// `prometheus demo` flags.
@@ -223,60 +262,6 @@ pub struct DemoArgs {
     /// Keep the directory afterwards.
     #[arg(long, help = "Keep the demo's home and repository afterwards")]
     pub keep: bool,
-}
-
-/// `prometheus runtimes` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum RuntimesCommand {
-    /// Pinned and installed versions with their size and users.
-    List,
-    /// Download, verify and install the pinned versions.
-    Install {
-        /// Runtime names (node, cpython, uv, chromium).
-        #[arg(required = true, value_name = "NAME")]
-        names: Vec<String>,
-    },
-    /// Remove every installed version no process is using.
-    Remove {
-        /// Runtime name.
-        name: String,
-    },
-    /// Re-hash every installed file against its recorded digest (exit 1 on
-    /// any mismatch).
-    Verify,
-    /// Remove versions neither this binary nor its `.prev` pins and no
-    /// process uses, and partial downloads older than 24 hours.
-    Gc,
-    /// Report the store: location, platform, mirror, exclusions and the
-    /// verification state of every installed version.
-    Doctor,
-    /// List and edit `runtimes.exclude` (runtimes nothing may install).
-    Exclude {
-        /// The exclude subcommand.
-        #[command(subcommand)]
-        command: ExcludeCommand,
-    },
-    /// Install this build's pins of the runtimes in use, then collect
-    /// garbage (run by `prometheus update` with the new binary).
-    #[command(hide = true)]
-    Refresh,
-}
-
-/// `prometheus runtimes exclude` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum ExcludeCommand {
-    /// The excluded runtimes.
-    List,
-    /// Exclude a runtime.
-    Add {
-        /// Runtime name.
-        name: String,
-    },
-    /// Allow a runtime again.
-    Remove {
-        /// Runtime name.
-        name: String,
-    },
 }
 
 /// `prometheus update` arguments. The flags are independent switches of
@@ -321,62 +306,6 @@ pub struct UpdateArgs {
     pub no_backup: bool,
 }
 
-/// `prometheus setup` arguments.
-#[derive(Debug, Clone, Args)]
-pub struct SetupArgs {
-    /// Only this section (all but `tools` and `gateway` when omitted).
-    #[arg(value_enum)]
-    pub section: Option<SetupSection>,
-    /// Take values from `--set` and secrets from the environment instead
-    /// of asking; a missing required value exits 78.
-    #[arg(long)]
-    pub non_interactive: bool,
-    /// Clear the onboarding state (offered setup, shown tips, tour steps).
-    #[arg(long, conflicts_with_all = ["section", "non_interactive"])]
-    pub reset_onboarding: bool,
-}
-
-/// Sections of `prometheus setup`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum SetupSection {
-    /// Provider and model, or a subscription sign-in, and its API key.
-    Model,
-    /// The secrets the configured providers need.
-    Secrets,
-    /// Toolsets per surface and tool providers.
-    Tools,
-    /// The terminal backend.
-    Terminal,
-    /// The memory stores.
-    Memory,
-    /// Messaging adapters (with the gateway).
-    Gateway,
-}
-
-/// `prometheus doctor` arguments.
-#[derive(Debug, Clone, Args)]
-#[allow(clippy::struct_excessive_bools)] // independent switches of one command line
-pub struct DoctorArgs {
-    /// Only this group: home, config, secrets, store, daemon, sandbox,
-    /// terminal, runtimes, plugins, observability, network, providers or
-    /// security.
-    pub group: Option<String>,
-    /// Perform the enumerated repairs (permissions, stale run files, the
-    /// full-text index, pending config migrations) and print each.
-    #[arg(long)]
-    pub fix: bool,
-    /// Allow network probes (provider reachability, IPv6).
-    #[arg(long)]
-    pub online: bool,
-    /// Treat warnings as failures; `doctor security --strict` exits 77 on
-    /// any downgrade.
-    #[arg(long)]
-    pub strict: bool,
-    /// Check every profile of the home.
-    #[arg(long)]
-    pub all_profiles: bool,
-}
-
 /// `prometheus debug` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum DebugCommand {
@@ -388,87 +317,6 @@ pub enum DebugCommand {
         #[arg(long)]
         show_key_prefixes: bool,
     },
-}
-
-/// `prometheus tools` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum ToolsCommand {
-    /// Enable or disable toolsets per surface and choose tool providers,
-    /// interactively.
-    Configure {
-        /// The surface: cli, tui, cron, acp or gateway.<platform> (every
-        /// surface when omitted).
-        #[arg(long, value_name = "SURFACE")]
-        surface: Option<String>,
-    },
-    /// Enable a toolset from the next session.
-    Enable {
-        /// The toolset.
-        toolset: String,
-        /// Only for this surface.
-        #[arg(long, value_name = "SURFACE")]
-        surface: Option<String>,
-    },
-    /// Disable a toolset from the next session.
-    Disable {
-        /// The toolset.
-        toolset: String,
-        /// Only for this surface.
-        #[arg(long, value_name = "SURFACE")]
-        surface: Option<String>,
-    },
-    /// Choose the provider of a tool category (web search, web extract,
-    /// browser, image generation, TTS, STT, video, X search).
-    Provider {
-        /// The category.
-        category: String,
-        /// The provider.
-        provider: String,
-    },
-    /// Every registered tool with its toolset and exposure verdict (`exposed`
-    /// or a reason code) for the profile's configured toolsets, or as a
-    /// session froze them (`--session`).
-    List(ToolsListArgs),
-    /// A tool's schema, owner, capabilities, effect, claims, timeout, result
-    /// budget and the approval rules that apply to it.
-    #[command(visible_alias = "show")]
-    Explain {
-        /// The tool name.
-        name: String,
-    },
-    /// The toolsets, as `prometheus toolsets list`.
-    Toolsets(ToolsetsListArgs),
-}
-
-/// `prometheus tools list` arguments.
-#[derive(Debug, clap::Args)]
-pub struct ToolsListArgs {
-    /// Show the surface this session froze when it started (id, id prefix
-    /// or title) instead of the one a new session would get.
-    #[arg(long, value_name = "SESSION")]
-    pub session: Option<String>,
-}
-
-/// `prometheus toolsets` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum ToolsetsCommand {
-    /// Every toolset: description, direct tools, includes, resolved tool
-    /// count, default-off and posture flags, and whether it is active.
-    List(ToolsetsListArgs),
-    /// The tools a toolset resolves to, in order, with their availability.
-    Show {
-        /// The toolset name.
-        name: String,
-    },
-}
-
-/// Arguments of `toolsets list`.
-#[derive(Debug, Clone, Default, clap::Args)]
-pub struct ToolsetsListArgs {
-    /// Mark the toolsets active on this surface (`toolsets.surfaces.<s>`,
-    /// else `tools.enabled_toolsets`).
-    #[arg(long, value_name = "SURFACE")]
-    pub surface: Option<String>,
 }
 
 /// `prometheus approvals` subcommands.
@@ -521,174 +369,6 @@ pub enum ApprovalContextArg {
     SingleQuery,
     /// Webhook/API surfaces (`approvals.unattended_mode`).
     Unattended,
-}
-
-/// `prometheus auth` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum AuthCommand {
-    /// Store an API key (read from a hidden prompt or stdin) or sign in to
-    /// a subscription.
-    Add {
-        /// Provider id or alias.
-        provider: String,
-        /// Credential type (default: `oauth` for sign-in-only providers,
-        /// else `api_key`).
-        #[arg(long = "type", value_enum, value_name = "TYPE")]
-        kind: Option<AuthTypeArg>,
-        /// Label of this credential (default `default`).
-        #[arg(long, value_name = "LABEL")]
-        label: Option<String>,
-        /// Sign in through the browser (PKCE on a loopback redirect).
-        #[arg(long, conflicts_with = "device")]
-        browser: bool,
-        /// Sign in with a device code.
-        #[arg(long)]
-        device: bool,
-        /// Refused: keys are never accepted as arguments.
-        #[arg(hide = true, trailing_var_arg = true, allow_hyphen_values = true)]
-        argv_key: Vec<String>,
-    },
-    /// List every credential: provider, label, kind, source and status
-    /// (never key or token material).
-    List,
-    /// One provider's credentials, sign-in flows and plan notes.
-    Status {
-        /// Provider id or alias.
-        provider: String,
-    },
-    /// Delete a credential (and revoke a sign-in's refresh token where the
-    /// provider offers revocation).
-    #[command(visible_alias = "rm")]
-    Remove {
-        /// Provider id or alias.
-        provider: String,
-        /// Label, or 1-based position in `auth status <provider>`.
-        #[arg(value_name = "LABEL|INDEX")]
-        credential: String,
-    },
-    /// Copy another tool's sign-in into the secrets store.
-    Import {
-        /// Where the sign-in comes from.
-        #[arg(value_enum)]
-        source: ImportSourceArg,
-        /// The sign-in file (default `~/.codex/auth.json`); only read.
-        #[arg(long, value_name = "PATH")]
-        path: Option<PathBuf>,
-        /// Label of the imported sign-in (default `default`).
-        #[arg(long, value_name = "LABEL")]
-        label: Option<String>,
-    },
-}
-
-/// `auth add --type`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum AuthTypeArg {
-    /// An API key.
-    #[value(name = "api_key")]
-    ApiKey,
-    /// A subscription or OAuth sign-in.
-    Oauth,
-}
-
-/// `auth import` sources.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum ImportSourceArg {
-    /// The Codex CLI's `auth.json` (provider `openai-codex`).
-    CodexCli,
-}
-
-/// A launch-only endpoint (`--base-url`, `--api-key-stdin`): used for this
-/// invocation only and never saved.
-#[derive(Debug, Clone, Default, PartialEq, Eq, clap::Args)]
-pub struct EndpointArgs {
-    /// Endpoint for this invocation only (without `--provider`: provider
-    /// `custom`); never saved.
-    #[arg(long, value_name = "URL")]
-    pub base_url: Option<String>,
-    /// Read the endpoint's API key from stdin; it is held in memory only
-    /// and sent to the `--base-url` host only.
-    #[arg(long, requires = "base_url")]
-    pub api_key_stdin: bool,
-}
-
-/// `prometheus model` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum ModelCommand {
-    /// Show each step resolving the provider, endpoint, wire format,
-    /// credential and model, without calling the model or printing secrets.
-    Explain {
-        /// Provider id or alias (as `--provider` on a session).
-        #[arg(long, value_name = "ID")]
-        provider: Option<String>,
-        /// Model id (as `--model` on a session).
-        #[arg(long, value_name = "ID")]
-        model: Option<String>,
-        /// Launch-only endpoint.
-        #[command(flatten)]
-        endpoint: EndpointArgs,
-    },
-    /// Validate a route (credential, tool support, context window) and
-    /// make it the profile's model.
-    Set {
-        /// `<provider>/<model>` or a `[model.aliases]` name.
-        #[arg(value_name = "PROVIDER/MODEL")]
-        model: String,
-        /// Also set `providers.<id>.wire_format`.
-        #[arg(long, value_enum, value_name = "FORMAT")]
-        wire_format: Option<WireFormatArg>,
-        /// Also set `providers.<id>.base_url` (a local server root is
-        /// normalised to the prefix that serves its model listing).
-        #[arg(long, value_name = "URL")]
-        base_url: Option<String>,
-    },
-    /// List models with their context window and capabilities.
-    List {
-        /// Only this provider's models.
-        #[arg(long, value_name = "ID")]
-        provider: Option<String>,
-        /// List providers (ids, aliases, wire format, endpoint, secret
-        /// names) instead of models.
-        #[arg(long, conflicts_with = "provider")]
-        providers: bool,
-        /// Fetch live listings and the models.dev catalog first.
-        #[arg(long)]
-        refresh: bool,
-    },
-    /// Show the profile's current route, context window and reasoning
-    /// effort.
-    Info,
-}
-
-/// `--wire-format` values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum WireFormatArg {
-    /// OpenAI Chat Completions.
-    ChatCompletions,
-    /// OpenAI Responses.
-    Responses,
-    /// Anthropic Messages.
-    AnthropicMessages,
-}
-
-/// `prometheus fallback` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum FallbackCommand {
-    /// List the chain in order.
-    List,
-    /// Validate a route and append it (no argument: the model picker).
-    Add {
-        /// `<provider>/<model>` or a `[model.aliases]` name.
-        #[arg(value_name = "PROVIDER/MODEL")]
-        model: Option<String>,
-    },
-    /// Remove an entry by its 1-based position or `<provider>/<model>`.
-    Remove {
-        /// Position or `<provider>/<model>`.
-        #[arg(value_name = "INDEX|PROVIDER/MODEL")]
-        entry: String,
-    },
-    /// Remove every entry.
-    Clear,
 }
 
 /// `prometheus logs` arguments.
@@ -844,236 +524,6 @@ pub enum TrajectoryFormat {
     Text,
     /// The stored JSONL lines.
     Jsonl,
-}
-
-/// `prometheus sessions` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum SessionsCommand {
-    /// Pick a session interactively (status tags, search) and resume it.
-    Browse {
-        /// Only sessions from this source.
-        #[arg(long, value_name = "SOURCE", value_parser = parse_source)]
-        source: Option<Source>,
-        /// Also hidden, archived and integration (oneshot, tool) sessions.
-        #[arg(long)]
-        all: bool,
-    },
-    /// List sessions, most recently active first.
-    List {
-        /// At most this many sessions.
-        #[arg(long, value_name = "N")]
-        limit: Option<u32>,
-        /// Also hidden, archived and integration (oneshot, tool) sessions.
-        #[arg(long)]
-        all: bool,
-        /// Only sessions from this source (repeatable).
-        #[arg(long, value_name = "SOURCE", value_parser = parse_source)]
-        source: Vec<Source>,
-        /// Only pinned sessions.
-        #[arg(long)]
-        pinned: bool,
-    },
-    /// Show a session (id, id prefix or title).
-    Show {
-        /// Session id, id prefix (8+ characters) or title.
-        session: String,
-    },
-    /// Full-text search over the profile's messages.
-    Search(SearchArgs),
-    /// Set a session's title.
-    Rename {
-        /// Session id, id prefix or title.
-        session: String,
-        /// The new title (at most 100 characters).
-        title: String,
-    },
-    /// Pin a session (pinned sessions are never pruned).
-    Pin {
-        /// Session id, id prefix or title.
-        session: String,
-    },
-    /// Unpin a session.
-    Unpin {
-        /// Session id, id prefix or title.
-        session: String,
-    },
-    /// Archive a session (hidden from the default listing).
-    Archive {
-        /// Session id, id prefix or title.
-        session: String,
-    },
-    /// Unarchive a session.
-    Unarchive {
-        /// Session id, id prefix or title.
-        session: String,
-    },
-    /// Show a session's lineage tree (forks, continuations, delegates).
-    Tree {
-        /// Session id, id prefix or title.
-        session: String,
-    },
-    /// Show a session's and its lineage's message and token totals.
-    Stats {
-        /// Session id, id prefix or title.
-        session: String,
-    },
-    /// Export sessions (jsonl, md, html, prompts or trace).
-    Export(ExportArgs),
-    /// Delete a session (asks for confirmation unless --yes).
-    Delete {
-        /// Session id, id prefix or title.
-        session: String,
-        /// Also delete its compression continuations.
-        #[arg(long)]
-        with_lineage: bool,
-        /// Do not ask for confirmation.
-        #[arg(long)]
-        yes: bool,
-    },
-    /// Delete ended, unpinned sessions inactive for longer than --older-than days.
-    Prune {
-        /// Inactivity threshold in days.
-        #[arg(long, value_name = "DAYS")]
-        older_than: u64,
-        /// Only print what would be deleted.
-        #[arg(long)]
-        dry_run: bool,
-        /// Do not ask for confirmation.
-        #[arg(long)]
-        yes: bool,
-    },
-    /// Rewind a session to a user message (soft delete; --restore undoes it).
-    Rewind {
-        /// Session id, id prefix or title.
-        session: String,
-        /// The user message to rewind to (default: the last one).
-        #[arg(long, value_name = "MESSAGE_ID", conflicts_with = "restore")]
-        to: Option<String>,
-        /// Restore the rewind that hid this message.
-        #[arg(long, value_name = "MESSAGE_ID")]
-        restore: Option<String>,
-    },
-    /// Rebuild the derived search indexes from the stored messages.
-    Repair {
-        /// Rebuild the search indexes (the only repair so far).
-        #[arg(long)]
-        indexes: bool,
-    },
-    /// Compact state.db and truncate its write-ahead log.
-    Vacuum,
-}
-
-/// `prometheus sessions search` arguments.
-#[derive(Debug, clap::Args)]
-pub struct SearchArgs {
-    /// The query: words, "quoted phrases", prefix* and AND/OR/NOT.
-    pub query: String,
-    /// Hits to return.
-    #[arg(long, value_name = "N", default_value_t = 20)]
-    pub limit: u32,
-    /// Hits to skip.
-    #[arg(long, value_name = "N", default_value_t = 0)]
-    pub offset: u32,
-    /// Result order.
-    #[arg(long, value_enum, default_value_t = SortArg::Rank)]
-    pub sort: SortArg,
-    /// Only these sources (repeatable).
-    #[arg(long, value_name = "SOURCE", value_parser = parse_source)]
-    pub source: Vec<Source>,
-    /// Never these sources (repeatable).
-    #[arg(long, value_name = "SOURCE", value_parser = parse_source)]
-    pub exclude_source: Vec<Source>,
-    /// Only these roles (repeatable: user, assistant, tool, system).
-    #[arg(long, value_name = "ROLE", value_parser = parse_role)]
-    pub role: Vec<Role>,
-    /// Only messages at or after this time (RFC 3339 or YYYY-MM-DD).
-    #[arg(long, value_name = "TIME", value_parser = parse_time)]
-    pub after: Option<jiff::Timestamp>,
-    /// Only messages before this time (RFC 3339 or YYYY-MM-DD).
-    #[arg(long, value_name = "TIME", value_parser = parse_time)]
-    pub before: Option<jiff::Timestamp>,
-    /// Only this session (id, id prefix or title).
-    #[arg(long, value_name = "SESSION")]
-    pub session: Option<String>,
-    /// Only pinned sessions.
-    #[arg(long)]
-    pub pinned: bool,
-    /// Leave archived sessions out.
-    #[arg(long)]
-    pub no_archived: bool,
-    /// Include rewound messages.
-    #[arg(long)]
-    pub include_inactive: bool,
-}
-
-/// `prometheus sessions export` arguments.
-#[derive(Debug, clap::Args)]
-pub struct ExportArgs {
-    /// Sessions to export (id, id prefix or title).
-    #[arg(required_unless_present = "all", conflicts_with = "all")]
-    pub sessions: Vec<String>,
-    /// Export every session.
-    #[arg(long)]
-    pub all: bool,
-    /// Output format.
-    #[arg(long, value_enum, default_value_t = ExportFormat::Jsonl)]
-    pub format: ExportFormat,
-    /// Include rewound and compacted messages.
-    #[arg(long)]
-    pub include_inactive: bool,
-    /// Replace secrets and credential-shaped text with [REDACTED].
-    #[arg(long)]
-    pub redact: bool,
-    /// Write to this file instead of stdout.
-    #[arg(short, long, value_name = "FILE")]
-    pub output: Option<PathBuf>,
-}
-
-/// Search result order on the command line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum SortArg {
-    /// Best match first.
-    Rank,
-    /// Newest first.
-    Newest,
-    /// Oldest first.
-    Oldest,
-}
-
-/// Session export formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum ExportFormat {
-    /// Portable JSONL (header, session, messages, usage, lineage).
-    Jsonl,
-    /// Readable Markdown transcript, tool calls collapsed.
-    Md,
-    /// Self-contained HTML page.
-    Html,
-    /// Only the user messages, one JSON line each.
-    Prompts,
-    /// Trajectory grammar JSONL.
-    Trace,
-}
-
-fn parse_source(text: &str) -> Result<Source, String> {
-    text.parse()
-        .map_err(|e: pmt_core::Error| e.message().to_owned())
-}
-
-fn parse_role(text: &str) -> Result<Role, String> {
-    text.parse()
-        .map_err(|e: pmt_core::Error| e.message().to_owned())
-}
-
-/// RFC 3339, or a date meaning its UTC midnight.
-fn parse_time(text: &str) -> Result<jiff::Timestamp, String> {
-    if let Ok(ts) = text.parse::<jiff::Timestamp>() {
-        return Ok(ts);
-    }
-    text.parse::<jiff::civil::Date>()
-        .and_then(|date| date.to_zoned(jiff::tz::TimeZone::UTC))
-        .map(|zoned| zoned.timestamp())
-        .map_err(|_| format!("'{text}' is not an RFC 3339 time or a YYYY-MM-DD date"))
 }
 
 /// `prometheus grants` subcommands.
@@ -1232,57 +682,6 @@ pub enum ProfileCommand {
         #[arg(long)]
         yes: bool,
     },
-}
-
-/// `prometheus config` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum ConfigCommand {
-    /// Print the path of the profile's config.toml.
-    Path,
-    /// Print config.toml, or with --effective every effective value.
-    Show {
-        /// Every effective value (defaults, file and --set) instead of the file.
-        #[arg(long)]
-        effective: bool,
-    },
-    /// Print the effective value of a key.
-    Get {
-        /// Dotted key, for example `agent.max_iterations`.
-        #[arg(help = "Dotted key, for example agent.max_iterations")]
-        key: String,
-    },
-    /// Set a key in config.toml (the value is typed by the key's schema).
-    Set {
-        /// Dotted key, for example display.theme.
-        key: String,
-        /// New value: text for string keys, else a TOML value (`10`, `true`, `["a"]`).
-        #[arg(allow_hyphen_values = true)]
-        #[arg(help = "New value: text for string keys, else a TOML value (10, true, [\"a\"])")]
-        value: String,
-    },
-    /// Remove a key from config.toml so its default applies.
-    Unset {
-        /// Dotted key.
-        key: String,
-    },
-    /// Edit config.toml in $VISUAL / $EDITOR; the result is validated before it is saved.
-    Edit,
-    /// Validate config.toml (exit 0 when valid, 78 when not).
-    Validate,
-    /// Explain a key: type, default, effective value, source, apply class.
-    #[command(arg_required_else_help = true)]
-    Explain {
-        /// Dotted key.
-        #[arg(required_unless_present = "changed")]
-        key: Option<String>,
-        /// List every key whose effective value differs from its default.
-        #[arg(long, conflicts_with = "key")]
-        changed: bool,
-    },
-    /// Print the config.toml JSON Schema (draft 2020-12).
-    Schema,
-    /// Print the configuration reference (Markdown).
-    Docs,
 }
 
 /// The clap command tree, for generated documentation.

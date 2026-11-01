@@ -98,7 +98,16 @@ pub fn run(command: &SkillsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             Ok(0)
         }
         SkillsCommand::Bundles { command } => bundles::run(&env, command),
-        other => maintain::run(&env, other),
+        SkillsCommand::Reload => maintain::reload_all(&env),
+        SkillsCommand::Pending { command } => maintain::pending(&env, command.as_ref()),
+        SkillsCommand::OptOut { remove, yes } => maintain::opt_out(&env, *remove, *yes),
+        SkillsCommand::OptIn => maintain::opt_in(&env),
+        SkillsCommand::ListModified => maintain::list_modified(&env),
+        SkillsCommand::RepairOfficial {
+            target,
+            restore,
+            yes,
+        } => maintain::repair_official(&env, target, *restore, *yes),
     }
 }
 

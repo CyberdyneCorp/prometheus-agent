@@ -370,7 +370,7 @@ fn reset(env: &Env, which: ResetTarget, yes: bool) -> Result<u8, Error> {
         match prompt::confirm_typed(&format!("delete every {names} memory entry"), "delete")? {
             None => {
                 eprintln!("error: confirmation needed; rerun with --yes");
-                return Ok(prompt::NEEDS_CONFIRMATION);
+                return Ok(pmt_core::exit::APPROVAL_REQUIRED);
             }
             Some(false) => return Ok(1),
             Some(true) => {}

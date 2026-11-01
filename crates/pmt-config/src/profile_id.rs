@@ -46,21 +46,20 @@ fn read(path: &Path) -> Result<Option<ProfileId>, Error> {
             .map(Some)
             .map_err(|e| invalid(path, e.message())),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(crate::layout::io_error(path, &e)),
+        Err(e) => Err(Error::io(&codes::HOME_IO, path, &e)),
     }
 }
 
 fn create(path: &Path) -> Result<(), Error> {
-    let temp = path.with_file_name(format!("{PROFILE_ID_FILE}.tmp.{}", std::process::id()));
-    let _ = std::fs::remove_file(&temp);
+    let temp = private_fs::temp_beside(path).map_err(|e| Error::io(&codes::HOME_IO, path, &e))?;
     private_fs::write_atomic(&temp, format!("{}\n", ProfileId::new()).as_bytes())
-        .map_err(|e| crate::layout::io_error(&temp, &e))?;
+        .map_err(|e| Error::io(&codes::HOME_IO, &temp, &e))?;
     let linked = std::fs::hard_link(&temp, path);
     let _ = std::fs::remove_file(&temp);
     match linked {
         // Another process created it first; its id wins.
         Err(e) if e.kind() != io::ErrorKind::AlreadyExists => {
-            Err(crate::layout::io_error(path, &e))
+            Err(Error::io(&codes::HOME_IO, path, &e))
         }
         _ => Ok(()),
     }

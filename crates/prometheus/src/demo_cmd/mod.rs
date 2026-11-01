@@ -38,9 +38,6 @@ use crate::context::Context;
 /// turn is stopped when it runs longer.
 pub const TIME_LIMIT: Duration = Duration::from_secs(30);
 
-/// Exit status of a demo whose answer did not match.
-pub const FAILED: u8 = 1;
-
 /// The source tag of the demo's session.
 const SOURCE_TAG: &str = "demo";
 
@@ -138,7 +135,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
 
 async fn session(factory: Factory, flags: &RouteFlags<'_>) -> Result<Session, Error> {
     let target = factory.models.primary(flags).await?;
-    let id = factory.create_session(None)?;
+    let id = factory.create_session(None, &target)?;
     let live = factory.open(id, &target).await?;
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = Some(TIME_LIMIT);
@@ -173,7 +170,7 @@ fn report(session: &Session, home: &Path, elapsed: Duration) -> Result<u8, Error
         }
         Err(reason) => {
             println!("demo failed: {reason}");
-            Ok(FAILED)
+            Ok(pmt_core::exit::FAILURE)
         }
     }
 }

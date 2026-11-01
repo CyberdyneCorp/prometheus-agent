@@ -5,6 +5,7 @@
 //! provider, label, kind, source and status — never key or token material.
 
 mod add;
+pub mod args;
 mod import;
 mod list;
 mod remove;

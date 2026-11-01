@@ -1,13 +1,18 @@
 //! Questions the session asks the person and the line that answers them:
-//! command approvals, clarify questions, memory approvals and the
+//! command approvals, clarify questions, memory approvals, a skill's
+//! missing secrets (read with the input hidden) and the
 //! `once / always / cancel` confirmation of destructive commands.
 
 use std::fmt::Write as _;
 
 use pmt_agent::tools::clarify::{Answer, AnswerStatus, ClarifyAnswer, ClarifyRequest};
 use pmt_agent::turn::model::BoxFuture;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use pmt_core::human::Prompt;
+use pmt_core::secret::SecretString;
 use pmt_memory::session::Approver;
+use pmt_skills::secrets::SecretPrompt;
 use pmt_tools::approval::{ApprovalRequest, Decision};
 use tokio::sync::{mpsc, oneshot};
 
@@ -46,6 +51,56 @@ impl Approver for MemoryApprover {
     }
 }
 
+/// A skill secret waiting for the person.
+pub struct SecretAsk {
+    /// The question.
+    pub question: String,
+    /// The value (`None`: skipped).
+    pub reply: oneshot::Sender<Option<SecretString>>,
+}
+
+/// The secret prompt of an interactive session: asks the REPL, which
+/// reads the answer with the input hidden (spec: skills, Skill secrets and
+/// settings). Questions asked before the REPL listens (a `-s` preload at
+/// session start) go unanswered: the secret is reported missing.
+pub struct CliSecretPrompt {
+    asks: mpsc::UnboundedSender<SecretAsk>,
+    listening: AtomicBool,
+}
+
+impl CliSecretPrompt {
+    /// A prompt sending its questions to `asks`.
+    #[must_use]
+    pub fn new(asks: mpsc::UnboundedSender<SecretAsk>) -> Self {
+        Self {
+            asks,
+            listening: AtomicBool::new(false),
+        }
+    }
+
+    /// The REPL answers from now on.
+    pub fn listen(&self) {
+        self.listening.store(true, Ordering::Relaxed);
+    }
+}
+
+impl SecretPrompt for CliSecretPrompt {
+    /// Blocks (on the blocking pool) until the person answers.
+    fn ask(&self, skill: &str, name: &str, prompt: Option<&str>) -> Option<SecretString> {
+        if !self.listening.load(Ordering::Relaxed) {
+            return None;
+        }
+        let why = prompt.map(|p| format!(": {p}")).unwrap_or_default();
+        let (reply, answer) = oneshot::channel();
+        let ask = SecretAsk {
+            question: format!("skill {skill} needs secret {name}{why} (input hidden, Enter skips)"),
+            reply,
+        };
+        self.asks.send(ask).ok()?;
+        answer.blocking_recv().ok().flatten()
+    }
+}
+
 /// What the next line answers.
 pub(super) enum Pending {
     /// A command approval.
@@ -61,6 +116,8 @@ pub(super) enum Pending {
     Memory(oneshot::Sender<bool>),
     /// A runtime install (`[Y/n]`: Enter installs).
     Install(oneshot::Sender<bool>),
+    /// A skill secret, typed hidden.
+    Secret(oneshot::Sender<Option<SecretString>>),
     /// A destructive command waiting for `once / always / cancel`.
     Confirm {
         /// The command line.
@@ -76,6 +133,7 @@ impl Pending {
             Self::Clarify { .. } => "answer › ".to_owned(),
             Self::Memory(_) => "save to memory? [y/n] › ".to_owned(),
             Self::Install(_) => "install? [Y/n] › ".to_owned(),
+            Self::Secret(_) => "secret › ".to_owned(),
             Self::Confirm { .. } => "once / always / cancel › ".to_owned(),
         }
     }
@@ -87,6 +145,9 @@ impl Pending {
             Self::Clarify { prompt, .. } => drop(prompt),
             Self::Memory(reply) | Self::Install(reply) => {
                 let _ = reply.send(false);
+            }
+            Self::Secret(reply) => {
+                let _ = reply.send(None);
             }
             Self::Confirm { .. } => {}
         }

@@ -7,6 +7,7 @@
 //! interactive` takes values from `--set` and secrets from the
 //! environment, exiting 78 when a required one is missing.
 
+pub mod args;
 mod model;
 pub mod sections;
 

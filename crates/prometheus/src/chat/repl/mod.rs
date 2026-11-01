@@ -38,7 +38,7 @@ use tokio::sync::mpsc;
 
 use self::input::{Event, Input};
 use self::prompts::Pending;
-pub use self::prompts::{MemoryApprover, MemoryAsk};
+pub use self::prompts::{CliSecretPrompt, MemoryApprover, MemoryAsk, SecretAsk};
 use super::Ui;
 use super::session::{Factory, Live};
 use super::theme::{Role, Theme};
@@ -99,6 +99,8 @@ struct Repl {
     memory: mpsc::UnboundedReceiver<MemoryAsk>,
     /// Runtime install questions (`Install <name> <version> (<size>)?`).
     installs: mpsc::UnboundedReceiver<InstallAsk>,
+    /// Skill secrets to read hidden.
+    secrets: mpsc::UnboundedReceiver<SecretAsk>,
     /// Messages background work posts to the chat (`/refine` summaries).
     posted: mpsc::UnboundedSender<String>,
     to_post: mpsc::UnboundedReceiver<String>,
@@ -127,6 +129,10 @@ pub struct Asks {
     pub memory: mpsc::UnboundedReceiver<MemoryAsk>,
     /// Runtime installs.
     pub installs: mpsc::UnboundedReceiver<InstallAsk>,
+    /// Skill secrets.
+    pub secrets: mpsc::UnboundedReceiver<SecretAsk>,
+    /// The secret prompt to start listening when the REPL runs.
+    pub secret_prompt: Option<Arc<CliSecretPrompt>>,
 }
 
 impl Asks {
@@ -136,6 +142,8 @@ impl Asks {
         Self {
             memory: memory_channel().1,
             installs: mpsc::unbounded_channel().1,
+            secrets: mpsc::unbounded_channel().1,
+            secret_prompt: None,
         }
     }
 }
@@ -196,6 +204,7 @@ pub async fn run(
         view: progress::TurnView::default(),
         memory: asks.memory,
         installs: asks.installs,
+        secrets: asks.secrets,
         posted,
         to_post,
         last_interrupt: None,
@@ -206,6 +215,9 @@ pub async fn run(
         running: false,
     };
     repl.attach(live);
+    if let Some(prompt) = &asks.secret_prompt {
+        prompt.listen();
+    }
     repl.load_registry();
     repl.banner();
     if repl.start.resumed {
@@ -265,6 +277,7 @@ impl Repl {
     /// within [`DOUBLE_CTRL_C`].
     fn idle_interrupt(&mut self) -> Flow {
         if let Some(pending) = self.pending.take() {
+            self.input.set_masked(false);
             pending.cancel();
             self.notice("cancelled");
             return Flow::Continue;

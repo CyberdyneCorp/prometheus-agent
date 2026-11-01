@@ -139,7 +139,8 @@ fn vim_mode_edits_the_line_with_vi_keys() {
 fn after_a_turn(p: &mut expectrl::session::OsSession) -> String {
     p.send_line("hello").unwrap();
     p.expect("tokens").unwrap();
-    // Let the turn's last lines out before typing.
+    // Let the turn's last lines out before typing (they are part of what
+    // the caller compares, so they are not consumed here).
     std::thread::sleep(Duration::from_millis(500));
     p.send_line("/version").unwrap();
     let found = p.expect("prometheus ").unwrap();

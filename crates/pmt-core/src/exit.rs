@@ -21,64 +21,110 @@ const fn exit(code: u8, name: &'static str, meaning: &'static str) -> ExitCode {
     }
 }
 
+// The named statuses of `EXIT_CODES`: commands return these, never a
+// literal, so the table stays the one definition.
+
+/// Success.
+pub const SUCCESS: u8 = 0;
+/// The command ran but reported failure.
+pub const FAILURE: u8 = 1;
+/// Usage error.
+pub const USAGE: u8 = 2;
+/// Budget exhausted.
+pub const BUDGET_EXHAUSTED: u8 = 3;
+/// Approval or confirmation required but unobtainable.
+pub const APPROVAL_REQUIRED: u8 = 4;
+/// Partial result.
+pub const PARTIAL: u8 = 5;
+/// Update available (`update --check`).
+pub const UPDATE_AVAILABLE: u8 = 10;
+/// Invalid input data.
+pub const INVALID_INPUT: u8 = 65;
+/// Not found.
+pub const NOT_FOUND: u8 = 66;
+/// Unavailable.
+pub const UNAVAILABLE: u8 = 69;
+/// Internal error (also a panic on the main thread).
+pub const INTERNAL: u8 = 70;
+/// Cannot create output.
+pub const CANNOT_CREATE_OUTPUT: u8 = 73;
+/// I/O error.
+pub const IO: u8 = 74;
+/// Temporary failure or lock held.
+pub const TEMPORARY_FAILURE: u8 = 75;
+/// Protocol mismatch.
+pub const PROTOCOL_MISMATCH: u8 = 76;
+/// Permission denied or strict security posture failure.
+pub const PERMISSION_DENIED: u8 = 77;
+/// Configuration or credential error.
+pub const CONFIG: u8 = 78;
+/// Interrupted by SIGINT.
+pub const INTERRUPTED: u8 = 130;
+/// Terminated by SIGTERM.
+pub const TERMINATED: u8 = 143;
+
 /// Every exit code the binary may return, in ascending order. Each
 /// [`ErrorKind`](crate::error::ErrorKind) maps to one of them.
 pub const EXIT_CODES: &[ExitCode] = &[
-    exit(0, "success", "Success."),
+    exit(SUCCESS, "success", "Success."),
     exit(
-        1,
+        FAILURE,
         "failure",
         "The command ran but reported failure (agent error, failing eval tasks, doctor failures).",
     ),
     exit(
-        2,
+        USAGE,
         "usage",
         "Usage error (unknown command, flag or argument).",
     ),
-    exit(3, "budget_exhausted", "Budget exhausted."),
+    exit(BUDGET_EXHAUSTED, "budget_exhausted", "Budget exhausted."),
     exit(
-        4,
+        APPROVAL_REQUIRED,
         "approval_required",
         "Approval or confirmation required but unobtainable non-interactively.",
     ),
     exit(
-        5,
+        PARTIAL,
         "partial",
         "Partial result (some items skipped or ungraded).",
     ),
     exit(
-        10,
+        UPDATE_AVAILABLE,
         "update_available",
         "Update available (`prometheus update --check` only).",
     ),
     exit(
-        65,
+        INVALID_INPUT,
         "invalid_input",
         "Invalid input data (for example harness tree validation).",
     ),
-    exit(66, "not_found", "Not found."),
+    exit(NOT_FOUND, "not_found", "Not found."),
     exit(
-        69,
+        UNAVAILABLE,
         "unavailable",
         "Unavailable (provider, daemon, runtime, surface missing, or self-update of an install owned elsewhere).",
     ),
-    exit(70, "internal", "Internal error."),
-    exit(73, "cannot_create_output", "Cannot create output."),
-    exit(74, "io", "I/O error."),
+    exit(INTERNAL, "internal", "Internal error."),
     exit(
-        75,
+        CANNOT_CREATE_OUTPUT,
+        "cannot_create_output",
+        "Cannot create output.",
+    ),
+    exit(IO, "io", "I/O error."),
+    exit(
+        TEMPORARY_FAILURE,
         "temporary_failure",
         "Temporary failure or lock held (retryable).",
     ),
-    exit(76, "protocol_mismatch", "Protocol mismatch."),
+    exit(PROTOCOL_MISMATCH, "protocol_mismatch", "Protocol mismatch."),
     exit(
-        77,
+        PERMISSION_DENIED,
         "permission_denied",
         "Permission denied or strict security posture failure.",
     ),
-    exit(78, "config", "Configuration or credential error."),
-    exit(130, "interrupted", "Interrupted by SIGINT."),
-    exit(143, "terminated", "Terminated by SIGTERM."),
+    exit(CONFIG, "config", "Configuration or credential error."),
+    exit(INTERRUPTED, "interrupted", "Interrupted by SIGINT."),
+    exit(TERMINATED, "terminated", "Terminated by SIGTERM."),
 ];
 
 /// The table entry for a numeric status, if it is a documented code.
@@ -87,19 +133,37 @@ pub fn lookup(code: u8) -> Option<&'static ExitCode> {
     EXIT_CODES.iter().find(|e| e.code == code)
 }
 
-/// Exit status for success.
-pub const SUCCESS: u8 = 0;
-/// Exit status for a panic on the main thread (the `internal` code).
-pub const INTERNAL: u8 = 70;
-
 #[cfg(test)]
 mod tests {
-    use super::{EXIT_CODES, INTERNAL, SUCCESS, lookup};
+    use super::*;
 
     #[test]
     fn named_constants_are_documented() {
-        assert_eq!(lookup(SUCCESS).map(|e| e.name), Some("success"));
-        assert_eq!(lookup(INTERNAL).map(|e| e.name), Some("internal"));
+        let named = [
+            (SUCCESS, "success"),
+            (FAILURE, "failure"),
+            (USAGE, "usage"),
+            (BUDGET_EXHAUSTED, "budget_exhausted"),
+            (APPROVAL_REQUIRED, "approval_required"),
+            (PARTIAL, "partial"),
+            (UPDATE_AVAILABLE, "update_available"),
+            (INVALID_INPUT, "invalid_input"),
+            (NOT_FOUND, "not_found"),
+            (UNAVAILABLE, "unavailable"),
+            (INTERNAL, "internal"),
+            (CANNOT_CREATE_OUTPUT, "cannot_create_output"),
+            (IO, "io"),
+            (TEMPORARY_FAILURE, "temporary_failure"),
+            (PROTOCOL_MISMATCH, "protocol_mismatch"),
+            (PERMISSION_DENIED, "permission_denied"),
+            (CONFIG, "config"),
+            (INTERRUPTED, "interrupted"),
+            (TERMINATED, "terminated"),
+        ];
+        for (code, name) in named {
+            assert_eq!(lookup(code).map(|e| e.name), Some(name));
+        }
+        assert_eq!(named.len(), EXIT_CODES.len());
         assert!(lookup(99).is_none());
     }
 

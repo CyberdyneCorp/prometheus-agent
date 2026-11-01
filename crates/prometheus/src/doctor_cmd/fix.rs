@@ -34,10 +34,6 @@ pub(super) fn run(ctx: &Context<'_>, root: &Path, profile: &Path) -> Result<Vec<
     Ok(done)
 }
 
-fn io(path: &Path, e: &std::io::Error) -> Error {
-    Error::new(&codes::HOME_IO, format!("{}: {e}", path.display()))
-}
-
 /// Owner-only modes on the home's directories and the profile's files.
 fn tighten(root: &Path, profile: &Path) -> Result<Vec<String>, Error> {
     let (dirs, files) = private_paths(root, profile);
@@ -59,7 +55,8 @@ fn tighten(root: &Path, profile: &Path) -> Result<Vec<String>, Error> {
 #[cfg(unix)]
 fn set_mode(path: &Path, mode: u32) -> Result<(), Error> {
     use std::os::unix::fs::PermissionsExt as _;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).map_err(|e| io(path, &e))
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
+        .map_err(|e| Error::io(&codes::HOME_IO, path, &e))
 }
 
 #[cfg(not(unix))]
@@ -80,7 +77,8 @@ fn stale_records(root: &Path) -> Result<Vec<String>, Error> {
             continue;
         }
         let record_path = run.join(role.record_file());
-        std::fs::remove_file(&record_path).map_err(|e| io(&record_path, &e))?;
+        std::fs::remove_file(&record_path)
+            .map_err(|e| Error::io(&codes::HOME_IO, &record_path, &e))?;
         done.push(format!(
             "removed stale {what} lock (pid {} not running)",
             record.pid
@@ -90,7 +88,7 @@ fn stale_records(root: &Path) -> Result<Vec<String>, Error> {
     let nobody =
         read_record(root, Role::Daemon)?.is_none() && read_record(root, Role::Chat)?.is_none();
     if !done.is_empty() && nobody && lock.exists() {
-        std::fs::remove_file(&lock).map_err(|e| io(&lock, &e))?;
+        std::fs::remove_file(&lock).map_err(|e| Error::io(&codes::HOME_IO, &lock, &e))?;
     }
     Ok(done)
 }
@@ -104,7 +102,7 @@ fn migrate(file: &ConfigFile) -> Result<Vec<String>, Error> {
     let path = file.path();
     let stamp = jiff::Timestamp::now().strftime("%Y%m%dT%H%M%SZ");
     let backup = path.with_file_name(format!("config.toml.bak.{stamp}"));
-    std::fs::copy(path, &backup).map_err(|e| io(&backup, &e))?;
+    std::fs::copy(path, &backup).map_err(|e| Error::io(&codes::HOME_IO, &backup, &e))?;
     file.read()?;
     Ok(vec![format!(
         "migrated config.toml from schema version {from} (backup {})",

@@ -19,7 +19,7 @@ use crate::bundled::Bundled;
 use crate::catalog::Catalog;
 use crate::digest;
 use crate::layout;
-use crate::lockfile::{self, Contents, Entry, LockFile, Trust, io};
+use crate::lockfile::{self, Contents, Entry, LockFile, Trust};
 use crate::roots::{Tier, profile_skills};
 
 /// The `source` prefix of an official install.
@@ -184,12 +184,12 @@ fn repair_one(
 /// Moves `dir` to `<skills>/.backups/<name>-<time>/`.
 fn back_up(skills: &Path, name: &str, dir: &Path) -> Result<PathBuf, Error> {
     let backups = skills.join(".backups");
-    private_fs::create_dir(&backups).map_err(|e| io(&backups, &e))?;
+    private_fs::create_dir(&backups).map_err(|e| Error::io(&codes::SKILL_IO, &backups, &e))?;
     let stamp = jiff::Timestamp::now()
         .strftime("%Y%m%dT%H%M%S%.3fZ")
         .to_string();
     let target = backups.join(format!("{name}-{stamp}"));
-    std::fs::rename(dir, &target).map_err(|e| io(dir, &e))?;
+    std::fs::rename(dir, &target).map_err(|e| Error::io(&codes::SKILL_IO, dir, &e))?;
     Ok(target)
 }
 
@@ -199,9 +199,10 @@ fn write_tree(tree: &Bundled, prefix: &str, target: &Path) -> Result<(), Error> 
         let bytes = tree.read(prefix, &rel).unwrap_or_default();
         let path = rel.split('/').fold(target.to_path_buf(), |p, c| p.join(c));
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| io(parent, &e))?;
+            std::fs::create_dir_all(parent).map_err(|e| Error::io(&codes::SKILL_IO, parent, &e))?;
         }
-        private_fs::write_atomic(&path, bytes).map_err(|e| io(&path, &e))?;
+        private_fs::write_atomic(&path, bytes)
+            .map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
     }
     Ok(())
 }

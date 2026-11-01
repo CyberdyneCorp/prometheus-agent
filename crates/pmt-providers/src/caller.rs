@@ -14,6 +14,7 @@ use crate::capability;
 use crate::classify::ProviderError;
 use crate::cost::{CallContext, Pending};
 use crate::fallback::{Activated, Fallback, Walk};
+use crate::metadata::Catalog;
 use crate::mock::Mock;
 use crate::request::Request;
 use crate::resolve::{BoxFuture, Route};
@@ -270,7 +271,11 @@ impl ModelCaller {
         let mut first: Option<(ProviderError, Route)> = None;
         loop {
             let route = state.current().clone();
-            match self.send(&route, request, ctx).await {
+            let fitted = fit_reasoning(request, &route, walk.catalog);
+            match self
+                .send(&route, fitted.as_ref().unwrap_or(request), ctx)
+                .await
+            {
                 Ok(stream) => {
                     state.primary_succeeded();
                     return Ok(Called {
@@ -299,4 +304,17 @@ impl ModelCaller {
             }
         }
     }
+}
+
+/// `request` with its reasoning level clamped to what `route`'s model
+/// supports, when that differs (a fallback route may reason less, or not
+/// at all); `None` when the request fits as it is.
+fn fit_reasoning(request: &Request, route: &Route, catalog: &Catalog) -> Option<Request> {
+    let level = request.reasoning?;
+    let (meta, _) = catalog.metadata_at(&route.provider, &route.model, Some(&route.base_url));
+    let (sent, _) = crate::reasoning::clamp(level, &meta);
+    (sent != request.reasoning).then(|| Request {
+        reasoning: sent,
+        ..request.clone()
+    })
 }

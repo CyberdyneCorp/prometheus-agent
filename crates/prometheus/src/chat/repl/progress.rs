@@ -73,6 +73,7 @@ impl Repl {
                     self.say(Role::Notice, &format!("(reasoning) {}", text.trim()));
                 }
             }
+            Progress::Notice(text) => self.notice(&text),
         }
     }
 

@@ -359,7 +359,7 @@ fn sigint_stops_a_one_shot_run_with_exit_130() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    common::wait_for_turn_start(home.path());
     let pid = Pid::from_raw(i32::try_from(child.id()).unwrap());
     kill(pid, Signal::SIGINT).unwrap();
     let status = child.wait().unwrap();

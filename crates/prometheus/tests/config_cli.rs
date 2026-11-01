@@ -230,6 +230,24 @@ fn validate_reports_every_error_with_line_and_allowed_values() {
 }
 
 #[test]
+fn validate_refuses_a_string_iteration_limit() {
+    let home = temp_home();
+    run(home.path(), &["config", "path"]);
+    std::fs::write(
+        config_path(home.path()),
+        "[agent]\nmax_iterations = \"unlimited\"\n",
+    )
+    .unwrap();
+    let out = run(home.path(), &["config", "validate"]);
+    assert_eq!(out.status.code(), Some(78));
+    assert!(
+        stderr(&out).contains("agent.max_iterations: expected integer"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
 fn unknown_toolset_fails_validation_with_the_closest_name() {
     let home = temp_home();
     run(home.path(), &["config", "path"]);

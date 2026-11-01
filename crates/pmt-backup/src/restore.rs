@@ -16,7 +16,7 @@ use pmt_core::runtime::{self, Role};
 use serde::Serialize;
 
 use crate::create::Staging;
-use crate::fsutil::{self, Hashing, io_error};
+use crate::fsutil::{self, Hashing};
 use crate::manifest::{self, Manifest};
 use crate::snapshot::{self, Reason, SnapshotInfo};
 use crate::{apply, members, sqlite};
@@ -67,7 +67,7 @@ impl std::fmt::Debug for Plan {
 /// affected profile; `backup.io`. Nothing in the home has changed then.
 pub fn plan(home: &Home, archive: &Path, profile: Option<&ProfileName>) -> Result<Plan, Error> {
     let backups = home.root().join("backups");
-    private_fs::create_dir(&backups).map_err(|e| io_error(&backups, &e))?;
+    private_fs::create_dir(&backups).map_err(|e| Error::io(&codes::BACKUP_IO, &backups, &e))?;
     let staging = Staging::new(&backups)?;
     let manifest = extract_verified(archive, staging.path())?;
     let selected: Vec<String> = manifest
@@ -145,7 +145,8 @@ impl Plan {
             // Restoring a profile is an explicit way back from deletion.
             let tombstone = self.home.tombstone(&name);
             if tombstone.exists() {
-                std::fs::remove_file(&tombstone).map_err(|e| io_error(&tombstone, &e))?;
+                std::fs::remove_file(&tombstone)
+                    .map_err(|e| Error::io(&codes::BACKUP_IO, &tombstone, &e))?;
             }
         }
         let files = self.staging.path().join("files");
@@ -193,7 +194,7 @@ fn older_backup_warning(current: &Path, restored: &Path) -> Option<String> {
 /// against its manifest: each member present once, with the manifest's
 /// size and hash, and nothing unlisted.
 fn extract_verified(archive: &Path, staging: &Path) -> Result<Manifest, Error> {
-    let file = File::open(archive).map_err(|e| io_error(archive, &e))?;
+    let file = File::open(archive).map_err(|e| Error::io(&codes::BACKUP_IO, archive, &e))?;
     let decoder = zstd::Decoder::new(file).map_err(|e| corrupt(&e.to_string()))?;
     let mut tar = tar::Archive::new(decoder);
     let mut seen: BTreeMap<String, (u64, String)> = BTreeMap::new();
@@ -228,11 +229,11 @@ fn extract_verified(archive: &Path, staging: &Path) -> Result<Manifest, Error> {
 
 fn write_staged(entry: &mut impl io::Read, target: &Path) -> Result<(u64, String), Error> {
     if let Some(parent) = target.parent() {
-        private_fs::create_dir(parent).map_err(|e| io_error(parent, &e))?;
+        private_fs::create_dir(parent).map_err(|e| Error::io(&codes::BACKUP_IO, parent, &e))?;
     }
     let mut out = private_fs::new_file_options()
         .open(target)
-        .map_err(|e| io_error(target, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, target, &e))?;
     let mut reader = Hashing::new(entry);
     io::copy(&mut reader, &mut out).map_err(|e| corrupt(&e.to_string()))?;
     Ok(reader.finish())

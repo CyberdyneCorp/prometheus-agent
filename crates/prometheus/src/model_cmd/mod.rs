@@ -4,6 +4,8 @@
 //! resolves routes for the selected profile exactly as a new session
 //! would, and never prints a secret value.
 
+pub mod args;
+
 pub(crate) mod explain;
 mod info;
 mod list;

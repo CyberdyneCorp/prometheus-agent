@@ -15,7 +15,13 @@ touch host paths, and every access is checked first against the session's
 `fs.read`/`fs.write` capabilities (by default the workspace and the
 session scratch directory; see
 [Capabilities, grants and redaction](security.md)). A path outside them is
-`denied` naming the missing capability. Relative paths resolve against the
+`denied` naming the missing capability. The credential stores and the
+Prometheus home that the [OS sandbox](sandbox.md) denies are refused the
+same way, however broad the grant (a session started in your home grants
+`~/**`): [`read_file`](../reference/tools.md#read_file),
+[`search_files`](../reference/tools.md#search_files) and the write tools never reach
+`~/.ssh`, `~/.aws/credentials` or a profile's `secrets.toml` unless a grant
+names a path inside that store. Relative paths resolve against the
 session's working directory, which follows `cd` in the terminal; `~`
 expands to the user home.
 

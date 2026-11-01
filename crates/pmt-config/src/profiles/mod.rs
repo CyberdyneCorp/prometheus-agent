@@ -12,15 +12,15 @@ use pmt_core::runtime::{self, Role};
 
 use crate::layers::Overrides;
 use crate::layout::{
-    ACTIVE_PROFILE_FILE, DEFAULT_PROFILE, Home, ProfileDir, ProfileName, TOMBSTONE_DIR, io_error,
-    private_dir,
+    ACTIVE_PROFILE_FILE, DEFAULT_PROFILE, Home, ProfileDir, ProfileName, TOMBSTONE_DIR, private_dir,
 };
 use crate::scope::{Launch, ProfileScope};
 use crate::secrets::SecretStore;
 
 /// The profile's identity file, copied by `--clone-from`.
 pub const IDENTITY_FILE: &str = "SOUL.md";
-/// What `--clone-from` copies besides `config.toml` and the identity file.
+/// What `--clone-from` copies besides `config.toml` and the identity file
+/// (built-in memory lives in `state.db`; the CLI copies its entries).
 pub const CLONED_DIRS: &[&str] = &["memories", "skills", "themes", "plugins"];
 
 /// What a new profile starts from.
@@ -77,7 +77,7 @@ impl Home {
     /// `home.io`.
     pub fn profiles(&self) -> Result<Vec<ProfileName>, Error> {
         let dir = self.root().join("profiles");
-        let entries = std::fs::read_dir(&dir).map_err(|e| io_error(&dir, &e))?;
+        let entries = std::fs::read_dir(&dir).map_err(|e| Error::io(&codes::HOME_IO, &dir, &e))?;
         let mut names: Vec<ProfileName> = entries
             .filter_map(Result::ok)
             .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
@@ -133,7 +133,7 @@ impl Home {
             return remove_file_if_exists(&path);
         }
         private_fs::write_atomic(&path, format!("{name}\n").as_bytes())
-            .map_err(|e| io_error(&path, &e))
+            .map_err(|e| Error::io(&codes::HOME_IO, &path, &e))
     }
 
     /// Renames profile `old` to `new`, moving its keychain secrets and the
@@ -157,7 +157,8 @@ impl Home {
         let old_store = profile_store(&from)?;
         remove_file_if_exists(&self.tombstone(&new))?;
         let target = self.profile_path(&new);
-        std::fs::rename(from.path(), &target).map_err(|e| io_error(&target, &e))?;
+        std::fs::rename(from.path(), &target)
+            .map_err(|e| Error::io(&codes::HOME_IO, &target, &e))?;
         let to = self.profile(&new)?;
         move_keychain_secrets(&old_store, &to)?;
         if self.active_profile()? == *old {
@@ -185,13 +186,14 @@ impl Home {
         private_dir(&self.root().join("profiles").join(TOMBSTONE_DIR))?;
         let stamp = jiff::Timestamp::now().to_string();
         private_fs::write_atomic(&tombstone, format!("deleted {stamp}\n").as_bytes())
-            .map_err(|e| io_error(&tombstone, &e))?;
+            .map_err(|e| Error::io(&codes::HOME_IO, &tombstone, &e))?;
         if store.kind() == crate::schema::SecretsBackend::Keychain {
             for secret in store.names()? {
                 store.remove(&secret)?;
             }
         }
-        std::fs::remove_dir_all(profile.path()).map_err(|e| io_error(profile.path(), &e))?;
+        std::fs::remove_dir_all(profile.path())
+            .map_err(|e| Error::io(&codes::HOME_IO, profile.path(), &e))?;
         if self.active_profile().ok().as_ref() == Some(name) {
             remove_file_if_exists(&self.root().join(ACTIVE_PROFILE_FILE))?;
         }
@@ -221,9 +223,9 @@ fn copy_profile(source: &ProfileDir, target: &ProfileDir, secrets: bool) -> Resu
     let source_store = profile_store(source)?;
     let copy = |from: &Path, to: &Path| -> Result<(), Error> {
         if from.is_dir() {
-            private_fs::copy_tree(from, to).map_err(|e| io_error(to, &e))
+            private_fs::copy_tree(from, to).map_err(|e| Error::io(&codes::HOME_IO, to, &e))
         } else if from.is_file() {
-            private_fs::copy_file(from, to).map_err(|e| io_error(to, &e))
+            private_fs::copy_file(from, to).map_err(|e| Error::io(&codes::HOME_IO, to, &e))
         } else {
             Ok(())
         }
@@ -270,7 +272,7 @@ fn remove_file_if_exists(path: &Path) -> Result<(), Error> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(io_error(path, &e)),
+        Err(e) => Err(Error::io(&codes::HOME_IO, path, &e)),
     }
 }
 

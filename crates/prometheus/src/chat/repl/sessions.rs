@@ -28,7 +28,7 @@ impl Repl {
         let target = self.live().model.target();
         let id = match next {
             Some(id) => id,
-            None => self.factory.create_session(None)?,
+            None => self.factory.create_session(None, &target)?,
         };
         self.finish(reason).await;
         let live = self.factory.open(id, &target).await?;
@@ -114,7 +114,9 @@ impl Repl {
     pub(super) async fn fork(&mut self, title: &str) -> Result<String, Error> {
         let parent = self.live().id;
         let store = &self.factory.store;
-        let child = self.factory.create_session(Some(parent))?;
+        let child = self
+            .factory
+            .create_session(Some(parent), &self.live().model.target())?;
         let copied: Vec<NewMessage> = store
             .messages(parent, Visibility::Active)?
             .into_iter()
@@ -184,15 +186,23 @@ impl Repl {
             current: &current,
             needs,
         };
-        let mut session = pmt_providers::switch::SessionModel::default();
+        let mut session = live.model.session();
         let text = crate::model_slash::model(&self.factory.scope, &mut session, &ctx, args).await?;
-        if let (Some(next), _) = session.next_turn() {
+        let (next, reasoning) = session.next_turn();
+        if let Some(next) = next {
             let route = resolver
                 .resolve_target(&next, &mut pmt_providers::resolve::Trace::default())
                 .await?;
             let next = target_of(&route);
             let port = models.port(&next).await?;
+            self.factory
+                .store
+                .set_session_route(live.id, &next.provider, next.model.as_deref())?;
             live.model.switch(next, port);
+        }
+        live.model.set_session(session);
+        if reasoning.is_some() {
+            live.model.set_reasoning(reasoning);
         }
         Ok(text)
     }
@@ -208,8 +218,11 @@ impl Repl {
             )
             .await?;
         let (meta, _) = models.catalog().metadata(&route.provider, &route.model);
-        let mut session = pmt_providers::switch::SessionModel::default();
-        crate::model_slash::reasoning(&self.factory.scope, &mut session, &route, &meta, args)
+        let mut session = live.model.session();
+        let text =
+            crate::model_slash::reasoning(&self.factory.scope, &mut session, &route, &meta, args)?;
+        live.model.set_session(session);
+        Ok(text)
     }
 
     /// `/snapshot ...`; a restore replaces `state.db`, so the session's

@@ -159,10 +159,31 @@ impl Segment {
         (None, elevated)
     }
 
-    /// The words joined by single spaces (what allow and deny rules see).
+    /// The words joined by single spaces (what deny rules see).
     #[must_use]
     pub fn text(&self) -> String {
         self.words.join(" ")
+    }
+
+    /// Whether it writes through a redirection.
+    #[must_use]
+    pub fn writes(&self) -> bool {
+        self.redirects.iter().any(Redirect::writes)
+    }
+
+    /// What allow rules see: [`Segment::text`] followed by ` <op> <target>`
+    /// for each write redirection, so an approval of a command never
+    /// covers it with an added redirection.
+    #[must_use]
+    pub fn rule_text(&self) -> String {
+        let mut text = self.text();
+        for redirect in self.redirects.iter().filter(|r| r.writes()) {
+            text.push(' ');
+            text.push_str(&redirect.op);
+            text.push(' ');
+            text.push_str(&redirect.target);
+        }
+        text
     }
 }
 

@@ -15,6 +15,14 @@ pub const SURFACES: [(&str, bool); 7] = [
     ("eval", cfg!(feature = "eval")),
 ];
 
+/// The arguments of a surface left out of this build: anything, ignored.
+#[derive(Debug, Clone, clap::Args)]
+pub struct MissingArgs {
+    /// Whatever followed the surface's name.
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
+    pub args: Vec<std::ffi::OsString>,
+}
+
 /// The gate every surface command calls first.
 ///
 /// # Errors

@@ -46,7 +46,7 @@ use rustyline::hint::Hinter;
 use rustyline::history::{FileHistory, History as _};
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{
-    Cmd, ConditionalEventHandler, Config, EditMode, Editor, EventContext, EventHandler,
+    Cmd, ColorMode, ConditionalEventHandler, Config, EditMode, Editor, EventContext, EventHandler,
     ExternalPrinter, Helper, KeyCode, KeyEvent, Modifiers, RepeatCount,
 };
 use tokio::sync::mpsc;
@@ -78,6 +78,8 @@ struct Shared {
     compose: Mutex<Option<String>>,
     /// The buffer (split at the cursor) an idle Ctrl+Z took.
     suspend: Mutex<Option<(String, String)>>,
+    /// The line is a secret: drawn as `*` and never remembered.
+    masked: AtomicBool,
 }
 
 /// How long [`Input::flush`] waits for earlier output.
@@ -146,6 +148,12 @@ impl Input {
             shared,
             printing: Some(printing),
         })
+    }
+
+    /// Reads the next lines hidden (a secret): echoed as `*`, kept out of
+    /// the history.
+    pub fn set_masked(&self, masked: bool) {
+        self.shared.masked.store(masked, Ordering::Relaxed);
     }
 
     /// Marks whether a turn runs (Ctrl+Z is refused meanwhile).
@@ -267,6 +275,7 @@ fn editor_thread(
     let _ = printer.send(external);
     while let Ok(prompt) = wanted.recv() {
         let event = match read_line(&mut editor, shared, &prompt) {
+            Ok(line) if shared.masked.load(Ordering::Relaxed) => Event::Line(line),
             Ok(line) => {
                 remember(&mut editor, setup, &line);
                 Event::Line(join_continuations(&line))
@@ -298,6 +307,9 @@ fn editor(
         .history_ignore_dups(true)?
         .history_ignore_space(true)
         .auto_add_history(false)
+        // The helper only masks a secret (it adds no colors); rustyline
+        // calls it only with colors on, which NO_COLOR would turn off.
+        .color_mode(ColorMode::Forced)
         .edit_mode(if setup.vim_mode {
             EditMode::Vi
         } else {
@@ -307,6 +319,7 @@ fn editor(
     let mut editor = Editor::with_config(config)?;
     editor.set_helper(Some(LineHelper {
         cwd: setup.cwd.clone(),
+        shared: Arc::clone(shared),
     }));
     editor.bind_sequence(
         KeyEvent(KeyCode::Enter, Modifiers::ALT),
@@ -457,9 +470,16 @@ pub fn join_continuations(line: &str) -> String {
     line.replace("\\\n", "\n")
 }
 
-/// Completion, multi-line validation.
+/// Completion, multi-line validation, masking of a secret.
 struct LineHelper {
     cwd: PathBuf,
+    shared: Arc<Shared>,
+}
+
+impl LineHelper {
+    fn masked(&self) -> bool {
+        self.shared.masked.load(Ordering::Relaxed)
+    }
 }
 
 impl Completer for LineHelper {
@@ -476,7 +496,7 @@ impl Completer for LineHelper {
             i + before[i..].chars().next().map_or(1, char::len_utf8)
         });
         let word = &before[start..];
-        if !word.starts_with('@') {
+        if self.masked() || !word.starts_with('@') {
             return Ok((pos, Vec::new()));
         }
         let candidates = pmt_agent::references::complete::complete(word, &self.cwd)
@@ -492,7 +512,7 @@ impl Completer for LineHelper {
 
 impl Validator for LineHelper {
     fn validate(&self, ctx: &mut ValidationContext<'_>) -> rustyline::Result<ValidationResult> {
-        Ok(if ctx.input().ends_with('\\') {
+        Ok(if !self.masked() && ctx.input().ends_with('\\') {
             ValidationResult::Incomplete
         } else {
             ValidationResult::Valid(None)
@@ -505,6 +525,23 @@ impl Hinter for LineHelper {
 }
 
 impl Highlighter for LineHelper {
+    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
+        if self.masked() {
+            Cow::Owned("*".repeat(line.chars().count()))
+        } else {
+            Cow::Borrowed(line)
+        }
+    }
+
+    fn highlight_char(
+        &self,
+        _line: &str,
+        _pos: usize,
+        _kind: rustyline::highlight::CmdKind,
+    ) -> bool {
+        self.masked()
+    }
+
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,

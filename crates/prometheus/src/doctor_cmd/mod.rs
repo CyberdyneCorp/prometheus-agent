@@ -7,6 +7,7 @@
 //! --strict` exits 77 on a downgrade). Without `--online` nothing touches
 //! the network.
 
+pub mod args;
 mod fix;
 mod groups;
 mod system;
@@ -39,9 +40,6 @@ pub const GROUPS: &[&str] = &[
     "providers",
     "security",
 ];
-
-/// Exit status of `doctor security --strict` with a downgrade.
-pub const STRICT_SECURITY: u8 = 77;
 
 /// What the checks of one run need.
 pub(crate) struct Inputs<'a> {
@@ -154,7 +152,7 @@ fn finish(
         .any(|c| c.group == "security" && c.status != Status::Ok);
     Ok(
         if args.strict && args.group.as_deref() == Some("security") && downgraded {
-            STRICT_SECURITY
+            pmt_core::exit::PERMISSION_DENIED
         } else {
             u8::from(failed)
         },

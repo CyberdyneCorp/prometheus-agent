@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use similar::TextDiff;
 
 use crate::layout::{self, SKILL_FILE};
-use crate::lockfile::{io, now};
+use crate::lockfile::now;
 use crate::manage::{self, Action, Outcome, Request};
 use crate::session::SkillsSession;
 
@@ -94,13 +94,13 @@ pub fn stage(session: &SkillsSession, request: &Request) -> Result<String, Error
     };
     let dir = dir(profile);
     if let Some(parent) = dir.parent() {
-        private_fs::create_dir(parent).map_err(|e| io(parent, &e))?;
+        private_fs::create_dir(parent).map_err(|e| Error::io(&codes::SKILL_IO, parent, &e))?;
     }
-    private_fs::create_dir(&dir).map_err(|e| io(&dir, &e))?;
+    private_fs::create_dir(&dir).map_err(|e| Error::io(&codes::SKILL_IO, &dir, &e))?;
     let path = file(profile, &id)?;
     let text = serde_json::to_vec_pretty(&pending)
         .map_err(|e| Error::new(&codes::SKILL_IO, format!("pending write: {e}")))?;
-    private_fs::write_atomic(&path, &text).map_err(|e| io(&path, &e))?;
+    private_fs::write_atomic(&path, &text).map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
     Ok(id)
 }
 
@@ -143,7 +143,7 @@ pub fn approve(session: &SkillsSession, id: &str) -> Result<Outcome, Error> {
     let outcome = manage::run(session, &pending.request, true)
         .map_err(|why| Error::new(&codes::SKILL_INVALID, format!("{id}: {why}")))?;
     let path = file(session.scope().dir(), id)?;
-    fs::remove_file(&path).map_err(|e| io(&path, &e))?;
+    fs::remove_file(&path).map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
     Ok(outcome)
 }
 

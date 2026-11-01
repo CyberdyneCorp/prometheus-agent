@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use pmt_config::Config;
-use pmt_config::schema::WireFormat;
+use pmt_config::schema::{ReasoningLevel, WireFormat};
 use pmt_core::error::Error;
 use pmt_obs::trajectory::payload::{ModelCall, ProviderFallback};
 use pmt_obs::usage::{Price, Prices as _};
@@ -27,6 +27,10 @@ use pmt_providers::resolve::{
 };
 use pmt_providers::{CallError, ModelCaller, ProviderRegistry, Route};
 use tokio::sync::Mutex;
+
+/// Sees the credential of every route a call is sent on (a surface
+/// announces a borrowed login's first use with it).
+pub type CredentialWatch = Arc<dyn Fn(&pmt_providers::resolve::Credential) + Send + Sync>;
 
 /// A boxed future of a port call.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -185,6 +189,9 @@ pub struct ProviderModel {
     setup: ProviderSetup,
     caller: ModelCaller,
     fallback: Mutex<Fallback>,
+    /// The session's `/reasoning` level (`None`: the config decides).
+    session_reasoning: std::sync::Mutex<Option<ReasoningLevel>>,
+    watch: std::sync::Mutex<Option<CredentialWatch>>,
 }
 
 impl ProviderModel {
@@ -197,6 +204,56 @@ impl ProviderModel {
             setup,
             caller,
             fallback: Mutex::new(fallback),
+            session_reasoning: std::sync::Mutex::default(),
+            watch: std::sync::Mutex::default(),
+        }
+    }
+
+    /// Calls `watch` with the credential of each route a call is sent on.
+    pub fn watch_credentials(&self, watch: CredentialWatch) {
+        *self
+            .watch
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(watch);
+    }
+
+    /// Sets the session's reasoning level from the next request (`None`
+    /// returns to the config's level).
+    pub fn set_reasoning(&self, level: Option<ReasoningLevel>) {
+        *self
+            .session_reasoning
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = level;
+    }
+
+    /// The session's reasoning level.
+    #[must_use]
+    pub fn reasoning(&self) -> Option<ReasoningLevel> {
+        *self
+            .session_reasoning
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// `request` carrying the effort for `route` (spec: model-providers,
+    /// Reasoning effort defaults, overrides and display): the session
+    /// level, else the config's, clamped to what the route's model
+    /// supports. A bad override was refused by config validation, so it
+    /// sends no control here rather than failing the call.
+    fn with_effort(&self, request: &Request, route: &Route) -> Request {
+        let (meta, _) =
+            self.setup
+                .catalog
+                .metadata_at(&route.provider, &route.model, Some(&route.base_url));
+        let effort = pmt_providers::reasoning::effort(
+            &self.setup.config.agent,
+            self.reasoning(),
+            &route.model,
+            &meta,
+        );
+        Request {
+            reasoning: effort.ok().and_then(|e| e.sent),
+            ..request.clone()
         }
     }
 
@@ -252,6 +309,7 @@ impl ProviderModel {
         };
         let started = Instant::now();
         let mut state = self.fallback.lock().await;
+        let request = &self.with_effort(request, state.current());
         let called = match self
             .caller
             .call(&mut state, &walk, request, Some(ctx))
@@ -261,6 +319,14 @@ impl ProviderModel {
             Err(err) => return Err(call_failure(&err)),
         };
         drop(state);
+        let watch = self
+            .watch
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if let Some(watch) = watch {
+            watch(&called.route.credential);
+        }
         let fallbacks = called.fallbacks.iter().map(Activated::payload).collect();
         let mut stream = called.stream;
         let mut reply = ModelReply {

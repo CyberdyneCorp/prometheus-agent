@@ -63,6 +63,23 @@ fn broad_read_grant_still_denies_credential_stores() {
     }
 }
 
+/// A dotfiles manager's `~/.ssh -> ~/dotfiles/ssh`: the store reached
+/// through the link stays denied under a grant covering the home.
+#[test]
+fn a_store_behind_a_link_stays_denied() {
+    let fixture = Fixture::new();
+    let real = fixture.home.join("dotfiles/ssh");
+    std::fs::create_dir_all(&real).unwrap();
+    std::fs::write(real.join("key"), SECRET).unwrap();
+    std::fs::remove_dir_all(fixture.home.join(".ssh")).unwrap();
+    std::os::unix::fs::symlink(&real, fixture.home.join(".ssh")).unwrap();
+    let sandbox = confine(fixture.policy(&["fs.read:~/**"]));
+    assert_denied(&cat(&sandbox, &fixture.home.join(".ssh/key")));
+    assert_denied(&cat(&sandbox, &real.join("key")));
+    let notes = cat(&sandbox, &fixture.home.join("notes.txt"));
+    assert!(notes.status.success(), "{notes:?}");
+}
+
 #[test]
 fn a_grant_naming_the_exact_path_is_honoured() {
     let fixture = Fixture::new();

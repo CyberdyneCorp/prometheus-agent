@@ -109,6 +109,8 @@ pub(crate) struct Recording {
     inner: Arc<dyn ModelPort>,
     requests: Mutex<Vec<Request>>,
     price: Priced,
+    /// Fires when a call starts (tests wait on it instead of sleeping).
+    pub(crate) called: tokio::sync::Notify,
 }
 
 /// The price a test route reports.
@@ -158,6 +160,7 @@ impl ModelPort for Recording {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(request.clone());
+        self.called.notify_one();
         self.inner.call(request, ctx, deltas)
     }
 }
@@ -232,6 +235,7 @@ pub(crate) async fn mock_model_priced(
         inner: Arc::new(inner),
         requests: Mutex::new(Vec::new()),
         price,
+        called: tokio::sync::Notify::new(),
     })
 }
 
@@ -249,6 +253,8 @@ pub(crate) struct FakeTools {
     pub(crate) respond: Option<Respond>,
     /// Tools the no-progress guardrail counts.
     pub(crate) idempotent: Vec<String>,
+    /// Fires when a batch starts (tests wait on it instead of sleeping).
+    pub(crate) started: tokio::sync::Notify,
 }
 
 impl FakeTools {
@@ -265,6 +271,7 @@ impl FakeTools {
             effect: None,
             respond: None,
             idempotent: Vec::new(),
+            started: tokio::sync::Notify::new(),
         }
     }
 
@@ -305,6 +312,7 @@ impl ToolPort for FakeTools {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(async move {
+            self.started.notify_one();
             if let Some(effect) = &self.effect {
                 effect();
             }

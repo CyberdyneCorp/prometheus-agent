@@ -95,9 +95,9 @@ async fn a_steer_is_a_new_row_after_the_last_tool_result() {
         delay: Duration::from_millis(300),
         ..FakeTools::plain()
     });
-    let run = agent(&profile, s, model.clone(), tools, |_| {});
+    let run = agent(&profile, s, model.clone(), tools.clone(), |_| {});
     let steer = async {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tools.started.notified().await;
         run.agent.steer("use the retry helper").unwrap();
         run.agent.steer("and log it").unwrap();
     };
@@ -128,7 +128,7 @@ async fn a_steer_during_a_final_answer_opens_the_next_user_message() {
     let model = mock_model(&profile, script, "mock").await;
     let run = agent(&profile, s, model.clone(), FakeTools::new(), |_| {});
     let steer = async {
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        model.called.notified().await;
         run.agent.steer("prefer tabs").unwrap();
     };
     let (first, ()) = tokio::join!(run.turn(&profile, "hi"), steer);
@@ -171,11 +171,11 @@ async fn stop_during_tools(
         delay: Duration::from_millis(400),
         ..FakeTools::plain()
     });
-    let run = agent(&profile, s, model, tools, |_| {});
+    let run = agent(&profile, s, model, tools.clone(), |_| {});
     let opts = options();
     let interrupt = opts.interrupt.clone();
     let stop = async {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tools.started.notified().await;
         run.agent.steer("keep it short").unwrap();
         if hard {
             interrupt.stop(Issuer::User);
@@ -225,6 +225,10 @@ async fn a_hard_stop_cancels_tools_and_discards_the_steer() {
 #[derive(Default)]
 struct Child {
     cancelled: Arc<AtomicBool>,
+    /// Fires when the delegated child starts.
+    started: tokio::sync::Notify,
+    /// Fires when the child saw its token cancelled.
+    stopped: Arc<tokio::sync::Notify>,
 }
 
 impl ToolPort for Child {
@@ -242,11 +246,13 @@ impl ToolPort for Child {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         let token = cancel.child();
-        let flag = self.cancelled.clone();
+        let (flag, stopped) = (self.cancelled.clone(), self.stopped.clone());
         let child = tokio::spawn(async move {
             token.cancelled().await;
             flag.store(true, Ordering::SeqCst);
+            stopped.notify_one();
         });
+        self.started.notify_one();
         Box::pin(async move {
             let _ = child.await;
             ToolBatch {
@@ -273,7 +279,7 @@ async fn stopping_a_turn_interrupts_its_running_child() {
     let opts = options();
     let interrupt = opts.interrupt.clone();
     let stop = async {
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        child.started.notified().await;
         interrupt.stop(Issuer::User);
     };
     let started = Instant::now();
@@ -283,7 +289,9 @@ async fn stopping_a_turn_interrupts_its_running_child() {
     );
     assert_eq!(result.exit_reason, ExitReason::InterruptedByUser);
     assert!(started.elapsed() < Duration::from_secs(2));
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    tokio::time::timeout(Duration::from_secs(5), child.stopped.notified())
+        .await
+        .expect("the child stopped");
     assert!(
         child.cancelled.load(Ordering::SeqCst),
         "the child saw the stop"
@@ -303,11 +311,12 @@ async fn interrupting_one_session_leaves_another_running() {
             ..FakeTools::plain()
         })
     };
+    let tools_a = slow();
     let run_a = agent(
         &profile,
         a,
         mock_model(&profile, TOOL_THEN_ANSWER, "mock").await,
-        slow(),
+        tools_a.clone(),
         |_| {},
     );
     let run_b = agent(
@@ -320,7 +329,7 @@ async fn interrupting_one_session_leaves_another_running() {
     let (opts_a, opts_b) = (options(), options());
     let stop_a = opts_a.interrupt.clone();
     let stop = async {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tools_a.started.notified().await;
         stop_a.stop(Issuer::User);
     };
     let (ra, rb, ()) = tokio::join!(

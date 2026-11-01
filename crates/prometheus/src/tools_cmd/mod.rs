@@ -11,6 +11,7 @@
 //! `/toolsets` slash command renders the same listing for the session's
 //! own selection ([`slash_toolsets`]).
 
+pub mod args;
 pub mod configure;
 mod render;
 

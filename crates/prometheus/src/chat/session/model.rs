@@ -8,11 +8,12 @@ use std::sync::{Arc, PoisonError, RwLock};
 use std::time::Duration;
 
 use pmt_agent::turn::model::{
-    BoxFuture, DeltaSink, ModelFailure, ModelPort, ModelReply, ProviderModel, ProviderSetup,
-    RouteInfo,
+    BoxFuture, CredentialWatch, DeltaSink, ModelFailure, ModelPort, ModelReply, ProviderModel,
+    ProviderSetup, RouteInfo,
 };
 use pmt_agent::vision::AuxDescriber;
 use pmt_config::ProfileScope;
+use pmt_config::schema::ReasoningLevel;
 use pmt_core::error::{Error, codes};
 use pmt_obs::usage::{Prices, UsageRecorder};
 use pmt_providers::ModelCaller;
@@ -27,6 +28,7 @@ use pmt_providers::request::Request;
 use pmt_providers::resolve::{
     AdHoc, Layer, Resolver, Route, Selection, Target, TcpProbe, Trace, requested,
 };
+use pmt_providers::switch::SessionModel;
 use pmt_store::Store;
 
 /// The exact message of a profile with nothing to talk to.
@@ -43,12 +45,12 @@ pub struct Models {
 }
 
 /// The shareable parts of a [`ProviderSetup`].
-struct ProviderSetupParts {
-    config: Arc<pmt_config::Config>,
+pub(super) struct ProviderSetupParts {
+    pub(super) config: Arc<pmt_config::Config>,
     registry: Arc<ProviderRegistry>,
     secrets: pmt_config::SecretsHandle,
     accounts: Arc<Accounts>,
-    catalog: Arc<Catalog>,
+    pub(super) catalog: Arc<Catalog>,
     ad_hoc: Option<AdHoc>,
 }
 
@@ -68,7 +70,7 @@ impl ProviderSetupParts {
         }
     }
 
-    fn resolver(&self) -> Resolver<'_> {
+    pub(super) fn resolver(&self) -> Resolver<'_> {
         static PROBE: TcpProbe = TcpProbe {
             timeout: Duration::from_millis(500),
         };
@@ -146,6 +148,17 @@ impl Models {
     /// `model.not_configured`, resolution errors.
     pub async fn primary(&self, flags: &RouteFlags<'_>) -> Result<Target, Error> {
         let parts = &self.setup;
+        if let Some(target) = self.flag_target(flags) {
+            let route = parts
+                .resolver()
+                .resolve_target(&target, &mut Trace::default())
+                .await?;
+            return Ok(Target {
+                provider: route.provider,
+                model: Some(route.model),
+                ..target
+            });
+        }
         let selection = Selection {
             flag: Layer {
                 provider: flags.provider.map(str::to_owned),
@@ -162,6 +175,34 @@ impl Models {
             .resolve(&requested, &mut Trace::default())
             .await?;
         Ok(target_of(&route))
+    }
+
+    /// The route `-m` names on its own, with the `[<provider>/]<model>`
+    /// grammar of `/model`: an alias or `<registered provider>/<model>`
+    /// picks the provider too. A bare model, or a prefix that is not a
+    /// provider (an aggregator's `vendor/model` id), stays a model of the
+    /// configured provider; with `--provider` the model is taken verbatim.
+    fn flag_target(&self, flags: &RouteFlags<'_>) -> Option<Target> {
+        if flags.provider.is_some() {
+            return None;
+        }
+        let parts = &self.setup;
+        pmt_providers::target::parse(flags.model?, &parts.config.model, &parts.registry, None).ok()
+    }
+
+    /// The `compression` auxiliary route of the session served by
+    /// `model`, as the summarizer of compaction and `session_search`.
+    pub(crate) fn summarizer(
+        &self,
+        model: &Arc<SwitchableModel>,
+        session: pmt_core::id::SessionId,
+    ) -> Arc<super::summarize::RouteSummarizer> {
+        Arc::new(super::summarize::RouteSummarizer {
+            parts: Arc::clone(&self.setup),
+            aux: Arc::clone(&self.aux),
+            model: Arc::clone(model),
+            session,
+        })
     }
 
     /// The port of `target`, with the profile's fallback chain.
@@ -224,9 +265,12 @@ pub fn target_of(route: &Route) -> Target {
     }
 }
 
-/// The session's model port; `/model` swaps the route between turns.
+/// The session's model port; `/model` swaps the route between turns and
+/// `/reasoning` sets the session's effort, which follows a switch.
 pub struct SwitchableModel {
     current: RwLock<(Target, Arc<ProviderModel>)>,
+    session: std::sync::Mutex<SessionModel>,
+    watch: std::sync::Mutex<Option<CredentialWatch>>,
 }
 
 impl SwitchableModel {
@@ -235,7 +279,16 @@ impl SwitchableModel {
     pub fn new(target: Target, model: Arc<ProviderModel>) -> Self {
         Self {
             current: RwLock::new((target, model)),
+            session: std::sync::Mutex::default(),
+            watch: std::sync::Mutex::default(),
         }
+    }
+
+    /// Calls `watch` with the credential of every route this port sends on,
+    /// across `/model` switches.
+    pub fn watch_credentials(&self, watch: CredentialWatch) {
+        self.model().watch_credentials(Arc::clone(&watch));
+        *self.watch.lock().unwrap_or_else(PoisonError::into_inner) = Some(watch);
     }
 
     /// The target the port serves.
@@ -244,9 +297,40 @@ impl SwitchableModel {
         self.read().0.clone()
     }
 
-    /// Serves `model` (for `target`) from the next call.
+    /// Serves `model` (for `target`) from the next call, keeping the
+    /// session's reasoning level.
     pub fn switch(&self, target: Target, model: Arc<ProviderModel>) {
+        model.set_reasoning(self.model().reasoning());
+        if let Some(watch) = self
+            .watch
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+        {
+            model.watch_credentials(watch);
+        }
         *self.current.write().unwrap_or_else(PoisonError::into_inner) = (target, model);
+    }
+
+    /// The session's `/model` and `/reasoning` choices.
+    #[must_use]
+    pub fn session(&self) -> SessionModel {
+        self.session
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Keeps `session` and sends its reasoning level from the next request.
+    pub fn set_session(&self, session: SessionModel) {
+        self.model().set_reasoning(session.reasoning());
+        *self.session.lock().unwrap_or_else(PoisonError::into_inner) = session;
+    }
+
+    /// Sends `level` from the next request without changing the session
+    /// level (a `/model --reasoning` choice).
+    pub fn set_reasoning(&self, level: Option<ReasoningLevel>) {
+        self.model().set_reasoning(level);
     }
 
     fn model(&self) -> Arc<ProviderModel> {

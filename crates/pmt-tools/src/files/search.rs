@@ -169,10 +169,13 @@ impl FileSession {
             Ok(matcher) => matcher,
             Err(why) => return ToolResult::error(why),
         };
-        let files = match walk(&root, args.file_glob.as_deref()) {
+        let mut files = match walk(&root, args.file_glob.as_deref()) {
             Ok(files) => files,
             Err(why) => return ToolResult::error(why),
         };
+        // A granted root may hold paths the backend refuses (a credential
+        // store under the home): they are neither listed nor read.
+        files.retain(|file| self.backend().check(Access::Read, &file.path).is_ok());
         let files = ordered(files, args.order);
         match matcher {
             Matcher::Name(pattern) => by_name(&files, &pattern, args, &cwd),

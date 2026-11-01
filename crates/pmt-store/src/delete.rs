@@ -10,6 +10,7 @@
 //! tool-result spillover directories (spec: tool-system, Spillover
 //! retention).
 
+use pmt_core::error::codes;
 use std::collections::{BTreeSet, VecDeque};
 use std::path::Path;
 use std::time::SystemTime;
@@ -19,7 +20,7 @@ use pmt_core::id::SessionId;
 use rusqlite::{Connection, Transaction};
 
 use crate::blobs::BlobRef;
-use crate::error::{self, sql};
+use crate::error::sql;
 use crate::index;
 use crate::leases;
 use crate::sessions;
@@ -150,7 +151,7 @@ pub(crate) fn remove_unreferenced(
         }
         let path = dir.join(&sha[..2]).join(sha);
         if untouched_since(&path, since) {
-            std::fs::remove_file(&path).map_err(|e| error::io(&path, &e))?;
+            std::fs::remove_file(&path).map_err(|e| Error::io(&codes::STORE_IO, &path, &e))?;
             removed += 1;
         }
     }

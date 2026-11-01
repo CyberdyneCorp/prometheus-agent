@@ -20,7 +20,7 @@ use pmt_core::private_fs;
 use rusqlite::OptionalExtension;
 use sha2::{Digest, Sha256};
 
-use crate::error::{self, sql};
+use crate::error::sql;
 use crate::files;
 use crate::store::Store;
 
@@ -125,7 +125,7 @@ pub(crate) fn put(dir: &Path, bytes: &[u8]) -> Result<BlobRef, Error> {
         .and_then(|()| std::fs::rename(&temp, &path));
     if let Err(e) = written {
         let _ = std::fs::remove_file(&temp);
-        return Err(error::io(&path, &e));
+        return Err(Error::io(&codes::STORE_IO, &path, &e));
     }
     Ok(blob)
 }
@@ -141,7 +141,7 @@ pub(crate) fn get(dir: &Path, blob: &BlobRef) -> Result<Vec<u8>, Error> {
                 format!("{blob} is missing from {}", dir.display()),
             ));
         }
-        Err(e) => return Err(error::io(&path, &e)),
+        Err(e) => return Err(Error::io(&codes::STORE_IO, &path, &e)),
     };
     if BlobRef::of(&bytes) != *blob {
         return Err(Error::new(
@@ -254,7 +254,7 @@ impl Store {
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         if name.starts_with('.') {
             if older_than_grace(path) {
-                std::fs::remove_file(path).map_err(|e| error::io(path, &e))?;
+                std::fs::remove_file(path).map_err(|e| Error::io(&codes::STORE_IO, path, &e))?;
                 report.temp_files += 1;
             }
             return Ok(());
@@ -275,7 +275,7 @@ impl Store {
         if referenced.is_some() {
             report.referenced += 1;
         } else if older_than_grace(path) {
-            std::fs::remove_file(path).map_err(|e| error::io(path, &e))?;
+            std::fs::remove_file(path).map_err(|e| Error::io(&codes::STORE_IO, path, &e))?;
             report.deleted.push(blob);
         } else {
             report.young += 1;
@@ -295,13 +295,13 @@ fn older_than_grace(path: &Path) -> bool {
 /// Every file one level below the fan-out directories.
 fn blob_files(dir: &Path) -> Result<Vec<PathBuf>, Error> {
     let mut found = Vec::new();
-    let fan_out = std::fs::read_dir(dir).map_err(|e| error::io(dir, &e))?;
+    let fan_out = std::fs::read_dir(dir).map_err(|e| Error::io(&codes::STORE_IO, dir, &e))?;
     for entry in fan_out.filter_map(Result::ok) {
         let sub = entry.path();
         if !entry.file_type().is_ok_and(|t| t.is_dir()) {
             continue;
         }
-        let files = std::fs::read_dir(&sub).map_err(|e| error::io(&sub, &e))?;
+        let files = std::fs::read_dir(&sub).map_err(|e| Error::io(&codes::STORE_IO, &sub, &e))?;
         found.extend(
             files
                 .filter_map(Result::ok)

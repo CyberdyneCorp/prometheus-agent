@@ -4,6 +4,7 @@
 //! `exclude list|add|remove`, and the hidden `refresh` the updater runs
 //! with the new binary. The store itself is `pmt_update::runtimes`.
 
+pub mod args;
 pub mod browser;
 pub mod checks;
 
@@ -24,9 +25,6 @@ use crate::cli::{ExcludeCommand, RuntimesCommand};
 use crate::context::Context;
 use crate::model_cmd::block_on;
 use crate::output::{document, print_raw};
-
-/// Exit status of `runtimes verify` with a mismatch.
-pub const VERIFY_FAILED: u8 = 1;
 
 /// Runs one `runtimes` subcommand.
 ///
@@ -179,7 +177,11 @@ fn verify(store: &Store, json: bool) -> Result<u8, Error> {
         }
         print_raw(&out)?;
     }
-    Ok(if failed { VERIFY_FAILED } else { 0 })
+    Ok(if failed {
+        pmt_core::exit::FAILURE
+    } else {
+        pmt_core::exit::SUCCESS
+    })
 }
 
 /// Runs `gc`, keeping this binary's pins and those of the other installed

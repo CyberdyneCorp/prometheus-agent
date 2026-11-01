@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use landlock::{
     ABI, Access, AccessFs, AccessNet, BitFlags, CompatLevel, Compatible, NetPort, PathBeneath,
-    PathFd, Ruleset, RulesetAttr, RulesetCreated, RulesetCreatedAttr, Scope,
+    Ruleset, RulesetAttr, RulesetCreated, RulesetCreatedAttr, Scope,
 };
 
 use crate::carve::{Reach, carve};
@@ -76,11 +76,12 @@ pub(super) fn ruleset(policy: &Policy, abi: ABI) -> Result<RulesetCreated, Strin
 }
 
 fn add_path(created: RulesetCreated, rule: &PathRule, abi: ABI) -> Result<RulesetCreated, String> {
-    let Ok(fd) = PathFd::new(&rule.path) else {
-        // A root that does not exist (or vanished) grants nothing.
+    let Some((fd, is_dir)) = open_path(&rule.path) else {
+        // A root that does not exist (or vanished, or is now a link)
+        // grants nothing.
         return Ok(created);
     };
-    let access = if rule.path.is_dir() {
+    let access = if is_dir {
         rule.access
     } else {
         rule.access & AccessFs::from_file(abi)
@@ -88,6 +89,23 @@ fn add_path(created: RulesetCreated, rule: &PathRule, abi: ABI) -> Result<Rulese
     created
         .add_rule(PathBeneath::new(fd, access))
         .map_err(|e| format!("{}: {e}", rule.path.display()))
+}
+
+/// An `O_PATH` descriptor of `path` that does not follow a final link, so
+/// a link swapped in after carving cannot redirect the grant to its
+/// target; `None` for a link or a path that cannot be opened.
+fn open_path(path: &std::path::Path) -> Option<(std::fs::File, bool)> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_NOFOLLOW)
+        .open(path)
+        .ok()?;
+    let meta = file.metadata().ok()?;
+    if meta.file_type().is_symlink() {
+        return None;
+    }
+    Some((file, meta.is_dir()))
 }
 
 fn add_ports(

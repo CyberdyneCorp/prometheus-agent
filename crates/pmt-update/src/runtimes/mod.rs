@@ -429,11 +429,7 @@ fn file_name(path: &Path) -> String {
 }
 
 pub(crate) fn remove_dir(dir: &Path) -> Result<(), Error> {
-    std::fs::remove_dir_all(dir).map_err(|e| io_error(dir, &e))
-}
-
-pub(crate) fn io_error(path: &Path, e: &std::io::Error) -> Error {
-    Error::new(&codes::RUNTIME_IO, format!("{}: {e}", path.display()))
+    std::fs::remove_dir_all(dir).map_err(|e| Error::io(&codes::RUNTIME_IO, dir, &e))
 }
 
 #[cfg(test)]

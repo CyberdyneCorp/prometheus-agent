@@ -62,7 +62,9 @@ pub fn sweep(
     if retention_secs > 0 {
         let cutoff = now - Duration::from_secs(retention_secs);
         for id in store.trajectory_purge_candidates(cutoff)? {
-            files::remove(dir, &id.to_string()).map_err(|err| io_error(dir, &err))?;
+            files::remove(dir, &id.to_string()).map_err(|err| {
+                Error::io_doing(&codes::TRAJECTORY_IO, "cannot remove", dir, &err)
+            })?;
             store.mark_trajectory_purged(id)?;
             swept.purged.push(id);
         }
@@ -84,7 +86,8 @@ fn remove_orphans(store: &Store, dir: &Path, now: Timestamp) -> Result<Vec<PathB
         if !older_than(&path, now, ORPHAN_GRACE) || session_exists(store, id)? {
             continue;
         }
-        std::fs::remove_file(&path).map_err(|err| io_error(&path, &err))?;
+        std::fs::remove_file(&path)
+            .map_err(|err| Error::io_doing(&codes::TRAJECTORY_IO, "cannot remove", &path, &err))?;
         removed.push(path);
     }
     Ok(removed)
@@ -104,11 +107,4 @@ fn older_than(path: &Path, now: Timestamp, age: Duration) -> bool {
         .ok()
         .and_then(|time| Timestamp::try_from(time).ok());
     modified.is_some_and(|modified| modified + age < now)
-}
-
-fn io_error(path: &Path, err: &std::io::Error) -> Error {
-    Error::new(
-        &codes::TRAJECTORY_IO,
-        format!("cannot remove {}: {err}", path.display()),
-    )
 }

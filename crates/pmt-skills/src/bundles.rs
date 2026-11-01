@@ -16,7 +16,6 @@ use pmt_core::private_fs;
 use serde::{Deserialize, Serialize};
 
 use crate::digest;
-use crate::lockfile::io;
 use crate::session::SkillsSession;
 use crate::slash::{self, Message};
 
@@ -231,8 +230,9 @@ pub fn create(
             path.display()
         )));
     }
-    private_fs::create_dir(&dir).map_err(|e| io(&dir, &e))?;
-    private_fs::write_atomic(&path, text.as_bytes()).map_err(|e| io(&path, &e))?;
+    private_fs::create_dir(&dir).map_err(|e| Error::io(&codes::SKILL_IO, &dir, &e))?;
+    private_fs::write_atomic(&path, text.as_bytes())
+        .map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
     Ok(path)
 }
 
@@ -243,7 +243,7 @@ pub fn create(
 /// `skill.bundle_not_found`, `skill.io`.
 pub fn delete(profile_dir: &Path, slug: &str) -> Result<PathBuf, Error> {
     let bundle = find(profile_dir, slug)?;
-    fs::remove_file(&bundle.path).map_err(|e| io(&bundle.path, &e))?;
+    fs::remove_file(&bundle.path).map_err(|e| Error::io(&codes::SKILL_IO, &bundle.path, &e))?;
     Ok(bundle.path)
 }
 

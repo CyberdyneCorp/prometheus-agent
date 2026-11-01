@@ -118,7 +118,10 @@ model = "qwen3"
 Entries that are disabled, have no usable credential, whose model lacks a
 capability the request needs (tools, images, a large enough window) or
 that are the route that just failed are skipped; duplicate entries keep
-the first. Every switch is reported as a `provider.fallback` notice. The
+the first. Every switch is recorded as a `provider.fallback` event and
+shown as a notice (`switched from <from> to <to> (<reason>)`, on stderr in
+a one-shot run). A borrowed Claude Code or Codex CLI login is announced
+the first time a session uses it. The
 next turn starts on the primary route again, unless the primary was left
 for `rate_limit` or `billing`: then it rests until the provider's reset
 time, or 1, 2, 4... minutes (at most 4 hours) for consecutive failovers.

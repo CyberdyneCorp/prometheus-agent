@@ -7,6 +7,7 @@
 //! runs in its own `BEGIN IMMEDIATE` transaction that re-reads the version,
 //! so two processes upgrading at once apply every step exactly once.
 
+use pmt_core::error::codes;
 use std::path::{Path, PathBuf};
 
 use pmt_core::private_fs;
@@ -270,7 +271,8 @@ fn backup(conn: &Connection, backup_dir: &Path, old: u32) -> Result<(), Error> {
     files::private_dir(backup_dir)?;
     let target = new_backup_file(backup_dir, old)?;
     let path = target.to_str().ok_or_else(|| {
-        error::io(
+        Error::io(
+            &codes::STORE_IO,
             &target,
             &std::io::Error::new(std::io::ErrorKind::InvalidInput, "path is not UTF-8"),
         )
@@ -293,14 +295,14 @@ fn new_backup_file(dir: &Path, old: u32) -> Result<PathBuf, Error> {
         match private_fs::new_file_options().open(&target) {
             Ok(_) => return Ok(target),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(e) => return Err(error::io(&target, &e)),
+            Err(e) => return Err(Error::io(&codes::STORE_IO, &target, &e)),
         }
     }
     unreachable!("the loop returns")
 }
 
 fn prune_backups(dir: &Path) -> Result<(), Error> {
-    let entries = std::fs::read_dir(dir).map_err(|e| error::io(dir, &e))?;
+    let entries = std::fs::read_dir(dir).map_err(|e| Error::io(&codes::STORE_IO, dir, &e))?;
     let mut backups: Vec<(String, PathBuf)> = entries
         .filter_map(Result::ok)
         .filter_map(|entry| {
@@ -315,7 +317,7 @@ fn prune_backups(dir: &Path) -> Result<(), Error> {
     // Timestamps sort chronologically; newest first.
     backups.sort_by(|a, b| b.0.cmp(&a.0));
     for (_, path) in backups.into_iter().skip(BACKUPS_KEPT) {
-        std::fs::remove_file(&path).map_err(|e| error::io(&path, &e))?;
+        std::fs::remove_file(&path).map_err(|e| Error::io(&codes::STORE_IO, &path, &e))?;
     }
     Ok(())
 }

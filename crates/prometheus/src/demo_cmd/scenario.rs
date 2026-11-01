@@ -58,7 +58,8 @@ const SCRIPT: Script = Script {
 ///
 /// `demo.io` (74).
 pub(super) fn write(repository: &Path, mock_script: &Path) -> Result<(), Error> {
-    std::fs::create_dir_all(repository).map_err(|e| io_error(repository, &e))?;
+    std::fs::create_dir_all(repository)
+        .map_err(|e| Error::io_doing(&codes::DEMO_IO, "cannot write", repository, &e))?;
     let files = [
         (repository.join("ledger.txt"), LEDGER.to_owned()),
         (repository.join("README.md"), fill(README)),
@@ -66,7 +67,8 @@ pub(super) fn write(repository: &Path, mock_script: &Path) -> Result<(), Error> 
         (mock_script.to_path_buf(), fill(MOCK)),
     ];
     for (path, text) in files {
-        std::fs::write(&path, text).map_err(|e| io_error(&path, &e))?;
+        std::fs::write(&path, text)
+            .map_err(|e| Error::io_doing(&codes::DEMO_IO, "cannot write", &path, &e))?;
     }
     Ok(())
 }
@@ -78,13 +80,6 @@ fn fill(template: &str) -> String {
         .replace("@RUN@", SCRIPT.run)
         .replace("@BUG@", SCRIPT.bug)
         .replace("@FIX@", SCRIPT.fix)
-}
-
-fn io_error(path: &Path, err: &std::io::Error) -> Error {
-    Error::new(
-        &codes::DEMO_IO,
-        format!("cannot write {}: {err}", path.display()),
-    )
 }
 
 #[cfg(test)]

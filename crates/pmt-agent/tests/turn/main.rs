@@ -9,6 +9,7 @@ mod exits;
 mod guardrails;
 mod images;
 mod prompt;
+mod reasoning;
 mod recovery;
 mod references;
 mod session_tools;

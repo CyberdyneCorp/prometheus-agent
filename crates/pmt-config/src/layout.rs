@@ -254,7 +254,7 @@ impl Home {
             Ok(text) if !text.trim().is_empty() => ProfileName::parse(text.trim()),
             Ok(_) => Ok(ProfileName::default_profile()),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(ProfileName::default_profile()),
-            Err(e) => Err(io_error(&path, &e)),
+            Err(e) => Err(Error::io(&codes::HOME_IO, &path, &e)),
         }
     }
 
@@ -340,12 +340,8 @@ fn check_not_deleted(root: &Path, name: &ProfileName) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn io_error(path: &Path, e: &io::Error) -> Error {
-    Error::new(&codes::HOME_IO, format!("{}: {e}", path.display()))
-}
-
 pub(crate) fn private_dir(dir: &Path) -> Result<(), Error> {
-    private_fs::create_dir(dir).map_err(|e| io_error(dir, &e))?;
+    private_fs::create_dir(dir).map_err(|e| Error::io(&codes::HOME_IO, dir, &e))?;
     tighten(dir, 0o700);
     Ok(())
 }
@@ -355,10 +351,10 @@ pub(crate) fn write_new(path: &Path, text: &str) -> Result<(), Error> {
     match private_fs::new_file_options().open(path) {
         Ok(mut file) => file
             .write_all(text.as_bytes())
-            .map_err(|e| io_error(path, &e)),
+            .map_err(|e| Error::io(&codes::HOME_IO, path, &e)),
         // Another process created it first; its contents win.
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(io_error(path, &e)),
+        Err(e) => Err(Error::io(&codes::HOME_IO, path, &e)),
     }
 }
 

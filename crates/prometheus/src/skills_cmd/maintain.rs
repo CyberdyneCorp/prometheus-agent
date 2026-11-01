@@ -12,28 +12,15 @@ use pmt_store::Store;
 use serde_json::json;
 
 use super::Env;
-use super::args::{PendingCommand, SkillsCommand};
+use super::args::PendingCommand;
 use crate::output::{json, print_raw};
-use crate::prompt::{self, NEEDS_CONFIRMATION};
+use crate::prompt;
+use pmt_core::exit::APPROVAL_REQUIRED;
 
-/// The maintenance subcommands.
-pub(super) fn run(env: &Env, command: &SkillsCommand) -> Result<u8, Error> {
-    match command {
-        SkillsCommand::Reload => reload_all(env),
-        SkillsCommand::Pending { command } => pending(env, command.as_ref()),
-        SkillsCommand::OptOut { remove, yes } => opt_out(env, *remove, *yes),
-        SkillsCommand::OptIn => {
-            optout::set_included(env.scope.profile(), true)?;
-            done(env, "bundled skills are shown again from the next session")
-        }
-        SkillsCommand::ListModified => list_modified(env),
-        SkillsCommand::RepairOfficial {
-            target,
-            restore,
-            yes,
-        } => repair_official(env, target, *restore, *yes),
-        _ => unreachable!("handled by skills_cmd::run"),
-    }
+/// `skills opt-in`.
+pub(super) fn opt_in(env: &Env) -> Result<u8, Error> {
+    optout::set_included(env.scope.profile(), true)?;
+    done(env, "bundled skills are shown again from the next session")
 }
 
 fn done(env: &Env, message: &str) -> Result<u8, Error> {
@@ -62,7 +49,7 @@ pub(super) fn scan_now(env: &Env) -> reload::Scan {
     reload::scan_of(&visible, env.scope.dir())
 }
 
-fn reload_all(env: &Env) -> Result<u8, Error> {
+pub(super) fn reload_all(env: &Env) -> Result<u8, Error> {
     let file = reload::state_file(env.scope.dir());
     let before = reload::read_state(&file);
     let now = scan_now(env);
@@ -87,7 +74,7 @@ fn session(env: &Env) -> Result<SkillsSession, Error> {
     Ok(SkillsSession::new(setup))
 }
 
-fn pending(env: &Env, command: Option<&PendingCommand>) -> Result<u8, Error> {
+pub(super) fn pending(env: &Env, command: Option<&PendingCommand>) -> Result<u8, Error> {
     let args = match command {
         None | Some(PendingCommand::List) => "pending".to_owned(),
         Some(PendingCommand::Diff { id }) => format!("diff {id}"),
@@ -105,7 +92,7 @@ fn pending(env: &Env, command: Option<&PendingCommand>) -> Result<u8, Error> {
     print_raw(&text)
 }
 
-fn opt_out(env: &Env, remove: bool, yes: bool) -> Result<u8, Error> {
+pub(super) fn opt_out(env: &Env, remove: bool, yes: bool) -> Result<u8, Error> {
     let mut removed = Vec::new();
     if remove {
         let catalog = env.profile_catalog();
@@ -119,7 +106,7 @@ fn opt_out(env: &Env, remove: bool, yes: bool) -> Result<u8, Error> {
             match prompt::confirm_typed(&what, "delete")? {
                 None => {
                     eprintln!("refusing to {what} without a terminal; pass --yes");
-                    return Ok(NEEDS_CONFIRMATION);
+                    return Ok(APPROVAL_REQUIRED);
                 }
                 Some(false) => return Ok(1),
                 Some(true) => {}
@@ -140,7 +127,7 @@ fn opt_out(env: &Env, remove: bool, yes: bool) -> Result<u8, Error> {
     Ok(0)
 }
 
-fn list_modified(env: &Env) -> Result<u8, Error> {
+pub(super) fn list_modified(env: &Env) -> Result<u8, Error> {
     let modified = optout::modified(env.scope.dir(), &env.profile_catalog());
     if env.json {
         let rows: Vec<_> = modified
@@ -159,7 +146,12 @@ fn list_modified(env: &Env) -> Result<u8, Error> {
     print_raw(&text)
 }
 
-fn repair_official(env: &Env, target: &str, restore: bool, yes: bool) -> Result<u8, Error> {
+pub(super) fn repair_official(
+    env: &Env,
+    target: &str,
+    restore: bool,
+    yes: bool,
+) -> Result<u8, Error> {
     if restore && !yes {
         let what = format!(
             "replace missing or modified official skills ({target}); current copies move to skills/.backups/"
@@ -167,7 +159,7 @@ fn repair_official(env: &Env, target: &str, restore: bool, yes: bool) -> Result<
         match prompt::confirm_typed(&what, "restore")? {
             None => {
                 eprintln!("refusing to restore without a terminal; pass --yes");
-                return Ok(NEEDS_CONFIRMATION);
+                return Ok(APPROVAL_REQUIRED);
             }
             Some(false) => return Ok(1),
             Some(true) => {}

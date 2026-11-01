@@ -3,6 +3,7 @@
 //! binary nor its `.prev` pins and that no process leases, plus partial
 //! downloads and staging directories older than 24 hours.
 
+use pmt_core::error::codes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -105,7 +106,7 @@ fn sweep_old(dir: &Path, now: SystemTime, report: &mut GcReport) -> Result<(), E
             remove_dir(&path)?;
         } else {
             report.reclaimed += meta.len();
-            std::fs::remove_file(&path).map_err(|e| super::io_error(&path, &e))?;
+            std::fs::remove_file(&path).map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
         }
         report.removed.push(path);
     }

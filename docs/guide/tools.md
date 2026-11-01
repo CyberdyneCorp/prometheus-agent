@@ -142,8 +142,10 @@ the generic path (for example from an RPC client) returns
 - [`session_search`](../reference/tools.md#session_search) searches this
   profile's past sessions (never another profile's), leaving out what the
   current session already has in context, and can return the messages
-  around a hit (`session_id`, `around_message_id`, `window`). Results are
-  capped at 16 KiB.
+  around a hit (`session_id`, `around_message_id`, `window`). When more
+  than three sessions match, each gets a short summary from the
+  `[auxiliary.compression]` route (`detail = "full"` skips it). Results
+  are capped at 16 KiB.
 
 ## Large results
 
@@ -190,8 +192,12 @@ approval gate first, always in this order:
 3. **`approvals.mode = "off"`** (or `--yolo`, or `/yolo` for one session)
    runs everything else without asking; the status line shows `YOLO`.
 4. **Allow rules** in `grants.toml` (`[approvals] allow = [...]`) run
-   without asking; a command line is allowed when it matches a rule as a
-   whole or every command in it does.
+   without asking; a command line is allowed when every command in it,
+   nested `$(...)` ones included, matches a rule. A command is matched
+   with its output redirections, so `echo hi` never covers
+   `echo hi > ~/.bashrc`, and `git status*` never covers
+   `git status; curl x | sh`. A rule without wildcards (an `always`
+   answer) also covers exactly the line it was given for.
 5. **Dangerous commands ask**: recursive deletes, `git reset --hard`,
    force pushes, `chmod -R`, `sudo`, a download piped into a shell,
    destructive SQL and similar, plus two content checks: a `curl`/`wget`

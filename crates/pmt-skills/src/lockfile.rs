@@ -155,9 +155,10 @@ impl LockFile {
         let text = toml::to_string(&File { skills: entries })
             .map_err(|e| Error::new(&codes::SKILL_IO, format!("skills.lock: {e}")))?;
         if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| io(dir, &e))?;
+            std::fs::create_dir_all(dir).map_err(|e| Error::io(&codes::SKILL_IO, dir, &e))?;
         }
-        private_fs::write_atomic(&self.path, text.as_bytes()).map_err(|e| io(&self.path, &e))
+        private_fs::write_atomic(&self.path, text.as_bytes())
+            .map_err(|e| Error::io(&codes::SKILL_IO, &self.path, &e))
     }
 }
 
@@ -165,8 +166,4 @@ impl LockFile {
 #[must_use]
 pub fn now() -> String {
     Timestamp::now().to_string()
-}
-
-pub(crate) fn io(path: &Path, e: &std::io::Error) -> Error {
-    Error::new(&codes::SKILL_IO, format!("{}: {e}", path.display()))
 }

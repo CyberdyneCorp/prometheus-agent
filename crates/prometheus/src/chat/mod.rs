@@ -199,15 +199,23 @@ async fn start(
     }
     let id = match resumed {
         Some(id) => id,
-        None => factory.create_session(None)?,
+        None => factory.create_session(None, &target)?,
     };
     let asks = if mode == Mode::Line {
         let (approver, memory) = repl::memory_channel();
         let (install_asks, installs) = tokio::sync::mpsc::unbounded_channel();
+        let (secret_asks, secrets) = tokio::sync::mpsc::unbounded_channel();
+        let secret_prompt = Arc::new(repl::CliSecretPrompt::new(secret_asks));
         factory = factory
             .with_memory_approver(approver)
-            .with_install_asks(install_asks);
-        Some(repl::Asks { memory, installs })
+            .with_install_asks(install_asks)
+            .with_secret_prompt(Arc::clone(&secret_prompt) as _);
+        Some(repl::Asks {
+            memory,
+            installs,
+            secrets,
+            secret_prompt: Some(secret_prompt),
+        })
     } else {
         None
     };
@@ -250,8 +258,8 @@ async fn start(
 fn end_reason(status: u8) -> EndReason {
     match status {
         0 => EndReason::UserExit,
-        oneshot::BUDGET_EXHAUSTED => EndReason::BudgetExhausted,
-        oneshot::INTERRUPTED | oneshot::TERMINATED => EndReason::Interrupted,
+        pmt_core::exit::BUDGET_EXHAUSTED => EndReason::BudgetExhausted,
+        pmt_core::exit::INTERRUPTED | pmt_core::exit::TERMINATED => EndReason::Interrupted,
         _ => EndReason::Error,
     }
 }

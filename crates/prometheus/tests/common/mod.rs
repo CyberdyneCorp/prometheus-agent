@@ -203,3 +203,66 @@ pub fn fake_runtime(
     .unwrap();
     root
 }
+
+/// Reads one HTTP request (headers, then a sized or chunked body) and
+/// returns its body, so a fake server never closes the connection under
+/// a body the client is still sending.
+pub fn read_http_request(reader: &mut impl std::io::BufRead) -> Vec<u8> {
+    let (mut length, mut chunked) = (0, false);
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+            break;
+        }
+        let line = line.to_ascii_lowercase();
+        if let Some(value) = line.strip_prefix("content-length:") {
+            length = value.trim().parse().unwrap_or(0);
+        }
+        chunked |= line.starts_with("transfer-encoding:") && line.contains("chunked");
+    }
+    let mut body = Vec::new();
+    if !chunked {
+        body.resize(length, 0);
+        let _ = reader.read_exact(&mut body);
+        return body;
+    }
+    loop {
+        let mut size = String::new();
+        if reader.read_line(&mut size).unwrap_or(0) == 0 {
+            return body;
+        }
+        let size = usize::from_str_radix(size.trim(), 16).unwrap_or(0);
+        let mut chunk = vec![0; size + 2];
+        let _ = reader.read_exact(&mut chunk);
+        if size == 0 {
+            return body;
+        }
+        body.extend_from_slice(&chunk[..size]);
+    }
+}
+
+/// Waits (at most 30 s) until a turn has started in the default profile:
+/// its `turn.start` event is in a trajectory file. Tests that signal a
+/// running one-shot turn wait on this instead of sleeping.
+pub fn wait_for_turn_start(home: &Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while turns_started(home) == 0 {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no turn started within 30 s"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+/// How many turns have started in the default profile (`turn.start`
+/// events across its live trajectory files).
+pub fn turns_started(home: &Path) -> usize {
+    std::fs::read_dir(home.join("profiles/default/trajectories"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+        .map(|text| text.matches("\"turn.start\"").count())
+        .sum()
+}

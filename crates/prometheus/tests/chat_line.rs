@@ -137,7 +137,7 @@ fn a_command_typed_while_busy_follows_its_busy_policy() {
     let mut p = spawn(home.path(), &["--mock-script", &path]);
     prompt(&mut p);
     p.send_line("slow").unwrap();
-    std::thread::sleep(Duration::from_millis(300));
+    common::pty::wait_for_turns(&mut p, home.path(), 1);
     p.send_line("/compress").unwrap();
     p.expect("/compress is unavailable while the agent is working; use /stop first")
         .unwrap();
@@ -163,7 +163,9 @@ fn ctrl_c_stops_the_turn_and_twice_when_idle_exits() {
     let mut p = spawn(home.path(), &["--mock-script", &path]);
     prompt(&mut p);
     p.send_line("take your time").unwrap();
-    std::thread::sleep(Duration::from_millis(500));
+    common::pty::wait_for_turns(&mut p, home.path(), 1);
+    // The busy prompt: the editor reads keys again, so Ctrl+C is a key.
+    prompt(&mut p);
     p.send("\x03").unwrap();
     p.expect("interrupted").unwrap();
     prompt(&mut p);

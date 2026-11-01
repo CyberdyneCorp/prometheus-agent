@@ -3,6 +3,7 @@
 //! `<home>/updates/receipts/` (never a profile directory), named
 //! `<timestamp>-<id>.json`, plus `latest.json`; the newest 50 are kept.
 
+use pmt_core::error::codes;
 use std::path::{Path, PathBuf};
 
 use pmt_core::error::Error;
@@ -10,7 +11,7 @@ use pmt_core::private_fs;
 use pmt_core::runtime::process_start_time;
 use serde::{Deserialize, Serialize};
 
-use crate::install::{create_dirs, io_error};
+use crate::install::create_dirs;
 
 /// How many receipts are kept.
 pub const KEEP: usize = 50;
@@ -271,9 +272,11 @@ impl ReceiptWriter {
 
     fn save(&self) -> Result<(), Error> {
         let json = serde_json::to_vec_pretty(&self.receipt).expect("receipt serializes");
-        private_fs::write_atomic(&self.path, &json).map_err(|e| io_error(&self.path, &e))?;
+        private_fs::write_atomic(&self.path, &json)
+            .map_err(|e| Error::io(&codes::UPDATE_FAILED, &self.path, &e))?;
         let latest = self.dir.join(LATEST_FILE);
-        private_fs::write_atomic(&latest, &json).map_err(|e| io_error(&latest, &e))
+        private_fs::write_atomic(&latest, &json)
+            .map_err(|e| Error::io(&codes::UPDATE_FAILED, &latest, &e))
     }
 }
 
@@ -293,7 +296,7 @@ pub fn list(home: &Path) -> Result<Vec<(PathBuf, UpdateReceipt)>, Error> {
     let entries = match std::fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(io_error(&dir, &e)),
+        Err(e) => return Err(Error::io(&codes::UPDATE_FAILED, &dir, &e)),
     };
     let mut paths: Vec<PathBuf> = entries
         .filter_map(Result::ok)
@@ -361,10 +364,12 @@ pub fn mark_interrupted(home: &Path) -> Result<usize, Error> {
         }
         receipt.outcome = Outcome::Interrupted;
         let json = serde_json::to_vec_pretty(&receipt).expect("receipt serializes");
-        private_fs::write_atomic(&path, &json).map_err(|e| io_error(&path, &e))?;
+        private_fs::write_atomic(&path, &json)
+            .map_err(|e| Error::io(&codes::UPDATE_FAILED, &path, &e))?;
         if newest.as_ref() == Some(&path) {
             let latest = dir(home).join(LATEST_FILE);
-            private_fs::write_atomic(&latest, &json).map_err(|e| io_error(&latest, &e))?;
+            private_fs::write_atomic(&latest, &json)
+                .map_err(|e| Error::io(&codes::UPDATE_FAILED, &latest, &e))?;
         }
         marked += 1;
     }
@@ -373,7 +378,7 @@ pub fn mark_interrupted(home: &Path) -> Result<usize, Error> {
 
 fn prune(dir: &Path) -> Result<(), Error> {
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
-        .map_err(|e| io_error(dir, &e))?
+        .map_err(|e| Error::io(&codes::UPDATE_FAILED, dir, &e))?
         .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| is_receipt(p))
@@ -381,7 +386,7 @@ fn prune(dir: &Path) -> Result<(), Error> {
     paths.sort();
     let excess = paths.len().saturating_sub(KEEP);
     for path in &paths[..excess] {
-        std::fs::remove_file(path).map_err(|e| io_error(path, &e))?;
+        std::fs::remove_file(path).map_err(|e| Error::io(&codes::UPDATE_FAILED, path, &e))?;
     }
     Ok(())
 }

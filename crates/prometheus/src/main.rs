@@ -102,6 +102,20 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
+        #[cfg(not(feature = "tui"))]
+        Some(Command::Tui(_)) => prometheus::surface::require("tui").map(|()| 0),
+        #[cfg(not(feature = "gateway"))]
+        Some(Command::Gateway(_)) => prometheus::surface::require("gateway").map(|()| 0),
+        #[cfg(not(feature = "dashboard"))]
+        Some(Command::Dashboard(_)) => prometheus::surface::require("dashboard").map(|()| 0),
+        #[cfg(not(feature = "acp"))]
+        Some(Command::Acp(_)) => prometheus::surface::require("acp").map(|()| 0),
+        #[cfg(not(feature = "mcp"))]
+        Some(Command::Mcp(_)) => prometheus::surface::require("mcp").map(|()| 0),
+        #[cfg(not(feature = "evolve"))]
+        Some(Command::Evolve(_)) => prometheus::surface::require("evolve").map(|()| 0),
+        #[cfg(not(feature = "eval"))]
+        Some(Command::Eval(_)) => prometheus::surface::require("eval").map(|()| 0),
         None => chat::run(&cli.chat, &ctx, ui(cli)),
     };
     result.unwrap_or_else(|err| {

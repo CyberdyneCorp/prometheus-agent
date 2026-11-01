@@ -13,7 +13,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::private_fs;
 use serde::Serialize;
 
-use crate::fsutil::{self, Hashing, io_error};
+use crate::fsutil::{self, Hashing};
 use crate::manifest::{self, Manifest, Member};
 use crate::{members, sqlite};
 
@@ -58,7 +58,7 @@ pub struct Created {
 /// `backup.running` (75) when another backup holds the lock, `backup.io`.
 pub fn create(home: &Home, options: &CreateOptions) -> Result<Created, Error> {
     let backups = home.root().join("backups");
-    private_fs::create_dir(&backups).map_err(|e| io_error(&backups, &e))?;
+    private_fs::create_dir(&backups).map_err(|e| Error::io(&codes::BACKUP_IO, &backups, &e))?;
     let _lock = lock(&backups)?;
     let now = jiff::Timestamp::now();
     let output = match &options.output {
@@ -86,7 +86,8 @@ pub fn create(home: &Home, options: &CreateOptions) -> Result<Created, Error> {
         manifest,
     )
     .and_then(|manifest| {
-        std::fs::rename(&partial, &output).map_err(|e| io_error(&output, &e))?;
+        std::fs::rename(&partial, &output)
+            .map_err(|e| Error::io(&codes::BACKUP_IO, &output, &e))?;
         Ok(manifest)
     });
     let manifest = match written {
@@ -134,7 +135,7 @@ fn lock(backups: &Path) -> Result<File, Error> {
         .truncate(false)
         .write(true)
         .open(&path)
-        .map_err(|e| io_error(&path, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, &path, &e))?;
     fsutil::private_file(&path);
     match file.try_lock() {
         Ok(()) => Ok(file),
@@ -142,7 +143,7 @@ fn lock(backups: &Path) -> Result<File, Error> {
             &codes::BACKUP_RUNNING,
             "another backup is running",
         )),
-        Err(std::fs::TryLockError::Error(e)) => Err(io_error(&path, &e)),
+        Err(std::fs::TryLockError::Error(e)) => Err(Error::io(&codes::BACKUP_IO, &path, &e)),
     }
 }
 
@@ -157,7 +158,7 @@ impl Staging {
             ".staging-{}",
             pmt_core::id::SnapshotId::new().ulid()
         ));
-        private_fs::create_dir(&dir).map_err(|e| io_error(&dir, &e))?;
+        private_fs::create_dir(&dir).map_err(|e| Error::io(&codes::BACKUP_IO, &dir, &e))?;
         Ok(Self { dir })
     }
 
@@ -185,9 +186,9 @@ fn write_archive(
 ) -> Result<Manifest, Error> {
     let file = private_fs::new_file_options()
         .open(partial)
-        .map_err(|e| io_error(partial, &e))?;
-    let encoder =
-        zstd::Encoder::new(BufWriter::new(file), LEVEL).map_err(|e| io_error(partial, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, partial, &e))?;
+    let encoder = zstd::Encoder::new(BufWriter::new(file), LEVEL)
+        .map_err(|e| Error::io(&codes::BACKUP_IO, partial, &e))?;
     let mut tar = tar::Builder::new(encoder);
     for (index, relative) in selected.iter().enumerate() {
         let source = members::on_disk(root, relative);
@@ -212,15 +213,16 @@ fn write_archive(
     header.set_size(json.len() as u64);
     header.set_mode(0o600);
     tar.append_data(&mut header, manifest::ARCHIVE_ENTRY, json.as_slice())
-        .map_err(|e| io_error(partial, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, partial, &e))?;
     let mut out = tar
         .into_inner()
         .and_then(zstd::Encoder::finish)
-        .map_err(|e| io_error(partial, &e))?;
-    out.flush().map_err(|e| io_error(partial, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, partial, &e))?;
+    out.flush()
+        .map_err(|e| Error::io(&codes::BACKUP_IO, partial, &e))?;
     out.get_ref()
         .sync_all()
-        .map_err(|e| io_error(partial, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, partial, &e))?;
     Ok(manifest)
 }
 
@@ -234,19 +236,25 @@ fn append(
     let Ok(file) = File::open(source) else {
         return Ok(None);
     };
-    let size = file.metadata().map_err(|e| io_error(source, &e))?.len();
+    let size = file
+        .metadata()
+        .map_err(|e| Error::io(&codes::BACKUP_IO, source, &e))?
+        .len();
     let mut header = tar::Header::new_gnu();
     header.set_size(size);
     header.set_mode(0o600);
     header.set_entry_type(tar::EntryType::Regular);
     let mut reader = Hashing::new(io::Read::take(file, size));
     tar.append_data(&mut header, relative, &mut reader)
-        .map_err(|e| io_error(source, &e))?;
+        .map_err(|e| Error::io(&codes::BACKUP_IO, source, &e))?;
     let (read, sha256) = reader.finish();
     if read != size {
-        return Err(io_error(
-            source,
-            &"changed size while it was archived; retry the backup",
+        return Err(Error::new(
+            &codes::BACKUP_IO,
+            format!(
+                "{}: changed size while it was archived; retry the backup",
+                source.display()
+            ),
         ));
     }
     Ok(Some(Member {
@@ -259,7 +267,8 @@ fn append(
 /// Removes the oldest default-named archives in `backups` beyond `keep`
 /// (never `just_written`, never other files).
 fn prune(backups: &Path, keep: usize, just_written: &Path) -> Result<Vec<PathBuf>, Error> {
-    let entries = std::fs::read_dir(backups).map_err(|e| io_error(backups, &e))?;
+    let entries =
+        std::fs::read_dir(backups).map_err(|e| Error::io(&codes::BACKUP_IO, backups, &e))?;
     let mut named: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|e| e.path())
@@ -277,7 +286,7 @@ fn prune(backups: &Path, keep: usize, just_written: &Path) -> Result<Vec<PathBuf
         if path == just_written {
             continue;
         }
-        std::fs::remove_file(&path).map_err(|e| io_error(&path, &e))?;
+        std::fs::remove_file(&path).map_err(|e| Error::io(&codes::BACKUP_IO, &path, &e))?;
         pruned.push(path);
     }
     Ok(pruned)

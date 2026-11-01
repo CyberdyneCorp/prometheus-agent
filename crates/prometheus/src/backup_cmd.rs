@@ -5,15 +5,13 @@ use pmt_backup::snapshot::{self, Reason, SnapshotInfo};
 use pmt_backup::{CreateOptions, restore};
 use pmt_config::{ProfileDir, ProfileName};
 use pmt_core::error::Error;
+use pmt_core::exit::PARTIAL;
 use serde::Serialize;
 
 use crate::cli::{BackupCommand, SnapshotsCommand};
 use crate::context::Context;
 use crate::output::{document, print, print_raw};
 use crate::prompt;
-
-/// Exit status of a backup that skipped unreadable members.
-pub const PARTIAL: u8 = 5;
 
 /// Runs one `backup` subcommand and returns its exit code.
 ///
@@ -78,7 +76,7 @@ fn restore_home(ctx: &Context<'_>, archive: &std::path::Path, force: bool) -> Re
         match prompt::confirm_typed(&what, "restore")? {
             None => {
                 eprintln!("error: the home already holds data; rerun with --force to replace it");
-                return Ok(prompt::NEEDS_CONFIRMATION);
+                return Ok(pmt_core::exit::APPROVAL_REQUIRED);
             }
             Some(false) => {
                 eprintln!("nothing restored");

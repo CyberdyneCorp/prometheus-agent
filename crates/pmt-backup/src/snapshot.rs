@@ -13,7 +13,7 @@ use pmt_core::private_fs;
 use pmt_core::runtime::Role;
 use serde::{Deserialize, Serialize};
 
-use crate::fsutil::{self, io_error};
+use crate::fsutil::{self};
 use crate::manifest::Member;
 use crate::{apply, members, sqlite};
 
@@ -96,9 +96,11 @@ pub fn create(
         };
         let json = serde_json::to_vec_pretty(&info).expect("snapshot info serializes");
         let info_path = partial.join(INFO_FILE);
-        private_fs::write_atomic(&info_path, &json).map_err(|e| io_error(&info_path, &e))?;
+        private_fs::write_atomic(&info_path, &json)
+            .map_err(|e| Error::io(&codes::BACKUP_IO, &info_path, &e))?;
         let target = root.join(&id);
-        std::fs::rename(&partial, &target).map_err(|e| io_error(&target, &e))?;
+        std::fs::rename(&partial, &target)
+            .map_err(|e| Error::io(&codes::BACKUP_IO, &target, &e))?;
         Ok(info)
     });
     if written.is_err() {
@@ -109,19 +111,20 @@ pub fn create(
 
 fn write(profile: &Path, partial: &Path) -> Result<Vec<Member>, Error> {
     let files = partial.join(FILES_DIR);
-    private_fs::create_dir(&files).map_err(|e| io_error(&files, &e))?;
+    private_fs::create_dir(&files).map_err(|e| Error::io(&codes::BACKUP_IO, &files, &e))?;
     let (selected, _) = members::walk(profile, &members::profile_quick);
     let mut written = Vec::new();
     for relative in selected {
         let source = members::on_disk(profile, &relative);
         let target = members::on_disk(&files, &relative);
         if let Some(parent) = target.parent() {
-            private_fs::create_dir(parent).map_err(|e| io_error(parent, &e))?;
+            private_fs::create_dir(parent).map_err(|e| Error::io(&codes::BACKUP_IO, parent, &e))?;
         }
         if members::is_database(&relative) {
             sqlite::copy(&source, &target)?;
         } else {
-            private_fs::copy_file(&source, &target).map_err(|e| io_error(&source, &e))?;
+            private_fs::copy_file(&source, &target)
+                .map_err(|e| Error::io(&codes::BACKUP_IO, &source, &e))?;
         }
         let (size, sha256) = fsutil::hash_file(&target)?;
         written.push(Member {
@@ -143,7 +146,7 @@ pub fn list(profile: &ProfileDir) -> Result<Vec<SnapshotInfo>, Error> {
     let entries = match std::fs::read_dir(&root) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(io_error(&root, &e)),
+        Err(e) => return Err(Error::io(&codes::BACKUP_IO, &root, &e)),
     };
     let mut found: Vec<SnapshotInfo> = entries
         .filter_map(Result::ok)
@@ -161,7 +164,7 @@ pub fn list(profile: &ProfileDir) -> Result<Vec<SnapshotInfo>, Error> {
 
 fn read_info(dir: &Path) -> Result<SnapshotInfo, Error> {
     let path = dir.join(INFO_FILE);
-    let bytes = std::fs::read(&path).map_err(|e| io_error(&path, &e))?;
+    let bytes = std::fs::read(&path).map_err(|e| Error::io(&codes::BACKUP_IO, &path, &e))?;
     serde_json::from_slice(&bytes).map_err(|e| corrupt(&path, &e))
 }
 
@@ -218,10 +221,11 @@ pub fn restore(profile: &ProfileDir, id: &str) -> Result<Restored, Error> {
         // Restore from a copy: the snapshot itself stays intact.
         let staged = members::on_disk(staging.path(), &member.path);
         if let Some(parent) = staged.parent() {
-            private_fs::create_dir(parent).map_err(|e| io_error(parent, &e))?;
+            private_fs::create_dir(parent).map_err(|e| Error::io(&codes::BACKUP_IO, parent, &e))?;
         }
         let source = members::on_disk(&files, &member.path);
-        private_fs::copy_file(&source, &staged).map_err(|e| io_error(&source, &e))?;
+        private_fs::copy_file(&source, &staged)
+            .map_err(|e| Error::io(&codes::BACKUP_IO, &source, &e))?;
         let target = members::on_disk(profile.path(), &member.path);
         apply::member(&staged, &target, &member.path)?;
     }
@@ -288,7 +292,7 @@ fn prune_where(
         .skip(keep);
     for snapshot in prunable {
         let dir = snapshots_dir(profile).join(&snapshot.id);
-        std::fs::remove_dir_all(&dir).map_err(|e| io_error(&dir, &e))?;
+        std::fs::remove_dir_all(&dir).map_err(|e| Error::io(&codes::BACKUP_IO, &dir, &e))?;
         removed.push(snapshot.id);
     }
     Ok(removed)

@@ -13,9 +13,6 @@ use pmt_providers::resolve::Target;
 use pmt_store::{CostStatus, Store, UsageEvent};
 use serde::Serialize;
 
-/// Exit status when the usage file cannot be created.
-pub const CANNOT_CREATE: u8 = 73;
-
 /// What a run did, filled in as it goes.
 #[derive(Debug)]
 pub struct RunRecord {
@@ -222,7 +219,7 @@ pub fn finish(
                 format!("cannot write --usage-file {}: {e}", path.display()),
             );
             crate::output::print_error(&err, json);
-            Ok(CANNOT_CREATE)
+            Ok(pmt_core::exit::CANNOT_CREATE_OUTPUT)
         }
     }
 }

@@ -131,11 +131,7 @@ pub fn decompress(compressed_path: &Path) -> io::Result<PathBuf> {
 }
 
 fn sibling_temp(target: &Path) -> PathBuf {
-    let mut name = target.as_os_str().to_os_string();
-    name.push(format!(".tmp.{}", std::process::id()));
-    let temp = PathBuf::from(name);
-    let _ = fs::remove_file(&temp);
-    temp
+    pmt_core::private_fs::temp_beside(target).unwrap_or_else(|_| target.with_extension("tmp"))
 }
 
 #[cfg(test)]

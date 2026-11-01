@@ -1,7 +1,5 @@
 //! Mapping of SQLite and filesystem failures onto the error catalog.
 
-use std::path::Path;
-
 use pmt_core::error::{Error, codes};
 use rusqlite::ErrorCode;
 
@@ -26,11 +24,6 @@ pub(crate) fn sql(e: rusqlite::Error) -> Error {
         _ => &codes::STORE_SQLITE,
     };
     Error::new(code, format!("state.db: {e}"))
-}
-
-/// A filesystem failure on `path`.
-pub(crate) fn io(path: &Path, e: &std::io::Error) -> Error {
-    Error::new(&codes::STORE_IO, format!("{}: {e}", path.display()))
 }
 
 /// A column that does not hold what this build wrote.

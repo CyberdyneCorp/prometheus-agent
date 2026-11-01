@@ -10,6 +10,8 @@ use std::fmt;
 
 use serde::Serialize;
 
+use crate::exit;
+
 /// The closed set of error kinds. Each maps to exactly one process exit code.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -103,19 +105,19 @@ impl ErrorKind {
     #[must_use]
     pub const fn exit_code(self) -> u8 {
         match self {
-            Self::Usage => 2,
-            Self::InvalidInput => 65,
-            Self::NotFound => 66,
-            Self::Config | Self::Auth => 78,
-            Self::PermissionDenied | Self::Sandbox => 77,
-            Self::BudgetExceeded => 3,
-            Self::Provider | Self::Unavailable => 69,
-            Self::Tool => 1,
-            Self::Conflict => 75,
-            Self::Protocol => 76,
-            Self::Cancelled => 130,
-            Self::Io => 74,
-            Self::Internal => 70,
+            Self::Usage => exit::USAGE,
+            Self::InvalidInput => exit::INVALID_INPUT,
+            Self::NotFound => exit::NOT_FOUND,
+            Self::Config | Self::Auth => exit::CONFIG,
+            Self::PermissionDenied | Self::Sandbox => exit::PERMISSION_DENIED,
+            Self::BudgetExceeded => exit::BUDGET_EXHAUSTED,
+            Self::Provider | Self::Unavailable => exit::UNAVAILABLE,
+            Self::Tool => exit::FAILURE,
+            Self::Conflict => exit::TEMPORARY_FAILURE,
+            Self::Protocol => exit::PROTOCOL_MISMATCH,
+            Self::Cancelled => exit::INTERRUPTED,
+            Self::Io => exit::IO,
+            Self::Internal => exit::INTERNAL,
         }
     }
 }
@@ -801,6 +803,25 @@ impl Error {
         }
     }
 
+    /// An I/O failure on `path`: `<path>: <err>` under `code`, keeping the
+    /// I/O error (its kind and OS code) as the source.
+    #[must_use]
+    pub fn io(code: &'static ErrorCode, path: &std::path::Path, err: &std::io::Error) -> Self {
+        Self::new(code, format!("{}: {err}", path.display())).with_source(copy_io(err))
+    }
+
+    /// [`Error::io`] saying what failed: `<doing> <path>: <err>`, e.g.
+    /// `cannot write /x: ...`.
+    #[must_use]
+    pub fn io_doing(
+        code: &'static ErrorCode,
+        doing: &str,
+        path: &std::path::Path,
+        err: &std::io::Error,
+    ) -> Self {
+        Self::new(code, format!("{doing} {}: {err}", path.display())).with_source(copy_io(err))
+    }
+
     /// Adds a hint, usually the command that fixes the problem.
     #[must_use]
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
@@ -888,6 +909,15 @@ impl std::error::Error for Error {
             .as_deref()
             .map(|e| e as &(dyn std::error::Error + 'static))
     }
+}
+
+/// An owned copy of `err` for the source chain (`io::Error` is not
+/// `Clone`): the OS error when there is one, else its kind and message.
+fn copy_io(err: &std::io::Error) -> std::io::Error {
+    err.raw_os_error().map_or_else(
+        || std::io::Error::new(err.kind(), err.to_string()),
+        std::io::Error::from_raw_os_error,
+    )
 }
 
 /// Shorthand for results whose error is a user-visible [`Error`].
@@ -983,5 +1013,20 @@ mod tests {
         let doc: serde_json::Value = serde_json::from_str(&err.to_json()).unwrap();
         assert_eq!(doc["error"]["hint"], serde_json::Value::Null);
         assert_eq!(doc["error"]["kind"], "internal");
+    }
+
+    #[test]
+    fn an_io_error_names_the_path_and_keeps_the_io_error_as_source() {
+        let err = Error::io_doing(
+            &codes::HOME_IO,
+            "cannot write",
+            std::path::Path::new("/x/config.toml"),
+            &std::io::Error::from(std::io::ErrorKind::PermissionDenied),
+        );
+        assert!(err.message().starts_with("cannot write /x/config.toml: "));
+        let source = std::error::Error::source(&err)
+            .and_then(|s| s.downcast_ref::<std::io::Error>())
+            .map(std::io::Error::kind);
+        assert_eq!(source, Some(std::io::ErrorKind::PermissionDenied));
     }
 }

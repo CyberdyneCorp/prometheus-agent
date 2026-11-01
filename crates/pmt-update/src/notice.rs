@@ -4,6 +4,7 @@
 //! channel index; a newer release becomes a one-line notice and is never
 //! installed by the check itself.
 
+use pmt_core::error::codes;
 use std::path::{Path, PathBuf};
 
 use pmt_config::daemon::UpdateConfig;
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fetch::Releases;
 use crate::flow::{Checked, Install, Session, check};
-use crate::install::{create_dirs, io_error};
+use crate::install::create_dirs;
 
 const STATE_FILE: &str = "last_check.json";
 
@@ -75,7 +76,8 @@ pub async fn background(
     if let Some(dir) = path.parent() {
         create_dirs(dir)?;
     }
-    private_fs::write_atomic(&path, &json).map_err(|e| io_error(&path, &e))?;
+    private_fs::write_atomic(&path, &json)
+        .map_err(|e| Error::io(&codes::UPDATE_FAILED, &path, &e))?;
     Ok(notice)
 }
 

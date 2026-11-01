@@ -2,6 +2,8 @@
 //! Full-text session search; Export formats; Deletion semantics;
 //! Retention; Rewind is a soft delete).
 
+pub mod args;
+
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::time::Duration;
@@ -27,9 +29,6 @@ use crate::session_export::{self, ExportOptions, session_json};
 ///
 /// The command's failure; the caller prints it and exits with its code.
 pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) -> Result<u8, Error> {
-    if let SessionsCommand::Browse { source, all } = command {
-        return crate::sessions_browse::run(*source, *all, ctx, ui);
-    }
     let scope = ctx.scope()?;
     let store = Store::open(&scope)?;
     let session = |reference: &str| store.resolve_session(reference);
@@ -48,7 +47,9 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
             };
             list(ctx, &store.list_sessions(&options)?)
         }
-        SessionsCommand::Browse { .. } => unreachable!("handled above"),
+        SessionsCommand::Browse { source, all } => {
+            crate::sessions_browse::run(*source, *all, ctx, ui)
+        }
         SessionsCommand::Show { session: r } => show(ctx, &store, session(r)?),
         SessionsCommand::Search(args) => search(ctx, &store, args),
         SessionsCommand::Rename { session: r, title } => {
@@ -365,7 +366,7 @@ fn export(
         Ok(file) => file,
         Err(e) => {
             print_error(&cannot_create(path, &e), ctx.json);
-            return Ok(CANNOT_CREATE);
+            return Ok(pmt_core::exit::CANNOT_CREATE_OUTPUT);
         }
     };
     session_export::export(store, &ids, options, &mut file)?;
@@ -376,9 +377,6 @@ fn export(
     eprintln!("exported {} session(s) to {}", ids.len(), path.display());
     Ok(0)
 }
-
-/// Exit status when the export file cannot be created (shared exit codes).
-pub const CANNOT_CREATE: u8 = 73;
 
 fn cannot_create(path: &std::path::Path, e: &std::io::Error) -> Error {
     Error::new(
@@ -394,7 +392,7 @@ fn confirm(what: &str, yes: bool) -> Result<Option<u8>, Error> {
     match prompt::confirm_typed(what, "delete")? {
         None => {
             eprintln!("error: confirmation needed; rerun with --yes");
-            Ok(Some(prompt::NEEDS_CONFIRMATION))
+            Ok(Some(pmt_core::exit::APPROVAL_REQUIRED))
         }
         Some(false) => {
             eprintln!("nothing deleted");

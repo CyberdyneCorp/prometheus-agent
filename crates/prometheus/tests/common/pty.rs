@@ -67,3 +67,19 @@ pub fn shell(home: &Path) -> OsSession {
     session.set_expect_timeout(Some(Duration::from_secs(30)));
     session
 }
+
+/// Waits (at most 30 s) until `count` turns have started in the home's
+/// default profile, reading the terminal meanwhile so the interface never
+/// blocks on a full pseudo-terminal; what it printed stays for the next
+/// `expect`.
+pub fn wait_for_turns(p: &mut OsSession, home: &Path, count: usize) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while super::turns_started(home) < count {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{count} turn(s) did not start within 30 s"
+        );
+        let _ = p.check("\u{1}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}

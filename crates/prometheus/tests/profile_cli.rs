@@ -77,6 +77,22 @@ fn flag_beats_sticky_selection() {
     assert!(!home.path().join("active_profile").exists());
 }
 
+/// Built-in memory lives in `state.db`, and a clone takes its entries.
+#[test]
+fn a_clone_takes_the_source_memory() {
+    let home = temp_home();
+    ok(&run(
+        home.path(),
+        &["memory", "add", "User prefers tabs over spaces"],
+    ));
+    ok(&run(
+        home.path(),
+        &["profile", "create", "cl", "--clone-from", "default"],
+    ));
+    let listed = ok(&run(home.path(), &["-p", "cl", "memory", "list"]));
+    assert!(listed.contains("User prefers tabs over spaces"), "{listed}");
+}
+
 #[test]
 fn clone_without_secrets() {
     let home = temp_home();

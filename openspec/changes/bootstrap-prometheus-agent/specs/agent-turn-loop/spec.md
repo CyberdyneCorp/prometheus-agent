@@ -67,7 +67,7 @@ The system SHALL cap model calls per turn with `agent.max_iterations` (integer, 
 
 #### Scenario: String spelling rejected
 - **GIVEN** `agent.max_iterations = "unlimited"` in `config.toml`
-- **WHEN** `prometheus config check` runs
+- **WHEN** `prometheus config validate` runs
 - **THEN** the system SHALL report `agent.max_iterations: expected integer` and exit 78
 
 #### Scenario: Explicit unlimited

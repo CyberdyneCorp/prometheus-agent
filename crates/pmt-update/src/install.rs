@@ -129,7 +129,7 @@ impl InstallReceipt {
                     });
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(io_error(&path, &e)),
+                Err(e) => return Err(Error::io(&codes::UPDATE_FAILED, &path, &e)),
             }
         }
         Ok(None)
@@ -155,7 +155,8 @@ impl InstallReceipt {
         if let Some(dir) = fallback.parent() {
             create_dirs(dir)?;
         }
-        private_fs::write_atomic(&fallback, &json).map_err(|e| io_error(&fallback, &e))?;
+        private_fs::write_atomic(&fallback, &json)
+            .map_err(|e| Error::io(&codes::UPDATE_FAILED, &fallback, &e))?;
         Ok(fallback)
     }
 }
@@ -183,13 +184,9 @@ pub(crate) fn create_dirs(dir: &Path) -> Result<(), Error> {
         cursor = d.parent();
     }
     for d in missing.into_iter().rev() {
-        private_fs::create_dir(d).map_err(|e| io_error(d, &e))?;
+        private_fs::create_dir(d).map_err(|e| Error::io(&codes::UPDATE_FAILED, d, &e))?;
     }
     Ok(())
-}
-
-pub(crate) fn io_error(path: &Path, e: &std::io::Error) -> Error {
-    Error::new(&codes::UPDATE_FAILED, format!("{}: {e}", path.display()))
 }
 
 #[cfg(test)]

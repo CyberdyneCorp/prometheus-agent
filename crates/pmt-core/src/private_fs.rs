@@ -76,21 +76,35 @@ pub fn restrict_to_owner(dir: &Path) -> io::Result<()> {
     }
 }
 
+/// A temp path beside `path` that no other call uses, in this process or
+/// another: `<name>.tmp.<pid>.<ulid>` (backups skip `.tmp.` names).
+///
+/// # Errors
+///
+/// `path` has no file name.
+pub fn temp_beside(path: &Path) -> io::Result<std::path::PathBuf> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
+    let mut temp_name = name.to_os_string();
+    temp_name.push(format!(
+        ".tmp.{}.{}",
+        std::process::id(),
+        ulid::Ulid::generate()
+    ));
+    Ok(path.with_file_name(temp_name))
+}
+
 /// Replaces `path` with `bytes` atomically: readers see the old or the new
-/// contents, never a torn file. The data goes to a 0600 sibling temp file
-/// that is synced and then renamed over `path`.
+/// contents, never a torn file, however many writers race. The data goes
+/// to a 0600 sibling temp file of its own, synced and then renamed over
+/// `path`.
 ///
 /// # Errors
 ///
 /// Any I/O error; the temp file is removed on failure.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let name = path
-        .file_name()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
-    let mut temp_name = name.to_os_string();
-    temp_name.push(format!(".tmp.{}", std::process::id()));
-    let temp = path.with_file_name(temp_name);
-    let _ = fs::remove_file(&temp);
+    let temp = temp_beside(path)?;
     let written = new_file_options()
         .open(&temp)
         .and_then(|mut file: File| {
@@ -231,6 +245,31 @@ mod owner_acl {
 #[cfg(test)]
 mod tests {
     use super::{copy_tree, create_dir, write_atomic};
+
+    #[test]
+    fn concurrent_writers_never_tear_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("models.json");
+        let payloads: Vec<Vec<u8>> = (0..16u8).map(|n| vec![b'a' + n; 256 * 1024]).collect();
+        std::thread::scope(|scope| {
+            for payload in &payloads {
+                let path = &path;
+                scope.spawn(move || {
+                    for _ in 0..8 {
+                        write_atomic(path, payload).unwrap();
+                    }
+                });
+            }
+        });
+        let written = std::fs::read(&path).unwrap();
+        assert!(
+            payloads.contains(&written),
+            "torn file of {} bytes",
+            written.len()
+        );
+        let leftovers = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(leftovers, 1, "temp files left behind");
+    }
 
     #[test]
     fn copy_tree_copies_files_and_skips_links() {

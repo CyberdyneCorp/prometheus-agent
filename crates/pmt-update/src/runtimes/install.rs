@@ -20,9 +20,7 @@ use pmt_core::error::{Error, codes};
 use pmt_net::OutboundPolicy;
 
 use super::index::{Pin, PinnedArtifact};
-use super::{
-    Installed, RECORD_FILE, RECORD_SCHEMA, Record, Store, digest_tree, hash_file, io_error,
-};
+use super::{Installed, RECORD_FILE, RECORD_SCHEMA, Record, Store, digest_tree, hash_file};
 use crate::download::{self, Budget, FileSink, Stats};
 
 /// How runtimes are downloaded.
@@ -155,7 +153,8 @@ impl Installer {
         artifact: &PinnedArtifact,
     ) -> Result<PathBuf, Error> {
         let downloads = self.store.downloads();
-        std::fs::create_dir_all(&downloads).map_err(|e| io_error(&downloads, &e))?;
+        std::fs::create_dir_all(&downloads)
+            .map_err(|e| Error::io(&codes::RUNTIME_IO, &downloads, &e))?;
         Ok(downloads.join(format!(
             "{name}-{}-{}.part",
             pin.dir_name(artifact),
@@ -198,7 +197,8 @@ impl Installer {
     ) -> Result<(String, &'static str, Stats), Error> {
         let mut last = None;
         for (url, source) in self.urls(name, pin, artifact) {
-            let mut sink = FileSink::open(partial).map_err(|e| io_error(partial, &e))?;
+            let mut sink =
+                FileSink::open(partial).map_err(|e| Error::io(&codes::RUNTIME_IO, partial, &e))?;
             if sink_complete(&sink, artifact) {
                 return Ok((url, source, Stats::default()));
             }
@@ -208,7 +208,8 @@ impl Installer {
             ));
             match download::fetch(&self.client, &url, &mut sink, &self.budget).await {
                 Ok(stats) => {
-                    sink.sync().map_err(|e| io_error(partial, &e))?;
+                    sink.sync()
+                        .map_err(|e| Error::io(&codes::RUNTIME_IO, partial, &e))?;
                     return Ok((url, source, stats));
                 }
                 Err(reason) => {
@@ -235,7 +236,8 @@ impl Installer {
             .store
             .staging()
             .join(ulid::Ulid::generate().to_string());
-        std::fs::create_dir_all(&staging).map_err(|e| io_error(&staging, &e))?;
+        std::fs::create_dir_all(&staging)
+            .map_err(|e| Error::io(&codes::RUNTIME_IO, &staging, &e))?;
         let result = (|| {
             super::extract::unpack(archive, artifact.format, &staging).map_err(|reason| {
                 Error::new(
@@ -243,10 +245,11 @@ impl Installer {
                     format!("cannot unpack {}: {reason}", artifact.file_name()),
                 )
             })?;
-            record.files = digest_tree(&staging).map_err(|e| io_error(&staging, &e))?;
+            record.files =
+                digest_tree(&staging).map_err(|e| Error::io(&codes::RUNTIME_IO, &staging, &e))?;
             let text = serde_json::to_vec_pretty(&record).expect("a record serializes");
             let path = staging.join(RECORD_FILE);
-            std::fs::write(&path, text).map_err(|e| io_error(&path, &e))?;
+            std::fs::write(&path, text).map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
             publish(&staging, dir)
         })();
         let _ = std::fs::remove_dir_all(&staging);
@@ -276,8 +279,9 @@ fn lock(path: &Path) -> Result<std::fs::File, Error> {
         .truncate(false)
         .write(true)
         .open(path)
-        .map_err(|e| io_error(path, &e))?;
-    file.lock().map_err(|e| io_error(path, &e))?;
+        .map_err(|e| Error::io(&codes::RUNTIME_IO, path, &e))?;
+    file.lock()
+        .map_err(|e| Error::io(&codes::RUNTIME_IO, path, &e))?;
     Ok(file)
 }
 
@@ -289,7 +293,7 @@ fn sink_complete(sink: &FileSink, artifact: &PinnedArtifact) -> bool {
 
 /// Fails, deleting the download, unless it is the pinned archive.
 fn check_digest(partial: &Path, artifact: &PinnedArtifact, url: &str) -> Result<(), Error> {
-    let actual = hash_file(partial).map_err(|e| io_error(partial, &e))?;
+    let actual = hash_file(partial).map_err(|e| Error::io(&codes::RUNTIME_IO, partial, &e))?;
     if actual == artifact.sha256 {
         return Ok(());
     }
@@ -308,11 +312,11 @@ fn check_digest(partial: &Path, artifact: &PinnedArtifact, url: &str) -> Result<
 /// have published the same version meanwhile: its copy is kept.
 fn publish(staging: &Path, dir: &Path) -> Result<(), Error> {
     if let Some(parent) = dir.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| io_error(parent, &e))?;
+        std::fs::create_dir_all(parent).map_err(|e| Error::io(&codes::RUNTIME_IO, parent, &e))?;
     }
     match std::fs::rename(staging, dir) {
         Ok(()) => Ok(()),
         Err(_) if dir.join(RECORD_FILE).is_file() => Ok(()),
-        Err(e) => Err(io_error(dir, &e)),
+        Err(e) => Err(Error::io(&codes::RUNTIME_IO, dir, &e)),
     }
 }

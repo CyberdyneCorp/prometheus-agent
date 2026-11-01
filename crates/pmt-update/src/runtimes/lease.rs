@@ -9,12 +9,11 @@
 //! exits, however it exits, so a crashed holder never pins a version: its
 //! leftover file is unlocked and is swept by the next count.
 
+use pmt_core::error::codes;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use pmt_core::error::Error;
-
-use super::io_error;
 
 const LEASES: &str = ".leases";
 
@@ -33,14 +32,15 @@ impl Lease {
     /// `runtime.io` when the lease file cannot be created or locked.
     pub fn acquire(root: &Path, name: &str, dir_name: &str) -> Result<Self, Error> {
         let dir = lease_dir(root, name, dir_name);
-        std::fs::create_dir_all(&dir).map_err(|e| io_error(&dir, &e))?;
+        std::fs::create_dir_all(&dir).map_err(|e| Error::io(&codes::RUNTIME_IO, &dir, &e))?;
         let path = dir.join(format!(
             "{}-{}.lease",
             std::process::id(),
             ulid::Ulid::generate()
         ));
-        let file = File::create(&path).map_err(|e| io_error(&path, &e))?;
-        file.lock().map_err(|e| io_error(&path, &e))?;
+        let file = File::create(&path).map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
+        file.lock()
+            .map_err(|e| Error::io(&codes::RUNTIME_IO, &path, &e))?;
         Ok(Self {
             file: Some(file),
             path,

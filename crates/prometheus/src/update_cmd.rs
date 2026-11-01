@@ -94,14 +94,11 @@ pub fn run(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         // A backup that cannot be written exits 73 (cannot create output).
         Err(err) if err.code().code == codes::UPDATE_BACKUP_FAILED.code => {
             output::print_error(&err, ctx.json);
-            Ok(CANNOT_CREATE)
+            Ok(pmt_core::exit::CANNOT_CREATE_OUTPUT)
         }
         Err(err) => Err(err),
     }
 }
-
-/// Exit status of an update stopped because its backup cannot be written.
-pub const CANNOT_CREATE: u8 = 73;
 
 /// `--backup` forces `full`, `--no-backup` forces `off` (clap refuses both
 /// together with exit 2).
@@ -254,7 +251,7 @@ fn rollback(install: &Install, args: &UpdateArgs) -> Result<u8, Error> {
             eprintln!(
                 "--restore-snapshots discards sessions created since the update: rerun with --yes to confirm"
             );
-            Ok(prompt::NEEDS_CONFIRMATION)
+            Ok(pmt_core::exit::APPROVAL_REQUIRED)
         }
     }
 }

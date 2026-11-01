@@ -26,6 +26,9 @@ capabilities = [
     "cli",
     "distribution-and-update",
     "web-and-media-tools",
+    # Named by tasks 12.1, 12.2 and 21.1-21.2 though task 21.3 lists the
+    # fifteen above; its M1 scenarios are indexed too.
+    "replay-and-evaluation",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -34,7 +37,7 @@ capabilities = [
 
 [workspace-architecture."Version and build identity"]
 "Machine-readable version" = ["crates/prometheus/tests/output_contract.rs::version_json_values_have_their_shapes"]
-"Minimal build without dashboard" = { tests = ["crates/prometheus/src/surface.rs::missing_surface_exits_69_with_the_spec_message", "crates/prometheus/src/surface.rs::gate_follows_the_compiled_features"], note = "the `dashboard` command arrives in M3; every surface command goes through this gate" }
+"Minimal build without dashboard" = { tests = ["crates/prometheus/tests/surface_cli.rs::a_build_without_the_dashboard_refuses_its_command", "crates/prometheus/src/surface.rs::missing_surface_exits_69_with_the_spec_message"], note = "surface_cli runs in CI on a build without the dashboard feature (check job, x86_64-unknown-linux-gnu)" }
 
 [workspace-architecture."Supported targets and support tiers"]
 "Tier reported at runtime" = ["crates/prometheus/src/build_info.rs::every_listed_target_has_its_tier"]
@@ -383,8 +386,8 @@ capabilities = [
 "Extra pattern under yolo" = ["crates/pmt-tools/tests/protected.rs::extra_pattern_still_needs_approval_under_yolo"]
 
 [execution-environments."Typed backend registry and selection"]
-"Unknown backend" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::unknown_backend_exits_78_with_the_available_list"]
-"Reserved backend selected before it ships" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::reserved_backends_are_available_in_m2"]
+"Unknown backend" = ["crates/prometheus/tests/chat_startup.rs::an_unknown_backend_exits_78_listing_the_available_ones", "crates/pmt-sandbox/tests/sandbox/backend.rs::unknown_backend_exits_78_with_the_available_list"]
+"Reserved backend selected before it ships" = ["crates/prometheus/tests/chat_startup.rs::a_reserved_backend_fails_the_session_start_with_69", "crates/pmt-sandbox/tests/sandbox/backend.rs::reserved_backends_are_available_in_m2"]
 
 [execution-environments."Backend readiness checks"]
 "SSH misconfigured" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::ssh_misconfigured"]
@@ -747,7 +750,7 @@ capabilities = [
 
 [agent-turn-loop."Single documented iteration limit"]
 "Default limit" = ["crates/pmt-agent/tests/turn/budgets.rs::the_default_limit_is_500_and_strings_are_refused"]
-"String spelling rejected" = ["crates/pmt-agent/tests/turn/budgets.rs::the_default_limit_is_500_and_strings_are_refused"]
+"String spelling rejected" = ["crates/prometheus/tests/config_cli.rs::validate_refuses_a_string_iteration_limit", "crates/pmt-agent/tests/turn/budgets.rs::the_default_limit_is_500_and_strings_are_refused"]
 "Explicit unlimited" = ["crates/pmt-agent/tests/turn/budgets.rs::zero_iterations_means_unlimited"]
 
 [agent-turn-loop."Per-agent iteration budget"]
@@ -867,7 +870,7 @@ capabilities = [
 "Timeout" = ["crates/pmt-agent/tests/agent_tools.rs::clarify_times_out_after_the_configured_wait"]
 
 [context-compression."Context engine selection"]
-"Unknown engine" = ["crates/pmt-agent/src/compress/engine.rs::an_unknown_engine_is_a_config_error_not_a_fallback", "crates/prometheus/tests/config_cli.rs::unknown_context_engine_fails_validation_instead_of_falling_back"]
+"Unknown engine" = ["crates/prometheus/tests/chat_startup.rs::an_unknown_context_engine_fails_the_chat_start_with_78", "crates/pmt-agent/src/compress/engine.rs::an_unknown_engine_is_a_config_error_not_a_fallback", "crates/prometheus/tests/config_cli.rs::unknown_context_engine_fails_validation_instead_of_falling_back"]
 "Plugin engine not auto-activated" = ["crates/pmt-agent/src/compress/engine.rs::a_plugin_engine_is_used_only_when_named"]
 
 [context-compression."Compaction is the only sanctioned cache break"]
@@ -981,7 +984,7 @@ capabilities = [
 "Community skill never runs inline shell" = ["crates/pmt-skills/tests/skills/view.rs::community_skill_never_runs_inline_shell"]
 
 [skills."Skill secrets and settings"]
-"Secret value never reaches the transcript" = ["crates/pmt-skills/tests/skills/view.rs::secret_value_never_reaches_the_transcript"]
+"Secret value never reaches the transcript" = ["crates/prometheus/tests/chat_session_wiring.rs::a_missing_skill_secret_is_asked_for_hidden_and_never_stored_in_the_transcript", "crates/pmt-skills/tests/skills/view.rs::secret_value_never_reaches_the_transcript"]
 
 [skills."Skill slash commands"]
 "Built-in name wins" = ["crates/pmt-skills/tests/skills/view.rs::built_in_name_wins"]
@@ -1315,3 +1318,12 @@ capabilities = [
 [web-and-media-tools."Image input routing"]
 "Text mode keeps pixels out" = ["crates/pmt-agent/tests/vision.rs::text_mode_keeps_pixels_out_of_the_request"]
 "SVG on a raster-only route" = ["crates/pmt-agent/tests/vision.rs::an_svg_on_a_raster_only_route_is_sent_as_png"]
+
+[replay-and-evaluation."Deterministic mock provider"]
+"Scripted tool call" = ["crates/prometheus/tests/chat_startup.rs::a_scripted_tool_call_reads_the_file_once_and_prints_done"]
+
+[replay-and-evaluation."Mock fault injection"]
+"Fallback on rate limit" = ["crates/prometheus/tests/chat_startup.rs::a_rate_limited_primary_falls_back_with_a_notice_and_a_trajectory_event", "crates/pmt-providers/tests/providers/mock.rs::a_rate_limited_primary_falls_back_to_the_secondary"]
+
+[replay-and-evaluation."Offline smoke demo"]
+"First run on a fresh machine" = ["crates/prometheus/tests/demo_cli.rs::first_run_on_a_fresh_machine"]

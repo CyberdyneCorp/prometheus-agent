@@ -6,5 +6,6 @@ mod golden;
 mod patch;
 mod read;
 mod search;
+mod stores;
 mod support;
 mod write;

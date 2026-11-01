@@ -122,10 +122,12 @@ fn generations(current: &Path) -> impl Iterator<Item = PathBuf> + '_ {
 }
 
 fn read_records(path: &Path) -> Result<Vec<Record>, Error> {
-    let file = File::open(path).map_err(|err| io_error(path, &err))?;
+    let file = File::open(path)
+        .map_err(|err| Error::io_doing(&codes::LOGS_IO, "cannot read", path, &err))?;
     let mut records = Vec::new();
     for line in BufReader::new(file).lines() {
-        let line = line.map_err(|err| io_error(path, &err))?;
+        let line =
+            line.map_err(|err| Error::io_doing(&codes::LOGS_IO, "cannot read", path, &err))?;
         if let Ok(record) = serde_json::from_str(&line) {
             records.push(record);
         }
@@ -165,11 +167,18 @@ impl Follower {
         let mut file = match File::open(&self.path) {
             Ok(file) => file,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(err) => return Err(io_error(&self.path, &err)),
+            Err(err) => {
+                return Err(Error::io_doing(
+                    &codes::LOGS_IO,
+                    "cannot read",
+                    &self.path,
+                    &err,
+                ));
+            }
         };
         let len = file
             .metadata()
-            .map_err(|err| io_error(&self.path, &err))?
+            .map_err(|err| Error::io_doing(&codes::LOGS_IO, "cannot read", &self.path, &err))?
             .len();
         let now = identity(&file);
         if len < self.offset || now != self.identity {
@@ -179,10 +188,10 @@ impl Follower {
             self.partial.clear();
         }
         file.seek(SeekFrom::Start(self.offset))
-            .map_err(|err| io_error(&self.path, &err))?;
+            .map_err(|err| Error::io_doing(&codes::LOGS_IO, "cannot read", &self.path, &err))?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)
-            .map_err(|err| io_error(&self.path, &err))?;
+            .map_err(|err| Error::io_doing(&codes::LOGS_IO, "cannot read", &self.path, &err))?;
         self.offset += bytes.len() as u64;
         self.partial.push_str(&String::from_utf8_lossy(&bytes));
         let Some(end) = self.partial.rfind('\n') else {
@@ -207,13 +216,6 @@ fn identity(file: &File) -> Option<(u64, u64)> {
 #[cfg(not(unix))]
 fn identity(_file: &File) -> Option<(u64, u64)> {
     None
-}
-
-fn io_error(path: &Path, err: &io::Error) -> Error {
-    Error::new(
-        &codes::LOGS_IO,
-        format!("cannot read {}: {err}", path.display()),
-    )
 }
 
 #[cfg(test)]

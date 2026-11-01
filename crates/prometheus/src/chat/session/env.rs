@@ -19,6 +19,7 @@ use pmt_tools::environments::{Attachment, Environments, SessionEnv};
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
+use pmt_tools::terminal::shell::Shell;
 use pmt_tools::terminal::{LocalSetup, LocalTerminal, spill};
 use pmt_tools::web::{FullTextStore, WebSession};
 
@@ -50,6 +51,22 @@ pub struct Attached {
     pub attachment: Attachment,
     /// The session's `browser_exec` (its browsers close at session end).
     pub browser: Option<Arc<BrowserExec>>,
+    /// The session's terminal (skills pass their declared secrets to it).
+    pub terminal: Option<Arc<LocalTerminal>>,
+    /// How the session runs a command: its sandbox, child environment and
+    /// shell (skills' inline snippets run the same way).
+    pub commands: Option<Commands>,
+}
+
+/// The parts a session runs commands with.
+#[derive(Clone)]
+pub struct Commands {
+    /// The OS sandbox.
+    pub sandbox: Arc<Sandbox>,
+    /// The child environment.
+    pub env: ChildEnv,
+    /// The shell.
+    pub shell: Shell,
 }
 
 /// Builds and attaches the environment of one session; the returned
@@ -77,7 +94,14 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         scratch: vec![scratch.clone()],
         toolchain: Vec::new(),
     };
-    let process = processes(inputs, &scratch, user_home.as_ref())
+    let paths = Paths {
+        user_home: user_home.clone().unwrap_or_default(),
+        prometheus_home: inputs.scope.home().to_path_buf(),
+        workspace: inputs.cwd.to_path_buf(),
+        scratch: vec![scratch.clone()],
+    };
+    let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
+    let process = processes(inputs, &scratch, &policy)
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
     let browser = process.as_ref().and_then(|(sandbox, env)| {
@@ -90,9 +114,21 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         );
         Some(Arc::new(exec))
     });
-    let terminal = process
-        .and_then(|(sandbox, env)| {
-            terminal(inputs, &scratch, user_home.clone(), sandbox, env)
+    let commands = process.and_then(|(sandbox, env)| {
+        let config = scope.config();
+        pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
+            .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
+            .ok()
+            .map(|shell| Commands {
+                sandbox,
+                env,
+                shell,
+            })
+    });
+    let terminal = commands
+        .clone()
+        .and_then(|commands| {
+            terminal(inputs, &scratch, user_home.clone(), commands)
                 .inspect_err(
                     |err| tracing::warn!(error = %err, "terminal unavailable this session"),
                 )
@@ -100,8 +136,8 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         })
         .map(Arc::new);
     let env = SessionEnv {
-        files: Some(Arc::new(files(inputs, places, user_home))),
-        terminal,
+        files: Some(Arc::new(files(inputs, places, user_home, policy))),
+        terminal: terminal.clone(),
         web: web(scope).map(Arc::new),
         vision: None,
         browser: browser.clone(),
@@ -109,13 +145,21 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     Ok(Attached {
         attachment: Environments::process().attach(inputs.session_id, env),
         browser,
+        terminal,
+        commands,
     })
 }
 
-fn files(inputs: &EnvInputs<'_>, places: Places, user_home: Option<PathBuf>) -> FileSession {
+fn files(
+    inputs: &EnvInputs<'_>,
+    places: Places,
+    user_home: Option<PathBuf>,
+    policy: Arc<Policy>,
+) -> FileSession {
     let cwd = inputs.cwd.to_path_buf();
+    let backend = LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy);
     FileSession::new(FileSetup {
-        backend: Arc::new(LocalBackend::new(inputs.capabilities.clone(), places)),
+        backend: Arc::new(backend),
         cwd: Arc::new(move || cwd.clone()),
         user_home,
         control: ControlPaths {
@@ -131,17 +175,10 @@ fn files(inputs: &EnvInputs<'_>, places: Places, user_home: Option<PathBuf>) -> 
 fn processes(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
-    user_home: Option<&PathBuf>,
+    policy: &Policy,
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
-    let paths = Paths {
-        user_home: user_home.cloned().unwrap_or_default(),
-        prometheus_home: inputs.scope.home().to_path_buf(),
-        workspace: inputs.cwd.to_path_buf(),
-        scratch: vec![scratch.to_path_buf()],
-    };
-    let policy = Policy::from_set(inputs.capabilities, &paths);
-    let sandbox = Arc::new(Sandbox::new(policy, &config.security.sandbox)?);
+    let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
     let mut env = ChildEnv::build(
         inputs.launch,
         EnvRequest {
@@ -162,19 +199,16 @@ fn terminal(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
     user_home: Option<PathBuf>,
-    sandbox: Arc<Sandbox>,
-    env: ChildEnv,
+    commands: Commands,
 ) -> Result<LocalTerminal, Error> {
     let config = inputs.scope.config();
-    let shell =
-        pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)?;
     LocalTerminal::new(LocalSetup {
         terminal: config.terminal.clone(),
         max_chars: 50_000,
         kill_grace: Duration::from_secs(2),
-        sandbox,
-        env,
-        shell,
+        sandbox: commands.sandbox,
+        env: commands.env,
+        shell: commands.shell,
         scratch: scratch.to_path_buf(),
         spill_dir: spill::session_dir(inputs.scope.dir(), inputs.session_id),
         start_cwd: inputs.cwd.to_path_buf(),

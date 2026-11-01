@@ -7,8 +7,6 @@ use std::path::Path;
 use pmt_core::error::{Error, codes};
 use pmt_core::private_fs;
 
-use crate::error;
-
 /// Creates an empty 0600 file unless `path` exists, so SQLite opens a file
 /// that never had a wider mode (SQLite gives `-wal`/`-shm` the database
 /// file's mode).
@@ -16,13 +14,13 @@ pub(crate) fn create_private(path: &Path) -> Result<(), Error> {
     match private_fs::new_file_options().open(path) {
         Ok(_) => Ok(()),
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
-        Err(e) => Err(error::io(path, &e)),
+        Err(e) => Err(Error::io(&codes::STORE_IO, path, &e)),
     }
 }
 
 /// Creates directory `dir` (0700) or tightens an existing one.
 pub(crate) fn private_dir(dir: &Path) -> Result<(), Error> {
-    private_fs::create_dir(dir).map_err(|e| error::io(dir, &e))?;
+    private_fs::create_dir(dir).map_err(|e| Error::io(&codes::STORE_IO, dir, &e))?;
     tighten(dir, 0o700);
     Ok(())
 }

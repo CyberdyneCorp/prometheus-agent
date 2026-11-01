@@ -9,12 +9,12 @@
 //! (`<binary>.old`, removed on the next swap); the gap between the two
 //! renames is the one window in which the path is briefly empty.
 
+use pmt_core::error::codes;
 use std::path::{Path, PathBuf};
 
 use pmt_core::error::Error;
 
 use crate::archive::write_executable;
-use crate::install::io_error;
 
 /// `prometheus.prev` (Windows: `prometheus.prev.exe`) beside `binary`.
 #[must_use]
@@ -34,9 +34,10 @@ pub fn prev_path(binary: &Path) -> PathBuf {
 ///
 /// `update.failed`; the installed binary is unchanged on failure.
 pub fn install(staged: &Path, binary: &Path) -> Result<(), Error> {
-    let current = std::fs::read(binary).map_err(|e| io_error(binary, &e))?;
+    let current =
+        std::fs::read(binary).map_err(|e| Error::io(&codes::UPDATE_FAILED, binary, &e))?;
     replace(&prev_path(binary), &current)?;
-    let new = std::fs::read(staged).map_err(|e| io_error(staged, &e))?;
+    let new = std::fs::read(staged).map_err(|e| Error::io(&codes::UPDATE_FAILED, staged, &e))?;
     replace(binary, &new)
 }
 
@@ -48,7 +49,7 @@ pub fn install(staged: &Path, binary: &Path) -> Result<(), Error> {
 /// `update.failed`; the installed binary is unchanged on failure.
 pub fn restore_prev(binary: &Path) -> Result<(), Error> {
     let prev = prev_path(binary);
-    let bytes = std::fs::read(&prev).map_err(|e| io_error(&prev, &e))?;
+    let bytes = std::fs::read(&prev).map_err(|e| Error::io(&codes::UPDATE_FAILED, &prev, &e))?;
     replace(binary, &bytes)
 }
 
@@ -68,7 +69,7 @@ fn replace(path: &Path, bytes: &[u8]) -> Result<(), Error> {
 
 #[cfg(not(windows))]
 fn rename_over(temp: &Path, path: &Path) -> Result<(), Error> {
-    std::fs::rename(temp, path).map_err(|e| io_error(path, &e))
+    std::fs::rename(temp, path).map_err(|e| Error::io(&codes::UPDATE_FAILED, path, &e))
 }
 
 #[cfg(windows)]
@@ -80,13 +81,13 @@ fn rename_over(temp: &Path, path: &Path) -> Result<(), Error> {
     let _ = std::fs::remove_file(&aside);
     let moved_aside = path.exists();
     if moved_aside {
-        std::fs::rename(path, &aside).map_err(|e| io_error(path, &e))?;
+        std::fs::rename(path, &aside).map_err(|e| Error::io(&codes::UPDATE_FAILED, path, &e))?;
     }
     std::fs::rename(temp, path).map_err(|e| {
         if moved_aside {
             let _ = std::fs::rename(&aside, path);
         }
-        io_error(path, &e)
+        Error::io(&codes::UPDATE_FAILED, path, &e)
     })
 }
 
