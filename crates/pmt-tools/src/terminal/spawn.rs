@@ -76,29 +76,46 @@ enum Signal {
     Kill,
 }
 
-/// Kills the group when dropped: a cancelled or abandoned call never
-/// leaves processes behind. [`GroupGuard::disarm`] once the group is known
-/// to be gone, so a later reuse of its id is never signalled.
+/// Stops the group when dropped, so a cancelled or abandoned call never
+/// leaves processes behind: SIGTERM at once (the spec's interrupt signal,
+/// letting the command clean up), then SIGKILL after `grace` from a
+/// short-lived thread, since a drop cannot wait. [`GroupGuard::disarm`]
+/// once the group is known to be gone, so a later reuse of its id is never
+/// signalled.
 #[derive(Debug)]
-pub struct GroupGuard(Option<Group>);
+pub struct GroupGuard {
+    group: Option<Group>,
+    grace: Duration,
+}
 
 impl GroupGuard {
-    /// Guards `group`.
+    /// Guards `group`; `grace` is `tools.kill_grace_secs`.
     #[must_use]
-    pub fn new(group: Group) -> Self {
-        Self(Some(group))
+    pub fn new(group: Group, grace: Duration) -> Self {
+        Self {
+            group: Some(group),
+            grace,
+        }
     }
 
     /// Stops guarding.
     pub fn disarm(&mut self) {
-        self.0 = None;
+        self.group = None;
     }
 }
 
 impl Drop for GroupGuard {
     fn drop(&mut self) {
-        if let Some(group) = self.0 {
-            group.kill();
+        let Some(group) = self.group else {
+            return;
+        };
+        group.terminate();
+        if group.0.is_some() {
+            let grace = self.grace;
+            std::thread::spawn(move || {
+                std::thread::sleep(grace);
+                group.kill();
+            });
         }
     }
 }

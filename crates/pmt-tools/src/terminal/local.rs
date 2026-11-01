@@ -401,7 +401,7 @@ impl LocalTerminal {
             false,
         )?;
         let (mut child, group) = (spawned.child, spawned.group);
-        let mut guard = GroupGuard::new(group);
+        let mut guard = GroupGuard::new(group, self.setup.kill_grace);
         // Drain (and discard) init output so a chatty rc file cannot block.
         let drains = [
             child
@@ -497,7 +497,7 @@ impl LocalTerminal {
         timeout_secs: u64,
     ) -> (Option<i32>, Capture) {
         let (mut child, group) = (spawned.child, spawned.group);
-        let mut guard = GroupGuard::new(group);
+        let mut guard = GroupGuard::new(group, self.setup.kill_grace);
         let capture = Arc::new(Mutex::new(Capture::new(&self.setup.spill_dir)));
         let readers: Vec<_> = [
             child.stdout.take().map(|r| capture_into(&capture, r)),

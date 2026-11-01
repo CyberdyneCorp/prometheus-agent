@@ -95,6 +95,65 @@ async fn the_timeout_stops_the_whole_process_group() {
     assert!(gone(pid).await, "grandchild {pid} survived the timeout");
 }
 
+/// Scenario: Interrupt during a long shell command (spec:
+/// workspace-architecture, Cancellation latency): when the turn is stopped
+/// while `sleep 600` runs, the call ends within 500 ms and the command's
+/// process group receives SIGTERM (a trap records it), then nothing of it
+/// survives.
+#[tokio::test]
+async fn an_interrupt_ends_a_long_command_and_terms_its_group() {
+    let fixture = Fixture::new();
+    let session = fixture.session();
+    let (marker, pid_file) = (fixture.work.join("term"), fixture.work.join("sleep.pid"));
+    let command = format!(
+        "sh -c 'trap \"echo term > {}; exit 143\" TERM; sleep 600 & echo $! > {}; wait'",
+        marker.display(),
+        pid_file.display()
+    );
+    let token = pmt_core::cancel::CancelToken::new();
+    let call = token.run(session.run(TerminalArgs::new(command)));
+    tokio::pin!(call);
+    let started = Instant::now();
+    while !pid_file.exists() {
+        tokio::select! {
+            result = &mut call => panic!("the command ended early: {result:?}"),
+            () = tokio::time::sleep(Duration::from_millis(20)) => {}
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "the command never started"
+        );
+    }
+
+    let stopped = Instant::now();
+    token.cancel();
+    let result = call.await;
+    assert!(
+        stopped.elapsed() < Duration::from_millis(500),
+        "{:?}",
+        stopped.elapsed()
+    );
+    assert_eq!(result.unwrap_err().code().code, "task.cancelled");
+
+    let sleep: i32 = std::fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    for _ in 0..100 {
+        if marker.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        std::fs::read_to_string(&marker).unwrap().trim(),
+        "term",
+        "no SIGTERM"
+    );
+    assert!(gone(sleep).await, "sleep {sleep} survived the interrupt");
+}
+
 /// Whether `pid` is gone (allowing the init process a moment to reap it).
 pub(crate) async fn gone(pid: i32) -> bool {
     for _ in 0..50 {
