@@ -101,12 +101,13 @@ pub(crate) fn prepare(
             }
         }
     }
-    if std::env::var_os("PMT_DIAG_ANCESTORS").is_some() {
+    if let Some(mode) = std::env::var_os("PMT_DIAG_ANCESTORS") {
+        let list = mode == "list";
         let roots: Vec<PathBuf> = policy.read_roots().iter().chain(policy.write_roots().iter()).map(|r| r.to_path_buf()).collect();
         for root in roots {
             for ancestor in root.ancestors().skip(1) {
                 if ancestor.exists() {
-                    container.grant_here(ancestor).map_err(setup_error)?;
+                    container.grant_here(ancestor, list).map_err(setup_error)?;
                 }
             }
         }

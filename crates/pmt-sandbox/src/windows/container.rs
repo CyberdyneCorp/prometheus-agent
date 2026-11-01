@@ -128,9 +128,15 @@ impl AppContainer {
 impl AppContainer {
     /// TEMPORARY diagnostics: list access on this directory only, without
     /// re-propagating inheritance below it.
-    pub(super) fn grant_here(&mut self, path: &Path) -> Result<(), String> {
+    pub(super) fn grant_here(&mut self, path: &Path, list: bool) -> Result<(), String> {
         self.touched.push(path.to_path_buf());
-        acl::grant_here(path, self.sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE)
+        let mask = if list {
+            FILE_GENERIC_READ | FILE_GENERIC_EXECUTE
+        } else {
+            windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES
+                | windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE
+        };
+        acl::grant_here(path, self.sid, mask)
             .map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))
     }
 }

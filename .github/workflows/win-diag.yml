@@ -26,6 +26,8 @@ jobs:
           Get-Command bash, pwsh, powershell | Format-List Source
           $env:PSModulePath
       - name: diag
+        shell: bash
         run: |
           cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
-          PMT_DIAG_ANCESTORS=1 cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
+          PMT_DIAG_ANCESTORS=attr cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
+          PMT_DIAG_ANCESTORS=list cargo test -p pmt-sandbox --locked --test sandbox -- --ignored --nocapture diag_shells
