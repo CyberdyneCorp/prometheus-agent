@@ -77,7 +77,7 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
                 profile.path().display()
             );
             if !*no_alias {
-                default_alias(profile.name(), ctx);
+                default_alias(profile.name(), home.root(), ctx);
             }
             Ok(0)
         }
@@ -85,7 +85,7 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             let name = ProfileName::parse(name)?;
             home.existing_profile(&name)?;
             let alias = alias.as_deref().unwrap_or(name.as_str());
-            let path = alias::run(&name, alias, ctx.launch)?;
+            let path = alias::run(&name, alias, home.root(), ctx.launch)?;
             eprintln!("wrote {} (runs prometheus -p {name})", path.display());
             note_path(&path, ctx);
             Ok(0)
@@ -126,8 +126,8 @@ struct Row {
 
 /// The default launcher of a new profile; a refusal is a note, not a
 /// failure (spec: configuration-and-profiles, Profile creation options).
-fn default_alias(name: &ProfileName, ctx: &Context<'_>) {
-    match alias::run(name, name.as_str(), ctx.launch) {
+fn default_alias(name: &ProfileName, root: &std::path::Path, ctx: &Context<'_>) {
+    match alias::run(name, name.as_str(), root, ctx.launch) {
         Ok(path) => {
             eprintln!("alias launcher: {} (skip with --no-alias)", path.display());
             note_path(&path, ctx);

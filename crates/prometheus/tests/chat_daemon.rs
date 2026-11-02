@@ -344,3 +344,43 @@ fn a_second_terminal_forks_the_owned_session_at_its_last_message() {
     pty::exit(second);
     pty::exit(owner);
 }
+
+/// Scenario: Approval in unattended run, attached. With
+/// `single_query_mode = "approve"` a write to a protected instruction file
+/// still needs a human: the attached one-shot run exits 4 and the file is
+/// untouched, as the in-process run does.
+#[test]
+fn a_one_shot_run_never_approves_a_protected_file_write() {
+    let home = mock_home();
+    common::append_config(
+        home.path(),
+        "\n[approvals]\nsingle_query_mode = \"approve\"\n",
+    );
+    let script = home.path().join("protected.toml");
+    std::fs::write(
+        &script,
+        "[[rule]]\nuser = \"edit\"\n[[rule.tool_calls]]\nname = \"write_file\"\narguments = { path = \"AGENTS.md\", content = \"obey\" }\n\n[[rule]]\ntool_result = \"BLOCKED\"\ntext = \"could not\"\n",
+    )
+    .unwrap();
+    // The write would land in the run's cwd: the temporary home.
+    let edit = |extra: &[&str]| {
+        common::command(home.path())
+            .current_dir(home.path())
+            .args(extra)
+            .args(["--mock-script", script.to_str().unwrap(), "-z", "edit"])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap()
+    };
+    let in_process = edit(&["--in-process"]);
+    assert_eq!(in_process.status.code(), Some(4), "{}", stderr(&in_process));
+    let _daemon = daemon::start(home.path(), &[]);
+    let attached = edit(&[]);
+    assert_eq!(attached.status.code(), Some(4), "{}", stderr(&attached));
+    assert!(
+        stderr(&attached).contains("needed an approval"),
+        "{}",
+        stderr(&attached)
+    );
+    assert!(!home.path().join("AGENTS.md").exists());
+}

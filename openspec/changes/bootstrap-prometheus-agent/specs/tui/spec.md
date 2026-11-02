@@ -143,7 +143,7 @@ Requests declared `long` in the registry (for example `session.resume`, `session
 - **THEN** the catalog response MAY arrive before the resume response and the resume SHALL still complete
 
 ### Requirement: Gateway retirement refuses new work
-While the daemon is retiring (update, restart or shutdown), it SHALL refuse every new request with `-32006 daemon is restarting; reconnect to continue` except `rpc.ping`, `session.detach`, `approval.respond` (so the running turns it drains can finish) and the read-only `session.events.since`, `session.list`, `session.transcript` and `session.context_usage`, SHALL let running turns finish up to `daemon.restart_drain_secs` (default 120), and SHALL then close connections with 1001.
+While the daemon is retiring (update, restart or shutdown), it SHALL refuse every new request with `-32006 daemon is restarting; reconnect to continue` except `rpc.ping`, `session.detach`, `approval.respond` (so the running turns it drains can finish) and the read-only `session.events.since`, `session.list`, `session.transcript` and `session.context_usage`, SHALL let running turns finish up to `daemon.restart_drain_secs` (default 120), SHALL then end every session it loaded (`end_reason` `user_exit`, or `interrupted` for a turn stopped at the drain deadline, with the trajectory's `session.end`) and close connections with 1001. A one-shot run's session (`chat -z` attached to the daemon) SHALL end `user_exit` once its turn is done, as the same run in-process does.
 **Milestone:** M2
 
 #### Scenario: Prompt during retirement

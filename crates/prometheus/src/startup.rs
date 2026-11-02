@@ -90,20 +90,33 @@ pub const REDACTION_DISABLED_WARNING: &str = "security.redact_secrets is false: 
 
 /// Binds the command's logging to the profile it works on: records carry
 /// `profile` (so they go to that profile's `logs/`), its `logging.level`
-/// applies unless the environment set a filter, and its stored secrets are
-/// redacted (unless `security.redact_secrets = false`). A disabled
-/// `security.redact_secrets` or `security.protected_instruction_files` and
-/// a refused telemetry endpoint are logged at WARN here, on every start.
+/// applies unless the environment set a filter, and the profile is
+/// registered as by [`register_profile`].
 pub fn bind_profile(scope: &pmt_config::ProfileScope) {
+    tracing::Span::current().record("profile", scope.name().as_str());
+    if let Some(handle) = pmt_obs::logs::handle() {
+        handle.set_level(scope.config().logging.level);
+    }
+    register_profile(scope);
+}
+
+/// What logging needs of every profile a process serves (the daemon calls
+/// it for each one): its stored secrets are redacted from its records
+/// (unless `security.redact_secrets = false`), and a disabled
+/// `security.redact_secrets` or `security.protected_instruction_files` and
+/// a refused telemetry endpoint are logged at WARN, on every start, as
+/// records of that profile.
+pub fn register_profile(scope: &pmt_config::ProfileScope) {
     let name = scope.name().to_string();
-    tracing::Span::current().record("profile", name.as_str());
+    // A record of the profile, in its `logs/` (inside a daemon too).
+    let span = tracing::info_span!("profile", component = "agent", profile = name.as_str());
+    let _profile = span.enter();
     pmt_tools::protected::warn_if_disabled(&scope.config().security);
     let redact = scope.config().security.redact_secrets;
     if !redact {
         tracing::warn!("{REDACTION_DISABLED_WARNING}");
     }
     if let Some(handle) = pmt_obs::logs::handle() {
-        handle.set_level(scope.config().logging.level);
         match scope.secrets().redactor() {
             Ok(redactor) if redact => handle.register_profile(&name, redactor),
             Ok(_) => {}

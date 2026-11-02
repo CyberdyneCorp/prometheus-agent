@@ -73,6 +73,15 @@ pub struct Options {
     pub ignore_rules: bool,
 }
 
+/// The clients of one daemon session: they see its events and answer its
+/// secret prompts (a factory serves several sessions, each with its own).
+pub struct Clients {
+    /// Where the session's trajectory events also go.
+    pub events: Arc<dyn EventSink>,
+    /// Asks the session's clients for a skill's missing secret.
+    pub secrets: Arc<dyn SecretPrompt>,
+}
+
 /// What every session of this process shares.
 pub struct Factory {
     /// The profile.
@@ -330,7 +339,8 @@ impl Factory {
     }
 
     /// Like [`Factory::open`], also sending every trajectory event to
-    /// `clients` (a daemon session's attached clients).
+    /// `clients` (a daemon session's attached clients), which answer its
+    /// secret prompts too.
     ///
     /// # Errors
     ///
@@ -339,7 +349,7 @@ impl Factory {
         &self,
         id: SessionId,
         target: &pmt_providers::resolve::Target,
-        clients: Option<Arc<dyn EventSink>>,
+        clients: Option<Clients>,
     ) -> Result<Live, Error> {
         let scope = &self.scope;
         let config = scope.config();
@@ -358,6 +368,7 @@ impl Factory {
             id,
             &selection,
             &inline_shell,
+            clients.as_ref(),
         )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
@@ -400,7 +411,7 @@ impl Factory {
             .clone()
             .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
         if let Some(clients) = clients {
-            events = Arc::new(progress::Both(events, clients));
+            events = Arc::new(progress::Both(events, clients.events));
         }
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
@@ -524,12 +535,13 @@ impl Factory {
 
     /// The skills' view of the session: the CLI surface and its tools,
     /// snippets run in the session sandbox, and on an interactive session
-    /// missing secrets asked for locally.
+    /// missing secrets asked for locally (or by the session's `clients`).
     fn skills_setup(
         &self,
         id: SessionId,
         selection: &Selection,
         inline_shell: &Arc<skills::DeferredShell>,
+        clients: Option<&Clients>,
     ) -> SessionSetup {
         let mut setup =
             SessionSetup::new(self.scope.clone(), Arc::clone(&self.store), id.to_string());
@@ -537,7 +549,9 @@ impl Factory {
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
-        setup.secret_prompt.clone_from(&self.secret_prompt);
+        setup.secret_prompt = clients
+            .map(|c| Arc::clone(&c.secrets))
+            .or_else(|| self.secret_prompt.clone());
         setup
     }
 
@@ -750,6 +764,20 @@ impl Live {
     /// Ends the session row with `reason`, records `session.end` and
     /// closes the trajectory.
     pub async fn close(self, store: &Store, reason: EndReason) {
+        self.end(store, reason).await;
+        let trajectory = self.trajectory;
+        drop(self.agent);
+        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
+            && let Err(err) = writer.finish()
+        {
+            tracing::warn!(error = %err, "could not close the trajectory");
+        }
+    }
+
+    /// Ends the session row with `reason` and records `session.end`,
+    /// leaving the trajectory file open: for a session something else
+    /// still holds when the process stops (prefer [`Live::close`]).
+    pub async fn end(&self, store: &Store, reason: EndReason) {
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))
@@ -759,13 +787,6 @@ impl Live {
         }
         if let Some(browser) = &self.browser {
             browser.close_session(&self.id.to_string()).await;
-        }
-        let trajectory = self.trajectory;
-        drop(self.agent);
-        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
-            && let Err(err) = writer.finish()
-        {
-            tracing::warn!(error = %err, "could not close the trajectory");
         }
     }
 }

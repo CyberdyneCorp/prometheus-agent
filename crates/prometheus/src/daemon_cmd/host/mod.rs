@@ -26,8 +26,9 @@ use pmt_rpc::contracts::{
     TurnFinished,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
+use tracing::Instrument as _;
 
-use super::turn::{ToClients, approvals, clarify};
+use super::turn::{SecretsToClients, ToClients, approvals, clarify};
 
 mod commands;
 mod discovery;
@@ -36,7 +37,7 @@ mod setup;
 mod turns;
 
 use crate::chat::resume;
-use crate::chat::session::{Factory, Live};
+use crate::chat::session::{Clients, Factory, Live};
 pub(super) use reload::watch;
 
 /// A loaded session.
@@ -56,6 +57,9 @@ struct Loaded {
     queue: Mutex<std::collections::VecDeque<turns::Queued>>,
     /// The running turn's id (a steered input joins it).
     current: Mutex<Option<String>>,
+    /// A one-shot run's session: it ends once its turn is done, as an
+    /// in-process one-shot run's does.
+    oneshot: bool,
 }
 
 impl Loaded {
@@ -95,7 +99,9 @@ struct Profile {
 
 /// The daemon's host over every served profile.
 pub(super) struct DaemonHost {
-    profiles: BTreeMap<String, Profile>,
+    /// Shared with the tasks that run turns (a one-shot session is closed
+    /// by its task).
+    profiles: BTreeMap<String, Arc<Profile>>,
     launch: LaunchEnv,
     /// The daemon's `--set` overrides, kept for reloads.
     set: Vec<String>,
@@ -106,6 +112,13 @@ pub(super) struct DaemonHost {
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
     text.parse::<SessionId>()
+}
+
+/// Work on `profile`'s session: its records (and those of the tasks it
+/// spawns) go to that profile's `logs/` as the `agent` component, not to
+/// the daemon's `gateway.log` (spec: observability, Structured logs).
+fn session_span(profile: &str, session_id: &str) -> tracing::Span {
+    tracing::info_span!("session", component = "agent", profile, session_id)
 }
 
 fn busy(id: SessionId) -> Error {
@@ -140,14 +153,14 @@ impl DaemonHost {
             let state = reload::State::new(&scope);
             profiles.insert(
                 scope.name().to_string(),
-                Profile {
+                Arc::new(Profile {
                     current: SharedScope::new(scope),
                     config: Mutex::new(state),
                     store,
                     factories: Mutex::default(),
                     setups: Mutex::default(),
                     loaded: tokio::sync::Mutex::default(),
-                },
+                }),
             );
         }
         Ok(Self {
@@ -164,7 +177,7 @@ impl DaemonHost {
         self.profiles.keys().cloned().collect()
     }
 
-    fn profile(&self, name: &str) -> Result<&Profile, Error> {
+    fn profile(&self, name: &str) -> Result<&Arc<Profile>, Error> {
         self.profiles.get(name).ok_or_else(|| {
             Error::new(
                 &codes::PROFILE_NOT_FOUND,
@@ -209,17 +222,23 @@ impl DaemonHost {
             .unwrap_or_default();
         let factory = self.factory(profile, cwd, &setup)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
-        let clients = Arc::new(ToClients { link: link.clone() });
+        let clients = Clients {
+            events: Arc::new(ToClients { link: link.clone() }),
+            secrets: Arc::new(SecretsToClients {
+                link: link.clone(),
+                runtime: tokio::runtime::Handle::current(),
+            }),
+        };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {
             live.config.replace(effective);
         }
         let timeout = Duration::from_secs(profile.scope().config().approvals.timeout_secs);
         if let Some(prompts) = live.approvals.take() {
-            tokio::spawn(approvals(prompts, link.clone(), timeout));
+            tokio::spawn(approvals(prompts, link.clone(), timeout).in_current_span());
         }
         if let Some(prompts) = live.clarify.take() {
-            tokio::spawn(clarify(prompts, link.clone()));
+            tokio::spawn(clarify(prompts, link.clone()).in_current_span());
         }
         // Tool progress is rendered by clients from `session.event`.
         drop(live.progress.take());
@@ -232,6 +251,7 @@ impl DaemonHost {
             interrupt: Mutex::default(),
             queue: Mutex::default(),
             current: Mutex::default(),
+            oneshot: row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG),
         });
         loaded.insert(id, Arc::clone(&session));
         Ok(session)
@@ -384,14 +404,18 @@ impl Host for DaemonHost {
         setup: Option<SessionSetup>,
         link: Link,
     ) -> HostFuture<'a, ()> {
-        Box::pin(async move {
-            let profile = self.profile(profile)?;
-            let id = session_id(link.session_id())?;
-            if let Some(setup) = setup {
-                Self::set_up(profile, id, setup).await?;
+        let span = session_span(profile, link.session_id());
+        Box::pin(
+            async move {
+                let profile = self.profile(profile)?;
+                let id = session_id(link.session_id())?;
+                if let Some(setup) = setup {
+                    Self::set_up(profile, id, setup).await?;
+                }
+                self.load(profile, id, &link).await.map(|_| ())
             }
-            self.load(profile, id, &link).await.map(|_| ())
-        })
+            .instrument(span),
+        )
     }
 
     fn dispatch<'a>(
@@ -400,10 +424,14 @@ impl Host for DaemonHost {
         params: DispatchParams,
         link: Link,
     ) -> HostFuture<'a, Dispatched> {
-        Box::pin(async move {
-            let profile = self.profile(profile)?;
-            self.dispatch_command(profile, params, link).await
-        })
+        let span = session_span(profile, &params.session_id);
+        Box::pin(
+            async move {
+                let profile = self.profile(profile)?;
+                self.dispatch_command(profile, params, link).await
+            }
+            .instrument(span),
+        )
     }
 
     fn transcript<'a>(
@@ -500,10 +528,14 @@ impl Host for DaemonHost {
         author: Author,
         link: Link,
     ) -> HostFuture<'a, Submitted> {
-        Box::pin(async move {
-            let profile = self.profile(profile)?;
-            self.submit_turn(profile, params, author, link).await
-        })
+        let span = session_span(profile, &params.session_id);
+        Box::pin(
+            async move {
+                let profile = self.profile(profile)?;
+                self.submit_turn(profile, params, author, link).await
+            }
+            .instrument(span),
+        )
     }
 
     fn commands<'a>(
@@ -546,10 +578,13 @@ impl Host for DaemonHost {
     }
 
     fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
-        Box::pin(async move {
-            let profile = self.profile(profile)?;
-            Ok(Self::close_unused(profile, self::session_id(session_id)?).await)
-        })
+        Box::pin(
+            async move {
+                let profile = self.profile(profile)?;
+                Ok(Self::close_unused(profile, self::session_id(session_id)?).await)
+            }
+            .instrument(session_span(profile, session_id)),
+        )
     }
 
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
@@ -632,6 +667,9 @@ impl Host for DaemonHost {
             let until = tokio::time::Instant::now() + deadline;
             while self.turns.load(Ordering::Acquire) > 0 && tokio::time::Instant::now() < until {
                 tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            for (name, profile) in &self.profiles {
+                Self::close_all(name, profile).await;
             }
         })
     }

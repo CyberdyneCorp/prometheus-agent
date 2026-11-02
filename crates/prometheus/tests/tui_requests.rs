@@ -5,6 +5,9 @@
 //! answer: the value typed reaches the host, is never drawn, never
 //! written to the TUI history and never shown in the transcript; Esc or
 //! an empty input declines; a request that times out withdraws its card.
+//! The gateway reports another build than the TUI's, so the same harness
+//! covers the stale-build notice (workspace-architecture, Stale daemon
+//! build detection); any other prompt is answered `pong`.
 
 #![cfg(all(unix, feature = "gateway", feature = "tui"))]
 
@@ -44,6 +47,10 @@ const SESSION: &str = "ses_01JB7Z3Q5X8V2K4M6N8P0R2T00";
 
 async fn ask(text: String, link: Link, turn: String, answers: Answers) {
     let session_id = link.session_id().to_owned();
+    if text != "secret" && text != "sudo" {
+        finish_turn(&link, turn, "pong");
+        return;
+    }
     let answer = if text == "secret" {
         let params = SecretRequestParams {
             session_id,
@@ -70,6 +77,10 @@ async fn ask(text: String, link: Link, turn: String, answers: Answers) {
         "none given"
     };
     answers.lock().unwrap().push(answer);
+    finish_turn(&link, turn, reply);
+}
+
+fn finish_turn(link: &Link, turn: String, reply: &str) {
     link.emit::<TurnEnded>(&TurnFinished {
         turn_id: turn,
         exit_reason: "completed".into(),
@@ -339,4 +350,29 @@ fn an_unanswered_secret_request_counts_down_and_is_withdrawn() {
     let history = std::fs::read_to_string(home.path().join("profiles/default/tui/history"))
         .unwrap_or_default();
     assert!(!history.contains("half-typed"), "{history}");
+}
+
+/// Scenario: Binary updated under a running daemon. The gateway runs
+/// another build (`test-gateway`) with the same protocol major: the TUI
+/// shows the stale-build notice and still attaches (a prompt is answered).
+#[test]
+fn a_daemon_of_another_build_is_reported_and_the_tui_still_attaches() {
+    let home = mock_home();
+    let _gateway = Gateway::start(home.path(), 600);
+    let mut p = tui(home.path(), &["tui"], &[]);
+    // The notice may be drawn before or after the status line: matched
+    // without `opened`, which consumes up to that line.
+    p.expect(common::tui::ENTER).unwrap();
+    see(
+        &mut p,
+        &format!(
+            "daemon is running an older build ({}); restart with 'prometheus daemon restart'",
+            env!("CARGO_PKG_VERSION")
+        ),
+    );
+    enter(&mut p, "ping");
+    see(&mut p, "pong");
+    p.send(ControlCode::EndOfTransmission).unwrap();
+    let (rest, code) = finish(p);
+    assert_eq!(code, Some(0), "{rest}");
 }

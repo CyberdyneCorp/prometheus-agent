@@ -21,6 +21,15 @@ const T_COST: u32 = 2;
 /// Argon2id lanes.
 const P_COST: u32 = 1;
 
+/// The highest costs `open` accepts. The parameters come from the archive,
+/// which is untrusted: without a cap a crafted document could ask for
+/// terabytes of memory or years of passes once the passphrase is typed.
+/// Later builds may raise their own costs within these bounds.
+const MAX_M_COST: u32 = 1_048_576;
+const MAX_T_COST: u32 = 10;
+const MAX_P_COST: u32 = 8;
+const SALT_LEN: std::ops::RangeInclusive<usize> = 16..=64;
+
 /// The sealed document, stored as JSON in the archive.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,7 +84,13 @@ pub fn open(passphrase: &SecretString, sealed: &[u8]) -> Result<Vec<u8>, Error> 
     if sealed.kdf != "argon2id" || sealed.cipher != "xchacha20poly1305" {
         return Err(invalid(&"unknown key derivation or cipher"));
     }
+    if sealed.m_cost > MAX_M_COST || sealed.t_cost > MAX_T_COST || sealed.p_cost > MAX_P_COST {
+        return Err(invalid(&"unsupported key derivation cost"));
+    }
     let salt = STANDARD.decode(&sealed.salt).map_err(|e| invalid(&e))?;
+    if !SALT_LEN.contains(&salt.len()) {
+        return Err(invalid(&"unsupported salt length"));
+    }
     let nonce: [u8; 24] = STANDARD
         .decode(&sealed.nonce)
         .map_err(|e| invalid(&e))?
@@ -143,5 +158,32 @@ mod tests {
         let wrong = SecretString::new("wrong");
         let err = super::open(&wrong, &sealed).unwrap_err();
         assert_eq!(err.code().code, "profile.archive_passphrase");
+    }
+
+    /// A crafted archive cannot make the import derive with an unbounded
+    /// cost: it is refused before any key derivation.
+    #[test]
+    fn costs_beyond_the_cap_are_refused_without_deriving() {
+        let pass = SecretString::new("pass");
+        let sealed = super::seal(&pass, b"x").unwrap();
+        let mut doc: serde_json::Value = serde_json::from_slice(&sealed).unwrap();
+        for (key, value) in [("m_cost", u32::MAX), ("t_cost", u32::MAX), ("p_cost", 64)] {
+            let mut crafted = doc.clone();
+            crafted[key] = value.into();
+            let started = std::time::Instant::now();
+            let err = super::open(&pass, &serde_json::to_vec(&crafted).unwrap()).unwrap_err();
+            assert_eq!(err.code().code, "profile.archive_invalid");
+            assert!(
+                err.message().contains("unsupported key derivation cost"),
+                "{key}"
+            );
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(1),
+                "{key}"
+            );
+        }
+        doc["salt"] = "AAAA".into();
+        let err = super::open(&pass, &serde_json::to_vec(&doc).unwrap()).unwrap_err();
+        assert!(err.message().contains("unsupported salt length"));
     }
 }

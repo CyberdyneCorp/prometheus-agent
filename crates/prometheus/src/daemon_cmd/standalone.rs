@@ -89,12 +89,18 @@ impl Standalone {
         let (stop, stopped) = oneshot::channel::<()>();
         let home = setup.home.clone();
         let drain = Duration::from_secs(config.daemon.restart_drain_secs);
-        let task = tokio::spawn(async move {
-            let shutdown = async {
-                let _ = stopped.await;
-            };
-            pmt_gateway::run(&lock, &home, server, drain, shutdown).await
-        });
+        // The in-process gateway's records are the `gateway` component,
+        // as a daemon's are.
+        let span = tracing::info_span!("daemon", component = "gateway");
+        let task = tokio::spawn(tracing::Instrument::instrument(
+            async move {
+                let shutdown = async {
+                    let _ = stopped.await;
+                };
+                pmt_gateway::run(&lock, &home, server, drain, shutdown).await
+            },
+            span,
+        ));
         let record = wait_published(&setup.home, &task).await?;
         Ok((Self { stop, task }, record))
     }

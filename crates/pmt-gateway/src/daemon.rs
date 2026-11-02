@@ -16,6 +16,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::runtime::WriterLock;
 use pmt_net::listen::{Exposure, bind};
 use pmt_rpc::discovery::Endpoint;
+use tracing::Instrument as _;
 
 use crate::control;
 use crate::server::Server;
@@ -64,9 +65,9 @@ pub async fn run(
         started_at: server.started_at().to_owned(),
     };
     server.set_endpoint(endpoint.clone());
-    let control_task = tokio::spawn(control.serve(Arc::clone(&server)));
-    let accept_task = tokio::spawn(accept(listener, Arc::clone(&server)));
-    let reap_task = tokio::spawn(reap(Arc::clone(&server)));
+    let control_task = tokio::spawn(control.serve(Arc::clone(&server)).in_current_span());
+    let accept_task = tokio::spawn(accept(listener, Arc::clone(&server)).in_current_span());
+    let reap_task = tokio::spawn(reap(Arc::clone(&server)).in_current_span());
     lock.publish(&endpoint)?;
     tracing::info!(rpc_url = %endpoint.rpc_url, "daemon ready");
     tokio::select! {
@@ -92,7 +93,7 @@ async fn accept(listener: tokio::net::TcpListener, server: Arc<Server>) {
             () = server.closing.cancelled() => return,
             accepted = listener.accept() => {
                 if let Ok((stream, _)) = accepted {
-                    tokio::spawn(crate::connection::serve(Arc::clone(&server), stream));
+                    tokio::spawn(crate::connection::serve(Arc::clone(&server), stream).in_current_span());
                 }
             }
         }
@@ -112,15 +113,23 @@ async fn reap(server: Arc<Server>) {
             () = tokio::time::sleep(every) => {}
         }
         for (session, profile) in server.hub().unattended(idle) {
-            match server.host().close_idle(&profile, &session).await {
-                Ok(true) => {
-                    tracing::info!(session, "closed a session no client used for {idle:?}");
-                    server.hub().closed(&session);
-                }
-                Ok(false) => {}
-                Err(err) => tracing::warn!(session, "cannot close an idle session: {err}"),
-            }
+            // Attributed to the session's profile, kept in `gateway.log`.
+            let span = tracing::info_span!("reap", profile, session_id = session);
+            close_idle(&server, &session, &profile, idle)
+                .instrument(span)
+                .await;
         }
+    }
+}
+
+async fn close_idle(server: &Server, session: &str, profile: &str, idle: Duration) {
+    match server.host().close_idle(profile, session).await {
+        Ok(true) => {
+            tracing::info!("closed a session no client used for {idle:?}");
+            server.hub().closed(session);
+        }
+        Ok(false) => {}
+        Err(err) => tracing::warn!("cannot close an idle session: {err}"),
     }
 }
 

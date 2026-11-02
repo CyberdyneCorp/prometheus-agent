@@ -294,3 +294,39 @@ fn a_daemon_that_fails_to_start_reports_its_error() {
         stderr(&out)
     );
 }
+
+/// Scenario: doctor reports the running daemon (workspace-architecture,
+/// Doctor: `daemon` running, build and protocol match). Regression: the
+/// control status call used to start a nested runtime and panic.
+#[test]
+fn doctor_reports_a_running_daemon_of_this_build() {
+    let home = mock_home();
+    let _daemon = start(home.path());
+    let out = run(home.path(), &["doctor", "daemon"]);
+    let text = ok(&out);
+    assert!(text.contains("daemon running (pid "), "{text}");
+    let all = run(home.path(), &["doctor"]);
+    assert_ne!(all.status.code(), Some(70), "{}", stderr(&all));
+    assert!(
+        stdout(&all).contains("daemon running (pid "),
+        "{}",
+        stdout(&all)
+    );
+}
+
+/// A daemon of another build (same version) is not reported as current.
+#[test]
+fn doctor_warns_about_a_daemon_of_another_build() {
+    let home = mock_home();
+    let _daemon = start(home.path());
+    let path = home.path().join("run/gateway.json");
+    let mut record: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    record["build_id"] = json!("another-build");
+    std::fs::write(&path, record.to_string()).unwrap();
+    let text = stdout(&run(home.path(), &["doctor", "daemon"]));
+    assert!(
+        text.contains("warn daemon        running another build"),
+        "{text}"
+    );
+    assert!(text.contains("build another-build"), "{text}");
+}

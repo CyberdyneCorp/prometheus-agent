@@ -294,6 +294,13 @@ impl Hub {
         let tx = peer.tx.clone();
         log.attached.insert(conn, peer);
         log.unattended_since = None;
+        // A connection that re-attaches as observer may no longer answer
+        // what it was asked as driver (only drivers answer).
+        let orphaned = if answers {
+            Vec::new()
+        } else {
+            orphan_requests(&mut state, conn, Some(session_id))
+        };
         let mut open_requests = Vec::new();
         for (id, pending) in &mut state.requests {
             if pending.session_id != session_id {
@@ -309,6 +316,10 @@ impl Hub {
                 method: pending.method.clone(),
                 params: pending.params.clone(),
             });
+        }
+        drop(state);
+        for (session, id) in orphaned {
+            self.cancel_event(&session, &id, "no_responder");
         }
         Attached {
             session_id: session_id.to_owned(),
@@ -403,7 +414,7 @@ impl Hub {
             {
                 state.owners.remove(session_id);
             }
-            orphan_requests(&mut state, conn)
+            orphan_requests(&mut state, conn, Some(session_id))
         };
         for (session, id) in orphaned {
             self.cancel_event(&session, &id, "no_responder");
@@ -418,7 +429,7 @@ impl Hub {
                 leave(log, conn);
             }
             state.owners.retain(|_, (owner, _)| *owner != conn);
-            orphan_requests(&mut state, conn)
+            orphan_requests(&mut state, conn, None)
         };
         for (session, id) in orphaned {
             self.cancel_event(&session, &id, "no_responder");
@@ -738,11 +749,19 @@ fn evict_front(log: &mut Log) -> usize {
     }
 }
 
-/// Removes `conn` from every open request; the requests nobody else can
-/// answer are removed (their asker sees no answer) and returned.
-fn orphan_requests(state: &mut State, conn: ConnId) -> Vec<(String, String)> {
+/// Removes `conn` from the open requests of `session` (of every session
+/// with `None`); the requests nobody else can answer are removed (their
+/// asker sees no answer) and returned.
+fn orphan_requests(
+    state: &mut State,
+    conn: ConnId,
+    session: Option<&str>,
+) -> Vec<(String, String)> {
     let mut orphaned = Vec::new();
     for (id, pending) in &mut state.requests {
+        if session.is_some_and(|s| s != pending.session_id) {
+            continue;
+        }
         pending.sent_to.retain(|c| *c != conn);
         if pending.sent_to.is_empty() {
             orphaned.push((pending.session_id.clone(), id.clone()));

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use pmt_core::error::{Error, codes};
 use pmt_rpc::control::{ControlError, ControlRequest, ControlResponse};
 use tokio::io::{AsyncBufReadExt as _, AsyncRead, AsyncWrite, AsyncWriteExt as _, BufReader};
+use tracing::Instrument as _;
 
 use crate::server::Server;
 use crate::tickets::Grant;
@@ -88,14 +89,22 @@ fn private_socket_dir(run: &Path, short_root: &Path) -> Result<std::path::PathBu
     Ok(dir)
 }
 
-/// Answers one request.
-pub(crate) fn answer(server: &Server, request: ControlRequest) -> ControlResponse {
+/// Answers one request. `peer_pid` is the connecting process as the
+/// kernel reports it; it wins over the pid the client claims, which any
+/// same-user process could forge. The claimed pid is used only where the
+/// OS cannot tell (Windows named pipes).
+pub(crate) fn answer(
+    server: &Server,
+    request: ControlRequest,
+    peer_pid: Option<u32>,
+) -> ControlResponse {
     match request {
         ControlRequest::Ticket {
             purpose,
             profiles,
             pid,
         } => {
+            let pid = peer_pid.or(pid);
             if let Some(only) = server.only_pid()
                 && pid != Some(only)
             {
@@ -141,7 +150,11 @@ fn failure(err: &Error) -> ControlResponse {
 }
 
 /// Reads one request line from `stream` and writes the answer.
-async fn handle<S: AsyncRead + AsyncWrite + Unpin>(server: Arc<Server>, stream: S) {
+async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
+    server: Arc<Server>,
+    stream: S,
+    peer_pid: Option<u32>,
+) {
     let mut stream = BufReader::new(stream);
     let mut line = String::new();
     let read = tokio::time::timeout(pmt_rpc::control::TIMEOUT, stream.read_line(&mut line)).await;
@@ -149,7 +162,7 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(server: Arc<Server>, stream: 
         return;
     }
     let response = match serde_json::from_str::<ControlRequest>(&line) {
-        Ok(request) => answer(&server, request),
+        Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,
             format!("bad control request: {e}"),
@@ -227,12 +240,17 @@ impl Listener {
             let Ok((stream, _)) = self.inner.accept().await else {
                 continue;
             };
-            let peer_uid = stream.peer_cred().map(|c| c.uid());
+            let cred = stream.peer_cred();
+            let peer_uid = cred.as_ref().map(tokio::net::unix::UCred::uid);
             if !matches!((&own_uid, &peer_uid), (Ok(own), Ok(peer)) if own == peer) {
                 tracing::warn!("refused a control connection from another user");
                 continue;
             }
-            tokio::spawn(handle(Arc::clone(server), stream));
+            let kernel_pid = cred
+                .ok()
+                .and_then(|c| c.pid())
+                .and_then(|p| u32::try_from(p).ok());
+            tokio::spawn(handle(Arc::clone(server), stream, kernel_pid).in_current_span());
         }
     }
 
@@ -250,7 +268,10 @@ impl Listener {
                 return;
             };
             let connected = std::mem::replace(&mut next, following);
-            tokio::spawn(handle(Arc::clone(server), connected));
+            // tokio exposes no client process id for a named pipe (it needs
+            // GetNamedPipeClientProcessId, unsafe Win32): the claimed pid
+            // is used, a known gap like the pipe's default DACL.
+            tokio::spawn(handle(Arc::clone(server), connected, None).in_current_span());
         }
     }
 }

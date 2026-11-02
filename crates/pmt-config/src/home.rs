@@ -29,13 +29,19 @@ pub fn resolve(flag: Option<&Path>, env: &LaunchEnv) -> Result<PathBuf, Error> {
     })
 }
 
+/// The home used when neither `--home` nor `PROMETHEUS_HOME` is given;
+/// `None` when the user home is unknown.
 #[cfg(not(windows))]
-fn default_home(env: &LaunchEnv) -> Option<PathBuf> {
+#[must_use]
+pub fn default_home(env: &LaunchEnv) -> Option<PathBuf> {
     env.user_home().map(|home| home.join(".prometheus"))
 }
 
+/// The home used when neither `--home` nor `PROMETHEUS_HOME` is given;
+/// `None` when the user home is unknown.
 #[cfg(windows)]
-fn default_home(env: &LaunchEnv) -> Option<PathBuf> {
+#[must_use]
+pub fn default_home(env: &LaunchEnv) -> Option<PathBuf> {
     env.local_app_data().map(|dir| dir.join("Prometheus"))
 }
 

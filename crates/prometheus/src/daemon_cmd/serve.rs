@@ -9,6 +9,12 @@
 //! is invalid is logged and skipped). The daemon serves until it is
 //! stopped (exit 0) or restarted (exit 75, so a supervisor starts the new
 //! binary), reloading each profile's `config.toml` when it changes.
+//!
+//! Logging (spec: observability, Structured logs): the daemon's own records
+//! are the `gateway` component (`<home>/logs/gateway.log`), work on a
+//! profile's session is recorded in that profile's `logs/`, and every
+//! served profile registers its redactor and logs its startup security
+//! warnings; the launch profile's `logging.level` applies daemon-wide.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -18,6 +24,7 @@ use pmt_config::{DaemonConfig, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_core::runtime::{Role, WriterLock};
 use pmt_gateway::{Exit, Identity, Server, ServerOptions};
+use tracing::Instrument as _;
 
 use super::host::DaemonHost;
 use crate::context::Context;
@@ -29,6 +36,8 @@ use crate::context::Context;
 /// `home.locked` (75) when a daemon or chat holds the home, `config.*`
 /// (78) for `daemon.toml` or when no profile loads, listener errors.
 pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+    let span = tracing::info_span!("daemon", component = "gateway");
+    let _daemon = span.enter();
     let layout = ctx.home()?;
     let names: Vec<String> = layout
         .profiles()?
@@ -48,27 +57,30 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
                 format!("cannot start the runtime: {e}"),
             )
         })?;
-    let exit = runtime.block_on(async {
-        let host = Arc::new(DaemonHost::new(
-            scopes,
-            ctx.launch.clone(),
-            ctx.set.to_vec(),
-            launch_profile.as_str().to_owned(),
-        )?);
-        let mut options = ServerOptions::new(identity(), host.names());
-        options.rpc = config.daemon.rpc.clone();
-        options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
-        options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
-            Some(&home.to_path_buf()),
-            ctx.launch,
-        )));
-        let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
-        let server = Server::new(options, host)?;
-        let drain = Duration::from_secs(config.daemon.restart_drain_secs);
-        let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
-        watcher.abort();
-        exit
-    })?;
+    let exit = runtime.block_on(
+        async {
+            let host = Arc::new(DaemonHost::new(
+                scopes,
+                ctx.launch.clone(),
+                ctx.set.to_vec(),
+                launch_profile.as_str().to_owned(),
+            )?);
+            let mut options = ServerOptions::new(identity(), host.names());
+            options.rpc = config.daemon.rpc.clone();
+            options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
+            options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
+                Some(&home.to_path_buf()),
+                ctx.launch,
+            )));
+            let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
+            let server = Server::new(options, host)?;
+            let drain = Duration::from_secs(config.daemon.restart_drain_secs);
+            let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
+            watcher.abort();
+            exit
+        }
+        .in_current_span(),
+    )?;
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
     Ok(match exit {
@@ -104,7 +116,10 @@ fn served_profiles(
             .and_then(|dir| ProfileScope::open(dir, &overrides, launch))
     };
     let first = open(launch_profile, Launch::Profile(ctx.launch))?;
-    crate::startup::bind_profile(&first);
+    if let Some(handle) = pmt_obs::logs::handle() {
+        handle.set_level(first.config().logging.level);
+    }
+    crate::startup::register_profile(&first);
     if !first.config().gateway.multiplex {
         return Ok(vec![first]);
     }
@@ -117,7 +132,10 @@ fn served_profiles(
             Ok(scope) if scope.config().gateway.standalone => {
                 tracing::info!(profile = name.as_str(), "not served: gateway.standalone");
             }
-            Ok(scope) => scopes.push(scope),
+            Ok(scope) => {
+                crate::startup::register_profile(&scope);
+                scopes.push(scope);
+            }
             Err(err) => tracing::error!(profile = name.as_str(), "profile not served: {err}"),
         }
     }

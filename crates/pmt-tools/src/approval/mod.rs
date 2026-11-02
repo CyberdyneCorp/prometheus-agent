@@ -33,6 +33,7 @@ pub mod detectors;
 mod gate;
 pub mod hardline;
 pub mod paths;
+mod printable;
 pub mod rules;
 pub mod shell;
 
@@ -42,6 +43,7 @@ use std::path::Path;
 use serde::Serialize;
 
 pub use gate::{ApprovalRequest, CommandGate, Decision, GateSetup, STOP};
+pub use printable::printable;
 pub use shell::ParseError;
 
 /// Where a session runs, which decides who answers an approval.

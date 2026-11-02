@@ -82,8 +82,13 @@ fn the_launcher_runs_prometheus_with_the_profile() {
         &["profile", "alias", "work", "--as", "wk"],
     ));
     let path = launcher(home.path(), "wk");
+    // The profile lives outside the default home: the launcher opens it.
     let text = std::fs::read_to_string(&path).unwrap();
-    assert!(text.ends_with("exec prometheus -p work \"$@\"\n"), "{text}");
+    let expected = format!(
+        "exec prometheus --home '{}' -p work \"$@\"\n",
+        home.path().display()
+    );
+    assert!(text.ends_with(&expected), "{text}");
     // Writing it again is fine: it is ours.
     ok(&run(
         home.path(),
@@ -91,8 +96,6 @@ fn the_launcher_runs_prometheus_with_the_profile() {
     ));
     let bin = Path::new(common::BIN).parent().unwrap();
     let out = std::process::Command::new(&path)
-        .args(["--home"])
-        .arg(home.path())
         .args(["config", "path"])
         .env("PATH", bin)
         .output()
@@ -100,6 +103,26 @@ fn the_launcher_runs_prometheus_with_the_profile() {
     assert!(
         String::from_utf8_lossy(&out.stdout).contains("profiles/work/config.toml"),
         "{out:?}"
+    );
+}
+
+/// A profile of the default home gets a launcher without `--home`.
+#[cfg(unix)]
+#[test]
+fn a_default_home_launcher_names_no_home() {
+    let home = temp_home();
+    let default = common::user_home(home.path()).join(".prometheus");
+    let mut cmd = std::process::Command::new(common::BIN);
+    cmd.env_remove("PROMETHEUS_HOME");
+    common::isolate_user_home(&mut cmd, home.path());
+    cmd.args(["--home"])
+        .arg(&default)
+        .args(["profile", "create", "work"]);
+    ok(&cmd.stdin(std::process::Stdio::null()).output().unwrap());
+    let text = std::fs::read_to_string(launcher(home.path(), "work")).unwrap();
+    assert!(
+        text.ends_with("\nexec prometheus -p work \"$@\"\n"),
+        "{text}"
     );
 }
 

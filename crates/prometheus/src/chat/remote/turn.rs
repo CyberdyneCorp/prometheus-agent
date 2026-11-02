@@ -8,6 +8,7 @@ use pmt_rpc::client::{ServerCall, error_of};
 use pmt_rpc::contracts::{
     Envelope, PromptImage, PromptSubmit, SessionInterrupt, SessionRef, SubmitParams, TurnFinished,
 };
+use pmt_tools::approval::printable;
 use serde_json::{Value, json};
 
 use super::Attached;
@@ -198,7 +199,12 @@ async fn ask(
 ) -> Option<Asking> {
     let client = &attached.client;
     match (asker, call.method.as_str()) {
-        (Asker::OneShot { approve: true }, "approval.request") => {
+        // A request that cannot be remembered (a protected instruction
+        // file) needs a human: single-query mode never approves it, as
+        // the in-process gate does.
+        (Asker::OneShot { approve: true }, "approval.request")
+            if !call.params["remember"].is_null() =>
+        {
             client.respond(&call.id, Ok(json!({"decision": "once"})));
             None
         }
@@ -301,16 +307,20 @@ const ALLOW: &str = "allow? [o]nce, [s]ession, [a]lways, [d]eny";
 
 fn approval_text(params: &Value) -> String {
     use std::fmt::Write as _;
-    let tool = params["tool"].as_str().unwrap_or("tool");
-    let subject = params["subject"].as_str().unwrap_or_default();
-    let mut text = format!("approval needed: {tool} {subject}");
+    // Every field may come from the model: escaped so a control sequence
+    // cannot hide part of what is approved.
+    let field = |value: &Value| printable(value.as_str().unwrap_or_default());
+    let tool = params["tool"]
+        .as_str()
+        .map_or_else(|| "tool".to_owned(), printable);
+    let mut text = format!("approval needed: {tool} {}", field(&params["subject"]));
     for finding in params["findings"].as_array().into_iter().flatten() {
         let _ = write!(
             text,
             "\n  {}: {} ({})",
-            finding["detector"].as_str().unwrap_or_default(),
-            finding["reason"].as_str().unwrap_or_default(),
-            finding["fragment"].as_str().unwrap_or_default()
+            field(&finding["detector"]),
+            field(&finding["reason"]),
+            field(&finding["fragment"])
         );
     }
     let _ = write!(text, "\n{ALLOW}");
@@ -380,7 +390,24 @@ pub(crate) fn clarify_answer(question: &Value, line: &str) -> Value {
 mod tests {
     use serde_json::json;
 
-    use super::{clarify_answer, decision};
+    use super::{approval_text, clarify_answer, decision};
+
+    /// A control sequence in the model's command cannot hide part of it
+    /// on the attached approval prompt.
+    #[test]
+    fn the_approval_prompt_shows_control_sequences() {
+        let text = approval_text(&json!({
+            "tool": "terminal",
+            "subject": "rm -rf ~\u{1b}[2K\rls",
+            "findings": [{"detector": "dangerous", "reason": "deletes", "fragment": "rm\u{1b}[1A"}],
+        }));
+        assert!(
+            text.starts_with("approval needed: terminal rm -rf ~^[[2K\\rls\n"),
+            "{text}"
+        );
+        assert!(text.contains("dangerous: deletes (rm^[[1A)"), "{text}");
+        assert!(!text.contains('\u{1b}') && !text.contains('\r'), "{text}");
+    }
 
     #[test]
     fn typed_lines_become_answers() {

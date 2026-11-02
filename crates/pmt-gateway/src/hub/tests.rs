@@ -417,3 +417,88 @@ async fn a_session_without_clients_becomes_a_reaping_candidate() {
     hub.closed(S);
     assert!(hub.unattended(Duration::ZERO).is_empty(), "closed once");
 }
+
+/// Only drivers answer: a connection asked as driver that re-attaches as
+/// observer can no longer settle the request, and when nobody else can
+/// answer it the request is withdrawn (`no_responder`) at once.
+#[tokio::test]
+async fn a_driver_that_reattaches_as_observer_can_no_longer_answer() {
+    let hub = hub();
+    hub.register(S, "default");
+    let (driver, mut rx) = peer(true);
+    hub.attach(1, S, driver.clone(), None);
+    let asking = {
+        let hub = Arc::clone(&hub);
+        tokio::spawn(async move {
+            hub.ask(
+                S,
+                "sudo.request",
+                json!({"session_id": S, "command": "ls"}),
+                Duration::from_secs(5),
+            )
+            .await
+        })
+    };
+    let sent = loop {
+        if let Some(Message::Text(text)) = rx.recv().await {
+            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+        }
+    };
+    let id = sent["id"].as_str().unwrap().to_owned();
+    let observer = Peer {
+        role: AttachRole::Observer,
+        ..driver
+    };
+    let attached = hub.attach(1, S, observer, None);
+    assert!(attached.open_requests.is_empty(), "withdrawn, not listed");
+    let cancel = frames(&mut rx)
+        .into_iter()
+        .find(|f| f["method"] == "request.cancel")
+        .expect("request.cancel");
+    assert_eq!(
+        cancel["params"]["data"]["reason"], "no_responder",
+        "{cancel}"
+    );
+    assert_ne!(
+        hub.resolve(1, "tui-1", &id, Ok(json!({"password": "pw"}))),
+        Answered::Taken
+    );
+    assert_eq!(asking.await.unwrap(), None);
+}
+
+/// Detaching from one session leaves the requests of another session the
+/// connection still drives open.
+#[tokio::test]
+async fn detaching_one_session_keeps_another_sessions_requests() {
+    const OTHER: &str = "ses_other";
+    let hub = hub();
+    hub.register(S, "default");
+    hub.register(OTHER, "default");
+    let (driver, mut rx) = peer(true);
+    hub.attach(1, S, driver.clone(), None);
+    hub.attach(1, OTHER, driver, None);
+    let asking = {
+        let hub = Arc::clone(&hub);
+        tokio::spawn(async move {
+            hub.ask(
+                OTHER,
+                "sudo.request",
+                json!({"session_id": OTHER, "command": "ls"}),
+                Duration::from_secs(5),
+            )
+            .await
+        })
+    };
+    let sent = loop {
+        if let Some(Message::Text(text)) = rx.recv().await {
+            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+        }
+    };
+    let id = sent["id"].as_str().unwrap().to_owned();
+    hub.detach(1, S);
+    assert_eq!(
+        hub.resolve(1, "tui-1", &id, Ok(json!({"password": "pw"}))),
+        Answered::Taken
+    );
+    assert_eq!(asking.await.unwrap(), Some(json!({"password": "pw"})));
+}

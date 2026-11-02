@@ -1,8 +1,9 @@
 //! A daemon session's way to its clients: its trajectory events as
 //! `session.event`, and its approval and clarify prompts as server-to-client
-//! requests (spec: workspace-architecture, Server-to-client requests). A
-//! prompt no capable client answers resolves unanswered, which the gate
-//! treats as a denial.
+//! requests (spec: workspace-architecture, Server-to-client requests), and
+//! a skill's missing secret as `secret.request`. A prompt no capable
+//! client answers resolves unanswered, which the gate treats as a denial
+//! (a secret: reported missing to the model).
 
 use std::time::Duration;
 
@@ -10,12 +11,14 @@ use pmt_agent::tools::clarify::{ClarifyAnswer, ClarifyRequest};
 use pmt_agent::turn::EventSink;
 use pmt_agent::turn::model::BoxFuture;
 use pmt_core::human::Surface;
+use pmt_core::secret::SecretString;
 use pmt_gateway::Link;
 use pmt_obs::trajectory::writer::Emit;
 use pmt_rpc::contracts::{
     ApprovalAsk, ApprovalFinding, ApprovalRequestParams, ClarifyAsk, ClarifyRequestParams,
-    Decision, SessionEvent,
+    Decision, SecretAsk, SecretRequestParams, SessionEvent,
 };
+use pmt_skills::secrets::SecretPrompt;
 use pmt_tools::approval::ApprovalRequest;
 use serde_json::{Value, json};
 
@@ -36,6 +39,37 @@ impl EventSink for ToClients {
         });
         self.link.emit::<SessionEvent>(&data);
         Box::pin(async { Ok(()) })
+    }
+}
+
+/// Asks the session's clients for a skill's missing secret. The skills
+/// engine calls it on the blocking pool and stores the value itself in
+/// the profile's secrets store; it never reaches the transcript.
+pub(super) struct SecretsToClients {
+    pub(super) link: Link,
+    /// The daemon's runtime (the caller is a blocking-pool thread).
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+impl SecretPrompt for SecretsToClients {
+    fn ask(&self, skill: &str, name: &str, prompt: Option<&str>) -> Option<SecretString> {
+        let reason = prompt.map_or_else(
+            || format!("skill {skill} needs it"),
+            |p| format!("skill {skill}: {p}"),
+        );
+        let params = SecretRequestParams {
+            session_id: self.link.session_id().to_owned(),
+            name: name.to_owned(),
+            reason: Some(reason),
+            deadline_ms: None,
+        };
+        let answer = self
+            .runtime
+            .block_on(self.link.ask::<SecretAsk>(&params, None))?;
+        answer
+            .value
+            .filter(|v| !v.is_empty())
+            .map(SecretString::new)
     }
 }
 

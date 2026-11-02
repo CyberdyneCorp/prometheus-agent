@@ -8,6 +8,7 @@
 //! the network.
 
 pub mod args;
+mod daemon;
 mod fix;
 mod groups;
 mod system;
@@ -164,7 +165,7 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "config" => groups::config(inputs),
         "secrets" => groups::secrets(inputs)?,
         "store" => groups::store(inputs),
-        "daemon" => groups::daemon(inputs),
+        "daemon" => daemon::checks(inputs.scope.home()).await,
         "sandbox" => system::sandbox(inputs),
         "terminal" => system::terminal(inputs),
         "distribution" => groups::distribution(inputs),

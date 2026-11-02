@@ -49,11 +49,11 @@ pub fn require(home: &Path) -> Result<DaemonRecord, Error> {
     })
 }
 
-/// The `rpc.hello` of this binary as a `cli` client.
+/// The `rpc.hello` of this binary as a client of kind `client`.
 #[must_use]
-pub fn hello(server_requests: bool) -> HelloParams {
+pub fn hello(client: ClientKind, server_requests: bool) -> HelloParams {
     HelloParams {
-        client: ClientKind::Cli,
+        client,
         client_version: crate::build_info::VERSION.to_owned(),
         protocol: Version::from(pmt_core::protocol::RPC_PROTOCOL),
         capabilities: ClientCapabilities {
@@ -64,8 +64,9 @@ pub fn hello(server_requests: bool) -> HelloParams {
 }
 
 /// Attaches to `record`'s daemon for `profile` with an interactive ticket
-/// and performs `hello`; prints the stale-build notice on stderr when the
-/// daemon runs another build.
+/// and performs `hello`; also returns the stale-build notice when the
+/// daemon runs another build. Every client (CLI, TUI) connects through
+/// here so the handshake and the stale-build policy live in one place.
 ///
 /// # Errors
 ///
@@ -75,7 +76,7 @@ pub async fn connect(
     record: &DaemonRecord,
     profile: &str,
     hello: &HelloParams,
-) -> Result<(Client, Inbox), Error> {
+) -> Result<(Client, Inbox, Option<String>), Error> {
     let (client, inbox) = Client::connect(
         &record.endpoint,
         Purpose::Interactive,
@@ -83,7 +84,22 @@ pub async fn connect(
         hello,
     )
     .await?;
-    if let Some(notice) = stale_build_notice(client.hello(), crate::build_info::BUILD_ID) {
+    let notice = stale_build_notice(client.hello(), crate::build_info::BUILD_ID);
+    Ok((client, inbox, notice))
+}
+
+/// [`connect`] for a line-oriented CLI command: the notice goes to stderr.
+///
+/// # Errors
+///
+/// As [`connect`].
+pub async fn connect_cli(
+    record: &DaemonRecord,
+    profile: &str,
+    hello: &HelloParams,
+) -> Result<(Client, Inbox), Error> {
+    let (client, inbox, notice) = connect(record, profile, hello).await?;
+    if let Some(notice) = notice {
         eprintln!("{notice}");
     }
     Ok((client, inbox))

@@ -10,7 +10,7 @@ use clap::Subcommand;
 use pmt_core::error::{Error, codes};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::{Client, error_of};
-use pmt_rpc::contracts::{Envelope, EventsSinceParams, HelloParams};
+use pmt_rpc::contracts::{ClientKind, Envelope, EventsSinceParams, HelloParams};
 use pmt_rpc::discovery::DaemonRecord;
 use serde_json::Value;
 
@@ -100,18 +100,18 @@ async fn call(
         // The handshake is the first request of every connection; calling
         // it means performing it with these params.
         let hello: HelloParams = if params.as_object().is_some_and(serde_json::Map::is_empty) {
-            crate::daemon_client::hello(false)
+            crate::daemon_client::hello(ClientKind::Cli, false)
         } else {
             serde_json::from_value(params).map_err(|e| {
                 Error::new(&codes::CLI_USAGE, format!("invalid rpc.hello params: {e}"))
             })?
         };
-        let (client, _inbox) = crate::daemon_client::connect(record, profile, &hello).await?;
+        let (client, _inbox) = crate::daemon_client::connect_cli(record, profile, &hello).await?;
         client.close();
         return print_pretty(&serde_json::to_value(client.hello()).unwrap_or_default());
     }
-    let hello = crate::daemon_client::hello(false);
-    let (client, _inbox) = crate::daemon_client::connect(record, profile, &hello).await?;
+    let hello = crate::daemon_client::hello(ClientKind::Cli, false);
+    let (client, _inbox) = crate::daemon_client::connect_cli(record, profile, &hello).await?;
     let outcome = match attach_first(&client, method, &params).await {
         Ok(()) => client.call(method, params).await,
         Err(err) => Err(err),
@@ -180,8 +180,8 @@ async fn events(
     // Listening before anything is printed: a SIGINT right after the
     // first line must stop the stream, not kill the process.
     let mut signals = crate::chat::signals::Signals::listen();
-    let hello = crate::daemon_client::hello(false);
-    let (client, mut inbox) = crate::daemon_client::connect(record, profile, &hello).await?;
+    let hello = crate::daemon_client::hello(ClientKind::Cli, false);
+    let (client, mut inbox) = crate::daemon_client::connect_cli(record, profile, &hello).await?;
     let mut seen = Watermark::default();
     if let Some(session) = session {
         let params = serde_json::json!({ "session_id": session });

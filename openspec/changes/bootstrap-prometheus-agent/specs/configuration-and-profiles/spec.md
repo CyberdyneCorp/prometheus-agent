@@ -220,7 +220,7 @@ The system SHALL select the launch profile from, in order, `-p/--profile <name>`
 - **THEN** the session SHALL run in profile `home`
 
 ### Requirement: Profile alias launchers
-The system SHALL, on `prometheus profile alias <name> [--as <alias>]`, write a launcher `<alias>` (default the profile name) into the user's bin directory (`~/.local/bin` on POSIX, `%LOCALAPPDATA%\Prometheus\bin` on Windows) that runs `prometheus -p <name> "$@"`, and SHALL refuse an alias that is a reserved name, a `prometheus` subcommand name, or an existing executable on `PATH`.
+The system SHALL, on `prometheus profile alias <name> [--as <alias>]`, write a launcher `<alias>` (default the profile name) into the user's bin directory (`~/.local/bin` on POSIX, `%LOCALAPPDATA%\Prometheus\bin` on Windows) that runs `prometheus -p <name> "$@"` (as `prometheus --home <absolute home> -p <name> "$@"` when the profile's home is not the default home, so the launcher opens the same profile), and SHALL refuse an alias that is a reserved name, a `prometheus` subcommand name, or an existing executable on `PATH`.
 **Milestone:** M2
 
 #### Scenario: Alias collision

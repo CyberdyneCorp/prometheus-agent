@@ -14,31 +14,16 @@
 use std::collections::HashMap;
 
 use pmt_core::error::Error;
-use pmt_rpc::client::{Client, Inbox, error_of, stale_build_notice};
+use pmt_rpc::client::{Client, Inbox, error_of};
 use pmt_rpc::contracts::{
-    AttachParams, AttachRole, Attached, ClientCapabilities, ClientKind, CommandEntry,
-    CommandsCatalog, Disposition, Envelope, ForkParams, HelloParams, ResolveKind, ResolveParams,
-    ResumeParams, SessionAttach, SessionCreate, SessionCreateParams, SessionDetach, SessionFork,
-    SessionRef, SessionResolve, SessionResume, SessionSetup, SessionTranscript, Transcript,
-    Version,
+    AttachParams, AttachRole, Attached, ClientKind, CommandEntry, CommandsCatalog, Disposition,
+    Envelope, ForkParams, ResolveKind, ResolveParams, ResumeParams, SessionAttach, SessionCreate,
+    SessionCreateParams, SessionDetach, SessionFork, SessionRef, SessionResolve, SessionResume,
+    SessionSetup, SessionTranscript, Transcript,
 };
-use pmt_rpc::control::Purpose;
 use pmt_rpc::discovery::DaemonRecord;
 
 use super::Launch;
-
-/// The `rpc.hello` of the TUI: it answers server requests.
-pub(super) fn hello() -> HelloParams {
-    HelloParams {
-        client: ClientKind::Tui,
-        client_version: crate::build_info::VERSION.to_owned(),
-        protocol: Version::from(pmt_core::protocol::RPC_PROTOCOL),
-        capabilities: ClientCapabilities {
-            server_requests: true,
-            events: Vec::new(),
-        },
-    }
-}
 
 fn rpc(err: &pmt_rpc::RpcError) -> Error {
     error_of(err)
@@ -66,8 +51,8 @@ pub(super) struct Link {
     pub(super) record: DaemonRecord,
 }
 
-/// Connects to `record`'s daemon for `profile`; also returns the
-/// stale-build notice when the daemon runs another build.
+/// Connects to `record`'s daemon for `profile` as a `tui` client (it
+/// answers server requests); also returns the stale-build notice.
 ///
 /// # Errors
 ///
@@ -76,15 +61,8 @@ pub(super) async fn connect(
     record: &DaemonRecord,
     profile: &str,
 ) -> Result<(Client, Inbox, Option<String>), Error> {
-    let (client, inbox) = Client::connect(
-        &record.endpoint,
-        Purpose::Interactive,
-        vec![profile.to_owned()],
-        &hello(),
-    )
-    .await?;
-    let notice = stale_build_notice(client.hello(), crate::build_info::BUILD_ID);
-    Ok((client, inbox, notice))
+    let hello = crate::daemon_client::hello(ClientKind::Tui, true);
+    crate::daemon_client::connect(record, profile, &hello).await
 }
 
 impl Link {

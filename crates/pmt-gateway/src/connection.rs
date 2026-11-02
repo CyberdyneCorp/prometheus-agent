@@ -36,6 +36,7 @@ use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument as _;
 
 use crate::server::{Call, Conn, HelloState, Server};
 use crate::tickets::random_hex;
@@ -206,8 +207,8 @@ async fn run(server: Arc<Server>, socket: Socket, grant: Grant) {
         ordered,
     });
     server.connections.fetch_add(1, Ordering::Relaxed);
-    let writer = tokio::spawn(write_loop(sink, rx, dead.clone()));
-    let in_order = tokio::spawn(ordered_loop(queue));
+    let writer = tokio::spawn(write_loop(sink, rx, dead.clone()).in_current_span());
+    let in_order = tokio::spawn(ordered_loop(queue).in_current_span());
     read_loop(&server, &conn, stream, &dead).await;
     in_order.abort();
     server.hub().detach_all(conn.id);
@@ -328,12 +329,15 @@ fn request(
     };
     if long {
         let workers = Arc::clone(&server.workers);
-        tokio::spawn(async move {
-            let Ok(_permit) = workers.acquire_owned().await else {
-                return;
-            };
-            job.run().await;
-        });
+        tokio::spawn(
+            async move {
+                let Ok(_permit) = workers.acquire_owned().await else {
+                    return;
+                };
+                job.run().await;
+            }
+            .in_current_span(),
+        );
     } else {
         let _ = conn.ordered.send(job);
     }
@@ -366,16 +370,19 @@ impl Job {
         let name = method.clone();
         let reporter = server.crash_reporter().cloned();
         let catalog = Arc::clone(&server);
-        let handler = tokio::spawn(async move {
-            let work = server.router().dispatch(call, &name, params);
-            match reporter {
-                Some(reporter) => {
-                    let task = format!("rpc-{name}-{}", random_hex(4));
-                    pmt_core::panic::isolate(&task, &reporter, work).await.ok()
+        let handler = tokio::spawn(
+            async move {
+                let work = server.router().dispatch(call, &name, params);
+                match reporter {
+                    Some(reporter) => {
+                        let task = format!("rpc-{name}-{}", random_hex(4));
+                        pmt_core::panic::isolate(&task, &reporter, work).await.ok()
+                    }
+                    None => Some(work.await),
                 }
-                None => Some(work.await),
             }
-        });
+            .in_current_span(),
+        );
         let outcome = if let Ok(Some(outcome)) = handler.await {
             outcome
         } else {

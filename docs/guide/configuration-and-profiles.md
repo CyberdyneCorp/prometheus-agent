@@ -264,7 +264,9 @@ description: reading notes
 `prometheus profile alias <name> [--as <alias>]` writes a launcher
 `<alias>` (default: the profile name) into `~/.local/bin`
 (`%LOCALAPPDATA%\Prometheus\bin` on Windows) that runs `prometheus -p
-<name> "$@"`, so `work chat` means `prometheus -p work chat`. Every new
+<name> "$@"`, so `work chat` means `prometheus -p work chat`. A profile
+created under another home (`--home` or `PROMETHEUS_HOME`) gets a launcher
+that passes `--home <that home>` as well. Every new
 profile gets one unless `--no-alias` is given. A reserved name, a
 `prometheus` subcommand or an existing executable on `PATH` is refused
 (exit 2 naming it); a launcher written earlier is rewritten.

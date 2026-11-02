@@ -105,3 +105,44 @@ async fn interrupt_needs_the_session_attached() {
         .unwrap_err();
     assert_eq!(err.code, -32_002);
 }
+
+/// A ticket request for `default` claiming `pid`.
+#[cfg(unix)]
+async fn ticket_claiming(daemon: &Daemon, pid: u32) -> Result<String, String> {
+    use pmt_rpc::control::{self, ControlRequest, Purpose};
+    let request = ControlRequest::Ticket {
+        purpose: Purpose::Interactive,
+        profiles: vec!["default".into()],
+        pid: Some(pid),
+    };
+    let response = control::call(&daemon.endpoint.control, &request)
+        .await
+        .unwrap();
+    control::ticket_of(response)
+        .map(|t| t.ticket)
+        .map_err(|e| e.message().to_owned())
+}
+
+/// `prometheus tui --standalone` serves only the TUI that runs it: the
+/// peer's pid comes from the kernel, so another process claiming the
+/// TUI's pid is refused, and the claim of the right process is ignored.
+#[cfg(unix)]
+#[tokio::test]
+async fn only_the_kernel_reported_pid_gets_a_standalone_ticket() {
+    let tui_pid = std::process::id() + 1;
+    let mut options = support::options();
+    options.only_pid = Some(tui_pid);
+    let daemon = Daemon::start_with(options, tempfile::tempdir().unwrap()).await;
+    let err = ticket_claiming(&daemon, tui_pid).await.unwrap_err();
+    assert!(
+        err.contains(&format!("serves only the TUI that runs it (pid {tui_pid})")),
+        "{err}"
+    );
+    let _ = daemon.stop().await;
+
+    let mut options = support::options();
+    options.only_pid = Some(std::process::id());
+    let daemon = Daemon::start_with(options, tempfile::tempdir().unwrap()).await;
+    assert!(ticket_claiming(&daemon, 1).await.is_ok());
+    let _ = daemon.stop().await;
+}

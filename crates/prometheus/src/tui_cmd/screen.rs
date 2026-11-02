@@ -181,6 +181,8 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
         Terminal::new(CrosstermBackend::new(std::io::stdout())).map_err(|e| terminal_error(&e))?;
     let (done, mut results) = mpsc::unbounded_channel();
     let mut tui = Tui::new(open, link, done, theme);
+    // After the transcript is loaded: loading replaces it.
+    tui.reload().await;
     if let Some(notice) = notice {
         tui.app.transcript.push(Kind::Notice, notice);
     }
@@ -192,7 +194,6 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
         );
         tui.app.transcript.push(Kind::Notice, note);
     }
-    tui.reload().await;
     tui.load_banner();
     if let Some(first) = &open.launch.first {
         tui.submit(first.clone(), open.launch.images.clone());

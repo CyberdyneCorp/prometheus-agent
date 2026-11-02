@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use pmt_core::doctor::{Check, Status};
 use pmt_core::error::Error;
-use pmt_core::runtime::{Role, live_record};
 
 use super::Inputs;
 use crate::setup_cmd::sections::required_secrets;
@@ -254,90 +253,6 @@ pub(super) fn store(inputs: &Inputs<'_>) -> Vec<Check> {
             ),
         ],
     }
-}
-
-/// `daemon`: a running daemon must be this build.
-pub(super) fn daemon(inputs: &Inputs<'_>) -> Vec<Check> {
-    let check = match live_record(inputs.scope.home(), Role::Daemon) {
-        Ok(None) => Check::new(
-            "daemon",
-            "running",
-            Status::Ok,
-            "not running (sessions run in-process)",
-        ),
-        Ok(Some(record)) if record.version == crate::build_info::VERSION => Check::new(
-            "daemon",
-            "running",
-            Status::Ok,
-            format!("running (pid {}, version {})", record.pid, record.version),
-        ),
-        Ok(Some(record)) => Check::new(
-            "daemon",
-            "running",
-            Status::Warn,
-            format!(
-                "running version {} (pid {}), this binary is {}",
-                record.version,
-                record.pid,
-                crate::build_info::VERSION
-            ),
-        )
-        .with_hint("restart the daemon to run this build"),
-        Err(err) => Check::new("daemon", "running", Status::Warn, err.message().to_owned()),
-    };
-    let mut checks = vec![check];
-    checks.extend(daemon_config(inputs.scope.home()));
-    checks
-}
-
-/// What the running daemon reports of each served profile's
-/// configuration: an invalid edit it ignored fails, changes waiting for a
-/// restart warn (spec: configuration-and-profiles, Live reload with apply
-/// classes).
-fn daemon_config(home: &std::path::Path) -> Vec<Check> {
-    let Ok(Some(record)) = crate::daemon_client::running(home) else {
-        return Vec::new();
-    };
-    let request = pmt_rpc::control::ControlRequest::Status;
-    let control = record.endpoint.control.clone();
-    let status =
-        crate::model_cmd::block_on(async move { pmt_rpc::control::call(&control, &request).await });
-    let Ok(Ok(response)) = status else {
-        return Vec::new();
-    };
-    let mut checks = Vec::new();
-    for profile in response.status.map(|s| s.config).unwrap_or_default() {
-        if let Some(error) = &profile.error {
-            checks.push(
-                Check::new(
-                    "daemon",
-                    "config",
-                    Status::Fail,
-                    format!(
-                        "{}: the daemon ignored an invalid config.toml and serves the previous one: {error}",
-                        profile.profile
-                    ),
-                )
-                .with_hint("fix the file; the daemon reloads it when it is saved"),
-            );
-        }
-        if !profile.pending_restart.is_empty() {
-            checks.push(
-                Check::new(
-                    "daemon",
-                    "config",
-                    Status::Warn,
-                    format!(
-                        "{}: changed keys apply after a restart: {}",
-                        profile.profile,
-                        profile.pending_restart.join(", ")
-                    ),
-                )
-                .with_hint("prometheus daemon restart"),
-            );
-        }
-    }
-    checks
 }
 
 /// `runtimes`: the store policy and the verification state of every

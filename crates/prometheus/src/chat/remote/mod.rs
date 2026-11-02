@@ -137,10 +137,11 @@ pub fn setup_of(args: &ChatArgs, set: &[String], cwd: &Path) -> Result<SessionSe
 /// connection and session errors.
 pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Result<u8, Error> {
     crate::model_cmd::block_on(async {
-        let hello = crate::daemon_client::hello(true);
-        let (client, inbox) = crate::daemon_client::connect(record, scope.name().as_str(), &hello)
-            .await
-            .map_err(|err| not_served(&err, record, scope))?;
+        let hello = crate::daemon_client::hello(pmt_rpc::contracts::ClientKind::Cli, true);
+        let (client, inbox) =
+            crate::daemon_client::connect_cli(record, scope.name().as_str(), &hello)
+                .await
+                .map_err(|err| not_served(&err, record, scope))?;
         let mut attached = Attached {
             client,
             inbox,

@@ -1,7 +1,8 @@
 //! Profile alias launchers (spec: configuration-and-profiles, Profile alias
 //! launchers): `profile alias <name> [--as <alias>]` writes a launcher
 //! `<alias>` that runs `prometheus -p <name> "$@"` into the user's bin
-//! directory (`~/.local/bin`, or `%LOCALAPPDATA%\Prometheus\bin`), and
+//! directory (`~/.local/bin`, or `%LOCALAPPDATA%\Prometheus\bin`), adding
+//! `--home <home>` when the profile lives outside the default home, and
 //! refuses an alias that is reserved, a `prometheus` subcommand, or an
 //! existing executable on `PATH`. A launcher this command wrote earlier is
 //! recognised by its marker line and may be rewritten.
@@ -120,21 +121,37 @@ fn is_executable(path: &Path) -> bool {
 }
 
 /// Writes the launcher for `profile` as `alias` into `dir`; returns its
-/// path.
+/// path. `home` is the profile's home when it is not the default one: the
+/// launcher must open that home, not `~/.prometheus`.
 ///
 /// # Errors
 ///
 /// `home.io` when the directory or file cannot be written.
-pub(super) fn write(profile: &ProfileName, alias: &str, dir: &Path) -> Result<PathBuf, Error> {
+pub(super) fn write(
+    profile: &ProfileName,
+    alias: &str,
+    dir: &Path,
+    home: Option<&Path>,
+) -> Result<PathBuf, Error> {
     std::fs::create_dir_all(dir).map_err(|e| Error::io(&codes::HOME_IO, dir, &e))?;
     let path = launcher_path(dir, alias);
     let text = if cfg!(windows) {
+        // `%` is expanded in batch files even inside quotes.
+        let home = home.map_or_else(String::new, |h| {
+            format!("--home \"{}\" ", h.display().to_string().replace('%', "%%"))
+        });
         format!(
-            "@rem {MARKER}: runs prometheus with profile '{profile}'\r\n@prometheus -p {profile} %*\r\n"
+            "@rem {MARKER}: runs prometheus with profile '{profile}'\r\n@prometheus {home}-p {profile} %*\r\n"
         )
     } else {
+        let home = home.map_or_else(String::new, |h| {
+            format!(
+                "--home '{}' ",
+                h.display().to_string().replace('\'', "'\\''")
+            )
+        });
         format!(
-            "#!/bin/sh\n# {MARKER}: runs prometheus with profile '{profile}'\nexec prometheus -p {profile} \"$@\"\n"
+            "#!/bin/sh\n# {MARKER}: runs prometheus with profile '{profile}'\nexec prometheus {home}-p {profile} \"$@\"\n"
         )
     };
     std::fs::write(&path, text).map_err(|e| Error::io(&codes::HOME_IO, &path, &e))?;
@@ -148,7 +165,7 @@ pub(super) fn write(profile: &ProfileName, alias: &str, dir: &Path) -> Result<Pa
 }
 
 /// `profile alias`: checks and writes, then says where (and whether the
-/// directory is on `PATH`).
+/// directory is on `PATH`). `home` is the resolved home of the profile.
 ///
 /// # Errors
 ///
@@ -156,11 +173,20 @@ pub(super) fn write(profile: &ProfileName, alias: &str, dir: &Path) -> Result<Pa
 pub(super) fn run(
     profile: &ProfileName,
     alias: &str,
+    home: &Path,
     launch: &LaunchEnv,
 ) -> Result<PathBuf, Error> {
     let dir = bin_dir(launch)?;
     check(alias, &dir, launch)?;
-    write(profile, alias, &dir)
+    write(profile, alias, &dir, custom_home(home, launch).as_deref())
+}
+
+/// `home` as an absolute path when it is not the default home.
+fn custom_home(home: &Path, launch: &LaunchEnv) -> Option<PathBuf> {
+    let absolute = std::path::absolute(home).unwrap_or_else(|_| home.to_owned());
+    let default =
+        pmt_config::home::default_home(launch).map(|d| std::path::absolute(&d).unwrap_or(d));
+    (default.as_deref() != Some(absolute.as_path())).then_some(absolute)
 }
 
 /// Whether `dir` is on the launch environment's `PATH`.
