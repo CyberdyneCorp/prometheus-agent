@@ -15,6 +15,8 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.rpc.max_frame_bytes` | integer | `16777216` | ≥ 1024 | `restart` | Largest accepted frame; a larger one closes the connection with 4413. |
 | `daemon.rpc.request_timeout_secs` | integer | `600` | ≥ 1 | `restart` | Deadline of server-to-client requests other than approvals (which use the profile's `approvals.timeout_secs`). |
 | `daemon.rpc.workers` | integer | `8` | 1 to 256 | `restart` | Requests run concurrently per connection; `rpc.ping` never waits for one. |
+| `gateway.http.listen` | string | `"127.0.0.1:8644"` | any | `restart` | Where every webhook-style adapter is served, at `/p/<profile>/<platform>/`. |
+| `gateway.http.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
 | `gateway.on_all_adapters_down` | one of "stay_alive", "exit" | `"stay_alive"` | `"stay_alive"`, `"exit"` | `restart` | What the daemon does once every messaging adapter failed for good: keep serving local clients and schedulers, or exit 78. |
 | `gateway.relay.allow_direct_platforms` | array of string | `[]` | any | `restart` | Platforms the relay fronts whose direct adapters still connect. |
 | `gateway.relay.gateway_id` | string | unset | any | `restart` | This gateway's id at the connector. |

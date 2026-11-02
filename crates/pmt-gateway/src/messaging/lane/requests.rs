@@ -14,9 +14,9 @@ use serde_json::{Value, json};
 
 use super::Lane;
 use crate::hub::Answered;
-use crate::messaging::adapter::Button;
-use crate::messaging::auth;
+use crate::messaging::adapter::{Button, Interactive};
 use crate::messaging::key::Routing;
+use crate::messaging::{auth, cards};
 
 /// Told to a bystander who tries to decide.
 pub(crate) const NOT_YOURS: &str = "Only the person who asked or an admin may decide this.";
@@ -66,7 +66,7 @@ fn outcome_text(decision: Decision) -> &'static str {
     }
 }
 
-fn card_text(params: &ApprovalRequestParams) -> String {
+fn card_text(params: &ApprovalRequestParams, tier: Interactive, id: &str) -> String {
     let mut text = format!("Approval needed: {}", params.tool);
     if let Some(subject) = &params.subject {
         let _ = write!(text, "\n{}", pmt_text(subject));
@@ -74,7 +74,12 @@ fn card_text(params: &ApprovalRequestParams) -> String {
     for finding in &params.findings {
         let _ = write!(text, "\n- {}", pmt_text(&finding.reason));
     }
-    text.push_str("\nReply /approve, /approve session, /approve always or /deny.");
+    match tier {
+        Interactive::Native => {
+            text.push_str("\nReply /approve, /approve session, /approve always or /deny.");
+        }
+        other => text.push_str(&cards::instructions(other, id)),
+    }
     text
 }
 
@@ -117,16 +122,22 @@ impl Lane {
             .running
             .as_ref()
             .map_or_else(String::new, |r| r.requester.clone());
-        let buttons = ["once", "session", "always", "deny"]
-            .iter()
-            .map(|choice| Button {
-                label: choice[..1].to_uppercase() + &choice[1..],
-                data: format!("appr:{id}:{choice}"),
-            })
-            .collect::<Vec<_>>();
+        let tier = self.tier();
+        let buttons = if tier == Interactive::Native {
+            cards::CHOICES
+                .iter()
+                .map(|choice| Button {
+                    label: choice[..1].to_uppercase() + &choice[1..],
+                    data: self.shared.card_key.data(&id, choice),
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
         let session = self.session.clone().unwrap_or_default();
         let card_key = format!("{session}:{id}:card");
-        let body = json!({"text": card_text(&request), "buttons": buttons}).to_string();
+        let text = card_text(&request, tier, &id);
+        let body = json!({"text": text, "buttons": buttons}).to_string();
         self.deliver(card_key.clone(), OutboundKind::Approval, body, None);
         self.requests.approvals.push(Approval {
             id,
@@ -146,33 +157,48 @@ impl Lane {
         })
     }
 
-    /// `/approve [session|always]`: the oldest pending approval.
+    /// How the conversation's adapter renders choices.
+    fn tier(&self) -> Interactive {
+        self.shared
+            .adapters
+            .descriptor(&self.profile, &self.routing.platform)
+            .map_or(Interactive::None, |d| d.interactive)
+    }
+
+    /// The pending approval `/approve <id>` or `/deny <id>` names, and the
+    /// words after the id; the oldest one when no id is given.
+    fn named<'a>(&self, args: &'a str) -> (Option<Approval>, &'a str) {
+        let (first, rest) = args.trim().split_once(' ').unwrap_or((args.trim(), ""));
+        match self.requests.approvals.iter().find(|a| a.id == first) {
+            Some(approval) => (Some(approval.clone()), rest.trim()),
+            None => (self.requests.approvals.first().cloned(), args.trim()),
+        }
+    }
+
+    /// `/approve [<id>] [once|session|always]`: the named or oldest
+    /// pending approval.
     pub(super) fn approve(&mut self, routing: &Routing, args: &str) {
-        let word = args.split_whitespace().next().unwrap_or_default();
+        let (approval, rest) = self.named(args);
+        let word = rest.split_whitespace().next().unwrap_or_default();
         let Some(decision) = decision_of(&word.to_lowercase()).filter(|d| *d != Decision::Deny)
         else {
             self.say("Usage: /approve [session|always]");
             return;
         };
-        let Some(approval) = self.requests.approvals.first().cloned() else {
+        let Some(approval) = approval else {
             self.say(NOTHING_PENDING);
             return;
         };
         self.decide(routing, &approval, decision);
     }
 
-    /// `/deny [all] [reason]`.
+    /// `/deny [all | <id>] [reason]`.
     pub(super) fn deny(&mut self, routing: &Routing, args: &str) {
         let all = args.split_whitespace().next() == Some("all");
         let targets: Vec<Approval> = if all {
             self.requests.approvals.clone()
         } else {
-            self.requests
-                .approvals
-                .first()
-                .cloned()
-                .into_iter()
-                .collect()
+            self.named(args).0.into_iter().collect()
         };
         if targets.is_empty() {
             self.say(NOTHING_PENDING);
@@ -183,11 +209,15 @@ impl Lane {
         }
     }
 
-    /// A pressed card button (`appr:<id>:<choice>`).
+    /// A pressed card button (`appr:<id>:<choice>:<mac>`): rejected and
+    /// logged unless its MAC verifies under this boot's key.
     pub(super) fn callback(&mut self, routing: &Routing, data: &str) {
-        let mut parts = data.splitn(3, ':');
-        let (Some("appr"), Some(id), Some(choice)) = (parts.next(), parts.next(), parts.next())
-        else {
+        let Some((id, choice)) = self.shared.card_key.verify(data) else {
+            tracing::warn!(
+                platform = routing.platform,
+                sender = routing.sender_id,
+                "rejected a card callback whose signature does not verify"
+            );
             return;
         };
         let Some(decision) = decision_of(choice) else {
@@ -199,6 +229,30 @@ impl Lane {
         } else {
             tracing::info!("ignored a card answer for an unknown or settled request");
         }
+    }
+
+    /// A reply to a numbered card (`1`..`4` or the word, optionally
+    /// quoting the prompt id) from someone who may decide; `true` when it
+    /// decided.
+    pub(super) fn answer_numbered(&mut self, routing: &Routing, text: &str) -> bool {
+        if self.requests.approvals.is_empty() || self.tier() != Interactive::Numbered {
+            return false;
+        }
+        let Some((choice, quoted)) = cards::numbered_reply(text) else {
+            return false;
+        };
+        let approval = match quoted {
+            Some(id) => self.requests.approvals.iter().find(|a| a.id == id).cloned(),
+            None => self.requests.approvals.first().cloned(),
+        };
+        let Some(approval) = approval.filter(|a| self.may_decide(routing, a)) else {
+            return false;
+        };
+        let Some(decision) = decision_of(choice) else {
+            return false;
+        };
+        self.decide(routing, &approval, decision);
+        true
     }
 
     fn decide(&mut self, routing: &Routing, approval: &Approval, decision: Decision) {

@@ -120,4 +120,10 @@ pub trait Agents: Host {
     /// Ends a session the gateway replaced (`/new`, `/reset`, stuck-loop
     /// suspension).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
+
+    /// The profile's speech providers, when it has any (voice messages
+    /// are then transcribed and replies may be spoken).
+    fn speech(&self, _profile: &str) -> Option<Arc<dyn crate::messaging::voice::Speech>> {
+        None
+    }
 }

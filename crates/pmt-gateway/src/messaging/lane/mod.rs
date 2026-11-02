@@ -13,6 +13,7 @@
 mod admin;
 mod commands;
 mod input;
+mod reply;
 mod requests;
 mod turns;
 
@@ -41,6 +42,8 @@ pub(crate) enum Msg {
         seq: u64,
         routing: Box<Routing>,
         inbound: Box<Inbound>,
+        /// The user spoke (a voice note, now transcribed).
+        voice: bool,
     },
     /// A turn of the session ended.
     Finished(TurnFinished),
@@ -149,6 +152,8 @@ struct Pending {
     images: Vec<String>,
     routing: Routing,
     reply_to: Option<String>,
+    /// The user spoke (the reply may be spoken back).
+    voice: bool,
 }
 
 /// The turn the gateway started in the session.
@@ -161,6 +166,12 @@ struct Running {
     /// `/stop` stopped it: nothing is delivered.
     stopped: bool,
     draft: turns::Draft,
+    /// The user spoke.
+    voice: bool,
+    /// Keeps the typing indicator alive while the turn runs.
+    _typing: Option<tokio_util::sync::DropGuard>,
+    /// The reply's audio streamed to the platform, sentence by sentence.
+    speech: Option<reply::Spoken>,
 }
 
 /// A transition run once the stopped turn has ended.
@@ -192,6 +203,8 @@ struct Lane {
     policy: Option<pmt_config::schema::ChatPolicy>,
     /// Mirrored messages waiting for the running turn to end.
     mirrors: Vec<(String, Option<String>)>,
+    /// The event being handled was a voice note.
+    voice_input: bool,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -200,6 +213,7 @@ pub(crate) fn input(
     key: &SessionKey,
     routing: Routing,
     inbound: Inbound,
+    voice: bool,
 ) -> Admission {
     let handle = lane(shared, key, &routing);
     let seq = handle.status.seq.fetch_add(1, Ordering::AcqRel) + 1;
@@ -208,6 +222,7 @@ pub(crate) fn input(
         seq,
         routing: Box::new(routing),
         inbound: Box::new(inbound),
+        voice,
     });
     if queued {
         Admission::Queued
@@ -244,6 +259,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         horizon: 0,
         policy: None,
         mirrors: Vec::new(),
+        voice_input: false,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -348,7 +364,11 @@ impl Lane {
                 seq,
                 routing,
                 inbound,
-            } => self.inbound(seq, *routing, *inbound).await,
+                voice,
+            } => {
+                self.voice_input = voice;
+                self.inbound(seq, *routing, *inbound).await;
+            }
             Msg::Finished(finished) => self.finished(finished).await,
             Msg::Delta(text) => self.delta(&text).await,
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),
@@ -431,6 +451,7 @@ impl Lane {
                 images: Vec::new(),
                 routing: self.routing.clone(),
                 reply_to: None,
+                voice: false,
             });
         } else {
             self.say_as(OutboundKind::Notification, &event.text, None);

@@ -15,8 +15,9 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, Admission, Agents,
-    BusyPolicy, ChatType, Conversation, Descriptor, Gateway, Hooks, Inbound, Interactive, Lookup,
-    Options, Outgoing, SendError, Sent,
+    Attachment, AudioOp, BusyPolicy, ChatInfo, ChatType, Conversation, Descriptor, Gateway, Hooks,
+    HttpRequest, HttpResponse, Inbound, Interactive, Lookup, MediaStream, Options, Outgoing,
+    SendError, Sent, Speech,
 };
 use pmt_gateway::{Author, Host, HostFuture, Identity, Link, Server, ServerOptions};
 use pmt_rpc::contracts::{
@@ -34,6 +35,7 @@ use tokio_util::sync::CancellationToken;
 /// - `slow:<ms>[:<answer>]` answers after `ms` (or ends interrupted);
 /// - `approval` asks one approval and answers `approved` or `denied`;
 /// - `stream` streams its answer in pieces first;
+/// - `say:<text>` answers `<text>` verbatim;
 /// - anything else answers `echo: <text>` at once.
 async fn script(
     text: &str,
@@ -67,6 +69,9 @@ async fn script(
             "completed",
             Some("hello world, this is a streamed answer".into()),
         );
+    }
+    if let Some(rest) = text.strip_prefix("say:") {
+        return ("completed", Some(rest.to_owned()));
     }
     if let Some(rest) = text.strip_prefix("slow:") {
         let mut parts = rest.splitn(2, ':');
@@ -102,6 +107,8 @@ pub struct FakeAgents {
     pub approval_timeout: Mutex<Duration>,
     /// Every conversation session created, in order.
     pub conversations: Mutex<Vec<Conversation>>,
+    /// The profiles' speech providers.
+    pub speech: Mutex<Option<Arc<dyn Speech>>>,
 }
 
 impl FakeAgents {
@@ -409,6 +416,10 @@ impl Agents for FakeAgents {
         Vec::new()
     }
 
+    fn speech(&self, _profile: &str) -> Option<Arc<dyn Speech>> {
+        self.speech.lock().unwrap().clone()
+    }
+
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
         Box::pin(async move {
             let store = self
@@ -439,6 +450,22 @@ pub struct FakeAdapter {
     pub connect_error: Mutex<Option<AdapterError>>,
     pub link: Mutex<Option<Arc<dyn AdapterLink>>>,
     next: AtomicUsize,
+    /// When each typing indicator call started.
+    pub typing: Mutex<Vec<std::time::Instant>>,
+    /// How long a typing call takes (then fails).
+    pub typing_delay: Mutex<Duration>,
+    /// Inbound media by location: (declared length, chunks, chunk size).
+    pub media: Mutex<HashMap<String, MediaScript>>,
+    /// Streamed audio operations.
+    pub audio: Mutex<Vec<AudioOp>>,
+    /// `edit` answers `unsupported` although declared.
+    pub edit_unsupported: std::sync::atomic::AtomicBool,
+    /// Edits attempted.
+    pub edits_tried: AtomicUsize,
+    /// The credential identity it connects with.
+    pub credential: Mutex<Option<String>>,
+    /// The shared secret a webhook request must carry in `x-secret`.
+    pub http_secret: Mutex<Option<String>>,
 }
 
 impl FakeAdapter {
@@ -454,6 +481,14 @@ impl FakeAdapter {
             connect_error: Mutex::default(),
             link: Mutex::default(),
             next: AtomicUsize::new(1),
+            typing: Mutex::default(),
+            typing_delay: Mutex::new(Duration::ZERO),
+            media: Mutex::default(),
+            audio: Mutex::default(),
+            edit_unsupported: std::sync::atomic::AtomicBool::new(false),
+            edits_tried: AtomicUsize::new(0),
+            credential: Mutex::default(),
+            http_secret: Mutex::default(),
         })
     }
 
@@ -507,16 +542,131 @@ impl Adapter for FakeAdapter {
         Box::pin(async move { outcome })
     }
 
+    fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
+        Box::pin(async move {
+            Ok(ChatInfo {
+                name: chat_id.to_owned(),
+                chat_type: ChatType::Dm,
+            })
+        })
+    }
+
     fn edit<'a>(
         &'a self,
         message_id: &'a str,
         message: &'a Outgoing,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.edits_tried.fetch_add(1, Ordering::Relaxed);
+        if self.edit_unsupported.load(Ordering::Relaxed) {
+            return Box::pin(async { Err(SendError::Unsupported) });
+        }
         self.did
             .lock()
             .unwrap()
             .push(Did::Edit(message_id.to_owned(), message.clone()));
         Box::pin(async { Ok(()) })
+    }
+
+    fn send_typing<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.typing.lock().unwrap().push(std::time::Instant::now());
+        let delay = *self.typing_delay.lock().unwrap();
+        Box::pin(async move {
+            tokio::time::sleep(delay).await;
+            Err(SendError::Network("typing failed".into()))
+        })
+    }
+
+    fn credential_identity(&self) -> Option<String> {
+        self.credential.lock().unwrap().clone()
+    }
+
+    fn open_media<'a>(
+        &'a self,
+        attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        let found = self
+            .media
+            .lock()
+            .unwrap()
+            .get(&attachment.location)
+            .copied();
+        Box::pin(async move {
+            let (declared_len, chunks, size) = found.ok_or(SendError::Unsupported)?;
+            let body = futures_util::stream::iter((0..chunks).map(move |_| Ok(vec![7u8; size])));
+            Ok(MediaStream {
+                declared_len,
+                chunks: Box::pin(body),
+            })
+        })
+    }
+
+    fn audio<'a>(&'a self, op: &'a AudioOp) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.audio.lock().unwrap().push(op.clone());
+        Box::pin(async { Ok(()) })
+    }
+
+    fn verify_http(&self, request: &HttpRequest) -> bool {
+        let secret = self.http_secret.lock().unwrap().clone();
+        secret.is_some_and(|s| request.header("x-secret") == Some(s.as_str()))
+    }
+
+    fn handle_http<'a>(&'a self, request: &'a HttpRequest) -> AdapterFuture<'a, HttpResponse> {
+        let link = self.link.lock().unwrap().clone();
+        let text = String::from_utf8_lossy(&request.body).into_owned();
+        Box::pin(async move {
+            if let Some(link) = link {
+                let mut event = Inbound::text(ChatType::Dm, "hook", "hook", &text);
+                event.message_id = format!("h{}", text.len());
+                link.submit(event).await;
+            }
+            HttpResponse::status(200)
+        })
+    }
+}
+
+/// An inbound file the fake serves: (declared length, chunks, chunk
+/// size).
+pub type MediaScript = (Option<u64>, usize, usize);
+
+/// Scripted speech providers.
+#[derive(Default)]
+pub struct FakeSpeech {
+    /// What transcription answers.
+    pub transcript: Mutex<Option<Result<String, String>>>,
+    /// Texts synthesized.
+    pub spoken: Mutex<Vec<String>>,
+}
+
+impl Speech for FakeSpeech {
+    fn transcribe<'a>(
+        &'a self,
+        _path: &'a std::path::Path,
+    ) -> AdapterFuture<'a, Result<String, String>> {
+        let answer = self
+            .transcript
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| Err("no transcript".into()));
+        Box::pin(async move { answer })
+    }
+
+    fn synthesize<'a>(
+        &'a self,
+        text: &'a str,
+        out_dir: &'a std::path::Path,
+    ) -> AdapterFuture<'a, Result<std::path::PathBuf, String>> {
+        self.spoken.lock().unwrap().push(text.to_owned());
+        let n = self.spoken.lock().unwrap().len();
+        let path = out_dir.join(format!("speech-{n}.ogg"));
+        Box::pin(async move {
+            std::fs::write(&path, b"OggS").map_err(|e| e.to_string())?;
+            Ok(path)
+        })
     }
 }
 
@@ -549,6 +699,12 @@ pub struct Setup {
     pub relay: Option<pmt_gateway::messaging::RelayOptions>,
     /// The health export.
     pub health: Option<pmt_gateway::messaging::health::HealthOptions>,
+    /// Descriptors replacing the fake's, by platform.
+    pub descriptors: Vec<Descriptor>,
+    /// Credential identities, by (profile, platform).
+    pub credentials: Vec<((&'static str, &'static str), String)>,
+    /// Take platform credential locks (in the home).
+    pub locks: bool,
 }
 
 impl Setup {
@@ -564,6 +720,9 @@ impl Setup {
             unconnected: Vec::new(),
             relay: None,
             health: None,
+            descriptors: Vec::new(),
+            credentials: Vec::new(),
+            locks: false,
         }
     }
 }
@@ -610,7 +769,31 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         evicted: Mutex::default(),
         approval_timeout: Mutex::new(Duration::from_secs(30)),
         conversations: Mutex::default(),
+        speech: Mutex::default(),
     })
+}
+
+/// The fake adapter of `(profile, platform)` as `setup` describes it.
+fn fake_adapter(setup: &Setup, key: &(String, String)) -> Arc<FakeAdapter> {
+    let (name, platform) = key;
+    let adapter = FakeAdapter::new(platform);
+    if setup.no_edit.contains(&platform.as_str()) {
+        adapter.descriptor.lock().unwrap().supports_edit = false;
+    }
+    if let Some(descriptor) = setup.descriptors.iter().find(|d| &d.platform == platform) {
+        *adapter.descriptor.lock().unwrap() = descriptor.clone();
+    }
+    if let Some((_, credential)) = setup
+        .credentials
+        .iter()
+        .find(|((p, pl), _)| p == name && pl == platform)
+    {
+        *adapter.credential.lock().unwrap() = Some(credential.clone());
+    }
+    if let Some((_, err)) = setup.connect_errors.iter().find(|(k, _)| k == key) {
+        *adapter.connect_error.lock().unwrap() = Some(err.clone());
+    }
+    adapter
 }
 
 impl Harness {
@@ -638,14 +821,8 @@ impl Harness {
                 .platforms
                 .keys()
             {
-                let adapter = FakeAdapter::new(platform);
-                if setup.no_edit.contains(&platform.as_str()) {
-                    adapter.descriptor.lock().unwrap().supports_edit = false;
-                }
                 let key = (name.clone(), platform.clone());
-                if let Some((_, err)) = setup.connect_errors.iter().find(|(k, _)| *k == key) {
-                    *adapter.connect_error.lock().unwrap() = Some(err.clone());
-                }
+                let adapter = fake_adapter(&setup, &key);
                 adapters.insert(key, adapter);
             }
         }
@@ -662,6 +839,10 @@ impl Harness {
         options.relay.clone_from(&setup.relay);
         options.health.clone_from(&setup.health);
         options.drain_timeout = setup.drain;
+        options.http.listen = std::net::SocketAddr::from(([127, 0, 0, 1], 0));
+        if setup.locks {
+            options.locks_dir = Some(home.path().join("user-runtime").join("locks"));
+        }
         if setup.exit_when_down {
             options.on_all_adapters_down = pmt_config::daemon::AllAdaptersDown::Exit;
         }

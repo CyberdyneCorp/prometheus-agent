@@ -6,7 +6,7 @@
 //! failed for good, `on_all_adapters_down = "exit"` stops the daemon
 //! (exit 78) while `stay_alive` keeps serving local clients.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 
@@ -21,6 +21,7 @@ use super::adapter::{
     Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterSetup, AdapterState, AdapterStatus,
     Admission, Descriptor, Inbound, Outgoing, SendError, Sent,
 };
+use super::locks::{self, CredentialLock, Holder};
 use super::relay::{Relay, RelayDescriptor, RelayView};
 
 /// First reconnect delay.
@@ -33,19 +34,76 @@ const RECONNECT_MAX: Duration = Duration::from_mins(5);
 pub(crate) const UNCONFIRMED: &str =
     "connected but not yet confirmed active; recovering in background";
 
+/// An optional operation a descriptor declares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Op {
+    Edit,
+    Typing,
+    Reactions,
+    Audio,
+}
+
+impl Op {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Edit => "edit",
+            Self::Typing => "send_typing",
+            Self::Reactions => "react",
+            Self::Audio => "streaming audio",
+        }
+    }
+}
+
 /// One running adapter.
 pub(crate) struct Slot {
     pub(crate) adapter: Arc<dyn Adapter>,
+    /// The adapter's descriptor, its limit lowered by the platform table.
     pub(crate) descriptor: Descriptor,
     /// The relay carries this platform.
     pub(crate) relayed: bool,
     status: Mutex<AdapterStatus>,
+    /// Declared operations that answered `unsupported` on this
+    /// connection: treated as undeclared until the next connect.
+    unsupported: Mutex<BTreeSet<Op>>,
+    /// The platform credential lock while connected.
+    lock: Mutex<Option<CredentialLock>>,
     /// The adapter reported a lost connection.
     lost: Notify,
     stop: CancellationToken,
 }
 
 impl Slot {
+    /// Whether the descriptor declares `op` and it has not answered
+    /// `unsupported` on this connection.
+    pub(crate) fn can(&self, op: Op) -> bool {
+        let declared = match op {
+            Op::Edit => self.descriptor.supports_edit,
+            Op::Typing => self.descriptor.supports_typing,
+            Op::Reactions => self.descriptor.supports_reactions,
+            Op::Audio => self.descriptor.streaming_tts,
+        };
+        declared
+            && !self
+                .unsupported
+                .lock()
+                .expect("slot poisoned")
+                .contains(&op)
+    }
+
+    /// `op` answered `unsupported`: undeclared for the rest of the
+    /// connection, logged once.
+    pub(crate) fn refused(&self, op: Op) {
+        if self.unsupported.lock().expect("slot poisoned").insert(op) {
+            let status = self.status.lock().expect("status poisoned");
+            tracing::warn!(
+                profile = status.profile,
+                platform = status.platform,
+                "the adapter declared {} but does not support it; not used until it reconnects",
+                op.name()
+            );
+        }
+    }
+
     fn state(&self) -> AdapterState {
         self.status.lock().expect("status poisoned").state
     }
@@ -234,6 +292,7 @@ fn record_failure(shared: &Shared, key: (String, String), error: &AdapterError) 
         state: AdapterState::Fatal,
         code: Some(error.code.clone()),
         message: Some(error.message.clone()),
+        descriptor: None,
     };
     shared
         .adapters
@@ -254,18 +313,34 @@ fn launch_slot(
     adapter: Arc<dyn Adapter>,
     relayed: bool,
 ) {
-    let descriptor = adapter.describe();
+    let descriptor = match loaded_descriptor(shared, &key, adapter.as_ref(), relayed) {
+        Ok(descriptor) => descriptor,
+        Err(error) => return record_failure(shared, key, &error),
+    };
+    if descriptor.binds_http
+        && let Err(message) = super::http::ensure(shared)
+    {
+        let error = AdapterError {
+            retryable: false,
+            code: "http_listener".to_owned(),
+            message,
+        };
+        return record_failure(shared, key, &error);
+    }
     let slot = Arc::new(Slot {
         adapter,
-        descriptor,
-        relayed,
         status: Mutex::new(AdapterStatus {
             profile: key.0.clone(),
             platform: key.1.clone(),
             state: AdapterState::Connecting,
             code: None,
             message: None,
+            descriptor: Some(descriptor.clone()),
         }),
+        descriptor,
+        relayed,
+        unsupported: Mutex::default(),
+        lock: Mutex::default(),
         lost: Notify::new(),
         stop: shared.stop.child_token(),
     });
@@ -283,44 +358,22 @@ fn launch_slot(
 async fn supervise(shared: Weak<Shared>, key: (String, String), slot: Arc<Slot>) {
     let mut wait = RECONNECT_START;
     loop {
-        let link: Arc<dyn AdapterLink> = Arc::new(Link {
-            shared: Weak::clone(&shared),
-            profile: key.0.clone(),
-            platform: key.1.clone(),
-            slot: Arc::downgrade(&slot),
-        });
-        slot.set(AdapterState::Connecting, None);
-        let outcome = tokio::select! {
-            () = slot.stop.cancelled() => return,
-            outcome = slot.adapter.connect(link) => outcome,
+        let Some(outcome) = connect_once(&shared, &key, &slot).await else {
+            return;
         };
         match outcome {
             Ok(()) => {
-                if slot.state() == AdapterState::Connecting {
-                    let unconfirmed = AdapterError {
-                        retryable: true,
-                        code: "unconfirmed".to_owned(),
-                        message: UNCONFIRMED.to_owned(),
-                    };
-                    slot.set(AdapterState::Degraded, Some(&unconfirmed));
-                }
                 wait = RECONNECT_START;
                 tokio::select! {
                     () = slot.stop.cancelled() => return,
                     () = slot.lost.notified() => {}
                 }
             }
-            Err(error) if error.retryable => slot.set(AdapterState::Retrying, Some(&error)),
-            Err(error) => {
-                slot.set(AdapterState::Fatal, Some(&error));
-                if let Some(shared) = shared.upgrade() {
-                    platform_event(&shared, &key, &error).await;
-                    check_all_down(&shared);
-                }
-                return;
-            }
+            Err(error) if !failed(&shared, &key, &slot, &error).await => return,
+            Err(_) => {}
         }
-        if slot.state() == AdapterState::Fatal {
+        if slot.state() == AdapterState::Fatal && !slot.lock_wait() {
+            release(&slot);
             if let Some(shared) = shared.upgrade() {
                 check_all_down(&shared);
             }
@@ -332,6 +385,156 @@ async fn supervise(shared: Weak<Shared>, key: (String, String), slot: Arc<Slot>)
         }
         wait = (wait * 2).min(RECONNECT_MAX);
     }
+}
+
+/// One connect attempt (after the credential lock); `None` when the
+/// adapter was stopped meanwhile. A connected adapter is `degraded` until
+/// a send succeeds.
+async fn connect_once(
+    shared: &Weak<Shared>,
+    key: &(String, String),
+    slot: &Arc<Slot>,
+) -> Option<Result<(), AdapterError>> {
+    let link: Arc<dyn AdapterLink> = Arc::new(Link {
+        shared: Weak::clone(shared),
+        profile: key.0.clone(),
+        platform: key.1.clone(),
+        slot: Arc::downgrade(slot),
+    });
+    slot.set(AdapterState::Connecting, None);
+    slot.unsupported.lock().expect("slot poisoned").clear();
+    // A credential another holder keeps may free up: retried, visibly
+    // fatal meanwhile.
+    if let Err(error) = take_lock(shared, key, slot) {
+        return Some(Err(error));
+    }
+    let outcome = tokio::select! {
+        () = slot.stop.cancelled() => return None,
+        outcome = slot.adapter.connect(link) => outcome,
+    };
+    if outcome.is_ok() && slot.state() == AdapterState::Connecting {
+        let unconfirmed = AdapterError {
+            retryable: true,
+            code: "unconfirmed".to_owned(),
+            message: UNCONFIRMED.to_owned(),
+        };
+        slot.set(AdapterState::Degraded, Some(&unconfirmed));
+    }
+    Some(outcome)
+}
+
+/// Records a failed connect; `false` when the adapter stops for good.
+async fn failed(
+    shared: &Weak<Shared>,
+    key: &(String, String),
+    slot: &Slot,
+    error: &AdapterError,
+) -> bool {
+    if error.code == format!("{}_lock", key.1) {
+        slot.set(AdapterState::Fatal, Some(error));
+        return true;
+    }
+    if error.retryable {
+        slot.set(AdapterState::Retrying, Some(error));
+        return true;
+    }
+    slot.set(AdapterState::Fatal, Some(error));
+    release(slot);
+    if let Some(shared) = shared.upgrade() {
+        platform_event(&shared, key, error).await;
+        check_all_down(&shared);
+    }
+    false
+}
+
+impl Slot {
+    /// Fatal only because another process holds the credential: retried.
+    fn lock_wait(&self) -> bool {
+        let status = self.status.lock().expect("status poisoned");
+        status
+            .code
+            .as_deref()
+            .is_some_and(|code| code == format!("{}_lock", status.platform))
+    }
+}
+
+/// Takes the platform credential lock for a connect (no-op when held, or
+/// when the adapter's credential is not unique or locks are off).
+fn take_lock(
+    shared: &Weak<Shared>,
+    key: &(String, String),
+    slot: &Slot,
+) -> Result<(), AdapterError> {
+    let Some(shared) = shared.upgrade() else {
+        return Ok(());
+    };
+    let (Some(dir), Some(identity)) = (
+        shared.options.locks_dir.as_deref(),
+        slot.adapter.credential_identity(),
+    ) else {
+        return Ok(());
+    };
+    let mut held = slot.lock.lock().expect("slot poisoned");
+    if held.is_none() {
+        let holder = Holder::current(&shared.options.home, &key.0);
+        let platform = &key.1;
+        *held = Some(locks::acquire(
+            dir,
+            platform,
+            &identity,
+            holder,
+            shared.options.replace_locks,
+        )?);
+    }
+    Ok(())
+}
+
+/// Releases the credential lock of a stopped adapter.
+fn release(slot: &Slot) {
+    slot.lock.lock().expect("slot poisoned").take();
+}
+
+/// The adapter's descriptor once checked: a malformed one, upstream
+/// authorization outside the relay, or a table raising the limit fails
+/// the load; a lower `max_message_length` applies.
+fn loaded_descriptor(
+    shared: &Shared,
+    key: &(String, String),
+    adapter: &dyn Adapter,
+    relayed: bool,
+) -> Result<Descriptor, AdapterError> {
+    let refuse = |code: &str, message: String| AdapterError {
+        retryable: false,
+        code: code.to_owned(),
+        message,
+    };
+    let mut descriptor = adapter.describe();
+    descriptor
+        .check()
+        .map_err(|m| refuse("invalid_descriptor", m))?;
+    if descriptor.authorization_is_upstream && !relayed {
+        return Err(refuse(
+            "invalid_descriptor",
+            "descriptor field authorization_is_upstream is reserved to the relay adapter".into(),
+        ));
+    }
+    let lowered = shared
+        .agents
+        .scope(&key.0)
+        .and_then(|scope| scope.config().gateway.platform(&key.1).max_message_length);
+    if let Some(limit) = lowered.map(|l| l as usize) {
+        if limit > descriptor.max_message_length {
+            return Err(refuse(
+                "config_invalid",
+                format!(
+                    "gateway.platforms.{}.max_message_length: the adapter's maximum is {}; a limit can only be lowered",
+                    key.1, descriptor.max_message_length
+                ),
+            ));
+        }
+        descriptor.max_message_length = limit;
+    }
+    Ok(descriptor)
 }
 
 async fn platform_event(shared: &Shared, key: &(String, String), error: &AdapterError) {
@@ -448,6 +651,7 @@ pub(crate) async fn disconnect_all(shared: &Shared) {
     for slot in slots {
         slot.stop.cancel();
         slot.adapter.disconnect().await;
+        release(&slot);
         slot.set(AdapterState::Disabled, None);
     }
 }

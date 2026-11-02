@@ -29,6 +29,7 @@ pub mod managed;
 pub mod migrate;
 mod parse;
 pub mod passthrough;
+pub mod platforms;
 pub mod profile_id;
 pub mod profiles;
 pub mod provider_urls;
@@ -39,6 +40,7 @@ pub mod schema;
 pub mod scope;
 pub mod secrets;
 pub mod validate;
+mod validate_platforms;
 pub mod write;
 
 pub use daemon::DaemonConfig;

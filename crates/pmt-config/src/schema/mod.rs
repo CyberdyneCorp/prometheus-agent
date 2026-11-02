@@ -18,6 +18,7 @@
 
 mod agent;
 mod gateway;
+mod gateway_platform;
 mod gateway_policy;
 mod interface;
 mod models;
@@ -35,11 +36,12 @@ pub use agent::{
     VisionConfig,
 };
 pub use gateway::{
-    AgentCacheConfig, BackgroundNotifications, ChatPolicy, EffectiveBusy, GatewayBusy,
-    GatewayConfig, GatewayQuickCommands, GatewaySessions, HomeChannel, NotificationsConfig,
-    OutboxConfig, PlatformBusy, PlatformConfig, PlatformSessions, PlatformStreaming,
-    PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride, ShutdownConfig,
-    StreamTransport, StreamingConfig, UnauthorizedDm, resolve_policy,
+    AgentCacheConfig, BackgroundNotifications, Batching, ChatPolicy, DedupConfig, DeliveryConfig,
+    EffectiveBusy, GatewayBusy, GatewayConfig, GatewayQuickCommands, GatewaySessions, HomeChannel,
+    MediaConfig, NotificationsConfig, OutboxConfig, PlatformBusy, PlatformConfig, PlatformSessions,
+    PlatformStreaming, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,
+    ReplyToMode, ShutdownConfig, StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig,
+    VoiceReplyMode, resolve_policy,
 };
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,

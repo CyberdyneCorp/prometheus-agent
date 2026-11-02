@@ -17,6 +17,7 @@ use tokio::time::Instant;
 use super::Shared;
 use super::adapter::{Admission, Inbound, Outgoing};
 use super::auth::{self, Facts};
+use super::inbound;
 use super::key::{ChatType, Isolation, Routing};
 use super::lane;
 use super::limits::{self, Verdict};
@@ -104,9 +105,27 @@ async fn decide(
         );
         return Admission::Dropped;
     }
+    let dedup = &gateway.dedup;
+    let duplicate = shared.dedup.seen(
+        &format!("{owner}/{platform}"),
+        &inbound.chat_id,
+        &inbound.message_id,
+        Duration::from_secs(dedup.ttl_secs),
+        dedup.max_entries as usize,
+        Instant::now(),
+    );
+    if duplicate {
+        tracing::debug!(profile = owner, platform, "dropped a redelivered event");
+        return Admission::Duplicate;
+    }
     if let Some(limited) = limit(shared, owner, platform, &inbound, gateway).await {
         return limited;
     }
+    let mut inbound = inbound;
+    let voice = match shared.agents.scope(owner) {
+        Some(scope) => inbound::prepare(shared, owner, platform, &scope, &mut inbound).await,
+        None => false,
+    };
     let (group_per_user, thread_per_user) = gateway.sessions_for(platform);
     let routing = Routing {
         adapter: format!("{owner}/{platform}"),
@@ -123,7 +142,7 @@ async fn decide(
         group_per_user,
         thread_per_user,
     });
-    lane::input(shared, &key, routing, inbound)
+    lane::input(shared, &key, routing, inbound, voice)
 }
 
 /// The policy matching an event, if any.
@@ -272,7 +291,13 @@ fn pairing_text(owner: &str, platform: &str, code: &str) -> String {
     )
 }
 
-async fn reply(shared: &Shared, owner: &str, platform: &str, inbound: &Inbound, text: &str) {
+pub(crate) async fn reply(
+    shared: &Shared,
+    owner: &str,
+    platform: &str,
+    inbound: &Inbound,
+    text: &str,
+) {
     let message = Outgoing::text(&inbound.chat_id, inbound.thread_id.as_deref(), text);
     if let Err(err) = shared.adapters.send_direct(owner, platform, &message).await {
         tracing::warn!(

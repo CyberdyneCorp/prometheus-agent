@@ -235,6 +235,27 @@ fn gateway_status_reports_each_adapter() {
 }
 
 #[test]
+fn gateway_platforms_prints_each_loaded_descriptor() {
+    let home = gateway_home("max_message_length = 1000\n");
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    wait("the adapter is up", Duration::from_secs(30), || {
+        ok(&run(home, &["gateway", "platforms"])).contains("default/test:")
+    });
+    let text = ok(&run(home, &["gateway", "platforms"]));
+    assert!(text.contains("  max_message_length = 1000\n"), "{text}");
+    assert!(text.contains("  length_unit = \"chars\"\n"), "{text}");
+    assert!(text.contains("  interactive = \"native\"\n"), "{text}");
+    let json = ok(&run(home, &["--json", "gateway", "platforms"]));
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(
+        value["platforms"][0]["descriptor"]["max_message_length"],
+        1000
+    );
+    daemon.stop(home);
+}
+
+#[test]
 fn a_profile_created_while_running_is_served_after_gateway_reload() {
     let home = gateway_home("");
     let home = home.path();

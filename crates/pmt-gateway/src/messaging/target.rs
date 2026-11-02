@@ -176,30 +176,11 @@ pub fn not_configured(platform: &str) -> Error {
 
 /// A body's text and attachments: each `MEDIA:<path>` line attaches a
 /// file and a `[[as_document]]` line sends every attachment as a document
-/// (images uncompressed); both lines leave the text.
+/// (images uncompressed); both lines leave the text (the rules of
+/// [`super::attachments::directives`]).
 #[must_use]
 pub fn media(body: &str) -> (String, Vec<OutboundAttachment>) {
-    let mut text = Vec::new();
-    let mut paths = Vec::new();
-    let mut as_document = false;
-    for line in body.lines() {
-        let trimmed = line.trim();
-        if let Some(path) = trimmed.strip_prefix("MEDIA:") {
-            let path = path.trim();
-            if !path.is_empty() {
-                paths.push(path.to_owned());
-            }
-        } else if trimmed == "[[as_document]]" {
-            as_document = true;
-        } else {
-            text.push(line);
-        }
-    }
-    let attachments = paths
-        .into_iter()
-        .map(|path| OutboundAttachment { path, as_document })
-        .collect();
-    (text.join("\n").trim().to_owned(), attachments)
+    super::attachments::directives(body)
 }
 
 #[cfg(test)]

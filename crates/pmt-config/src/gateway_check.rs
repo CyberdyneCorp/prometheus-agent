@@ -82,6 +82,7 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
             )));
         }
     }
+    check_platform_timing(config)?;
     check_policies(config, profile_dir)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
@@ -93,6 +94,29 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
                     "quick_commands.{name}: /{name} is a built-in command; give the quick command another name"
                 ),
             ));
+        }
+    }
+    Ok(())
+}
+
+/// Batching waits after a split part at least as long as after any part,
+/// and a human delay range starts at its minimum.
+fn check_platform_timing(config: &Config) -> Result<(), Error> {
+    for (platform, table) in &config.gateway.platforms {
+        if let Some(batching) = &table.batching
+            && batching.split_delay_ms < batching.delay_ms
+        {
+            return Err(invalid(format!(
+                "gateway.platforms.{platform}.batching.split_delay_ms: must be at least delay_ms ({} ms)",
+                batching.delay_ms
+            )));
+        }
+        if let Some([min, max]) = table.human_delay_ms
+            && min > max
+        {
+            return Err(invalid(format!(
+                "gateway.platforms.{platform}.human_delay_ms: [min, max] with min <= max (found [{min}, {max}])"
+            )));
         }
     }
     Ok(())

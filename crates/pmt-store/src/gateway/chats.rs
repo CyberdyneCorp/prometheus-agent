@@ -89,6 +89,26 @@ impl Store {
         })
     }
 
+    /// Whether a pinned (kept) session's messages mention `name` (a cached
+    /// media file the gateway must not delete).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn pinned_sessions_mention(&self, name: &str) -> Result<bool, Error> {
+        self.read(|conn| {
+            conn.query_row(
+                "SELECT 1 FROM messages m JOIN sessions s ON s.id = m.session_id \
+                 WHERE s.pinned = 1 AND instr(m.content, ?1) > 0 LIMIT 1",
+                [name],
+                |_| Ok(()),
+            )
+            .optional()
+            .map(|found| found.is_some())
+            .map_err(sql)
+        })
+    }
+
     /// The session most recently routed for a chat (and thread, when
     /// given), whatever the sender: where a message sent to that chat is
     /// mirrored.

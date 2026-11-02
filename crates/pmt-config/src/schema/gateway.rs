@@ -10,11 +10,15 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::BusyInputMode;
+pub use super::gateway_platform::{
+    Batching, DedupConfig, DeliveryConfig, MediaConfig, PlatformBusy, PlatformConfig,
+    PlatformSessions, PlatformStreaming, ReplyToMode, UnauthorizedDm, VoiceConfig, VoiceReplyMode,
+};
 pub use super::gateway_policy::{
     ChatPolicy, HomeChannel, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,
     resolve_policy,
 };
-use super::{BusyInputMode, SecretName};
 
 /// The `[gateway]` section.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -32,6 +36,7 @@ pub struct GatewayConfig {
     /// unless `--clone-channels` is given, so two profiles never answer
     /// the same bot account.
     #[schemars(extend("x-apply" = "next_session"))]
+    #[serde(deserialize_with = "super::gateway_platform::lower_case_platforms")]
     pub platforms: BTreeMap<String, PlatformConfig>,
     /// How conversations map to sessions.
     pub sessions: GatewaySessions,
@@ -61,6 +66,18 @@ pub struct GatewayConfig {
     /// changed (`/policy apply --now` replaces a chat's session at once).
     #[schemars(extend("x-apply" = "next_session"))]
     pub chat_policies: Vec<ChatPolicy>,
+    /// Redelivered inbound events.
+    #[schemars(extend("x-apply" = "live"))]
+    pub dedup: DedupConfig,
+    /// Long replies.
+    #[schemars(extend("x-apply" = "live"))]
+    pub delivery: DeliveryConfig,
+    /// Inbound media.
+    #[schemars(extend("x-apply" = "live"))]
+    pub media: MediaConfig,
+    /// Voice messages in and out.
+    #[schemars(extend("x-apply" = "live"))]
+    pub voice: VoiceConfig,
 }
 
 /// `[gateway.sessions]`.
@@ -270,109 +287,6 @@ impl Default for AgentCacheConfig {
             memory_high_bytes: 0,
         }
     }
-}
-
-/// One `[gateway.platforms.<name>]` table: the keys every adapter shares.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct PlatformConfig {
-    /// Start this adapter with the daemon.
-    pub enabled: bool,
-    /// The chat that receives scheduled output, platform-only send
-    /// targets and notifications without an originating chat (`/sethome`
-    /// sets it).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub home_channel: Option<HomeChannel>,
-    /// Platform user ids admitted without pairing (no wildcards: use
-    /// `allow_all`).
-    pub allow_users: Vec<String>,
-    /// Chats every member of which is admitted.
-    pub allow_chats: Vec<String>,
-    /// Admit everyone (logged at WARN on every start).
-    pub allow_all: bool,
-    /// User ids with every command in direct messages.
-    pub admins: Vec<String>,
-    /// User ids with every command in groups.
-    pub group_admins: Vec<String>,
-    /// Commands other users may run where an admin list is set, besides
-    /// `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`.
-    pub user_commands: Vec<String>,
-    /// What an unauthorized direct message gets: a pairing code (`pair`),
-    /// nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for
-    /// email or when `allow_users` is set, else `pair`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub unauthorized_dm: Option<UnauthorizedDm>,
-    /// Busy handling on this platform (overrides `busy.input_mode` and
-    /// `gateway.busy`).
-    pub busy: PlatformBusy,
-    /// Session mapping on this platform (overrides `gateway.sessions`).
-    pub sessions: PlatformSessions,
-    /// Streaming on this platform.
-    pub streaming: PlatformStreaming,
-    /// Rate limits on this platform (overrides `gateway.rate_limit`).
-    pub rate_limit: RateLimitOverride,
-    /// The secret holding the adapter's credential (never the value).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token_secret: Option<SecretName>,
-}
-
-/// What an unauthorized direct message gets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum UnauthorizedDm {
-    /// A pairing code the owner can approve.
-    Pair,
-    /// Nothing.
-    Ignore,
-    /// A short refusal.
-    Decline,
-}
-
-/// `[gateway.platforms.<name>.busy]`: unset keys follow `busy.input_mode`
-/// and `gateway.busy`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct PlatformBusy {
-    /// Overrides `busy.input_mode`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_mode: Option<BusyInputMode>,
-    /// Overrides `gateway.busy.debounce_ms`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(max = 10_000))]
-    pub debounce_ms: Option<u64>,
-    /// Overrides `gateway.busy.debounce_cap_ms`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(max = 60_000))]
-    pub debounce_cap_ms: Option<u64>,
-    /// Overrides `gateway.busy.ack`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ack: Option<bool>,
-    /// Overrides `gateway.busy.max_queued`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schemars(range(min = 1, max = 1000))]
-    pub max_queued: Option<u32>,
-}
-
-/// `[gateway.platforms.<name>.sessions]`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct PlatformSessions {
-    /// Overrides `gateway.sessions.group_per_user`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub group_per_user: Option<bool>,
-    /// Overrides `gateway.sessions.thread_per_user`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thread_per_user: Option<bool>,
-}
-
-/// `[gateway.platforms.<name>.streaming]`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct PlatformStreaming {
-    /// `false` turns streaming off for this platform; `true` cannot turn
-    /// it on while `gateway.streaming.enabled` is off.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enabled: Option<bool>,
 }
 
 /// The busy settings in effect for one platform.

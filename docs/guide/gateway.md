@@ -62,6 +62,68 @@ $ prometheus gateway list
 no Prometheus daemon is running
 ```
 
+## Platform adapters
+
+The binary ships the `telegram`, `discord`, `slack`, `email`, `matrix`,
+`signal`, `whatsapp` and `webhook` adapters; any other platform name is
+accepted only when an installed adapter plugin declares it, and an unknown
+`[gateway.platforms.<name>]` table fails validation. Names are lower case.
+
+Each adapter declares a capability descriptor (its message limit and the
+unit it counts in, media, buttons, editing, typing, threads...) and the
+gateway reads limits and capabilities only from there; `prometheus gateway
+platforms` prints every loaded descriptor. A platform table may lower
+`max_message_length`, never raise it (Telegram 4096 UTF-16 units, Discord
+2000, Slack 39000, Email 50000, Matrix 32000 bytes, Signal 8000, WhatsApp
+4096, Webhook 65536 bytes).
+
+```toml
+[gateway.platforms.discord]
+enabled = true
+token_secret = "DISCORD_BOT_TOKEN"   # a secret name, never the token
+reply_to_mode = "first"              # off | first | all
+typing_indicator = true
+human_delay_ms = [400, 1200]         # random pause before each part
+batching = { delay_ms = 300, split_delay_ms = 1000 }
+options = { require_mention = true } # checked against the adapter's schema
+```
+
+What the gateway does for every adapter:
+
+- Long replies are split at paragraph, line and word boundaries (never
+  inside inline code), code fences are closed and reopened with their
+  language, and parts end with ` (i/N)`; more than `gateway.delivery.
+  max_parts` (10) parts become the first part plus the full text attached
+  as a document.
+- A redelivered event within `gateway.dedup.ttl_secs` (300) is a
+  duplicate; text split by the user's client is joined by `batching`.
+- Sends failing transiently are retried twice (2 s backoff with jitter);
+  a platform asking to wait more than a minute leaves the message in the
+  outbox for later; a reply whose markup the platform refuses is resent
+  once as plain text.
+- Inbound files are downloaded into the profile's `cache/media/` under
+  `gateway.media.max_inbound_bytes` (128 MiB) and deleted after
+  `gateway.media.cache_max_age_secs` (a day) unless a pinned session
+  mentions them. The agent attaches files with `MEDIA:<path>` lines
+  (`[[as_document]]`, `[[as_voice]]`), delivered only from the session's
+  workspace, the media cache or the blob store; anything else is withheld
+  with a note.
+- Voice notes are transcribed with the profile's speech provider
+  (`gateway.voice`); replies are spoken back to voice notes by default
+  (`reply_mode = "mirror"`).
+- Approval cards use buttons where the platform has them (signed per
+  daemon start, so a forged button press decides nothing), a numbered
+  list answered with `1`..`4` on `numbered` platforms, and `/approve <id>
+  <choice>` elsewhere.
+- A bot token used by two profiles or homes connects once: the second
+  adapter reports `fatal` with `<platform>_lock`, naming the holder and
+  the command that stops it; `prometheus daemon run --replace` takes the
+  credential over.
+- Webhook-style adapters are served on one listener, `daemon.toml
+  gateway.http.listen` (default `127.0.0.1:8644`), at
+  `/p/<profile>/<platform>/`; an unsigned request gets 401. A
+  non-loopback address needs `gateway.http.public = true`.
+
 ## Who may talk to the agent
 
 Nobody, by default. A sender is admitted by the first rule that matches:

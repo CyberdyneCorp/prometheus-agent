@@ -482,6 +482,29 @@
         }
       ]
     },
+    "Batching": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.batching]`.",
+      "properties": {
+        "delay_ms": {
+          "default": 300,
+          "description": "Text from the same sender within this many milliseconds joins the\npending input.",
+          "format": "uint64",
+          "maximum": 2000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "split_delay_ms": {
+          "default": 1000,
+          "description": "The wait after a part that filled the platform's limit (the client\nprobably split a longer message); at least `delay_ms`.",
+          "format": "uint64",
+          "maximum": 4000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "BrowserConfig": {
       "additionalProperties": false,
       "description": "The `[browser]` section.",
@@ -1017,6 +1040,29 @@
       "type": "object",
       "x-apply": "live"
     },
+    "DedupConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.dedup]`.",
+      "properties": {
+        "max_entries": {
+          "default": 2000,
+          "description": "Message ids remembered per adapter (the oldest are forgotten\nfirst).",
+          "format": "uint32",
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ttl_secs": {
+          "default": 300,
+          "description": "A redelivered inbound event within this many seconds is dropped\nas a duplicate.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "DegradedFeature": {
       "description": "Sandbox hardening features.",
       "oneOf": [
@@ -1081,6 +1127,21 @@
           "type": "string"
         }
       ]
+    },
+    "DeliveryConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.delivery]`.",
+      "properties": {
+        "max_parts": {
+          "default": 10,
+          "description": "A reply that would need more parts is sent as its first part plus\na truncation notice, with the full text attached.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 2,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "DialogPolicy": {
       "description": "Dialog policies.",
@@ -1424,6 +1485,32 @@
           "type": "array",
           "x-apply": "next_session"
         },
+        "dedup": {
+          "$ref": "#/$defs/DedupConfig",
+          "default": {
+            "max_entries": 2000,
+            "ttl_secs": 300
+          },
+          "description": "Redelivered inbound events.",
+          "x-apply": "live"
+        },
+        "delivery": {
+          "$ref": "#/$defs/DeliveryConfig",
+          "default": {
+            "max_parts": 10
+          },
+          "description": "Long replies.",
+          "x-apply": "live"
+        },
+        "media": {
+          "$ref": "#/$defs/MediaConfig",
+          "default": {
+            "cache_max_age_secs": 86400,
+            "max_inbound_bytes": 134217728
+          },
+          "description": "Inbound media.",
+          "x-apply": "live"
+        },
         "multiplex": {
           "default": false,
           "description": "In the daemon's launch profile: serve every profile of the home\n(each in its own scope) instead of the launch profile only.",
@@ -1504,6 +1591,16 @@
             "transport": "auto"
           },
           "description": "Token streaming to platforms.",
+          "x-apply": "live"
+        },
+        "voice": {
+          "$ref": "#/$defs/VoiceConfig",
+          "default": {
+            "echo_transcripts": true,
+            "reply_mode": "mirror",
+            "stt_enabled": true
+          },
+          "description": "Voice messages in and out.",
           "x-apply": "live"
         }
       },
@@ -1820,6 +1917,27 @@
           "type": "string"
         }
       ]
+    },
+    "MediaConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.media]`.",
+      "properties": {
+        "cache_max_age_secs": {
+          "default": 86400,
+          "description": "Cached inbound media older than this many seconds is deleted\nunless a kept session references it.",
+          "format": "uint64",
+          "minimum": 60,
+          "type": "integer"
+        },
+        "max_inbound_bytes": {
+          "default": 134217728,
+          "description": "Largest inbound attachment downloaded, in bytes; `0` disables the\ncap.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "MemoryConfig": {
       "additionalProperties": false,
@@ -2401,6 +2519,17 @@
           },
           "type": "array"
         },
+        "batching": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Batching"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Joins rapid consecutive text of one sender into one input (a\nclient that splits a long paste); replaces the busy debounce on\nthis platform when set."
+        },
         "busy": {
           "$ref": "#/$defs/PlatformBusy",
           "default": {},
@@ -2430,10 +2559,49 @@
           ],
           "description": "The chat that receives scheduled output, platform-only send\ntargets and notifications without an originating chat (`/sethome`\nsets it)."
         },
+        "human_delay_ms": {
+          "description": "A uniformly random delay `[min, max]` in milliseconds before each\noutbound part. Unset: none.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "max_message_length": {
+          "description": "Lowers the adapter's message length limit (in its own unit); it\ncan never raise it.",
+          "format": "uint32",
+          "minimum": 16,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "options": {
+          "additionalProperties": true,
+          "description": "The adapter's own settings, validated against the schema it\npublishes (`prometheus gateway platforms` lists the adapters).",
+          "type": "object"
+        },
         "rate_limit": {
           "$ref": "#/$defs/RateLimitOverride",
           "default": {},
           "description": "Rate limits on this platform (overrides `gateway.rate_limit`)."
+        },
+        "reply_to_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReplyToMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which parts of a reply quote the message they answer: none, the\nfirst part, or every part. Unset: `first`."
         },
         "sessions": {
           "$ref": "#/$defs/PlatformSessions",
@@ -2455,6 +2623,13 @@
             }
           ],
           "description": "The secret holding the adapter's credential (never the value)."
+        },
+        "typing_indicator": {
+          "description": "Show the platform's typing indicator while a turn runs. Unset:\n`true`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "unauthorized_dm": {
           "anyOf": [
@@ -3091,6 +3266,26 @@
         }
       },
       "type": "object"
+    },
+    "ReplyToMode": {
+      "description": "Which parts of a reply quote the message they answer.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "None.",
+          "type": "string"
+        },
+        {
+          "const": "first",
+          "description": "The first part.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every part.",
+          "type": "string"
+        }
+      ]
     },
     "ResultBudget": {
       "additionalProperties": false,
@@ -4321,6 +4516,48 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "VoiceConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.voice]`.",
+      "properties": {
+        "echo_transcripts": {
+          "default": true,
+          "description": "Echo a transcript back to the chat once.",
+          "type": "boolean"
+        },
+        "reply_mode": {
+          "$ref": "#/$defs/VoiceReplyMode",
+          "default": "mirror",
+          "description": "When replies are spoken."
+        },
+        "stt_enabled": {
+          "default": true,
+          "description": "Transcribe inbound voice and audio clips with the profile's\nspeech-to-text provider.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "VoiceReplyMode": {
+      "description": "When replies are spoken.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Never.",
+          "type": "string"
+        },
+        {
+          "const": "mirror",
+          "description": "When the user's message was voice.",
+          "type": "string"
+        },
+        {
+          "const": "always",
+          "description": "Always.",
+          "type": "string"
+        }
+      ]
+    },
     "WebConfig": {
       "additionalProperties": false,
       "description": "The `[web]` section.",
@@ -4609,6 +4846,17 @@
           "max_queued": 16
         },
         "chat_policies": [],
+        "dedup": {
+          "max_entries": 2000,
+          "ttl_secs": 300
+        },
+        "delivery": {
+          "max_parts": 10
+        },
+        "media": {
+          "cache_max_age_secs": 86400,
+          "max_inbound_bytes": 134217728
+        },
         "multiplex": false,
         "notifications": {
           "background": "concise"
@@ -4642,6 +4890,11 @@
           "edit_interval_ms": 800,
           "enabled": false,
           "transport": "auto"
+        },
+        "voice": {
+          "echo_transcripts": true,
+          "reply_mode": "mirror",
+          "stt_enabled": true
         }
       },
       "description": "The profile's part in the home's gateway daemon."

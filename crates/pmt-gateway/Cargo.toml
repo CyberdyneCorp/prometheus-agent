@@ -8,9 +8,14 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+bytes.workspace = true
 futures-util.workspace = true
 # Random instance ids, epochs, tickets and server-request ids.
 getrandom.workspace = true
+# The shared HTTP listener of webhook-style adapters.
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true

@@ -30,6 +30,12 @@ pub enum GatewayCommand {
     /// Start the adapters served profiles enable that are not running
     /// (running adapters and conversations are untouched).
     Reload,
+    /// Print each loaded adapter's capability descriptor (limits, unit,
+    /// media, interactive tier, optional capabilities).
+    Platforms,
+    /// Stop the daemon that serves this profile's adapters (releasing
+    /// their platform credentials), after its running turns finish.
+    Stop,
     /// The durable delivery outbox of the selected profile.
     Outbox {
         /// The outbox subcommand.
@@ -120,6 +126,8 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
     match command {
         GatewayCommand::Status => status(ctx.home()?.root(), ctx, false),
         GatewayCommand::Reload => status(ctx.home()?.root(), ctx, true),
+        GatewayCommand::Platforms => platforms(ctx.home()?.root(), ctx),
+        GatewayCommand::Stop => super::stop(ctx.home()?.root(), ctx.json),
         GatewayCommand::Outbox { command } => outbox(command, ctx),
         GatewayCommand::Send(args) => super::send_cmd::run(args, ctx),
         GatewayCommand::List => super::inventory::list(ctx),
@@ -134,7 +142,8 @@ struct StatusOutput {
     adapters: Vec<AdapterReport>,
 }
 
-fn status(home: &Path, ctx: &Context<'_>, reload: bool) -> Result<u8, Error> {
+/// The running daemon's status (after a reload when asked).
+fn daemon_status(home: &Path, reload: bool) -> Result<pmt_rpc::control::DaemonStatus, Error> {
     let Some(record) = wait_running(home, Duration::from_secs(2))? else {
         return Err(Error::new(
             &codes::DAEMON_NOT_RUNNING,
@@ -147,12 +156,59 @@ fn status(home: &Path, ctx: &Context<'_>, reload: bool) -> Result<u8, Error> {
     } else {
         ControlRequest::Status
     };
-    let Some(daemon) = control_call(&record, &request)?.status else {
-        return Err(Error::new(
-            &codes::RPC_CONNECTION,
-            "the daemon sent no status",
-        ));
-    };
+    control_call(&record, &request)?
+        .status
+        .ok_or_else(|| Error::new(&codes::RPC_CONNECTION, "the daemon sent no status"))
+}
+
+/// What `gateway platforms --json` prints.
+#[derive(Debug, Serialize)]
+struct PlatformsOutput {
+    platforms: Vec<LoadedPlatform>,
+}
+
+/// One loaded adapter's descriptor.
+#[derive(Debug, Serialize)]
+struct LoadedPlatform {
+    profile: String,
+    platform: String,
+    descriptor: serde_json::Value,
+}
+
+/// `gateway platforms`: each loaded adapter's descriptor.
+fn platforms(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+    let daemon = daemon_status(home, false)?;
+    let loaded: Vec<LoadedPlatform> = daemon
+        .adapters
+        .into_iter()
+        .filter_map(|a| {
+            a.descriptor.map(|descriptor| LoadedPlatform {
+                profile: a.profile,
+                platform: a.platform,
+                descriptor,
+            })
+        })
+        .collect();
+    if ctx.json {
+        return document("gateway platforms", &PlatformsOutput { platforms: loaded });
+    }
+    let mut text = String::new();
+    if loaded.is_empty() {
+        text.push_str("no messaging adapters loaded\n");
+    }
+    for adapter in &loaded {
+        let _ = writeln!(text, "{}/{}:", adapter.profile, adapter.platform);
+        if let Some(fields) = adapter.descriptor.as_object() {
+            for (key, value) in fields {
+                let _ = writeln!(text, "  {key} = {value}");
+            }
+        }
+    }
+    print_raw(&text)
+}
+
+fn status(home: &Path, ctx: &Context<'_>, reload: bool) -> Result<u8, Error> {
+    let daemon = daemon_status(home, reload)?;
     if ctx.json {
         let output = StatusOutput {
             profiles: daemon.profiles,

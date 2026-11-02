@@ -164,6 +164,10 @@ pub struct AdapterReport {
     pub code: Option<String>,
     /// What happened.
     pub message: Option<String>,
+    /// The capability descriptor the adapter loaded with (`gateway
+    /// platforms`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor: Option<serde_json::Value>,
 }
 
 /// A served profile's configuration state.

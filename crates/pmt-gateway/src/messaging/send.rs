@@ -15,7 +15,8 @@ use pmt_store::{NewMessage, Role, Store};
 use serde::Serialize;
 use serde_json::json;
 
-use super::adapter::{Reaction, SendError};
+use super::adapter::{Descriptor, Reaction, SendError};
+use super::shape::{self, Owner};
 use super::target::{self, Destination, Resolved, Target};
 use super::{Gateway, Shared};
 
@@ -220,7 +221,9 @@ impl Gateway {
         self.enqueue(profile, &resolved, &request.text, &request.attachments)
     }
 
-    /// Queues one message for an already resolved destination.
+    /// Queues one message for an already resolved destination: split at
+    /// the platform's limit, an oversized text truncated with the full
+    /// text attached; the first entry is returned.
     ///
     /// # Errors
     ///
@@ -233,21 +236,48 @@ impl Gateway {
         attachments: &[OutboundAttachment],
     ) -> Result<Outbound, Error> {
         let store = self.shared.profile_store(profile)?;
-        let new = NewOutbound {
-            idempotency_key: format!("send:{}", crate::tickets::random_hex(12)),
-            session_id: None,
-            platform: to.platform.clone(),
-            chat_id: to.chat_id.clone(),
-            thread_id: to.thread_id.clone(),
-            reply_to: None,
-            edit_of: None,
-            kind: OutboundKind::Notification,
-            body: text.to_owned(),
-            attachments: attachments.to_vec(),
+        let key = format!("send:{}", crate::tickets::random_hex(12));
+        let descriptor = self
+            .shared
+            .adapters
+            .descriptor(profile, &to.platform)
+            .unwrap_or_else(|| {
+                let limit = pmt_config::platforms::first_party(&to.platform)
+                    .map_or(4096, |p| p.max_message_length as usize);
+                Descriptor::new(&to.platform, limit)
+            });
+        let owner = Owner {
+            session: None,
+            key: &key,
         };
-        let (entry, _) = store.enqueue_outbound(&new)?;
+        let parts = shape::parts(&self.shared, profile, &descriptor, text, &owner);
+        let count = parts.len();
+        let mut first = None;
+        for (index, (body, mut attached)) in parts.into_iter().enumerate() {
+            if index + 1 == count {
+                attached.extend(attachments.iter().cloned());
+            }
+            let new = NewOutbound {
+                idempotency_key: if index == 0 {
+                    key.clone()
+                } else {
+                    format!("{key}:{index}")
+                },
+                session_id: None,
+                platform: to.platform.clone(),
+                chat_id: to.chat_id.clone(),
+                thread_id: to.thread_id.clone(),
+                reply_to: None,
+                edit_of: None,
+                kind: OutboundKind::Notification,
+                body,
+                attachments: attached,
+            };
+            let (entry, _) = store.enqueue_outbound(&new)?;
+            first.get_or_insert(entry);
+        }
         self.shared.outbox_wake.notify_waiters();
-        Ok(entry)
+        first.ok_or_else(|| Error::new(&codes::GATEWAY_DELIVERY_FAILED, "nothing to send"))
     }
 
     /// Whether the `send_message` tool may reach `to`: the platform's home
@@ -354,7 +384,7 @@ impl Gateway {
         let slot = shared
             .adapters
             .ready(profile, &to.platform)
-            .filter(|s| s.descriptor.supports_reactions)
+            .filter(|s| s.can(super::adapters::Op::Reactions))
             .ok_or_else(|| {
                 Error::new(
                     &codes::GATEWAY_NO_ADAPTER,
@@ -383,10 +413,13 @@ impl Gateway {
             .react(&reaction)
             .await
             .map_err(|err| match err {
-                SendError::Unsupported => Error::new(
-                    &codes::GATEWAY_NO_ADAPTER,
-                    format!("the {} adapter does not support reactions", to.platform),
-                ),
+                SendError::Unsupported => {
+                    slot.refused(super::adapters::Op::Reactions);
+                    Error::new(
+                        &codes::GATEWAY_NO_ADAPTER,
+                        format!("the {} adapter does not support reactions", to.platform),
+                    )
+                }
                 other => Error::new(&codes::GATEWAY_DELIVERY_FAILED, other.describe()),
             })
     }

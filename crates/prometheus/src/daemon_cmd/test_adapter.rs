@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use pmt_gateway::messaging::{
-    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, ChatType, Descriptor,
-    Inbound, Interactive, Outgoing, SendError, Sent,
+    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, ChatInfo, ChatType,
+    Descriptor, Inbound, Interactive, Outgoing, SendError, Sent,
 };
 use serde_json::{Value, json};
 
@@ -136,6 +136,15 @@ impl Adapter for FileAdapter {
             })
         };
         Box::pin(async move { outcome })
+    }
+
+    fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
+        Box::pin(async move {
+            Ok(ChatInfo {
+                name: chat_id.to_owned(),
+                chat_type: ChatType::Dm,
+            })
+        })
     }
 
     fn edit<'a>(

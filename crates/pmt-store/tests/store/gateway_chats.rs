@@ -140,6 +140,7 @@ fn attachments_survive_the_outbox() {
         attachments: vec![OutboundAttachment {
             path: "/data/report.png".into(),
             as_document: true,
+            as_voice: false,
         }],
     };
     let (entry, _) = store.enqueue_outbound(&new).unwrap();

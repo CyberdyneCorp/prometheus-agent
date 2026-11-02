@@ -15,16 +15,34 @@ use crate::support::{Did, Harness, Setup, config, eventually, open, said};
 
 /// The id of the approval request open in the session, as the card's
 /// buttons carry it.
-fn card_request(h: &Harness) -> String {
+fn card(h: &Harness) -> pmt_gateway::messaging::Outgoing {
     let did = h.adapter("telegram").all();
-    let card = did
-        .iter()
+    did.iter()
         .find_map(|d| match d {
             Did::Send(m) if !m.buttons.is_empty() => Some(m.clone()),
             _ => None,
         })
-        .expect("a card with buttons");
-    card.buttons[0].data.split(':').nth(1).unwrap().to_owned()
+        .expect("a card with buttons")
+}
+
+fn card_request(h: &Harness) -> String {
+    card(h).buttons[0]
+        .data
+        .split(':')
+        .nth(1)
+        .unwrap()
+        .to_owned()
+}
+
+/// The signed callback data of the card's `choice` button.
+fn button(h: &Harness, choice: &str) -> String {
+    card(h)
+        .buttons
+        .iter()
+        .find(|b| b.data.contains(&format!(":{choice}:")))
+        .expect("the choice's button")
+        .data
+        .clone()
 }
 
 #[tokio::test]
@@ -115,11 +133,39 @@ async fn a_button_press_decides_too() {
     let h = Harness::start(Setup::new(&open("telegram"))).await;
     h.dm("telegram", "1", "approval").await;
     said(&h.adapter("telegram"), "Approval needed: terminal").await;
-    let id = card_request(&h);
     let mut press = Inbound::text(ChatType::Dm, "1", "1", "");
-    press.callback = Some(format!("appr:{id}:deny"));
+    press.callback = Some(button(&h, "deny"));
     h.send("telegram", press).await;
     said(&h.adapter("telegram"), "denied").await;
+}
+
+#[tokio::test]
+async fn a_forged_callback_leaves_the_approval_pending() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    h.dm("telegram", "1", "approval").await;
+    said(&h.adapter("telegram"), "Approval needed: terminal").await;
+    let id = card_request(&h);
+    let genuine = button(&h, "always");
+    assert!(genuine.starts_with(&format!("appr:{id}:always:")));
+    for forged in [
+        format!("appr:{id}:always:deadbeef"),
+        format!("appr:{id}:always"),
+        genuine.replace(":always:", ":once:"),
+    ] {
+        let mut press = Inbound::text(ChatType::Dm, "1", "1", "");
+        press.callback = Some(forged);
+        h.send("telegram", press).await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let texts = h.adapter("telegram").texts();
+    assert!(
+        !texts
+            .iter()
+            .any(|t| t.contains("approved") || t.contains("Approved")),
+        "{texts:?}"
+    );
+    h.dm("telegram", "1", "/approve").await;
+    said(&h.adapter("telegram"), "approved").await;
 }
 
 #[tokio::test]

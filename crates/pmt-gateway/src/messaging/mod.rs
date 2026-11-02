@@ -24,21 +24,34 @@ pub mod adapter;
 mod adapters;
 mod admit;
 pub mod agents;
+pub mod attachments;
 pub mod auth;
 mod cache;
+mod cards;
+mod dedup;
+pub mod descriptor;
 pub mod health;
 pub mod hooks;
+mod http;
+mod inbound;
 pub mod key;
 mod lane;
 mod limits;
+mod locks;
+mod media;
 pub(crate) mod methods;
 mod outbox;
 mod peer;
 pub mod policy;
 mod recovery;
 mod relay;
+mod retry;
 mod send;
+pub mod shape;
+pub mod split;
 pub mod target;
+mod typing;
+pub mod voice;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -56,16 +69,19 @@ use tracing::Instrument as _;
 
 pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
-    AdapterState, AdapterStatus, Admission, Attachment, Button, Descriptor, Inbound, Interactive,
-    MediaKind, Outgoing, SendError, Sent,
+    AdapterState, AdapterStatus, Admission, Attachment, AudioOp, Button, ChatInfo, Descriptor,
+    HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind, MediaStream,
+    Outgoing, Reaction, SendError, Sent,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup};
 pub use hooks::{Hook, Hooks, PreCommand};
+pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
 pub use recovery::{CLEAN_SHUTDOWN, RESTARTED};
 pub use relay::{RelayOptions, RelaySource};
 pub use send::{KnownTarget, SendRequest, known_targets};
+pub use voice::Speech;
 
 use crate::hub::{ConnId, Peer};
 use crate::server::Server;
@@ -93,6 +109,15 @@ pub struct Options {
     /// The health export (`observability.gateway_health` of the launch
     /// profile), when enabled.
     pub health: Option<health::HealthOptions>,
+    /// The shared HTTP listener of webhook-style adapters
+    /// (`daemon.toml gateway.http`).
+    pub http: HttpOptions,
+    /// Where platform credential locks live (`<user runtime dir>/locks`);
+    /// `None` turns them off.
+    pub locks_dir: Option<PathBuf>,
+    /// `daemon run --replace`: take over credential locks live holders
+    /// keep.
+    pub replace_locks: bool,
 }
 
 impl std::fmt::Debug for Options {
@@ -120,6 +145,9 @@ impl Options {
             relay: None,
             relay_source: None,
             health: None,
+            http: HttpOptions::default(),
+            locks_dir: None,
+            replace_locks: false,
         }
     }
 }
@@ -137,6 +165,10 @@ pub(crate) struct Shared {
     sessions: Mutex<HashMap<String, String>>,
     adapters: adapters::Adapters,
     guard: auth::BotLoopGuard,
+    dedup: dedup::Dedup,
+    http: http::Listener,
+    /// Signs approval card callbacks (fresh at every start).
+    card_key: cards::CardKey,
     relay: std::sync::OnceLock<Arc<relay::Relay>>,
     last_inbound: send::LastInbound,
     limits: limits::Limits,
@@ -184,6 +216,18 @@ impl Shared {
             Ok(_) => self.outbox_wake.notify_waiters(),
             Err(err) => tracing::error!(profile, "cannot store an outbound message: {err}"),
         }
+    }
+
+    /// The table of `platform` in `profile`'s configuration now.
+    pub(crate) fn platform_config(
+        &self,
+        profile: &str,
+        platform: &str,
+    ) -> pmt_config::schema::PlatformConfig {
+        self.agents
+            .scope(profile)
+            .map(|s| s.config().gateway.platform(platform))
+            .unwrap_or_default()
     }
 
     pub(crate) fn outbox_config(&self, profile: &str) -> OutboxConfig {
@@ -261,6 +305,9 @@ impl Gateway {
             peer,
             adapters: adapters::Adapters::default(),
             guard: auth::BotLoopGuard::default(),
+            dedup: dedup::Dedup::default(),
+            http: http::Listener::default(),
+            card_key: cards::CardKey::random(),
             relay: std::sync::OnceLock::new(),
             last_inbound: send::LastInbound::default(),
             limits: limits::Limits::default(),
@@ -320,6 +367,12 @@ impl Gateway {
     #[must_use]
     pub fn statuses(&self) -> Vec<AdapterStatus> {
         self.shared.adapters.statuses()
+    }
+
+    /// The address of the shared webhook listener, once it runs.
+    #[must_use]
+    pub fn http_addr(&self) -> Option<std::net::SocketAddr> {
+        self.shared.http.addr()
     }
 
     /// Approves a pending pairing code of `profile` and queues the

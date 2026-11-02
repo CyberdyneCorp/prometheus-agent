@@ -17,6 +17,8 @@ use tracing::Instrument as _;
 
 use super::Shared;
 use super::adapter::{Button, Outgoing, SendError};
+use super::adapters::Op;
+use super::{retry, typing};
 
 /// How often the worker looks for due entries without being woken (the
 /// CLI enqueues from another process).
@@ -96,6 +98,7 @@ fn outgoing(entry: &Outbound) -> Outgoing {
         text,
         buttons,
         attachments: entry.attachments.clone(),
+        plain: false,
     }
 }
 
@@ -125,15 +128,30 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
         }
     }
     let message = outgoing(&entry);
+    let delay = typing::human_delay(
+        shared
+            .platform_config(profile, &entry.platform)
+            .human_delay_ms,
+    );
+    if !delay.is_zero() {
+        tokio::time::sleep(delay).await;
+    }
     let outcome = match &entry.edit_of {
-        Some(id) if slot.descriptor.supports_edit => match slot.adapter.edit(id, &message).await {
+        Some(id) if slot.can(Op::Edit) => match slot.adapter.edit(id, &message).await {
             Ok(()) => Ok(Some(id.clone())),
-            Err(SendError::Unsupported | SendError::Permanent(_)) => {
-                slot.adapter.send(&message).await.map(|s| s.message_id)
+            Err(err @ (SendError::Unsupported | SendError::Permanent(_))) => {
+                if err == SendError::Unsupported {
+                    slot.refused(Op::Edit);
+                }
+                retry::send(slot.adapter.as_ref(), &message)
+                    .await
+                    .map(|s| s.message_id)
             }
             Err(err) => Err(err),
         },
-        _ => slot.adapter.send(&message).await.map(|s| s.message_id),
+        _ => retry::send(slot.adapter.as_ref(), &message)
+            .await
+            .map(|s| s.message_id),
     };
     match outcome {
         Ok(message_id) => {
@@ -182,7 +200,7 @@ fn failed(store: &Store, entry: &Outbound, err: &SendError, max_attempts: u32, n
             &reason,
         ),
         SendError::Ambiguous(_) => store.settle_outbound(entry.id, OutboundState::Unknown, &reason),
-        SendError::Permanent(_) | SendError::Unsupported => {
+        SendError::Permanent(_) | SendError::Formatting(_) | SendError::Unsupported => {
             store.settle_outbound(entry.id, OutboundState::Failed, &reason)
         }
     };

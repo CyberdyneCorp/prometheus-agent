@@ -21,92 +21,35 @@ use super::key::ChatType;
 /// A boxed adapter future.
 pub type AdapterFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// How an adapter renders choices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Interactive {
-    /// Platform buttons.
-    Native,
-    /// A numbered list answered by number.
-    Numbered,
-    /// Slash-command instructions.
-    None,
-}
-
-/// An adapter's own access policy, when it enforces one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AccessPolicy {
-    /// It submits only senders on its allowlist (trusted).
-    Allowlist,
-    /// It submits everyone (not trusted).
-    Open,
-}
-
-/// What an adapter declares (the subset of the capability descriptor the
-/// gateway core reads; the full descriptor is the platform adapters').
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(clippy::struct_excessive_bools)] // independent capability flags
-pub struct Descriptor {
-    /// Platform name.
-    pub platform: String,
-    /// Longest message, in the platform's unit.
-    pub max_message_length: usize,
-    /// Messages can be edited.
-    pub supports_edit: bool,
-    /// Messages can be deleted.
-    pub supports_delete: bool,
-    /// How choices are rendered.
-    pub interactive: Interactive,
-    /// The connector authorizes senders upstream (the relay only).
-    pub authorization_is_upstream: bool,
-    /// The adapter's own access policy.
-    pub access_policy: Option<AccessPolicy>,
-    /// It can send one message without a running connection (one-shot
-    /// `gateway send` without the daemon).
-    pub stateless_send: bool,
-    /// It can add and remove reactions.
-    pub supports_reactions: bool,
-}
-
-impl Descriptor {
-    /// A plain descriptor for `platform`: no editing, numbered choices.
-    #[must_use]
-    pub fn new(platform: &str, max_message_length: usize) -> Self {
-        Self {
-            platform: platform.to_owned(),
-            max_message_length,
-            supports_edit: false,
-            supports_delete: false,
-            interactive: Interactive::Numbered,
-            authorization_is_upstream: false,
-            access_policy: None,
-            stateless_send: false,
-            supports_reactions: false,
-        }
-    }
-}
-
-/// Media kinds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MediaKind {
-    /// A picture.
-    Image,
-    /// An audio file.
-    Audio,
-    /// A voice note.
-    Voice,
-    /// A video.
-    Video,
-    /// Any other file.
-    Document,
-}
+pub use super::descriptor::{
+    AccessPolicy, ContinuableSurface, Descriptor, Interactive, LengthUnit, Markup, MediaKind,
+};
 
 /// One inbound attachment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attachment {
     /// What it is.
     pub kind: MediaKind,
-    /// Where the gateway can read it.
+    /// Where the gateway can read it: a platform reference the adapter
+    /// opens with [`Adapter::open_media`], or (once cached) a local path.
     pub location: String,
+    /// The file name, when the platform gives one.
+    pub name: Option<String>,
+    /// Length of a voice or audio clip.
+    pub duration_secs: Option<u64>,
+}
+
+impl Attachment {
+    /// An attachment of `kind` at `location`.
+    #[must_use]
+    pub fn new(kind: MediaKind, location: &str) -> Self {
+        Self {
+            kind,
+            location: location.to_owned(),
+            name: None,
+            duration_secs: None,
+        }
+    }
 }
 
 /// One inbound event, normalized by the adapter.
@@ -190,6 +133,8 @@ pub struct Outgoing {
     pub buttons: Vec<Button>,
     /// Files sent with it (from `MEDIA:` directives).
     pub attachments: Vec<OutboundAttachment>,
+    /// Send without markup (the resend after a `formatting` refusal).
+    pub plain: bool,
 }
 
 impl Outgoing {
@@ -203,6 +148,7 @@ impl Outgoing {
             text: text.to_owned(),
             buttons: Vec::new(),
             attachments: Vec::new(),
+            plain: false,
         }
     }
 }
@@ -230,6 +176,9 @@ pub enum SendError {
     Ambiguous(String),
     /// The platform refused the message for good.
     Permanent(String),
+    /// The platform refused the message's markup (resent once as plain
+    /// text).
+    Formatting(String),
     /// The operation is not supported.
     Unsupported,
 }
@@ -247,6 +196,7 @@ impl SendError {
             Self::Server(e) => format!("server error: {e}"),
             Self::Ambiguous(e) => format!("outcome unknown: {e}"),
             Self::Permanent(e) => format!("refused: {e}"),
+            Self::Formatting(e) => format!("markup refused: {e}"),
             Self::Unsupported => "unsupported".to_owned(),
         }
     }
@@ -294,6 +244,10 @@ pub struct AdapterStatus {
     pub code: Option<String>,
     /// Error message.
     pub message: Option<String>,
+    /// What the adapter declared (as loaded: the limit lowered by the
+    /// platform table); `None` when it could not be built.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub descriptor: Option<Descriptor>,
 }
 
 /// What submitting an inbound event did.
@@ -351,6 +305,146 @@ pub trait Adapter: Send + Sync + 'static {
     /// `None` when the platform has no such directory.
     fn resolve_channel<'a>(&'a self, _name: &'a str) -> AdapterFuture<'a, Option<String>> {
         Box::pin(async { None })
+    }
+    /// A chat's name and kind.
+    fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>>;
+    /// Shows the typing indicator once (adapters with `supports_typing`).
+    fn send_typing<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// What identifies the platform credential this adapter connects with
+    /// (a bot token), so two homes or profiles never connect it twice;
+    /// `None` when the credential is not unique to one connection.
+    fn credential_identity(&self) -> Option<String> {
+        None
+    }
+    /// Opens an inbound attachment for download.
+    fn open_media<'a>(
+        &'a self,
+        _attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Plays streamed reply audio (adapters with `streaming_tts`).
+    fn audio<'a>(&'a self, _op: &'a AudioOp) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Whether an HTTP request on the shared listener carries the
+    /// platform's valid signature or shared secret (adapters with
+    /// `binds_http`); nothing unverified is handled.
+    fn verify_http(&self, _request: &HttpRequest) -> bool {
+        false
+    }
+    /// Handles a verified request on the shared listener.
+    fn handle_http<'a>(&'a self, _request: &'a HttpRequest) -> AdapterFuture<'a, HttpResponse> {
+        Box::pin(async { HttpResponse::status(404) })
+    }
+}
+
+/// A chat's name and kind (`chat-info`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatInfo {
+    /// Display name.
+    pub name: String,
+    /// `dm`, `group`, `channel` or `thread`.
+    pub chat_type: ChatType,
+}
+
+/// A download of an inbound attachment.
+pub struct MediaStream {
+    /// The length the platform declared, when it did.
+    pub declared_len: Option<u64>,
+    /// The body, chunk by chunk.
+    pub chunks: Pin<Box<dyn futures_util::Stream<Item = Result<Vec<u8>, String>> + Send>>,
+}
+
+impl std::fmt::Debug for MediaStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MediaStream")
+            .field("declared_len", &self.declared_len)
+            .finish_non_exhaustive()
+    }
+}
+
+/// One step of streamed reply audio.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AudioOp {
+    /// A reply's audio starts in a chat.
+    Begin {
+        /// Chat id.
+        chat_id: String,
+        /// The turn it belongs to.
+        stream_id: String,
+    },
+    /// More audio.
+    Write {
+        /// The stream.
+        stream_id: String,
+        /// Encoded audio.
+        bytes: Vec<u8>,
+    },
+    /// The audio is complete.
+    Finish {
+        /// The stream.
+        stream_id: String,
+    },
+    /// The audio is abandoned.
+    Abort {
+        /// The stream.
+        stream_id: String,
+    },
+}
+
+/// A request on the shared HTTP listener, below `/p/<profile>/<platform>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpRequest {
+    /// `GET`, `POST`, ...
+    pub method: String,
+    /// The path below the adapter's prefix (`/` at least).
+    pub path: String,
+    /// The query string, without `?`.
+    pub query: Option<String>,
+    /// Headers, names in lower case.
+    pub headers: Vec<(String, String)>,
+    /// The body.
+    pub body: Vec<u8>,
+}
+
+impl HttpRequest {
+    /// The first header named `name` (lower case).
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// An adapter's answer on the shared listener.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpResponse {
+    /// HTTP status.
+    pub status: u16,
+    /// `Content-Type`.
+    pub content_type: Option<String>,
+    /// The body.
+    pub body: Vec<u8>,
+}
+
+impl HttpResponse {
+    /// An empty response with `status`.
+    #[must_use]
+    pub fn status(status: u16) -> Self {
+        Self {
+            status,
+            content_type: None,
+            body: Vec::new(),
+        }
     }
 }
 

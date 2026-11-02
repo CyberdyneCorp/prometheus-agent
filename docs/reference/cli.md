@@ -7725,6 +7725,9 @@ Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
+      --replace
+          Take over messaging platform credentials (bot tokens) that a live daemon of another home or profile holds
+
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
@@ -8089,13 +8092,15 @@ Messaging adapters of the running daemon and the profile's delivery outbox
 Usage: prometheus gateway [OPTIONS] <COMMAND>
 
 Commands:
-  status  Print each served profile's messaging adapters and their state
-  reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
-  outbox  The durable delivery outbox of the selected profile
-  send    Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
-  list    List every running Prometheus daemon of this OS user, whatever its home
-  enroll  Enroll this home with a relay connector using a one-time token
-  help    Print this message or the help of the given subcommand(s)
+  status     Print each served profile's messaging adapters and their state
+  reload     Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms  Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop       Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox     The durable delivery outbox of the selected profile
+  send       Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list       List every running Prometheus daemon of this OS user, whatever its home
+  enroll     Enroll this home with a relay connector using a one-time token
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -8162,6 +8167,72 @@ Options:
 Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
 
 Usage: prometheus gateway reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway platforms`
+
+```text
+Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+
+Usage: prometheus gateway platforms [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway stop`
+
+```text
+Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+
+Usage: prometheus gateway stop [OPTIONS]
 
 Options:
       --home <PATH>
@@ -8524,13 +8595,15 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway help [COMMAND]
 
 Commands:
-  status  Print each served profile's messaging adapters and their state
-  reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
-  outbox  The durable delivery outbox of the selected profile
-  send    Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
-  list    List every running Prometheus daemon of this OS user, whatever its home
-  enroll  Enroll this home with a relay connector using a one-time token
-  help    Print this message or the help of the given subcommand(s)
+  status     Print each served profile's messaging adapters and their state
+  reload     Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms  Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop       Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox     The durable delivery outbox of the selected profile
+  send       Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list       List every running Prometheus daemon of this OS user, whatever its home
+  enroll     Enroll this home with a relay connector using a one-time token
+  help       Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus gateway help status`
@@ -8547,6 +8620,22 @@ Usage: prometheus gateway help status
 Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
 
 Usage: prometheus gateway help reload
+```
+
+## `prometheus gateway help platforms`
+
+```text
+Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+
+Usage: prometheus gateway help platforms
+```
+
+## `prometheus gateway help stop`
+
+```text
+Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+
+Usage: prometheus gateway help stop
 ```
 
 ## `prometheus gateway help outbox`
@@ -11289,12 +11378,14 @@ Messaging adapters of the running daemon and the profile's delivery outbox
 Usage: prometheus help gateway [COMMAND]
 
 Commands:
-  status  Print each served profile's messaging adapters and their state
-  reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
-  outbox  The durable delivery outbox of the selected profile
-  send    Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
-  list    List every running Prometheus daemon of this OS user, whatever its home
-  enroll  Enroll this home with a relay connector using a one-time token
+  status     Print each served profile's messaging adapters and their state
+  reload     Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms  Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop       Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox     The durable delivery outbox of the selected profile
+  send       Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list       List every running Prometheus daemon of this OS user, whatever its home
+  enroll     Enroll this home with a relay connector using a one-time token
 ```
 
 ## `prometheus help gateway status`
@@ -11311,6 +11402,22 @@ Usage: prometheus help gateway status
 Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
 
 Usage: prometheus help gateway reload
+```
+
+## `prometheus help gateway platforms`
+
+```text
+Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+
+Usage: prometheus help gateway platforms
+```
+
+## `prometheus help gateway stop`
+
+```text
+Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+
+Usage: prometheus help gateway stop
 ```
 
 ## `prometheus help gateway outbox`
@@ -11660,6 +11767,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
+| `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |
 | `prometheus.gateway_outbox.v1` | `prometheus gateway outbox list` |
 | `prometheus.pairing.v1` | `prometheus pairing list` |
 | `prometheus.gateway_send.v1` | `prometheus gateway send` |

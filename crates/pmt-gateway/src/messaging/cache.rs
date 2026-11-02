@@ -130,6 +130,7 @@ async fn run(shared: Arc<Shared>) {
         if pruned_at.is_none_or(|at| at.elapsed() >= PRUNE_EVERY) {
             pruned_at = Some(Instant::now());
             prune_routes(&shared);
+            sweep_media(&shared);
             shared.limits.sweep(tokio::time::Instant::now());
         }
     }
@@ -147,6 +148,24 @@ pub(crate) async fn sweep(shared: &Shared) {
             }
             Ok(false) => {}
             Err(err) => tracing::warn!(profile, session_id = session, "agent not unloaded: {err}"),
+        }
+    }
+}
+
+/// Deletes cached inbound media older than `gateway.media.
+/// cache_max_age_secs` that no kept (pinned) session mentions.
+pub(crate) fn sweep_media(shared: &Shared) {
+    for profile in &shared.server.profiles() {
+        let (Some(store), Some(scope)) = (shared.store(profile), shared.agents.scope(profile))
+        else {
+            continue;
+        };
+        let max_age = Duration::from_secs(scope.config().gateway.media.cache_max_age_secs);
+        let kept = |name: &str| store.pinned_sessions_mention(name).unwrap_or(true);
+        let cache = super::media::cache_dir(scope.dir());
+        let deleted = super::media::sweep(&cache, std::time::SystemTime::now(), max_age, kept);
+        if deleted > 0 {
+            tracing::debug!(profile, deleted, "expired cached media deleted");
         }
     }
 }

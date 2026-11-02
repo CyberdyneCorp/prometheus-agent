@@ -1738,3 +1738,74 @@ capabilities = [
 [agent-interop."send_message tool"]
 "Unknown chat refused" = ["crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_unknown_chats_and_reaches_known_ones", "crates/pmt-gateway/tests/messaging/targets.rs::the_tool_may_reach_only_home_allowed_or_known_chats"]
 "Guard fault fails closed" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_send_tool_asks_the_relay_and_fails_closed"]
+
+# platform-adapters, host side of the adapter contract (25.1-25.4)
+[platform-adapters."Capability descriptor is the single source of truth"]
+"Missing limit fails load" = ["crates/pmt-gateway/src/messaging/descriptor.rs::a_descriptor_without_a_limit_fails_to_load", "crates/pmt-gateway/tests/messaging/platforms.rs::a_descriptor_without_a_positive_limit_fails_the_load"]
+"One limit everywhere" = ["crates/pmt-gateway/tests/messaging/platforms.rs::one_limit_everywhere_comes_from_the_descriptor", "crates/prometheus/tests/gateway_daemon.rs::gateway_platforms_prints_each_loaded_descriptor"]
+
+[platform-adapters."Optional capabilities degrade in the host"]
+"Edit unsupported" = ["crates/pmt-gateway/tests/messaging/platforms.rs::without_editing_the_resolved_card_is_a_new_message", "crates/pmt-gateway/tests/messaging/platforms.rs::a_declared_edit_answering_unsupported_is_dropped_for_the_connection"]
+
+[platform-adapters."First-party platforms and typed platform names"]
+"Unknown platform table" = ["crates/pmt-config/src/validate_platforms.rs::an_unknown_platform_table_fails_validation"]
+
+[platform-adapters."Default first-party message limits"]
+"Raising a limit is rejected" = ["crates/pmt-config/src/validate_platforms.rs::raising_a_first_party_limit_is_rejected", "crates/pmt-gateway/tests/messaging/platforms.rs::a_lowered_limit_applies_and_a_raised_one_fails_the_load"]
+"Telegram counts UTF-16" = ["crates/pmt-gateway/src/messaging/split.rs::utf16_limits_count_astral_characters_twice"]
+
+[platform-adapters."Platform configuration shape"]
+"Inline token rejected" = ["crates/pmt-config/src/validate_platforms.rs::an_inline_token_points_to_the_secrets_store"]
+"Adapter option validated" = ["crates/pmt-config/src/validate_platforms.rs::adapter_options_are_validated_against_the_adapter_schema"]
+
+[platform-adapters."Typed admission result"]
+"Duplicate reported" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_redelivered_event_is_a_duplicate_and_starts_nothing", "crates/pmt-gateway/src/messaging/dedup.rs::a_redelivery_within_the_window_is_a_duplicate"]
+
+[platform-adapters."Inbound deduplication and text batching in the host"]
+"Batch of a split paste" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_split_paste_is_batched_into_one_turn"]
+"Out of range delay" = ["crates/pmt-config/src/validate_platforms.rs::batching_out_of_range_names_the_maximum"]
+
+[platform-adapters."Fence-aware message splitting"]
+"Code fence carried across parts" = ["crates/pmt-gateway/src/messaging/split.rs::a_code_fence_is_carried_across_parts"]
+"Pathological limit terminates" = ["crates/pmt-gateway/src/messaging/split.rs::a_pathological_limit_terminates"]
+
+[platform-adapters."Oversized output handling"]
+"Long cron output to Telegram" = { tests = ["crates/pmt-gateway/tests/messaging/platforms.rs::long_scheduled_output_is_truncated_with_the_full_text_attached"], note = "scheduled output is delivered through Gateway::send (the delivery API scheduled-jobs 41.x calls), which shapes text like a turn's reply" }
+
+[platform-adapters."Send retry semantics"]
+"Long flood wait handed off" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_long_flood_wait_goes_back_to_the_outbox_at_once", "crates/pmt-gateway/src/messaging/retry.rs::transient_errors_back_off_and_long_waits_leave_for_the_outbox"]
+"Markup rejected" = ["crates/pmt-gateway/tests/messaging/platforms.rs::refused_markup_is_resent_once_as_plain_text"]
+
+[platform-adapters."Inbound media limits and caching"]
+"Lying content length" = ["crates/pmt-gateway/tests/messaging/media.rs::a_download_lying_about_its_length_is_aborted_and_nothing_is_cached"]
+
+[platform-adapters."Outbound attachments and path safety"]
+"Secrets file refused" = ["crates/pmt-gateway/tests/messaging/media.rs::an_attachment_outside_the_allowed_roots_is_withheld_with_a_note", "crates/pmt-gateway/src/messaging/attachments.rs::secrets_and_symlink_escapes_are_withheld"]
+"Symlink escape refused" = { tests = ["crates/pmt-gateway/src/messaging/attachments.rs::secrets_and_symlink_escapes_are_withheld"], note = "the symlink half runs on Unix hosts (creating symlinks on Windows needs a privilege CI lacks); real paths are compared after canonicalization on every OS" }
+
+[platform-adapters."Voice input transcription"]
+"Transcription failure is explicit" = { tests = ["crates/pmt-gateway/tests/messaging/media.rs::a_failed_transcription_hands_the_agent_the_voice_note"], note = "the profile's speech providers reach the gateway through messaging::Speech (Agents::speech); the built-in STT/TTS providers are web-and-media-tools 49.3" }
+
+[platform-adapters."Voice replies and streaming TTS"]
+"No double playback" = ["crates/pmt-gateway/tests/messaging/media.rs::streamed_reply_audio_is_not_played_twice"]
+
+[platform-adapters."Typing indicator and human delay"]
+"Slow typing call" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_slow_typing_call_never_stalls_the_cadence"]
+
+[platform-adapters."Interactive approval cards on every platform (upgrade)"]
+"Signal numbered approval" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_signal_style_numbered_card_is_answered_by_number"]
+"Forged callback" = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_forged_callback_leaves_the_approval_pending", "crates/pmt-gateway/src/messaging/cards.rs::only_data_signed_with_this_boots_key_verifies"]
+"Card updated after resolution" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_answered_in_the_desktop_app_updates_the_card"]
+
+[platform-adapters."Adapter access-policy delegation"]
+"Open adapter policy not trusted" = ["crates/pmt-gateway/tests/messaging/platforms.rs::an_open_adapter_policy_is_not_trusted", "crates/pmt-gateway/src/messaging/auth.rs::only_an_adapter_allowlist_is_trusted"]
+
+[platform-adapters."Credential locks across homes"]
+"Same bot token in two profiles" = ["crates/pmt-gateway/tests/messaging/platforms.rs::one_credential_in_two_profiles_connects_once", "crates/pmt-gateway/src/messaging/locks.rs::a_live_holder_keeps_the_lock_and_a_dead_one_loses_it"]
+
+[platform-adapters."Shared HTTP listener for webhook-style platforms"]
+"Two profiles share the listener" = ["crates/pmt-gateway/tests/messaging/platforms.rs::two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401"]
+"Unsigned webhook" = ["crates/pmt-gateway/tests/messaging/platforms.rs::two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401"]
+
+[platform-adapters."Adapter state reporting and reconnect"]
+"Degraded is visible" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_connected_adapter_is_degraded_until_a_send_succeeds", "crates/prometheus/tests/gateway_daemon.rs::gateway_status_reports_each_adapter"]

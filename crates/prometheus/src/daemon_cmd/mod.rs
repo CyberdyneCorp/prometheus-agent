@@ -36,7 +36,12 @@ use crate::context::Context;
 #[derive(Debug, Clone, Subcommand)]
 pub enum DaemonCommand {
     /// Run the daemon in the foreground (what `start` launches).
-    Run,
+    Run {
+        /// Take over messaging platform credentials (bot tokens) that a
+        /// live daemon of another home or profile holds.
+        #[arg(long)]
+        replace: bool,
+    },
     /// Start the daemon in the background; does nothing when it runs.
     Start,
     /// Start the daemon when it is not running and print its endpoint
@@ -89,7 +94,7 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let home = ctx.home()?;
     let root = home.root().to_path_buf();
     match command {
-        DaemonCommand::Run => serve::run(&root, ctx),
+        DaemonCommand::Run { replace } => serve::run(&root, ctx, *replace),
         DaemonCommand::Start => start(&root, ctx),
         DaemonCommand::Ensure => ensure(&root, ctx),
         DaemonCommand::Stop => stop(&root, ctx.json),

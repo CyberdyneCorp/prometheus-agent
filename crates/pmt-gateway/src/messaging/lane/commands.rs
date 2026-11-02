@@ -48,7 +48,9 @@ impl Lane {
             self.callback(&routing, data);
             return;
         }
-        if self.answer_clarify(&routing, &inbound.text) {
+        if self.answer_numbered(&routing, &inbound.text)
+            || self.answer_clarify(&routing, &inbound.text)
+        {
             return;
         }
         self.dispatch(seq, routing, inbound, 0).await;
@@ -152,6 +154,7 @@ impl Lane {
             images: Vec::new(),
             routing: call.routing.clone(),
             reply_to: None,
+            voice: false,
         };
         match call.busy {
             BusyPolicy::Reject => self.say(&rejected(&call.name)),
@@ -189,6 +192,7 @@ impl Lane {
                     images: Vec::new(),
                     routing,
                     reply_to: None,
+                    voice: false,
                 };
                 if self.running.is_some() {
                     self.queue_human(pending);
@@ -263,6 +267,7 @@ impl Lane {
             images: Vec::new(),
             routing,
             reply_to: None,
+            voice: false,
         };
         if self.running.is_none() {
             self.start_turn(pending).await;

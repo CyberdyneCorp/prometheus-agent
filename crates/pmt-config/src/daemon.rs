@@ -56,6 +56,55 @@ pub struct DaemonGateway {
     pub on_all_adapters_down: AllAdaptersDown,
     /// The relay connector (`prometheus gateway enroll` writes it).
     pub relay: crate::daemon_relay::RelayConfig,
+    /// The shared HTTP listener of webhook-style adapters.
+    pub http: GatewayHttp,
+}
+
+/// `daemon.toml [gateway.http]` (spec: platform-adapters, Shared HTTP
+/// listener for webhook-style platforms).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayHttp {
+    /// Where every webhook-style adapter is served, at
+    /// `/p/<profile>/<platform>/`.
+    pub listen: String,
+    /// Allow a non-loopback `listen` address (logged at WARN on every
+    /// start).
+    pub public: bool,
+}
+
+impl Default for GatewayHttp {
+    fn default() -> Self {
+        Self {
+            listen: "127.0.0.1:8644".to_owned(),
+            public: false,
+        }
+    }
+}
+
+impl GatewayHttp {
+    /// The parsed listen address.
+    ///
+    /// # Errors
+    ///
+    /// The validation message for a malformed address, or a non-loopback
+    /// one without `public = true`.
+    pub fn listen_addr(&self) -> Result<std::net::SocketAddr, String> {
+        let addr: std::net::SocketAddr = self.listen.parse().map_err(|_| {
+            format!(
+                "gateway.http.listen: '{}' is not an address such as 127.0.0.1:8644",
+                self.listen
+            )
+        })?;
+        if addr.ip().is_loopback() || self.public {
+            Ok(addr)
+        } else {
+            Err(format!(
+                "gateway.http.listen: '{}' is not a loopback address; set gateway.http.public = true to expose the webhook listener",
+                self.listen
+            ))
+        }
+    }
 }
 
 /// `gateway.on_all_adapters_down`.
@@ -355,6 +404,11 @@ impl DaemonConfig {
             .gateway
             .relay
             .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .gateway
+            .http
+            .listen_addr()
             .map_err(|message| parse_error(&message))?;
         if let Some(unknown) = config
             .runtimes

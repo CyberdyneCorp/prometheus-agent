@@ -36,7 +36,7 @@ use crate::context::Context;
 ///
 /// `home.locked` (75) when a daemon or chat holds the home, `config.*`
 /// (78) for `daemon.toml` or when no profile loads, listener errors.
-pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result<u8, Error> {
     let span = tracing::info_span!("daemon", component = "gateway");
     let _daemon = span.enter();
     let layout = ctx.home()?;
@@ -75,8 +75,9 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
             )));
             let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
-            let messaging =
+            let mut messaging =
                 super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
+            messaging.replace_locks = replace_locks;
             let agents = Arc::clone(&host) as Arc<dyn pmt_gateway::messaging::Agents>;
             match Gateway::start(Arc::clone(&server), agents, messaging).await {
                 Ok(gateway) => host.set_gateway(gateway),

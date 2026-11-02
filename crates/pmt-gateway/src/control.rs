@@ -175,6 +175,7 @@ async fn send(
             .map(|a| pmt_store::gateway::outbox::OutboundAttachment {
                 path: a.path,
                 as_document: a.as_document,
+                as_voice: false,
             })
             .collect(),
     };

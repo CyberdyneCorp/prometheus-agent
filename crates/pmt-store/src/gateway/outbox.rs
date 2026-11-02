@@ -107,6 +107,21 @@ pub struct OutboundAttachment {
     /// Sent as a document (images uncompressed).
     #[serde(default)]
     pub as_document: bool,
+    /// Sent as a voice note.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub as_voice: bool,
+}
+
+impl OutboundAttachment {
+    /// A file at `path`, sent as the platform sends its kind.
+    #[must_use]
+    pub fn new(path: &str) -> Self {
+        Self {
+            path: path.to_owned(),
+            as_document: false,
+            as_voice: false,
+        }
+    }
 }
 
 /// An entry to store.

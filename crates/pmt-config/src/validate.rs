@@ -133,6 +133,7 @@ pub fn document(root: &Node) -> Vec<Issue> {
         issues: &mut issues,
     };
     checker.check(root, catalog::schema(), "");
+    crate::validate_platforms::check(root, &mut issues);
     issues.retain(|i| i.code != &codes::CONFIG_UNKNOWN_KEY || !is_machine_wide_duplicate(i));
     issues.sort_by_key(|i| i.span.as_ref().map_or(usize::MAX, |s| s.start));
     issues.dedup();
@@ -209,8 +210,8 @@ pub fn unknown_key(key: &str, span: Option<Range<usize>>) -> Issue {
     }
 }
 
-struct Checker<'a> {
-    issues: &'a mut Vec<Issue>,
+pub(crate) struct Checker<'a> {
+    pub(crate) issues: &'a mut Vec<Issue>,
 }
 
 impl Checker<'_> {
@@ -223,7 +224,7 @@ impl Checker<'_> {
         });
     }
 
-    fn check(&mut self, node: &Node, schema: &'static Value, key: &str) {
+    pub(crate) fn check(&mut self, node: &Node, schema: &'static Value, key: &str) {
         let schema = resolve(schema);
         if let Some(allowed) = allowed_values(schema) {
             return self.check_enum(node, &allowed, key);

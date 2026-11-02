@@ -19,6 +19,14 @@
       "additionalProperties": false,
       "description": "`daemon.toml [gateway]`: the messaging gateway keys every served\nprofile shares.",
       "properties": {
+        "http": {
+          "$ref": "#/$defs/GatewayHttp",
+          "default": {
+            "listen": "127.0.0.1:8644",
+            "public": false
+          },
+          "description": "The shared HTTP listener of webhook-style adapters."
+        },
         "on_all_adapters_down": {
           "$ref": "#/$defs/AllAdaptersDown",
           "default": "stay_alive",
@@ -67,6 +75,23 @@
             "workers": 8
           },
           "description": "The local client protocol listener."
+        }
+      },
+      "type": "object"
+    },
+    "GatewayHttp": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [gateway.http]` (spec: platform-adapters, Shared HTTP\nlistener for webhook-style platforms).",
+      "properties": {
+        "listen": {
+          "default": "127.0.0.1:8644",
+          "description": "Where every webhook-style adapter is served, at\n`/p/<profile>/<platform>/`.",
+          "type": "string"
+        },
+        "public": {
+          "default": false,
+          "description": "Allow a non-loopback `listen` address (logged at WARN on every\nstart).",
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -319,6 +344,10 @@
     "gateway": {
       "$ref": "#/$defs/DaemonGateway",
       "default": {
+        "http": {
+          "listen": "127.0.0.1:8644",
+          "public": false
+        },
         "on_all_adapters_down": "stay_alive",
         "relay": {
           "allow_direct_platforms": [],

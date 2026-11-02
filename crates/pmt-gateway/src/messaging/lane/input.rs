@@ -89,32 +89,67 @@ impl Lane {
             images,
             routing,
             reply_to: Some(inbound.message_id.clone()).filter(|id| !id.is_empty()),
+            voice: self.voice_input,
         };
         if self.running.is_some() && pending.text.is_empty() {
             // Media follow-ups never interrupt or steer.
             self.queue_human(pending);
             return;
         }
-        let busy = self.busy();
+        let (window, cap) = self.gather_window(&inbound.text);
         let now = Instant::now();
         match &mut self.buffer {
             Some(buffer) => {
                 join(&mut buffer.pending, pending);
                 buffer.last = now;
+                buffer.window = window;
             }
             None => {
                 self.buffer = Some(Buffer {
                     pending,
                     first: now,
                     last: now,
-                    window: Duration::from_millis(busy.debounce_ms),
-                    cap: Duration::from_millis(busy.debounce_cap_ms),
+                    window,
+                    cap,
                 });
             }
         }
-        if busy.debounce_ms == 0 {
+        if window.is_zero() {
             self.flush().await;
         }
+    }
+
+    /// How long to wait for more text after `text`, and the longest an
+    /// input is held: the platform's batching when set (a longer wait
+    /// after a part that filled the platform's limit, likely split by the
+    /// client), else the busy debounce.
+    fn gather_window(&self, text: &str) -> (Duration, Duration) {
+        let busy = self.busy();
+        let batching = self.config().and_then(|scope| {
+            scope
+                .config()
+                .gateway
+                .platform(&self.routing.platform)
+                .batching
+        });
+        let Some(batching) = batching else {
+            return (
+                Duration::from_millis(busy.debounce_ms),
+                Duration::from_millis(busy.debounce_cap_ms),
+            );
+        };
+        let split = self
+            .shared
+            .adapters
+            .descriptor(&self.profile, &self.routing.platform)
+            .is_some_and(|d| d.length_unit.len(text) * 10 >= d.max_message_length * 9);
+        let window = if split {
+            batching.split_delay_ms
+        } else {
+            batching.delay_ms
+        };
+        let cap = busy.debounce_cap_ms.max(batching.split_delay_ms);
+        (Duration::from_millis(window), Duration::from_millis(cap))
     }
 
     /// The gathered text becomes one input.
@@ -214,6 +249,7 @@ fn join(into: &mut Pending, more: Pending) {
         into.text.push_str(&more.text);
     }
     into.images.extend(more.images);
+    into.voice |= more.voice;
     into.routing = more.routing;
     if more.reply_to.is_some() {
         into.reply_to = more.reply_to;

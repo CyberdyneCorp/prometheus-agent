@@ -120,6 +120,11 @@ chacha20poly1305 = { version = "0.11", default-features = false, features = ["al
 url = "2.5"
 # Test-only HTTP mock server (recorded provider stream fixtures).
 wiremock = "0.6"
+# The gateway's shared HTTP listener for webhook-style adapters.
+hyper = { version = "1.12", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1.12"
 # search_files: .gitignore-aware directory walks.
 ignore = "0.4"
 # Unified diffs of file tool edits.

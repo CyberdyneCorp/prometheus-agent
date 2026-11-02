@@ -216,6 +216,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "gateway status",
     },
     JsonShape {
+        schema: "prometheus.gateway_platforms.v1",
+        command: "gateway platforms",
+    },
+    JsonShape {
         schema: "prometheus.gateway_outbox.v1",
         command: "gateway outbox list",
     },

@@ -2405,8 +2405,12 @@ version = "0.1.0"
 name = "pmt-gateway"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "futures-util",
  "getrandom 0.4.3",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "jiff",
  "pmt-config",
  "pmt-core",

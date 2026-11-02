@@ -34,6 +34,15 @@ pub(super) fn options(
     let mut options = Options::new(home);
     options.factories = factories(ctx);
     options.on_all_adapters_down = config.gateway.on_all_adapters_down;
+    // `DaemonConfig::load` already refused a bad address.
+    if let Ok(listen) = config.gateway.http.listen_addr() {
+        options.http = pmt_gateway::messaging::HttpOptions {
+            listen,
+            public: config.gateway.http.public,
+        };
+    }
+    options.locks_dir =
+        pmt_core::inventory::user_runtime_dir(ctx.launch).map(|dir| dir.join("locks"));
     if let Some(scope) = host.scope(launch_profile) {
         let gateway = &scope.config().gateway;
         options.drain_timeout = Duration::from_secs(gateway.shutdown.drain_timeout_secs);

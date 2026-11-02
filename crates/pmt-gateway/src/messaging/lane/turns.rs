@@ -31,7 +31,7 @@ pub(crate) const SUSPENDED_NOTICE: &str = "Your previous session was suspended a
 #[derive(Debug, Default)]
 pub(crate) struct Draft {
     text: String,
-    message_id: Option<String>,
+    pub(super) message_id: Option<String>,
     last_edit: Option<Instant>,
     failed: bool,
 }
@@ -215,7 +215,7 @@ impl Lane {
             input_id: None,
             author: None,
         };
-        let link = self.link(&session, &pending.routing);
+        let link = self.link(&session, &pending.routing, pending.voice);
         self.shared
             .options
             .hooks
@@ -232,12 +232,26 @@ impl Lane {
             .await
         {
             Ok(submitted) => {
+                let routing = &pending.routing;
+                let typing = crate::messaging::typing::start(
+                    &self.shared,
+                    &self.profile,
+                    &routing.platform,
+                    &routing.chat_id,
+                    routing.thread_id.as_deref(),
+                );
+                let speech = self
+                    .streams_audio(pending.voice)
+                    .then(|| super::reply::Spoken::new(&submitted.turn_id));
                 self.running = Some(Running {
                     turn_id: submitted.turn_id,
                     requester: pending.routing.sender_id.clone(),
                     reply_to: pending.reply_to,
                     stopped: false,
                     draft: Draft::default(),
+                    voice: pending.voice,
+                    _typing: typing,
+                    speech,
                 });
             }
             Err(err) => {
@@ -247,9 +261,9 @@ impl Lane {
         }
     }
 
-    /// The session's link; streaming platforms get the answer text as it
-    /// is written.
-    fn link(&self, session: &str, routing: &Routing) -> crate::host::Link {
+    /// The session's link; streaming platforms (and a reply streamed as
+    /// audio) get the answer text as it is written.
+    fn link(&self, session: &str, routing: &Routing, voice: bool) -> crate::host::Link {
         let link = self.shared.server.link(session);
         let streams = self
             .config()
@@ -259,7 +273,7 @@ impl Lane {
                 .adapters
                 .descriptor(&self.profile, &routing.platform)
                 .is_some_and(|d| d.supports_edit);
-        if !streams {
+        if !streams && !self.streams_audio(voice) {
             return link;
         }
         let tx = self.tx.clone();
@@ -289,18 +303,25 @@ impl Lane {
         if !ours {
             return;
         }
-        let Some(running) = self.running.take() else {
+        let Some(mut running) = self.running.take() else {
             return;
         };
         let session = self.session.clone().unwrap_or_default();
         self.turn_over(&session);
         if !running.stopped {
-            self.deliver_answer(
-                &session,
-                &finished,
-                &running.draft,
-                running.reply_to.as_ref(),
-            );
+            let spoken = match running.speech.take() {
+                Some(mut speech) => self.speak_streamed(&mut speech, "", true).await,
+                None => false,
+            };
+            let answer = super::reply::Answer {
+                session: &session,
+                finished: &finished,
+                draft: &running.draft,
+                reply_to: running.reply_to.as_ref(),
+                voice: running.voice,
+                spoken,
+            };
+            self.deliver_answer(answer).await;
         }
         self.shared
             .options
@@ -334,48 +355,32 @@ impl Lane {
         }
     }
 
-    fn deliver_answer(
-        &self,
-        session: &str,
-        finished: &TurnFinished,
-        draft: &Draft,
-        reply_to: Option<&String>,
-    ) {
-        let text = match (&finished.final_response, &finished.error) {
-            (Some(answer), _) if !answer.trim().is_empty() => answer.clone(),
-            (_, Some(error)) => format!("The turn failed: {}", error.message),
-            _ => return,
-        };
-        let limit = self
-            .shared
-            .adapters
-            .descriptor(&self.profile, &self.routing.platform)
-            .map_or(4096, |d| d.max_message_length);
-        let parts = split(&text, limit);
-        for (index, part) in parts.into_iter().enumerate() {
-            let new = pmt_store::gateway::outbox::NewOutbound {
-                idempotency_key: format!("{session}:{}:{index}", finished.turn_id),
-                session_id: Some(session.to_owned()),
-                platform: self.routing.platform.clone(),
-                chat_id: self.routing.chat_id.clone(),
-                thread_id: self.routing.thread_id.clone(),
-                reply_to: if index == 0 { reply_to.cloned() } else { None },
-                edit_of: if index == 0 {
-                    draft.message_id.clone()
-                } else {
-                    None
-                },
-                kind: OutboundKind::Reply,
-                body: part,
-                attachments: Vec::new(),
-            };
-            self.shared.deliver(&self.profile, &new);
+    /// Streamed answer text: spoken sentence by sentence when the reply
+    /// streams as audio, and shown as an edited draft on streaming
+    /// platforms.
+    pub(super) async fn delta(&mut self, text: &str) {
+        if let Some(mut speech) = self.running.as_mut().and_then(|r| r.speech.take()) {
+            self.speak_streamed(&mut speech, text, false).await;
+            if let Some(running) = self.running.as_mut() {
+                running.speech = Some(speech);
+            }
+        }
+        let streams = self
+            .config()
+            .is_some_and(|s| s.config().gateway.streams_on(&self.routing.platform))
+            && self
+                .shared
+                .adapters
+                .descriptor(&self.profile, &self.routing.platform)
+                .is_some_and(|d| d.supports_edit);
+        if streams {
+            self.draft(text).await;
         }
     }
 
-    /// Streamed answer text: a draft message sent once enough text
-    /// arrived, then edited at most every `edit_interval_ms`.
-    pub(super) async fn delta(&mut self, text: &str) {
+    /// A draft message sent once enough text arrived, then edited at most
+    /// every `edit_interval_ms`.
+    async fn draft(&mut self, text: &str) {
         let Some(scope) = self.config() else {
             return;
         };
@@ -422,43 +427,5 @@ impl Lane {
             draft.failed = true;
             draft.message_id = None;
         }
-    }
-}
-
-/// Splits `text` into parts of at most `limit` characters, preferring
-/// line breaks (fence-aware splitting is the platform adapters').
-pub(crate) fn split(text: &str, limit: usize) -> Vec<String> {
-    let limit = limit.max(1);
-    let mut parts = Vec::new();
-    let mut rest = text;
-    while rest.chars().count() > limit {
-        let cut = rest
-            .char_indices()
-            .nth(limit)
-            .map_or(rest.len(), |(at, _)| at);
-        let at = rest[..cut]
-            .rfind('\n')
-            .filter(|at| *at > 0)
-            .map_or(cut, |at| at + 1);
-        parts.push(rest[..at].to_owned());
-        rest = &rest[at..];
-    }
-    if !rest.is_empty() || parts.is_empty() {
-        parts.push(rest.to_owned());
-    }
-    parts
-}
-
-#[cfg(test)]
-mod tests {
-    use super::split;
-
-    #[test]
-    fn a_long_answer_splits_at_lines_within_the_limit() {
-        let text = "aaaa\nbbbb\ncccc";
-        assert_eq!(split(text, 10), vec!["aaaa\nbbbb\n", "cccc"]);
-        assert_eq!(split("abcdefghij", 4), vec!["abcd", "efgh", "ij"]);
-        assert_eq!(split("short", 100), vec!["short"]);
-        assert!(split("ééééé", 2).iter().all(|p| p.chars().count() <= 2));
     }
 }

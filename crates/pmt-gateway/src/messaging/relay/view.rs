@@ -7,8 +7,8 @@ use std::sync::{Arc, Weak};
 use super::Relay;
 use super::wire::DEFAULT_MAX_LENGTH;
 use crate::messaging::adapter::{
-    Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterState, Descriptor, Outgoing,
-    SendError, Sent,
+    Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterState, ChatInfo, Descriptor,
+    Outgoing, SendError, Sent,
 };
 
 /// The relay as the adapter of `platform`.
@@ -71,6 +71,16 @@ impl Adapter for RelayView {
         Box::pin(async move {
             let message_id = self.relay()?.send(&self.platform, &message, None).await?;
             Ok(Sent { message_id })
+        })
+    }
+
+    fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
+        // The connector does not describe chats: the id is the name.
+        Box::pin(async move {
+            Ok(ChatInfo {
+                name: chat_id.to_owned(),
+                chat_type: crate::messaging::key::ChatType::Group,
+            })
         })
     }
 

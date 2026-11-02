@@ -147,6 +147,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.busy.debounce_ms` | integer | `350` | 0 to 10000 | `live` | Text arriving within this many milliseconds of the previous text joins it into one input. |
 | `gateway.busy.max_queued` | integer | `16` | 1 to 1000 | `live` | `/queue` entries kept per conversation. |
 | `gateway.chat_policies` | array of table | `[]` | any | `next_session` | Per-chat policies; each applies to sessions created after it changed (`/policy apply --now` replaces a chat's session at once). |
+| `gateway.dedup.max_entries` | integer | `2000` | 1 to 1000000 | `live` | Message ids remembered per adapter (the oldest are forgotten first). |
+| `gateway.dedup.ttl_secs` | integer | `300` | 1 to 86400 | `live` | A redelivered inbound event within this many seconds is dropped as a duplicate. |
+| `gateway.delivery.max_parts` | integer | `10` | 2 to 100 | `live` | A reply that would need more parts is sent as its first part plus a truncation notice, with the full text attached. |
+| `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
+| `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
 | `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
 | `gateway.notifications.background` | one of "concise", "all", "result", "error", "off" | `"concise"` | `"concise"`, `"all"`, `"result"`, `"error"`, `"off"` | `live` | Which background process and subagent events reach the chat. |
 | `gateway.outbox.max_age_secs` | integer | `86400` | ≥ 1 | `restart` | An entry older than this becomes `failed`. |
@@ -155,6 +160,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.allow_all` | boolean | `false` | any | `next_session` | Admit everyone (logged at WARN on every start). |
 | `gateway.platforms.<name>.allow_chats` | array of string | `[]` | any | `next_session` | Chats every member of which is admitted. |
 | `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing (no wildcards: use `allow_all`). |
+| `gateway.platforms.<name>.batching.delay_ms` | integer | `300` | 0 to 2000 | `next_session` | Text from the same sender within this many milliseconds joins the pending input. |
+| `gateway.platforms.<name>.batching.split_delay_ms` | integer | `1000` | 0 to 4000 | `next_session` | The wait after a part that filled the platform's limit (the client probably split a longer message); at least `delay_ms`. |
 | `gateway.platforms.<name>.busy.ack` | boolean | unset | any | `next_session` | Overrides `gateway.busy.ack`. |
 | `gateway.platforms.<name>.busy.debounce_cap_ms` | integer | unset | 0 to 60000 | `next_session` | Overrides `gateway.busy.debounce_cap_ms`. |
 | `gateway.platforms.<name>.busy.debounce_ms` | integer | unset | 0 to 10000 | `next_session` | Overrides `gateway.busy.debounce_ms`. |
@@ -165,14 +172,19 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.home_channel.chat_id` | string | `""` | any | `next_session` | The chat id. |
 | `gateway.platforms.<name>.home_channel.name` | string | unset | any | `next_session` | A display name (also accepted as `platform:#name` in send targets). |
 | `gateway.platforms.<name>.home_channel.thread_id` | string | unset | any | `next_session` | The thread (forum topic) inside the chat. |
+| `gateway.platforms.<name>.human_delay_ms` | array | unset | any | `next_session` | A uniformly random delay `[min, max]` in milliseconds before each outbound part. Unset: none. |
+| `gateway.platforms.<name>.max_message_length` | integer | unset | ≥ 16 | `next_session` | Lowers the adapter's message length limit (in its own unit); it can never raise it. |
+| `gateway.platforms.<name>.options` | table | unset | any | `next_session` | The adapter's own settings, validated against the schema it publishes (`prometheus gateway platforms` lists the adapters). |
 | `gateway.platforms.<name>.rate_limit.burst` | integer | unset | 1 to 10000 | `next_session` | Overrides `burst`. |
 | `gateway.platforms.<name>.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `next_session` | Overrides `daily_cost_usd`. |
 | `gateway.platforms.<name>.rate_limit.messages_per_minute` | integer | unset | 1 to 10000 | `next_session` | Overrides `messages_per_minute`. |
 | `gateway.platforms.<name>.rate_limit.turns_per_hour` | integer | unset | 1 to 100000 | `next_session` | Overrides `turns_per_hour`. |
+| `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
 | `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
 | `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
 | `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |
 | `gateway.platforms.<name>.token_secret` | string | unset | a secret name | `next_session` | The secret holding the adapter's credential (never the value). |
+| `gateway.platforms.<name>.typing_indicator` | boolean | unset | any | `next_session` | Show the platform's typing indicator while a turn runs. Unset: `true`. |
 | `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
 | `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
 | `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
@@ -191,6 +203,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.streaming.edit_interval_ms` | integer | `800` | 100 to 60000 | `live` | Least time between two edits of a draft. |
 | `gateway.streaming.enabled` | boolean | `false` | any | `live` | Stream answers while they are written. A platform can turn it off for itself, never on when this is off. |
 | `gateway.streaming.transport` | one of "auto", "draft", "edit", "off" | `"auto"` | `"auto"`, `"draft"`, `"edit"`, `"off"` | `live` | How a streamed draft reaches the platform. |
+| `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
+| `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
+| `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
