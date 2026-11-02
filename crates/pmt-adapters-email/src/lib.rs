@@ -10,6 +10,10 @@
 
 mod imap;
 mod mime;
+/// The mock platform the conformance kit runs this adapter against; only
+/// in builds with the `kit` feature (tests, `prometheus` with
+/// `adapter-kits`), so release binaries do not carry it.
+#[cfg(feature = "kit")]
 pub mod mock;
 mod smtp;
 mod wire;

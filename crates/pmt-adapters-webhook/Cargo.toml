@@ -7,6 +7,11 @@ rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
 
+[features]
+# The mock platform server the conformance kit runs this adapter against
+# (`pub mod mock`, `prometheus plugins test-adapter`).
+kit = []
+
 [dependencies]
 # Standard Webhooks secrets and signatures are base64.
 base64.workspace = true
@@ -22,6 +27,8 @@ tokio = { workspace = true, features = ["net", "io-util"] }
 tracing.workspace = true
 
 [dev-dependencies]
+# The tests run the adapter against its mock.
+pmt-adapters-webhook = { path = ".", features = ["kit"] }
 tempfile.workspace = true
 
 [lints]

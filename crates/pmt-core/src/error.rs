@@ -295,7 +295,7 @@ error_codes! {
         "Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed.");
     /// The invoked surface was not compiled into this build.
     SURFACE_NOT_INCLUDED = ("surface.not_included", Unavailable,
-        "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build.");
+        "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build, or `plugins test-adapter <platform>` ran in a build without the first-party adapter kits (`adapter-kits` feature).");
     /// The profile's identity file is unreadable or malformed.
     PROFILE_ID_INVALID = ("profile.id_invalid", Config,
         "The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup.");
@@ -929,7 +929,7 @@ error_codes! {
     /// A plugin directory given to `plugins test-adapter` needs the WASM
     /// plugin host, which this build does not have yet.
     PLUGINS_HOST_UNAVAILABLE = ("plugins.host_unavailable", Unavailable,
-        "The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`).");
+        "The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`) in a build with the `adapter-kits` feature.");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

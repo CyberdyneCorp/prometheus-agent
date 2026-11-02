@@ -36,6 +36,21 @@ gateway = [
     "dep:pmt-adapters-whatsapp",
     "dep:pmt-adapters-webhook",
 ]
+# The first-party adapters' mock platforms for `plugins test-adapter
+# <platform>`: a developer and CI tool, left out of release builds to keep
+# the binary within its size budget (spec: workspace-architecture, Memory
+# and size budgets). `scripts/check` builds with it (`--all-features`).
+adapter-kits = [
+    "gateway",
+    "pmt-adapters-telegram/kit",
+    "pmt-adapters-discord/kit",
+    "pmt-adapters-slack/kit",
+    "pmt-adapters-email/kit",
+    "pmt-adapters-matrix/kit",
+    "pmt-adapters-signal/kit",
+    "pmt-adapters-whatsapp/kit",
+    "pmt-adapters-webhook/kit",
+]
 dashboard = []
 acp = []
 mcp = []

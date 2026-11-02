@@ -161,6 +161,12 @@ its reason) and exits 0 only when none failed. Where a bot cannot post
 voice notes (Slack, Signal) a voice reply arrives as an audio file;
 WhatsApp's bridge sends every audio file as a voice note.
 
+The first-party mocks are developer and CI tooling: release binaries leave
+them out (they would push the binary past its size budget), so there the
+command answers `surface.not_included` (69) for a first-party name. Build
+with `cargo build -p prometheus --features adapter-kits` (as
+`scripts/check` and CI do) to run them.
+
 What the gateway does for every adapter:
 
 - Long replies are split at paragraph, line and word boundaries (never

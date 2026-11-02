@@ -2,7 +2,7 @@
 //! conformance kit): the suite passes for every first-party adapter
 //! against its built-in mock, printing a line per check.
 
-#![cfg(feature = "gateway")]
+#![cfg(feature = "adapter-kits")]
 
 mod common;
 

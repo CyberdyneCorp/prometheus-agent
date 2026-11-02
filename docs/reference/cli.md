@@ -8967,7 +8967,7 @@ Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformanc
 Usage: prometheus plugins [OPTIONS] <COMMAND>
 
 Commands:
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
   help          Print this message or the help of the given subcommand(s)
 
 Options:
@@ -8999,7 +8999,7 @@ Options:
 ## `prometheus plugins test-adapter`
 
 ```text
-Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
 
 Usage: prometheus plugins test-adapter [OPTIONS] <PATH>
 
@@ -9041,14 +9041,14 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins help [COMMAND]
 
 Commands:
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
   help          Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus plugins help test-adapter`
 
 ```text
-Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
 
 Usage: prometheus plugins help test-adapter
 ```
@@ -11639,13 +11639,13 @@ Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformanc
 Usage: prometheus help plugins [COMMAND]
 
 Commands:
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
 ```
 
 ## `prometheus help plugins test-adapter`
 
 ```text
-Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
 
 Usage: prometheus help plugins test-adapter
 ```

@@ -2,8 +2,10 @@
 //! platform-adapters, Adapter conformance kit): runs the conformance suite
 //! against a built-in mock of the platform in a throwaway home, prints one
 //! `pass`/`FAIL`/`skip` line per check and exits 0 only when nothing
-//! failed. Every first-party adapter is tested by its platform name; a
-//! plugin directory needs the WASM plugin host.
+//! failed. Every first-party adapter is tested by its platform name in a
+//! build with the `adapter-kits` feature (the mocks are developer and CI
+//! tooling, left out of release binaries to keep them within the size
+//! budget); a plugin directory needs the WASM plugin host.
 
 use clap::Subcommand;
 use pmt_core::error::Error;
@@ -15,8 +17,8 @@ use pmt_core::error::codes;
 pub enum PluginsCommand {
     /// Run the adapter conformance kit against a mock of the platform:
     /// a first-party platform name (`telegram`, `discord`, `slack`,
-    /// `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a
-    /// `platform-adapter` plugin directory.
+    /// `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the
+    /// `adapter-kits` feature) or a `platform-adapter` plugin directory.
     TestAdapter {
         /// The platform name or plugin directory.
         path: String,
@@ -29,7 +31,8 @@ pub enum PluginsCommand {
 ///
 /// `cli.usage` for a name that is neither a first-party adapter nor a
 /// directory; `plugins.host_unavailable` for a plugin directory;
-/// `surface.not_included` without the gateway surface.
+/// `surface.not_included` without the gateway surface, or for a
+/// first-party name in a build without the `adapter-kits` feature.
 pub fn run(command: &PluginsCommand) -> Result<u8, Error> {
     match command {
         PluginsCommand::TestAdapter { path } => test_adapter(path),
@@ -41,7 +44,21 @@ fn test_adapter(_path: &str) -> Result<u8, Error> {
     crate::surface::require("gateway").map(|()| 0)
 }
 
-#[cfg(feature = "gateway")]
+#[cfg(all(feature = "gateway", not(feature = "adapter-kits")))]
+fn test_adapter(path: &str) -> Result<u8, Error> {
+    if pmt_config::platforms::first_party(&path.to_lowercase()).is_some() {
+        return Err(Error::new(
+            &codes::SURFACE_NOT_INCLUDED,
+            format!("the '{path}' adapter kit is not included in this build"),
+        )
+        .with_hint(
+            "build prometheus with `--features adapter-kits` to test first-party adapters",
+        ));
+    }
+    Err(not_an_adapter(path))
+}
+
+#[cfg(feature = "adapter-kits")]
 fn test_adapter(path: &str) -> Result<u8, Error> {
     let Some(kit) = kits::find(path) else {
         return Err(not_an_adapter(path));
@@ -87,7 +104,7 @@ fn not_an_adapter(path: &str) -> Error {
     )
 }
 
-#[cfg(feature = "gateway")]
+#[cfg(feature = "adapter-kits")]
 mod kits {
     //! The first-party adapters with their mocks.
 

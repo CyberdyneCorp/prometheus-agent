@@ -96,7 +96,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `backup.io` | `io` | 74 | A backup archive or snapshot could not be written or read. |
 | `snapshot.not_found` | `not_found` | 66 | No snapshot of this profile has the given id; list them with `prometheus snapshots list`. |
 | `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
-| `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
+| `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build, or `plugins test-adapter <platform>` ran in a build without the first-party adapter kits (`adapter-kits` feature). |
 | `profile.id_invalid` | `config` | 78 | The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup. |
 | `store.profile_mismatch` | `config` | 78 | The profile's `state.db` records another profile's id (it was copied from another profile); nothing was written. Restore the profile's own database or move the file away. |
 | `store.schema_too_new` | `config` | 78 | `state.db` has a newer schema than this build supports: it is read-only (or unreadable when the newer build says so). Update Prometheus. |
@@ -307,7 +307,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `gateway.target_refused` | `permission_denied` | 77 | The tool may send only to a platform's home channel, a chat in `allow_chats` or a chat the profile already has a session in. |
 | `gateway.enroll_rejected` | `config` | 78 | The relay connector refused the enrollment token (already used, expired or unknown); ask the relay operator for a new one-time token. |
 | `gateway.relay` | `unavailable` | 69 | The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network. |
-| `plugins.host_unavailable` | `unavailable` | 69 | The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`). |
+| `plugins.host_unavailable` | `unavailable` | 69 | The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`) in a build with the `adapter-kits` feature. |
 | `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
 | `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |
 | `service.unsupported` | `unavailable` | 69 | `prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor. |
