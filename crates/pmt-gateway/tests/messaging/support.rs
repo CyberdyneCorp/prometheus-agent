@@ -17,15 +17,15 @@ use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, Admission, Agents,
     Attachment, AudioOp, BusyPolicy, ChatInfo, ChatType, Conversation, Descriptor, Gateway, Hooks,
     HttpRequest, HttpResponse, Inbound, Interactive, Lookup, MediaStream, Options, Outgoing,
-    SendError, Sent, Speech,
+    SendError, SenderVerdict, Sent, Speech,
 };
 use pmt_gateway::{Author, Host, HostFuture, Identity, Link, Server, ServerOptions};
 use pmt_rpc::contracts::{
-    Admission as RpcAdmission, ApprovalAsk, ApprovalRequestParams, ClientKind, CommandCatalog,
-    CompactParams, Compacted, CompleteParams, Completions, ConfigValue, ContextUsage, Decision,
-    DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveParams, SessionCreateParams,
-    SessionList, SessionListParams, SessionRef, SessionSetup, SubmitParams, Submitted, Transcript,
-    TurnEnded, TurnFinished,
+    Admission as RpcAdmission, ApprovalAsk, ApprovalRequestParams, ClarifyAsk,
+    ClarifyRequestParams, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams,
+    Completions, ConfigValue, ContextUsage, Decision, DispatchParams, Dispatched, ForkParams,
+    ModelOptions, ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef,
+    SessionSetup, SubmitParams, Submitted, Transcript, TurnEnded, TurnFinished,
 };
 use pmt_store::{EndReason, LineageKind, NewSession, Origin, Source, Store};
 use tokio_util::sync::CancellationToken;
@@ -34,6 +34,8 @@ use tokio_util::sync::CancellationToken;
 ///
 /// - `slow:<ms>[:<answer>]` answers after `ms` (or ends interrupted);
 /// - `approval` asks one approval and answers `approved` or `denied`;
+/// - `clarify` asks a choice question (`red`, `green`, `blue`) and a
+///   free-text one, and answers `clarified: <answers as JSON>`;
 /// - `stream` streams its answer in pieces first;
 /// - `say:<text>` answers `<text>` verbatim;
 /// - anything else answers `echo: <text>` at once.
@@ -59,6 +61,20 @@ async fn script(
             "completed",
             Some(if approved { "approved" } else { "denied" }.into()),
         );
+    }
+    if text == "clarify" {
+        let params = ClarifyRequestParams {
+            session_id: link.session_id().to_owned(),
+            questions: vec![
+                serde_json::json!({"question": "Which colour?", "choices": ["red", "green", "blue"]}),
+                serde_json::json!({"question": "Why?"}),
+            ],
+            allow_other: true,
+            deadline_ms: None,
+        };
+        let answer = link.ask::<ClarifyAsk>(&params, Some(timeout)).await;
+        let answers = answer.map_or(serde_json::Value::Null, |a| a.answers.into());
+        return ("completed", Some(format!("clarified: {answers}")));
     }
     if text == "stream" {
         for piece in ["hello ", "wor", "ld, this is a streamed answer"] {
@@ -109,6 +125,8 @@ pub struct FakeAgents {
     pub conversations: Mutex<Vec<Conversation>>,
     /// The profiles' speech providers.
     pub speech: Mutex<Option<Arc<dyn Speech>>>,
+    /// The working directory new sessions record.
+    pub cwd: Mutex<Option<String>>,
 }
 
 impl FakeAgents {
@@ -325,6 +343,7 @@ impl Agents for FakeAgents {
                 }
                 None => NewSession::new(Source::Gateway),
             };
+            new.cwd.clone_from(&self.cwd.lock().unwrap());
             new.origin = Origin::Gateway {
                 platform: conversation.platform,
                 chat: conversation.chat_id,
@@ -466,6 +485,10 @@ pub struct FakeAdapter {
     pub credential: Mutex<Option<String>>,
     /// The shared secret a webhook request must carry in `x-secret`.
     pub http_secret: Mutex<Option<String>>,
+    /// What its sender check answers, by sender (`unknown` otherwise).
+    pub verdicts: Mutex<HashMap<String, Result<SenderVerdict, AdapterError>>>,
+    /// Sender checks asked.
+    pub sender_checks: AtomicUsize,
 }
 
 impl FakeAdapter {
@@ -489,6 +512,8 @@ impl FakeAdapter {
             edits_tried: AtomicUsize::new(0),
             credential: Mutex::default(),
             http_secret: Mutex::default(),
+            verdicts: Mutex::default(),
+            sender_checks: AtomicUsize::new(0),
         })
     }
 
@@ -607,6 +632,20 @@ impl Adapter for FakeAdapter {
     fn audio<'a>(&'a self, op: &'a AudioOp) -> AdapterFuture<'a, Result<(), SendError>> {
         self.audio.lock().unwrap().push(op.clone());
         Box::pin(async { Ok(()) })
+    }
+
+    fn authorize_sender<'a>(
+        &'a self,
+        inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<SenderVerdict, AdapterError>> {
+        self.sender_checks.fetch_add(1, Ordering::Relaxed);
+        let verdict = self
+            .verdicts
+            .lock()
+            .unwrap()
+            .get(&inbound.sender_id)
+            .cloned();
+        Box::pin(async move { verdict.unwrap_or(Ok(SenderVerdict::Unknown)) })
     }
 
     fn verify_http(&self, request: &HttpRequest) -> bool {
@@ -770,6 +809,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         approval_timeout: Mutex::new(Duration::from_secs(30)),
         conversations: Mutex::default(),
         speech: Mutex::default(),
+        cwd: Mutex::default(),
     })
 }
 

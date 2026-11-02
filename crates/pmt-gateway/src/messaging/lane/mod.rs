@@ -11,6 +11,7 @@
 //! - `requests`: approval and clarify prompts and their cards.
 
 mod admin;
+mod clarify;
 mod commands;
 mod input;
 mod reply;

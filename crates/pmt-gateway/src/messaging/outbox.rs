@@ -78,7 +78,7 @@ fn after(now: Timestamp, wait: Duration) -> Timestamp {
         .unwrap_or(now)
 }
 
-/// The message an entry sends: an approval card's JSON carries buttons.
+/// The message an entry sends: a card's JSON carries buttons.
 fn outgoing(entry: &Outbound) -> Outgoing {
     let (text, buttons) = if entry.kind == OutboundKind::Approval {
         let card: Value = serde_json::from_str(&entry.body).unwrap_or_else(|_| json!({}));

@@ -15,7 +15,7 @@ use serde_json::json;
 use tokio::time::Instant;
 
 use super::Shared;
-use super::adapter::{Admission, Inbound, Outgoing};
+use super::adapter::{Admission, Inbound, Outgoing, SenderVerdict};
 use super::auth::{self, Facts};
 use super::inbound;
 use super::key::{ChatType, Isolation, Routing};
@@ -84,13 +84,22 @@ async fn decide(
             tracing::warn!("pairing lookup failed: {err}");
             false
         });
-    let facts = Facts {
+    let mut facts = Facts {
         descriptor: &descriptor,
         config: &table,
         inbound: &inbound,
         paired,
+        adapter: SenderVerdict::Unknown,
     };
-    if auth::authorize(&facts).is_none() {
+    let mut rule = auth::authorize(&facts);
+    if rule.is_none()
+        && auth::asks_adapter(&descriptor)
+        && let Some(adapter) = shared.adapters.adapter(owner, platform)
+    {
+        facts.adapter = auth::adapter_verdict(adapter.as_ref(), &inbound).await;
+        rule = auth::authorize(&facts);
+    }
+    if rule.is_none() {
         return unauthorized(shared, owner, platform, &inbound, gateway).await;
     }
     shared

@@ -122,10 +122,14 @@ What the gateway does for every adapter:
 - Voice notes are transcribed with the profile's speech provider
   (`gateway.voice`); replies are spoken back to voice notes by default
   (`reply_mode = "mirror"`).
-- Approval cards use buttons where the platform has them (signed per
-  daemon start, so a forged button press decides nothing), a numbered
-  list answered with `1`..`4` on `numbered` platforms, and `/approve <id>
-  <choice>` elsewhere.
+- Approval cards show the tool, the exact action, the session's working
+  directory, the risk reasons and when the request expires (unanswered,
+  it is denied). They use buttons where the platform has them (signed
+  per daemon start, so a forged button press decides nothing), a
+  numbered list answered with `1`..`4` on `numbered` platforms, and
+  `/approve <id> <choice>` elsewhere. Clarify questions list their
+  choices by number everywhere and, on platforms with buttons, as
+  buttons too; the asker answers with a button, the numbers or text.
 - A bot token used by two profiles or homes connects once: the second
   adapter reports `fatal` with `<platform>_lock`, naming the holder and
   the command that stops it; `prometheus daemon run --replace` takes the
@@ -139,7 +143,10 @@ What the gateway does for every adapter:
 
 Nobody, by default. A sender is admitted by the first rule that matches:
 the relay's upstream verdict, `allow_chats`, `allow_all`, an approved
-pairing, `allow_users`, then the adapter's own allowlist. Wildcards in
+pairing, `allow_users`, then the adapter's own allowlist. An adapter's
+own policy counts only in `allowlist` mode and only when its sender check
+answers `allow`; `deny`, any other answer, a failure or no answer within
+5 seconds leave the default deny. Wildcards in
 `allow_users` are refused: admitting everyone is the explicit `allow_all`.
 
 ### Pairing

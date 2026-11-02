@@ -1805,7 +1805,7 @@ capabilities = [
 "Card updated after resolution" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_answered_in_the_desktop_app_updates_the_card"]
 
 [platform-adapters."Adapter access-policy delegation"]
-"Open adapter policy not trusted" = ["crates/pmt-gateway/tests/messaging/platforms.rs::an_open_adapter_policy_is_not_trusted", "crates/pmt-gateway/src/messaging/auth.rs::only_an_adapter_allowlist_is_trusted"]
+"Open adapter policy not trusted" = ["crates/pmt-gateway/tests/messaging/platforms.rs::an_open_adapter_policy_is_not_trusted", "crates/pmt-gateway/src/messaging/auth.rs::only_an_allow_from_an_adapter_allowlist_is_trusted", "crates/pmt-gateway/tests/messaging/cards.rs::an_open_adapter_policy_is_never_asked"]
 
 [platform-adapters."Credential locks across homes"]
 "Same bot token in two profiles" = ["crates/pmt-gateway/tests/messaging/platforms.rs::one_credential_in_two_profiles_connects_once", "crates/pmt-gateway/src/messaging/locks.rs::a_live_holder_keeps_the_lock_and_a_dead_one_loses_it"]

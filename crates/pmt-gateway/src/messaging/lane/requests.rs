@@ -4,19 +4,21 @@
 //! (buttons where the platform has them, `/approve` and `/deny` always),
 //! the first valid answer from the requester, an admin, or any attached
 //! client wins, and the card is then updated with the outcome and who
-//! decided; expiry, detachment or dismissal count as a denial.
+//! decided; expiry, detachment or dismissal count as a denial. Clarify
+//! questions are in `clarify.rs`.
 
-use std::fmt::Write as _;
-
+use jiff::Zoned;
 use pmt_rpc::contracts::{ApprovalRequestParams, Decision};
 use pmt_store::gateway::outbox::OutboundKind;
 use serde_json::{Value, json};
 
 use super::Lane;
+use super::clarify::Clarify;
 use crate::hub::Answered;
 use crate::messaging::adapter::{Button, Interactive};
+use crate::messaging::auth;
+use crate::messaging::cards::{self, Card, CardKind};
 use crate::messaging::key::Routing;
-use crate::messaging::{auth, cards};
 
 /// Told to a bystander who tries to decide.
 pub(crate) const NOT_YOURS: &str = "Only the person who asked or an admin may decide this.";
@@ -30,19 +32,11 @@ struct Approval {
     card_key: String,
 }
 
-#[derive(Debug, Clone)]
-struct Clarify {
-    id: String,
-    requester: String,
-    questions: Vec<Value>,
-    answers: Vec<Value>,
-}
-
 /// The prompts open in the conversation, oldest first.
 #[derive(Debug, Default)]
 pub(crate) struct Open {
     approvals: Vec<Approval>,
-    clarify: Option<Clarify>,
+    pub(super) clarify: Option<Clarify>,
     /// Secrets already asked for in this chat (told once).
     secrets_told: bool,
 }
@@ -66,14 +60,35 @@ fn outcome_text(decision: Decision) -> &'static str {
     }
 }
 
-fn card_text(params: &ApprovalRequestParams, tier: Interactive, id: &str) -> String {
-    let mut text = format!("Approval needed: {}", params.tool);
+/// The approval card's text: title, exact action, working directory, risk
+/// reasons, expiry, and how to answer on this tier.
+fn card_text(
+    params: &ApprovalRequestParams,
+    cwd: Option<&str>,
+    tier: Interactive,
+    id: &str,
+    now: &Zoned,
+) -> String {
+    let mut details = Vec::new();
     if let Some(subject) = &params.subject {
-        let _ = write!(text, "\n{}", pmt_text(subject));
+        details.push(format!("Action: {subject}"));
     }
-    for finding in &params.findings {
-        let _ = write!(text, "\n- {}", pmt_text(&finding.reason));
+    if let Some(cwd) = cwd {
+        details.push(format!("Directory: {cwd}"));
     }
+    details.extend(
+        params
+            .findings
+            .iter()
+            .map(|finding| format!("Risk: {}", finding.reason)),
+    );
+    let card = Card {
+        title: format!("Approval needed: {}", params.tool),
+        details,
+        deadline_ms: params.deadline_ms,
+        on_expiry: "unanswered, it is denied",
+    };
+    let mut text = card.text(now);
     match tier {
         Interactive::Native => {
             text.push_str("\nReply /approve, /approve session, /approve always or /deny.");
@@ -81,20 +96,6 @@ fn card_text(params: &ApprovalRequestParams, tier: Interactive, id: &str) -> Str
         other => text.push_str(&cards::instructions(other, id)),
     }
     text
-}
-
-/// Model-controlled text shown in a chat: control characters are made
-/// visible so they cannot disguise the command.
-fn pmt_text(text: &str) -> String {
-    text.chars()
-        .map(|c| {
-            if c.is_control() && c != '\n' {
-                format!("\\u{{{:x}}}", u32::from(c))
-            } else {
-                c.to_string()
-            }
-        })
-        .collect()
 }
 
 impl Lane {
@@ -128,7 +129,7 @@ impl Lane {
                 .iter()
                 .map(|choice| Button {
                     label: choice[..1].to_uppercase() + &choice[1..],
-                    data: self.shared.card_key.data(&id, choice),
+                    data: self.shared.card_key.data(CardKind::Approval, &id, choice),
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -136,7 +137,8 @@ impl Lane {
         };
         let session = self.session.clone().unwrap_or_default();
         let card_key = format!("{session}:{id}:card");
-        let text = card_text(&request, tier, &id);
+        let cwd = self.session_cwd(&request.session_id);
+        let text = card_text(&request, cwd.as_deref(), tier, &id, &Zoned::now());
         let body = json!({"text": text, "buttons": buttons}).to_string();
         self.deliver(card_key.clone(), OutboundKind::Approval, body, None);
         self.requests.approvals.push(Approval {
@@ -157,8 +159,14 @@ impl Lane {
         })
     }
 
+    /// The working directory recorded on session `session`.
+    fn session_cwd(&self, session: &str) -> Option<String> {
+        let store = self.shared.store(&self.profile)?;
+        store.session(session.parse().ok()?).ok()?.cwd
+    }
+
     /// How the conversation's adapter renders choices.
-    fn tier(&self) -> Interactive {
+    pub(super) fn tier(&self) -> Interactive {
         self.shared
             .adapters
             .descriptor(&self.profile, &self.routing.platform)
@@ -209,10 +217,10 @@ impl Lane {
         }
     }
 
-    /// A pressed card button (`appr:<id>:<choice>:<mac>`): rejected and
-    /// logged unless its MAC verifies under this boot's key.
+    /// A pressed card button (`appr:` or `clar:<id>:<choice>:<mac>`):
+    /// rejected and logged unless its MAC verifies under this boot's key.
     pub(super) fn callback(&mut self, routing: &Routing, data: &str) {
-        let Some((id, choice)) = self.shared.card_key.verify(data) else {
+        let Some((kind, id, choice)) = self.shared.card_key.verify(data) else {
             tracing::warn!(
                 platform = routing.platform,
                 sender = routing.sender_id,
@@ -220,6 +228,10 @@ impl Lane {
             );
             return;
         };
+        if kind == CardKind::Clarify {
+            self.clarify_pressed(routing, id, choice);
+            return;
+        }
         let Some(decision) = decision_of(choice) else {
             return;
         };
@@ -333,95 +345,5 @@ impl Lane {
         if self.requests.clarify.as_ref().is_some_and(|c| c.id == id) {
             self.requests.clarify = None;
         }
-    }
-
-    fn clarify_question(&mut self, id: String, params: &Value) {
-        let questions = params["questions"].as_array().cloned().unwrap_or_default();
-        if questions.is_empty() {
-            return;
-        }
-        let requester = self
-            .running
-            .as_ref()
-            .map_or_else(String::new, |r| r.requester.clone());
-        self.requests.clarify = Some(Clarify {
-            id,
-            requester,
-            questions,
-            answers: Vec::new(),
-        });
-        self.ask_next_question();
-    }
-
-    fn ask_next_question(&self) {
-        let Some(clarify) = &self.requests.clarify else {
-            return;
-        };
-        let question = &clarify.questions[clarify.answers.len()];
-        let mut text = pmt_text(question["question"].as_str().unwrap_or("?"));
-        let choices = question["choices"].as_array().cloned().unwrap_or_default();
-        for (n, choice) in choices.iter().enumerate() {
-            let _ = write!(
-                text,
-                "\n{}. {}",
-                n + 1,
-                pmt_text(choice.as_str().unwrap_or_default())
-            );
-        }
-        self.say(&text);
-    }
-
-    /// The requester's next message answers an open clarify question;
-    /// `true` when it did.
-    pub(super) fn answer_clarify(&mut self, routing: &Routing, text: &str) -> bool {
-        let Some(clarify) = self.requests.clarify.as_mut() else {
-            return false;
-        };
-        let theirs = clarify.requester.is_empty() || clarify.requester == routing.sender_id;
-        if !theirs || text.trim_start().starts_with('/') {
-            return false;
-        }
-        let question = &clarify.questions[clarify.answers.len()];
-        clarify.answers.push(clarify_answer(question, text));
-        if clarify.answers.len() < clarify.questions.len() {
-            self.ask_next_question();
-            return true;
-        }
-        let Some(done) = self.requests.clarify.take() else {
-            return true;
-        };
-        let hub = self.shared.server.hub();
-        let answer = json!({"answers": done.answers});
-        let _ = hub.resolve(
-            self.shared.conn,
-            &self.shared.peer.client_id,
-            &done.id,
-            Ok(answer),
-        );
-        true
-    }
-}
-
-/// The clarify answer a chat message stands for: choice numbers or text.
-fn clarify_answer(question: &Value, line: &str) -> Value {
-    let line = line.trim();
-    let choices: Vec<&str> = question["choices"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect();
-    let picked: Option<Vec<&str>> = line
-        .split(',')
-        .map(|n| {
-            n.trim()
-                .parse::<usize>()
-                .ok()
-                .and_then(|n| choices.get(n.wrapping_sub(1)).copied())
-        })
-        .collect();
-    match picked {
-        Some(picked) if !picked.is_empty() => json!({"status": "answered", "choices": picked}),
-        _ => json!({"status": "answered", "text": line}),
     }
 }

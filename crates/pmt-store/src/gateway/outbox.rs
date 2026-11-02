@@ -20,7 +20,7 @@ pub enum OutboundKind {
     Reply,
     /// A background or system notification.
     Notification,
-    /// An approval card.
+    /// An interactive card (an approval, or a clarify question).
     Approval,
     /// A gateway message (pairing codes, busy acknowledgements, notices).
     System,

@@ -270,6 +270,40 @@ pub enum Admission {
     Dropped,
 }
 
+/// An adapter's verdict on a sender (spec: platform-adapters, Adapter
+/// access-policy delegation).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SenderVerdict {
+    /// The adapter's own allowlist admits the sender.
+    Allow,
+    /// The adapter refuses the sender.
+    Deny,
+    /// No verdict: the gateway's own rules decide (and deny by default).
+    Unknown,
+}
+
+impl SenderVerdict {
+    /// The verdict an answer in words stands for (plugin adapters answer
+    /// across the plugin boundary): anything but `allow` or `deny` is
+    /// `unknown`.
+    #[must_use]
+    pub fn from_answer(answer: &str) -> Self {
+        match answer {
+            "allow" => Self::Allow,
+            "deny" => Self::Deny,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// The verdict of a check that may have failed: a failure is
+    /// `unknown`.
+    #[must_use]
+    pub fn of<E>(result: Result<Self, E>) -> Self {
+        result.unwrap_or(Self::Unknown)
+    }
+}
+
 /// The gateway, as an adapter reaches it.
 pub trait AdapterLink: Send + Sync {
     /// Submits an inbound event.
@@ -332,6 +366,16 @@ pub trait Adapter: Send + Sync + 'static {
     /// Plays streamed reply audio (adapters with `streaming_tts`).
     fn audio<'a>(&'a self, _op: &'a AudioOp) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Whether the adapter's own access policy admits the event's sender;
+    /// asked only of adapters declaring `enforces_own_access_policy =
+    /// allowlist`, and only when no gateway rule admitted the sender.
+    /// Failing, or answering `unknown`, leaves the gateway's default deny.
+    fn authorize_sender<'a>(
+        &'a self,
+        _inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<SenderVerdict, AdapterError>> {
+        Box::pin(async { Ok(SenderVerdict::Unknown) })
     }
     /// Whether an HTTP request on the shared listener carries the
     /// platform's valid signature or shared secret (adapters with

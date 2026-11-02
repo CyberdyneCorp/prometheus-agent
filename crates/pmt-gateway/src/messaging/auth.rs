@@ -2,7 +2,10 @@
 //! and fail-closed default; Slash command access tiers; platform-adapters,
 //! Adapter access-policy delegation). The first rule that admits a sender
 //! wins, in a fixed order, and anything no rule admits is denied; no
-//! environment variable takes part.
+//! environment variable takes part. An adapter's own access policy is
+//! trusted last, only in `allowlist` mode and only on an explicit `allow`
+//! from its sender check: a `deny`, an `unknown`, a failure or a timeout
+//! leave the default deny.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
@@ -11,7 +14,7 @@ use std::time::Duration;
 use pmt_config::schema::PlatformConfig;
 use tokio::time::Instant;
 
-use super::adapter::{AccessPolicy, Descriptor, Inbound};
+use super::adapter::{AccessPolicy, Adapter, Descriptor, Inbound, SenderVerdict};
 use super::key::ChatType;
 
 /// The rule that admitted a sender.
@@ -42,6 +45,40 @@ pub struct Facts<'a> {
     pub inbound: &'a Inbound,
     /// The sender has an approved pairing.
     pub paired: bool,
+    /// The adapter's sender check ([`adapter_verdict`]); `Unknown` when
+    /// not asked.
+    pub adapter: SenderVerdict,
+}
+
+/// How long an adapter's sender check may take before it counts as
+/// `unknown`.
+pub const SENDER_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Whether the adapter's access policy should be asked about the sender:
+/// only an `allowlist` policy is ever trusted.
+#[must_use]
+pub fn asks_adapter(descriptor: &Descriptor) -> bool {
+    descriptor.access_policy == Some(AccessPolicy::Allowlist)
+}
+
+/// The adapter's verdict on the event's sender; a failing or slow check
+/// is `unknown`.
+pub async fn adapter_verdict(adapter: &dyn Adapter, inbound: &Inbound) -> SenderVerdict {
+    match tokio::time::timeout(SENDER_CHECK_TIMEOUT, adapter.authorize_sender(inbound)).await {
+        Ok(Err(err)) => {
+            tracing::warn!(
+                code = err.code,
+                "the adapter's sender check failed: {}",
+                err.message
+            );
+            SenderVerdict::Unknown
+        }
+        Ok(answer) => SenderVerdict::of(answer),
+        Err(_) => {
+            tracing::warn!("the adapter's sender check timed out");
+            SenderVerdict::Unknown
+        }
+    }
 }
 
 /// The rule admitting the sender, or `None` (deny).
@@ -52,6 +89,7 @@ pub fn authorize(facts: &Facts<'_>) -> Option<Rule> {
         config,
         inbound,
         paired,
+        adapter,
     } = *facts;
     if descriptor.authorization_is_upstream {
         Some(Rule::Upstream)
@@ -63,7 +101,7 @@ pub fn authorize(facts: &Facts<'_>) -> Option<Rule> {
         Some(Rule::Paired)
     } else if config.allow_users.contains(&inbound.sender_id) {
         Some(Rule::User)
-    } else if descriptor.access_policy == Some(AccessPolicy::Allowlist) {
+    } else if asks_adapter(descriptor) && adapter == SenderVerdict::Allow {
         Some(Rule::AdapterAllowlist)
     } else {
         None
@@ -165,6 +203,7 @@ mod tests {
             config,
             inbound,
             paired: false,
+            adapter: SenderVerdict::Unknown,
         }
     }
 
@@ -211,17 +250,51 @@ mod tests {
     }
 
     #[test]
-    fn only_an_adapter_allowlist_is_trusted() {
-        let mut descriptor = Descriptor::new("x", 100);
+    fn only_an_allow_from_an_adapter_allowlist_is_trusted() {
+        use SenderVerdict::{Allow, Deny, Unknown};
         let config = PlatformConfig::default();
         let inbound = Inbound::text(ChatType::Dm, "c", "u", "hi");
-        descriptor.access_policy = Some(AccessPolicy::Open);
-        assert_eq!(authorize(&facts(&descriptor, &config, &inbound)), None);
-        descriptor.access_policy = Some(AccessPolicy::Allowlist);
-        assert_eq!(
-            authorize(&facts(&descriptor, &config, &inbound)),
-            Some(Rule::AdapterAllowlist)
-        );
+        let table = [
+            (
+                Some(AccessPolicy::Allowlist),
+                Allow,
+                Some(Rule::AdapterAllowlist),
+            ),
+            (Some(AccessPolicy::Allowlist), Deny, None),
+            (Some(AccessPolicy::Allowlist), Unknown, None),
+            (Some(AccessPolicy::Open), Allow, None),
+            (Some(AccessPolicy::Open), Unknown, None),
+            (None, Allow, None),
+        ];
+        for (policy, verdict, expected) in table {
+            let descriptor = Descriptor {
+                access_policy: policy,
+                ..Descriptor::new("x", 100)
+            };
+            let facts = Facts {
+                adapter: verdict,
+                ..facts(&descriptor, &config, &inbound)
+            };
+            assert_eq!(authorize(&facts), expected, "{policy:?} {verdict:?}");
+        }
+    }
+
+    #[test]
+    fn answers_other_than_allow_or_deny_and_failures_are_unknown() {
+        use SenderVerdict::{Allow, Deny, Unknown};
+        let table = [
+            ("allow", Allow),
+            ("deny", Deny),
+            ("unknown", Unknown),
+            ("Allow", Unknown),
+            ("yes", Unknown),
+            ("", Unknown),
+        ];
+        for (answer, expected) in table {
+            assert_eq!(SenderVerdict::from_answer(answer), expected, "{answer:?}");
+        }
+        assert_eq!(SenderVerdict::of::<()>(Ok(Allow)), Allow);
+        assert_eq!(SenderVerdict::of(Err("plugin trapped")), Unknown);
     }
 
     #[test]

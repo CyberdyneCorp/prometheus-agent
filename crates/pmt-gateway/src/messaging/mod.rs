@@ -74,7 +74,7 @@ pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Admission, Attachment, AudioOp, Button, ChatInfo, Descriptor,
     HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind, MediaStream,
-    Outgoing, Reaction, SendError, Sent,
+    Outgoing, Reaction, SendError, SenderVerdict, Sent,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup};
 pub use hooks::{Hook, Hooks, PreCommand};

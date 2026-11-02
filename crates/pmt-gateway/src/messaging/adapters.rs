@@ -153,6 +153,11 @@ impl Adapters {
         self.slot(profile, platform).map(|s| s.descriptor.clone())
     }
 
+    /// The running adapter itself.
+    pub(crate) fn adapter(&self, profile: &str, platform: &str) -> Option<Arc<dyn Adapter>> {
+        self.slot(profile, platform).map(|s| Arc::clone(&s.adapter))
+    }
+
     /// The adapter when it is connected (`connected` or `degraded`).
     pub(crate) fn ready(&self, profile: &str, platform: &str) -> Option<Arc<Slot>> {
         self.slot(profile, platform)
