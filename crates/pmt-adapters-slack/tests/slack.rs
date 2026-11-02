@@ -152,3 +152,44 @@ async fn unacknowledged_envelopes_arrive_once_after_reconnecting() {
         .collect();
     assert_eq!(texts, ["one", "two", "three"]);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_slash_command_runs_and_is_answered_privately() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let slack = adapter(home.path(), &mock);
+    let link = Arc::new(Recorder::default());
+    slack.connect(Arc::clone(&link) as _).await.unwrap();
+    let menu: Vec<pmt_gateway::messaging::MenuCommand> = ["model", "stop"]
+        .iter()
+        .map(|n| pmt_gateway::messaging::MenuCommand {
+            name: (*n).into(),
+            description: String::new(),
+            takes_args: true,
+        })
+        .collect();
+    slack.register_commands(&menu).await.unwrap();
+    mock.slash("/prometheus", "model fast");
+    mock.slash("/prometheus", "how are you");
+    eventually(|| link.events.lock().unwrap().len() == 2).await;
+    let events = link.events.lock().unwrap().clone();
+    assert_eq!(events[0].text, "/model fast");
+    assert_eq!(events[1].text, "how are you");
+    eventually(|| mock.ack_payloads().len() == 2).await;
+    assert_eq!(mock.ack_payloads()[0]["text"], "Running /model…");
+    assert_eq!(mock.ack_payloads()[0]["response_type"], "ephemeral");
+
+    let mut answer = Outgoing::text(mock::DM, None, "Model set to fast.");
+    answer.reply_to = Some(events[0].message_id.clone());
+    slack.send(&answer).await.unwrap();
+    let responses = mock.responses();
+    assert_eq!(responses.len(), 1);
+    assert_eq!(responses[0]["text"], "Model set to fast.");
+    assert_eq!(responses[0]["response_type"], "ephemeral");
+    assert_eq!(responses[0]["replace_original"], true);
+    assert!(
+        mock.sent().iter().all(|m| m.text != "Model set to fast."),
+        "never a public post"
+    );
+    slack.disconnect().await;
+}

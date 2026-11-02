@@ -8,7 +8,7 @@
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use pmt_config::schema::{BusyInputMode, EffectiveBusy};
+use pmt_config::schema::{Batching, BusyInputMode, EffectiveBusy};
 use tokio::time::Instant;
 
 use super::{Lane, Origin, Pending};
@@ -125,12 +125,15 @@ impl Lane {
     /// client), else the busy debounce.
     fn gather_window(&self, text: &str) -> (Duration, Duration) {
         let busy = self.busy();
+        let platform = &self.routing.platform;
+        // WhatsApp clients split rapid messages: batched by default.
         let batching = self.config().and_then(|scope| {
             scope
                 .config()
                 .gateway
-                .platform(&self.routing.platform)
+                .platform(platform)
                 .batching
+                .or_else(|| (platform == "whatsapp").then(Batching::default))
         });
         let Some(batching) = batching else {
             return (

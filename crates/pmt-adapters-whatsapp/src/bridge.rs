@@ -129,6 +129,7 @@ pub(crate) fn launch(
     home: &Path,
     profile_dir: &Path,
     profile: &str,
+    mode: &str,
 ) -> Result<(tokio::process::Child, String), AdapterError> {
     let missing = || AdapterError {
         retryable: false,
@@ -160,6 +161,8 @@ pub(crate) fn launch(
         .arg(port.to_string())
         .arg("--session")
         .arg(&session)
+        .arg("--mode")
+        .arg(mode)
         .kill_on_drop(true)
         .stdin(std::process::Stdio::null())
         .spawn()

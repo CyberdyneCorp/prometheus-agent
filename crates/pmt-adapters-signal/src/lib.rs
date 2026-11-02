@@ -46,7 +46,13 @@ pub struct Signal {
     stream: Mutex<Option<CancellationToken>>,
     /// The daemon refused text styles once: send plain text from then on.
     no_styles: std::sync::atomic::AtomicBool,
+    reader: events::Reader,
+    /// When the typing indicator was last shown, by chat.
+    typing: Mutex<std::collections::HashMap<String, std::time::Instant>>,
 }
+
+/// How often the typing indicator is refreshed (it lasts about 15 s).
+const TYPING_EVERY: std::time::Duration = std::time::Duration::from_secs(8);
 
 impl std::fmt::Debug for Signal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -139,6 +145,8 @@ impl Signal {
                 format!("cannot build the Signal client: {e}"),
             )
         })?;
+        let options_groups = options.allow_groups.clone();
+        let rpc_account = options.account.clone();
         let (rpc, missing) = match (options.http_url, options.account) {
             (Some(url), Some(account)) => (
                 Some(Rpc {
@@ -157,6 +165,13 @@ impl Signal {
             missing,
             stream: Mutex::default(),
             no_styles: std::sync::atomic::AtomicBool::new(false),
+            reader: events::Reader {
+                account: rpc_account.unwrap_or_default(),
+                allow_groups: options_groups,
+                sent: Arc::default(),
+                to_self: Arc::default(),
+            },
+            typing: Mutex::default(),
         })
     }
 
@@ -185,19 +200,7 @@ impl Signal {
             message: format!("the signal-cli daemon at {} is unreachable: {why}", rpc.url),
         };
         rpc.check().await.map_err(unreachable)?;
-        let response = rpc
-            .client
-            .get(format!("{}/api/v1/events", rpc.url))
-            .header("accept", "text/event-stream")
-            .send()
-            .await
-            .map_err(|e| unreachable(e.without_url().to_string()))?;
-        if !response.status().is_success() {
-            return Err(unreachable(format!(
-                "events answered {}",
-                response.status()
-            )));
-        }
+        let response = rpc.events().await.map_err(unreachable)?;
         tracing::info!(
             platform = PLATFORM,
             account = events::redact(&rpc.account),
@@ -212,7 +215,13 @@ impl Signal {
         {
             old.cancel();
         }
-        tokio::spawn(events::stream(response, link, rpc.url.clone(), stop));
+        tokio::spawn(events::follow(
+            response,
+            link,
+            self.reader.clone(),
+            rpc.clone(),
+            stop,
+        ));
         Ok(())
     }
 }
@@ -273,7 +282,14 @@ impl Adapter for Signal {
                 params["quoteAuthor"] = json!(author);
                 params["quoteTimestamp"] = json!(ts);
             }
+            if message.chat_id == rpc.account {
+                self.reader
+                    .sending_to_self(params["message"].as_str().unwrap_or_default());
+            }
             let sent = self.call_styled(rpc, params, &message).await?;
+            if let Some(timestamp) = sent["timestamp"].as_i64() {
+                self.reader.sent(timestamp);
+            }
             let id = sent["timestamp"]
                 .as_i64()
                 .map(|ts| format!("{}:{ts}", rpc.account));
@@ -352,6 +368,17 @@ impl Adapter for Signal {
         _thread_id: Option<&'a str>,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
+            let now = std::time::Instant::now();
+            {
+                let mut shown = self.typing.lock().expect("typing poisoned");
+                if shown
+                    .get(chat_id)
+                    .is_some_and(|at| now.duration_since(*at) < TYPING_EVERY)
+                {
+                    return Ok(());
+                }
+                shown.insert(chat_id.to_owned(), now);
+            }
             self.rpc()?
                 .call("sendTyping", &recipient(chat_id))
                 .await

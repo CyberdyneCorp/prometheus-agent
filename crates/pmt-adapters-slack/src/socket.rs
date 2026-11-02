@@ -42,6 +42,7 @@ pub(crate) struct Run {
     pub(crate) extra_ca: Option<PathBuf>,
     /// The proxy the WebSocket tunnels through, if any.
     pub(crate) proxy: Option<String>,
+    pub(crate) slash: Arc<crate::slash::Replies>,
     pub(crate) stop: CancellationToken,
 }
 
@@ -88,6 +89,17 @@ pub(crate) async fn open(run: Run) -> Result<(), AdapterError> {
     }
 }
 
+/// The acknowledgement of an envelope (a slash command's carries its
+/// private placeholder); `None` for frames without an envelope id.
+fn acknowledgement(envelope: &Value) -> Option<String> {
+    let id = envelope["envelope_id"].as_str()?;
+    let mut ack = json!({"envelope_id": id});
+    if envelope["type"] == "slash_commands" {
+        ack["payload"] = crate::slash::placeholder(&envelope["payload"]);
+    }
+    Some(ack.to_string())
+}
+
 impl Run {
     async fn drive(self, socket: ws::Socket, ready: oneshot::Sender<()>) {
         let (mut sink, mut source) = socket.split();
@@ -112,15 +124,14 @@ impl Run {
                 Some(Ok(_)) => continue,
             };
             let envelope: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
-            if let Some(id) = envelope["envelope_id"].as_str() {
-                let ack = json!({"envelope_id": id}).to_string();
-                if sink.send(Message::text(ack)).await.is_err() {
-                    break lost(
-                        "slack_disconnected",
-                        "the acknowledgement could not be sent",
-                        true,
-                    );
-                }
+            if let Some(ack) = acknowledgement(&envelope)
+                && sink.send(Message::text(ack)).await.is_err()
+            {
+                break lost(
+                    "slack_disconnected",
+                    "the acknowledgement could not be sent",
+                    true,
+                );
             }
             match envelope["type"].as_str() {
                 Some("hello") => {
@@ -151,13 +162,7 @@ impl Run {
                 normalize::message(&payload["event"], self.team.as_deref(), &self.bot_user)
             }
             Some("interactive") => normalize::action(payload),
-            Some("slash_commands") => {
-                tracing::debug!(
-                    platform = crate::PLATFORM,
-                    "native slash commands are not dispatched yet; use the message form"
-                );
-                None
-            }
+            Some("slash_commands") => self.slash.event(payload, self.team.as_deref()),
             _ => None,
         };
         if let Some(inbound) = inbound {

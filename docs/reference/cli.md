@@ -8093,15 +8093,16 @@ Messaging adapters of the running daemon and the profile's delivery outbox
 Usage: prometheus gateway [OPTIONS] <COMMAND>
 
 Commands:
-  status     Print each served profile's messaging adapters and their state
-  reload     Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
-  platforms  Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
-  stop       Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
-  outbox     The durable delivery outbox of the selected profile
-  send       Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
-  list       List every running Prometheus daemon of this OS user, whatever its home
-  enroll     Enroll this home with a relay connector using a one-time token
-  help       Print this message or the help of the given subcommand(s)
+  status          Print each served profile's messaging adapters and their state
+  reload          Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms       Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox          The durable delivery outbox of the selected profile
+  send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list            List every running Prometheus daemon of this OS user, whatever its home
+  enroll          Enroll this home with a relay connector using a one-time token
+  slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  help            Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -8588,6 +8589,65 @@ Options:
           Print help
 ```
 
+## `prometheus gateway slack-manifest`
+
+```text
+Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+
+Usage: prometheus gateway slack-manifest [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The app's display name
+
+          [default: Prometheus]
+
+      --description <DESCRIPTION>
+          The app's short description
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --long-description <LONG_DESCRIPTION>
+          The app's long description (175-4000 characters)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --long-description-file <PATH>
+          A file holding the long description
+
+      --agent-view
+          Subscribe to the agent messaging events (the app's Messages tab)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-assistant
+          Leave out the assistant view, its scope and events
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --commands-only
+          Print only the slash-command array
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --write [<PATH>]
+          Write the manifest to PATH (default `<profile>/slack-manifest.json`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus gateway help`
 
 ```text
@@ -8596,15 +8656,16 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway help [COMMAND]
 
 Commands:
-  status     Print each served profile's messaging adapters and their state
-  reload     Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
-  platforms  Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
-  stop       Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
-  outbox     The durable delivery outbox of the selected profile
-  send       Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
-  list       List every running Prometheus daemon of this OS user, whatever its home
-  enroll     Enroll this home with a relay connector using a one-time token
-  help       Print this message or the help of the given subcommand(s)
+  status          Print each served profile's messaging adapters and their state
+  reload          Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms       Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox          The durable delivery outbox of the selected profile
+  send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list            List every running Prometheus daemon of this OS user, whatever its home
+  enroll          Enroll this home with a relay connector using a one-time token
+  slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  help            Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus gateway help status`
@@ -8698,6 +8759,14 @@ Usage: prometheus gateway help list
 Enroll this home with a relay connector using a one-time token
 
 Usage: prometheus gateway help enroll
+```
+
+## `prometheus gateway help slack-manifest`
+
+```text
+Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+
+Usage: prometheus gateway help slack-manifest
 ```
 
 ## `prometheus gateway help help`
@@ -11482,14 +11551,15 @@ Messaging adapters of the running daemon and the profile's delivery outbox
 Usage: prometheus help gateway [COMMAND]
 
 Commands:
-  status     Print each served profile's messaging adapters and their state
-  reload     Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
-  platforms  Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
-  stop       Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
-  outbox     The durable delivery outbox of the selected profile
-  send       Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
-  list       List every running Prometheus daemon of this OS user, whatever its home
-  enroll     Enroll this home with a relay connector using a one-time token
+  status          Print each served profile's messaging adapters and their state
+  reload          Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms       Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox          The durable delivery outbox of the selected profile
+  send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list            List every running Prometheus daemon of this OS user, whatever its home
+  enroll          Enroll this home with a relay connector using a one-time token
+  slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
 ```
 
 ## `prometheus help gateway status`
@@ -11583,6 +11653,14 @@ Usage: prometheus help gateway list
 Enroll this home with a relay connector using a one-time token
 
 Usage: prometheus help gateway enroll
+```
+
+## `prometheus help gateway slack-manifest`
+
+```text
+Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+
+Usage: prometheus help gateway slack-manifest
 ```
 
 ## `prometheus help pairing`

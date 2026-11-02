@@ -14,6 +14,7 @@ mod bridge;
 #[cfg(feature = "kit")]
 pub mod mock;
 mod normalize;
+mod session;
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -28,8 +29,8 @@ use pmt_config::platforms::WhatsappOptions;
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
-    Attachment, ChatInfo, ChatType, Descriptor, Markup, MediaKind, MediaStream, Outgoing,
-    SendError, Sent,
+    Attachment, ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream,
+    Outgoing, SendError, Sent,
 };
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
@@ -57,6 +58,7 @@ pub struct Whatsapp {
     /// The managed bridge process, when the adapter started one.
     child: Mutex<Option<tokio::process::Child>>,
     poller: Mutex<Option<CancellationToken>>,
+    session: Arc<session::Session>,
 }
 
 impl std::fmt::Debug for Whatsapp {
@@ -106,6 +108,11 @@ impl Whatsapp {
             bridge: Mutex::default(),
             child: Mutex::default(),
             poller: Mutex::default(),
+            session: Arc::new(session::Session::new(
+                options.mode,
+                options.group_policy,
+                setup.config.allow_chats.clone(),
+            )),
         })
     }
 
@@ -144,7 +151,12 @@ impl Whatsapp {
         if running && let Some(bridge) = self.bridge.lock().expect("bridge poisoned").clone() {
             return Ok(bridge);
         }
-        let (process, url) = bridge::launch(self.scope.home(), self.scope.dir(), self.profile())?;
+        let mode = match self.session.mode {
+            pmt_config::platforms::WhatsappMode::Bot => "bot",
+            pmt_config::platforms::WhatsappMode::SelfChat => "self-chat",
+        };
+        let (process, url) =
+            bridge::launch(self.scope.home(), self.scope.dir(), self.profile(), mode)?;
         *child = Some(process);
         Ok(Bridge {
             client: self.client.clone(),
@@ -188,11 +200,68 @@ impl Whatsapp {
             bridge,
             link,
             aliases: Arc::clone(&self.aliases),
+            session: Arc::clone(&self.session),
             profile: self.profile().to_owned(),
             stop,
         };
         tokio::spawn(poll.run());
         Ok(())
+    }
+
+    /// Sends the text of `message`: an approval card's choices numbered
+    /// (approvals are answered by number; a clarify question whose poll
+    /// failed is already numbered by the gateway).
+    async fn send_text(
+        &self,
+        bridge: &Bridge,
+        message: &Outgoing,
+    ) -> Result<Option<String>, SendError> {
+        let approval = message.buttons.iter().any(|b| b.data.starts_with("appr:"));
+        let text = if approval {
+            self.session
+                .numbered(&message.chat_id, &message.text, &message.buttons)
+        } else {
+            message.text.clone()
+        };
+        let mut body = json!({"chatId": message.chat_id, "message": text});
+        if let Some(reply) = &message.reply_to {
+            body["replyTo"] = json!(reply);
+        }
+        let sent = bridge.post("/send", &body).await?;
+        let id = sent["messageId"].as_str().map(str::to_owned);
+        if let Some(id) = &id {
+            self.session.sent(id, &text);
+        }
+        Ok(id)
+    }
+
+    /// A clarify question as a native poll; `None` when the message is
+    /// not one or the poll could not be sent (the numbered text goes
+    /// instead).
+    async fn poll(&self, bridge: &Bridge, message: &Outgoing) -> Option<Sent> {
+        let request =
+            session::Session::poll_for(&message.text, &message.buttons, message.select.as_ref())?;
+        let body = json!({"chatId": message.chat_id, "question": request.question,
+                          "options": request.options, "selectableCount": request.selectable});
+        match bridge.post("/send-poll", &body).await {
+            Ok(sent) => {
+                let id = sent["messageId"].as_str()?.to_owned();
+                self.session
+                    .opened(&id, &request, &message.buttons, message.select.as_ref());
+                self.session.sent(&id, &request.question);
+                Some(Sent {
+                    message_id: Some(id),
+                })
+            }
+            Err(err) => {
+                tracing::warn!(
+                    platform = PLATFORM,
+                    "poll not sent ({}); asking with numbered choices",
+                    err.describe()
+                );
+                None
+            }
+        }
     }
 
     async fn send_file(
@@ -236,6 +305,7 @@ struct Poll {
     bridge: Bridge,
     link: Arc<dyn AdapterLink>,
     aliases: Arc<Aliases>,
+    session: Arc<session::Session>,
     profile: String,
     stop: CancellationToken,
 }
@@ -252,7 +322,10 @@ impl Poll {
                 Err(err) => return self.lost(&err).await,
             };
             for raw in events.as_array().into_iter().flatten() {
-                if let Some(inbound) = normalize::event(raw, &self.aliases) {
+                if let Some((inbound, from_me)) = normalize::event(raw, &self.aliases)
+                    && self.session.admits(&inbound, from_me)
+                {
+                    let inbound = self.session.enrich(inbound, raw);
                     self.link.submit(inbound).await;
                 }
             }
@@ -300,6 +373,7 @@ impl Adapter for Whatsapp {
         out.remove(&MediaKind::Audio);
         Descriptor {
             markup: Markup::Platform,
+            interactive: Interactive::Native,
             supports_edit: true,
             supports_typing: true,
             media_in: all,
@@ -326,14 +400,12 @@ impl Adapter for Whatsapp {
         let message = message.clone();
         Box::pin(async move {
             let bridge = self.bridge()?;
+            if let Some(sent) = self.poll(&bridge, &message).await {
+                return Ok(sent);
+            }
             let mut first = None;
             if !message.text.is_empty() || message.attachments.is_empty() {
-                let mut body = json!({"chatId": message.chat_id, "message": message.text});
-                if let Some(reply) = &message.reply_to {
-                    body["replyTo"] = json!(reply);
-                }
-                let sent = bridge.post("/send", &body).await?;
-                first = sent["messageId"].as_str().map(str::to_owned);
+                first = self.send_text(&bridge, &message).await?;
             }
             for file in &message.attachments {
                 let kind = media_type(&file.path, file.as_document, file.as_voice);

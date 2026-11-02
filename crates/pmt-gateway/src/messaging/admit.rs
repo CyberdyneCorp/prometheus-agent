@@ -15,7 +15,7 @@ use serde_json::json;
 use tokio::time::Instant;
 
 use super::Shared;
-use super::adapter::{Admission, Inbound, Outgoing, SenderVerdict};
+use super::adapter::{Admission, Descriptor, Inbound, Outgoing, SenderVerdict};
 use super::auth::{self, Facts};
 use super::inbound;
 use super::key::{ChatType, Isolation, Routing};
@@ -64,16 +64,38 @@ pub(crate) async fn admit(
     admission
 }
 
+/// The command a message stands for on a platform with a command prefix
+/// alias: its first token (after an optional leading bot mention) is
+/// `<alias><command>`; only that token is looked at.
+pub(crate) fn command_alias(descriptor: &Descriptor, text: &str) -> Option<String> {
+    let alias = descriptor.command_prefix_alias.as_deref()?;
+    let mut rest = text.trim_start();
+    let first = rest.split_whitespace().next()?;
+    let mention = (first.starts_with("<@") && first.ends_with('>')) || first.starts_with('@');
+    if mention {
+        rest = rest[first.len()..].trim_start();
+    }
+    let command = rest.strip_prefix(alias)?;
+    command
+        .chars()
+        .next()
+        .is_some_and(char::is_alphanumeric)
+        .then(|| format!("/{command}"))
+}
+
 async fn decide(
     shared: &Arc<Shared>,
     owner: &str,
     platform: &str,
-    inbound: Inbound,
+    mut inbound: Inbound,
     gateway: &GatewayConfig,
 ) -> Admission {
     let Some(descriptor) = shared.adapters.descriptor(owner, platform) else {
         return Admission::Dropped;
     };
+    if let Some(command) = command_alias(&descriptor, &inbound.text) {
+        inbound.text = command;
+    }
     let Some(store) = shared.store(owner) else {
         return Admission::Dropped;
     };
@@ -370,4 +392,34 @@ pub(crate) async fn sender_admitted(
         facts.adapter = auth::adapter_verdict(adapter.as_ref(), &inbound).await;
     }
     auth::authorize(&facts).is_some()
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::*;
+
+    fn slack() -> Descriptor {
+        Descriptor {
+            command_prefix_alias: Some("!".into()),
+            ..Descriptor::new("slack", 39_000)
+        }
+    }
+
+    #[test]
+    fn a_bang_command_in_the_first_token_is_a_command() {
+        assert_eq!(
+            command_alias(&slack(), "<@U1> !stop").as_deref(),
+            Some("/stop")
+        );
+        assert_eq!(
+            command_alias(&slack(), "!model gpt").as_deref(),
+            Some("/model gpt")
+        );
+        assert_eq!(command_alias(&slack(), "please run !stop later"), None);
+        assert_eq!(command_alias(&slack(), "!! wow"), None);
+        assert_eq!(
+            command_alias(&Descriptor::new("discord", 2000), "!stop"),
+            None
+        );
+    }
 }

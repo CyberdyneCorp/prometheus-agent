@@ -373,3 +373,31 @@ async fn a_completed_kanban_task_uploads_its_artifacts_to_a_slack_channel() {
         sent.text
     );
 }
+
+fn slack_thread(text: &str) -> Inbound {
+    let mut inbound = Inbound::text(ChatType::Thread, "C1", "U1", text);
+    inbound.thread_id = Some("1700.1".into());
+    inbound
+}
+
+#[tokio::test]
+async fn a_bang_stop_after_the_bot_mention_stops_the_thread_turn() {
+    let mut setup = Setup::new(&open("slack"));
+    setup.descriptors.push(Descriptor {
+        command_prefix_alias: Some("!".into()),
+        ..Descriptor::new("slack", 39_000)
+    });
+    let h = Harness::start(setup).await;
+    h.send("slack", slack_thread("slow:10000")).await;
+    eventually("the turn runs", || h.agents.running() == 1).await;
+    h.send("slack", slack_thread("<@B1> !stop")).await;
+    said(
+        &h.adapter("slack"),
+        "Stopped. You can continue this session.",
+    )
+    .await;
+    eventually("the turn ends", || h.agents.running() == 0).await;
+    h.send("slack", slack_thread("please run !stop later"))
+        .await;
+    said(&h.adapter("slack"), "echo: please run !stop later").await;
+}

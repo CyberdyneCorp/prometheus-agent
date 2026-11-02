@@ -56,6 +56,10 @@ struct State {
     deleted: Vec<String>,
     socket: Option<mpsc::UnboundedSender<Option<Value>>>,
     connections: usize,
+    /// Acknowledgements that carried a payload (slash command placeholders).
+    ack_payloads: Vec<Value>,
+    /// Bodies posted to slash commands' response URLs.
+    responses: Vec<Value>,
 }
 
 /// The mock.
@@ -132,6 +136,30 @@ impl SlackMock {
         format!("{}.000100", state.next)
     }
 
+    /// Invokes slash command `command` with `text` in the kit's DM; the
+    /// trigger id.
+    pub fn slash(&self, command: &str, text: &str) -> String {
+        let trigger = format!("trig-{}", self.ts());
+        let url = format!("http://{}/response/{trigger}", self.api_addr());
+        self.envelope(
+            "slash_commands",
+            &json!({"command": command, "text": text, "channel_id": DM,
+                    "user_id": USER, "user_name": "kit", "trigger_id": trigger,
+                    "response_url": url}),
+        );
+        trigger
+    }
+
+    /// Placeholders the adapter acknowledged slash commands with.
+    pub fn ack_payloads(&self) -> Vec<Value> {
+        self.lock().ack_payloads.clone()
+    }
+
+    /// Bodies posted to response URLs.
+    pub fn responses(&self) -> Vec<Value> {
+        self.lock().responses.clone()
+    }
+
     /// Queues an envelope and pushes it to the connected socket.
     pub fn envelope(&self, kind: &str, payload: &Value) {
         let mut state = self.lock();
@@ -191,7 +219,11 @@ impl SlackMock {
                     let Some(Ok(Message::Text(text))) = frame else { return };
                     let ack: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
                     if let Some(id) = ack["envelope_id"].as_str() {
-                        self.lock().pending.retain(|(e, _)| e != id);
+                        let mut state = self.lock();
+                        state.pending.retain(|(e, _)| e != id);
+                        if ack["payload"].is_object() {
+                            state.ack_payloads.push(ack["payload"].clone());
+                        }
                     }
                 }
             }
@@ -207,6 +239,11 @@ impl SlackMock {
                 }
                 _ => HttpResponse::status(404),
             };
+        }
+        if request.path.starts_with("/response/") {
+            let body: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
+            self.lock().responses.push(body);
+            return HttpResponse::status(200);
         }
         if let Some(id) = request.path.strip_prefix("/upload/") {
             let mut state = self.lock();

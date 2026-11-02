@@ -118,3 +118,29 @@ async fn attachments_download_and_upload() {
     assert_eq!(mock.uploads(), [file.to_string_lossy().into_owned()]);
     signal.disconnect().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn note_to_self_is_admitted_and_the_reply_is_not() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SignalMock::start().await;
+    let setup = kit_setup(home.path(), "signal", &mock.table(), &[]).unwrap();
+    let signal = Signal::new(&setup).unwrap();
+    let link = Arc::new(Recorder::default());
+    signal.connect(Arc::clone(&link) as _).await.unwrap();
+    mock.note_to_self("remember the milk");
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    let note = link.events.lock().unwrap()[0].clone();
+    assert_eq!(note.chat_id, mock::ACCOUNT);
+    assert_eq!(note.text, "remember the milk");
+    signal
+        .send(&Outgoing::text(mock::ACCOUNT, None, "Noted."))
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert_eq!(
+        link.events.lock().unwrap().len(),
+        1,
+        "the reply is not re-admitted"
+    );
+    signal.disconnect().await;
+}

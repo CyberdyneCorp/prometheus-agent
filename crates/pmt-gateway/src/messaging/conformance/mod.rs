@@ -688,11 +688,28 @@ impl Kit {
             .platform
             .sent()
             .into_iter()
-            .find(|m| m.message_id == id);
-        if shown.is_none_or(|m| m.buttons != card.buttons) {
+            .find(|m| m.message_id == id)
+            .ok_or("the card never arrived")?;
+        // A platform without buttons (WhatsApp approvals) numbers the
+        // choices and maps a numbered reply back to the button.
+        let numbered = card
+            .buttons
+            .iter()
+            .enumerate()
+            .all(|(i, b)| shown.text.contains(&format!("{}. {}", i + 1, b.label)));
+        if shown.buttons == card.buttons {
+            self.platform.press(&id, data);
+        } else if numbered {
+            let number = card
+                .buttons
+                .iter()
+                .position(|b| b.data == data)
+                .unwrap_or(0)
+                + 1;
+            self.platform.inject(&number.to_string());
+        } else {
             return Err("the platform does not show the card's buttons".to_owned());
         }
-        self.platform.press(&id, data);
         let pressed = eventually(|| {
             self.link
                 .accepted()

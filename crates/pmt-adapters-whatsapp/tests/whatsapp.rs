@@ -140,3 +140,71 @@ async fn media_is_read_from_the_bridge_cache_and_sent_by_kind() {
     assert_eq!(kinds, ["image", "audio"]);
     adapter.disconnect().await;
 }
+
+fn clarify_card() -> Outgoing {
+    let mut card = Outgoing::text(mock::USER, None, "Which colour?\n1. red\n2. green\n3. blue");
+    card.buttons = ["red", "green", "blue"]
+        .iter()
+        .enumerate()
+        .map(|(i, c)| pmt_gateway::messaging::Button {
+            label: (*c).into(),
+            data: format!("clar:req1:0.{}:mac", i + 1),
+        })
+        .collect();
+    card
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_clarify_question_is_a_poll_whose_vote_is_the_answer() {
+    let home = tempfile::tempdir().unwrap();
+    let (mock, adapter, link) = connected(home.path()).await;
+    let sent = adapter.send(&clarify_card()).await.unwrap();
+    let polls = mock.polls();
+    assert_eq!(polls.len(), 1);
+    let (id, _, question, options, selectable) = polls[0].clone();
+    assert_eq!(sent.message_id.as_deref(), Some(id.as_str()));
+    assert_eq!(question, "Which colour?");
+    assert_eq!(options, ["red", "green", "blue"]);
+    assert_eq!(selectable, 1);
+    mock.vote(&id, &["green"]);
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    let vote = link.events.lock().unwrap()[0].clone();
+    assert_eq!(vote.callback.as_deref(), Some("clar:req1:0.2:mac"));
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_refused_poll_falls_back_to_numbered_text() {
+    let home = tempfile::tempdir().unwrap();
+    let (mock, adapter, _link) = connected(home.path()).await;
+    mock.refuse_polls();
+    adapter.send(&clarify_card()).await.unwrap();
+    let sent = conformance::MockPlatform::sent(mock.as_ref());
+    assert!(sent.iter().any(|m| m.text.contains("2. green")), "{sent:?}");
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn self_chat_mode_ignores_contacts() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = BridgeMock::start().await;
+    let table = mock.table().replace(" }", ", mode = \"self_chat\" }");
+    let setup = kit_setup(home.path(), "whatsapp", &table, &[]).unwrap();
+    let adapter = Whatsapp::new(&setup).unwrap();
+    let link = Arc::new(Recorder::default());
+    adapter.connect(Arc::clone(&link) as _).await.unwrap();
+    let me = "15550001111@s.whatsapp.net";
+    mock.receive(&json!({"body": "hi from a friend"}));
+    mock.receive(&json!({"chatId": me, "senderId": me, "fromMe": true, "body": "note to me"}));
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let texts: Vec<String> = link
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|e| e.text.clone())
+        .collect();
+    assert_eq!(texts, ["note to me"]);
+    adapter.disconnect().await;
+}

@@ -50,6 +50,9 @@ pub enum GatewayCommand {
     List,
     /// Enroll this home with a relay connector using a one-time token.
     Enroll(super::enroll_cmd::EnrollArgs),
+    /// Print (or write) a Slack app manifest for Socket Mode with one
+    /// slash command per gateway command.
+    SlackManifest(super::slack_manifest_cmd::SlackManifestArgs),
 }
 
 /// `prometheus gateway outbox` subcommands.
@@ -132,6 +135,7 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Send(args) => super::send_cmd::run(args, ctx),
         GatewayCommand::List => super::inventory::list(ctx),
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
+        GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),
     }
 }
 

@@ -37,6 +37,10 @@ struct State {
     failures: VecDeque<Failure>,
     fail_next_fetch: bool,
     status: String,
+    /// Polls opened: `(id, chat, question, options, selectable)`.
+    polls: Vec<(String, String, String, Vec<String>, u64)>,
+    /// Poll sends refused from now on.
+    refuse_polls: bool,
 }
 
 /// The mock.
@@ -71,6 +75,22 @@ impl BridgeMock {
     pub fn table(&self) -> String {
         let addr = self.addr.lock().unwrap().expect("started");
         format!("options = {{ bridge_url = \"http://{addr}\" }}")
+    }
+
+    /// Polls opened: `(id, chat, question, options, selectable)`.
+    pub fn polls(&self) -> Vec<(String, String, String, Vec<String>, u64)> {
+        self.lock().polls.clone()
+    }
+
+    /// Refuses poll sends from now on.
+    pub fn refuse_polls(&self) {
+        self.lock().refuse_polls = true;
+    }
+
+    /// The user votes `options` on poll `id`, as the bridge reports it.
+    pub fn vote(&self, id: &str, options: &[&str]) -> String {
+        self.receive(&json!({"mediaType": "poll_update", "quotedMessageId": id,
+            "body": options.join(", "), "pollUpdate": {"pollId": id, "selectedOptions": options}}))
     }
 
     /// The linked device is logged out from the phone.
@@ -146,6 +166,27 @@ impl BridgeMock {
                     200,
                     &json!({"success": true, "messageId": format!("WA{}", state.next)}),
                 )
+            }
+            ("POST", "/send-poll") => {
+                if state.refuse_polls {
+                    return mock_server::json(400, &json!({"error": "polls unavailable"}));
+                }
+                state.next += 1;
+                let id = format!("WA{}", state.next);
+                let options = body["options"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|o| o.as_str().map(str::to_owned))
+                    .collect();
+                state.polls.push((
+                    id.clone(),
+                    body["chatId"].as_str().unwrap_or_default().to_owned(),
+                    body["question"].as_str().unwrap_or_default().to_owned(),
+                    options,
+                    body["selectableCount"].as_u64().unwrap_or(1),
+                ));
+                mock_server::json(200, &json!({"success": true, "messageId": id}))
             }
             ("POST", "/typing") => {
                 state.typing += 1;

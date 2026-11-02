@@ -14,6 +14,7 @@ mod messaging;
 mod send_cmd;
 mod serve;
 pub mod service;
+mod slack_manifest_cmd;
 pub(crate) mod standalone;
 #[cfg(debug_assertions)]
 mod test_adapter;

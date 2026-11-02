@@ -151,6 +151,21 @@ impl SignalMock {
         format!("{USER}:{ts}")
     }
 
+    fn sync_to_self(ts: i64, text: &str) -> Value {
+        json!({"envelope": {"source": ACCOUNT, "sourceNumber": ACCOUNT, "timestamp": ts,
+            "syncMessage": {"sentMessage": {"destinationNumber": ACCOUNT, "timestamp": ts,
+                                            "message": text}}},
+               "account": ACCOUNT})
+    }
+
+    /// The account owner writes in Note to Self (from another device); the
+    /// message id.
+    pub fn note_to_self(&self, text: &str) -> String {
+        let ts = self.ts();
+        self.publish(Self::sync_to_self(ts, text));
+        format!("{ACCOUNT}:{ts}")
+    }
+
     fn publish(&self, event: Value) {
         let mut state = self.lock();
         let delivered = state
@@ -318,6 +333,7 @@ impl SignalMock {
         }
         state.next += 1;
         let ts = state.next;
+        let to_self = chat == ACCOUNT;
         state.sent.push(MockSent {
             chat_id: chat,
             message_id: format!("{ACCOUNT}:{ts}"),
@@ -325,6 +341,11 @@ impl SignalMock {
             buttons: Vec::new(),
             thread_id: None,
         });
+        drop(state);
+        if to_self {
+            // Signal echoes a send to oneself as a sync message.
+            self.publish(Self::sync_to_self(ts, text));
+        }
         let result = json!({"timestamp": ts, "results": [{"type": "SUCCESS"}]});
         response(
             200,

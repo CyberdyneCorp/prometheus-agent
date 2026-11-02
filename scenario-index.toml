@@ -1835,6 +1835,7 @@ capabilities = [
 
 [platform-adapters."WhatsApp pairing and modes"]
 "Logged out from the phone" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::a_logged_out_device_is_fatal_naming_the_pair_command"]
+"Self-chat only" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::self_chat_mode_ignores_contacts", "crates/pmt-adapters-whatsapp/src/session.rs::self_chat_mode_admits_only_the_users_own_chat"]
 
 [platform-adapters."Webhook routes"]
 "Event filtered by type" = ["crates/pmt-adapters-webhook/tests/webhook.rs::an_event_outside_the_route_filter_is_ignored"]
@@ -1890,3 +1891,17 @@ capabilities = [
 [platform-adapters."Discord auto-threading and forum channels"]
 "Mention creates a thread" = ["crates/pmt-adapters-discord/tests/discord.rs::a_mention_creates_a_thread_named_after_the_message", "crates/pmt-adapters-discord/src/threads.rs::thread_names_drop_mentions_and_stay_short"]
 "Excluded channel stays inline" = ["crates/pmt-adapters-discord/tests/discord.rs::an_excluded_channel_stays_inline"]
+
+[platform-adapters."Slack app manifest generator"]
+"Commands only" = ["crates/prometheus/tests/gateway_slack_manifest.rs::commands_only_prints_one_slash_command_per_gateway_command"]
+"Description too short" = ["crates/prometheus/tests/gateway_slack_manifest.rs::a_short_long_description_is_a_usage_error"]
+
+[platform-adapters."Slack slash commands and thread command prefix"]
+"Stop inside a thread" = ["crates/pmt-gateway/tests/messaging/features.rs::a_bang_stop_after_the_bot_mention_stops_the_thread_turn", "crates/pmt-gateway/src/messaging/admit.rs::a_bang_command_in_the_first_token_is_a_command"]
+"Bang later in text is ordinary" = ["crates/pmt-gateway/tests/messaging/features.rs::a_bang_stop_after_the_bot_mention_stops_the_thread_turn", "crates/pmt-gateway/src/messaging/admit.rs::a_bang_command_in_the_first_token_is_a_command"]
+
+[platform-adapters."Signal adapter specifics"]
+"Note to self" = ["crates/pmt-adapters-signal/tests/signal.rs::note_to_self_is_admitted_and_the_reply_is_not", "crates/pmt-adapters-signal/src/events.rs::note_to_self_is_inbound_and_the_agents_own_reply_is_not"]
+
+[platform-adapters."WhatsApp interactive and rich features"]
+"Clarify as poll" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::a_clarify_question_is_a_poll_whose_vote_is_the_answer", "crates/pmt-adapters-whatsapp/src/session.rs::a_clarify_question_is_a_poll_and_a_vote_answers_it"]

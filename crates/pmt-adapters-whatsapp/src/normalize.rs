@@ -91,12 +91,10 @@ fn kind(media_type: &str) -> MediaKind {
     }
 }
 
-/// A bridge event as an inbound event; `None` for the account's own
-/// messages and events without a sender.
-pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<Inbound> {
-    if event["fromMe"].as_bool() == Some(true) {
-        return None;
-    }
+/// A bridge event as an inbound event, and whether the account itself
+/// sent it; `None` for events without a sender.
+pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<(Inbound, bool)> {
+    let from_me = event["fromMe"].as_bool() == Some(true);
     let raw_sender = text(&event["senderId"])?;
     if let Some(alt) = text(&event["senderAltId"]) {
         aliases.learn(&raw_sender, &alt);
@@ -116,7 +114,7 @@ pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<Inbound> {
         .flatten()
         .filter_map(|url| Some(Attachment::new(kind(media_type), url.as_str()?)))
         .collect();
-    Some(Inbound {
+    let inbound = Inbound {
         message_id: text(&event["messageId"])?,
         sender_id: sender,
         sender_name: text(&event["senderName"]),
@@ -134,7 +132,8 @@ pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<Inbound> {
         is_bot: false,
         callback: None,
         profile: None,
-    })
+    };
+    Some((inbound, from_me))
 }
 
 #[cfg(test)]
@@ -152,8 +151,8 @@ mod tests {
             "senderId": "15551234567@s.whatsapp.net", "senderAltId": "98765@lid", "body": "hi"});
         let by_lid = json!({"messageId": "A2", "chatId": "98765@lid",
             "senderId": "98765@lid", "body": "again"});
-        let first = event(&by_phone, &aliases).unwrap();
-        let second = event(&by_lid, &aliases).unwrap();
+        let first = event(&by_phone, &aliases).unwrap().0;
+        let second = event(&by_lid, &aliases).unwrap().0;
         assert_eq!(first.sender_id, second.sender_id);
         assert_eq!(first.chat_id, second.chat_id);
         assert_eq!(second.sender_id, "15551234567@s.whatsapp.net");
@@ -166,16 +165,17 @@ mod tests {
     }
 
     #[test]
-    fn groups_keep_their_id_and_own_messages_are_not_inbound() {
+    fn groups_keep_their_id_and_own_messages_are_marked() {
         let aliases = Aliases::load(PathBuf::from("/nonexistent/aliases.json"));
         let group = json!({"messageId": "G1", "chatId": "123@g.us", "isGroup": true,
             "senderId": "1@s.whatsapp.net", "body": "x", "mediaType": "ptt",
             "mediaUrls": ["/cache/a.ogg"]});
-        let inbound = event(&group, &aliases).unwrap();
+        let (inbound, from_me) = event(&group, &aliases).unwrap();
+        assert!(!from_me);
         assert_eq!(inbound.chat_type, ChatType::Group);
         assert_eq!(inbound.chat_id, "123@g.us");
         assert_eq!(inbound.attachments[0].kind, MediaKind::Voice);
         let own = json!({"messageId": "M", "chatId": "1@s.whatsapp.net", "senderId": "1@s.whatsapp.net", "fromMe": true});
-        assert_eq!(event(&own, &aliases), None);
+        assert!(event(&own, &aliases).unwrap().1, "own messages are marked");
     }
 }

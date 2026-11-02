@@ -178,6 +178,10 @@ pub struct Descriptor {
     /// The connector authorizes senders upstream (the relay only).
     #[serde(default)]
     pub authorization_is_upstream: bool,
+    /// A character that stands for `/` in front of a command name where
+    /// the platform blocks slash commands (Slack threads: `!stop`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_prefix_alias: Option<String>,
     /// The adapter's own access policy (`enforces_own_access_policy`).
     #[serde(
         default,
@@ -242,6 +246,7 @@ impl Descriptor {
             continuable_surface: ContinuableSurface::Thread,
             authorization_is_upstream: false,
             access_policy: None,
+            command_prefix_alias: None,
         }
     }
 

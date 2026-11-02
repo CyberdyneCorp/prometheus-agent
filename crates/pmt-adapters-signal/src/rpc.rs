@@ -40,6 +40,22 @@ fn transport(err: reqwest::Error) -> SendError {
 
 impl Rpc {
     /// Whether the daemon answers its health check.
+    /// Opens the event stream.
+    pub(crate) async fn events(&self) -> Result<reqwest::Response, String> {
+        let response = self
+            .client
+            .get(format!("{}/api/v1/events", self.url))
+            .header("accept", "text/event-stream")
+            .send()
+            .await
+            .map_err(|e| e.without_url().to_string())?;
+        if response.status().is_success() {
+            Ok(response)
+        } else {
+            Err(format!("events answered {}", response.status()))
+        }
+    }
+
     pub(crate) async fn check(&self) -> Result<(), String> {
         let answer = self
             .client

@@ -210,6 +210,10 @@ struct Lane {
     /// The session whose thread already had its title offered (after its
     /// first turn).
     titled: Option<String>,
+    /// The command message being handled: what it says quotes it (a
+    /// platform answering commands privately, such as Slack's slash
+    /// commands, recognises its reply by it).
+    answering: Option<String>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -263,6 +267,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         deferred: None,
         horizon: 0,
         titled: None,
+        answering: None,
         policy: None,
         mirrors: Vec::new(),
         voice_input: false,
@@ -373,7 +378,10 @@ impl Lane {
                 voice,
             } => {
                 self.voice_input = voice;
+                self.answering = Some(inbound.message_id.clone())
+                    .filter(|id| !id.is_empty() && inbound.text.trim_start().starts_with('/'));
                 self.inbound(seq, *routing, *inbound).await;
+                self.answering = None;
             }
             Msg::Finished(finished) => self.finished(finished).await,
             Msg::Delta(text) => self.delta(&text).await,
@@ -419,7 +427,7 @@ impl Lane {
             platform: self.routing.platform.clone(),
             chat_id: self.routing.chat_id.clone(),
             thread_id: self.routing.thread_id.clone(),
-            reply_to: None,
+            reply_to: self.answering.clone(),
             edit_of,
             kind,
             body,

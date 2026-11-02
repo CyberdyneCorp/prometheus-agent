@@ -14,6 +14,7 @@ mod api;
 #[cfg(feature = "kit")]
 pub mod mock;
 mod normalize;
+mod slash;
 mod socket;
 
 use std::collections::BTreeSet;
@@ -28,8 +29,8 @@ use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, Outgoing,
-    Reaction, Select, SendError, Sent,
+    ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, MenuCommand,
+    Outgoing, Reaction, Select, SendError, Sent,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -61,6 +62,7 @@ pub struct Slack {
     proxy: pmt_gateway::messaging::proxy::Proxy,
     api: Mutex<Option<Api>>,
     socket: Mutex<Option<CancellationToken>>,
+    slash: Arc<slash::Replies>,
 }
 
 impl std::fmt::Debug for Slack {
@@ -107,6 +109,7 @@ impl Slack {
             proxy,
             api: Mutex::default(),
             socket: Mutex::default(),
+            slash: Arc::default(),
         })
     }
 
@@ -159,6 +162,7 @@ impl Slack {
             team: me["team_id"].as_str().map(str::to_owned),
             extra_ca: self.extra_ca.clone(),
             proxy: self.proxy.for_websocket(true),
+            slash: Arc::clone(&self.slash),
             stop,
         })
         .await
@@ -196,6 +200,22 @@ fn blocks(message: &Outgoing) -> Value {
         blocks.push(checkboxes(select));
     }
     Value::Array(blocks)
+}
+
+/// The `chat.postMessage` body of a message: thread, blocks for its
+/// choices, and no markup on a plain resend.
+fn post_body(message: &Outgoing) -> Value {
+    let mut body = json!({"channel": message.chat_id, "text": message.text});
+    if let Some(thread) = &message.thread_id {
+        body["thread_ts"] = json!(thread);
+    }
+    if !message.buttons.is_empty() || message.select.is_some() {
+        body["blocks"] = blocks(message);
+    }
+    if message.plain {
+        body["mrkdwn"] = json!(false);
+    }
+    body
 }
 
 /// A multi-select control: checkboxes and a Submit button carrying the
@@ -247,6 +267,7 @@ impl Adapter for Slack {
         let limit = pmt_config::platforms::first_party(PLATFORM)
             .map_or(39_000, |p| p.max_message_length as usize);
         Descriptor {
+            command_prefix_alias: Some("!".to_owned()),
             supports_edit: true,
             supports_delete: true,
             supports_reactions: true,
@@ -274,20 +295,16 @@ impl Adapter for Slack {
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
         let message = message.clone();
         Box::pin(async move {
+            // An answer to a slash command stays private.
+            if let Some((url, posts)) = self.slash.posts(message.reply_to.as_deref(), &message.text)
+            {
+                slash::respond(&self.client, &url, posts).await?;
+                return Ok(Sent { message_id: None });
+            }
             let api = self.api()?;
             let mut first = None;
             if !message.text.is_empty() || message.attachments.is_empty() {
-                let mut body = json!({"channel": message.chat_id, "text": message.text});
-                if let Some(thread) = &message.thread_id {
-                    body["thread_ts"] = json!(thread);
-                }
-                if !message.buttons.is_empty() || message.select.is_some() {
-                    body["blocks"] = blocks(&message);
-                }
-                if message.plain {
-                    body["mrkdwn"] = json!(false);
-                }
-                let sent = api.call("chat.postMessage", &body).await?;
+                let sent = api.call("chat.postMessage", &post_body(&message)).await?;
                 first = sent["ts"].as_str().map(str::to_owned);
             }
             for file in &message.attachments {
@@ -389,6 +406,18 @@ impl Adapter for Slack {
             }
             None
         })
+    }
+
+    fn register_commands<'a>(
+        &'a self,
+        commands: &'a [MenuCommand],
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        // Slack's slash commands are declared in the app manifest
+        // (`prometheus gateway slack-manifest`); the adapter only needs
+        // the names the umbrella `/prometheus` may dispatch.
+        *self.slash.commands.lock().expect("slash poisoned") =
+            commands.iter().map(|c| c.name.clone()).collect();
+        Box::pin(async { Ok(()) })
     }
 
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {

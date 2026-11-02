@@ -88,16 +88,49 @@ batching = { delay_ms = 300, split_delay_ms = 1000 }
 options = { require_mention = true } # checked against the adapter's schema
 ```
 
+Settings an enabled adapter cannot start without fail validation and name
+the key (for example `gateway.platforms.email.options.imap_host`). Adapters
+connect directly: proxy variables in the daemon's environment are ignored
+unless `gateway.trust_env = true`. `gateway.platforms.<name>.proxy_url`
+(else `gateway.proxy_url`) sends an adapter's HTTP and WebSocket traffic
+through an `http://`, `https://` or `socks5://` proxy; a proxy URL with a
+password goes in a secret named by `proxy_url_secret`.
+
 Telegram reads its bot token from the secret `TELEGRAM_BOT_TOKEN` and
 long-polls the Bot API (`options.poll_timeout_secs`, default 30); updates
-that arrive while it is disconnected are fetched once it reconnects.
+that arrive while it is disconnected are fetched once it reconnects. With
+`options.mode = "webhook"` Telegram posts updates to the shared listener
+instead (`options.webhook_public_url` must reach
+`/p/<profile>/telegram/`, and `options.webhook_secret_secret` names the
+secret token every post must carry; a post without it gets 401). Topics
+of a threaded private chat or a forum group are threads of their own:
+`options.dm_topics` / `options.group_topics` declare topics per chat
+(`{ name, thread_id?, icon_color?, skill? }`), missing private topics are
+created at connect (their ids kept in
+`<profile>/platforms/telegram/topics.json`), and a topic's `skill` is
+loaded into each new session there; `options.ignore_root_dm = true`
+ignores ordinary messages outside a topic. The bot's command menu lists
+the gateway commands and skills, cut to `options.command_menu.max_commands`
+(60) after placing `options.command_menu.priority` first (`priority_mode`
+`prepend`, `append` or `replace`); `@bot <term>` searches every command and
+skill. Replies are sent as `MarkdownV2` (small tables as bullet groups),
+or as HTML with `options.rich_messages = true`.
+
 Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
 resumes the session after a dropped connection, so missed messages are
 replayed; the bot needs the Message Content privileged intent, and
 `options.require_mention = true` answers server messages only when they
-mention the bot. Both send buttons for approvals, typing indicators,
-reactions and files, and both read the token from the owning profile's
-secrets only.
+mention the bot (`options.free_response_channels` excepted). A mention in
+a text channel opens a thread named after the message, where the
+conversation goes on without mentions and which takes the session's
+title after the first turn (`options.auto_thread`, default on; never in
+`options.no_thread_channels` or for replies). A send to a forum channel
+opens a post titled by its first line. The gateway's commands are
+registered as application commands (100 at most) unless
+`options.slash_commands = false`, which a follower daemon sharing the
+application sets. Both adapters send buttons for approvals, typing
+indicators, reactions and files, and both read the token from the owning
+profile's secrets only.
 
 The other first-party adapters:
 
@@ -105,8 +138,15 @@ The other first-party adapters:
   (or `options.app_token_secret`) and the Web API with the bot token
   `SLACK_BOT_TOKEN`; Slack keeps events nobody acknowledged and delivers
   them after a reconnect. Cards are Block Kit buttons, edited when an
-  approval is resolved; files use Slack's external upload flow. Native
-  slash commands are not dispatched yet: type the command as a message.
+  approval is resolved; files use Slack's external upload flow. Each
+  gateway command is a native slash command (and `/prometheus <command>`
+  runs any of them); its output replaces a private "Running /command…"
+  note and is never posted publicly. In threads, where Slack has no
+  slash commands, `!stop` (after an optional mention) runs `/stop`.
+  `prometheus gateway slack-manifest` prints an app manifest with Socket
+  Mode, the scopes, the events and every slash command (`--write` saves
+  it as `<profile>/slack-manifest.json`, `--commands-only` prints the
+  command list).
 - **Email** polls the inbox over IMAP every `options.poll_interval_secs`
   (15) and answers over SMTP as `options.address` with the password in
   `EMAIL_PASSWORD`. `options.imap_host` and `options.smtp_host` are
@@ -116,7 +156,14 @@ The other first-party adapters:
   inbox when the adapter first connects is left alone; replies thread
   under the mail they answer with a single `Re:`; mail from the mailbox
   itself, from no-reply or bounce senders, or marked automatic or bulk is
-  not answered. Long replies go out whole.
+  not answered. Long replies go out whole. Mail counts only when the
+  topmost `Authentication-Results` header of `options.authserv_id` (your
+  receiving server, for example `mx.google.com`) authenticates its From
+  domain, so a spoofed From is dropped; set
+  `options.require_authenticated_sender = false` to accept unauthenticated
+  mail. `options.tls_verify = false` skips certificate checks (warned at
+  every start) and `options.skip_attachments = true` ignores attachments.
+  Allowlist entries are whole addresses.
 - **Matrix** syncs with `options.homeserver` using `MATRIX_ACCESS_TOKEN`;
   the sync cursor survives reconnects, a two-member room is a direct
   chat, and invites from `allow_users` are accepted. Rooms are not
@@ -125,13 +172,22 @@ The other first-party adapters:
   the account `options.account` (E.164). Run the daemon with
   `--receive-mode on-connection` so Signal holds messages while the
   adapter is disconnected; an unreachable daemon is retried with
-  `signal_daemon_unreachable`.
+  `signal_daemon_unreachable` (2 to 60 s apart, with a health check after
+  two quiet minutes). Groups are answered only when listed in
+  `options.allow_groups` (`["*"]`: every group). Writing to yourself (Note
+  to Self) talks to the agent; its answers there are not read back.
+  Markdown is sent as Signal text styles.
 - **WhatsApp** runs the managed WhatsApp Web bridge runtime for each
   profile (its linked-device session under
   `<profile>/platforms/whatsapp/session/`), or uses a bridge already
   running at `options.bridge_url`. One person is one sender whether
   WhatsApp names them by phone number or LID. A device logged out from the
-  phone stops the adapter with `whatsapp_logged_out`.
+  phone stops the adapter with `whatsapp_logged_out`. `options.mode` is
+  `bot` (a number of its own) or `self_chat` (your number: only your chat
+  with yourself counts); `options.group_policy` is `pairing` (no group
+  until listed in `allow_chats`), `allowlist` or `open`. Clarify questions
+  arrive as polls whose vote is the answer; approvals are numbered and
+  answered by number.
 - **Webhook** serves each route `[gateway.platforms.webhook.routes.<name>]`
   at `/p/<profile>/webhook/<name>`. A route needs `secret_secret`, a
   secret its senders sign with (GitHub `X-Hub-Signature-256`, GitLab
@@ -148,6 +204,30 @@ The other first-party adapters:
 secret_secret = "CI_WEBHOOK_SECRET"
 events = ["pull_request"]
 prompt = "Review PR #{pull_request.number}: {pull_request.title}"
+```
+
+A route admits `rate_limit_per_min` (30) requests a minute (then 429),
+answers a redelivery of the same delivery id within an hour with
+`{"status":"duplicate"}`, and refuses bodies over
+`gateway.platforms.webhook.max_body_bytes` (1 MiB) with 413 before
+reading them. `filters` (`exists`, `missing`, `equals`, `not_equals`,
+`contains`, `in`, `in_file`, `regex`, grouped by `all`, `any`, `not`, over
+`payload.<path>`, `event` and `headers.<Name>`) drop events that do not
+match. `script` runs a transform from the profile's `scripts/` directory
+in the sandbox with the payload on stdin: a JSON object it prints
+replaces the payload, other output is added as `script_output`, and no
+output, `[SILENT]` or `{"ignore": true}` drops the event. `skills` and
+`toolsets` shape each delivery's session. With `deliver_only = true` no
+model runs: the rendered prompt goes straight to `deliver` (a send
+target such as `telegram`).
+
+```toml
+[gateway.platforms.webhook.routes.alerts]
+secret_secret = "ALERTS_SECRET"
+deliver_only = true
+deliver = "telegram"
+prompt = "ALERT {alert.name} on {alert.host}"
+filters = { equals = { path = "payload.alert.severity", value = "critical" } }
 ```
 
 `prometheus plugins test-adapter <platform>` runs the adapter conformance
@@ -175,7 +255,20 @@ What the gateway does for every adapter:
   max_parts` (10) parts become the first part plus the full text attached
   as a document.
 - A redelivered event within `gateway.dedup.ttl_secs` (300) is a
-  duplicate; text split by the user's client is joined by `batching`.
+  duplicate; text split by the user's client is joined by `batching`
+  (on by default for WhatsApp).
+- The agent writes Markdown; each platform gets its own markup (Telegram
+  `MarkdownV2`, Slack `mrkdwn`, WhatsApp style, Matrix HTML, Signal text
+  styles, and `text (url)` links where only plain text is shown). Code is
+  never changed.
+- Where `gateway.platforms.<name>.reactions` is on (by default on Discord
+  and Slack), the message that started a turn gets 👀, then ✅ or ❌.
+- A final reply naming a file by path (outside code) delivers the file:
+  images and video inline, audio as audio or a voice note, documents and
+  archives as uploads (`gateway.delivery.detect_paths`, default on).
+  `[[as_document]]` anywhere in a reply sends every attachment as a
+  document. A path inside the session's container is read from its
+  mounted host directory.
 - Sends failing transiently are retried twice (2 s backoff with jitter);
   a platform asking to wait more than a minute leaves the message in the
   outbox for later; a reply whose markup the platform refuses is resent
@@ -197,7 +290,11 @@ What the gateway does for every adapter:
   numbered list answered with `1`..`4` on `numbered` platforms, and
   `/approve <id> <choice>` elsewhere. Clarify questions list their
   choices by number everywhere and, on platforms with buttons, as
-  buttons too; the asker answers with a button, the numbers or text.
+  buttons too; the asker answers with a button, the numbers or text. A
+  question taking several answers says "Multiple selections allowed" and
+  takes `1, 3`, the option texts or free text (a select menu on Discord,
+  checkboxes on Slack); a number out of range is answered with the valid
+  range.
 - A bot token used by two profiles or homes connects once: the second
   adapter reports `fatal` with `<platform>_lock`, naming the holder and
   the command that stops it; `prometheus daemon run --replace` takes the
