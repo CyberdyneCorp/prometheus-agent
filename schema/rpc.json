@@ -280,6 +280,51 @@
       ],
       "type": "object"
     },
+    "BannerInfo": {
+      "additionalProperties": false,
+      "description": "`session.banner` result: what the TUI's startup banner lists.",
+      "properties": {
+        "mcp_servers": {
+          "description": "The session's MCP servers.",
+          "items": {
+            "$ref": "#/$defs/McpServerState"
+          },
+          "type": "array"
+        },
+        "skills": {
+          "description": "The installed skills the session can load.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "system_prompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FrozenPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The frozen system prompt; none before the first turn."
+        },
+        "tools": {
+          "description": "The session's tool names, in request order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tools",
+        "skills",
+        "mcp_servers"
+      ],
+      "type": "object"
+    },
     "ClarifyAnswers": {
       "additionalProperties": false,
       "description": "`clarify.request` result.",
@@ -946,6 +991,25 @@
       ],
       "type": "object"
     },
+    "FrozenPrompt": {
+      "additionalProperties": false,
+      "description": "The system prompt a session froze on its first turn.",
+      "properties": {
+        "sha256": {
+          "description": "`sha256:<hex>` of the prompt text.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The prompt text, its tiers joined in request order.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "text"
+      ],
+      "type": "object"
+    },
     "HelloParams": {
       "additionalProperties": false,
       "description": "`rpc.hello` params: the first request on every connection.",
@@ -1032,6 +1096,32 @@
         "methods_digest",
         "capabilities",
         "platform_support"
+      ],
+      "type": "object"
+    },
+    "McpServerState": {
+      "additionalProperties": false,
+      "description": "One MCP server of a session.",
+      "properties": {
+        "name": {
+          "description": "Its configured name.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`ready`, `starting`, `failed` or `disabled`.",
+          "type": "string"
+        },
+        "tools": {
+          "description": "The tools it contributes.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "tools"
       ],
       "type": "object"
     },
@@ -2369,6 +2459,17 @@
       },
       "result": {
         "$ref": "#/$defs/Attached"
+      },
+      "since": "1.0"
+    },
+    "session.banner": {
+      "long": true,
+      "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/BannerInfo"
       },
       "since": "1.0"
     },

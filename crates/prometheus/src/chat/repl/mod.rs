@@ -9,6 +9,7 @@
 //! their busy policy and prompts (approvals, clarify questions, memory
 //! approvals, confirmations) are answered from the next line.
 
+mod bottom_line;
 mod commands;
 pub(crate) mod compose;
 pub mod input;
@@ -99,6 +100,8 @@ struct Repl {
     shell_context: Vec<String>,
     /// A turn runs (`/status`).
     running: bool,
+    /// The bottom status line's toggles (`/statusbar`, `/battery`).
+    status_bar: crate::chat::status_bar::StatusBar,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -157,6 +160,7 @@ pub async fn run(
         .inherited("NO_COLOR")
         .is_some_and(|v| !v.is_empty());
     let display = Display::new(&factory.scope, ui.no_color || no_color_env, ui.quiet);
+    let status_bar = crate::chat::status_bar::StatusBar::new(&factory.scope, factory.launch());
     let input = Input::start(input::Setup {
         history: factory.scope.dir().join("cli_history"),
         cwd: factory.options.cwd.clone(),
@@ -187,6 +191,7 @@ pub async fn run(
         confirm_destructive: config.cli.confirm_destructive,
         shell_context: Vec::new(),
         running: false,
+        status_bar,
     };
     repl.attach(live);
     if let Some(prompt) = &asks.secret_prompt {
@@ -224,6 +229,7 @@ impl Repl {
     /// Reads and handles one event at the idle prompt.
     async fn idle_event(&mut self) -> Flow {
         let prompt = self.prompt();
+        self.show_status();
         self.input.request(&prompt);
         let event = tokio::select! {
             event = self.input.next() => event,
@@ -286,6 +292,25 @@ impl Repl {
         }
         self.user_turn(line).await;
         Flow::Continue
+    }
+
+    /// Hands the bottom status line to the editor (drawn before the read;
+    /// none when quiet or turned off).
+    fn show_status(&self) {
+        let text = (!self.display.quiet).then(|| {
+            let target = self.live().model.target();
+            let model = format!(
+                "{}/{}",
+                target.provider,
+                target.model.as_deref().unwrap_or("default")
+            );
+            crate::chat::status_bar::line_text(
+                &self.status_bar,
+                self.factory.scope.name().as_str(),
+                Some(&model),
+            )
+        });
+        self.input.set_status(text.flatten());
     }
 
     fn live(&self) -> &Live {

@@ -1562,3 +1562,37 @@ capabilities = [
 
 [tui."Orphaned attachments are reaped"]
 "Terminal window closed mid-turn" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_dropped_driver_leaves_its_turn_running_and_approvals_settle_no_responder", "crates/pmt-gateway/tests/tui_protocol.rs::a_session_left_without_clients_is_closed_after_the_idle_limit"]
+
+# Group 23.5-23.7 (TUI display commands, palette, banner, pastes, clipboard,
+# math, background detection, live sessions, auto-resume).
+[tui."Client-local display commands"]
+"Battery on a desktop tower" = ["crates/prometheus/tests/tui_display.rs::battery_on_without_a_battery_is_saved_and_shows_nothing", "crates/prometheus/tests/tui_display.rs::the_line_interface_runs_battery_and_statusbar_itself"]
+"Hiding the status bar" = ["crates/prometheus/tests/tui_display.rs::sb_hides_the_status_bar_and_saves_ui_status_bar_false", "crates/prometheus/tests/tui_display.rs::the_line_interface_runs_battery_and_statusbar_itself", "crates/pmt-tui/tests/snapshots.rs::a_hidden_status_bar_gives_its_row_to_the_transcript"]
+
+[tui."Busy indicator styles"]
+"Switching style" = ["crates/prometheus/tests/tui_display.rs::indicator_ascii_is_saved_and_the_next_busy_period_uses_it", "crates/pmt-tui/src/busy.rs::the_glyph_changes_every_period_unless_motion_is_reduced", "crates/pmt-tui/src/busy.rs::every_glyph_of_a_style_has_the_same_width"]
+
+[tui."Fuzzy command palette"]
+"Insert, not run" = ["crates/prometheus/tests/tui_display.rs::the_palette_inserts_the_chosen_command_without_running_it", "crates/pmt-tui/src/palette.rs::typing_cmpr_ranks_compress_first_and_enter_inserts_it"]
+
+[tui."Large pastes collapse into chips"]
+"Long log paste" = ["crates/prometheus/tests/tui_paste.rs::a_300_line_paste_is_one_chip_and_the_prompt_carries_every_line", "crates/pmt-tui/src/composer.rs::a_long_paste_is_one_chip_and_the_submission_has_every_line"]
+
+[tui."Clipboard image attachments"]
+"Image in the clipboard" = { tests = ["crates/prometheus/tests/tui_paste.rs::paste_attaches_the_clipboard_image_to_the_next_prompt"], note = "the platform clipboard tool is a fake on PATH (osascript on macOS, wl-paste elsewhere) holding a PNG; the tool selection per platform is unit-tested in tui_cmd/clipboard.rs" }
+"Over SSH" = ["crates/prometheus/tests/tui_paste.rs::over_ssh_without_a_display_paste_explains_and_attaches_nothing", "crates/prometheus/src/tui_cmd/clipboard.rs::over_ssh_without_a_display_there_is_no_clipboard"]
+
+[tui."Live session switcher"]
+"Dispatching a second session" = ["crates/prometheus/tests/tui_sessions.rs::a_new_session_from_the_switcher_runs_while_the_first_keeps_running"]
+
+[tui."LaTeX math rendering"]
+"Unsupported macro" = ["crates/pmt-tui/src/math.rs::unsupported_math_is_the_literal_tex_in_a_code_span", "crates/prometheus/tests/tui_paste.rs::answers_render_math_and_show_unsupported_tex_literally"]
+
+[tui."Terminal background detection"]
+"Light terminal without COLORFGBG" = ["crates/prometheus/tests/tui_paste.rs::a_white_osc11_answer_picks_the_light_theme", "crates/pmt-tui/src/background.rs::an_osc11_reply_gives_the_background_brightness"]
+
+[tui."Collapsible startup banner"]
+"Many skills installed" = ["crates/prometheus/tests/tui_display.rs::the_banner_keeps_skills_collapsed_until_enter_opens_them", "crates/pmt-tui/src/banner.rs::eighty_skills_show_only_their_header_and_count_until_opened"]
+
+[tui."Auto-resume of the last TUI session"]
+"Reconnecting after a dropped SSH link" = ["crates/prometheus/tests/tui_sessions.rs::after_the_transport_is_killed_the_next_tui_resumes_the_session", "crates/prometheus/tests/tui_sessions.rs::a_deleted_recent_session_falls_back_to_a_new_one"]

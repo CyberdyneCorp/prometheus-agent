@@ -19,6 +19,7 @@ pub mod repl;
 pub mod resume;
 pub mod session;
 pub(crate) mod signals;
+pub mod status_bar;
 pub mod terminal;
 pub mod theme;
 pub mod usage_file;

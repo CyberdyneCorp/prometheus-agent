@@ -101,6 +101,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `screen.handback` | `execution-environments` | 1.0 | not served yet | |
 | `screen.takeover` | `execution-environments` | 1.0 | not served yet | |
 | `session.attach` | `workspace-architecture` | 1.0 | [`AttachParams`](#attachparams) | [`Attached`](#attached) |
+| `session.banner` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`BannerInfo`](#bannerinfo) |
 | `session.compact` | `workspace-architecture` | 1.0 | [`CompactParams`](#compactparams) | [`Compacted`](#compacted) |
 | `session.context_usage` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`ContextUsage`](#contextusage) |
 | `session.create` | `workspace-architecture` | 1.0 | [`SessionCreateParams`](#sessioncreateparams) | [`SessionRef`](#sessionref) |
@@ -255,6 +256,17 @@ What an attached connection may do in the session.
 | `open_requests` | array of [`OpenRequest`](#openrequest) | no | Requests of the session still waiting for an answer (re-sent to this connection when it is a capable driver). |
 | `session_id` | string | yes | The session. |
 | `truncated` | boolean | no | Events after the client's `last_seen_seq` were evicted, or the client's epoch is not this daemon's: reload the transcript (`session.transcript`) instead of applying the replayed events. |
+
+### `BannerInfo`
+
+`session.banner` result: what the TUI's startup banner lists.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mcp_servers` | array of [`McpServerState`](#mcpserverstate) | yes | The session's MCP servers. |
+| `skills` | array of string | yes | The installed skills the session can load. |
+| `system_prompt` | [`FrozenPrompt`](#frozenprompt) or null | no | The frozen system prompt; none before the first turn. |
+| `tools` | array of string | yes | The session's tool names, in request order. |
 
 ### `ClarifyAnswers`
 
@@ -494,6 +506,15 @@ One event frame: the notification params and the replay item.
 | `session_id` | string | yes | The session to fork. |
 | `title` | string or null | no | The fork's title; default `<parent title> #<n>`. |
 
+### `FrozenPrompt`
+
+The system prompt a session froze on its first turn.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sha256` | string | yes | `sha256:<hex>` of the prompt text. |
+| `text` | string | yes | The prompt text, its tiers joined in request order. |
+
 ### `HelloParams`
 
 `rpc.hello` params: the first request on every connection.
@@ -520,6 +541,16 @@ One event frame: the notification params and the replay item.
 | `profiles` | array of string | yes | The profiles the connection's ticket grants. |
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
+
+### `McpServerState`
+
+One MCP server of a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Its configured name. |
+| `state` | string | yes | `ready`, `starting`, `failed` or `disabled`. |
+| `tools` | integer | yes | The tools it contributes. |
 
 ### `ModelOption`
 

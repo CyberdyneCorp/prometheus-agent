@@ -37,6 +37,11 @@ const TEST_MANAGED_DIR: &str = "PMT_TEST_MANAGED_DIR";
 /// can check the terminal is restored and the panic report written (a test
 /// seam; release builds ignore it).
 const TEST_TUI_PANIC: &str = "PMT_TEST_TUI_PANIC";
+/// Debug builds only: the battery the status bar sees instead of the
+/// machine's (`none`, or a percentage with an optional `,charging`), so
+/// the test suite runs the same on laptops and towers (a test seam;
+/// release builds ignore it).
+const TEST_BATTERY: &str = "PMT_TEST_BATTERY";
 const RUST_LOG: &str = "RUST_LOG";
 const OWNED_PREFIXES: [&str; 2] = ["PMT_", "PROMETHEUS_"];
 
@@ -122,6 +127,7 @@ pub struct LaunchEnv {
     ignored: Vec<IgnoredVar>,
     test_managed_dir: Option<PathBuf>,
     test_tui_panic: bool,
+    test_battery: Option<String>,
 }
 
 impl LaunchEnv {
@@ -168,6 +174,7 @@ impl LaunchEnv {
                 Var::LocalAppData => env.local_app_data = non_blank(value).map(PathBuf::from),
                 Var::TestManagedDir => env.test_managed_dir = non_blank(value).map(PathBuf::from),
                 Var::TestTuiPanic => env.test_tui_panic = true,
+                Var::TestBattery => env.test_battery = env.unicode(name, value),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
                 Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
@@ -215,6 +222,13 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_tui_panic(&self) -> bool {
         self.test_tui_panic
+    }
+
+    /// Debug builds: `PMT_TEST_BATTERY`, the battery the status bar
+    /// reports instead of the machine's. Always `None` in release builds.
+    #[must_use]
+    pub fn test_battery(&self) -> Option<&str> {
+        self.test_battery.as_deref()
     }
 
     /// `PROMETHEUS_HOME` when set and not blank (`~` is expanded by home
@@ -327,6 +341,7 @@ enum Var {
     Editor,
     TestManagedDir,
     TestTuiPanic,
+    TestBattery,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -353,6 +368,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         "EDITOR" => return Var::Editor,
         TEST_MANAGED_DIR if cfg!(debug_assertions) => return Var::TestManagedDir,
         TEST_TUI_PANIC if cfg!(debug_assertions) => return Var::TestTuiPanic,
+        TEST_BATTERY if cfg!(debug_assertions) => return Var::TestBattery,
         _ => {}
     }
     if is_user_home_var(name) {

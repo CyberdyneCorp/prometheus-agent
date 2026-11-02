@@ -252,9 +252,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 23.2 Implement terminal state restoration on every exit path (panic, signal) and the in-TUI update hand-off; verify with pty tests that the terminal mode is restored after SIGTERM (spec: tui)
 - [x] 23.3 Implement the TUI side of the protocol (handshake, typed method registry, error and close codes, attachment-scoped session access, sequencing and replay, liveness, non-blocking long requests, retirement, server requests with fail-closed deadlines, idempotent creation, busy submission, author stamping, profile scope); verify against the shared conformance suite (spec: tui)
 - [x] 23.4 Implement the slash command flow, discovery RPCs that preserve the prompt cache, composer with path completion, status line with accessibility, configurable key bindings and orphan attachment reaping; verify with snapshot tests (spec: tui)
-- [ ] 23.5 Implement client-local display commands (status bar and indicator toggles that never reach the daemon), busy indicator styles, the fuzzy command palette (inserts, never runs) and the collapsible startup banner; verify with pty snapshot tests (spec: tui)
-- [ ] 23.6 Implement large pastes collapsing into chips, clipboard image attachments (with the over-SSH fallback), LaTeX math rendering with an unsupported-macro fallback and terminal background detection without `COLORFGBG`; verify with snapshot tests (spec: tui)
-- [ ] 23.7 Implement the live session switcher and auto-resume of the last TUI session after a dropped connection; verify with a pty test that reconnects after the transport is killed (spec: tui)
+- [x] 23.5 Implement client-local display commands (status bar and indicator toggles that never reach the daemon), busy indicator styles, the fuzzy command palette (inserts, never runs) and the collapsible startup banner; verify with pty snapshot tests (spec: tui)
+- [x] 23.6 Implement large pastes collapsing into chips, clipboard image attachments (with the over-SSH fallback), LaTeX math rendering with an unsupported-macro fallback and terminal background detection without `COLORFGBG`; verify with snapshot tests (spec: tui)
+- [x] 23.7 Implement the live session switcher and auto-resume of the last TUI session after a dropped connection; verify with a pty test that reconnects after the transport is killed (spec: tui)
 
 ## 24. M2 Messaging gateway core
 

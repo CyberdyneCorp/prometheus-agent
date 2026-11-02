@@ -35,9 +35,9 @@ pub use agent::{
 };
 pub use gateway::{GatewayConfig, PlatformConfig};
 pub use interface::{
-    BusyConfig, BusyInputMode, CliConfig, DisplayConfig, Interface, KeyChord, MarkdownMode,
-    QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress, ToolProgressGrouping, TuiConfig,
-    TuiKeys, TuiTheme, UiConfig,
+    AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
+    Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
+    ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,

@@ -38,6 +38,16 @@ pub enum Action {
     LineEnd,
     /// Clear the composer.
     ClearInput,
+    /// Open the command palette.
+    Palette,
+    /// Open the live session switcher.
+    Sessions,
+    /// Attach the clipboard's image.
+    PasteImage,
+    /// Expand the paste chip before the cursor.
+    ExpandPaste,
+    /// Move to the startup banner's headers.
+    Banner,
 }
 
 /// One action: its `ui.tui.keys` name, its default chord, and its
@@ -133,6 +143,36 @@ const SPECS: &[Spec] = &[
         name: "clear_input",
         default: Chord::ctrl(Key::Char('u')),
         configured: |k| k.clear_input.as_ref(),
+    },
+    Spec {
+        action: Action::Palette,
+        name: "palette",
+        default: Chord::ctrl(Key::Char('p')),
+        configured: |k| k.palette.as_ref(),
+    },
+    Spec {
+        action: Action::Sessions,
+        name: "sessions",
+        default: Chord::ctrl(Key::Char('x')),
+        configured: |k| k.sessions.as_ref(),
+    },
+    Spec {
+        action: Action::PasteImage,
+        name: "paste_image",
+        default: Chord::ctrl(Key::Char('v')),
+        configured: |k| k.paste_image.as_ref(),
+    },
+    Spec {
+        action: Action::ExpandPaste,
+        name: "expand_paste",
+        default: Chord::ctrl(Key::Char('o')),
+        configured: |k| k.expand_paste.as_ref(),
+    },
+    Spec {
+        action: Action::Banner,
+        name: "banner",
+        default: Chord::ctrl(Key::Char('b')),
+        configured: |k| k.banner.as_ref(),
     },
 ];
 

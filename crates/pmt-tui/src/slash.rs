@@ -24,6 +24,22 @@ pub enum Local {
     Resume,
     /// Fork the session at its last message and switch to the fork.
     Fork,
+    /// Clear and fully repaint the screen.
+    Redraw,
+    /// Show or hide the status bar (`ui.status_bar`).
+    StatusBar,
+    /// Show, hide or report the battery item (`ui.status_bar_battery`).
+    Battery,
+    /// Show or set the busy indicator style (`ui.tui.busy_indicator`).
+    Indicator,
+    /// Open the command palette.
+    Palette,
+    /// Open the live session switcher (`/sessions new` starts one).
+    Sessions,
+    /// Attach the clipboard's image to the next prompt.
+    Paste,
+    /// Make `Ctrl+V` reach the TUI in VS Code, Cursor or Windsurf.
+    TerminalSetup,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -94,6 +110,54 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "fork",
         aliases: &["branch"],
         description: "fork the session at its last message and switch to the fork",
+    },
+    LocalCommand {
+        command: Local::Redraw,
+        name: "redraw",
+        aliases: &[],
+        description: "clear and repaint the screen",
+    },
+    LocalCommand {
+        command: Local::StatusBar,
+        name: "statusbar",
+        aliases: &["sb"],
+        description: "show or hide the status bar",
+    },
+    LocalCommand {
+        command: Local::Battery,
+        name: "battery",
+        aliases: &[],
+        description: "battery in the status bar: /battery [on|off|status]",
+    },
+    LocalCommand {
+        command: Local::Indicator,
+        name: "indicator",
+        aliases: &[],
+        description: "busy indicator style: kaomoji, emoji, unicode, ascii",
+    },
+    LocalCommand {
+        command: Local::Palette,
+        name: "palette",
+        aliases: &[],
+        description: "find a command (Enter puts it in the composer)",
+    },
+    LocalCommand {
+        command: Local::Sessions,
+        name: "sessions",
+        aliases: &["switch"],
+        description: "switch between live sessions; /sessions new starts one",
+    },
+    LocalCommand {
+        command: Local::Paste,
+        name: "paste",
+        aliases: &[],
+        description: "attach the clipboard's image to the next prompt",
+    },
+    LocalCommand {
+        command: Local::TerminalSetup,
+        name: "terminal-setup",
+        aliases: &[],
+        description: "make Ctrl+V reach the TUI in VS Code, Cursor or Windsurf",
     },
 ];
 

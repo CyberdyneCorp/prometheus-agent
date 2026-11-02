@@ -1,7 +1,8 @@
 //! The discovery and presentation methods (spec: tui, Discovery RPCs
 //! preserve the prompt cache; Composer and path completion; Profile scope
 //! on every request): `commands.catalog`, `complete.slash`,
-//! `complete.path`, `model.options`, `subagent.list` and `config.get`.
+//! `complete.path`, `model.options`, `subagent.list`, `config.get` and
+//! `session.banner`.
 //! They read; none of them rebuilds a live session's system prompt,
 //! changes its toolset or reloads its memory snapshot.
 
@@ -24,7 +25,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::CompletePath, _, _>(catalog, complete_path)?
         .register::<c::ModelOptionsList, _, _>(catalog, model_options)?
         .register::<c::SubagentListing, _, _>(catalog, subagents)?
-        .register::<c::ConfigGet, _, _>(catalog, config_get)?;
+        .register::<c::ConfigGet, _, _>(catalog, config_get)?
+        .register::<c::SessionBanner, _, _>(catalog, banner)?;
     Ok(())
 }
 
@@ -104,6 +106,15 @@ async fn config_get(call: Call, params: c::ConfigGetParams) -> Result<c::ConfigV
     call.server
         .host()
         .config_get(&profile, &params.key)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn banner(call: Call, params: c::SessionRef) -> Result<c::BannerInfo, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Attached)?;
+    call.server
+        .host()
+        .banner(&profile, &params.session_id)
         .await
         .map_err(|e| rpc(&e))
 }

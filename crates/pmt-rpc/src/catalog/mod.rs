@@ -118,6 +118,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::ModelOptionsList>()
         .method::<c::SubagentListing>()
         .method::<c::ConfigGet>()
+        .method::<c::SessionBanner>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()

@@ -24,7 +24,7 @@ dist = true
 
 [features]
 default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
-tui = ["dep:pmt-tui", "dep:ratatui", "dep:crossterm"]
+tui = ["dep:pmt-tui", "dep:ratatui"]
 gateway = ["dep:pmt-gateway"]
 dashboard = []
 acp = []
@@ -53,7 +53,8 @@ pmt-tui = { workspace = true, optional = true }
 pmt-update.workspace = true
 pulldown-cmark.workspace = true
 ratatui = { workspace = true, optional = true }
-crossterm = { workspace = true, optional = true }
+# The terminal size for the line interface's bottom status line too.
+crossterm.workspace = true
 # `/copy` in the TUI: the OSC 52 clipboard sequence carries base64.
 base64.workspace = true
 reqwest.workspace = true
@@ -69,6 +70,7 @@ ulid.workspace = true
 # `logs --follow` polls and stops on Ctrl-C.
 tokio = { workspace = true, features = ["signal"] }
 tracing.workspace = true
+unicode-width.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The controlling terminal's device and session leader (`-c` per terminal);

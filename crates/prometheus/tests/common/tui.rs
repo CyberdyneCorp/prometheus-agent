@@ -13,11 +13,21 @@ pub const LEAVE: &str = "\u{1b}[?1049l";
 
 /// The binary on a terminal with `ui.interface` at its default (`tui`).
 pub fn tui(home: &Path, args: &[&str], env: &[(&str, &str)]) -> OsSession {
+    tui_with(home, args, env, &[])
+}
+
+/// [`tui`] with the variables `removed` unset too.
+pub fn tui_with(home: &Path, args: &[&str], env: &[(&str, &str)], removed: &[&str]) -> OsSession {
     let mut cmd: Command = super::command(home);
     cmd.args(args)
         .current_dir(home)
         .env("TERM", "xterm-256color")
+        // The developer's terminal must not pick the theme.
+        .env_remove("COLORFGBG")
         .env_remove("NO_COLOR");
+    for key in removed {
+        cmd.env_remove(key);
+    }
     for (key, value) in env {
         cmd.env(key, value);
     }

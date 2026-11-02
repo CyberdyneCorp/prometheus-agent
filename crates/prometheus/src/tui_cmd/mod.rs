@@ -10,12 +10,18 @@
 //! lifetime and serves only it. The screen ([`pmt_tui`]) is fed from the
 //! session's events by [`screen`]; [`link`] is the protocol side.
 
+mod clipboard;
+mod display;
 mod input;
 mod link;
 mod masked;
+mod overlays;
+mod paste;
+mod recent;
 mod screen;
 mod session;
 mod signals;
+mod terminal_setup;
 
 use std::io::IsTerminal as _;
 use std::path::PathBuf;
@@ -169,6 +175,7 @@ pub fn start(
                 .is_some_and(|v| !v.is_empty()),
         home: home.clone(),
         panic_on_draw: ctx.launch.test_tui_panic(),
+        env: ctx.launch.clone(),
     };
     let ending = runtime.block_on(async {
         match daemon {

@@ -216,6 +216,43 @@ pub struct ConfigValue {
     pub source: String,
 }
 
+/// The system prompt a session froze on its first turn.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FrozenPrompt {
+    /// `sha256:<hex>` of the prompt text.
+    pub sha256: String,
+    /// The prompt text, its tiers joined in request order.
+    pub text: String,
+}
+
+/// One MCP server of a session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpServerState {
+    /// Its configured name.
+    pub name: String,
+    /// `ready`, `starting`, `failed` or `disabled`.
+    pub state: String,
+    /// The tools it contributes.
+    pub tools: u32,
+}
+
+/// `session.banner` result: what the TUI's startup banner lists.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BannerInfo {
+    /// The session's tool names, in request order.
+    pub tools: Vec<String>,
+    /// The installed skills the session can load.
+    pub skills: Vec<String>,
+    /// The frozen system prompt; none before the first turn.
+    #[serde(default)]
+    pub system_prompt: Option<FrozenPrompt>,
+    /// The session's MCP servers.
+    pub mcp_servers: Vec<McpServerState>,
+}
+
 method!(/// `commands.catalog`: the session's slash commands with their
     /// disposition on the asking client's surface.
     CommandsCatalog = "commands.catalog" (SessionRef) -> CommandCatalog);
@@ -230,3 +267,6 @@ method!(/// `subagent.list`: the session's delegated children.
     SubagentListing = "subagent.list" (SessionRef) -> SubagentList);
 method!(/// `config.get`: one effective configuration value of a profile.
     ConfigGet = "config.get" (ConfigGetParams) -> ConfigValue);
+method!(/// `session.banner`: the session's tools, skills, frozen system
+    /// prompt and MCP servers (read only; the prompt is never rebuilt).
+    SessionBanner = "session.banner" (SessionRef) -> BannerInfo);

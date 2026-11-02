@@ -70,16 +70,20 @@ impl Tui<'_> {
         });
     }
 
-    /// One event of the connection.
+    /// One event of the connection: the shown session's output reaches
+    /// the transcript; the other live sessions only report their turns'
+    /// ends.
     pub(super) fn on_event(&mut self, event: &Envelope) {
         if !self.link.applies(event) {
             return;
         }
+        let session = event.session_id.clone().unwrap_or_default();
+        let shown = session == self.link.session;
         match event.event.as_str() {
-            "session.event" => self.on_session_event(&event.data),
+            "session.event" if shown => self.on_session_event(&event.data),
             "turn.finished" => {
                 if let Ok(finished) = serde_json::from_value::<TurnFinished>(event.data.clone()) {
-                    self.on_finished(&finished);
+                    self.on_finished(&session, &finished, shown);
                 }
             }
             "request.cancel" => {
@@ -103,7 +107,16 @@ impl Tui<'_> {
         }
     }
 
-    fn on_finished(&mut self, finished: &TurnFinished) {
+    fn on_finished(&mut self, session: &str, finished: &TurnFinished, shown: bool) {
+        if let Some(turns) = self.pending.get_mut(session) {
+            turns.remove(&finished.turn_id);
+        }
+        if !shown {
+            self.notice(format!(
+                "(session {session} finished a turn in the background)"
+            ));
+            return;
+        }
         if let Some(answer) = &finished.final_response
             && self.app.transcript.last_answer() != Some(answer.as_str())
         {
@@ -112,8 +125,7 @@ impl Tui<'_> {
         if let Some(error) = &finished.error {
             self.error(&error.to_error());
         }
-        self.pending.remove(&finished.turn_id);
-        self.app.status.busy = !self.pending.is_empty();
+        self.sync_busy();
         self.refresh_status();
     }
 
@@ -140,7 +152,11 @@ impl Tui<'_> {
             .count();
         let asked = self.clarify.len();
         let typed = self.masked.chars().count();
-        self.app.card = self.asking.front().map(|a| card(a, asked, typed));
+        self.app.card = self
+            .asking
+            .front()
+            .map(|a| card(a, asked, typed))
+            .or_else(|| self.setup_card());
     }
 
     fn withdraw(&mut self, data: &Value, why: &str) {
@@ -199,10 +215,12 @@ impl Tui<'_> {
     /// A background request finished.
     pub(super) async fn on_done(&mut self, done: Done) {
         match done {
-            Done::Submitted(Ok(submitted)) => {
-                self.admitted(&submitted.turn_id, submitted.admission);
+            Done::Submitted(Ok((session, submitted))) => {
+                self.admitted(&session, &submitted.turn_id, submitted.admission);
             }
-            Done::Submitted(Err(err)) | Done::Dispatched(Err(err)) | Done::Switched(Err(err)) => {
+            Done::Submitted(Err(err))
+            | Done::Dispatched(Err(err))
+            | Done::Switched(Err(err), _) => {
                 self.error(&err);
             }
             Done::Dispatched(Ok(dispatched)) => self.dispatched(dispatched),
@@ -214,6 +232,9 @@ impl Tui<'_> {
                 self.app.status.cost_usd = usage.cost_usd;
             }
             Done::Models(models) => {
+                if !models.models.is_empty() {
+                    self.models = models.models.iter().map(|m| m.id.clone()).collect();
+                }
                 if let Some(current) = models.current {
                     let window = models.models.iter().find(|m| m.id == current);
                     if let Some(window) = window.and_then(|m| m.context_window) {
@@ -223,18 +244,25 @@ impl Tui<'_> {
                 }
             }
             Done::Completed(start, completions) => self.completed(start, &completions),
-            Done::Switched(Ok((session, attached))) => {
+            Done::Switched(Ok((session, attached)), prompt) => {
                 self.link.switch(session, &attached).await;
-                self.pending.clear();
-                self.app.status.busy = false;
+                self.shown_changed();
                 self.reload().await;
                 let shown = self.link.session.clone();
                 self.notice(format!("session {shown}"));
+                if let Some(prompt) = prompt {
+                    self.submit(prompt, Vec::new());
+                }
             }
+            Done::Banner(info) => self.show_banner(info),
+            Done::Titles(titles) => self.titles_listed(titles),
+            Done::Clipboard(grabbed) => self.clipboard_read(grabbed),
+            Done::Show(id) => self.shown(&id).await,
+            Done::Close(id) => self.closed(&id).await,
         }
     }
 
-    fn admitted(&mut self, turn: &str, admission: Admission) {
+    fn admitted(&mut self, session: &str, turn: &str, admission: Admission) {
         match admission {
             Admission::Started => {}
             Admission::Queued => self.notice("queued; it runs when the current turn ends"),
@@ -243,8 +271,11 @@ impl Tui<'_> {
                 return;
             }
         }
-        self.pending.insert(turn.to_owned());
-        self.app.status.busy = true;
+        self.pending
+            .entry(session.to_owned())
+            .or_default()
+            .insert(turn.to_owned());
+        self.sync_busy();
     }
 
     fn dispatched(&mut self, dispatched: Dispatched) {

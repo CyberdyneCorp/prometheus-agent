@@ -19,10 +19,11 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_gateway::{Author, Host, HostFuture, Link};
 use pmt_rpc::contracts::{
-    ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions, ConfigValue,
-    ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind, ResolveParams,
-    SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup, SessionSummary,
-    SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError, TurnFinished,
+    BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
+    ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind,
+    ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
+    SessionSummary, SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError,
+    TurnFinished,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 
@@ -534,6 +535,10 @@ impl Host for DaemonHost {
             let profile = self.profile(profile)?;
             self.models_of(profile, session_id).await
         })
+    }
+
+    fn banner<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, BannerInfo> {
+        Box::pin(async move { Self::banner_of(self.profile(profile)?, session_id).await })
     }
 
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {

@@ -4,7 +4,7 @@
 //! terminal is entered only once the session is open (so connection
 //! errors print normally) and restored on every way out.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Stdout;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,14 +13,17 @@ use std::time::Duration;
 
 use crossterm::event::Event as TermEvent;
 use pmt_config::ProfileScope;
+use pmt_config::schema::{AutoResume, TuiTheme};
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::Redactor;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
-    Completions, ContextUsage, Dispatched, ModelOptions, PromptImage, Submitted,
+    Attached, BannerInfo, Completions, ContextUsage, Dispatched, ModelOptions, PromptImage,
+    Submitted,
 };
 use pmt_rpc::discovery::DaemonRecord;
 use pmt_tui::app::App;
+use pmt_tui::composer::Collapse;
 use pmt_tui::history::{self, History};
 use pmt_tui::keys::Bindings;
 use pmt_tui::status::Status;
@@ -33,7 +36,8 @@ use tokio::sync::mpsc;
 
 use super::link::Link;
 use super::signals::Signals;
-use super::{Ending, Launch};
+use super::{Ending, Launch, recent};
+use crate::chat::status_bar::StatusBar;
 
 /// What the TUI starts with.
 pub(super) struct Open<'a> {
@@ -49,22 +53,36 @@ pub(super) struct Open<'a> {
     pub(super) home: PathBuf,
     /// Debug builds: panic while drawing (`PMT_TEST_TUI_PANIC`).
     pub(super) panic_on_draw: bool,
+    /// The launch environment (`COLORFGBG`, the clipboard's tools, the
+    /// editors' settings, the battery seam).
+    pub(super) env: pmt_core::env::LaunchEnv,
 }
 
 /// The result of a request that ran in the background.
 pub(super) enum Done {
     /// `command.dispatch` answered.
     Dispatched(Result<Dispatched, Error>),
-    /// `prompt.submit` answered.
-    Submitted(Result<Submitted, Error>),
+    /// `prompt.submit` answered for the session.
+    Submitted(Result<(String, Submitted), Error>),
     /// `session.context_usage` answered.
     Usage(ContextUsage),
     /// `model.options` answered.
     Models(ModelOptions),
     /// A completion request answered for the word starting at the offset.
     Completed(usize, Completions),
-    /// A session operation (`/new`, `/resume`, `/fork`) opened this one.
-    Switched(Result<(String, pmt_rpc::contracts::Attached), Error>),
+    /// A session operation (`/new`, `/resume`, `/fork`, the switcher)
+    /// opened this one; the prompt is submitted in it.
+    Switched(Result<(String, Attached), Error>, Option<String>),
+    /// `session.banner` answered.
+    Banner(BannerInfo),
+    /// `session.list` answered: titles by session.
+    Titles(HashMap<String, String>),
+    /// The clipboard was read (`/paste`, `Ctrl+V`).
+    Clipboard(Result<super::paste::Grabbed, String>),
+    /// The switcher picked a live session to show.
+    Show(String),
+    /// The switcher closed a live session.
+    Close(String),
 }
 
 /// The TUI's state.
@@ -80,8 +98,24 @@ pub(super) struct Tui<'a> {
     /// What was typed into a secret or sudo card: kept apart from the
     /// composer so it is never drawn, never in the history.
     pub(super) masked: String,
-    /// Turns this TUI admitted that have not finished.
-    pub(super) pending: HashSet<String>,
+    /// Turns this TUI admitted that have not finished, per session.
+    pub(super) pending: HashMap<String, HashSet<String>>,
+    /// When the shown session's busy period began.
+    pub(super) busy_since: Option<std::time::Instant>,
+    /// The status bar's toggles and battery.
+    pub(super) status_bar: StatusBar,
+    /// The theme in use after detection (`/theme`).
+    pub(super) theme_in_use: TuiTheme,
+    /// Live sessions' titles (the switcher).
+    pub(super) titles: HashMap<String, String>,
+    /// The models the shown session may use (`Tab` in the switcher).
+    pub(super) models: Vec<String>,
+    /// `/terminal-setup` waiting for its confirmation.
+    pub(super) setup: Option<Vec<super::terminal_setup::Target>>,
+    /// `/redraw`: clear the terminal before the next frame.
+    pub(super) clear_next: bool,
+    /// When a paste collapses into a chip.
+    pub(super) collapse: Collapse,
     /// Where background requests report.
     pub(super) done: mpsc::UnboundedSender<Done>,
     /// Set when the TUI should end.
@@ -128,13 +162,25 @@ type Screen = Terminal<CrosstermBackend<Stdout>>;
 pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending, Error> {
     let mut signals = Signals::listen();
     let profile = open.scope.name().as_str().to_owned();
-    let (link, notice) = Link::open(record, &profile, open.launch).await?;
+    let recent_file = recent::path_in(open.scope.dir());
+    let launch = open.launch;
+    let unnamed = launch.resume.is_none() && launch.continue_.is_none() && launch.first.is_none();
+    let recent = (unnamed && open.scope.config().ui.tui.auto_resume == AutoResume::Recent)
+        .then(|| recent::lookup(&recent_file, &launch.cwd))
+        .flatten();
+    let (link, notice) = Link::open(record, &profile, launch, recent).await?;
     pmt_tui::terminal::install_panic_hook(open.home.join("logs"));
     let guard = TerminalGuard::enter().map_err(|e| terminal_error(&e))?;
+    // Before the key reader starts: the answer comes on the same input.
+    let theme = pmt_tui::background::resolve(
+        open.scope.config().ui.tui.theme,
+        open.launch_env("COLORFGBG").as_deref(),
+        pmt_tui::background::query,
+    );
     let mut screen =
         Terminal::new(CrosstermBackend::new(std::io::stdout())).map_err(|e| terminal_error(&e))?;
     let (done, mut results) = mpsc::unbounded_channel();
-    let mut tui = Tui::new(open, link, done);
+    let mut tui = Tui::new(open, link, done, theme);
     if let Some(notice) = notice {
         tui.app.transcript.push(Kind::Notice, notice);
     }
@@ -147,6 +193,7 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
         tui.app.transcript.push(Kind::Notice, note);
     }
     tui.reload().await;
+    tui.load_banner();
     if let Some(first) = &open.launch.first {
         tui.submit(first.clone(), open.launch.images.clone());
     }
@@ -165,30 +212,78 @@ fn terminal_error(e: &std::io::Error) -> Error {
 }
 
 impl<'a> Tui<'a> {
-    fn new(open: &'a Open<'a>, link: Link, done: mpsc::UnboundedSender<Done>) -> Self {
+    fn new(
+        open: &'a Open<'a>,
+        link: Link,
+        done: mpsc::UnboundedSender<Done>,
+        theme: TuiTheme,
+    ) -> Self {
         let config = open.scope.config();
         // The profile the daemon granted (the handshake names it).
         let granted = link.client.hello().profiles.first().cloned();
         let status = Status {
             profile: granted.unwrap_or_else(|| open.scope.name().as_str().to_owned()),
             reduced_motion: config.ui.tui.reduced_motion,
+            indicator: config.ui.tui.busy_indicator,
             ..Status::default()
         };
-        let theme = Theme::new(config.ui.tui.theme, open.no_color);
         let history = History::load(history::path_in(open.scope.dir()), Redactor::default());
-        Self {
-            app: App::new(theme, status),
+        let status_bar = StatusBar::new(open.scope, &open.env);
+        let mut app = App::new(Theme::new(theme, open.no_color), status);
+        app.status_visible = status_bar.shown;
+        let composer = &config.ui.composer;
+        let mut tui = Self {
+            app,
             link,
             open,
             history,
             asking: VecDeque::new(),
             clarify: Vec::new(),
             masked: String::new(),
-            pending: HashSet::new(),
+            pending: HashMap::new(),
+            busy_since: None,
+            status_bar,
+            theme_in_use: theme,
+            titles: HashMap::new(),
+            models: Vec::new(),
+            setup: None,
+            clear_next: false,
+            collapse: Collapse {
+                lines: composer.paste_collapse_lines,
+                chars: composer.paste_collapse_chars,
+            },
             done,
             ending: None,
             panic_on_draw: open.panic_on_draw,
             lost: None,
+        };
+        tui.shown_changed();
+        tui
+    }
+
+    /// The shown session changed: the status counts it and this directory
+    /// remembers it (`ui.tui.auto_resume`).
+    pub(super) fn shown_changed(&mut self) {
+        self.app.status.live = self.link.live.len();
+        recent::record(
+            &recent::path_in(self.open.scope.dir()),
+            &self.open.launch.cwd,
+            &self.link.session,
+        );
+        self.sync_busy();
+    }
+
+    /// The busy indicator follows the shown session's admitted turns.
+    pub(super) fn sync_busy(&mut self) {
+        let busy = self
+            .pending
+            .get(&self.link.session)
+            .is_some_and(|turns| !turns.is_empty());
+        self.app.status.busy = busy;
+        if !busy {
+            self.busy_since = None;
+        } else if self.busy_since.is_none() {
+            self.busy_since = Some(std::time::Instant::now());
         }
     }
 
@@ -200,6 +295,8 @@ impl<'a> Tui<'a> {
         signals: &mut Signals,
     ) -> Result<Ending, Error> {
         let mut tick = tokio::time::interval(Duration::from_millis(120));
+        // A redraw now and then picks up a fresh battery reading.
+        let mut battery = tokio::time::interval(Duration::from_secs(30));
         loop {
             self.draw(screen)?;
             if let Some(ending) = self.ending.take() {
@@ -232,16 +329,31 @@ impl<'a> Tui<'a> {
                 }
                 code = signals.next() => return Ok(Ending::Signal(code)),
                 _ = tick.tick(), if self.app.status.busy || self.counting_down() => {
-                    self.app.status.frame = self.app.status.frame.wrapping_add(1);
+                    if let Some(since) = self.busy_since {
+                        self.app.status.busy_for = since.elapsed();
+                    }
                     // The card's countdown.
                     self.show_question();
                 }
+                _ = battery.tick(), if self.status_bar.battery => {}
             }
         }
     }
 
     fn draw(&mut self, screen: &mut Screen) -> Result<(), Error> {
         let panic_now = self.panic_on_draw;
+        if std::mem::take(&mut self.clear_next) {
+            // Not `Terminal::clear`: it asks the terminal for the cursor
+            // position, an answer the key reader would swallow. Clearing
+            // and emptying both buffers makes the next draw paint it all.
+            use ratatui::backend::{Backend as _, ClearType};
+            screen
+                .backend_mut()
+                .clear_region(ClearType::All)
+                .map_err(|e| terminal_error(&e))?;
+            screen.swap_buffers();
+        }
+        self.app.status.battery = self.status_bar.battery_item();
         screen
             .draw(|frame| {
                 assert!(!panic_now, "PMT_TEST_TUI_PANIC: a panic while drawing");
@@ -281,11 +393,12 @@ impl<'a> Tui<'a> {
         });
     }
 
-    /// Submits `text` (with `images`) as a prompt; the admission comes back
-    /// as [`Done::Submitted`].
+    /// Submits `text` (with `images`) as a prompt in the shown session;
+    /// the admission comes back as [`Done::Submitted`].
     pub(super) fn submit(&mut self, text: String, images: Vec<PromptImage>) {
+        let session = self.link.session.clone();
         let params = pmt_rpc::contracts::SubmitParams {
-            session_id: self.link.session.clone(),
+            session_id: session.clone(),
             text,
             images,
             run_budget_secs: self.open.launch.run_budget,
@@ -298,7 +411,7 @@ impl<'a> Tui<'a> {
                 .call_typed::<pmt_rpc::contracts::PromptSubmit>(&params)
                 .await
                 .map_err(|e| pmt_rpc::client::error_of(&e));
-            Done::Submitted(submitted)
+            Done::Submitted(submitted.map(|s| (session, s)))
         });
     }
 
@@ -407,5 +520,15 @@ impl KeyReader {
         if thread.is_finished() {
             let _ = thread.join();
         }
+    }
+}
+
+impl Open<'_> {
+    /// A launch environment variable, when set and not empty.
+    fn launch_env(&self, name: &str) -> Option<String> {
+        self.env
+            .inherited(name)
+            .map(|v| v.to_string_lossy().into_owned())
+            .filter(|v| !v.is_empty())
     }
 }

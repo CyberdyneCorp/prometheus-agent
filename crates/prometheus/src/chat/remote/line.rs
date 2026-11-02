@@ -90,6 +90,16 @@ impl Lines {
     pub(super) fn flush(&self) {
         self.editor.flush();
     }
+
+    /// The bottom status line drawn before each read.
+    pub(super) fn set_status(&self, text: Option<String>) {
+        self.editor.set_status(text);
+    }
+
+    /// `/redraw`: clears the screen for the next read to repaint.
+    pub(super) fn redraw(&self) {
+        self.editor.redraw();
+    }
 }
 
 /// The attached interface's output: painted with the profile's theme,
@@ -156,6 +166,10 @@ pub(super) struct Chat<'a, 'b> {
     pub(super) images: Vec<std::path::PathBuf>,
     /// `cli.confirm_destructive`.
     pub(super) confirm_destructive: bool,
+    /// The bottom status line's toggles (`/statusbar`, `/battery`).
+    pub(super) status_bar: crate::chat::status_bar::StatusBar,
+    /// The session's model, for the status line.
+    pub(super) model: Option<String>,
 }
 
 /// What the loop does after a line.
@@ -190,7 +204,10 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         screen,
         signals: Signals::listen(),
         images: start.images.clone(),
+        status_bar: crate::chat::status_bar::StatusBar::new(start.scope, start.launch),
+        model: None,
     };
+    chat.refresh_model().await;
     chat.screen.say(
         Role::Accent,
         &format!(
@@ -208,6 +225,7 @@ impl Chat<'_, '_> {
     async fn main_loop(&mut self) -> Result<u8, Error> {
         let mut last_interrupt: Option<Instant> = None;
         loop {
+            self.show_status();
             let typed = if let Some(line) = self.lines.queue.pop_front() {
                 Typed::Line(line)
             } else {
@@ -300,6 +318,34 @@ impl Chat<'_, '_> {
         }
     }
 
+    /// The session's model, for the status line.
+    pub(super) async fn refresh_model(&mut self) {
+        let params = SessionRef {
+            session_id: self.attached.session.clone(),
+        };
+        let options = self
+            .attached
+            .client
+            .call_typed::<pmt_rpc::contracts::ModelOptionsList>(&params)
+            .await;
+        self.model = options.ok().and_then(|o| o.current);
+    }
+
+    /// Hands the bottom status line to the editor (none when quiet or
+    /// turned off).
+    fn show_status(&self) {
+        let text = (!self.start.ui.quiet)
+            .then(|| {
+                crate::chat::status_bar::line_text(
+                    &self.status_bar,
+                    self.start.scope.name().as_str(),
+                    self.model.as_deref(),
+                )
+            })
+            .flatten();
+        self.lines.set_status(text);
+    }
+
     /// Runs `name` on the daemon's session (`command.dispatch`).
     pub(super) async fn dispatch(&mut self, name: &str, args: &str) -> Result<(), Error> {
         let params = DispatchParams {
@@ -327,6 +373,9 @@ impl Chat<'_, '_> {
                 return Err(err);
             }
             Err(err) => self.screen.error(&err),
+        }
+        if name == "model" {
+            self.refresh_model().await;
         }
         Ok(())
     }

@@ -8,8 +8,8 @@
 use pmt_config::schema::ModelAlias;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
-    ClientKind, CommandCatalog, CommandEntry, CommandSource, Completion, Completions, ConfigValue,
-    Disposition, ModelOption, ModelOptions,
+    BannerInfo, ClientKind, CommandCatalog, CommandEntry, CommandSource, Completion, Completions,
+    ConfigValue, Disposition, FrozenPrompt, ModelOption, ModelOptions,
 };
 use pmt_tools::environments::Environments;
 use pmt_tools::files::backend::Kind;
@@ -183,6 +183,53 @@ impl DaemonHost {
         Ok(ModelOptions {
             current: current.map(|c| c.id),
             models,
+        })
+    }
+
+    /// What the TUI's banner lists: the loaded session's tools and
+    /// skills, and the prompt it froze (read from the store, never
+    /// rebuilt). MCP servers join when the MCP client lands (group 27).
+    pub(super) async fn banner_of(profile: &Profile, session: &str) -> Result<BannerInfo, Error> {
+        use pmt_agent::turn::tools::ToolPort as _;
+        let id = session_id(session)?;
+        let system_prompt = profile
+            .store
+            .session_prompt(id)?
+            .map(|prompt| FrozenPrompt {
+                sha256: prompt.sha256,
+                text: prompt
+                    .tiers
+                    .into_iter()
+                    .map(|tier| tier.text)
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+            });
+        let loaded = profile.loaded.lock().await.get(&id).cloned();
+        let Some(session) = loaded else {
+            return Ok(BannerInfo {
+                system_prompt,
+                ..BannerInfo::default()
+            });
+        };
+        let live = &session.live;
+        let tools = live
+            .tools
+            .definitions()
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        let (catalog, config) = live.skills.catalog();
+        let skills = live
+            .skills
+            .visible(&catalog, &config)
+            .into_iter()
+            .map(|skill| skill.name.clone())
+            .collect();
+        Ok(BannerInfo {
+            tools,
+            skills,
+            system_prompt,
+            mcp_servers: Vec::new(),
         })
     }
 

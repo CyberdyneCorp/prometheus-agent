@@ -157,6 +157,12 @@ impl Repl {
             "verbose" => Ok(self.verbose()),
             "focus" => Ok(self.focus(args)),
             "timestamps" => self.timestamps(args),
+            "redraw" => {
+                self.input.redraw();
+                Ok(String::new())
+            }
+            "statusbar" => self.status_bar.statusbar(&self.factory.scope, args),
+            "battery" => self.status_bar.battery_command(&self.factory.scope, args),
             other => match commands::run(&self.ctx(live), other, args).await {
                 Some(Ok(Reply::Text(text))) => Ok(text),
                 // Only `/learn` and `/retry` send, and they run with the

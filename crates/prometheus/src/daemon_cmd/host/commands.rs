@@ -34,6 +34,9 @@ pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "focus",
     "timestamps",
     "prompt",
+    "redraw",
+    "statusbar",
+    "battery",
 ];
 
 fn refused(reason: impl Into<String>) -> Dispatched {

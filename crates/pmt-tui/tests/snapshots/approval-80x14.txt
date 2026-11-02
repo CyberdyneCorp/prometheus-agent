@@ -11,4 +11,4 @@ The build failed in the linker step: two crates define the same symbol.
 [o]nce  [s]ession  [a]lways  [d]eny   (answer within 300 s)
 ────────────────────────────────────────────────────────────────────────────────
 ›
-● default │ mock/m1 │ ctx 25% │ $0.0042 │ 1 approval
+(•_•) default │ mock/m1 │ ctx 25% │ $0.0042 │ 1 approval

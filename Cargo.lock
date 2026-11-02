@@ -2659,6 +2659,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "jiff",
+ "nix 0.31.3",
  "pmt-config",
  "pmt-core",
  "ratatui",
@@ -2813,6 +2814,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ulid",
+ "unicode-width",
  "url",
  "wiremock",
  "zstd",

@@ -115,6 +115,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("subagent.list", "tui"),
     method("subagent.subscribe", "tui"),
     method("config.get", "tui"),
+    long("session.banner", "tui"),
     // tool-system
     method("approval.respond", "tool-system"),
     method("tools.list", "tool-system"),

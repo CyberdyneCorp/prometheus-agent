@@ -120,3 +120,128 @@ fn keys_lists_the_effective_bindings() {
         .push(Kind::Notice, Bindings::default().describe());
     check("keys-60x24", &screen(&app, 60, 24));
 }
+
+/// Scenario: Hiding the status bar (the screen side).
+#[test]
+fn a_hidden_status_bar_gives_its_row_to_the_transcript() {
+    let mut app = app();
+    app.status_visible = false;
+    let shown = screen(&app, 60, 10);
+    assert!(!shown.contains("mock/m1"), "{shown}");
+    check("no-status-60x10", &shown);
+}
+
+/// Scenario: Battery on a desktop tower (a battery leads when there is
+/// one) and Switching style (the busy indicator).
+#[test]
+fn the_battery_leads_the_status_and_the_busy_glyph_follows_the_style() {
+    let mut app = app();
+    app.status.battery = Some(pmt_core::battery::Battery {
+        percent: 64,
+        charging: true,
+    });
+    app.status.busy = true;
+    app.status.indicator = pmt_config::schema::BusyIndicator::Ascii;
+    app.status.busy_for = pmt_tui::busy::PERIOD * 2;
+    check("battery-busy-70x8", &screen(&app, 70, 8));
+}
+
+/// Scenario: Insert, not run (what the palette shows).
+#[test]
+fn the_palette_lists_matching_commands_with_their_disposition() {
+    use pmt_tui::app::Overlay;
+    use pmt_tui::palette::{Entry, Palette};
+    let entry = |name: &str, description: &str, disposition: &str| Entry {
+        name: name.into(),
+        description: description.into(),
+        disposition: disposition.into(),
+    };
+    let mut palette = Palette::new(vec![
+        entry("compress", "summarise older turns", "exec"),
+        entry("compact", "compact the context now", "exec"),
+        entry("deploy", "deploy the service", "skill"),
+        entry("clear", "clear the screen", "client"),
+    ]);
+    palette.push('c');
+    palette.push('o');
+    let mut app = app();
+    app.overlay = Some(Overlay::Palette(palette));
+    check("palette-70x14", &screen(&app, 70, 14));
+}
+
+/// Scenario: Dispatching a second session (what the switcher shows).
+#[test]
+fn the_switcher_lists_live_sessions_and_new() {
+    use pmt_tui::app::Overlay;
+    use pmt_tui::switcher::{Row, Switcher};
+    let mut switcher = Switcher::new(vec![
+        Row {
+            id: "ses_01A".into(),
+            title: Some("build log".into()),
+            busy: true,
+            shown: true,
+        },
+        Row {
+            id: "ses_01B".into(),
+            title: None,
+            busy: false,
+            shown: false,
+        },
+    ]);
+    switcher.move_selection(2);
+    for c in "write the tests".chars() {
+        switcher.type_char(c);
+    }
+    let mut app = app();
+    app.status.live = 2;
+    app.overlay = Some(Overlay::Switcher(switcher));
+    check("switcher-90x14", &screen(&app, 90, 14));
+}
+
+/// Scenario: Many skills installed. Scenario: Unsupported macro.
+#[test]
+fn the_banner_heads_the_transcript_and_answers_render_math() {
+    use pmt_tui::banner::{Banner, Contents};
+    let contents = Contents {
+        tools: vec!["read_file".into(), "terminal".into(), "patch".into()],
+        skills: (0..80).map(|n| format!("skill-{n}")).collect(),
+        system_prompt: vec!["You are Prometheus.".into()],
+        mcp_servers: Vec::new(),
+    };
+    let mut app = App::new(Theme::new(TuiTheme::Dark, true), Status::default());
+    app.banner = Some(Banner::new(
+        "Prometheus 0.1.0 · default · mock/m1".into(),
+        contents,
+    ));
+    app.transcript.push(
+        Kind::Assistant,
+        r"Energy is $E = mc^2$, a half is $\frac{1}{2}$, it costs $5 and $10; $\begin{tikzpicture}$ is not supported.",
+    );
+    let shown = screen(&app, 70, 14);
+    assert!(shown.contains("▸ Skills (80)"), "{shown}");
+    assert!(!shown.contains("skill-1"), "{shown}");
+    assert!(shown.contains(r"$\begin{tikzpicture}$"), "{shown}");
+    check("banner-math-70x14", &shown);
+}
+
+/// Scenario: Long log paste (what the composer shows).
+#[test]
+fn a_long_paste_shows_as_one_chip_and_an_image_as_a_badge() {
+    use pmt_tui::composer::Collapse;
+    let mut app = app();
+    let log = (1..=300)
+        .map(|n| format!("log line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    app.composer.paste(
+        &log,
+        Collapse {
+            lines: 5,
+            chars: 2000,
+        },
+    );
+    app.composer
+        .attach_image(std::path::PathBuf::from("shot.png"));
+    app.composer.insert_str("what failed?");
+    check("chips-70x10", &screen(&app, 70, 10));
+}

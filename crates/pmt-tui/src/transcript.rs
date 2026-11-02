@@ -1,11 +1,14 @@
 //! The conversation as the TUI shows it: one entry per message, tool call,
-//! notice or error, wrapped to the screen's width when drawn.
+//! notice or error, wrapped to the screen's width when drawn. Answers get
+//! their math formatted and their code spans styled ([`crate::math`]).
 
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr as _;
 
+use crate::math::{Segment, segments};
 use crate::theme::Theme;
-use crate::wrap::wrap;
+use crate::wrap::wrap_spans;
 
 /// What an entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,14 +95,29 @@ impl Transcript {
             let indent = " ".repeat(prefix.width());
             let style = theme.entry(entry.kind);
             let room = usize::from(width).saturating_sub(prefix.width());
-            for (row, text) in wrap(&entry.text, room).into_iter().enumerate() {
+            let runs = if entry.kind == Kind::Assistant {
+                answer_runs(&entry.text, style, theme.code)
+            } else {
+                vec![(entry.text.clone(), style)]
+            };
+            for (row, spans) in wrap_spans(&runs, room).into_iter().enumerate() {
                 let lead = if row == 0 { prefix } else { indent.as_str() };
-                lines.push(Line::from(vec![
-                    Span::styled(lead.to_owned(), style),
-                    Span::styled(text, style),
-                ]));
+                let mut line = vec![Span::styled(lead.to_owned(), style)];
+                line.extend(spans);
+                lines.push(Line::from(line));
             }
         }
         lines
     }
+}
+
+/// An answer's styled runs: math formatted, code in the code style.
+fn answer_runs(text: &str, style: Style, code: Style) -> Vec<(String, Style)> {
+    segments(text)
+        .into_iter()
+        .map(|segment| match segment {
+            Segment::Text(t) | Segment::Math(t) => (t, style),
+            Segment::Code(t) => (t, code),
+        })
+        .collect()
 }

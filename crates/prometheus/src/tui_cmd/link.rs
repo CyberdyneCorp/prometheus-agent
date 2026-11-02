@@ -6,6 +6,12 @@
 //! `-r`/`-c` names), the event watermark, and re-attaching after a lost
 //! connection with that watermark, reloading the transcript when the
 //! daemon says the replay is `truncated` (another epoch, or evicted).
+//!
+//! A TUI may hold several live sessions (spec: tui, Live session
+//! switcher): it stays attached to each as owner, keeps a watermark per
+//! session and shows one; the others keep running in the background.
+
+use std::collections::HashMap;
 
 use pmt_core::error::Error;
 use pmt_rpc::client::{Client, Inbox, error_of, stale_build_notice};
@@ -46,10 +52,12 @@ pub(super) struct Link {
     pub(super) inbox: Inbox,
     /// The session shown.
     pub(super) session: String,
-    /// The daemon epoch of `last_seq`.
+    /// Every session this TUI is attached to, in the order it opened them.
+    pub(super) live: Vec<String>,
+    /// The daemon epoch of the watermarks.
     pub(super) epoch: String,
-    /// The newest event sequence number applied.
-    pub(super) last_seq: u64,
+    /// The newest event sequence number applied, per live session.
+    pub(super) seen: HashMap<String, u64>,
     /// The session's commands (`commands.catalog`).
     pub(super) commands: Vec<CommandEntry>,
     /// The profile the ticket grants.
@@ -86,10 +94,13 @@ impl Link {
     ///
     /// Connection errors, `session.in_use` (75), resolution and creation
     /// errors.
+    /// `recent` is the session to re-attach to (`ui.tui.auto_resume`);
+    /// when it cannot be resumed (deleted, in use) a new one is opened.
     pub(super) async fn open(
         record: DaemonRecord,
         profile: &str,
         launch: &Launch,
+        recent: Option<String>,
     ) -> Result<(Self, Option<String>), Error> {
         let (client, inbox, notice) = connect(&record, profile).await?;
         let epoch = client.hello().epoch.clone();
@@ -97,12 +108,23 @@ impl Link {
             client,
             inbox,
             session: String::new(),
+            live: Vec::new(),
             epoch,
-            last_seq: 0,
+            seen: HashMap::new(),
             commands: Vec::new(),
             profile: profile.to_owned(),
             record,
         };
+        // Resolved first: the store, not the daemon's memory, says whether
+        // the session still exists.
+        if let Some(recent) = recent
+            && let Ok(found) = resolve(&link.client, ResolveKind::Resume, recent, launch).await
+            && let Ok(attached) = resume(&link.client, &found, None).await
+        {
+            link.adopt(found, &attached);
+            link.refresh_commands().await;
+            return Ok((link, notice));
+        }
         // A new session is loaded at once too, so its commands (skills
         // included) list.
         let (session, setup) = if let Some(found) = link.target(launch).await? {
@@ -111,10 +133,20 @@ impl Link {
             (create(&link.client, launch).await?, None)
         };
         let attached = resume(&link.client, &session, setup).await?;
-        link.watermark(&attached);
-        link.session = session;
+        link.adopt(session, &attached);
         link.refresh_commands().await;
         Ok((link, notice))
+    }
+
+    /// Shows `session` (attached as `attached` says), keeping the others
+    /// live.
+    fn adopt(&mut self, session: String, attached: &Attached) {
+        self.epoch.clone_from(&attached.epoch);
+        self.seen.insert(session.clone(), attached.latest_seq);
+        if !self.live.contains(&session) {
+            self.live.push(session.clone());
+        }
+        self.session = session;
     }
 
     /// The stored session `-r`/`-c` names.
@@ -129,17 +161,36 @@ impl Link {
             .map(Some)
     }
 
-    /// Detaches from the shown session and shows `session` (attached as
-    /// `attached` says) instead.
+    /// Shows `session` (attached as `attached` says); the session shown
+    /// before stays live.
     pub(super) async fn switch(&mut self, session: String, attached: &Attached) {
-        let old = SessionRef {
-            session_id: std::mem::replace(&mut self.session, session),
-        };
-        if old.session_id != self.session {
-            let _ = self.client.call_typed::<SessionDetach>(&old).await;
-        }
-        self.watermark(attached);
+        self.adopt(session, attached);
         self.refresh_commands().await;
+    }
+
+    /// Shows the live session `session` (no round-trip but its commands).
+    pub(super) async fn show(&mut self, session: &str) {
+        if self.live.iter().any(|s| s == session) {
+            session.clone_into(&mut self.session);
+            self.refresh_commands().await;
+        }
+    }
+
+    /// Detaches from the live session `session` and forgets it; the
+    /// daemon closes it once idle. Another live session is shown when it
+    /// was the shown one.
+    pub(super) async fn close(&mut self, session: &str) {
+        let params = SessionRef {
+            session_id: session.to_owned(),
+        };
+        let _ = self.client.call_typed::<SessionDetach>(&params).await;
+        self.live.retain(|s| s != session);
+        self.seen.remove(session);
+        if self.session == session
+            && let Some(next) = self.live.last().cloned()
+        {
+            self.show(&next).await;
+        }
     }
 
     /// The shown session's active messages.
@@ -171,54 +222,64 @@ impl Link {
         })
     }
 
-    pub(super) fn watermark(&mut self, attached: &Attached) {
-        self.epoch.clone_from(&attached.epoch);
-        self.last_seq = attached.latest_seq;
-    }
-
-    /// Records an event of the shown session as applied; `false` for one
-    /// already applied (a replay overlapping the live stream) or of
-    /// another session.
+    /// Records an event of a live session as applied; `false` for one
+    /// already applied (a replay overlapping the live stream) or of a
+    /// session this TUI does not hold.
     pub(super) fn applies(&mut self, event: &Envelope) -> bool {
-        if event.session_id.as_deref() != Some(self.session.as_str()) {
+        let Some(session) = event.session_id.as_deref() else {
+            return false;
+        };
+        let Some(seen) = self.seen.get_mut(session) else {
+            return false;
+        };
+        if event.epoch == self.epoch && event.seq <= *seen {
             return false;
         }
-        if event.epoch == self.epoch && event.seq <= self.last_seq {
-            return false;
-        }
+        *seen = event.seq;
         self.epoch.clone_from(&event.epoch);
-        self.last_seq = event.seq;
         true
     }
 
-    /// A new connection to `record` re-attached to the shown session from
-    /// the watermark: `true` when the daemon replayed what was missed,
-    /// `false` when the screen must reload the transcript instead.
+    /// A new connection to `record` re-attached to every live session from
+    /// its watermark: `true` when the daemon replayed what the shown one
+    /// missed, `false` when the screen must reload its transcript instead.
+    /// A live session that cannot be re-attached (deleted meanwhile) is
+    /// dropped; the shown one failing is an error.
     ///
     /// # Errors
     ///
     /// Connection and attachment errors.
     pub(super) async fn reconnect(&mut self, record: DaemonRecord) -> Result<bool, Error> {
         let (client, inbox, _) = connect(&record, &self.profile).await?;
-        let params = AttachParams {
-            session_id: self.session.clone(),
-            role: AttachRole::Driver,
-            last_seen_seq: Some(self.last_seq),
-            epoch: Some(self.epoch.clone()),
-        };
-        let attached = client
-            .call_typed::<SessionAttach>(&params)
-            .await
-            .map_err(|e| rpc(&e))?;
-        // Owner again: a client that lost its connection lost ownership.
-        let _ = resume(&client, &self.session, None).await;
+        let mut replayed = true;
+        for session in self.live.clone() {
+            let params = AttachParams {
+                session_id: session.clone(),
+                role: AttachRole::Driver,
+                last_seen_seq: self.seen.get(&session).copied(),
+                epoch: Some(self.epoch.clone()),
+            };
+            let attached = match client.call_typed::<SessionAttach>(&params).await {
+                Ok(attached) => attached,
+                Err(err) if session == self.session => return Err(rpc(&err)),
+                Err(_) => {
+                    self.live.retain(|s| *s != session);
+                    self.seen.remove(&session);
+                    continue;
+                }
+            };
+            // Owner again: a client that lost its connection lost ownership.
+            let _ = resume(&client, &session, None).await;
+            if attached.truncated {
+                self.epoch.clone_from(&attached.epoch);
+                self.seen.insert(session.clone(), attached.latest_seq);
+                replayed &= session != self.session;
+            }
+        }
         self.client = client;
         self.inbox = inbox;
         self.record = record;
-        if attached.truncated {
-            self.watermark(&attached);
-        }
-        Ok(!attached.truncated)
+        Ok(replayed)
     }
 }
 

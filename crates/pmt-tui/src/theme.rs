@@ -5,6 +5,7 @@ use pmt_config::schema::TuiTheme;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::transcript::Kind;
+use pmt_core::battery::Level;
 
 /// The styles of every part of the screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,12 +23,19 @@ pub struct Theme {
     pub frame: Style,
     /// The busy glyph.
     pub busy: Style,
+    /// A code span (and math the renderer cannot format).
+    pub code: Style,
+    /// The selected row of an overlay (palette, switcher, banner header).
+    pub selected: Style,
+    battery_high: Style,
+    battery_medium: Style,
+    battery_low: Style,
 }
 
 impl Theme {
     /// The theme `ui.tui.theme` names; `no_color` (`NO_COLOR` set or
-    /// `--no-color`) keeps only bold and reverse video. `auto` is dark
-    /// until the terminal's background is detected.
+    /// `--no-color`) keeps only bold and reverse video. `auto` here is
+    /// dark: detection ([`crate::background`]) resolves it first.
     #[must_use]
     pub fn new(theme: TuiTheme, no_color: bool) -> Self {
         if no_color {
@@ -50,6 +58,11 @@ impl Theme {
             card: Style::new().fg(Color::Yellow),
             frame: Style::new().fg(Color::DarkGray),
             busy: Style::new().fg(Color::Magenta),
+            code: Style::new().fg(Color::LightGreen),
+            selected: Style::new().add_modifier(Modifier::REVERSED),
+            battery_high: Style::new().fg(Color::Green),
+            battery_medium: Style::new().fg(Color::Yellow),
+            battery_low: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
         }
     }
 
@@ -64,6 +77,11 @@ impl Theme {
             card: Style::new().fg(Color::Magenta),
             frame: Style::new().fg(Color::Gray),
             busy: Style::new().fg(Color::Blue),
+            code: Style::new().fg(Color::Green),
+            selected: Style::new().add_modifier(Modifier::REVERSED),
+            battery_high: Style::new().fg(Color::Green),
+            battery_medium: Style::new().fg(Color::Yellow),
+            battery_low: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
         }
     }
 
@@ -79,6 +97,11 @@ impl Theme {
             card: plain.add_modifier(Modifier::BOLD),
             frame: plain,
             busy: plain,
+            code: plain,
+            selected: plain.add_modifier(Modifier::REVERSED),
+            battery_high: plain,
+            battery_medium: plain,
+            battery_low: plain.add_modifier(Modifier::BOLD),
         }
     }
 
@@ -91,6 +114,16 @@ impl Theme {
             Kind::Tool => self.tool,
             Kind::Notice => self.notice,
             Kind::Error => self.error,
+        }
+    }
+
+    /// The colour of a battery level.
+    #[must_use]
+    pub const fn battery(&self, level: Level) -> Style {
+        match level {
+            Level::High => self.battery_high,
+            Level::Medium => self.battery_medium,
+            Level::Low => self.battery_low,
         }
     }
 

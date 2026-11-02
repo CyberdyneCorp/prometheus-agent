@@ -10,10 +10,10 @@ use std::time::Duration;
 
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
-    ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions, ConfigValue,
-    ContextUsage, DispatchParams, Dispatched, Event, ForkParams, ModelOptions, ResolveParams,
-    ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SubagentList, SubmitParams, Submitted, Transcript,
+    BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
+    ConfigValue, ContextUsage, DispatchParams, Dispatched, Event, ForkParams, ModelOptions,
+    ResolveParams, ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef,
+    SessionSetup, SubagentList, SubmitParams, Submitted, Transcript,
 };
 use serde::Serialize;
 
@@ -134,6 +134,12 @@ pub trait Host: Send + Sync + 'static {
         _session_id: &'a str,
     ) -> HostFuture<'a, SubagentList> {
         Box::pin(async { Ok(SubagentList::default()) })
+    }
+
+    /// What the session's startup banner lists (`session.banner`). Never
+    /// rebuilds its prompt; nothing listed by a host that knows none.
+    fn banner<'a>(&'a self, _profile: &'a str, _session_id: &'a str) -> HostFuture<'a, BannerInfo> {
+        Box::pin(async { Ok(BannerInfo::default()) })
     }
 
     /// One effective configuration value of `profile`.

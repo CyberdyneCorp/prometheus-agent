@@ -10,8 +10,6 @@ use pmt_rpc::contracts::{
 };
 use pmt_tui::keys::Action;
 use pmt_tui::slash::{Input, LOCAL, Local, classify};
-use pmt_tui::theme::Theme;
-use pmt_tui::transcript::Kind;
 
 use super::Ending;
 use super::screen::{Done, Tui};
@@ -26,17 +24,25 @@ impl Tui<'_> {
             Event::Key(key) if self.masked_front() => self.masked_key(&key),
             Event::Key(key) => self.on_key(&key),
             Event::Paste(text) if self.masked_front() => self.masked_paste(&text),
-            Event::Paste(text) => self.app.composer.insert_str(&text),
+            Event::Paste(text) => self.paste_text(&text),
             Event::Mouse(mouse) => match mouse.kind {
                 MouseEventKind::ScrollUp => self.app.scroll_up(3),
                 MouseEventKind::ScrollDown => self.app.scroll_down(3),
-                _ => {}
+                _ => self.on_click(mouse),
             },
             _ => {}
         }
     }
 
     fn on_key(&mut self, key: &KeyEvent) {
+        if self.overlay_key(key) {
+            return;
+        }
+        // Cmd+V, on terminals that report the Super modifier.
+        if key.code == KeyCode::Char('v') && key.modifiers.contains(KeyModifiers::SUPER) {
+            self.paste_clipboard(true);
+            return;
+        }
         if let Some(action) = self.open.bindings.action(key) {
             self.on_action(action);
             return;
@@ -63,12 +69,16 @@ impl Tui<'_> {
         }
     }
 
-    /// `o`/`s`/`a`/`d` on an empty composer answers an approval card.
+    /// `o`/`s`/`a`/`d` on an empty composer answers an approval card,
+    /// `y`/`n` the `/terminal-setup` card.
     fn answer_key(&mut self, c: char) -> bool {
         let approval = self
             .asking
             .front()
             .is_some_and(|asked| asked.method() == "approval.request");
+        if self.asking.is_empty() && self.setup.is_some() && "yn".contains(c) {
+            return self.answer_setup(&c.to_string());
+        }
         approval && "osad".contains(c) && self.answer(&c.to_string())
     }
 
@@ -104,6 +114,13 @@ impl Tui<'_> {
             Action::ClearInput => {
                 composer.take();
             }
+            Action::Palette => self.open_palette(),
+            Action::Sessions => self.open_switcher(),
+            Action::PasteImage => self.paste_clipboard(true),
+            Action::ExpandPaste => {
+                composer.expand();
+            }
+            Action::Banner => self.focus_banner(),
         }
     }
 
@@ -127,17 +144,27 @@ impl Tui<'_> {
 
     fn submit_line(&mut self) {
         let line = self.app.composer.text().to_owned();
-        if !self.asking.is_empty() && self.answer(line.trim()) {
+        let answered = if self.asking.is_empty() {
+            self.setup.is_some() && self.answer_setup(&line)
+        } else {
+            self.answer(line.trim())
+        };
+        if answered {
             self.app.composer.take();
             return;
         }
-        if line.trim().is_empty() {
+        let (line, images) = self.take_prompt();
+        if line.trim().is_empty() && images.is_empty() {
             return;
         }
-        self.app.composer.take();
         self.app.scroll = 0;
         if let Err(err) = self.history.push(&line) {
             tracing::warn!("cannot write the TUI history: {err}");
+        }
+        if !images.is_empty() {
+            // Images go with a prompt, never with a command.
+            self.submit(line, images);
+            return;
         }
         match classify(line.trim_end(), |name| self.link.registered(name)) {
             Input::Local(command, args) => self.local(command, &args),
@@ -173,6 +200,15 @@ impl Tui<'_> {
             }
             Local::Copy => self.copy(),
             Local::Theme => self.theme(args),
+            Local::Redraw => self.redraw(),
+            Local::StatusBar => self.statusbar(args),
+            Local::Battery => self.battery(args),
+            Local::Indicator => self.indicator(args),
+            Local::Palette => self.open_palette(),
+            Local::Sessions if args.trim() == "new" => self.start_session(None, None),
+            Local::Sessions => self.open_switcher(),
+            Local::Paste => self.paste_clipboard(false),
+            Local::TerminalSetup => self.terminal_setup(),
             Local::Keys => {
                 let keys = self.open.bindings.describe();
                 self.notice(keys);
@@ -201,34 +237,8 @@ impl Tui<'_> {
         self.notice("copied the last answer");
     }
 
-    /// `/theme [dark|light]`: shows or sets this run's theme.
-    fn theme(&mut self, args: &str) {
-        use pmt_config::schema::TuiTheme;
-        let theme = match args.trim() {
-            "" => {
-                let colored = if self.app.theme.colored() {
-                    ""
-                } else {
-                    " (no colour)"
-                };
-                let configured = self.open.scope.config().ui.tui.theme;
-                self.notice(format!("theme: {configured:?}{colored}").to_lowercase());
-                return;
-            }
-            "dark" => TuiTheme::Dark,
-            "light" => TuiTheme::Light,
-            other => {
-                self.app.transcript.push(
-                    Kind::Error,
-                    format!("unknown theme '{other}' (dark, light)"),
-                );
-                return;
-            }
-        };
-        self.app.theme = Theme::new(theme, self.open.no_color);
-    }
-
-    /// `/new`, `/resume <ref>`, `/fork`: opens another session and shows it.
+    /// `/new`, `/resume <ref>`, `/fork`: opens another session and shows
+    /// it; the one shown before stays live (the switcher lists both).
     fn switch(&mut self, command: Local, args: &str) {
         use super::link::{create, fork, resolve, resume};
         let client = self.link.client.clone();
@@ -247,7 +257,7 @@ impl Tui<'_> {
                     .map(|attached| (id, attached)),
                 Err(err) => Err(err),
             };
-            Done::Switched(switched)
+            Done::Switched(switched, None)
         });
     }
 

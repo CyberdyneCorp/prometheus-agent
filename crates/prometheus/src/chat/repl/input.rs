@@ -80,6 +80,9 @@ struct Shared {
     suspend: Mutex<Option<(String, String)>>,
     /// The line is a secret: drawn as `*` and never remembered.
     masked: AtomicBool,
+    /// The bottom status line's text (`None`: no status line).
+    status: Mutex<Option<String>>,
+    bottom: Mutex<super::bottom_line::BottomLine>,
 }
 
 /// How long [`Input::flush`] waits for earlier output.
@@ -171,6 +174,22 @@ impl Input {
         self.shared.masked.store(masked, Ordering::Relaxed);
     }
 
+    /// Sets the bottom status line drawn before each read (`None` gives
+    /// the row back).
+    pub fn set_status(&self, text: Option<String>) {
+        *self
+            .shared
+            .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = text;
+    }
+
+    /// `/redraw`: clears the screen; the next read reprints the prompt and
+    /// the status line.
+    pub fn redraw(&self) {
+        self.print("\x1b[r\x1b[2J\x1b[H");
+    }
+
     /// Marks whether a turn runs (Ctrl+Z is refused meanwhile).
     pub fn set_busy(&self, busy: bool) {
         self.shared.busy.store(busy, Ordering::Relaxed);
@@ -240,6 +259,11 @@ impl Drop for Input {
         if let Some(printing) = self.printing.take() {
             let _ = printing.join();
         }
+        self.shared
+            .bottom
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .release();
     }
 }
 
@@ -295,6 +319,16 @@ fn editor_thread(
         .map(|p| Box::new(p) as Box<dyn ExternalPrinter + Send>);
     let _ = printer.send(external);
     while let Ok(prompt) = wanted.recv() {
+        let status = shared
+            .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        shared
+            .bottom
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .show(status.as_deref());
         let event = match read_line(&mut editor, shared, &prompt) {
             Ok(line) if shared.masked.load(Ordering::Relaxed) => Event::Line(line),
             Ok(line) => {

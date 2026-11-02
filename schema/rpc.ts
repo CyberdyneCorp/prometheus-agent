@@ -124,6 +124,18 @@ export interface Attached {
   truncated?: boolean;
 }
 
+/** `session.banner` result: what the TUI's startup banner lists. */
+export interface BannerInfo {
+  /** The session's MCP servers. */
+  mcp_servers: Array<McpServerState>;
+  /** The installed skills the session can load. */
+  skills: Array<string>;
+  /** The frozen system prompt; none before the first turn. */
+  system_prompt?: FrozenPrompt | null;
+  /** The session's tool names, in request order. */
+  tools: Array<string>;
+}
+
 /** `clarify.request` result. */
 export interface ClarifyAnswers {
   /** One answer per question, as the `clarify` tool defines them. */
@@ -332,6 +344,14 @@ export interface ForkParams {
   title?: string | null;
 }
 
+/** The system prompt a session froze on its first turn. */
+export interface FrozenPrompt {
+  /** `sha256:<hex>` of the prompt text. */
+  sha256: string;
+  /** The prompt text, its tiers joined in request order. */
+  text: string;
+}
+
 /** `rpc.hello` params: the first request on every connection. */
 export interface HelloParams {
   /** What it can handle. */
@@ -364,6 +384,16 @@ export interface HelloResult {
   protocol: Version;
   /** The daemon's semantic version. */
   server_version: string;
+}
+
+/** One MCP server of a session. */
+export interface McpServerState {
+  /** Its configured name. */
+  name: string;
+  /** `ready`, `starting`, `failed` or `disabled`. */
+  state: string;
+  /** The tools it contributes. */
+  tools: number;
 }
 
 /** One `model.options` entry. */
@@ -680,6 +710,7 @@ export interface Methods {
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
   "session.attach": { params: AttachParams; result: Attached };
+  "session.banner": { params: SessionRef; result: BannerInfo };
   "session.compact": { params: CompactParams; result: Compacted };
   "session.context_usage": { params: SessionRef; result: ContextUsage };
   "session.create": { params: SessionCreateParams; result: SessionRef };

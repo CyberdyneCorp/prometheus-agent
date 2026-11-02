@@ -1,6 +1,3 @@
-› summarise the build log
-· read_file
-
 The build failed in the linker step: two crates define the
 same symbol.
   submit         Enter
@@ -17,8 +14,11 @@ same symbol.
   line_start     Ctrl+A
   line_end       Ctrl+E
   clear_input    Ctrl+U
-
-
+  palette        Ctrl+P
+  sessions       Ctrl+X
+  paste_image    Ctrl+V
+  expand_paste   Ctrl+O
+  banner         Ctrl+B
 ────────────────────────────────────────────────────────────
 ›
   default │ mock/m1 │ ctx 25% │ $0.0042

@@ -146,6 +146,12 @@ impl Chat<'_, '_> {
                 queue::parse(args).and_then(|action| queue::apply(&mut self.lines.queue, action))
             }
             "image" => self.image(args),
+            "redraw" => {
+                self.lines.redraw();
+                Ok(String::new())
+            }
+            "statusbar" => self.status_bar.statusbar(scope, args),
+            "battery" => self.status_bar.battery_command(scope, args),
             _ => return None,
         })
     }
