@@ -1690,3 +1690,50 @@ capabilities = [
 
 [messaging-gateway."Gateway lifecycle hooks are typed"]
 "Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs", "crates/pmt-gateway/tests/messaging/commands.rs::reset_ends_the_replaced_session_for_its_own_profile_hooks"]
+
+# Group 24.7-24.10 (relay, health export, rate limits, chat policies,
+# service installation, daemon inventory, enrollment, pause, home channel,
+# one-shot send, send_message).
+
+[messaging-gateway."Per-user rate limiting (upgrade)"]
+"Burst exceeded" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_burst_beyond_the_limit_is_dropped_with_one_slow_down_reply", "crates/pmt-gateway/src/messaging/limits.rs::a_burst_is_admitted_then_refilled_at_the_rate"]
+"Daily cost cap" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_spent_daily_budget_starts_no_turn", "crates/pmt-store/tests/store/gateway_chats.rs::a_senders_spend_counts_only_their_sessions_since_the_cutoff"]
+
+[messaging-gateway."Per-chat policies (upgrade)"]
+"Group gets a restricted toolset" = ["crates/prometheus/tests/gateway_send.rs::a_group_policy_gives_its_sessions_only_the_policy_toolsets", "crates/pmt-gateway/tests/messaging/limits.rs::a_matched_chat_gets_the_policy_frozen_with_its_session"]
+"Policy cannot widen" = ["crates/pmt-config/src/gateway_check.rs::a_policy_cannot_widen_the_toolsets"]
+"Mid-session edit is deferred" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_policy_edit_reaches_the_next_session_only"]
+
+[messaging-gateway."Relay connector"]
+"Relay fronts Slack" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_relay_fronts_slack_instead_of_the_direct_adapter"]
+
+[messaging-gateway."Gateway health export is opt-in and content-free"]
+"Endpoint down" = ["crates/pmt-gateway/tests/messaging/health.rs::an_unreachable_collector_changes_nothing_but_one_warning", "crates/pmt-gateway/src/messaging/health.rs::export_failures_are_logged_at_most_once_a_minute"]
+
+[messaging-gateway."Per-OS service installation without elevation"]
+"Re-install is idempotent" = { tests = ["crates/prometheus/tests/gateway_service.rs::reinstalling_the_launch_agent_rewrites_one_plist", "crates/prometheus/tests/gateway_service.rs::reinstalling_the_user_unit_rewrites_one_unit"], note = "macOS and Linux tests run on their CI hosts against the PMT_TEST_SERVICE_DIR seam (units written under the seam, launchctl/systemctl invocations recorded)" }
+"Windows fallback without Task Scheduler rights" = { tests = ["crates/prometheus/tests/gateway_service.rs::without_task_scheduler_rights_a_startup_launcher_is_used"], note = "runs on the Windows CI host; schtasks refusal is simulated by the PMT_TEST_SERVICE_DIR seam" }
+"System scope needs root" = ["crates/prometheus/tests/gateway_service.rs::system_scope_needs_root"]
+
+[messaging-gateway."Daemon inventory across homes"]
+"Two homes on one machine" = ["crates/prometheus/tests/gateway_service.rs::two_homes_on_one_machine_are_both_listed", "crates/pmt-core/src/inventory.rs::two_homes_are_two_entries_and_a_dead_one_is_pruned"]
+
+[messaging-gateway."Relay enrollment"]
+"Token reused" = ["crates/prometheus/tests/gateway_service.rs::a_reused_enrollment_token_changes_nothing"]
+
+[messaging-gateway."Global emergency pause"]
+"Message during pause" = ["crates/pmt-gateway/tests/messaging/pause.rs::a_message_during_a_pause_starts_no_turn", "crates/prometheus/tests/gateway_send.rs::a_pause_refuses_new_turns_across_a_restart_until_lifted"]
+"In-flight turn finishes" = ["crates/pmt-gateway/tests/messaging/pause.rs::an_in_flight_turn_finishes_and_the_next_message_is_refused"]
+"Pause survives restart" = { tests = ["crates/pmt-gateway/tests/messaging/pause.rs::a_pause_survives_a_restart", "crates/prometheus/tests/gateway_send.rs::a_pause_refuses_new_turns_across_a_restart_until_lifted", "crates/pmt-core/src/pause.rs::a_pause_is_a_file_any_process_of_the_home_reads"], note = "no scheduler exists before scheduled-jobs (41.x); the tests prove the sentinel survives the restart and refuses turns, and every scheduler must consult pmt_core::pause::check before it fires" }
+
+[messaging-gateway."Home channel and /sethome"]
+"Cron output goes home" = { tests = ["crates/pmt-gateway/tests/messaging/targets.rs::sethome_makes_scheduled_output_go_to_that_chat_and_topic", "crates/prometheus/tests/gateway_send.rs::sethome_makes_a_platform_only_send_go_to_that_chat"], note = "the job delivery is the gateway delivery API (Gateway::send with the job's deliver target); scheduled-jobs (41.x) calls it" }
+"Missing home channel" = ["crates/pmt-gateway/tests/messaging/targets.rs::a_delivery_without_a_home_channel_fails_naming_sethome", "crates/pmt-gateway/src/messaging/target.rs::a_bare_platform_is_its_home_channel"]
+
+[agent-interop."One-shot send command"]
+"Pipe a status line" = ["crates/prometheus/tests/gateway_send.rs::piping_a_status_line_sends_it_through_the_daemon_without_a_turn", "crates/prometheus/tests/gateway_send.rs::without_the_daemon_a_stateless_adapter_sends_directly"]
+"No home channel" = ["crates/prometheus/tests/gateway_send.rs::send_exit_codes_name_the_problem"]
+
+[agent-interop."send_message tool"]
+"Unknown chat refused" = ["crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_unknown_chats_and_reaches_known_ones", "crates/pmt-gateway/tests/messaging/targets.rs::the_tool_may_reach_only_home_allowed_or_known_chats"]
+"Guard fault fails closed" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_send_tool_asks_the_relay_and_fails_closed"]

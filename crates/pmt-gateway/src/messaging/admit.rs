@@ -8,8 +8,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use jiff::Timestamp;
-use pmt_config::schema::{GatewayConfig, UnauthorizedDm};
+use jiff::{Timestamp, Zoned};
+use pmt_config::schema::{ChatPolicy, GatewayConfig, PolicyFacts, UnauthorizedDm, resolve_policy};
 use pmt_store::gateway::pairing::{Requested, Requester};
 use serde_json::json;
 use tokio::time::Instant;
@@ -19,6 +19,7 @@ use super::adapter::{Admission, Inbound, Outgoing};
 use super::auth::{self, Facts};
 use super::key::{ChatType, Isolation, Routing};
 use super::lane;
+use super::limits::{self, Verdict};
 
 /// How often an adapter's events for an unserved profile are logged.
 const UNSERVED_WARN_EVERY: Duration = Duration::from_hours(1);
@@ -48,8 +49,16 @@ pub(crate) async fn admit(
         .await;
     let gateway = &scope.config().gateway;
     let admission = decide(shared, &owner, platform, inbound, gateway).await;
+    let label = json!(admission);
+    shared.health.add(
+        "prometheus.gateway.admissions",
+        &[
+            ("platform", platform),
+            ("admission", label.as_str().unwrap_or_default()),
+        ],
+    );
     let mut event = event;
-    event["admission"] = json!(admission);
+    event["admission"] = label;
     hooks.emit(&owner, "post_gateway_admission", event).await;
     admission
 }
@@ -83,6 +92,9 @@ async fn decide(
     if auth::authorize(&facts).is_none() {
         return unauthorized(shared, owner, platform, &inbound, gateway).await;
     }
+    shared
+        .last_inbound
+        .record(owner, platform, &inbound.chat_id, &inbound.message_id);
     let chat = format!("{owner}:{platform}:{}", inbound.chat_id);
     if inbound.is_bot && !shared.guard.admit(&chat, Instant::now()) {
         tracing::info!(
@@ -91,6 +103,9 @@ async fn decide(
             "bot message refused: bot-loop cool-down"
         );
         return Admission::Dropped;
+    }
+    if let Some(limited) = limit(shared, owner, platform, &inbound, gateway).await {
+        return limited;
     }
     let (group_per_user, thread_per_user) = gateway.sessions_for(platform);
     let routing = Routing {
@@ -109,6 +124,82 @@ async fn decide(
         thread_per_user,
     });
     lane::input(shared, &key, routing, inbound)
+}
+
+/// The policy matching an event, if any.
+pub(crate) fn policy_for<'a>(
+    gateway: &'a GatewayConfig,
+    platform: &str,
+    inbound: &Inbound,
+) -> Option<(usize, &'a ChatPolicy)> {
+    let facts = PolicyFacts {
+        platform,
+        chat_id: &inbound.chat_id,
+        chat_type: inbound.chat_type.as_str(),
+        user_id: &inbound.sender_id,
+    };
+    resolve_policy(&gateway.chat_policies, &facts)
+}
+
+/// Applies the sender's rate limits and daily budget (admins are exempt);
+/// `Some(rate_limited)` drops the event.
+async fn limit(
+    shared: &Shared,
+    owner: &str,
+    platform: &str,
+    inbound: &Inbound,
+    gateway: &GatewayConfig,
+) -> Option<Admission> {
+    let table = gateway.platform(platform);
+    if auth::is_admin(&table, inbound.chat_type, &inbound.sender_id) == Some(true) {
+        return None;
+    }
+    let mut config = gateway.rate_limit_for(platform);
+    if let Some(over) =
+        policy_for(gateway, platform, inbound).and_then(|(_, p)| p.rate_limit.as_ref())
+    {
+        config = config.with(over);
+    }
+    let turn = inbound.callback.is_none() && !inbound.text.trim_start().starts_with('/');
+    let sender = format!("{owner}\u{1f}{platform}\u{1f}{}", inbound.sender_id);
+    let now = Instant::now();
+    if let Verdict::Limited { wait, notify } = shared.limits.check(&sender, &config, turn, now) {
+        tracing::info!(profile = owner, platform, "message dropped: rate limit");
+        if notify {
+            reply(shared, owner, platform, inbound, &limits::slow_down(wait)).await;
+        }
+        return Some(Admission::RateLimited);
+    }
+    let cap = config.daily_cost_usd.filter(|_| turn)?;
+    let store = shared.store(owner)?;
+    let midnight = Zoned::now()
+        .start_of_day()
+        .map_or_else(|_| Timestamp::now(), |z| z.timestamp());
+    let spent = store
+        .sender_cost_since(platform, &inbound.sender_id, midnight)
+        .unwrap_or_else(|err| {
+            tracing::warn!("daily spend not readable: {err}");
+            0.0
+        });
+    if spent < cap {
+        return None;
+    }
+    tracing::info!(
+        profile = owner,
+        platform,
+        "message dropped: daily budget spent"
+    );
+    if shared.limits.budget_notice_due(&sender, now) {
+        reply(
+            shared,
+            owner,
+            platform,
+            inbound,
+            &limits::daily_budget(spent, cap),
+        )
+        .await;
+    }
+    Some(Admission::RateLimited)
 }
 
 /// An unauthorized sender: silence in groups; in a DM the platform's
@@ -182,13 +273,7 @@ fn pairing_text(owner: &str, platform: &str, code: &str) -> String {
 }
 
 async fn reply(shared: &Shared, owner: &str, platform: &str, inbound: &Inbound, text: &str) {
-    let message = Outgoing {
-        chat_id: inbound.chat_id.clone(),
-        thread_id: inbound.thread_id.clone(),
-        reply_to: None,
-        text: text.to_owned(),
-        buttons: Vec::new(),
-    };
+    let message = Outgoing::text(&inbound.chat_id, inbound.thread_id.as_deref(), text);
     if let Err(err) = shared.adapters.send_direct(owner, platform, &message).await {
         tracing::warn!(
             profile = owner,

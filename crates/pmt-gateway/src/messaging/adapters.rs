@@ -21,6 +21,7 @@ use super::adapter::{
     Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterSetup, AdapterState, AdapterStatus,
     Admission, Descriptor, Inbound, Outgoing, SendError, Sent,
 };
+use super::relay::{Relay, RelayDescriptor, RelayView};
 
 /// First reconnect delay.
 const RECONNECT_START: Duration = Duration::from_secs(1);
@@ -36,6 +37,8 @@ pub(crate) const UNCONFIRMED: &str =
 pub(crate) struct Slot {
     pub(crate) adapter: Arc<dyn Adapter>,
     pub(crate) descriptor: Descriptor,
+    /// The relay carries this platform.
+    pub(crate) relayed: bool,
     status: Mutex<AdapterStatus>,
     /// The adapter reported a lost connection.
     lost: Notify,
@@ -70,6 +73,12 @@ impl Adapters {
             .expect("adapters poisoned")
             .get(&(profile.to_owned(), platform.to_owned()))
             .cloned()
+    }
+
+    /// Whether the relay carries `platform` for `profile` (`None`: no
+    /// adapter runs for it).
+    pub(crate) fn slot_relayed(&self, profile: &str, platform: &str) -> Option<bool> {
+        self.slot(profile, platform).map(|s| s.relayed)
     }
 
     /// The descriptor of a running adapter.
@@ -148,13 +157,32 @@ impl Adapters {
     }
 }
 
-/// Starts the adapters `profile` enables that are not running yet.
+/// Starts the adapters `profile` enables that are not running yet, and
+/// the relay's platforms for it.
 pub(crate) fn start_profile(shared: &Arc<Shared>, profile: &str) {
     let Some(scope) = shared.agents.scope(profile) else {
         return;
     };
+    if let Some(relay) = shared.relay.get()
+        && let Some(descriptor) = relay.descriptor()
+    {
+        front_profile(shared, relay, &descriptor, profile);
+    }
     for (platform, table) in &scope.config().gateway.platforms {
         if !table.enabled || shared.adapters.slot(profile, platform).is_some() {
+            continue;
+        }
+        if shared
+            .relay
+            .get()
+            .is_some_and(|r| r.replaces_direct(platform))
+        {
+            tracing::info!(
+                profile,
+                platform,
+                "the relay fronts {platform}; the direct adapter is not connected \
+                 (list it in gateway.relay.allow_direct_platforms to keep it)"
+            );
             continue;
         }
         if table.allow_all {
@@ -217,10 +245,20 @@ fn record_failure(shared: &Shared, key: (String, String), error: &AdapterError) 
 }
 
 fn launch(shared: &Arc<Shared>, key: (String, String), adapter: Arc<dyn Adapter>) {
+    launch_slot(shared, key, adapter, false);
+}
+
+fn launch_slot(
+    shared: &Arc<Shared>,
+    key: (String, String),
+    adapter: Arc<dyn Adapter>,
+    relayed: bool,
+) {
     let descriptor = adapter.describe();
     let slot = Arc::new(Slot {
         adapter,
         descriptor,
+        relayed,
         status: Mutex::new(AdapterStatus {
             profile: key.0.clone(),
             platform: key.1.clone(),
@@ -297,6 +335,14 @@ async fn supervise(shared: Weak<Shared>, key: (String, String), slot: Arc<Slot>)
 }
 
 async fn platform_event(shared: &Shared, key: &(String, String), error: &AdapterError) {
+    shared.health.add(
+        "prometheus.adapter.fatal",
+        &[
+            ("profile", &key.0),
+            ("platform", &key.1),
+            ("code", &error.code),
+        ],
+    );
     shared
         .options
         .hooks
@@ -319,6 +365,73 @@ fn check_all_down(shared: &Shared) {
             "every messaging adapter failed for good and gateway.on_all_adapters_down = \"exit\""
         );
         shared.server.request_fatal_stop();
+    }
+}
+
+/// The relay's descriptor arrived: every served profile gets the fronted
+/// platforms through the relay, and a direct adapter of a fronted
+/// platform that is not allowed beside it is disconnected.
+pub(crate) fn front(shared: &Arc<Shared>, relay: &Arc<Relay>, descriptor: &RelayDescriptor) {
+    for profile in shared.server.profiles() {
+        front_profile(shared, relay, descriptor, &profile);
+    }
+}
+
+fn front_profile(
+    shared: &Arc<Shared>,
+    relay: &Arc<Relay>,
+    descriptor: &RelayDescriptor,
+    profile: &str,
+) {
+    for platform in &descriptor.platforms {
+        let key = (profile.to_owned(), platform.clone());
+        match shared.adapters.slot(profile, platform) {
+            Some(slot) if slot.relayed => continue,
+            Some(slot) => {
+                if !relay.replaces_direct(platform) {
+                    continue;
+                }
+                tracing::info!(
+                    profile,
+                    platform,
+                    "the relay fronts {platform}; disconnecting the direct adapter"
+                );
+                slot.stop.cancel();
+                let adapter = Arc::clone(&slot.adapter);
+                tokio::spawn(async move { adapter.disconnect().await });
+            }
+            None => {
+                let direct = shared.agents.scope(profile).is_some_and(|scope| {
+                    scope
+                        .config()
+                        .gateway
+                        .platforms
+                        .get(platform)
+                        .is_some_and(|t| t.enabled)
+                });
+                if direct && !relay.replaces_direct(platform) {
+                    // Allowed beside the relay: the profile's own adapter
+                    // serves the platform.
+                    continue;
+                }
+                if direct {
+                    tracing::info!(
+                        profile,
+                        platform,
+                        "the relay fronts {platform}; the direct adapter is not connected \
+                         (list it in gateway.relay.allow_direct_platforms to keep it)"
+                    );
+                }
+            }
+        }
+        shared
+            .adapters
+            .failed
+            .write()
+            .expect("adapters poisoned")
+            .remove(&key);
+        let view: Arc<dyn Adapter> = Arc::new(RelayView::new(relay, platform));
+        launch_slot(shared, key, view, true);
     }
 }
 

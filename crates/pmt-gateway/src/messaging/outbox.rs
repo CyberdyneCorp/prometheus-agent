@@ -95,6 +95,7 @@ fn outgoing(entry: &Outbound) -> Outgoing {
         reply_to: entry.reply_to.clone(),
         text,
         buttons,
+        attachments: entry.attachments.clone(),
     }
 }
 
@@ -141,6 +142,9 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
             }
             shared.adapters.confirm(profile, &entry.platform);
             shared
+                .health
+                .add("prometheus.outbox.sent", &[("platform", &entry.platform)]);
+            shared
                 .options
                 .hooks
                 .emit(
@@ -150,7 +154,13 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
                 )
                 .await;
         }
-        Err(err) => failed(store, &entry, &err, config.max_attempts, now),
+        Err(err) => {
+            shared.health.add(
+                "prometheus.outbox.send_failures",
+                &[("platform", &entry.platform)],
+            );
+            failed(store, &entry, &err, config.max_attempts, now);
+        }
     }
 }
 

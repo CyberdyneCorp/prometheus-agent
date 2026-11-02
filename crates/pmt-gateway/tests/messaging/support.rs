@@ -81,7 +81,7 @@ async fn script(
 }
 
 struct Profile {
-    scope: ProfileScope,
+    dir: pmt_config::ProfileDir,
     store: Arc<Store>,
 }
 
@@ -100,6 +100,8 @@ pub struct FakeAgents {
     pub evicted: Mutex<Vec<(String, String)>>,
     /// How long an `approval` turn waits.
     pub approval_timeout: Mutex<Duration>,
+    /// Every conversation session created, in order.
+    pub conversations: Mutex<Vec<Conversation>>,
 }
 
 impl FakeAgents {
@@ -278,6 +280,9 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("deny", &[], BusyPolicy::Immediate),
     ("whoami", &[], BusyPolicy::Immediate),
     ("pair", &[], BusyPolicy::Immediate),
+    ("pause", &[], BusyPolicy::Immediate),
+    ("sethome", &["set-home"], BusyPolicy::Immediate),
+    ("policy", &[], BusyPolicy::Immediate),
     ("model", &[], BusyPolicy::Reject),
     ("usage", &[], BusyPolicy::Immediate),
     ("retry", &[], BusyPolicy::InterruptThenDispatch),
@@ -288,8 +293,10 @@ impl Agents for FakeAgents {
         self.profiles.get(profile).map(|p| Arc::clone(&p.store))
     }
 
+    /// Read from disk at every call, as the daemon's reload would.
     fn scope(&self, profile: &str) -> Option<ProfileScope> {
-        self.profiles.get(profile).map(|p| p.scope.clone())
+        let dir = self.profiles.get(profile)?.dir.clone();
+        ProfileScope::open(dir, &Overrides::default(), Launch::Other).ok()
     }
 
     fn create_conversation<'a>(
@@ -297,6 +304,10 @@ impl Agents for FakeAgents {
         profile: &'a str,
         conversation: Conversation,
     ) -> HostFuture<'a, String> {
+        self.conversations
+            .lock()
+            .unwrap()
+            .push(conversation.clone());
         Box::pin(async move {
             let store = self
                 .store(profile)
@@ -532,6 +543,12 @@ pub struct Setup {
     pub drain: Duration,
     /// Adapters without editing, by platform.
     pub no_edit: Vec<&'static str>,
+    /// Platforms whose direct adapter is not expected to connect.
+    pub unconnected: Vec<&'static str>,
+    /// The relay connector.
+    pub relay: Option<pmt_gateway::messaging::RelayOptions>,
+    /// The health export.
+    pub health: Option<pmt_gateway::messaging::health::HealthOptions>,
 }
 
 impl Setup {
@@ -544,6 +561,9 @@ impl Setup {
             connect_errors: Vec::new(),
             drain: Duration::from_secs(2),
             no_edit: Vec::new(),
+            unconnected: Vec::new(),
+            relay: None,
+            health: None,
         }
     }
 }
@@ -576,9 +596,9 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
     for (name, config) in &setup.profiles {
         let dir = layout.profile(&ProfileName::parse(name).unwrap()).unwrap();
         std::fs::write(dir.path().join("config.toml"), config).unwrap();
-        let scope = ProfileScope::open(dir, &Overrides::default(), Launch::Other).unwrap();
+        let scope = ProfileScope::open(dir.clone(), &Overrides::default(), Launch::Other).unwrap();
         let store = Arc::new(Store::open(&scope).unwrap());
-        profiles.insert((*name).to_owned(), Profile { scope, store });
+        profiles.insert((*name).to_owned(), Profile { dir, store });
     }
     Arc::new(FakeAgents {
         profiles,
@@ -589,6 +609,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         commands: Mutex::default(),
         evicted: Mutex::default(),
         approval_timeout: Mutex::new(Duration::from_secs(30)),
+        conversations: Mutex::default(),
     })
 }
 
@@ -638,6 +659,8 @@ impl Harness {
             options.factories.insert(platform.clone(), factory);
         }
         options.hooks = Arc::clone(&setup.hooks);
+        options.relay.clone_from(&setup.relay);
+        options.health.clone_from(&setup.health);
         options.drain_timeout = setup.drain;
         if setup.exit_when_down {
             options.on_all_adapters_down = pmt_config::daemon::AllAdaptersDown::Exit;
@@ -656,14 +679,16 @@ impl Harness {
             gateway,
             adapters,
         };
-        harness.connected().await;
+        harness.connected(&setup.unconnected).await;
         harness
     }
 
     /// Waits until every adapter that can connect has.
-    async fn connected(&self) {
-        for adapter in self.adapters.values() {
-            if adapter.connect_error.lock().unwrap().is_some() {
+    async fn connected(&self, unconnected: &[&str]) {
+        for ((_, platform), adapter) in &self.adapters {
+            if adapter.connect_error.lock().unwrap().is_some()
+                || unconnected.contains(&platform.as_str())
+            {
                 continue;
             }
             eventually("the adapter connects", || {
@@ -750,4 +775,38 @@ pub async fn said(adapter: &FakeAdapter, text: &str) {
         adapter.texts().iter().any(|t| t.contains(text))
     })
     .await;
+}
+
+/// Captures every log line of the test's thread while the guard lives.
+#[derive(Clone, Default)]
+pub struct Logs(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Logs {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Logs {
+    /// Starts capturing (the test must run on a current-thread runtime).
+    pub fn capture() -> (Self, tracing::subscriber::DefaultGuard) {
+        let logs = Self::default();
+        let writer = logs.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        (logs, tracing::subscriber::set_default(subscriber))
+    }
+
+    /// Everything logged so far.
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
+    }
 }

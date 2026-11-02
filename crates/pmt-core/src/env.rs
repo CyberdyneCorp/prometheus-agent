@@ -46,6 +46,11 @@ const TEST_BATTERY: &str = "PMT_TEST_BATTERY";
 /// adapter exchanges messages, so daemon tests can drive the gateway end
 /// to end (a test seam; release builds ignore it).
 const TEST_ADAPTER_DIR: &str = "PMT_TEST_ADAPTER_DIR";
+/// Debug builds: the directory under which `daemon install-service`
+/// writes units and records the service-manager commands it would run,
+/// instead of touching the real service manager (a test seam; release
+/// builds ignore it).
+const TEST_SERVICE_DIR: &str = "PMT_TEST_SERVICE_DIR";
 const RUST_LOG: &str = "RUST_LOG";
 const OWNED_PREFIXES: [&str; 2] = ["PMT_", "PROMETHEUS_"];
 
@@ -133,6 +138,7 @@ pub struct LaunchEnv {
     test_tui_panic: bool,
     test_battery: Option<String>,
     test_adapter_dir: Option<PathBuf>,
+    test_service_dir: Option<PathBuf>,
 }
 
 impl LaunchEnv {
@@ -181,6 +187,7 @@ impl LaunchEnv {
                 Var::TestTuiPanic => env.test_tui_panic = true,
                 Var::TestBattery => env.test_battery = env.unicode(name, value),
                 Var::TestAdapterDir => env.test_adapter_dir = non_blank(value).map(PathBuf::from),
+                Var::TestServiceDir => env.test_service_dir = non_blank(value).map(PathBuf::from),
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
                 Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
@@ -236,6 +243,14 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_adapter_dir(&self) -> Option<&PathBuf> {
         self.test_adapter_dir.as_ref()
+    }
+
+    /// Debug builds: `PMT_TEST_SERVICE_DIR`, where `daemon
+    /// install-service` writes units and records service-manager commands
+    /// instead of running them. Always `None` in release builds.
+    #[must_use]
+    pub fn test_service_dir(&self) -> Option<&PathBuf> {
+        self.test_service_dir.as_ref()
     }
 
     /// Debug builds: `PMT_TEST_BATTERY`, the battery the status bar
@@ -357,6 +372,7 @@ enum Var {
     TestTuiPanic,
     TestBattery,
     TestAdapterDir,
+    TestServiceDir,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -385,6 +401,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         TEST_TUI_PANIC if cfg!(debug_assertions) => return Var::TestTuiPanic,
         TEST_BATTERY if cfg!(debug_assertions) => return Var::TestBattery,
         TEST_ADAPTER_DIR if cfg!(debug_assertions) => return Var::TestAdapterDir,
+        TEST_SERVICE_DIR if cfg!(debug_assertions) => return Var::TestServiceDir,
         _ => {}
     }
     if is_user_home_var(name) {

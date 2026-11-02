@@ -105,6 +105,8 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         ("session_search", strings(&["session_search"])),
         ("connections", strings(&["manage_connections"])),
         ("clarify", strings(&["clarify"])),
+        // agent-interop, send_message tool.
+        ("messaging", strings(&["send_message"])),
         ("code_execution", strings(&["execute_code"])),
         ("delegation", strings(&["delegate_task"])),
         ("kanban", Vec::new()),

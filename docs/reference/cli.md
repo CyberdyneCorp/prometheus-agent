@@ -36,6 +36,7 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
@@ -7524,6 +7525,151 @@ Options:
           Print help
 ```
 
+## `prometheus pause`
+
+```text
+Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+
+Usage: prometheus pause [OPTIONS]
+       prometheus pause <COMMAND>
+
+Commands:
+  off     Lift the pause
+  status  Print whether the home is paused, why, by whom and since when
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --reason <REASON>
+          Why (shown in every refusal)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pause off`
+
+```text
+Lift the pause
+
+Usage: prometheus pause off [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pause status`
+
+```text
+Print whether the home is paused, why, by whom and since when
+
+Usage: prometheus pause status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pause help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pause help [COMMAND]
+
+Commands:
+  off     Lift the pause
+  status  Print whether the home is paused, why, by whom and since when
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus pause help off`
+
+```text
+Lift the pause
+
+Usage: prometheus pause help off
+```
+
+## `prometheus pause help status`
+
+```text
+Print whether the home is paused, why, by whom and since when
+
+Usage: prometheus pause help status
+```
+
+## `prometheus pause help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pause help help
+```
+
 ## `prometheus daemon`
 
 ```text
@@ -7532,13 +7678,15 @@ Run, start, stop and inspect the gateway daemon that owns this home's sessions (
 Usage: prometheus daemon [OPTIONS] <COMMAND>
 
 Commands:
-  run      Run the daemon in the foreground (what `start` launches)
-  start    Start the daemon in the background; does nothing when it runs
-  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
-  stop     Stop the daemon after its running turns finish
-  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
-  status   Print the daemon's process state
-  help     Print this message or the help of the given subcommand(s)
+  run                Run the daemon in the foreground (what `start` launches)
+  start              Start the daemon in the background; does nothing when it runs
+  ensure             Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop               Stop the daemon after its running turns finish
+  restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status             Print the daemon's process state
+  install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+  uninstall-service  Stop and remove the unit `install-service` installed
+  help               Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -7764,6 +7912,84 @@ Options:
           Print help
 ```
 
+## `prometheus daemon install-service`
+
+```text
+Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+
+Usage: prometheus daemon install-service [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --system
+          Install a boot-time system unit instead (root or administrator)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --run-as-user <USER>
+          The user the system unit runs the daemon as
+
+      --no-start
+          Install without starting the daemon now
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon uninstall-service`
+
+```text
+Stop and remove the unit `install-service` installed
+
+Usage: prometheus daemon uninstall-service [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --system
+          Remove the system unit instead of the per-user one
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus daemon help`
 
 ```text
@@ -7772,13 +7998,15 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus daemon help [COMMAND]
 
 Commands:
-  run      Run the daemon in the foreground (what `start` launches)
-  start    Start the daemon in the background; does nothing when it runs
-  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
-  stop     Stop the daemon after its running turns finish
-  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
-  status   Print the daemon's process state
-  help     Print this message or the help of the given subcommand(s)
+  run                Run the daemon in the foreground (what `start` launches)
+  start              Start the daemon in the background; does nothing when it runs
+  ensure             Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop               Stop the daemon after its running turns finish
+  restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status             Print the daemon's process state
+  install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+  uninstall-service  Stop and remove the unit `install-service` installed
+  help               Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus daemon help run`
@@ -7829,6 +8057,22 @@ Print the daemon's process state
 Usage: prometheus daemon help status
 ```
 
+## `prometheus daemon help install-service`
+
+```text
+Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+
+Usage: prometheus daemon help install-service
+```
+
+## `prometheus daemon help uninstall-service`
+
+```text
+Stop and remove the unit `install-service` installed
+
+Usage: prometheus daemon help uninstall-service
+```
+
 ## `prometheus daemon help help`
 
 ```text
@@ -7848,6 +8092,9 @@ Commands:
   status  Print each served profile's messaging adapters and their state
   reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
   outbox  The durable delivery outbox of the selected profile
+  send    Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list    List every running Prometheus daemon of this OS user, whatever its home
+  enroll  Enroll this home with a relay connector using a one-time token
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -8142,6 +8389,133 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway outbox help help
 ```
 
+## `prometheus gateway send`
+
+```text
+Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+
+Usage: prometheus gateway send [OPTIONS] [MESSAGE]
+
+Arguments:
+  [MESSAGE]
+          The message; without it, `--file` or piped stdin
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TARGET>
+          Where: `platform` (its home channel), `platform:chat_id`, `platform:chat_id:thread_id` or `platform:#channel-name`
+
+      --file <PATH>
+          Read the message from a text file (`-` for stdin)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --subject <SUBJECT>
+          A subject line put before the message
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --list [<PLATFORM>]
+          List known targets (home channels, allowed chats, chats with sessions), optionally of one platform
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway list`
+
+```text
+List every running Prometheus daemon of this OS user, whatever its home
+
+Usage: prometheus gateway list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway enroll`
+
+```text
+Enroll this home with a relay connector using a one-time token
+
+Usage: prometheus gateway enroll [OPTIONS] --token <TOKEN> --connector-url <URL>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --token <TOKEN>
+          The one-time enrollment token from the relay operator
+
+      --connector-url <URL>
+          The connector's HTTPS base URL
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --gateway-id <ID>
+          The gateway id to ask for (the connector may assign one)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --wake-url <URL>
+          An HTTPS URL the connector calls to wake this host when it scaled to zero
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus gateway help`
 
 ```text
@@ -8153,6 +8527,9 @@ Commands:
   status  Print each served profile's messaging adapters and their state
   reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
   outbox  The durable delivery outbox of the selected profile
+  send    Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list    List every running Prometheus daemon of this OS user, whatever its home
+  enroll  Enroll this home with a relay connector using a one-time token
   help    Print this message or the help of the given subcommand(s)
 ```
 
@@ -8207,6 +8584,30 @@ Usage: prometheus gateway help outbox retry
 Remove an entry that is not being sent
 
 Usage: prometheus gateway help outbox drop
+```
+
+## `prometheus gateway help send`
+
+```text
+Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+
+Usage: prometheus gateway help send
+```
+
+## `prometheus gateway help list`
+
+```text
+List every running Prometheus daemon of this OS user, whatever its home
+
+Usage: prometheus gateway help list
+```
+
+## `prometheus gateway help enroll`
+
+```text
+Enroll this home with a relay connector using a one-time token
+
+Usage: prometheus gateway help enroll
 ```
 
 ## `prometheus gateway help help`
@@ -9467,6 +9868,7 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
@@ -10769,6 +11171,34 @@ Update this install to its channel's newest signed release, check for one (exit 
 Usage: prometheus help update
 ```
 
+## `prometheus help pause`
+
+```text
+Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+
+Usage: prometheus help pause [COMMAND]
+
+Commands:
+  off     Lift the pause
+  status  Print whether the home is paused, why, by whom and since when
+```
+
+## `prometheus help pause off`
+
+```text
+Lift the pause
+
+Usage: prometheus help pause off
+```
+
+## `prometheus help pause status`
+
+```text
+Print whether the home is paused, why, by whom and since when
+
+Usage: prometheus help pause status
+```
+
 ## `prometheus help daemon`
 
 ```text
@@ -10777,12 +11207,14 @@ Run, start, stop and inspect the gateway daemon that owns this home's sessions (
 Usage: prometheus help daemon [COMMAND]
 
 Commands:
-  run      Run the daemon in the foreground (what `start` launches)
-  start    Start the daemon in the background; does nothing when it runs
-  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
-  stop     Stop the daemon after its running turns finish
-  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
-  status   Print the daemon's process state
+  run                Run the daemon in the foreground (what `start` launches)
+  start              Start the daemon in the background; does nothing when it runs
+  ensure             Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop               Stop the daemon after its running turns finish
+  restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status             Print the daemon's process state
+  install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+  uninstall-service  Stop and remove the unit `install-service` installed
 ```
 
 ## `prometheus help daemon run`
@@ -10833,6 +11265,22 @@ Print the daemon's process state
 Usage: prometheus help daemon status
 ```
 
+## `prometheus help daemon install-service`
+
+```text
+Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+
+Usage: prometheus help daemon install-service
+```
+
+## `prometheus help daemon uninstall-service`
+
+```text
+Stop and remove the unit `install-service` installed
+
+Usage: prometheus help daemon uninstall-service
+```
+
 ## `prometheus help gateway`
 
 ```text
@@ -10844,6 +11292,9 @@ Commands:
   status  Print each served profile's messaging adapters and their state
   reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
   outbox  The durable delivery outbox of the selected profile
+  send    Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list    List every running Prometheus daemon of this OS user, whatever its home
+  enroll  Enroll this home with a relay connector using a one-time token
 ```
 
 ## `prometheus help gateway status`
@@ -10897,6 +11348,30 @@ Usage: prometheus help gateway outbox retry
 Remove an entry that is not being sent
 
 Usage: prometheus help gateway outbox drop
+```
+
+## `prometheus help gateway send`
+
+```text
+Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+
+Usage: prometheus help gateway send
+```
+
+## `prometheus help gateway list`
+
+```text
+List every running Prometheus daemon of this OS user, whatever its home
+
+Usage: prometheus help gateway list
+```
+
+## `prometheus help gateway enroll`
+
+```text
+Enroll this home with a relay connector using a one-time token
+
+Usage: prometheus help gateway enroll
 ```
 
 ## `prometheus help pairing`
@@ -11184,3 +11659,10 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
+| `prometheus.gateway_status.v1` | `prometheus gateway status` |
+| `prometheus.gateway_outbox.v1` | `prometheus gateway outbox list` |
+| `prometheus.pairing.v1` | `prometheus pairing list` |
+| `prometheus.gateway_send.v1` | `prometheus gateway send` |
+| `prometheus.gateway_targets.v1` | `prometheus gateway send --list` |
+| `prometheus.gateway_list.v1` | `prometheus gateway list` |
+| `prometheus.pause.v1` | `prometheus pause status` |

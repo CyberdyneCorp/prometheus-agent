@@ -132,6 +132,9 @@ impl Lane {
             "deny" => self.deny(&call.routing, &call.args),
             "whoami" => self.whoami(&call.routing, &table),
             "pair" => self.pair(&call.routing, &table, &call.args),
+            "pause" => self.pause_command(&call.routing, &call.args),
+            "sethome" => self.set_home(&call.routing),
+            "policy" => self.policy_command(&call.routing, &call.args).await,
             _ => self.registry(call).await,
         }
         None

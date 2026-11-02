@@ -182,6 +182,11 @@ pub fn builtin() -> Vec<Toolset> {
             &["manage_connections"],
         ),
         Toolset::new("clarify", "Ask the user a question", &["clarify"]),
+        Toolset::new(
+            "messaging",
+            "Send messages and reactions to messaging chats (needs the gateway daemon)",
+            &["send_message"],
+        ),
         Toolset::new("code_execution", "Run code in a sandbox", &["execute_code"]),
         Toolset::new(
             "delegation",

@@ -899,6 +899,39 @@ error_codes! {
     /// Every messaging adapter failed for good with `on_all_adapters_down = "exit"`.
     GATEWAY_ALL_ADAPTERS_DOWN = ("gateway.all_adapters_down", Config,
         "Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = \"exit\"`; fix the adapters' configuration or credentials, or set it to `stay_alive`.");
+    /// A new turn while the home is paused.
+    PAUSE_ACTIVE = ("pause.active", Unavailable,
+        "The home is paused (`<home>/run/paused`): no new turns or scheduled work start until `prometheus pause off` (or `/pause off` from an admin chat).");
+    /// A delivery to a platform without a home channel.
+    GATEWAY_NO_HOME_CHANNEL = ("gateway.no_home_channel", NotFound,
+        "The delivery names only a platform and that platform has no home channel; run /sethome in the target chat or name the chat (`platform:chat_id`).");
+    /// A send target that is malformed or names nothing known.
+    GATEWAY_UNKNOWN_TARGET = ("gateway.unknown_target", NotFound,
+        "The target is not `platform`, `platform:chat_id`, `platform:chat_id:thread_id` or `platform:#channel-name`, or names a channel nobody knows; `prometheus gateway send --list` shows the known targets.");
+    /// A send to a platform the profile does not enable.
+    GATEWAY_PLATFORM_NOT_CONFIGURED = ("gateway.platform_not_configured", Config,
+        "The profile does not enable that platform; add `[gateway.platforms.<name>]` with `enabled = true` and its credential.");
+    /// A one-shot send that needs the daemon.
+    GATEWAY_DAEMON_REQUIRED = ("gateway.daemon_required", Unavailable,
+        "The platform's adapter cannot send without a running connection; start the daemon with `prometheus daemon start` and send again.");
+    /// A one-shot send the platform refused or that was not delivered in time.
+    GATEWAY_DELIVERY_FAILED = ("gateway.delivery_failed", Tool,
+        "The message was not delivered; `prometheus gateway outbox list` shows the entry and its last error.");
+    /// A destination the `send_message` tool may not reach.
+    GATEWAY_TARGET_REFUSED = ("gateway.target_refused", PermissionDenied,
+        "The tool may send only to a platform's home channel, a chat in `allow_chats` or a chat the profile already has a session in.");
+    /// A relay enrollment token the connector refused.
+    GATEWAY_ENROLL_REJECTED = ("gateway.enroll_rejected", Config,
+        "The relay connector refused the enrollment token (already used, expired or unknown); ask the relay operator for a new one-time token.");
+    /// The relay connector could not be reached or answered nonsense.
+    GATEWAY_RELAY = ("gateway.relay", Unavailable,
+        "The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network.");
+    /// A system-scope service install without root or administrator rights.
+    SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
+        "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");
+    /// The OS service manager refused or is missing.
+    SERVICE_MANAGER = ("service.manager", Unavailable,
+        "The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

@@ -145,6 +145,56 @@ pub(crate) fn answer(
             server.request_stop(restart);
             ControlResponse::default()
         }
+        // Answered by `handle`, which can wait for the adapter.
+        ControlRequest::GatewaySend { .. } => failure(&Error::new(
+            &codes::RPC_INVALID_REQUEST,
+            "gateway_send is answered asynchronously",
+        )),
+    }
+}
+
+/// `gateway send` through the running daemon's outbox.
+async fn send(
+    server: &Server,
+    profile: &str,
+    target: String,
+    text: String,
+    attachments: Vec<pmt_rpc::control::SendAttachment>,
+) -> ControlResponse {
+    let Some(messaging) = server.messaging() else {
+        return failure(&Error::new(
+            &codes::GATEWAY_DAEMON_REQUIRED,
+            "the daemon runs no messaging gateway",
+        ));
+    };
+    let request = crate::messaging::SendRequest {
+        target,
+        text,
+        attachments: attachments
+            .into_iter()
+            .map(|a| pmt_store::gateway::outbox::OutboundAttachment {
+                path: a.path,
+                as_document: a.as_document,
+            })
+            .collect(),
+    };
+    match messaging.send(profile, &request).await {
+        Ok(entry) => {
+            let destination = crate::messaging::target::Resolved {
+                platform: entry.platform.clone(),
+                chat_id: entry.chat_id.clone(),
+                thread_id: entry.thread_id.clone(),
+            }
+            .label();
+            ControlResponse {
+                queued: Some(pmt_rpc::control::Queued {
+                    entry: entry.id,
+                    destination,
+                }),
+                ..ControlResponse::default()
+            }
+        }
+        Err(err) => failure(&err),
     }
 }
 
@@ -171,6 +221,12 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
         return;
     }
     let response = match serde_json::from_str::<ControlRequest>(&line) {
+        Ok(ControlRequest::GatewaySend {
+            profile,
+            target,
+            text,
+            attachments,
+        }) => send(&server, &profile, target, text, attachments).await,
         Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,

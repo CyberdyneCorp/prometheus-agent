@@ -669,6 +669,108 @@
       "type": "string",
       "x-capability": true
     },
+    "ChatPolicy": {
+      "additionalProperties": false,
+      "description": "One `[[gateway.chat_policies]]` entry: what sessions of the chats it\nmatches get. A policy is resolved once when a session is created and\nfrozen for that session.",
+      "properties": {
+        "busy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlatformBusy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Busy handling in matched chats (over the platform's)."
+        },
+        "chat_id": {
+          "description": "Matches this chat.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chat_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolicyChatType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Matches this kind of chat."
+        },
+        "max_cost_usd_per_turn": {
+          "description": "USD one turn of a matched session may cost.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "The model of matched sessions (`[<provider>/]<model>` or an alias).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "default": "",
+          "description": "The platform it applies to.",
+          "type": "string"
+        },
+        "rate_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimitOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Rate limits in matched chats (over the platform's)."
+        },
+        "skills": {
+          "description": "Skills preloaded into matched sessions; only enabled skills.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "system_prompt_append": {
+          "description": "Text appended to the platform hint of matched sessions' system\nprompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "toolsets": {
+          "description": "Toolsets of matched sessions; only narrows the profile's enabled\ntoolsets.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "user_id": {
+          "description": "Matches this sender.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "CliConfig": {
       "additionalProperties": false,
       "description": "The `[cli]` section.",
@@ -1313,6 +1415,15 @@
           "description": "Input that arrives while a turn runs (the mode itself is\n`busy.input_mode`, overridable per platform).",
           "x-apply": "live"
         },
+        "chat_policies": {
+          "default": [],
+          "description": "Per-chat policies; each applies to sessions created after it\nchanged (`/policy apply --now` replaces a chat's session at once).",
+          "items": {
+            "$ref": "#/$defs/ChatPolicy"
+          },
+          "type": "array",
+          "x-apply": "next_session"
+        },
         "multiplex": {
           "default": false,
           "description": "In the daemon's launch profile: serve every profile of the home\n(each in its own scope) instead of the launch profile only.",
@@ -1349,6 +1460,16 @@
             "timeout_secs": 30
           },
           "description": "`exec` quick commands run from a chat.",
+          "x-apply": "live"
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/RateLimitConfig",
+          "default": {
+            "burst": 10,
+            "messages_per_minute": 20,
+            "turns_per_hour": 120
+          },
+          "description": "Per-sender rate limits (overridable per platform and chat policy).",
           "x-apply": "live"
         },
         "sessions": {
@@ -1388,6 +1509,33 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "GatewayHealthConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.gateway_health]` section (spec: messaging-gateway,\nGateway health export is opt-in and content-free): allowlisted gateway,\nadapter, outbox and cron gauges and counters with bounded attributes,\nposted as OTLP/HTTP JSON metrics; never message text, user ids, chat\nids or secrets.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Export gateway health. Off by default: nothing is sent.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a\nloopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interval_secs": {
+          "default": 60,
+          "description": "Seconds between two exports.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "GatewayQuickCommands": {
       "additionalProperties": false,
@@ -1464,6 +1612,32 @@
         "same_tool_failure",
         "idempotent_no_progress"
       ],
+      "type": "object"
+    },
+    "HomeChannel": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.home_channel]`: the default destination of\nscheduled output, platform-only send targets and notices without an\noriginating chat.",
+      "properties": {
+        "chat_id": {
+          "default": "",
+          "description": "The chat id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A display name (also accepted as `platform:#name` in send targets).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thread_id": {
+          "description": "The thread (forum topic) inside the chat.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ImageInputMode": {
@@ -2095,6 +2269,15 @@
       "additionalProperties": false,
       "description": "The `[observability]` section.",
       "properties": {
+        "gateway_health": {
+          "$ref": "#/$defs/GatewayHealthConfig",
+          "default": {
+            "enabled": false,
+            "interval_secs": 60
+          },
+          "description": "The gateway daemon's health export (read from the launch profile).",
+          "x-apply": "restart"
+        },
         "trajectories": {
           "$ref": "#/$defs/TrajectoriesConfig",
           "default": {
@@ -2237,11 +2420,20 @@
           "type": "array"
         },
         "home_channel": {
-          "description": "The chat that receives notifications and scheduled output.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HomeChannel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The chat that receives scheduled output, platform-only send\ntargets and notifications without an originating chat (`/sethome`\nsets it)."
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/RateLimitOverride",
+          "default": {},
+          "description": "Rate limits on this platform (overrides `gateway.rate_limit`)."
         },
         "sessions": {
           "$ref": "#/$defs/PlatformSessions",
@@ -2341,6 +2533,31 @@
         }
       },
       "type": "object"
+    },
+    "PolicyChatType": {
+      "description": "The chat kinds a policy can match.",
+      "oneOf": [
+        {
+          "const": "dm",
+          "description": "Direct messages.",
+          "type": "string"
+        },
+        {
+          "const": "group",
+          "description": "Group chats.",
+          "type": "string"
+        },
+        {
+          "const": "channel",
+          "description": "Channels.",
+          "type": "string"
+        },
+        {
+          "const": "thread",
+          "description": "Threads inside a group or channel.",
+          "type": "string"
+        }
+      ]
     },
     "PoolStrategy": {
       "description": "Credential pool strategies.",
@@ -2722,6 +2939,92 @@
           "type": "string"
         }
       ]
+    },
+    "RateLimitConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.rate_limit]`: per-sender limits (admins and local clients are\nexempt).",
+      "properties": {
+        "burst": {
+          "default": 10,
+          "description": "Messages a sender may send at once above the sustained rate.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "daily_cost_usd": {
+          "description": "USD a sender's turns may cost per local day (from the usage\nledger); unset is no cap.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "messages_per_minute": {
+          "default": 20,
+          "description": "Messages a sender may send per minute (sustained rate).",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "turns_per_hour": {
+          "default": 120,
+          "description": "Turns a sender may start per hour.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RateLimitOverride": {
+      "additionalProperties": false,
+      "description": "Overrides of `[gateway.rate_limit]` (per platform or chat policy); unset\nkeys keep the shared value.",
+      "properties": {
+        "burst": {
+          "description": "Overrides `burst`.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "daily_cost_usd": {
+          "description": "Overrides `daily_cost_usd`.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "messages_per_minute": {
+          "description": "Overrides `messages_per_minute`.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "turns_per_hour": {
+          "description": "Overrides `turns_per_hour`.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "ReasoningLevel": {
       "description": "Reasoning effort levels, in increasing order.",
@@ -4305,6 +4608,7 @@
           "debounce_ms": 350,
           "max_queued": 16
         },
+        "chat_policies": [],
         "multiplex": false,
         "notifications": {
           "background": "concise"
@@ -4316,6 +4620,11 @@
         "platforms": {},
         "quick_commands": {
           "timeout_secs": 30
+        },
+        "rate_limit": {
+          "burst": 10,
+          "messages_per_minute": 20,
+          "turns_per_hour": 120
         },
         "sessions": {
           "group_per_user": true,
@@ -4396,6 +4705,10 @@
     "observability": {
       "$ref": "#/$defs/ObservabilityConfig",
       "default": {
+        "gateway_health": {
+          "enabled": false,
+          "interval_secs": 60
+        },
         "trajectories": {
           "enabled": true,
           "max_bytes_per_session": 268435456,

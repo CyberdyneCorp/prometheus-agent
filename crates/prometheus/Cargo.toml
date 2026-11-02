@@ -74,8 +74,9 @@ unicode-width.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The controlling terminal's device and session leader (`-c` per terminal);
-# SIGTSTP for the line interface's Ctrl+Z.
-nix = { workspace = true, features = ["term", "process", "signal"] }
+# SIGTSTP for the line interface's Ctrl+Z; the effective uid for
+# `daemon install-service --system` and the launchd GUI domain.
+nix = { workspace = true, features = ["term", "process", "signal", "user"] }
 
 [build-dependencies]
 jiff.workspace = true

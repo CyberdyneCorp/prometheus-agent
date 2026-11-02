@@ -76,16 +76,26 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
             let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
             let messaging =
-                super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx);
-            if let Err(err) = Gateway::start(Arc::clone(&server), host, messaging).await {
-                // The daemon cannot tell whether its last stop was clean.
-                tracing::error!("{err}");
-                eprint!("{}", crate::output::render_error(&err, false));
-                watcher.abort();
-                return Ok(pmt_core::exit::FAILURE);
+                super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
+            let agents = Arc::clone(&host) as Arc<dyn pmt_gateway::messaging::Agents>;
+            match Gateway::start(Arc::clone(&server), agents, messaging).await {
+                Ok(gateway) => host.set_gateway(gateway),
+                Err(err) => {
+                    // The daemon cannot tell whether its last stop was clean.
+                    tracing::error!("{err}");
+                    eprint!("{}", crate::output::render_error(&err, false));
+                    watcher.abort();
+                    return Ok(pmt_core::exit::FAILURE);
+                }
             }
+            super::inventory::register(
+                home,
+                ctx.launch,
+                enabled_adapters(&scopes_of(&server, &host)),
+            );
             let drain = Duration::from_secs(config.daemon.restart_drain_secs);
             let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
+            super::inventory::unregister(home, ctx.launch);
             watcher.abort();
             exit.map(exit_code)
         }
@@ -94,6 +104,34 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
     Ok(exit)
+}
+
+/// The served profiles' scopes.
+fn scopes_of(server: &Server, host: &DaemonHost) -> Vec<ProfileScope> {
+    use pmt_gateway::messaging::Agents as _;
+    server
+        .profiles()
+        .iter()
+        .filter_map(|name| host.scope(name))
+        .collect()
+}
+
+/// The platforms each served profile enables, for the daemon registry.
+fn enabled_adapters(scopes: &[ProfileScope]) -> std::collections::BTreeMap<String, Vec<String>> {
+    scopes
+        .iter()
+        .map(|scope| {
+            let platforms = scope
+                .config()
+                .gateway
+                .platforms
+                .iter()
+                .filter(|(_, t)| t.enabled)
+                .map(|(name, _)| name.clone())
+                .collect();
+            (scope.name().as_str().to_owned(), platforms)
+        })
+        .collect()
 }
 
 /// The process exit status of a daemon stop.

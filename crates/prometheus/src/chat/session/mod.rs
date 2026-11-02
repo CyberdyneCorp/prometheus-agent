@@ -106,6 +106,8 @@ pub struct Factory {
     /// The browser tools every session shares, set up by the first
     /// session (`None`: they could not be, see the WARN).
     browser: OnceLock<Option<browser::Shared>>,
+    /// The gateway's `send_message` ports (daemon sessions only).
+    messaging: Option<Arc<dyn pmt_agent::tools::MessagingPorts>>,
     /// The profile's configuration as it is now: `scope` until a daemon
     /// reload replaces it (shared tools read their `live` keys from it).
     current: SharedScope,
@@ -201,6 +203,7 @@ impl Factory {
             maintained: std::sync::atomic::AtomicBool::new(false),
             install_asks: None,
             browser: OnceLock::new(),
+            messaging: None,
         })
     }
 
@@ -379,7 +382,7 @@ impl Factory {
         }
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
-        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer)?;
+        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
         let gate = self.gate()?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let session_tools = tools::session_tools(&SurfaceInputsOwned {
@@ -514,6 +517,7 @@ impl Factory {
         id: SessionId,
         memory: &Arc<MemorySession>,
         summarizer: &Arc<summarize::RouteSummarizer>,
+        capabilities: &CapabilitySet,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -530,7 +534,34 @@ impl Factory {
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
         .with_memory(Arc::clone(memory) as _);
+        let tools = match &self.messaging {
+            Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
+            None => tools,
+        };
         Ok((Arc::new(tools), clarify))
+    }
+
+    /// Whether the session may read a path: its effective capabilities
+    /// with the placeholders of its working directory and the user's home.
+    fn read_check(&self, capabilities: &CapabilitySet) -> pmt_agent::tools::ReadCheck {
+        let capabilities = capabilities.clone();
+        let places = pmt_core::capability::Places {
+            user_home: self.launch.user_home().cloned().unwrap_or_default(),
+            workspace: self.options.cwd.clone(),
+            scratch: Vec::new(),
+            toolchain: Vec::new(),
+        };
+        Arc::new(move |path| {
+            capabilities.allows_path(pmt_core::capability::Access::Read, path, &places)
+        })
+    }
+
+    /// Sends `send_message` calls of this factory's sessions through
+    /// `ports` (the daemon's gateway).
+    #[must_use]
+    pub fn with_messaging(mut self, ports: Arc<dyn pmt_agent::tools::MessagingPorts>) -> Self {
+        self.messaging = Some(ports);
+        self
     }
 
     /// The skills' view of the session: the CLI surface and its tools,

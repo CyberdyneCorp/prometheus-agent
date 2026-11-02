@@ -36,6 +36,14 @@ pub enum GatewayCommand {
         #[command(subcommand)]
         command: OutboxCommand,
     },
+    /// Send one message to a chat without an agent turn (through the
+    /// daemon's outbox when it runs).
+    Send(super::send_cmd::SendArgs),
+    /// List every running Prometheus daemon of this OS user, whatever its
+    /// home.
+    List,
+    /// Enroll this home with a relay connector using a one-time token.
+    Enroll(super::enroll_cmd::EnrollArgs),
 }
 
 /// `prometheus gateway outbox` subcommands.
@@ -113,6 +121,9 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Status => status(ctx.home()?.root(), ctx, false),
         GatewayCommand::Reload => status(ctx.home()?.root(), ctx, true),
         GatewayCommand::Outbox { command } => outbox(command, ctx),
+        GatewayCommand::Send(args) => super::send_cmd::run(args, ctx),
+        GatewayCommand::List => super::inventory::list(ctx),
+        GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
     }
 }
 
@@ -239,7 +250,7 @@ fn list_outbox(entries: &[Outbound], json: bool) -> Result<u8, Error> {
         })
         .collect();
     if json {
-        return document("gateway outbox list", &rows);
+        return document("gateway outbox list", &serde_json::json!({"entries": rows}));
     }
     let mut text = String::new();
     for row in &rows {
@@ -326,7 +337,7 @@ fn list_pairings(entries: &[Pairing], json: bool) -> Result<u8, Error> {
         })
         .collect();
     if json {
-        return document("pairing list", &rows);
+        return document("pairing list", &serde_json::json!({"pairings": rows}));
     }
     let mut text = String::new();
     for row in &rows {

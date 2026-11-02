@@ -10,6 +10,7 @@
 //! - `turns`: the routed session, turns, replies and streaming;
 //! - `requests`: approval and clarify prompts and their cards.
 
+mod admin;
 mod commands;
 mod input;
 mod requests;
@@ -57,6 +58,12 @@ pub(crate) enum Msg {
     Cancelled { id: String, reason: String },
     /// A background notification.
     Internal(Background),
+    /// A message another session sent to this chat (`send_message`), to
+    /// mirror into this session once no turn runs.
+    Mirror {
+        text: String,
+        from_session: Option<String>,
+    },
 }
 
 /// What a lane shows outside its task.
@@ -79,6 +86,11 @@ pub(crate) struct Handle {
 impl Handle {
     pub(crate) fn send(&self, msg: Msg) {
         let _ = self.tx.send(msg);
+    }
+
+    /// Whether the conversation runs a turn.
+    pub(crate) fn running(&self) -> bool {
+        self.status.running.load(Ordering::Acquire)
     }
 }
 
@@ -176,6 +188,10 @@ struct Lane {
     /// Admissions up to here happened before the latest session
     /// transition completed: a `/new` among them shares its result.
     horizon: u64,
+    /// The chat policy frozen for the current session.
+    policy: Option<pmt_config::schema::ChatPolicy>,
+    /// Mirrored messages waiting for the running turn to end.
+    mirrors: Vec<(String, Option<String>)>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -226,6 +242,8 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         requests: requests::Open::default(),
         deferred: None,
         horizon: 0,
+        policy: None,
+        mirrors: Vec::new(),
     };
     let span = tracing::info_span!(
         "conversation",
@@ -337,6 +355,12 @@ impl Lane {
             Msg::Resolved { id, by_client } => self.resolved(&id, &by_client),
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),
             Msg::Internal(event) => self.internal(event),
+            Msg::Mirror { text, from_session } => {
+                self.mirrors.push((text, from_session));
+                if self.running.is_none() {
+                    self.flush_mirrors();
+                }
+            }
         }
     }
 
@@ -373,6 +397,7 @@ impl Lane {
             edit_of,
             kind,
             body,
+            attachments: Vec::new(),
         };
         self.shared.deliver(&self.profile, &new);
     }
@@ -380,6 +405,21 @@ impl Lane {
     /// The profile's gateway configuration now.
     fn config(&self) -> Option<pmt_config::ProfileScope> {
         self.shared.agents.scope(&self.profile)
+    }
+
+    /// Appends the waiting mirrored messages to the session (never while
+    /// a turn runs: it owns the transcript then).
+    fn flush_mirrors(&mut self) {
+        let (Some(store), Some(session)) = (
+            self.shared.store(&self.profile),
+            self.session.as_deref().and_then(|s| s.parse().ok()),
+        ) else {
+            self.mirrors.clear();
+            return;
+        };
+        for (text, from) in self.mirrors.drain(..) {
+            crate::messaging::send::append_mirror(&store, session, &text, from.as_deref());
+        }
     }
 
     /// A background event: shown now when idle, after the turn otherwise.

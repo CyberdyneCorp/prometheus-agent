@@ -79,6 +79,32 @@ pub fn registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
     ))
 }
 
+/// The tools `names` select (composites expanded), for checking that a
+/// chat policy only narrows a profile's toolsets; `Err(name)` names an
+/// unknown toolset. The registry is built once, on first use.
+///
+/// # Errors
+///
+/// The unknown toolset's name.
+pub fn expand_toolsets(names: &[String]) -> Result<std::collections::BTreeSet<String>, String> {
+    static REGISTRY: std::sync::OnceLock<Option<ToolRegistry>> = std::sync::OnceLock::new();
+    let registry = REGISTRY.get_or_init(|| {
+        Builtins::standard(builtin_tools(Path::new("")))
+            .ok()
+            .map(|builtins| ToolRegistry::new("validation", Arc::new(builtins)))
+    });
+    let Some(registry) = registry else {
+        // Built-ins that do not load are reported by every other command;
+        // here the check falls back to accepting the names.
+        return Ok(names.iter().cloned().collect());
+    };
+    let mut tools = std::collections::BTreeSet::new();
+    for name in names {
+        tools.extend(registry.members(name).map_err(|_| name.clone())?);
+    }
+    Ok(tools)
+}
+
 /// What the listings work on: a registry, the profile's config, the
 /// effective capability set of a session of the profile and a probe cache.
 pub struct Inventory<'a> {

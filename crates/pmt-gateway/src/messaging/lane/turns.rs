@@ -95,6 +95,7 @@ impl Lane {
         if self.session.as_deref() != Some(session) {
             peer::attach(&self.shared, &self.profile, session, self.key.as_str());
             self.session = Some(session.to_owned());
+            self.load_policy(session);
         }
     }
 
@@ -107,12 +108,14 @@ impl Lane {
         reason: Option<ResetReason>,
         parent: Option<String>,
     ) -> Result<String, Error> {
+        let policy = self.current_policy(routing);
         let conversation = Conversation {
             platform: routing.platform.clone(),
             chat_id: routing.chat_id.clone(),
             thread_id: routing.thread_id.clone(),
             user_id: routing.sender_id.clone(),
             parent: parent.clone(),
+            policy: policy.clone(),
         };
         let agents = &self.shared.agents;
         let session = agents
@@ -131,6 +134,7 @@ impl Lane {
         };
         store.bind_route(&route, reason)?;
         self.adopt(&session);
+        self.freeze_policy(&session, policy);
         self.horizon = self.status.seq.load(std::sync::atomic::Ordering::Acquire);
         if let (Some(old), Some(reason)) = (parent.as_deref(), reason)
             && reason != ResetReason::StaleRoute
@@ -171,8 +175,14 @@ impl Lane {
         hooks.emit(&self.profile, "on_session_end", payload).await;
     }
 
-    /// Starts a turn with `pending` in the key's session.
+    /// Starts a turn with `pending` in the key's session; while the home
+    /// is paused the input is refused with the pause notice.
     pub(super) async fn start_turn(&mut self, pending: Pending) {
+        if let Some(pause) = pmt_core::pause::active(&self.shared.options.home) {
+            tracing::info!(profile = self.profile, "turn refused: the home is paused");
+            self.say(&pause.notice());
+            return;
+        }
         let session = match self.ensure_session(&pending.routing).await {
             Ok(session) => session,
             Err(err) => {
@@ -301,6 +311,7 @@ impl Lane {
                 json!({"session_id": session, "exit_reason": finished.exit_reason}),
             )
             .await;
+        self.flush_mirrors();
         if let Some(Deferred::New { reset, routing }) = self.deferred.take() {
             self.renew(&routing, reset).await;
         }
@@ -356,6 +367,7 @@ impl Lane {
                 },
                 kind: OutboundKind::Reply,
                 body: part,
+                attachments: Vec::new(),
             };
             self.shared.deliver(&self.profile, &new);
         }
@@ -387,13 +399,11 @@ impl Lane {
         if !due {
             return;
         }
-        let message = Outgoing {
-            chat_id: self.routing.chat_id.clone(),
-            thread_id: self.routing.thread_id.clone(),
-            reply_to: None,
-            text: format!("{}{}", draft.text, streaming.cursor),
-            buttons: Vec::new(),
-        };
+        let message = Outgoing::text(
+            &self.routing.chat_id,
+            self.routing.thread_id.as_deref(),
+            &format!("{}{}", draft.text, streaming.cursor),
+        );
         let adapters = &self.shared.adapters;
         let outcome = match &draft.message_id {
             None => adapters

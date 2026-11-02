@@ -4,11 +4,27 @@
 //! wildcard (admitting everyone is the explicit `allow_all`), and a quick
 //! command never shadows a command of the shared registry.
 
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use pmt_core::error::{Error, codes};
 
-use crate::schema::Config;
+use crate::schema::{ChatPolicy, Config};
+
+/// Expands toolset names to the tools they select; `Err(name)` for an
+/// unknown toolset.
+pub type ToolsetExpander = fn(&[String]) -> Result<BTreeSet<String>, String>;
+
+/// The tool registry's toolset expansion, set once by the binary that owns
+/// the registry. Unset (libraries, tests): a policy's toolsets must be
+/// listed literally among the profile's.
+static TOOLSETS: OnceLock<ToolsetExpander> = OnceLock::new();
+
+/// Registers the toolset expansion used to check that chat policies only
+/// narrow the profile's toolsets. The first call wins.
+pub fn register_toolsets(expand: ToolsetExpander) {
+    let _ = TOOLSETS.set(expand);
+}
 
 /// The shared slash command registry's names and aliases, set once by the
 /// binary that owns the registry. Unset (libraries, tests): no quick
@@ -38,6 +54,19 @@ pub fn check(config: &Config) -> Result<(), Error> {
             ));
         }
     }
+    for (platform, table) in &config.gateway.platforms {
+        if table
+            .home_channel
+            .as_ref()
+            .is_some_and(|h| h.chat_id.trim().is_empty())
+        {
+            return Err(invalid(format!(
+                "gateway.platforms.{platform}.home_channel.chat_id: must name the chat"
+            )));
+        }
+    }
+    check_policies(config)?;
+    check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
     for name in config.quick_commands.keys() {
         if reserved.iter().any(|r| r == name) {
@@ -50,6 +79,134 @@ pub fn check(config: &Config) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+fn invalid(message: String) -> Error {
+    Error::new(&codes::CONFIG_INVALID, message)
+}
+
+fn check_policies(config: &Config) -> Result<(), Error> {
+    let policies = &config.gateway.chat_policies;
+    for (index, policy) in policies.iter().enumerate() {
+        let key = format!("gateway.chat_policies[{index}]");
+        if policy.platform.trim().is_empty() {
+            return Err(invalid(format!("{key}.platform: must name a platform")));
+        }
+        if policy.specificity() == 0 {
+            return Err(invalid(format!(
+                "{key}: match on chat_id, chat_type or user_id besides the platform"
+            )));
+        }
+        if let Some(earlier) = policies[..index].iter().position(|p| p.ties_with(policy)) {
+            return Err(invalid(format!(
+                "{key}: matches the same chats as gateway.chat_policies[{earlier}]; neither would win"
+            )));
+        }
+        check_policy_toolsets(config, policy, &key)?;
+        check_policy_skills(config, policy, &key)?;
+    }
+    Ok(())
+}
+
+/// The profile's toolsets as sessions select them: the per-surface list,
+/// else `tools.enabled_toolsets`, minus the disabled ones.
+fn profile_toolsets(config: &Config) -> Vec<String> {
+    let enabled = config
+        .toolsets
+        .surfaces
+        .get("cli")
+        .unwrap_or(&config.tools.enabled_toolsets);
+    enabled
+        .iter()
+        .filter(|t| !config.tools.disabled_toolsets.contains(t))
+        .cloned()
+        .collect()
+}
+
+fn check_policy_toolsets(config: &Config, policy: &ChatPolicy, key: &str) -> Result<(), Error> {
+    let Some(toolsets) = &policy.toolsets else {
+        return Ok(());
+    };
+    let profile = profile_toolsets(config);
+    let outside = |name: &str| {
+        invalid(format!(
+            "{key}.toolsets: '{name}' is outside the profile's toolsets ({}); a policy can only narrow them",
+            profile.join(", ")
+        ))
+    };
+    let Some(expand) = TOOLSETS.get() else {
+        return match toolsets.iter().find(|t| !profile.contains(t)) {
+            Some(name) => Err(outside(name)),
+            None => Ok(()),
+        };
+    };
+    let allowed = expand(&profile)
+        .map_err(|name| invalid(format!("tools.enabled_toolsets: unknown toolset '{name}'")))?;
+    for name in toolsets {
+        let tools = expand(std::slice::from_ref(name))
+            .map_err(|_| invalid(format!("{key}.toolsets: unknown toolset '{name}'")))?;
+        if !tools.is_subset(&allowed) {
+            return Err(outside(name));
+        }
+    }
+    Ok(())
+}
+
+fn check_policy_skills(config: &Config, policy: &ChatPolicy, key: &str) -> Result<(), Error> {
+    let disabled = policy
+        .skills
+        .iter()
+        .flatten()
+        .find(|s| config.skills.disabled.contains(s));
+    match disabled {
+        Some(name) => Err(invalid(format!(
+            "{key}.skills: '{name}' is disabled in this profile (skills.disabled); a policy can only narrow the enabled skills"
+        ))),
+        None => Ok(()),
+    }
+}
+
+fn check_health(config: &Config) -> Result<(), Error> {
+    let health = &config.observability.gateway_health;
+    if !health.enabled {
+        return Ok(());
+    }
+    let Some(endpoint) = health
+        .endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+    else {
+        return Err(invalid(
+            "observability.gateway_health.endpoint: required when observability.gateway_health.enabled = true".to_owned(),
+        ));
+    };
+    if safe_endpoint(endpoint) {
+        Ok(())
+    } else {
+        Err(invalid(format!(
+            "observability.gateway_health.endpoint: '{endpoint}' must be https://, or http:// to a loopback collector"
+        )))
+    }
+}
+
+/// `https://`, or plain `http://` only to a loopback host.
+fn safe_endpoint(endpoint: &str) -> bool {
+    if endpoint.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = endpoint.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = match authority.strip_prefix('[') {
+        Some(v6) => v6.split(']').next().unwrap_or_default(),
+        None => authority.rsplit_once(':').map_or(authority, |(h, _)| h),
+    };
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
 }
 
 #[cfg(test)]
@@ -74,5 +231,100 @@ mod tests {
                 .contains("gateway.platforms.telegram.allow_users")
         );
         assert!(err.message().contains("allow_all"), "{}", err.message());
+    }
+
+    fn with_policy(toml_policies: &str) -> Result<(), Error> {
+        let config: Config = toml::from_str(toml_policies).unwrap();
+        check(&config)
+    }
+
+    #[test]
+    fn a_policy_cannot_widen_the_toolsets() {
+        let err = with_policy(
+            r#"
+            [tools]
+            enabled_toolsets = ["web", "file"]
+            [[gateway.chat_policies]]
+            platform = "discord"
+            chat_id = "555"
+            toolsets = ["terminal"]
+            "#,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), &codes::CONFIG_INVALID);
+        assert!(
+            err.message()
+                .contains("'terminal' is outside the profile's toolsets"),
+            "{}",
+            err.message()
+        );
+        with_policy(
+            r#"
+            [tools]
+            enabled_toolsets = ["web", "file"]
+            [[gateway.chat_policies]]
+            platform = "discord"
+            chat_id = "555"
+            toolsets = ["web"]
+            "#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn two_policies_with_the_same_matchers_tie() {
+        let err = with_policy(
+            r#"
+            [[gateway.chat_policies]]
+            platform = "discord"
+            chat_id = "555"
+            model = "a"
+            [[gateway.chat_policies]]
+            platform = "discord"
+            chat_id = "555"
+            model = "b"
+            "#,
+        )
+        .unwrap_err();
+        assert!(
+            err.message().contains("neither would win"),
+            "{}",
+            err.message()
+        );
+        let err = with_policy("[[gateway.chat_policies]]\nplatform = \"discord\"\n").unwrap_err();
+        assert!(err.message().contains("chat_id, chat_type or user_id"));
+    }
+
+    #[test]
+    fn a_disabled_skill_is_outside_the_policy_reach() {
+        let err = with_policy(
+            r#"
+            [skills]
+            disabled = ["deploy"]
+            [[gateway.chat_policies]]
+            platform = "telegram"
+            chat_type = "group"
+            skills = ["deploy"]
+            "#,
+        )
+        .unwrap_err();
+        assert!(
+            err.message().contains("'deploy' is disabled"),
+            "{}",
+            err.message()
+        );
+    }
+
+    #[test]
+    fn an_enabled_health_export_needs_a_safe_endpoint() {
+        let parse = |text: &str| check(&toml::from_str::<Config>(text).unwrap());
+        assert!(parse("[observability.gateway_health]\nenabled = true\n").is_err());
+        assert!(
+            parse("[observability.gateway_health]\nenabled = true\nendpoint = \"http://collector.example/v1/metrics\"\n")
+                .is_err()
+        );
+        parse("[observability.gateway_health]\nenabled = true\nendpoint = \"http://127.0.0.1:4318/v1/metrics\"\n").unwrap();
+        parse("[observability.gateway_health]\nenabled = true\nendpoint = \"https://otel.example/v1/metrics\"\n").unwrap();
+        parse("[observability.gateway_health]\nendpoint = \"http://x\"\n").unwrap();
     }
 }

@@ -195,6 +195,7 @@ fn a_reply_stored_before_a_crash_is_sent_exactly_once() {
             edit_of: None,
             kind: OutboundKind::Reply,
             body: "the answer".into(),
+            attachments: Vec::new(),
         };
         h.store().enqueue_outbound(&reply).unwrap();
         h.home

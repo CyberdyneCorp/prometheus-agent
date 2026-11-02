@@ -47,7 +47,7 @@ pub enum Lookup {
 }
 
 /// A conversation session to create.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Conversation {
     /// Platform name.
     pub platform: String,
@@ -59,6 +59,8 @@ pub struct Conversation {
     pub user_id: String,
     /// The session it replaces (`/new`, suspension).
     pub parent: Option<String>,
+    /// The chat policy the session is created with (frozen with it).
+    pub policy: Option<pmt_config::schema::ChatPolicy>,
 }
 
 /// The agent side of the messaging gateway.

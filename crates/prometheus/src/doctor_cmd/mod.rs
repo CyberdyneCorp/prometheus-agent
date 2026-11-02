@@ -165,7 +165,11 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "config" => groups::config(inputs),
         "secrets" => groups::secrets(inputs)?,
         "store" => groups::store(inputs),
-        "daemon" => daemon::checks(inputs.scope.home()).await,
+        "daemon" => {
+            let mut checks = daemon::checks(inputs.scope.home()).await;
+            checks.extend(daemon::legacy_units(inputs.ctx.launch.user_home()));
+            checks
+        }
         "sandbox" => system::sandbox(inputs),
         "terminal" => system::terminal(inputs),
         "distribution" => groups::distribution(inputs),

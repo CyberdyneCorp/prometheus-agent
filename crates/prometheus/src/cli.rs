@@ -206,6 +206,9 @@ pub enum Command {
     /// Update this install to its channel's newest signed release, check
     /// for one (exit 10 when available), change the channel, or roll back.
     Update(UpdateArgs),
+    /// Emergency pause: no new turns or scheduled jobs on any profile of
+    /// this home until `pause off` (running turns finish).
+    Pause(crate::pause_cmd::PauseArgs),
     /// Run, start, stop and inspect the gateway daemon that owns this
     /// home's sessions (one per home; clients attach to it).
     #[cfg(feature = "gateway")]

@@ -41,6 +41,11 @@ impl Repl {
         let Some(live) = self.live.take() else {
             return;
         };
+        if let Err(err) = pmt_core::pause::check(live.scope.home()) {
+            self.error(&err);
+            self.live = Some(live);
+            return;
+        }
         if let Some(note) = live.skills.change_note() {
             input.additions.push(note);
         }

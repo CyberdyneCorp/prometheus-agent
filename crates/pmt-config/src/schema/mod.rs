@@ -18,6 +18,7 @@
 
 mod agent;
 mod gateway;
+mod gateway_policy;
 mod interface;
 mod models;
 mod operations;
@@ -34,10 +35,11 @@ pub use agent::{
     VisionConfig,
 };
 pub use gateway::{
-    AgentCacheConfig, BackgroundNotifications, EffectiveBusy, GatewayBusy, GatewayConfig,
-    GatewayQuickCommands, GatewaySessions, NotificationsConfig, OutboxConfig, PlatformBusy,
-    PlatformConfig, PlatformSessions, PlatformStreaming, ShutdownConfig, StreamTransport,
-    StreamingConfig, UnauthorizedDm,
+    AgentCacheConfig, BackgroundNotifications, ChatPolicy, EffectiveBusy, GatewayBusy,
+    GatewayConfig, GatewayQuickCommands, GatewaySessions, HomeChannel, NotificationsConfig,
+    OutboxConfig, PlatformBusy, PlatformConfig, PlatformSessions, PlatformStreaming,
+    PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride, ShutdownConfig,
+    StreamTransport, StreamingConfig, UnauthorizedDm, resolve_policy,
 };
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
@@ -50,9 +52,9 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, LogLevel, LoggingConfig,
-    NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend, SecretsConfig,
-    SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, GatewayHealthConfig, LogLevel,
+    LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend,
+    SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
 };
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,

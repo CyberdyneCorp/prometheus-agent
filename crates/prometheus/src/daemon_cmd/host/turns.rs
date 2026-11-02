@@ -47,6 +47,9 @@ impl DaemonHost {
         link: Link,
     ) -> Result<Submitted, Error> {
         let id = session_id(&params.session_id)?;
+        // No new turn starts while the home is paused (spec: messaging-
+        // gateway, Global emergency pause).
+        pmt_core::pause::check(profile.scope().home())?;
         Self::check_budget(profile, id)?;
         let session = self.load(profile, id, &link).await?;
         let mut input = setup::input(&session.factory, &session.live, &params).await?;

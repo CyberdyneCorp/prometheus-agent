@@ -54,6 +54,8 @@ pub struct DaemonGateway {
     /// What the daemon does once every messaging adapter failed for good:
     /// keep serving local clients and schedulers, or exit 78.
     pub on_all_adapters_down: AllAdaptersDown,
+    /// The relay connector (`prometheus gateway enroll` writes it).
+    pub relay: crate::daemon_relay::RelayConfig,
 }
 
 /// `gateway.on_all_adapters_down`.
@@ -347,6 +349,11 @@ impl DaemonConfig {
         config
             .daemon
             .rpc
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .gateway
+            .relay
             .validate()
             .map_err(|message| parse_error(&message))?;
         if let Some(unknown) = config

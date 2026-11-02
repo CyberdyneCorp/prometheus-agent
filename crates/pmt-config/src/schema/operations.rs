@@ -12,6 +12,38 @@ use serde::{Deserialize, Serialize};
 pub struct ObservabilityConfig {
     /// Session trajectories.
     pub trajectories: TrajectoriesConfig,
+    /// The gateway daemon's health export (read from the launch profile).
+    #[schemars(extend("x-apply" = "restart"))]
+    pub gateway_health: GatewayHealthConfig,
+}
+
+/// The `[observability.gateway_health]` section (spec: messaging-gateway,
+/// Gateway health export is opt-in and content-free): allowlisted gateway,
+/// adapter, outbox and cron gauges and counters with bounded attributes,
+/// posted as OTLP/HTTP JSON metrics; never message text, user ids, chat
+/// ids or secrets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayHealthConfig {
+    /// Export gateway health. Off by default: nothing is sent.
+    pub enabled: bool,
+    /// The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a
+    /// loopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// Seconds between two exports.
+    #[schemars(range(min = 1, max = 3600))]
+    pub interval_secs: u64,
+}
+
+impl Default for GatewayHealthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: None,
+            interval_secs: 60,
+        }
+    }
 }
 
 /// The `[observability.trajectories]` section.

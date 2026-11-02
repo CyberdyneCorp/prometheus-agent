@@ -10,10 +10,14 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub use super::gateway_policy::{
+    ChatPolicy, HomeChannel, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,
+    resolve_policy,
+};
 use super::{BusyInputMode, SecretName};
 
 /// The `[gateway]` section.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "restart"))]
 pub struct GatewayConfig {
@@ -50,6 +54,13 @@ pub struct GatewayConfig {
     pub shutdown: ShutdownConfig,
     /// Live agents kept in memory (read from the launch profile).
     pub agent_cache: AgentCacheConfig,
+    /// Per-sender rate limits (overridable per platform and chat policy).
+    #[schemars(extend("x-apply" = "live"))]
+    pub rate_limit: RateLimitConfig,
+    /// Per-chat policies; each applies to sessions created after it
+    /// changed (`/policy apply --now` replaces a chat's session at once).
+    #[schemars(extend("x-apply" = "next_session"))]
+    pub chat_policies: Vec<ChatPolicy>,
 }
 
 /// `[gateway.sessions]`.
@@ -262,14 +273,16 @@ impl Default for AgentCacheConfig {
 }
 
 /// One `[gateway.platforms.<name>]` table: the keys every adapter shares.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PlatformConfig {
     /// Start this adapter with the daemon.
     pub enabled: bool,
-    /// The chat that receives notifications and scheduled output.
+    /// The chat that receives scheduled output, platform-only send
+    /// targets and notifications without an originating chat (`/sethome`
+    /// sets it).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub home_channel: Option<String>,
+    pub home_channel: Option<HomeChannel>,
     /// Platform user ids admitted without pairing (no wildcards: use
     /// `allow_all`).
     pub allow_users: Vec<String>,
@@ -296,6 +309,8 @@ pub struct PlatformConfig {
     pub sessions: PlatformSessions,
     /// Streaming on this platform.
     pub streaming: PlatformStreaming,
+    /// Rate limits on this platform (overrides `gateway.rate_limit`).
+    pub rate_limit: RateLimitOverride,
     /// The secret holding the adapter's credential (never the value).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token_secret: Option<SecretName>,
@@ -414,6 +429,13 @@ impl GatewayConfig {
         self.streaming.enabled
             && self.streaming.transport != StreamTransport::Off
             && self.platform(platform).streaming.enabled != Some(false)
+    }
+
+    /// The rate limits of `platform`: its overrides over
+    /// `gateway.rate_limit`.
+    #[must_use]
+    pub fn rate_limit_for(&self, platform: &str) -> RateLimitConfig {
+        self.rate_limit.with(&self.platform(platform).rate_limit)
     }
 
     /// What an unauthorized direct message on `platform` gets.

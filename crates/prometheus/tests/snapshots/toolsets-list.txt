@@ -42,6 +42,9 @@
   memory  (1 tool)
     Long-term memory
     tools: memory
+  messaging  (1 tool)
+    Send messages and reactions to messaging chats (needs the gateway daemon)
+    tools: send_message
   process  (1 tool)
     Background process management
     tools: process

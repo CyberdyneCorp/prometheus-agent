@@ -62,6 +62,19 @@ pub enum ControlRequest {
     /// Starts the messaging adapters served profiles enable that are not
     /// running (`prometheus gateway reload`); answers the new status.
     GatewayReload,
+    /// Queues one message in a profile's outbox without an agent turn
+    /// (`prometheus gateway send`); answers the stored entry.
+    GatewaySend {
+        /// The owning profile.
+        profile: String,
+        /// `platform`, `platform:chat_id[:thread_id]` or `platform:#name`.
+        target: String,
+        /// The text (`MEDIA:` directives already taken out).
+        text: String,
+        /// Files sent with it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<SendAttachment>,
+    },
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -69,6 +82,25 @@ pub enum ControlRequest {
         #[serde(default)]
         restart: bool,
     },
+}
+
+/// A file sent with a `gateway send` message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendAttachment {
+    /// Absolute path the daemon reads.
+    pub path: String,
+    /// Sent as a document (images uncompressed).
+    #[serde(default)]
+    pub as_document: bool,
+}
+
+/// A message `gateway send` queued.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Queued {
+    /// The outbox entry id.
+    pub entry: i64,
+    /// Where it goes (`platform:chat_id[:thread_id]`).
+    pub destination: String,
 }
 
 /// A granted ticket.
@@ -168,6 +200,9 @@ pub struct ControlResponse {
     /// For `status`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<DaemonStatus>,
+    /// For `gateway_send`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued: Option<Queued>,
     /// Set when the request failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ControlError>,

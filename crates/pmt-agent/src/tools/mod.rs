@@ -5,6 +5,7 @@
 
 pub mod clarify;
 pub mod memory;
+pub mod messaging;
 pub mod session_search;
 pub mod todo;
 
@@ -17,6 +18,7 @@ use serde_json::Value;
 
 pub use clarify::Clarifier;
 pub use memory::{MemoryPort, Recalled};
+pub use messaging::{MessagingPort, MessagingPorts, ReadCheck};
 pub use session_search::SessionSearch;
 pub use todo::TodoList;
 
@@ -28,6 +30,7 @@ pub struct AgentTools {
     clarify: Clarifier,
     search: SessionSearch,
     memory: Option<Arc<dyn MemoryPort>>,
+    messaging: Option<Arc<dyn MessagingPort>>,
 }
 
 impl AgentTools {
@@ -51,6 +54,7 @@ impl AgentTools {
             clarify: clarifier,
             search,
             memory: None,
+            messaging: None,
         })
     }
 
@@ -62,6 +66,13 @@ impl AgentTools {
         self
     }
 
+    /// Sends `send_message` calls through `port` (the daemon's gateway).
+    #[must_use]
+    pub fn with_messaging(mut self, port: Arc<dyn MessagingPort>) -> Self {
+        self.messaging = Some(port);
+        self
+    }
+
     /// Runs `name` when it is an agent-level tool this loop executes;
     /// `None` for any other tool (the generic dispatcher runs it).
     pub async fn call(&self, name: &str, arguments: Value) -> Option<ToolResult> {
@@ -70,6 +81,10 @@ impl AgentTools {
             "clarify" => self.clarify.call(arguments).await,
             "session_search" => self.search.call(arguments).await,
             "memory" => self.memory.as_ref()?.call(arguments).await,
+            "send_message" => match &self.messaging {
+                Some(port) => port.call(self.session, arguments).await,
+                None => ToolResult::error(messaging::NO_GATEWAY),
+            },
             _ => return None,
         })
     }

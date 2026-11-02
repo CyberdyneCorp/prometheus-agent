@@ -73,6 +73,7 @@ fn main() -> ExitCode {
     // (spec: messaging-gateway, Gateway slash commands, quick commands and
     // hooks): the names are reserved before any config loads.
     pmt_config::gateway_check::reserve_command_names(prometheus::slash::reserved_names());
+    pmt_config::gateway_check::register_toolsets(prometheus::tools_cmd::expand_toolsets);
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
@@ -124,6 +125,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
+        Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]

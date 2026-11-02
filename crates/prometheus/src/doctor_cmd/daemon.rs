@@ -118,3 +118,37 @@ async fn config(record: &DaemonRecord) -> Vec<Check> {
     }
     checks
 }
+
+/// Supervisor units left by an earlier layout or an imported Hermes
+/// gateway (spec: messaging-gateway, Per-OS service installation without
+/// elevation): reported with the command that replaces each, never removed.
+#[cfg(feature = "gateway")]
+pub(super) fn legacy_units(user_home: Option<&std::path::PathBuf>) -> Vec<Check> {
+    let Some(user_home) = user_home else {
+        return Vec::new();
+    };
+    crate::daemon_cmd::service::legacy_units(user_home)
+        .into_iter()
+        .map(|unit| {
+            Check::new(
+                "daemon",
+                "legacy_unit",
+                Status::Warn,
+                format!(
+                    "{} left a supervisor unit at {}",
+                    unit.origin,
+                    unit.path.display()
+                ),
+            )
+            .with_hint(format!(
+                "prometheus daemon install-service, then disable and remove {}",
+                unit.path.display()
+            ))
+        })
+        .collect()
+}
+
+#[cfg(not(feature = "gateway"))]
+pub(super) fn legacy_units(_: Option<&std::path::PathBuf>) -> Vec<Check> {
+    Vec::new()
+}

@@ -223,6 +223,7 @@ fn outbound(key: &str, chat: &str) -> NewOutbound {
         edit_of: None,
         kind: OutboundKind::Reply,
         body: format!("body of {key}"),
+        attachments: Vec::new(),
     }
 }
 

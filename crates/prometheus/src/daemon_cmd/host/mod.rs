@@ -34,6 +34,7 @@ mod commands;
 mod discovery;
 mod gateway;
 mod reload;
+mod send_tool;
 mod setup;
 mod turns;
 
@@ -110,6 +111,8 @@ pub(super) struct DaemonHost {
     /// The profile that sees the launch environment's secrets.
     launch_profile: String,
     turns: Arc<AtomicUsize>,
+    /// The messaging gateway, for the `send_message` tool.
+    gateway: send_tool::GatewayCell,
 }
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
@@ -173,7 +176,13 @@ impl DaemonHost {
             set,
             launch_profile,
             turns: Arc::default(),
+            gateway: Arc::default(),
         })
+    }
+
+    /// Hands sessions the started messaging gateway (`send_message`).
+    pub(super) fn set_gateway(&self, gateway: pmt_gateway::messaging::Gateway) {
+        let _ = self.gateway.set(gateway);
     }
 
     /// The served profile names.
@@ -236,6 +245,7 @@ impl DaemonHost {
             .lock()
             .expect("setups poisoned")
             .remove(&id)
+            .or_else(|| frozen_policy(profile, &row))
             .unwrap_or_default();
         let factory = self.factory(profile, cwd, &setup)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
@@ -690,4 +700,18 @@ impl Host for DaemonHost {
             }
         })
     }
+}
+
+/// The setup of the chat policy frozen with a gateway session, which keeps
+/// shaping it after a daemon restart (spec: messaging-gateway, Per-chat
+/// policies).
+fn frozen_policy(profile: &Profile, row: &pmt_store::Session) -> Option<SessionSetup> {
+    let pmt_store::Origin::Gateway { platform, .. } = &row.origin else {
+        return None;
+    };
+    let text = profile.store.session_policy(row.id).ok().flatten()?;
+    let policy: pmt_config::schema::ChatPolicy = serde_json::from_str(&text).ok()?;
+    Some(pmt_gateway::messaging::policy::session_setup(
+        &policy, platform,
+    ))
 }

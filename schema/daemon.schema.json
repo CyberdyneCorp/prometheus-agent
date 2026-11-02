@@ -23,6 +23,14 @@
           "$ref": "#/$defs/AllAdaptersDown",
           "default": "stay_alive",
           "description": "What the daemon does once every messaging adapter failed for good:\nkeep serving local clients and schedulers, or exit 78."
+        },
+        "relay": {
+          "$ref": "#/$defs/RelayConfig",
+          "default": {
+            "allow_direct_platforms": [],
+            "token_secret": "PMT_RELAY_TOKEN"
+          },
+          "description": "The relay connector (`prometheus gateway enroll` writes it)."
         }
       },
       "type": "object"
@@ -93,6 +101,47 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RelayConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.relay]`.",
+      "properties": {
+        "allow_direct_platforms": {
+          "default": [],
+          "description": "Platforms the relay fronts whose direct adapters still connect.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "gateway_id": {
+          "description": "This gateway's id at the connector.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "PMT_RELAY_TOKEN",
+          "description": "The secret holding the gateway credential `prometheus gateway\nenroll` obtained (never the value)."
+        },
+        "url": {
+          "description": "The connector's WebSocket URL (`wss://`; `ws://` only to a loopback\nhost). Unset: no relay.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wake_url": {
+          "description": "An `https://` URL the connector calls to wake a scaled-to-zero host.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -191,6 +240,12 @@
       },
       "type": "object"
     },
+    "SecretName": {
+      "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
+      "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+      "type": "string",
+      "x-secret-ref": true
+    },
     "UpdateConfig": {
       "additionalProperties": false,
       "description": "The `[update]` section (spec: distribution-and-update). The release\nchannel is not here: it belongs to the install receipt.",
@@ -264,7 +319,11 @@
     "gateway": {
       "$ref": "#/$defs/DaemonGateway",
       "default": {
-        "on_all_adapters_down": "stay_alive"
+        "on_all_adapters_down": "stay_alive",
+        "relay": {
+          "allow_direct_platforms": [],
+          "token_secret": "PMT_RELAY_TOKEN"
+        }
       },
       "description": "Daemon-wide messaging gateway settings (spec: messaging-gateway,\nProfiles served by one daemon)."
     },

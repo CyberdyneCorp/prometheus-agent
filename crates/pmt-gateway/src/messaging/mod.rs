@@ -26,13 +26,19 @@ mod admit;
 pub mod agents;
 pub mod auth;
 mod cache;
+pub mod health;
 pub mod hooks;
 pub mod key;
 mod lane;
+mod limits;
 pub(crate) mod methods;
 mod outbox;
 mod peer;
+pub mod policy;
 mod recovery;
+mod relay;
+mod send;
+pub mod target;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -58,6 +64,8 @@ pub use hooks::{Hook, Hooks, PreCommand};
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
 pub use recovery::{CLEAN_SHUTDOWN, RESTARTED};
+pub use relay::{RelayOptions, RelaySource};
+pub use send::{KnownTarget, SendRequest, known_targets};
 
 use crate::hub::{ConnId, Peer};
 use crate::server::Server;
@@ -77,6 +85,14 @@ pub struct Options {
     pub agent_cache: AgentCacheConfig,
     /// Typed hooks by profile.
     pub hooks: Arc<Hooks>,
+    /// The relay connector (`daemon.toml gateway.relay`), when set.
+    pub relay: Option<RelayOptions>,
+    /// Reads the relay settings again (`gateway reload` connects a relay
+    /// enrolled since the daemon started).
+    pub relay_source: Option<RelaySource>,
+    /// The health export (`observability.gateway_health` of the launch
+    /// profile), when enabled.
+    pub health: Option<health::HealthOptions>,
 }
 
 impl std::fmt::Debug for Options {
@@ -101,6 +117,9 @@ impl Options {
             drain_timeout: Duration::from_secs(30),
             agent_cache: AgentCacheConfig::default(),
             hooks: Arc::new(Hooks::default()),
+            relay: None,
+            relay_source: None,
+            health: None,
         }
     }
 }
@@ -118,6 +137,10 @@ pub(crate) struct Shared {
     sessions: Mutex<HashMap<String, String>>,
     adapters: adapters::Adapters,
     guard: auth::BotLoopGuard,
+    relay: std::sync::OnceLock<Arc<relay::Relay>>,
+    last_inbound: send::LastInbound,
+    limits: limits::Limits,
+    health: health::Counters,
     cache: cache::AgentCache,
     /// Unserved-profile warnings already logged, by adapter, with when.
     unserved: Mutex<HashMap<String, tokio::time::Instant>>,
@@ -126,6 +149,28 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    /// The lane of the conversation `session` belongs to, when it has one.
+    pub(crate) fn lane_of_session(&self, session: &str) -> Option<lane::Handle> {
+        let key = self
+            .sessions
+            .lock()
+            .expect("sessions poisoned")
+            .get(session)
+            .cloned()?;
+        self.lanes
+            .lock()
+            .expect("lanes poisoned")
+            .get(&key)
+            .cloned()
+    }
+
+    /// Conversations with a lane, and how many run a turn.
+    fn lane_counts(&self) -> (u64, u64) {
+        let lanes = self.lanes.lock().expect("lanes poisoned");
+        let running = lanes.values().filter(|h| h.running()).count();
+        (lanes.len() as u64, running as u64)
+    }
+
     fn store(&self, profile: &str) -> Option<Arc<Store>> {
         self.agents.store(profile)
     }
@@ -171,6 +216,7 @@ pub fn paired_notice(pairing: &pmt_store::gateway::pairing::Pairing) -> NewOutbo
         edit_of: None,
         kind: pmt_store::gateway::outbox::OutboundKind::System,
         body: "You are paired with this assistant now; send a message to start.".to_owned(),
+        attachments: Vec::new(),
     }
 }
 
@@ -215,6 +261,10 @@ impl Gateway {
             peer,
             adapters: adapters::Adapters::default(),
             guard: auth::BotLoopGuard::default(),
+            relay: std::sync::OnceLock::new(),
+            last_inbound: send::LastInbound::default(),
+            limits: limits::Limits::default(),
+            health: health::Counters::default(),
             cache: cache::AgentCache::new(options.agent_cache.clone()),
             lanes: Mutex::default(),
             sessions: Mutex::default(),
@@ -237,6 +287,15 @@ impl Gateway {
             outbox::spawn(&shared, profile);
         }
         cache::spawn(&shared);
+        if let Some(health) = shared.options.health.clone() {
+            health::spawn(&shared, health);
+        }
+        shared
+            .health
+            .add("prometheus.gateway.lifecycle", &[("event", "startup")]);
+        if let Some(options) = shared.options.relay.clone() {
+            relay::start(&shared, options).await;
+        }
         for profile in &profiles {
             shared
                 .options
@@ -291,6 +350,7 @@ impl Gateway {
     /// running adapters and sessions are untouched.
     pub fn reload(&self) {
         let shared = &self.shared;
+        relay::reload(shared);
         for profile in shared.agents.serve_new_profiles() {
             if shared.server.add_profile(&profile) {
                 tracing::info!(profile, "now serving a profile created since start");
@@ -315,6 +375,9 @@ impl Gateway {
     /// clean-shutdown marker when they did, and disconnects the adapters.
     pub async fn shutdown(&self) {
         let shared = &self.shared;
+        shared
+            .health
+            .add("prometheus.gateway.lifecycle", &[("event", "shutdown")]);
         shared.stop.cancel();
         let drained = lane::drain(shared, shared.options.drain_timeout).await;
         for profile in &shared.server.profiles() {

@@ -6,10 +6,14 @@
 //! prints its endpoint, `stop` drains and stops it, `restart` drains and
 //! replaces it, `status` prints its process state.
 
+mod enroll_cmd;
 mod gateway_cmd;
 mod host;
+mod inventory;
 mod messaging;
+mod send_cmd;
 mod serve;
+pub mod service;
 pub(crate) mod standalone;
 #[cfg(debug_assertions)]
 mod test_adapter;
@@ -45,6 +49,12 @@ pub enum DaemonCommand {
     Restart,
     /// Print the daemon's process state.
     Status,
+    /// Install a per-user supervisor unit that starts the daemon at login
+    /// (no administrator rights); `--system --run-as-user` installs a
+    /// boot-time unit instead (root only).
+    InstallService(service::InstallArgs),
+    /// Stop and remove the unit `install-service` installed.
+    UninstallService(service::UninstallArgs),
 }
 
 pub use gateway_cmd::{GatewayCommand, OutboxCommand, PairingCommand};
@@ -85,6 +95,8 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         DaemonCommand::Stop => stop(&root, ctx.json),
         DaemonCommand::Restart => restart(&root, ctx),
         DaemonCommand::Status => status(&root, ctx.json),
+        DaemonCommand::InstallService(args) => service::install(args, ctx),
+        DaemonCommand::UninstallService(args) => service::uninstall(args, ctx),
     }
 }
 

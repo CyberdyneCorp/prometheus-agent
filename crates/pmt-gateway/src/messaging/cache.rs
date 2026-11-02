@@ -130,6 +130,7 @@ async fn run(shared: Arc<Shared>) {
         if pruned_at.is_none_or(|at| at.elapsed() >= PRUNE_EVERY) {
             pruned_at = Some(Instant::now());
             prune_routes(&shared);
+            shared.limits.sweep(tokio::time::Instant::now());
         }
     }
 }

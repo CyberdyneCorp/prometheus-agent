@@ -26,6 +26,7 @@
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
+- [The messaging gateway](guide/gateway.md)
 
 # Reference
 

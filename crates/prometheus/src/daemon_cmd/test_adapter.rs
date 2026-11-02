@@ -98,6 +98,7 @@ impl Adapter for FileAdapter {
         Descriptor {
             supports_edit: true,
             interactive: Interactive::Native,
+            stateless_send: true,
             ..Descriptor::new(PLATFORM, 4096)
         }
     }
@@ -126,8 +127,9 @@ impl Adapter for FileAdapter {
             append(
                 &self.root,
                 "sent.jsonl",
-                &json!({"kind": "send", "chat": message.chat_id, "text": message.text,
-                    "buttons": buttons, "message_id": id}),
+                &json!({"kind": "send", "chat": message.chat_id, "thread": message.thread_id,
+                    "text": message.text, "buttons": buttons, "message_id": id,
+                    "attachments": message.attachments}),
             );
             Ok(Sent {
                 message_id: Some(id),

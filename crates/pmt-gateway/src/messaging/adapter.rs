@@ -13,6 +13,7 @@ use jiff::Timestamp;
 use pmt_config::ProfileScope;
 use pmt_config::schema::PlatformConfig;
 use pmt_core::error::Error;
+pub use pmt_store::gateway::outbox::OutboundAttachment;
 use serde::Serialize;
 
 use super::key::ChatType;
@@ -43,6 +44,7 @@ pub enum AccessPolicy {
 /// What an adapter declares (the subset of the capability descriptor the
 /// gateway core reads; the full descriptor is the platform adapters').
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)] // independent capability flags
 pub struct Descriptor {
     /// Platform name.
     pub platform: String,
@@ -58,6 +60,11 @@ pub struct Descriptor {
     pub authorization_is_upstream: bool,
     /// The adapter's own access policy.
     pub access_policy: Option<AccessPolicy>,
+    /// It can send one message without a running connection (one-shot
+    /// `gateway send` without the daemon).
+    pub stateless_send: bool,
+    /// It can add and remove reactions.
+    pub supports_reactions: bool,
 }
 
 impl Descriptor {
@@ -72,6 +79,8 @@ impl Descriptor {
             interactive: Interactive::Numbered,
             authorization_is_upstream: false,
             access_policy: None,
+            stateless_send: false,
+            supports_reactions: false,
         }
     }
 }
@@ -179,6 +188,23 @@ pub struct Outgoing {
     pub text: String,
     /// Buttons (adapters with `interactive = native`).
     pub buttons: Vec<Button>,
+    /// Files sent with it (from `MEDIA:` directives).
+    pub attachments: Vec<OutboundAttachment>,
+}
+
+impl Outgoing {
+    /// Plain text to a chat (and thread).
+    #[must_use]
+    pub fn text(chat_id: &str, thread_id: Option<&str>, text: &str) -> Self {
+        Self {
+            chat_id: chat_id.to_owned(),
+            thread_id: thread_id.map(str::to_owned),
+            reply_to: None,
+            text: text.to_owned(),
+            buttons: Vec::new(),
+            attachments: Vec::new(),
+        }
+    }
 }
 
 /// A successful send.
@@ -316,6 +342,29 @@ pub trait Adapter: Send + Sync + 'static {
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
     }
+    /// Adds (`remove = false`) or removes a reaction on a message
+    /// (adapters with `supports_reactions`).
+    fn react<'a>(&'a self, _reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// The chat id of a channel known by name (`platform:#name` targets);
+    /// `None` when the platform has no such directory.
+    fn resolve_channel<'a>(&'a self, _name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        Box::pin(async { None })
+    }
+}
+
+/// A reaction to add or remove.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reaction {
+    /// Chat id.
+    pub chat_id: String,
+    /// The message reacted to.
+    pub message_id: String,
+    /// The emoji.
+    pub emoji: String,
+    /// Remove instead of add.
+    pub remove: bool,
 }
 
 /// What a factory builds an adapter from.

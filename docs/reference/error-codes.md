@@ -298,3 +298,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `gateway.recovery` | `io` | 74 | The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again. |
 | `gateway.no_adapter` | `unavailable` | 69 | The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`. |
 | `gateway.all_adapters_down` | `config` | 78 | Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = "exit"`; fix the adapters' configuration or credentials, or set it to `stay_alive`. |
+| `pause.active` | `unavailable` | 69 | The home is paused (`<home>/run/paused`): no new turns or scheduled work start until `prometheus pause off` (or `/pause off` from an admin chat). |
+| `gateway.no_home_channel` | `not_found` | 66 | The delivery names only a platform and that platform has no home channel; run /sethome in the target chat or name the chat (`platform:chat_id`). |
+| `gateway.unknown_target` | `not_found` | 66 | The target is not `platform`, `platform:chat_id`, `platform:chat_id:thread_id` or `platform:#channel-name`, or names a channel nobody knows; `prometheus gateway send --list` shows the known targets. |
+| `gateway.platform_not_configured` | `config` | 78 | The profile does not enable that platform; add `[gateway.platforms.<name>]` with `enabled = true` and its credential. |
+| `gateway.daemon_required` | `unavailable` | 69 | The platform's adapter cannot send without a running connection; start the daemon with `prometheus daemon start` and send again. |
+| `gateway.delivery_failed` | `tool` | 1 | The message was not delivered; `prometheus gateway outbox list` shows the entry and its last error. |
+| `gateway.target_refused` | `permission_denied` | 77 | The tool may send only to a platform's home channel, a chat in `allow_chats` or a chat the profile already has a session in. |
+| `gateway.enroll_rejected` | `config` | 78 | The relay connector refused the enrollment token (already used, expired or unknown); ask the relay operator for a new one-time token. |
+| `gateway.relay` | `unavailable` | 69 | The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network. |
+| `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
+| `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |

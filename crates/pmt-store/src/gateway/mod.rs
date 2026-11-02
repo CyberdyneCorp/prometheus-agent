@@ -4,6 +4,7 @@
 //! bookkeeping), [`pairing`] holds pairing requests and approved senders,
 //! and [`outbox`] every outbound message until it is delivered.
 
+pub mod chats;
 pub mod outbox;
 pub mod pairing;
 pub mod routes;

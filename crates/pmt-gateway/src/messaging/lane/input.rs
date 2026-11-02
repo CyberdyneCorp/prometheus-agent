@@ -59,7 +59,7 @@ fn content(inbound: &Inbound) -> (String, Vec<String>) {
 impl Lane {
     /// The busy settings of the conversation's platform now.
     pub(super) fn busy(&self) -> EffectiveBusy {
-        self.config().map_or(
+        let busy = self.config().map_or(
             EffectiveBusy {
                 input_mode: BusyInputMode::Queue,
                 debounce_ms: 350,
@@ -73,7 +73,8 @@ impl Lane {
                     .gateway
                     .busy_for(&self.routing.platform, config.busy.input_mode)
             },
-        )
+        );
+        self.with_policy_busy(busy)
     }
 
     /// Plain text or media from the conversation.

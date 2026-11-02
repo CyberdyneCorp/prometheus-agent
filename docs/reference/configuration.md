@@ -146,6 +146,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.busy.debounce_cap_ms` | integer | `1000` | 0 to 60000 | `live` | An input is never held longer than this for more text. |
 | `gateway.busy.debounce_ms` | integer | `350` | 0 to 10000 | `live` | Text arriving within this many milliseconds of the previous text joins it into one input. |
 | `gateway.busy.max_queued` | integer | `16` | 1 to 1000 | `live` | `/queue` entries kept per conversation. |
+| `gateway.chat_policies` | array of table | `[]` | any | `next_session` | Per-chat policies; each applies to sessions created after it changed (`/policy apply --now` replaces a chat's session at once). |
 | `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
 | `gateway.notifications.background` | one of "concise", "all", "result", "error", "off" | `"concise"` | `"concise"`, `"all"`, `"result"`, `"error"`, `"off"` | `live` | Which background process and subagent events reach the chat. |
 | `gateway.outbox.max_age_secs` | integer | `86400` | ≥ 1 | `restart` | An entry older than this becomes `failed`. |
@@ -161,7 +162,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.busy.max_queued` | integer | unset | 1 to 1000 | `next_session` | Overrides `gateway.busy.max_queued`. |
 | `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
 | `gateway.platforms.<name>.group_admins` | array of string | `[]` | any | `next_session` | User ids with every command in groups. |
-| `gateway.platforms.<name>.home_channel` | string | unset | any | `next_session` | The chat that receives notifications and scheduled output. |
+| `gateway.platforms.<name>.home_channel.chat_id` | string | `""` | any | `next_session` | The chat id. |
+| `gateway.platforms.<name>.home_channel.name` | string | unset | any | `next_session` | A display name (also accepted as `platform:#name` in send targets). |
+| `gateway.platforms.<name>.home_channel.thread_id` | string | unset | any | `next_session` | The thread (forum topic) inside the chat. |
+| `gateway.platforms.<name>.rate_limit.burst` | integer | unset | 1 to 10000 | `next_session` | Overrides `burst`. |
+| `gateway.platforms.<name>.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `next_session` | Overrides `daily_cost_usd`. |
+| `gateway.platforms.<name>.rate_limit.messages_per_minute` | integer | unset | 1 to 10000 | `next_session` | Overrides `messages_per_minute`. |
+| `gateway.platforms.<name>.rate_limit.turns_per_hour` | integer | unset | 1 to 100000 | `next_session` | Overrides `turns_per_hour`. |
 | `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
 | `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
 | `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |
@@ -169,6 +176,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
 | `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
 | `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
+| `gateway.rate_limit.burst` | integer | `10` | 1 to 10000 | `live` | Messages a sender may send at once above the sustained rate. |
+| `gateway.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `live` | USD a sender's turns may cost per local day (from the usage ledger); unset is no cap. |
+| `gateway.rate_limit.messages_per_minute` | integer | `20` | 1 to 10000 | `live` | Messages a sender may send per minute (sustained rate). |
+| `gateway.rate_limit.turns_per_hour` | integer | `120` | 1 to 100000 | `live` | Turns a sender may start per hour. |
 | `gateway.sessions.group_per_user` | boolean | `true` | any | `restart` | Each member of a non-thread group or channel gets a session of their own. |
 | `gateway.sessions.route_max_age_secs` | integer | `7776000` | ≥ 0 | `restart` | Routes (conversation to session, never transcripts) unused this long are pruned; `0` keeps them forever. |
 | `gateway.sessions.stuck_loop_threshold` | integer | `3` | 1 to 100 | `restart` | A session whose turn was running during this many consecutive daemon restarts is suspended; its next message starts a new one. |
@@ -200,6 +211,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `network.extra_ca_file` | string | unset | any | `restart` | Extra PEM CA bundle trusted in addition to the platform store. |
 | `network.force_ipv4` | boolean | `false` | any | `restart` | Resolve and connect every outbound client (providers, MCP over HTTP, web tools, adapters, OTLP, downloads) over IPv4 only; loopback listeners are unaffected. Set it when `prometheus doctor network --online` reports a blackholed IPv6 route. |
 | `network.proxy` | string | unset | any | `restart` | Outbound HTTP(S) proxy URL. |
+| `observability.gateway_health.enabled` | boolean | `false` | any | `restart` | Export gateway health. Off by default: nothing is sent. |
+| `observability.gateway_health.endpoint` | string | unset | any | `restart` | The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`. |
+| `observability.gateway_health.interval_secs` | integer | `60` | 1 to 3600 | `restart` | Seconds between two exports. |
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |

@@ -30,6 +30,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `session_search` | `session_search` |  |  | Search past sessions |
 | `connections` | `manage_connections` |  |  | Manage connectors and MCP connections |
 | `clarify` | `clarify` |  |  | Ask the user a question |
+| `messaging` | `send_message` |  |  | Send messages and reactions to messaging chats (needs the gateway daemon) |
 | `code_execution` | `execute_code` |  |  | Run code in a sandbox |
 | `delegation` | `delegate_task` |  |  | Delegate work to subagents |
 | `kanban` |  |  | default-off | Kanban boards |
@@ -158,3 +159,7 @@ Toolsets: `video`.
 ### `video_generate`
 
 Toolsets: `video_gen`.
+
+### `send_message`
+
+Toolsets: `messaging`.

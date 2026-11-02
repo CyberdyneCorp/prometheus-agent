@@ -67,7 +67,11 @@ impl Agents for DaemonHost {
             let cwd = Self::cwd_of(profile, None);
             std::fs::create_dir_all(&cwd)
                 .map_err(|e| Error::io(&pmt_core::error::codes::HOME_IO, &cwd, &e))?;
-            let setup = SessionSetup::default();
+            let setup = conversation
+                .policy
+                .as_ref()
+                .map(|p| pmt_gateway::messaging::policy::session_setup(p, &conversation.platform))
+                .unwrap_or_default();
             let factory = self.factory(profile, cwd.clone(), &setup)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
             let mut new = match &conversation.parent {
@@ -85,7 +89,11 @@ impl Agents for DaemonHost {
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
             new.cwd = Some(cwd.to_string_lossy().into_owned());
-            Ok(profile.store.create_session(&new)?.id.to_string())
+            let id = profile.store.create_session(&new)?.id;
+            if setup != SessionSetup::default() {
+                Self::set_up(profile, id, setup).await?;
+            }
+            Ok(id.to_string())
         })
     }
 

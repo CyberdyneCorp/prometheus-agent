@@ -99,6 +99,16 @@ impl OutboundState {
     }
 }
 
+/// A file sent with a message.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct OutboundAttachment {
+    /// Where the daemon reads it.
+    pub path: String,
+    /// Sent as a document (images uncompressed).
+    #[serde(default)]
+    pub as_document: bool,
+}
+
 /// An entry to store.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewOutbound {
@@ -122,6 +132,8 @@ pub struct NewOutbound {
     pub kind: OutboundKind,
     /// The text (an approval card's JSON for `approval`).
     pub body: String,
+    /// Files sent with it.
+    pub attachments: Vec<OutboundAttachment>,
 }
 
 /// A stored entry.
@@ -147,6 +159,8 @@ pub struct Outbound {
     pub kind: OutboundKind,
     /// The text.
     pub body: String,
+    /// Files sent with it.
+    pub attachments: Vec<OutboundAttachment>,
     /// Where it is.
     pub state: OutboundState,
     /// Attempts that counted against the limit.
@@ -165,7 +179,7 @@ pub struct Outbound {
 
 const COLUMNS: &str = "id, idempotency_key, session_id, platform, chat_id, thread_id, reply_to, \
     edit_of, kind, body, state, attempts, next_attempt_at, created_at, updated_at, platform_message_id, \
-    last_error";
+    last_error, attachments";
 
 fn from_row(row: &Row<'_>) -> Result<Outbound, Error> {
     let kind: String = row.get(8).map_err(sql)?;
@@ -190,6 +204,12 @@ fn from_row(row: &Row<'_>) -> Result<Outbound, Error> {
         updated_at: timestamp(row.get(14).map_err(sql)?),
         platform_message_id: row.get(15).map_err(sql)?,
         last_error: row.get(16).map_err(sql)?,
+        attachments: match row.get::<_, Option<String>>(17).map_err(sql)? {
+            Some(text) => {
+                serde_json::from_str(&text).map_err(|e| corrupt("gateway_outbox.attachments", e))?
+            }
+            None => Vec::new(),
+        },
     })
 }
 
@@ -225,13 +245,21 @@ impl Store {
     /// `store.sqlite`.
     pub fn enqueue_outbound(&self, new: &NewOutbound) -> Result<(Outbound, bool), Error> {
         let now = millis(Timestamp::now());
+        let attachments = if new.attachments.is_empty() {
+            None
+        } else {
+            Some(
+                serde_json::to_string(&new.attachments)
+                    .map_err(|e| corrupt("gateway_outbox.attachments", e))?,
+            )
+        };
         self.write(|tx| {
             let inserted = tx
                 .execute(
                     "INSERT INTO gateway_outbox (idempotency_key, session_id, platform, chat_id, \
                      thread_id, reply_to, edit_of, kind, body, state, next_attempt_at, \
-                     created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'queued', \
-                     ?10, ?10, ?10) ON CONFLICT (idempotency_key) DO NOTHING",
+                     created_at, updated_at, attachments) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, \
+                     ?9, 'queued', ?10, ?10, ?10, ?11) ON CONFLICT (idempotency_key) DO NOTHING",
                     params![
                         new.idempotency_key,
                         new.session_id,
@@ -242,7 +270,8 @@ impl Store {
                         new.edit_of,
                         new.kind.as_str(),
                         new.body,
-                        now
+                        now,
+                        attachments
                     ],
                 )
                 .map_err(sql)?;
@@ -315,6 +344,23 @@ impl Store {
                 ),
                 params![state.map(OutboundState::as_str), limit],
             )
+        })
+    }
+
+    /// How many entries are in `state`.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn outbox_count(&self, state: OutboundState) -> Result<u64, Error> {
+        self.read(|conn| {
+            conn.query_row(
+                "SELECT COUNT(*) FROM gateway_outbox WHERE state = ?1",
+                [state.as_str()],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|n| u64::try_from(n).unwrap_or(0))
+            .map_err(sql)
         })
     }
 
