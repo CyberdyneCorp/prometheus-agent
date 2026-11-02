@@ -1,5 +1,34 @@
 {
   "$defs": {
+    "AgentCacheConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.agent_cache]`.",
+      "properties": {
+        "idle_ttl_secs": {
+          "default": 3600,
+          "description": "An agent unused this long is unloaded (its session stays open).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_size": {
+          "default": 128,
+          "description": "Conversations whose agent stays loaded.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "memory_high_bytes": {
+          "default": 0,
+          "description": "Above this resident memory the least recently used agents are\nunloaded; `0` is half the physical memory.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "AgentConfig": {
       "additionalProperties": false,
       "description": "The `[agent]` section.",
@@ -422,6 +451,36 @@
         }
       },
       "type": "object"
+    },
+    "BackgroundNotifications": {
+      "description": "Background notification levels.",
+      "oneOf": [
+        {
+          "const": "concise",
+          "description": "Results and errors, one line each.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every event.",
+          "type": "string"
+        },
+        {
+          "const": "result",
+          "description": "Results only.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Errors only.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Nothing.",
+          "type": "string"
+        }
+      ]
     },
     "BrowserConfig": {
       "additionalProperties": false,
@@ -1194,14 +1253,86 @@
       },
       "type": "object"
     },
+    "GatewayBusy": {
+      "additionalProperties": false,
+      "description": "`[gateway.busy]`.",
+      "properties": {
+        "ack": {
+          "default": true,
+          "description": "Send one busy acknowledgement per conversation per 30 seconds.",
+          "type": "boolean"
+        },
+        "debounce_cap_ms": {
+          "default": 1000,
+          "description": "An input is never held longer than this for more text.",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "debounce_ms": {
+          "default": 350,
+          "description": "Text arriving within this many milliseconds of the previous text\njoins it into one input.",
+          "format": "uint64",
+          "maximum": 10000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_queued": {
+          "default": 16,
+          "description": "`/queue` entries kept per conversation.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "GatewayConfig": {
       "additionalProperties": false,
       "description": "The `[gateway]` section.",
       "properties": {
+        "agent_cache": {
+          "$ref": "#/$defs/AgentCacheConfig",
+          "default": {
+            "idle_ttl_secs": 3600,
+            "max_size": 128,
+            "memory_high_bytes": 0
+          },
+          "description": "Live agents kept in memory (read from the launch profile)."
+        },
+        "busy": {
+          "$ref": "#/$defs/GatewayBusy",
+          "default": {
+            "ack": true,
+            "debounce_cap_ms": 1000,
+            "debounce_ms": 350,
+            "max_queued": 16
+          },
+          "description": "Input that arrives while a turn runs (the mode itself is\n`busy.input_mode`, overridable per platform).",
+          "x-apply": "live"
+        },
         "multiplex": {
           "default": false,
           "description": "In the daemon's launch profile: serve every profile of the home\n(each in its own scope) instead of the launch profile only.",
           "type": "boolean"
+        },
+        "notifications": {
+          "$ref": "#/$defs/NotificationsConfig",
+          "default": {
+            "background": "concise"
+          },
+          "description": "Notifications of background work.",
+          "x-apply": "live"
+        },
+        "outbox": {
+          "$ref": "#/$defs/OutboxConfig",
+          "default": {
+            "max_age_secs": 86400,
+            "max_attempts": 8
+          },
+          "description": "The durable delivery outbox."
         },
         "platforms": {
           "additionalProperties": {
@@ -1212,14 +1343,98 @@
           "type": "object",
           "x-apply": "next_session"
         },
+        "quick_commands": {
+          "$ref": "#/$defs/GatewayQuickCommands",
+          "default": {
+            "timeout_secs": 30
+          },
+          "description": "`exec` quick commands run from a chat.",
+          "x-apply": "live"
+        },
+        "sessions": {
+          "$ref": "#/$defs/GatewaySessions",
+          "default": {
+            "group_per_user": true,
+            "route_max_age_secs": 7776000,
+            "stuck_loop_threshold": 3,
+            "thread_per_user": false
+          },
+          "description": "How conversations map to sessions."
+        },
+        "shutdown": {
+          "$ref": "#/$defs/ShutdownConfig",
+          "default": {
+            "drain_timeout_secs": 30
+          },
+          "description": "Stopping the daemon (read from the launch profile)."
+        },
         "standalone": {
           "default": false,
           "description": "Never serve this profile from a multiplexing daemon (it gets a\ndaemon of its own home).",
           "type": "boolean"
+        },
+        "streaming": {
+          "$ref": "#/$defs/StreamingConfig",
+          "default": {
+            "buffer_threshold": 24,
+            "cursor": " ▉",
+            "edit_interval_ms": 800,
+            "enabled": false,
+            "transport": "auto"
+          },
+          "description": "Token streaming to platforms.",
+          "x-apply": "live"
         }
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "GatewayQuickCommands": {
+      "additionalProperties": false,
+      "description": "`[gateway.quick_commands]`.",
+      "properties": {
+        "timeout_secs": {
+          "default": 30,
+          "description": "An `exec` quick command run from a chat is killed, with its whole\nprocess tree, after this many seconds.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "GatewaySessions": {
+      "additionalProperties": false,
+      "description": "`[gateway.sessions]`.",
+      "properties": {
+        "group_per_user": {
+          "default": true,
+          "description": "Each member of a non-thread group or channel gets a session of\ntheir own.",
+          "type": "boolean"
+        },
+        "route_max_age_secs": {
+          "default": 7776000,
+          "description": "Routes (conversation to session, never transcripts) unused this\nlong are pruned; `0` keeps them forever.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stuck_loop_threshold": {
+          "default": 3,
+          "description": "A session whose turn was running during this many consecutive\ndaemon restarts is suspended; its next message starts a new one.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "thread_per_user": {
+          "default": false,
+          "description": "Each participant of a thread gets a session of their own.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "GuardrailThresholds": {
       "additionalProperties": false,
@@ -1771,6 +1986,18 @@
       "type": "object",
       "x-apply": "restart"
     },
+    "NotificationsConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.notifications]`.",
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/BackgroundNotifications",
+          "default": "concise",
+          "description": "Which background process and subagent events reach the chat."
+        }
+      },
+      "type": "object"
+    },
     "OAuthEndpoints": {
       "additionalProperties": false,
       "description": "A `[providers.<id>.oauth]` table: sign-in endpoints. Endpoints must be\n`https://` (plain `http://` only on a loopback address) and their hosts\nmust be in `allowed_hosts`.",
@@ -1881,13 +2108,90 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OutboxConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.outbox]`.",
+      "properties": {
+        "max_age_secs": {
+          "default": 86400,
+          "description": "An entry older than this becomes `failed`.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_attempts": {
+          "default": 8,
+          "description": "Send attempts before an entry becomes `failed`.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "PlatformBusy": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.busy]`: unset keys follow `busy.input_mode`\nand `gateway.busy`.",
+      "properties": {
+        "ack": {
+          "description": "Overrides `gateway.busy.ack`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "debounce_cap_ms": {
+          "description": "Overrides `gateway.busy.debounce_cap_ms`.",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "debounce_ms": {
+          "description": "Overrides `gateway.busy.debounce_ms`.",
+          "format": "uint64",
+          "maximum": 10000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusyInputMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Overrides `busy.input_mode`."
+        },
+        "max_queued": {
+          "description": "Overrides `gateway.busy.max_queued`.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "PlatformConfig": {
       "additionalProperties": false,
       "description": "One `[gateway.platforms.<name>]` table: the keys every adapter shares.",
       "properties": {
         "admins": {
           "default": [],
-          "description": "Platform user ids with the admin command tier.",
+          "description": "User ids with every command in direct messages.",
           "items": {
             "type": "string"
           },
@@ -1908,16 +2212,29 @@
         },
         "allow_users": {
           "default": [],
-          "description": "Platform user ids admitted without pairing.",
+          "description": "Platform user ids admitted without pairing (no wildcards: use\n`allow_all`).",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
+        "busy": {
+          "$ref": "#/$defs/PlatformBusy",
+          "default": {},
+          "description": "Busy handling on this platform (overrides `busy.input_mode` and\n`gateway.busy`)."
+        },
         "enabled": {
           "default": false,
           "description": "Start this adapter with the daemon.",
           "type": "boolean"
+        },
+        "group_admins": {
+          "default": [],
+          "description": "User ids with every command in groups.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "home_channel": {
           "description": "The chat that receives notifications and scheduled output.",
@@ -1925,6 +2242,16 @@
             "string",
             "null"
           ]
+        },
+        "sessions": {
+          "$ref": "#/$defs/PlatformSessions",
+          "default": {},
+          "description": "Session mapping on this platform (overrides `gateway.sessions`)."
+        },
+        "streaming": {
+          "$ref": "#/$defs/PlatformStreaming",
+          "default": {},
+          "description": "Streaming on this platform."
         },
         "token_secret": {
           "anyOf": [
@@ -1936,6 +2263,25 @@
             }
           ],
           "description": "The secret holding the adapter's credential (never the value)."
+        },
+        "unauthorized_dm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnauthorizedDm"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What an unauthorized direct message gets: a pairing code (`pair`),\nnothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for\nemail or when `allow_users` is set, else `pair`."
+        },
+        "user_commands": {
+          "default": [],
+          "description": "Commands other users may run where an admin list is set, besides\n`/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -1955,6 +2301,41 @@
           "description": "Replaces the built-in hint.",
           "type": [
             "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PlatformSessions": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.sessions]`.",
+      "properties": {
+        "group_per_user": {
+          "description": "Overrides `gateway.sessions.group_per_user`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thread_per_user": {
+          "description": "Overrides `gateway.sessions.thread_per_user`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PlatformStreaming": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.streaming]`.",
+      "properties": {
+        "enabled": {
+          "description": "`false` turns streaming off for this platform; `true` cannot turn\nit on while `gateway.streaming.enabled` is off.",
+          "type": [
+            "boolean",
             "null"
           ]
         }
@@ -2635,6 +3016,21 @@
       "type": "object",
       "x-apply": "live"
     },
+    "ShutdownConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.shutdown]`.",
+      "properties": {
+        "drain_timeout_secs": {
+          "default": 30,
+          "description": "A stop whose conversations finish within this many seconds is\nclean: the next start skips crash recovery.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "SkillsConfig": {
       "additionalProperties": false,
       "description": "The `[skills]` section.",
@@ -2797,6 +3193,69 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "StreamTransport": {
+      "description": "How a streamed draft reaches a platform.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "`edit` where the platform edits messages, else no streaming.",
+          "type": "string"
+        },
+        {
+          "const": "draft",
+          "description": "A platform-native draft (falls back to `edit`).",
+          "type": "string"
+        },
+        {
+          "const": "edit",
+          "description": "One message edited as the answer grows.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No streaming.",
+          "type": "string"
+        }
+      ]
+    },
+    "StreamingConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.streaming]`.",
+      "properties": {
+        "buffer_threshold": {
+          "default": 24,
+          "description": "Characters gathered before the first draft is sent.",
+          "format": "uint32",
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cursor": {
+          "default": " ▉",
+          "description": "Shown at the end of a draft still being written.",
+          "type": "string"
+        },
+        "edit_interval_ms": {
+          "default": 800,
+          "description": "Least time between two edits of a draft.",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 100,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Stream answers while they are written. A platform can turn it off\nfor itself, never on when this is off.",
+          "type": "boolean"
+        },
+        "transport": {
+          "$ref": "#/$defs/StreamTransport",
+          "default": "auto",
+          "description": "How a streamed draft reaches the platform."
+        }
+      },
+      "type": "object"
     },
     "TailMode": {
       "description": "Tail retention modes.",
@@ -3526,6 +3985,26 @@
         }
       ]
     },
+    "UnauthorizedDm": {
+      "description": "What an unauthorized direct message gets.",
+      "oneOf": [
+        {
+          "const": "pair",
+          "description": "A pairing code the owner can approve.",
+          "type": "string"
+        },
+        {
+          "const": "ignore",
+          "description": "Nothing.",
+          "type": "string"
+        },
+        {
+          "const": "decline",
+          "description": "A short refusal.",
+          "type": "string"
+        }
+      ]
+    },
     "VisionConfig": {
       "additionalProperties": false,
       "description": "The `[vision]` section.",
@@ -3815,9 +4294,46 @@
     "gateway": {
       "$ref": "#/$defs/GatewayConfig",
       "default": {
+        "agent_cache": {
+          "idle_ttl_secs": 3600,
+          "max_size": 128,
+          "memory_high_bytes": 0
+        },
+        "busy": {
+          "ack": true,
+          "debounce_cap_ms": 1000,
+          "debounce_ms": 350,
+          "max_queued": 16
+        },
         "multiplex": false,
+        "notifications": {
+          "background": "concise"
+        },
+        "outbox": {
+          "max_age_secs": 86400,
+          "max_attempts": 8
+        },
         "platforms": {},
-        "standalone": false
+        "quick_commands": {
+          "timeout_secs": 30
+        },
+        "sessions": {
+          "group_per_user": true,
+          "route_max_age_secs": 7776000,
+          "stuck_loop_threshold": 3,
+          "thread_per_user": false
+        },
+        "shutdown": {
+          "drain_timeout_secs": 30
+        },
+        "standalone": false,
+        "streaming": {
+          "buffer_threshold": 24,
+          "cursor": " ▉",
+          "edit_interval_ms": 800,
+          "enabled": false,
+          "transport": "auto"
+        }
       },
       "description": "The profile's part in the home's gateway daemon."
     },

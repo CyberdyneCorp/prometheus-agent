@@ -132,6 +132,15 @@ pub(crate) fn answer(
             status: Some(server.status()),
             ..ControlResponse::default()
         },
+        ControlRequest::GatewayReload => {
+            if let Some(messaging) = server.messaging() {
+                messaging.reload();
+            }
+            ControlResponse {
+                status: Some(server.status()),
+                ..ControlResponse::default()
+            }
+        }
         ControlRequest::Stop { restart } => {
             server.request_stop(restart);
             ControlResponse::default()

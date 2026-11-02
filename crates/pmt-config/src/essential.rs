@@ -50,6 +50,7 @@ pub fn check(config: &Config) -> Result<(), Error> {
 pub fn semantic(config: &Config) -> Result<(), Error> {
     crate::provider_urls::check(config)?;
     crate::quick_commands::check(config)?;
+    crate::gateway_check::check(config)?;
     check(config)
 }
 

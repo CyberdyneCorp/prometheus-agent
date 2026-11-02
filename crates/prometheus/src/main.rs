@@ -69,6 +69,10 @@ fn main() -> ExitCode {
         ),
     };
     pmt_config::managed::init(&managed_dir, owner);
+    // A quick command never shadows a command of the shared registry
+    // (spec: messaging-gateway, Gateway slash commands, quick commands and
+    // hooks): the names are reserved before any config loads.
+    pmt_config::gateway_check::reserve_command_names(prometheus::slash::reserved_names());
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
@@ -122,6 +126,10 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
+        #[cfg(feature = "gateway")]
+        Some(Command::Gateway { command }) => prometheus::daemon_cmd::gateway(command, &ctx),
+        #[cfg(feature = "gateway")]
+        Some(Command::Pairing { command }) => prometheus::daemon_cmd::pairing(command, &ctx),
         #[cfg(not(feature = "gateway"))]
         Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),

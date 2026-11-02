@@ -291,3 +291,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `rpc.request_settled` | `conflict` | 75 | The server-to-client request already settled (answered, timed out or cancelled); the late answer changed nothing. |
 | `rpc.internal` | `internal` | 70 | The daemon's handler for the method failed unexpectedly (a crash report was written); the connection stays open. |
 | `tui.not_a_terminal` | `usage` | 2 | `prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping. |
+| `gateway.pairing_locked` | `permission_denied` | 77 | Five failed pairing approvals locked pairing for that platform for an hour; wait until the stated time. |
+| `gateway.pairing_unknown` | `not_found` | 66 | No pending pairing request has that code (it may have expired after an hour); ask the sender to message the bot again for a new code. |
+| `gateway.pairing_not_found` | `not_found` | 66 | No pairing entry matches; `prometheus pairing list` shows pending and approved entries. |
+| `gateway.outbox_entry` | `not_found` | 66 | No outbox entry with that id is in a state the action applies to; `prometheus gateway outbox list` shows the entries. |
+| `gateway.recovery` | `io` | 74 | The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again. |
+| `gateway.no_adapter` | `unavailable` | 69 | The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`. |
+| `gateway.all_adapters_down` | `config` | 78 | Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = "exit"`; fix the adapters' configuration or credentials, or set it to `stay_alive`. |

@@ -20,6 +20,8 @@ const fn text(name: &'static str) -> Arg {
 const YES: Arg = arg("yes", ArgKind::Flag, false);
 const NOW: Arg = arg("now", ArgKind::Flag, false);
 const EVERYWHERE: &[Surface] = super::ALL_SURFACES;
+/// Commands only messaging platforms have.
+const GATEWAY: &[Surface] = &[Surface::Gateway];
 const CHATS: &[Surface] = &[
     Surface::Cli,
     Surface::Tui,
@@ -497,6 +499,46 @@ pub static BUILTINS: &[Command] = &[
         "Show the version line",
         &[],
         EVERYWHERE,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "approve",
+        &[],
+        Session,
+        "Approve the oldest pending approval (once, or for the session, or always)",
+        &[arg("scope", ArgKind::Choice(&["session", "always"]), false)],
+        GATEWAY,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "deny",
+        &[],
+        Session,
+        "Deny the oldest pending approval, or all of them",
+        &[text("all | reason")],
+        GATEWAY,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "whoami",
+        &[],
+        Info,
+        "Show your platform id, your command tier and this chat's session",
+        &[],
+        GATEWAY,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "pair",
+        &[],
+        Config,
+        "Approve a pairing code (admins only)",
+        &[text("approve <code>")],
+        GATEWAY,
         Immediate,
         Effect::None,
     ),

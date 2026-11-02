@@ -878,6 +878,27 @@ error_codes! {
     /// `prometheus tui` without an interactive terminal.
     TUI_NOT_A_TERMINAL = ("tui.not_a_terminal", Usage,
         "`prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping.");
+    /// A pairing approval while pairing is locked after failed attempts.
+    GATEWAY_PAIRING_LOCKED = ("gateway.pairing_locked", PermissionDenied,
+        "Five failed pairing approvals locked pairing for that platform for an hour; wait until the stated time.");
+    /// A pairing code that matches no pending request.
+    GATEWAY_PAIRING_UNKNOWN = ("gateway.pairing_unknown", NotFound,
+        "No pending pairing request has that code (it may have expired after an hour); ask the sender to message the bot again for a new code.");
+    /// An approved sender or pending request that does not exist.
+    GATEWAY_PAIRING_NOT_FOUND = ("gateway.pairing_not_found", NotFound,
+        "No pairing entry matches; `prometheus pairing list` shows pending and approved entries.");
+    /// An outbox entry that does not exist or is not in a state the action applies to.
+    GATEWAY_OUTBOX_ENTRY = ("gateway.outbox_entry", NotFound,
+        "No outbox entry with that id is in a state the action applies to; `prometheus gateway outbox list` shows the entries.");
+    /// The clean-shutdown marker exists but cannot be removed.
+    GATEWAY_RECOVERY = ("gateway.recovery", Io,
+        "The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again.");
+    /// A messaging delivery with no adapter for its platform.
+    GATEWAY_NO_ADAPTER = ("gateway.no_adapter", Unavailable,
+        "The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`.");
+    /// Every messaging adapter failed for good with `on_all_adapters_down = "exit"`.
+    GATEWAY_ALL_ADAPTERS_DOWN = ("gateway.all_adapters_down", Config,
+        "Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = \"exit\"`; fix the adapters' configuration or credentials, or set it to `stay_alive`.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

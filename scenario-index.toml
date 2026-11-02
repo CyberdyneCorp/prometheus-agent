@@ -1599,3 +1599,93 @@ capabilities = [
 
 [tui."Auto-resume of the last TUI session"]
 "Reconnecting after a dropped SSH link" = ["crates/prometheus/tests/tui_sessions.rs::after_the_transport_is_killed_the_next_tui_resumes_the_session", "crates/prometheus/tests/tui_sessions.rs::a_deleted_recent_session_falls_back_to_a_new_one"]
+
+# Group 24.1-24.6 (messaging gateway core: routing, busy input, commands
+# and hooks, authorization and pairing, delivery, crash recovery).
+[messaging-gateway."Profiles served by one daemon"]
+"Eviction flushes into the owning profile" = { tests = ["crates/pmt-gateway/tests/messaging/routing.rs::an_evicted_agent_is_unloaded_in_its_own_profile", "crates/prometheus/tests/gateway_daemon.rs::an_evicted_agent_is_rebuilt_with_the_same_frozen_prompt"], note = "eviction unloads the agent through the session's own profile (Live::unload); built-in memory is written to the session's own profile store at every call, so nothing is left to flush" }
+"Daemon-wide key in a secondary profile" = ["crates/pmt-config/src/validate.rs::daemon_wide_keys_in_a_profile_config_point_to_daemon_toml"]
+"Pairing written to the owning profile" = ["crates/pmt-gateway/tests/messaging/routing.rs::pairing_is_stored_in_the_owning_profile", "crates/prometheus/tests/gateway_daemon.rs::a_pairing_code_is_approved_from_the_cli_whatever_its_formatting"]
+
+[messaging-gateway."Routing identity and deterministic session keys"]
+"Default profile key" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar"]
+"Profile names never alias" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/tests/messaging/routing.rs::profiles_route_the_same_chat_to_their_own_sessions"]
+"Separator in an id is escaped" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/src/messaging/key.rs::every_key_parses_back_to_its_fields"]
+"Unserved profile route is dropped" = ["crates/pmt-gateway/tests/messaging/routing.rs::an_event_for_an_unserved_profile_is_dropped"]
+
+[messaging-gateway."DM, group and thread isolation"]
+"Group members isolated by default" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/tests/messaging/routing.rs::group_members_get_sessions_of_their_own_and_a_thread_is_shared"]
+"Thread shared by default" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/tests/messaging/routing.rs::group_members_get_sessions_of_their_own_and_a_thread_is_shared"]
+
+[messaging-gateway."Single-flight session routing"]
+"Burst of first messages" = ["crates/pmt-gateway/tests/messaging/routing.rs::a_burst_of_first_messages_creates_one_session", "crates/pmt-gateway/tests/messaging/commands.rs::concurrent_new_commands_create_one_session"]
+
+[messaging-gateway."Conversations never rotate on time"]
+"Month-old conversation resumes" = ["crates/pmt-gateway/tests/messaging/routing.rs::a_month_old_conversation_continues_its_session"]
+"Suspended session replaced" = ["crates/pmt-gateway/tests/messaging/recovery.rs::the_third_restart_during_a_turn_suspends_the_session"]
+"Pruned route keeps its transcript" = ["crates/pmt-store/tests/store/gateway.rs::a_pruned_route_keeps_its_session_searchable", "crates/pmt-gateway/tests/messaging/routing.rs::a_pruned_route_starts_a_new_session_marked_stale"]
+
+[messaging-gateway."Busy input policy from configuration only"]
+"Unknown mode is a validation error" = ["crates/pmt-config/src/validate.rs::gateway_values_are_validated"]
+"Steer reaches the running turn" = ["crates/pmt-gateway/tests/messaging/busy.rs::steer_reaches_the_running_turn_without_a_second_turn"]
+"Acknowledgement throttled" = ["crates/pmt-gateway/tests/messaging/busy.rs::three_follow_ups_get_one_acknowledgement_and_one_merged_turn"]
+
+[messaging-gateway."Command busy policy declared in the registry"]
+"Approval bypasses the queue" = ["crates/pmt-gateway/tests/messaging/busy.rs::approve_runs_at_once_while_the_turn_waits_for_it"]
+"Config change rejected mid-turn" = ["crates/pmt-gateway/tests/messaging/busy.rs::a_reject_command_mid_turn_is_refused_and_the_turn_continues"]
+"Unknown slash text is plain input" = ["crates/pmt-gateway/tests/messaging/busy.rs::unknown_slash_text_mid_turn_is_ordinary_input"]
+
+[messaging-gateway."Queued turns run in FIFO order"]
+"Two queued prompts" = ["crates/pmt-gateway/tests/messaging/busy.rs::queued_prompts_run_as_separate_turns_in_order", "crates/pmt-gateway/tests/messaging/busy.rs::the_queue_is_bounded"]
+
+[messaging-gateway."Stop preserves the session"]
+"Continue after stop" = ["crates/pmt-gateway/tests/messaging/busy.rs::stop_keeps_the_session_for_the_next_message"]
+
+[messaging-gateway."Gateway slash commands, quick commands and hooks"]
+"Hook denies a command" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_denying_a_command_replies_and_skips_the_handler"]
+"Quick command timeout" = { tests = ["crates/prometheus/tests/gateway_daemon.rs::a_gateway_quick_command_is_killed_after_its_timeout"], note = "gateway.quick_commands.timeout_secs = 2 in the test (the default is 30); the command forks a pipeline child and the session terminal kills the process group" }
+
+[messaging-gateway."Slash command access tiers"]
+"Non-admin refused" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_non_admin_keeps_only_the_user_tier", "crates/pmt-gateway/src/messaging/auth.rs::a_non_admin_keeps_only_the_user_tier"]
+
+[messaging-gateway."Authorization order and fail-closed default"]
+"Default deny" = ["crates/pmt-gateway/tests/messaging/access.rs::nobody_is_admitted_by_default", "crates/pmt-gateway/src/messaging/auth.rs::nothing_configured_denies"]
+"Wildcard rejected" = ["crates/pmt-config/src/gateway_check.rs::a_wildcard_allowlist_points_to_allow_all"]
+"Bot loop cooled down" = ["crates/pmt-gateway/tests/messaging/access.rs::a_sixth_bot_message_in_a_minute_is_refused", "crates/pmt-gateway/src/messaging/auth.rs::five_bot_exchanges_cool_the_chat_down_for_a_minute"]
+
+[messaging-gateway."Documented pairing flow"]
+"Approval tolerates formatting" = ["crates/prometheus/tests/gateway_daemon.rs::a_pairing_code_is_approved_from_the_cli_whatever_its_formatting", "crates/pmt-store/tests/store/gateway.rs::a_code_approves_its_sender_whatever_the_formatting"]
+"Lockout after failures" = ["crates/pmt-store/tests/store/gateway.rs::five_failures_lock_pairing_even_for_a_valid_code"]
+"Code never logged" = ["crates/pmt-gateway/tests/messaging/access.rs::a_pairing_code_is_never_logged", "crates/pmt-store/tests/store/gateway.rs::a_code_approves_its_sender_whatever_the_formatting"]
+
+[messaging-gateway."Durable delivery outbox (upgrade)"]
+"Reply survives a crash" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_reply_stored_before_a_crash_is_sent_exactly_once"]
+"Ambiguous timeout not duplicated" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_ambiguous_send_is_not_repeated", "crates/pmt-store/tests/store/gateway.rs::an_attempt_in_flight_at_a_crash_becomes_unknown_and_is_not_resent"]
+"Platform outage" = { tests = ["crates/pmt-gateway/tests/messaging/delivery.rs::replies_wait_out_an_outage_and_arrive_in_order", "crates/pmt-store/tests/store/gateway.rs::parts_of_one_chat_leave_in_order"], note = "the outage is two 503 answers (waits of 2 s and up); network and 5xx failures use no attempt, so a 20-minute outage is bounded only by gateway.outbox.max_age_secs" }
+
+[messaging-gateway."Approval requests routed to every surface"]
+"Resolved in the desktop app" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_answered_in_the_desktop_app_updates_the_card"]
+"Timeout denies" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_unanswered_approval_expires_as_a_denial"]
+"Bystander cannot approve" = { tests = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_bystander_cannot_approve"], note = "the refusal is posted in the chat; private or ephemeral replies arrive with the platform adapters' card model (platform-adapters 25.4)" }
+
+[messaging-gateway."Streaming to platforms"]
+"Per-platform cannot enable" = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_platform_cannot_turn_streaming_on_by_itself", "crates/pmt-config/src/schema/gateway.rs::a_platform_cannot_enable_streaming_that_is_off_globally"]
+"Final edits the draft" = ["crates/pmt-gateway/tests/messaging/delivery.rs::the_final_answer_edits_the_streamed_draft"]
+
+[messaging-gateway."Background and internal notifications"]
+"Errors only" = ["crates/pmt-gateway/tests/messaging/delivery.rs::errors_only_skips_a_successful_background_exit", "crates/pmt-gateway/src/messaging/lane/mod.rs::errors_only_hides_a_successful_exit"]
+
+[messaging-gateway."Crash recovery and clean shutdown marker"]
+"Timed-out drain" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_clean_stop_skips_recovery_and_a_timed_out_drain_does_not", "crates/prometheus/tests/gateway_daemon.rs::a_daemon_killed_mid_turn_recovers_the_conversation"]
+
+[messaging-gateway."Stuck-loop suspension"]
+"Third restart suspends" = ["crates/pmt-gateway/tests/messaging/recovery.rs::the_third_restart_during_a_turn_suspends_the_session", "crates/pmt-store/tests/store/gateway.rs::the_third_restart_during_a_turn_suspends_the_session"]
+
+[messaging-gateway."Agent cache and eviction"]
+"Rebuilt agent preserves the cached prefix" = ["crates/prometheus/tests/gateway_daemon.rs::an_evicted_agent_is_rebuilt_with_the_same_frozen_prompt"]
+
+[messaging-gateway."All adapters down policy"]
+"Revoked token keeps local clients alive" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_revoked_token_keeps_local_clients_alive_by_default", "crates/pmt-gateway/tests/messaging/recovery.rs::with_exit_the_daemon_stops_when_every_adapter_is_down"]
+
+[messaging-gateway."Gateway lifecycle hooks are typed"]
+"Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs"]

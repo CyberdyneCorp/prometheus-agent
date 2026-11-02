@@ -774,6 +774,24 @@ impl Live {
         }
     }
 
+    /// Unloads the session without ending it (the messaging gateway's
+    /// agent cache): the record stays open and its next turn rebuilds the
+    /// agent from the store with the same frozen prompt. Built-in memory
+    /// is written to the session's own profile store at every call, so
+    /// nothing is left to flush.
+    pub async fn unload(self) {
+        if let Some(browser) = &self.browser {
+            browser.close_session(&self.id.to_string()).await;
+        }
+        let trajectory = self.trajectory;
+        drop(self.agent);
+        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
+            && let Err(err) = writer.finish()
+        {
+            tracing::warn!(error = %err, "could not close the trajectory");
+        }
+    }
+
     /// Ends the session row with `reason` and records `session.end`,
     /// leaving the trajectory file open: for a session something else
     /// still holds when the process stops (prefer [`Live::close`]).

@@ -139,15 +139,47 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
+| `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
+| `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
+| `gateway.busy.ack` | boolean | `true` | any | `live` | Send one busy acknowledgement per conversation per 30 seconds. |
+| `gateway.busy.debounce_cap_ms` | integer | `1000` | 0 to 60000 | `live` | An input is never held longer than this for more text. |
+| `gateway.busy.debounce_ms` | integer | `350` | 0 to 10000 | `live` | Text arriving within this many milliseconds of the previous text joins it into one input. |
+| `gateway.busy.max_queued` | integer | `16` | 1 to 1000 | `live` | `/queue` entries kept per conversation. |
 | `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
-| `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | Platform user ids with the admin command tier. |
+| `gateway.notifications.background` | one of "concise", "all", "result", "error", "off" | `"concise"` | `"concise"`, `"all"`, `"result"`, `"error"`, `"off"` | `live` | Which background process and subagent events reach the chat. |
+| `gateway.outbox.max_age_secs` | integer | `86400` | ≥ 1 | `restart` | An entry older than this becomes `failed`. |
+| `gateway.outbox.max_attempts` | integer | `8` | 1 to 100 | `restart` | Send attempts before an entry becomes `failed`. |
+| `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | User ids with every command in direct messages. |
 | `gateway.platforms.<name>.allow_all` | boolean | `false` | any | `next_session` | Admit everyone (logged at WARN on every start). |
 | `gateway.platforms.<name>.allow_chats` | array of string | `[]` | any | `next_session` | Chats every member of which is admitted. |
-| `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing. |
+| `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing (no wildcards: use `allow_all`). |
+| `gateway.platforms.<name>.busy.ack` | boolean | unset | any | `next_session` | Overrides `gateway.busy.ack`. |
+| `gateway.platforms.<name>.busy.debounce_cap_ms` | integer | unset | 0 to 60000 | `next_session` | Overrides `gateway.busy.debounce_cap_ms`. |
+| `gateway.platforms.<name>.busy.debounce_ms` | integer | unset | 0 to 10000 | `next_session` | Overrides `gateway.busy.debounce_ms`. |
+| `gateway.platforms.<name>.busy.input_mode` | one of "queue", "steer", "interrupt" | unset | `"queue"`, `"steer"`, `"interrupt"` | `next_session` | Overrides `busy.input_mode`. |
+| `gateway.platforms.<name>.busy.max_queued` | integer | unset | 1 to 1000 | `next_session` | Overrides `gateway.busy.max_queued`. |
 | `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
+| `gateway.platforms.<name>.group_admins` | array of string | `[]` | any | `next_session` | User ids with every command in groups. |
 | `gateway.platforms.<name>.home_channel` | string | unset | any | `next_session` | The chat that receives notifications and scheduled output. |
+| `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
+| `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
+| `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |
 | `gateway.platforms.<name>.token_secret` | string | unset | a secret name | `next_session` | The secret holding the adapter's credential (never the value). |
+| `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
+| `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
+| `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
+| `gateway.sessions.group_per_user` | boolean | `true` | any | `restart` | Each member of a non-thread group or channel gets a session of their own. |
+| `gateway.sessions.route_max_age_secs` | integer | `7776000` | ≥ 0 | `restart` | Routes (conversation to session, never transcripts) unused this long are pruned; `0` keeps them forever. |
+| `gateway.sessions.stuck_loop_threshold` | integer | `3` | 1 to 100 | `restart` | A session whose turn was running during this many consecutive daemon restarts is suspended; its next message starts a new one. |
+| `gateway.sessions.thread_per_user` | boolean | `false` | any | `restart` | Each participant of a thread gets a session of their own. |
+| `gateway.shutdown.drain_timeout_secs` | integer | `30` | 1 to 3600 | `restart` | A stop whose conversations finish within this many seconds is clean: the next start skips crash recovery. |
 | `gateway.standalone` | boolean | `false` | any | `restart` | Never serve this profile from a multiplexing daemon (it gets a daemon of its own home). |
+| `gateway.streaming.buffer_threshold` | integer | `24` | 1 to 4096 | `live` | Characters gathered before the first draft is sent. |
+| `gateway.streaming.cursor` | string | `" ▉"` | any | `live` | Shown at the end of a draft still being written. |
+| `gateway.streaming.edit_interval_ms` | integer | `800` | 100 to 60000 | `live` | Least time between two edits of a draft. |
+| `gateway.streaming.enabled` | boolean | `false` | any | `live` | Stream answers while they are written. A platform can turn it off for itself, never on when this is off. |
+| `gateway.streaming.transport` | one of "auto", "draft", "edit", "off" | `"auto"` | `"auto"`, `"draft"`, `"edit"`, `"off"` | `live` | How a streamed draft reaches the platform. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |

@@ -214,6 +214,24 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::DaemonCommand,
     },
+    /// Messaging adapters of the running daemon and the profile's delivery
+    /// outbox.
+    #[cfg(feature = "gateway")]
+    Gateway {
+        /// The gateway subcommand.
+        #[command(subcommand)]
+        command: crate::daemon_cmd::GatewayCommand,
+    },
+    /// Approve, deny, list and revoke messaging senders' pairing requests.
+    /// A code is approved with `prometheus pairing approve <platform>
+    /// <code>`, the RPC `pairing.approve` from a client attached to the
+    /// profile, or the admin-only chat command `/pair approve <code>`.
+    #[cfg(feature = "gateway")]
+    Pairing {
+        /// The pairing subcommand.
+        #[command(subcommand)]
+        command: crate::daemon_cmd::PairingCommand,
+    },
     /// The full-screen terminal UI, attached to the home's gateway daemon
     /// (started when it is not running), or with `--standalone` to an
     /// in-process gateway that serves only this TUI.

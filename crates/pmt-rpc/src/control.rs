@@ -59,6 +59,9 @@ pub enum ControlRequest {
     },
     /// The daemon's process state.
     Status,
+    /// Starts the messaging adapters served profiles enable that are not
+    /// running (`prometheus gateway reload`); answers the new status.
+    GatewayReload,
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -109,6 +112,26 @@ pub struct DaemonStatus {
     /// invalid edit it ignored, keys waiting for a restart.
     #[serde(default)]
     pub config: Vec<ProfileConfig>,
+    /// Each messaging adapter's state (spec: messaging-gateway, One gateway
+    /// daemon per home; platform-adapters, Adapter state reporting).
+    #[serde(default)]
+    pub adapters: Vec<AdapterReport>,
+}
+
+/// One messaging adapter in `daemon status` and `gateway status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterReport {
+    /// The owning profile.
+    pub profile: String,
+    /// Platform name.
+    pub platform: String,
+    /// `disabled`, `connecting`, `connected`, `degraded`, `retrying` or
+    /// `fatal`.
+    pub state: String,
+    /// Error code of a `degraded`, `retrying` or `fatal` adapter.
+    pub code: Option<String>,
+    /// What happened.
+    pub message: Option<String>,
 }
 
 /// A served profile's configuration state.

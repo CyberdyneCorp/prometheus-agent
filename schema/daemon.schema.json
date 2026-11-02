@@ -1,5 +1,32 @@
 {
   "$defs": {
+    "AllAdaptersDown": {
+      "description": "`gateway.on_all_adapters_down`.",
+      "oneOf": [
+        {
+          "const": "stay_alive",
+          "description": "Keep running (the daemon also serves local clients and schedulers).",
+          "type": "string"
+        },
+        {
+          "const": "exit",
+          "description": "Stop with exit 78.",
+          "type": "string"
+        }
+      ]
+    },
+    "DaemonGateway": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [gateway]`: the messaging gateway keys every served\nprofile shares.",
+      "properties": {
+        "on_all_adapters_down": {
+          "$ref": "#/$defs/AllAdaptersDown",
+          "default": "stay_alive",
+          "description": "What the daemon does once every messaging adapter failed for good:\nkeep serving local clients and schedulers, or exit 78."
+        }
+      },
+      "type": "object"
+    },
     "DaemonSection": {
       "additionalProperties": false,
       "description": "The `[daemon]` section (spec: workspace-architecture, One daemon per\nPrometheus home; Stale daemon build detection).",
@@ -233,6 +260,13 @@
         }
       },
       "description": "The gateway daemon: its client listener and lifecycle."
+    },
+    "gateway": {
+      "$ref": "#/$defs/DaemonGateway",
+      "default": {
+        "on_all_adapters_down": "stay_alive"
+      },
+      "description": "Daemon-wide messaging gateway settings (spec: messaging-gateway,\nProfiles served by one daemon)."
     },
     "process": {
       "$ref": "#/$defs/ProcessConfig",

@@ -94,7 +94,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
 | `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
-| `pairing.approve` | `messaging-gateway` | 1.0 | not served yet | |
+| `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
@@ -580,6 +580,26 @@ A server-to-client request still waiting for an answer.
 | `id` | string | yes | `srq-<12 hex>`. |
 | `method` | string | yes | The request name (`approval.request`, ...). |
 | `params` | any | yes | Its params. |
+
+### `PairingApproveParams`
+
+`pairing.approve` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `code` | string | yes | The code (spaces, dashes and case are ignored). |
+| `platform` | string | yes | The platform the code was issued on. |
+| `profile` | string or null | no | The profile; required when the connection is granted several. |
+
+### `PairingApproved`
+
+`pairing.approve` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `platform` | string | yes | The platform. |
+| `sender_id` | string | yes | The approved sender's platform id. |
+| `sender_name` | string or null | no | The sender's display name, when known. |
 
 ### `PlatformSupport`
 

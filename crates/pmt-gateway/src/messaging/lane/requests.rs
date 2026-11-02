@@ -1,0 +1,373 @@
+//! Approval and clarify prompts in a chat (spec: messaging-gateway,
+//! Approval requests routed to every surface). The gateway is one of the
+//! session's answering surfaces: an approval becomes a card in the chat
+//! (buttons where the platform has them, `/approve` and `/deny` always),
+//! the first valid answer from the requester, an admin, or any attached
+//! client wins, and the card is then updated with the outcome and who
+//! decided; expiry, detachment or dismissal count as a denial.
+
+use std::fmt::Write as _;
+
+use pmt_rpc::contracts::{ApprovalRequestParams, Decision};
+use pmt_store::gateway::outbox::OutboundKind;
+use serde_json::{Value, json};
+
+use super::Lane;
+use crate::hub::Answered;
+use crate::messaging::adapter::Button;
+use crate::messaging::auth;
+use crate::messaging::key::Routing;
+
+/// Told to a bystander who tries to decide.
+pub(crate) const NOT_YOURS: &str = "Only the person who asked or an admin may decide this.";
+/// `/approve` or `/deny` with nothing pending.
+pub(crate) const NOTHING_PENDING: &str = "No pending approval";
+
+#[derive(Debug, Clone)]
+struct Approval {
+    id: String,
+    requester: String,
+    card_key: String,
+}
+
+#[derive(Debug, Clone)]
+struct Clarify {
+    id: String,
+    requester: String,
+    questions: Vec<Value>,
+    answers: Vec<Value>,
+}
+
+/// The prompts open in the conversation, oldest first.
+#[derive(Debug, Default)]
+pub(crate) struct Open {
+    approvals: Vec<Approval>,
+    clarify: Option<Clarify>,
+    /// Secrets already asked for in this chat (told once).
+    secrets_told: bool,
+}
+
+fn decision_of(word: &str) -> Option<Decision> {
+    match word {
+        "" | "once" => Some(Decision::Once),
+        "session" => Some(Decision::Session),
+        "always" => Some(Decision::Always),
+        "deny" => Some(Decision::Deny),
+        _ => None,
+    }
+}
+
+fn outcome_text(decision: Decision) -> &'static str {
+    match decision {
+        Decision::Once => "Approved once",
+        Decision::Session => "Approved for this session",
+        Decision::Always => "Approved always",
+        Decision::Deny => "Denied",
+    }
+}
+
+fn card_text(params: &ApprovalRequestParams) -> String {
+    let mut text = format!("Approval needed: {}", params.tool);
+    if let Some(subject) = &params.subject {
+        let _ = write!(text, "\n{}", pmt_text(subject));
+    }
+    for finding in &params.findings {
+        let _ = write!(text, "\n- {}", pmt_text(&finding.reason));
+    }
+    text.push_str("\nReply /approve, /approve session, /approve always or /deny.");
+    text
+}
+
+/// Model-controlled text shown in a chat: control characters are made
+/// visible so they cannot disguise the command.
+fn pmt_text(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() && c != '\n' {
+                format!("\\u{{{:x}}}", u32::from(c))
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
+impl Lane {
+    /// A server request of the session.
+    pub(super) fn asked(&mut self, id: String, method: &str, params: &Value) {
+        match method {
+            "approval.request" => self.approval_card(id, params),
+            "clarify.request" => self.clarify_question(id, params),
+            "secret.request" | "sudo.request" if !self.requests.secrets_told => {
+                self.requests.secrets_told = true;
+                self.say(
+                    "The agent needs a secret or password, which cannot be entered in a chat; \
+                     enter it in a local client (prometheus tui) or it will be skipped.",
+                );
+            }
+            _ => {}
+        }
+    }
+
+    fn approval_card(&mut self, id: String, params: &Value) {
+        let Ok(request) = serde_json::from_value::<ApprovalRequestParams>(params.clone()) else {
+            return;
+        };
+        let requester = self
+            .running
+            .as_ref()
+            .map_or_else(String::new, |r| r.requester.clone());
+        let buttons = ["once", "session", "always", "deny"]
+            .iter()
+            .map(|choice| Button {
+                label: choice[..1].to_uppercase() + &choice[1..],
+                data: format!("appr:{id}:{choice}"),
+            })
+            .collect::<Vec<_>>();
+        let session = self.session.clone().unwrap_or_default();
+        let card_key = format!("{session}:{id}:card");
+        let body = json!({"text": card_text(&request), "buttons": buttons}).to_string();
+        self.deliver(card_key.clone(), OutboundKind::Approval, body, None);
+        self.requests.approvals.push(Approval {
+            id,
+            requester,
+            card_key,
+        });
+    }
+
+    /// Whether `sender` may decide `approval`: its requester or an admin.
+    fn may_decide(&self, routing: &Routing, approval: &Approval) -> bool {
+        if approval.requester.is_empty() || approval.requester == routing.sender_id {
+            return true;
+        }
+        self.config().is_some_and(|scope| {
+            let table = scope.config().gateway.platform(&routing.platform);
+            auth::is_admin(&table, routing.chat_type, &routing.sender_id) == Some(true)
+        })
+    }
+
+    /// `/approve [session|always]`: the oldest pending approval.
+    pub(super) fn approve(&mut self, routing: &Routing, args: &str) {
+        let word = args.split_whitespace().next().unwrap_or_default();
+        let Some(decision) = decision_of(&word.to_lowercase()).filter(|d| *d != Decision::Deny)
+        else {
+            self.say("Usage: /approve [session|always]");
+            return;
+        };
+        let Some(approval) = self.requests.approvals.first().cloned() else {
+            self.say(NOTHING_PENDING);
+            return;
+        };
+        self.decide(routing, &approval, decision);
+    }
+
+    /// `/deny [all] [reason]`.
+    pub(super) fn deny(&mut self, routing: &Routing, args: &str) {
+        let all = args.split_whitespace().next() == Some("all");
+        let targets: Vec<Approval> = if all {
+            self.requests.approvals.clone()
+        } else {
+            self.requests
+                .approvals
+                .first()
+                .cloned()
+                .into_iter()
+                .collect()
+        };
+        if targets.is_empty() {
+            self.say(NOTHING_PENDING);
+            return;
+        }
+        for approval in targets {
+            self.decide(routing, &approval, Decision::Deny);
+        }
+    }
+
+    /// A pressed card button (`appr:<id>:<choice>`).
+    pub(super) fn callback(&mut self, routing: &Routing, data: &str) {
+        let mut parts = data.splitn(3, ':');
+        let (Some("appr"), Some(id), Some(choice)) = (parts.next(), parts.next(), parts.next())
+        else {
+            return;
+        };
+        let Some(decision) = decision_of(choice) else {
+            return;
+        };
+        let found = self.requests.approvals.iter().find(|a| a.id == id).cloned();
+        if let Some(approval) = found {
+            self.decide(routing, &approval, decision);
+        } else {
+            tracing::info!("ignored a card answer for an unknown or settled request");
+        }
+    }
+
+    fn decide(&mut self, routing: &Routing, approval: &Approval, decision: Decision) {
+        if !self.may_decide(routing, approval) {
+            self.say(NOT_YOURS);
+            return;
+        }
+        let answer = json!({"decision": decision});
+        let hub = self.shared.server.hub();
+        let by = &self.shared.peer.client_id;
+        match hub.resolve(self.shared.conn, by, &approval.id, Ok(answer)) {
+            Answered::Taken => {
+                let who = format!("{} via {}", routing.sender_id, routing.platform);
+                self.close_card(
+                    &approval.id,
+                    &format!("{} by {who}", outcome_text(decision)),
+                );
+            }
+            Answered::Settled | Answered::Unknown => {
+                self.requests.approvals.retain(|a| a.id != approval.id);
+                self.say("That approval was already decided.");
+            }
+        }
+    }
+
+    /// Replaces the card of `id` with `outcome` (edited in place where the
+    /// platform can, a new message otherwise).
+    fn close_card(&mut self, id: &str, outcome: &str) {
+        let Some(at) = self.requests.approvals.iter().position(|a| a.id == id) else {
+            return;
+        };
+        let approval = self.requests.approvals.remove(at);
+        let message_id = self
+            .shared
+            .store(&self.profile)
+            .and_then(|store| store.outbound_message_id(&approval.card_key).ok().flatten());
+        let body = json!({"text": outcome, "buttons": []}).to_string();
+        self.deliver(
+            format!("{}:outcome", approval.card_key),
+            OutboundKind::Approval,
+            body,
+            message_id,
+        );
+    }
+
+    /// Another surface answered (the desktop app, the TUI).
+    pub(super) fn resolved(&mut self, id: &str, by_client: &str) {
+        if by_client == self.shared.peer.client_id {
+            return;
+        }
+        let surface = by_client.split('-').next().unwrap_or(by_client).to_owned();
+        if self.requests.approvals.iter().any(|a| a.id == id) {
+            let decision = self
+                .shared
+                .server
+                .hub()
+                .answer_of(id)
+                .and_then(|(value, _)| {
+                    serde_json::from_value::<Decision>(value["decision"].clone()).ok()
+                });
+            let outcome = decision.map_or("Answered", outcome_text);
+            self.close_card(id, &format!("{outcome} via {surface}"));
+        }
+        if self.requests.clarify.as_ref().is_some_and(|c| c.id == id) {
+            self.requests.clarify = None;
+            self.say(&format!("Answered via {surface}."));
+        }
+    }
+
+    /// A request settled unanswered: an expired approval is denied.
+    pub(super) fn cancelled(&mut self, id: &str, reason: &str) {
+        let outcome = if reason == "timeout" {
+            "Approval expired; the action was denied."
+        } else {
+            "Approval withdrawn; the action was denied."
+        };
+        self.close_card(id, outcome);
+        if self.requests.clarify.as_ref().is_some_and(|c| c.id == id) {
+            self.requests.clarify = None;
+        }
+    }
+
+    fn clarify_question(&mut self, id: String, params: &Value) {
+        let questions = params["questions"].as_array().cloned().unwrap_or_default();
+        if questions.is_empty() {
+            return;
+        }
+        let requester = self
+            .running
+            .as_ref()
+            .map_or_else(String::new, |r| r.requester.clone());
+        self.requests.clarify = Some(Clarify {
+            id,
+            requester,
+            questions,
+            answers: Vec::new(),
+        });
+        self.ask_next_question();
+    }
+
+    fn ask_next_question(&self) {
+        let Some(clarify) = &self.requests.clarify else {
+            return;
+        };
+        let question = &clarify.questions[clarify.answers.len()];
+        let mut text = pmt_text(question["question"].as_str().unwrap_or("?"));
+        let choices = question["choices"].as_array().cloned().unwrap_or_default();
+        for (n, choice) in choices.iter().enumerate() {
+            let _ = write!(
+                text,
+                "\n{}. {}",
+                n + 1,
+                pmt_text(choice.as_str().unwrap_or_default())
+            );
+        }
+        self.say(&text);
+    }
+
+    /// The requester's next message answers an open clarify question;
+    /// `true` when it did.
+    pub(super) fn answer_clarify(&mut self, routing: &Routing, text: &str) -> bool {
+        let Some(clarify) = self.requests.clarify.as_mut() else {
+            return false;
+        };
+        let theirs = clarify.requester.is_empty() || clarify.requester == routing.sender_id;
+        if !theirs || text.trim_start().starts_with('/') {
+            return false;
+        }
+        let question = &clarify.questions[clarify.answers.len()];
+        clarify.answers.push(clarify_answer(question, text));
+        if clarify.answers.len() < clarify.questions.len() {
+            self.ask_next_question();
+            return true;
+        }
+        let Some(done) = self.requests.clarify.take() else {
+            return true;
+        };
+        let hub = self.shared.server.hub();
+        let answer = json!({"answers": done.answers});
+        let _ = hub.resolve(
+            self.shared.conn,
+            &self.shared.peer.client_id,
+            &done.id,
+            Ok(answer),
+        );
+        true
+    }
+}
+
+/// The clarify answer a chat message stands for: choice numbers or text.
+fn clarify_answer(question: &Value, line: &str) -> Value {
+    let line = line.trim();
+    let choices: Vec<&str> = question["choices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let picked: Option<Vec<&str>> = line
+        .split(',')
+        .map(|n| {
+            n.trim()
+                .parse::<usize>()
+                .ok()
+                .and_then(|n| choices.get(n.wrapping_sub(1)).copied())
+        })
+        .collect();
+    match picked {
+        Some(picked) if !picked.is_empty() => json!({"status": "answered", "choices": picked}),
+        _ => json!({"status": "answered", "text": line}),
+    }
+}

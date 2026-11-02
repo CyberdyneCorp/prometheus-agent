@@ -29,6 +29,9 @@ pub enum Exit {
     /// Stopped to be replaced (`daemon restart`; exit 75 so a supervisor
     /// restarts it).
     Restart,
+    /// Every messaging adapter failed for good under
+    /// `gateway.on_all_adapters_down = "exit"` (exit 78, no restart).
+    AdaptersDown,
 }
 
 /// Serves `server` for the home whose writer lock `lock` is, until a stop
@@ -74,13 +77,18 @@ pub async fn run(
         () = server.stop.cancelled() => {}
         () = shutdown => server.request_stop(false),
     }
+    if let Some(messaging) = server.messaging() {
+        messaging.shutdown().await;
+    }
     server.host().drain(drain).await;
     server.closing.cancel();
     let _ = accept_task.await;
     reap_task.abort();
     let _ = control_task.await;
     wait_for_connections(&server).await;
-    Ok(if server.restart_requested() {
+    Ok(if server.adapters_down() {
+        Exit::AdaptersDown
+    } else if server.restart_requested() {
         Exit::Restart
     } else {
         Exit::Stopped

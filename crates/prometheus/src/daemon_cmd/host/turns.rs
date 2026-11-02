@@ -178,7 +178,7 @@ impl DaemonHost {
     /// Unloads session `id` and ends it with `reason`, unless something
     /// else (a request being answered) holds it right now; `true` when it
     /// is closed (or was not loaded).
-    async fn close_loaded(profile: &Profile, id: SessionId, reason: EndReason) -> bool {
+    pub(super) async fn close_loaded(profile: &Profile, id: SessionId, reason: EndReason) -> bool {
         let mut loaded = profile.loaded.lock().await;
         let Some(session) = loaded.remove(&id) else {
             return true;
@@ -187,6 +187,34 @@ impl DaemonHost {
             Ok(session) => {
                 drop(loaded);
                 session.live.close(&profile.store, reason).await;
+                true
+            }
+            Err(shared) => {
+                loaded.insert(id, shared);
+                false
+            }
+        }
+    }
+
+    /// Unloads an idle session without ending it (the messaging gateway's
+    /// agent cache): `false` while it runs a turn, holds queued input or
+    /// is in use by a request.
+    pub(super) async fn unload(profile: &Profile, id: SessionId) -> bool {
+        let mut loaded = profile.loaded.lock().await;
+        let Some(session) = loaded.get(&id) else {
+            return true;
+        };
+        let queued = !session.queue.lock().expect("queue poisoned").is_empty();
+        if session.busy.load(Ordering::Acquire) || queued {
+            return false;
+        }
+        let Some(session) = loaded.remove(&id) else {
+            return true;
+        };
+        match Arc::try_unwrap(session) {
+            Ok(session) => {
+                drop(loaded);
+                session.live.unload().await;
                 true
             }
             Err(shared) => {
@@ -246,6 +274,9 @@ async fn run_one(
     let scope = session.live.config.get();
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = job.run_budget.map(Duration::from_secs);
+    if job.link.streams() {
+        options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink(job.link.clone()));
+    }
     *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
     let outcome = session
         .live

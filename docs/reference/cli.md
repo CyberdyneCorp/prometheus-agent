@@ -37,6 +37,8 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -7835,6 +7837,637 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus daemon help help
 ```
 
+## `prometheus gateway`
+
+```text
+Messaging adapters of the running daemon and the profile's delivery outbox
+
+Usage: prometheus gateway [OPTIONS] <COMMAND>
+
+Commands:
+  status  Print each served profile's messaging adapters and their state
+  reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  outbox  The durable delivery outbox of the selected profile
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway status`
+
+```text
+Print each served profile's messaging adapters and their state
+
+Usage: prometheus gateway status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway reload`
+
+```text
+Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+
+Usage: prometheus gateway reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox`
+
+```text
+The durable delivery outbox of the selected profile
+
+Usage: prometheus gateway outbox [OPTIONS] <COMMAND>
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox list`
+
+```text
+List entries, newest first
+
+Usage: prometheus gateway outbox list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --state <STATE>
+          Only entries in this state (`queued`, `sending`, `sent`, `delivered`, `read`, `failed`, `unknown`)
+
+      --limit <LIMIT>
+          At most this many
+
+          [default: 50]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus gateway outbox retry [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id from `outbox list`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus gateway outbox drop [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id from `outbox list`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway outbox help [COMMAND]
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway outbox help list`
+
+```text
+List entries, newest first
+
+Usage: prometheus gateway outbox help list
+```
+
+## `prometheus gateway outbox help retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus gateway outbox help retry
+```
+
+## `prometheus gateway outbox help drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus gateway outbox help drop
+```
+
+## `prometheus gateway outbox help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway outbox help help
+```
+
+## `prometheus gateway help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway help [COMMAND]
+
+Commands:
+  status  Print each served profile's messaging adapters and their state
+  reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  outbox  The durable delivery outbox of the selected profile
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway help status`
+
+```text
+Print each served profile's messaging adapters and their state
+
+Usage: prometheus gateway help status
+```
+
+## `prometheus gateway help reload`
+
+```text
+Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+
+Usage: prometheus gateway help reload
+```
+
+## `prometheus gateway help outbox`
+
+```text
+The durable delivery outbox of the selected profile
+
+Usage: prometheus gateway help outbox [COMMAND]
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+```
+
+## `prometheus gateway help outbox list`
+
+```text
+List entries, newest first
+
+Usage: prometheus gateway help outbox list
+```
+
+## `prometheus gateway help outbox retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus gateway help outbox retry
+```
+
+## `prometheus gateway help outbox drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus gateway help outbox drop
+```
+
+## `prometheus gateway help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway help help
+```
+
+## `prometheus pairing`
+
+```text
+Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+
+Usage: prometheus pairing [OPTIONS] <COMMAND>
+
+Commands:
+  list     List pending codes (unexpired) and approved senders
+  approve  Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+  deny     Refuse a pending code
+  revoke   Remove an approved sender
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing list`
+
+```text
+List pending codes (unexpired) and approved senders
+
+Usage: prometheus pairing list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <PLATFORM>
+          Only this platform
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing approve`
+
+```text
+Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+
+Usage: prometheus pairing approve [OPTIONS] <PLATFORM> <CODE>
+
+Arguments:
+  <PLATFORM>
+          The platform the code was issued on
+
+  <CODE>
+          The code the sender got
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing deny`
+
+```text
+Refuse a pending code
+
+Usage: prometheus pairing deny [OPTIONS] <PLATFORM> <CODE>
+
+Arguments:
+  <PLATFORM>
+          The platform the code was issued on
+
+  <CODE>
+          The code the sender got
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing revoke`
+
+```text
+Remove an approved sender
+
+Usage: prometheus pairing revoke [OPTIONS] <PLATFORM> <SENDER>
+
+Arguments:
+  <PLATFORM>
+          The platform
+
+  <SENDER>
+          The sender's platform id (from `pairing list`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pairing help [COMMAND]
+
+Commands:
+  list     List pending codes (unexpired) and approved senders
+  approve  Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+  deny     Refuse a pending code
+  revoke   Remove an approved sender
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus pairing help list`
+
+```text
+List pending codes (unexpired) and approved senders
+
+Usage: prometheus pairing help list
+```
+
+## `prometheus pairing help approve`
+
+```text
+Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+
+Usage: prometheus pairing help approve
+```
+
+## `prometheus pairing help deny`
+
+```text
+Refuse a pending code
+
+Usage: prometheus pairing help deny
+```
+
+## `prometheus pairing help revoke`
+
+```text
+Remove an approved sender
+
+Usage: prometheus pairing help revoke
+```
+
+## `prometheus pairing help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pairing help help
+```
+
 ## `prometheus tui`
 
 ```text
@@ -8835,6 +9468,8 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -10196,6 +10831,118 @@ Usage: prometheus help daemon restart
 Print the daemon's process state
 
 Usage: prometheus help daemon status
+```
+
+## `prometheus help gateway`
+
+```text
+Messaging adapters of the running daemon and the profile's delivery outbox
+
+Usage: prometheus help gateway [COMMAND]
+
+Commands:
+  status  Print each served profile's messaging adapters and their state
+  reload  Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  outbox  The durable delivery outbox of the selected profile
+```
+
+## `prometheus help gateway status`
+
+```text
+Print each served profile's messaging adapters and their state
+
+Usage: prometheus help gateway status
+```
+
+## `prometheus help gateway reload`
+
+```text
+Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+
+Usage: prometheus help gateway reload
+```
+
+## `prometheus help gateway outbox`
+
+```text
+The durable delivery outbox of the selected profile
+
+Usage: prometheus help gateway outbox [COMMAND]
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+```
+
+## `prometheus help gateway outbox list`
+
+```text
+List entries, newest first
+
+Usage: prometheus help gateway outbox list
+```
+
+## `prometheus help gateway outbox retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus help gateway outbox retry
+```
+
+## `prometheus help gateway outbox drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus help gateway outbox drop
+```
+
+## `prometheus help pairing`
+
+```text
+Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+
+Usage: prometheus help pairing [COMMAND]
+
+Commands:
+  list     List pending codes (unexpired) and approved senders
+  approve  Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+  deny     Refuse a pending code
+  revoke   Remove an approved sender
+```
+
+## `prometheus help pairing list`
+
+```text
+List pending codes (unexpired) and approved senders
+
+Usage: prometheus help pairing list
+```
+
+## `prometheus help pairing approve`
+
+```text
+Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+
+Usage: prometheus help pairing approve
+```
+
+## `prometheus help pairing deny`
+
+```text
+Refuse a pending code
+
+Usage: prometheus help pairing deny
+```
+
+## `prometheus help pairing revoke`
+
+```text
+Remove an approved sender
+
+Usage: prometheus help pairing revoke
 ```
 
 ## `prometheus help tui`

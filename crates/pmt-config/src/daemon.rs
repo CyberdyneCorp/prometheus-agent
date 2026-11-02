@@ -31,6 +31,10 @@ pub struct DaemonConfig {
     /// The gateway daemon: its client listener and lifecycle.
     #[serde(default)]
     pub daemon: DaemonSection,
+    /// Daemon-wide messaging gateway settings (spec: messaging-gateway,
+    /// Profiles served by one daemon).
+    #[serde(default)]
+    pub gateway: DaemonGateway,
     /// Limits applied to every `prometheus` process of this home.
     #[serde(default)]
     pub process: ProcessConfig,
@@ -40,6 +44,27 @@ pub struct DaemonConfig {
     /// The managed runtime store (`prometheus runtimes`).
     #[serde(default)]
     pub runtimes: RuntimesConfig,
+}
+
+/// `daemon.toml [gateway]`: the messaging gateway keys every served
+/// profile shares.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct DaemonGateway {
+    /// What the daemon does once every messaging adapter failed for good:
+    /// keep serving local clients and schedulers, or exit 78.
+    pub on_all_adapters_down: AllAdaptersDown,
+}
+
+/// `gateway.on_all_adapters_down`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AllAdaptersDown {
+    /// Keep running (the daemon also serves local clients and schedulers).
+    #[default]
+    StayAlive,
+    /// Stop with exit 78.
+    Exit,
 }
 
 /// The `[daemon]` section (spec: workspace-architecture, One daemon per

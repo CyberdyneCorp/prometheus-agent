@@ -193,6 +193,10 @@ pub struct Server {
     /// Recent admissions by (session, input id), oldest first: a resent
     /// input gets its original admission.
     pub(crate) admitted: tokio::sync::Mutex<std::collections::VecDeque<Admitted>>,
+    /// The messaging gateway, once started.
+    messaging: OnceLock<crate::messaging::Gateway>,
+    /// Every messaging adapter failed for good and the policy is to exit.
+    adapters_down: AtomicBool,
 }
 
 /// One remembered `prompt.submit` admission.
@@ -261,6 +265,8 @@ impl Server {
             only_pid: options.only_pid,
             created: tokio::sync::Mutex::default(),
             admitted: tokio::sync::Mutex::default(),
+            messaging: OnceLock::new(),
+            adapters_down: AtomicBool::new(false),
         };
         Ok(Arc::new(server))
     }
@@ -375,6 +381,30 @@ impl Server {
         self.stop.cancel();
     }
 
+    /// Stops the daemon because every messaging adapter failed for good
+    /// (`gateway.on_all_adapters_down = "exit"`; exit 78).
+    pub fn request_fatal_stop(&self) {
+        self.adapters_down.store(true, Ordering::Relaxed);
+        self.request_stop(false);
+    }
+
+    /// Whether the stop is [`Server::request_fatal_stop`]'s.
+    #[must_use]
+    pub fn adapters_down(&self) -> bool {
+        self.adapters_down.load(Ordering::Relaxed)
+    }
+
+    /// Records the running messaging gateway (the first call wins).
+    pub fn set_messaging(&self, gateway: crate::messaging::Gateway) {
+        let _ = self.messaging.set(gateway);
+    }
+
+    /// The messaging gateway, when one runs.
+    #[must_use]
+    pub fn messaging(&self) -> Option<&crate::messaging::Gateway> {
+        self.messaging.get()
+    }
+
     /// Whether the stop was for a restart.
     #[must_use]
     pub fn restart_requested(&self) -> bool {
@@ -461,6 +491,24 @@ impl Server {
             active_turns,
             retiring: self.retiring(),
             config: self.host.config(),
+            adapters: self
+                .messaging()
+                .map(|m| {
+                    m.statuses()
+                        .into_iter()
+                        .map(|a| pmt_rpc::control::AdapterReport {
+                            profile: a.profile,
+                            platform: a.platform,
+                            state: serde_json::to_value(a.state)
+                                .ok()
+                                .and_then(|v| v.as_str().map(str::to_owned))
+                                .unwrap_or_default(),
+                            code: a.code,
+                            message: a.message,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }

@@ -1,0 +1,749 @@
+//! A messaging gateway over real profile stores on a temporary home, with
+//! a fake agent side whose turns are scripted by their prompt text and a
+//! fake adapter that records what it sends.
+
+#![allow(dead_code, unreachable_pub)] // each test module uses part of it
+
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+use pmt_core::error::{Error, codes};
+use pmt_core::id::SessionId;
+use pmt_gateway::messaging::{
+    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, Admission, Agents,
+    BusyPolicy, ChatType, Conversation, Descriptor, Gateway, Hooks, Inbound, Interactive, Lookup,
+    Options, Outgoing, SendError, Sent,
+};
+use pmt_gateway::{Author, Host, HostFuture, Identity, Link, Server, ServerOptions};
+use pmt_rpc::contracts::{
+    Admission as RpcAdmission, ApprovalAsk, ApprovalRequestParams, ClientKind, CommandCatalog,
+    CompactParams, Compacted, CompleteParams, Completions, ConfigValue, ContextUsage, Decision,
+    DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveParams, SessionCreateParams,
+    SessionList, SessionListParams, SessionRef, SessionSetup, SubmitParams, Submitted, Transcript,
+    TurnEnded, TurnFinished,
+};
+use pmt_store::{EndReason, LineageKind, NewSession, Origin, Source, Store};
+use tokio_util::sync::CancellationToken;
+
+/// The fake turns' scripts, by prompt text:
+///
+/// - `slow:<ms>[:<answer>]` answers after `ms` (or ends interrupted);
+/// - `approval` asks one approval and answers `approved` or `denied`;
+/// - `stream` streams its answer in pieces first;
+/// - anything else answers `echo: <text>` at once.
+async fn script(
+    text: &str,
+    link: &Link,
+    cancel: &CancellationToken,
+    timeout: Duration,
+) -> (&'static str, Option<String>) {
+    if text == "approval" {
+        let params = ApprovalRequestParams {
+            session_id: link.session_id().to_owned(),
+            tool: "terminal".into(),
+            call_id: "c1".into(),
+            subject: Some("rm -rf build".into()),
+            findings: Vec::new(),
+            remember: None,
+            deadline_ms: None,
+        };
+        let answer = link.ask::<ApprovalAsk>(&params, Some(timeout)).await;
+        let approved = answer.is_some_and(|a| a.decision != Decision::Deny);
+        return (
+            "completed",
+            Some(if approved { "approved" } else { "denied" }.into()),
+        );
+    }
+    if text == "stream" {
+        for piece in ["hello ", "wor", "ld, this is a streamed answer"] {
+            link.delta(piece);
+            tokio::time::sleep(Duration::from_millis(40)).await;
+        }
+        return (
+            "completed",
+            Some("hello world, this is a streamed answer".into()),
+        );
+    }
+    if let Some(rest) = text.strip_prefix("slow:") {
+        let mut parts = rest.splitn(2, ':');
+        let ms: u64 = parts.next().unwrap_or("0").parse().unwrap_or(0);
+        let answer = parts.next().unwrap_or("slow done").to_owned();
+        return tokio::select! {
+            () = tokio::time::sleep(Duration::from_millis(ms)) => ("completed", Some(answer)),
+            () = cancel.cancelled() => ("interrupted_by_user", None),
+        };
+    }
+    ("completed", Some(format!("echo: {text}")))
+}
+
+struct Profile {
+    scope: ProfileScope,
+    store: Arc<Store>,
+}
+
+/// The agent side.
+pub struct FakeAgents {
+    profiles: BTreeMap<String, Profile>,
+    turns: Arc<Mutex<HashMap<String, CancellationToken>>>,
+    next: AtomicUsize,
+    /// Every turn started: (session, text).
+    pub started: Mutex<Vec<(String, String)>>,
+    /// Steered texts.
+    pub steered: Mutex<Vec<String>>,
+    /// Registry commands run: (session, line).
+    pub commands: Mutex<Vec<(String, String)>>,
+    /// Evictions: (profile, session).
+    pub evicted: Mutex<Vec<(String, String)>>,
+    /// How long an `approval` turn waits.
+    pub approval_timeout: Mutex<Duration>,
+}
+
+impl FakeAgents {
+    pub fn store_of(&self, profile: &str) -> Arc<Store> {
+        Arc::clone(&self.profiles[profile].store)
+    }
+
+    /// Texts of the turns started so far.
+    pub fn texts(&self) -> Vec<String> {
+        self.started
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, t)| t.clone())
+            .collect()
+    }
+
+    /// The sessions of the turns started so far.
+    pub fn turn_sessions(&self) -> Vec<String> {
+        self.started
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(s, _)| s.clone())
+            .collect()
+    }
+
+    pub fn running(&self) -> usize {
+        self.turns.lock().unwrap().len()
+    }
+}
+
+fn not_here<T>() -> HostFuture<'static, T>
+where
+    T: Send + 'static,
+{
+    Box::pin(async { Err(Error::new(&codes::RPC_NOT_SERVED, "not in this fake")) })
+}
+
+impl Host for FakeAgents {
+    fn owns<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async { Ok(true) })
+    }
+
+    fn create<'a>(&'a self, _: &'a str, _: SessionCreateParams) -> HostFuture<'a, SessionRef> {
+        not_here()
+    }
+
+    fn list<'a>(&'a self, _: &'a str, _: SessionListParams) -> HostFuture<'a, SessionList> {
+        not_here()
+    }
+
+    fn resume<'a>(&'a self, _: &'a str, _: Option<SessionSetup>, _: Link) -> HostFuture<'a, ()> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn transcript<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, Transcript> {
+        not_here()
+    }
+
+    fn context_usage<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ContextUsage> {
+        not_here()
+    }
+
+    fn compact<'a>(&'a self, _: &'a str, _: CompactParams) -> HostFuture<'a, Compacted> {
+        not_here()
+    }
+
+    fn submit<'a>(
+        &'a self,
+        _: &'a str,
+        params: SubmitParams,
+        _: Author,
+        link: Link,
+    ) -> HostFuture<'a, Submitted> {
+        Box::pin(async move {
+            let turn = format!("turn-{}", self.next.fetch_add(1, Ordering::Relaxed));
+            let session = params.session_id.clone();
+            self.started
+                .lock()
+                .unwrap()
+                .push((session.clone(), params.text.clone()));
+            let cancel = CancellationToken::new();
+            self.turns
+                .lock()
+                .unwrap()
+                .insert(session.clone(), cancel.clone());
+            let timeout = *self.approval_timeout.lock().unwrap();
+            let turns = Arc::clone(&self.turns);
+            let turn_id = turn.clone();
+            tokio::spawn(async move {
+                let (reason, answer) = script(&params.text, &link, &cancel, timeout).await;
+                // Gone before the end is announced, as in the daemon.
+                turns.lock().unwrap().remove(&session);
+                link.emit::<TurnEnded>(&TurnFinished {
+                    turn_id,
+                    exit_reason: reason.to_owned(),
+                    final_response: answer,
+                    error: None,
+                    usage: None,
+                    report: None,
+                });
+            });
+            Ok(Submitted {
+                turn_id: turn,
+                admission: RpcAdmission::Started,
+            })
+        })
+    }
+
+    fn dispatch<'a>(
+        &'a self,
+        _: &'a str,
+        _: DispatchParams,
+        _: Link,
+    ) -> HostFuture<'a, Dispatched> {
+        not_here()
+    }
+
+    fn interrupt<'a>(&'a self, _: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
+        if let Some(cancel) = self.turns.lock().unwrap().get(session_id) {
+            cancel.cancel();
+        }
+        Box::pin(async { Ok(()) })
+    }
+
+    fn resolve<'a>(&'a self, _: &'a str, _: ResolveParams) -> HostFuture<'a, SessionRef> {
+        not_here()
+    }
+
+    fn fork<'a>(&'a self, _: &'a str, _: ForkParams) -> HostFuture<'a, SessionRef> {
+        not_here()
+    }
+
+    fn commands<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: ClientKind,
+    ) -> HostFuture<'a, CommandCatalog> {
+        not_here()
+    }
+
+    fn complete_path<'a>(&'a self, _: &'a str, _: CompleteParams) -> HostFuture<'a, Completions> {
+        not_here()
+    }
+
+    fn model_options<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ModelOptions> {
+        not_here()
+    }
+
+    fn config_get<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ConfigValue> {
+        not_here()
+    }
+
+    fn close_idle<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
+    }
+
+    fn load(&self) -> (usize, usize) {
+        (0, self.running())
+    }
+
+    fn drain(&self, _: Duration) -> Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
+        Box::pin(async {})
+    }
+}
+
+/// The registry the fake knows: name, aliases, busy policy.
+const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
+    ("help", &[], BusyPolicy::Immediate),
+    ("new", &["reset"], BusyPolicy::InterruptThenDispatch),
+    ("stop", &[], BusyPolicy::InterruptThenDispatch),
+    ("queue", &[], BusyPolicy::Immediate),
+    ("approve", &[], BusyPolicy::Immediate),
+    ("deny", &[], BusyPolicy::Immediate),
+    ("whoami", &[], BusyPolicy::Immediate),
+    ("pair", &[], BusyPolicy::Immediate),
+    ("model", &[], BusyPolicy::Reject),
+    ("usage", &[], BusyPolicy::Immediate),
+    ("retry", &[], BusyPolicy::InterruptThenDispatch),
+];
+
+impl Agents for FakeAgents {
+    fn store(&self, profile: &str) -> Option<Arc<Store>> {
+        self.profiles.get(profile).map(|p| Arc::clone(&p.store))
+    }
+
+    fn scope(&self, profile: &str) -> Option<ProfileScope> {
+        self.profiles.get(profile).map(|p| p.scope.clone())
+    }
+
+    fn create_conversation<'a>(
+        &'a self,
+        profile: &'a str,
+        conversation: Conversation,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async move {
+            let store = self
+                .store(profile)
+                .ok_or_else(|| Error::new(&codes::PROFILE_NOT_FOUND, "no profile"))?;
+            let mut new = match &conversation.parent {
+                Some(parent) => {
+                    NewSession::child(Source::Gateway, parent.parse()?, LineageKind::Reset)
+                }
+                None => NewSession::new(Source::Gateway),
+            };
+            new.origin = Origin::Gateway {
+                platform: conversation.platform,
+                chat: conversation.chat_id,
+                thread: conversation.thread_id,
+                user: Some(conversation.user_id),
+            };
+            Ok(store.create_session(&new)?.id.to_string())
+        })
+    }
+
+    fn steer<'a>(&'a self, _: &'a str, session_id: &'a str, text: &'a str) -> HostFuture<'a, bool> {
+        let running = self.turns.lock().unwrap().contains_key(session_id);
+        if running {
+            self.steered.lock().unwrap().push(text.to_owned());
+        }
+        Box::pin(async move { Ok(running) })
+    }
+
+    fn lookup<'a>(&'a self, _: &'a str, _: &'a str, line: &'a str) -> HostFuture<'a, Lookup> {
+        let line = line.trim().trim_start_matches('/');
+        let (token, args) = line.split_once(' ').unwrap_or((line, ""));
+        let token = token.to_lowercase();
+        let found = REGISTRY
+            .iter()
+            .find(|(name, aliases, _)| *name == token || aliases.contains(&token.as_str()));
+        let lookup = match found {
+            Some((name, _, busy)) => Lookup::Command {
+                name: (*name).to_owned(),
+                args: args.trim().to_owned(),
+                busy: *busy,
+            },
+            None if token == "theme" => Lookup::Reply("/theme is not available here".into()),
+            None => Lookup::Text,
+        };
+        Box::pin(async move { Ok(lookup) })
+    }
+
+    fn run_command<'a>(
+        &'a self,
+        _: &'a str,
+        session_id: &'a str,
+        line: &'a str,
+        _: Link,
+    ) -> HostFuture<'a, Dispatched> {
+        self.commands
+            .lock()
+            .unwrap()
+            .push((session_id.to_owned(), line.to_owned()));
+        let name = line
+            .trim_start_matches('/')
+            .split(' ')
+            .next()
+            .unwrap_or_default();
+        let last = self
+            .started
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|(s, _)| s == session_id)
+            .map_or_else(|| "the last message again".to_owned(), |(_, t)| t.clone());
+        let outcome = match name {
+            "retry" => Dispatched::Send {
+                message: last,
+                images: Vec::new(),
+            },
+            "model" => Dispatched::Done {
+                notice: "model switched".into(),
+            },
+            other => Dispatched::Done {
+                notice: format!("ran /{other}"),
+            },
+        };
+        Box::pin(async move { Ok(outcome) })
+    }
+
+    fn evict<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        let busy = self.turns.lock().unwrap().contains_key(session_id);
+        if !busy {
+            self.evicted
+                .lock()
+                .unwrap()
+                .push((profile.to_owned(), session_id.to_owned()));
+        }
+        Box::pin(async move { Ok(!busy) })
+    }
+
+    fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let store = self
+                .store(profile)
+                .ok_or_else(|| Error::new(&codes::PROFILE_NOT_FOUND, "no profile"))?;
+            store.end_session(session_id.parse()?, EndReason::NewSession)?;
+            Ok(())
+        })
+    }
+}
+
+/// What the fake adapter did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Did {
+    /// A new message.
+    Send(Outgoing),
+    /// An edit of message `id`.
+    Edit(String, Outgoing),
+}
+
+/// A scripted platform: records sends; failures can be queued.
+pub struct FakeAdapter {
+    pub descriptor: Mutex<Descriptor>,
+    pub did: Mutex<Vec<Did>>,
+    /// Results the next sends get (then success).
+    pub failures: Mutex<VecDeque<SendError>>,
+    /// What `connect` answers.
+    pub connect_error: Mutex<Option<AdapterError>>,
+    pub link: Mutex<Option<Arc<dyn AdapterLink>>>,
+    next: AtomicUsize,
+}
+
+impl FakeAdapter {
+    pub fn new(platform: &str) -> Arc<Self> {
+        Arc::new(Self {
+            descriptor: Mutex::new(Descriptor {
+                supports_edit: true,
+                interactive: Interactive::Native,
+                ..Descriptor::new(platform, 4096)
+            }),
+            did: Mutex::default(),
+            failures: Mutex::default(),
+            connect_error: Mutex::default(),
+            link: Mutex::default(),
+            next: AtomicUsize::new(1),
+        })
+    }
+
+    /// Texts of new messages (not edits), in order.
+    pub fn texts(&self) -> Vec<String> {
+        self.did
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|d| match d {
+                Did::Send(m) => Some(m.text.clone()),
+                Did::Edit(..) => None,
+            })
+            .collect()
+    }
+
+    /// Everything it did.
+    pub fn all(&self) -> Vec<Did> {
+        self.did.lock().unwrap().clone()
+    }
+}
+
+impl Adapter for FakeAdapter {
+    fn describe(&self) -> Descriptor {
+        self.descriptor.lock().unwrap().clone()
+    }
+
+    fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
+        let error = self.connect_error.lock().unwrap().clone();
+        if error.is_none() {
+            *self.link.lock().unwrap() = Some(link);
+        }
+        Box::pin(async move { error.map_or(Ok(()), Err) })
+    }
+
+    fn disconnect(&self) -> AdapterFuture<'_, ()> {
+        Box::pin(async {})
+    }
+
+    fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
+        let failure = self.failures.lock().unwrap().pop_front();
+        let outcome = if let Some(err) = failure {
+            Err(err)
+        } else {
+            self.did.lock().unwrap().push(Did::Send(message.clone()));
+            let id = self.next.fetch_add(1, Ordering::Relaxed);
+            Ok(Sent {
+                message_id: Some(format!("m{id}")),
+            })
+        };
+        Box::pin(async move { outcome })
+    }
+
+    fn edit<'a>(
+        &'a self,
+        message_id: &'a str,
+        message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.did
+            .lock()
+            .unwrap()
+            .push(Did::Edit(message_id.to_owned(), message.clone()));
+        Box::pin(async { Ok(()) })
+    }
+}
+
+/// A gateway on a temporary home.
+pub struct Harness {
+    pub home: tempfile::TempDir,
+    pub agents: Arc<FakeAgents>,
+    pub server: Arc<Server>,
+    pub gateway: Gateway,
+    pub adapters: BTreeMap<(String, String), Arc<FakeAdapter>>,
+}
+
+/// How a harness starts.
+pub struct Setup {
+    /// Profiles and their `config.toml`.
+    pub profiles: Vec<(&'static str, String)>,
+    /// Hooks.
+    pub hooks: Arc<Hooks>,
+    /// `on_all_adapters_down = "exit"`.
+    pub exit_when_down: bool,
+    /// Adapters that fail connecting, by (profile, platform).
+    pub connect_errors: Vec<((String, String), AdapterError)>,
+    /// Drain timeout.
+    pub drain: Duration,
+    /// Adapters without editing, by platform.
+    pub no_edit: Vec<&'static str>,
+}
+
+impl Setup {
+    /// One `default` profile with `config`.
+    pub fn new(config: &str) -> Self {
+        Self {
+            profiles: vec![("default", config.to_owned())],
+            hooks: Arc::new(Hooks::default()),
+            exit_when_down: false,
+            connect_errors: Vec::new(),
+            drain: Duration::from_secs(2),
+            no_edit: Vec::new(),
+        }
+    }
+}
+
+/// A `config.toml` enabling `platform` with `table` keys (allowing every
+/// sender unless `table` says otherwise) and no debounce.
+pub fn config(platform: &str, table: &str) -> String {
+    format!(
+        "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.platforms.{platform}]\nenabled = true\n{table}\n"
+    )
+}
+
+/// A `config.toml` where `platform` admits everyone.
+pub fn open(platform: &str) -> String {
+    config(platform, "allow_all = true")
+}
+
+fn identity() -> Identity {
+    Identity {
+        version: "0.0.0".into(),
+        build_id: "test".into(),
+        target: "test".into(),
+        tier: "tier1".into(),
+    }
+}
+
+fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
+    let layout = Home::open(home).unwrap();
+    let mut profiles = BTreeMap::new();
+    for (name, config) in &setup.profiles {
+        let dir = layout.profile(&ProfileName::parse(name).unwrap()).unwrap();
+        std::fs::write(dir.path().join("config.toml"), config).unwrap();
+        let scope = ProfileScope::open(dir, &Overrides::default(), Launch::Other).unwrap();
+        let store = Arc::new(Store::open(&scope).unwrap());
+        profiles.insert((*name).to_owned(), Profile { scope, store });
+    }
+    Arc::new(FakeAgents {
+        profiles,
+        turns: Arc::default(),
+        next: AtomicUsize::new(0),
+        started: Mutex::default(),
+        steered: Mutex::default(),
+        commands: Mutex::default(),
+        evicted: Mutex::default(),
+        approval_timeout: Mutex::new(Duration::from_secs(30)),
+    })
+}
+
+impl Harness {
+    pub async fn start(setup: Setup) -> Self {
+        Self::start_in(tempfile::tempdir().unwrap(), setup).await
+    }
+
+    /// A gateway over an existing home (a restart).
+    pub async fn start_in(home: tempfile::TempDir, setup: Setup) -> Self {
+        let agents = agents_for(home.path(), &setup);
+        let names: Vec<String> = setup
+            .profiles
+            .iter()
+            .map(|(n, _)| (*n).to_owned())
+            .collect();
+        let host: Arc<dyn Host> = Arc::clone(&agents) as Arc<dyn Host>;
+        let server = Server::new(ServerOptions::new(identity(), names.clone()), host).unwrap();
+        let mut adapters = BTreeMap::new();
+        for name in &names {
+            for platform in agents
+                .scope(name)
+                .unwrap()
+                .config()
+                .gateway
+                .platforms
+                .keys()
+            {
+                let adapter = FakeAdapter::new(platform);
+                if setup.no_edit.contains(&platform.as_str()) {
+                    adapter.descriptor.lock().unwrap().supports_edit = false;
+                }
+                let key = (name.clone(), platform.clone());
+                if let Some((_, err)) = setup.connect_errors.iter().find(|(k, _)| *k == key) {
+                    *adapter.connect_error.lock().unwrap() = Some(err.clone());
+                }
+                adapters.insert(key, adapter);
+            }
+        }
+        let mut options = Options::new(home.path());
+        for (_, platform) in adapters.keys() {
+            let by_key = adapters.clone();
+            let factory: AdapterFactory = Arc::new(move |setup| {
+                let key = (setup.scope.name().to_string(), setup.platform.clone());
+                Ok(Arc::clone(&by_key[&key]) as Arc<dyn Adapter>)
+            });
+            options.factories.insert(platform.clone(), factory);
+        }
+        options.hooks = Arc::clone(&setup.hooks);
+        options.drain_timeout = setup.drain;
+        if setup.exit_when_down {
+            options.on_all_adapters_down = pmt_config::daemon::AllAdaptersDown::Exit;
+        }
+        let gateway = Gateway::start(
+            Arc::clone(&server),
+            Arc::clone(&agents) as Arc<dyn Agents>,
+            options,
+        )
+        .await
+        .unwrap();
+        let harness = Self {
+            home,
+            agents,
+            server,
+            gateway,
+            adapters,
+        };
+        harness.connected().await;
+        harness
+    }
+
+    /// Waits until every adapter that can connect has.
+    async fn connected(&self) {
+        for adapter in self.adapters.values() {
+            if adapter.connect_error.lock().unwrap().is_some() {
+                continue;
+            }
+            eventually("the adapter connects", || {
+                adapter.link.lock().unwrap().is_some()
+            })
+            .await;
+        }
+    }
+
+    pub fn adapter(&self, platform: &str) -> Arc<FakeAdapter> {
+        self.adapter_of("default", platform)
+    }
+
+    pub fn adapter_of(&self, profile: &str, platform: &str) -> Arc<FakeAdapter> {
+        Arc::clone(&self.adapters[&(profile.to_owned(), platform.to_owned())])
+    }
+
+    pub fn store(&self) -> Arc<Store> {
+        self.agents.store_of("default")
+    }
+
+    /// Submits `inbound` through the adapter's link, as the platform would.
+    pub async fn send(&self, platform: &str, inbound: Inbound) -> Admission {
+        self.send_as("default", platform, inbound).await
+    }
+
+    pub async fn send_as(&self, profile: &str, platform: &str, inbound: Inbound) -> Admission {
+        let link = self
+            .adapter_of(profile, platform)
+            .link
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("the adapter is connected");
+        link.submit(inbound).await
+    }
+
+    /// A DM from `sender` on `platform`.
+    pub async fn dm(&self, platform: &str, sender: &str, text: &str) -> Admission {
+        self.send(platform, Inbound::text(ChatType::Dm, sender, sender, text))
+            .await
+    }
+
+    /// The sessions of the default profile.
+    pub fn sessions(&self) -> Vec<SessionId> {
+        self.sessions_of("default")
+    }
+
+    pub fn sessions_of(&self, profile: &str) -> Vec<SessionId> {
+        let store = self.agents.store_of(profile);
+        store
+            .list_sessions(&pmt_store::ListOptions {
+                limit: Some(100),
+                ..pmt_store::ListOptions::default()
+            })
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect()
+    }
+
+    /// Stops the gateway and hands back its home (for a restart).
+    pub async fn stop(self) -> tempfile::TempDir {
+        self.gateway.shutdown().await;
+        self.home
+    }
+}
+
+/// Waits up to ten seconds for `check`.
+pub async fn eventually(what: &str, mut check: impl FnMut() -> bool) {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while !check() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting: {what}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Waits until the adapter sent a message containing `text`.
+pub async fn said(adapter: &FakeAdapter, text: &str) {
+    eventually(&format!("a message containing {text:?}"), || {
+        adapter.texts().iter().any(|t| t.contains(text))
+    })
+    .await;
+}

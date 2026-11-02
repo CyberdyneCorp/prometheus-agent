@@ -6,9 +6,13 @@
 //! prints its endpoint, `stop` drains and stops it, `restart` drains and
 //! replaces it, `status` prints its process state.
 
+mod gateway_cmd;
 mod host;
+mod messaging;
 mod serve;
 pub(crate) mod standalone;
+#[cfg(debug_assertions)]
+mod test_adapter;
 mod turn;
 
 use std::fmt::Write as _;
@@ -41,6 +45,26 @@ pub enum DaemonCommand {
     Restart,
     /// Print the daemon's process state.
     Status,
+}
+
+pub use gateway_cmd::{GatewayCommand, OutboxCommand, PairingCommand};
+
+/// Runs `prometheus gateway <command>`.
+///
+/// # Errors
+///
+/// As [`gateway_cmd::run`].
+pub fn gateway(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+    gateway_cmd::run(command, ctx)
+}
+
+/// Runs `prometheus pairing <command>`.
+///
+/// # Errors
+///
+/// As [`gateway_cmd::pairing`].
+pub fn pairing(command: &PairingCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+    gateway_cmd::pairing(command, ctx)
 }
 
 /// How long `start` waits for the endpoint.

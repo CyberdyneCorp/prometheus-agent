@@ -33,7 +33,12 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
-pub use gateway::{GatewayConfig, PlatformConfig};
+pub use gateway::{
+    AgentCacheConfig, BackgroundNotifications, EffectiveBusy, GatewayBusy, GatewayConfig,
+    GatewayQuickCommands, GatewaySessions, NotificationsConfig, OutboxConfig, PlatformBusy,
+    PlatformConfig, PlatformSessions, PlatformStreaming, ShutdownConfig, StreamTransport,
+    StreamingConfig, UnauthorizedDm,
+};
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
@@ -210,6 +215,9 @@ impl Default for Config {
 /// a profile `config.toml` that contains one is refused (design D13).
 pub const MACHINE_WIDE_SECTIONS: &[&str] =
     &["daemon", "local_runtime", "process", "runtimes", "update"];
+
+/// `[gateway]` keys that are daemon-wide and live in `daemon.toml`.
+pub const MACHINE_WIDE_GATEWAY_KEYS: &[&str] = &["http", "relay", "on_all_adapters_down"];
 
 /// The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).
 /// Config keys that need a credential hold a name, never the value.

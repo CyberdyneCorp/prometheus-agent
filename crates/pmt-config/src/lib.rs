@@ -18,6 +18,7 @@ pub mod credential;
 pub mod daemon;
 mod edit;
 pub mod essential;
+pub mod gateway_check;
 pub mod grants;
 pub mod home;
 pub mod keys;

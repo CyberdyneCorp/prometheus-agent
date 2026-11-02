@@ -32,6 +32,7 @@ use super::turn::{SecretsToClients, ToClients, approvals, clarify};
 
 mod commands;
 mod discovery;
+mod gateway;
 mod reload;
 mod setup;
 mod turns;

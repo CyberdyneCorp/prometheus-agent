@@ -15,6 +15,7 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.rpc.max_frame_bytes` | integer | `16777216` | ≥ 1024 | `restart` | Largest accepted frame; a larger one closes the connection with 4413. |
 | `daemon.rpc.request_timeout_secs` | integer | `600` | ≥ 1 | `restart` | Deadline of server-to-client requests other than approvals (which use the profile's `approvals.timeout_secs`). |
 | `daemon.rpc.workers` | integer | `8` | 1 to 256 | `restart` | Requests run concurrently per connection; `rpc.ping` never waits for one. |
+| `gateway.on_all_adapters_down` | one of "stay_alive", "exit" | `"stay_alive"` | `"stay_alive"`, `"exit"` | `restart` | What the daemon does once every messaging adapter failed for good: keep serving local clients and schedulers, or exit 78. |
 | `process.nofile_soft_limit` | integer | `4096` | ≥ 0 | `restart` | Open-file soft limit every process raises itself to at startup on POSIX hosts, capped by the hard limit and never lowering a higher limit; children inherit it. `0` disables the raise. |
 | `runtimes.allow_lazy_install` | boolean | `true` | any | `restart` | Install a missing pinned runtime the first time a tool needs it (asking first on an interactive terminal). `false` makes the tool fail with a `prometheus runtimes install <name>` hint instead. |
 | `runtimes.exclude` | array of string | `[]` | any | `restart` | Runtimes nothing may install: not lazily, not `prometheus runtimes install`, not the pin refresh after an update. `install.sh --without <name>` records names here. |

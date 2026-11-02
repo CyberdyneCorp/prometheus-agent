@@ -190,6 +190,9 @@ struct State {
     owners: HashMap<String, (ConnId, Option<u32>)>,
     /// Recently settled request ids, oldest first.
     settled: VecDeque<String>,
+    /// Recently taken answers (`id`, answer, answering client), oldest
+    /// first, so a surface can show what another one decided.
+    answers: VecDeque<(String, Value, String)>,
 }
 
 impl State {
@@ -696,9 +699,26 @@ impl Hub {
         };
         state.settle(id);
         if let Ok(value) = answer {
+            if state.answers.len() == SETTLED_KEPT {
+                state.answers.pop_front();
+            }
+            state
+                .answers
+                .push_back((id.to_owned(), value.clone(), by_client.to_owned()));
             let _ = pending.reply.send((value, by_client.to_owned()));
         }
         Answered::Taken
+    }
+
+    /// The answer that settled request `id` and the client that gave it,
+    /// while it is among the recently settled ones.
+    #[must_use]
+    pub fn answer_of(&self, id: &str) -> Option<(Value, String)> {
+        self.state()
+            .answers
+            .iter()
+            .find(|(settled, _, _)| settled == id)
+            .map(|(_, value, by)| (value.clone(), by.clone()))
     }
 
     /// The session of an open request.

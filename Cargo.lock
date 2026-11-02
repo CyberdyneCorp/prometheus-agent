@@ -2411,9 +2411,11 @@ dependencies = [
  "pmt-core",
  "pmt-net",
  "pmt-rpc",
+ "pmt-store",
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "sysinfo",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -2597,6 +2599,7 @@ dependencies = [
 name = "pmt-store"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.4.3",
  "jiff",
  "nix 0.31.3",
  "pmt-config",

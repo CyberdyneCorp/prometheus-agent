@@ -23,6 +23,7 @@ use std::time::Duration;
 use pmt_config::{DaemonConfig, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_core::runtime::{Role, WriterLock};
+use pmt_gateway::messaging::Gateway;
 use pmt_gateway::{Exit, Identity, Server, ServerOptions};
 use tracing::Instrument as _;
 
@@ -73,20 +74,35 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
                 ctx.launch,
             )));
             let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
-            let server = Server::new(options, host)?;
+            let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
+            let messaging =
+                super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx);
+            if let Err(err) = Gateway::start(Arc::clone(&server), host, messaging).await {
+                // The daemon cannot tell whether its last stop was clean.
+                tracing::error!("{err}");
+                eprint!("{}", crate::output::render_error(&err, false));
+                watcher.abort();
+                return Ok(pmt_core::exit::FAILURE);
+            }
             let drain = Duration::from_secs(config.daemon.restart_drain_secs);
             let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
             watcher.abort();
-            exit
+            exit.map(exit_code)
         }
         .in_current_span(),
     )?;
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
-    Ok(match exit {
+    Ok(exit)
+}
+
+/// The process exit status of a daemon stop.
+fn exit_code(exit: Exit) -> u8 {
+    match exit {
         Exit::Stopped => 0,
         Exit::Restart => pmt_core::exit::TEMPORARY_FAILURE,
-    })
+        Exit::AdaptersDown => pmt_core::exit::CONFIG,
+    }
 }
 
 pub(super) fn identity() -> Identity {

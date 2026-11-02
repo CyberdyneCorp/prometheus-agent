@@ -60,6 +60,9 @@ struct Run<'a> {
     profile: &'a Profile,
     registry: &'a Registry,
     link: &'a Link,
+    /// Where the command was typed: a client (`Cli`) or a messaging
+    /// platform (`Gateway`).
+    surface: Surface,
 }
 
 impl DaemonHost {
@@ -77,14 +80,39 @@ impl DaemonHost {
             profile,
             registry: &registry,
             link: &link,
+            surface: Surface::Cli,
         };
         Ok(run.line(line_of(&params), 0).await)
+    }
+
+    /// A registry command a messaging user sent (spec: messaging-gateway,
+    /// Gateway slash commands, quick commands and hooks): resolved for the
+    /// gateway surface; an `exec` quick command is killed with its process
+    /// tree after `gateway.quick_commands.timeout_secs`.
+    pub(super) async fn gateway_command(
+        &self,
+        profile: &Profile,
+        session_id: &str,
+        input: &str,
+        link: Link,
+    ) -> Result<Dispatched, Error> {
+        let id = super::session_id(session_id)?;
+        let session = self.load(profile, id, &link).await?;
+        let registry = commands::registry(&profile.scope(), &session.live);
+        let run = Run {
+            session: &session,
+            profile,
+            registry: &registry,
+            link: &link,
+            surface: Surface::Gateway,
+        };
+        Ok(run.line(input.to_owned(), 0).await)
     }
 }
 
 impl Run<'_> {
     async fn line(&self, line: String, depth: u8) -> Dispatched {
-        match self.registry.resolve(&line, Surface::Cli) {
+        match self.registry.resolve(&line, self.surface) {
             Resolution::Builtin { command, args } => self.builtin(command, &args).await,
             Resolution::External { command, args } => match command.source {
                 Source::Quick => Box::pin(self.quick(&command.name, &args, depth)).await,
@@ -120,6 +148,10 @@ impl Run<'_> {
                 self.line(alias_line(&command, args), depth + 1).await
             }
             pmt_config::schema::QuickCommandKind::Exec => {
+                let mut command = command;
+                if self.surface == Surface::Gateway {
+                    command.timeout_secs = scope.config().gateway.quick_commands.timeout_secs;
+                }
                 let notice = exec(&self.ctx(&scope), name, &command, args).await;
                 Dispatched::Done { notice }
             }
@@ -128,7 +160,7 @@ impl Run<'_> {
 
     async fn builtin(&self, command: &'static Command, args: &str) -> Dispatched {
         let name = command.name;
-        if CLIENT_COMMANDS.contains(&name) {
+        if self.surface == Surface::Cli && CLIENT_COMMANDS.contains(&name) {
             return refused(format!("/{name} is handled by the client"));
         }
         let session = self.session;
@@ -181,7 +213,7 @@ impl Run<'_> {
             live: &self.session.live,
             scope,
             registry: self.registry,
-            surface: Surface::Cli,
+            surface: self.surface,
             timestamps: scope.config().display.timestamps,
             running: self.session.busy.load(Ordering::Acquire),
             post: Arc::new(move |text| notice(&link, &text)),

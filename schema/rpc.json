@@ -1202,6 +1202,59 @@
       ],
       "type": "object"
     },
+    "PairingApproveParams": {
+      "additionalProperties": false,
+      "description": "`pairing.approve` params.",
+      "properties": {
+        "code": {
+          "description": "The code (spaces, dashes and case are ignored).",
+          "type": "string"
+        },
+        "platform": {
+          "description": "The platform the code was issued on.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile; required when the connection is granted several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "platform",
+        "code"
+      ],
+      "type": "object"
+    },
+    "PairingApproved": {
+      "additionalProperties": false,
+      "description": "`pairing.approve` result.",
+      "properties": {
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "sender_id": {
+          "description": "The approved sender's platform id.",
+          "type": "string"
+        },
+        "sender_name": {
+          "description": "The sender's display name, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "platform",
+        "sender_id"
+      ],
+      "type": "object"
+    },
     "PlatformSupport": {
       "additionalProperties": false,
       "description": "The daemon's build target and its support tier.",
@@ -2408,8 +2461,13 @@
       "since": "1.0"
     },
     "pairing.approve": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "params": {
+        "$ref": "#/$defs/PairingApproveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PairingApproved"
+      },
       "since": "1.0"
     },
     "prompt.submit": {

@@ -374,7 +374,7 @@ async fn a_client_supplied_author_is_refused_and_inputs_are_stamped() {
     submit(&client, &session, "hi").await;
     let authors = daemon.host.authors.lock().unwrap().clone();
     assert_eq!(authors.len(), 1);
-    assert_eq!(authors[0].client_kind, ClientKind::Tui);
+    assert_eq!(authors[0].client_kind, "tui");
     assert!(authors[0].client_id.starts_with("tui-"));
     assert_eq!(authors[0].principal, "default");
 }
