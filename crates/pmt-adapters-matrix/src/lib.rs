@@ -369,6 +369,23 @@ impl Adapter for Matrix {
         })
     }
 
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let path = format!(
+                "/rooms/{}/redact/{}/{}",
+                segment(chat_id),
+                segment(message_id),
+                segment(&self.txn())
+            );
+            self.api()?.put(&path, &json!({})).await.map(drop)
+        })
+    }
+
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
         Box::pin(async move {
             let api = self.api()?;

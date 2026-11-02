@@ -289,11 +289,15 @@ impl Adapter for Whatsapp {
         .collect();
         let limit = pmt_config::platforms::first_party(PLATFORM)
             .map_or(4096, |p| p.max_message_length as usize);
+        // The bridge sends every audio file as a voice note (it converts
+        // to Ogg Opus and sets `ptt`), so a plain audio file cannot go out.
+        let mut out = all.clone();
+        out.remove(&MediaKind::Audio);
         Descriptor {
             supports_edit: true,
             supports_typing: true,
-            media_in: all.clone(),
-            media_out: all,
+            media_in: all,
+            media_out: out,
             ..Descriptor::new(PLATFORM, limit)
         }
     }

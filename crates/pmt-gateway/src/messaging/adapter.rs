@@ -330,6 +330,16 @@ pub trait Adapter: Send + Sync + 'static {
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
     }
+    /// Deletes a sent message (adapters with `supports_delete`); a message
+    /// sent into a thread names it.
+    fn delete<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        _message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
     /// Adds (`remove = false`) or removes a reaction on a message
     /// (adapters with `supports_reactions`).
     fn react<'a>(&'a self, _reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {

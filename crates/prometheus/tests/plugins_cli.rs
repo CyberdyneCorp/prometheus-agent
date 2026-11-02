@@ -54,6 +54,26 @@ fn the_kit_passes_for_all_eight_first_party_adapters() {
             );
         }
         assert!(!text.contains("FAIL"), "{platform}:\n{text}");
+        // Every optional capability gets a line: exercised when declared,
+        // skipped with a reason otherwise.
+        for capability in [
+            "edit",
+            "typing",
+            "reactions",
+            "threads",
+            "delete",
+            "media in",
+            "media out",
+            "streaming tts",
+            "receipts",
+            "cards",
+        ] {
+            assert!(
+                text.lines().any(|l| l == format!("pass  {capability}")
+                    || l.starts_with(&format!("skip  {capability}: "))),
+                "{platform} printed no line for {capability}:\n{text}"
+            );
+        }
     }
     let scratch = std::fs::read_dir(home.path().join("tmp")).unwrap().count();
     assert_eq!(scratch, 0, "the kit's scratch homes are removed");

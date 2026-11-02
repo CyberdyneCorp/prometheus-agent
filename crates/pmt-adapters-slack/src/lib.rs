@@ -301,6 +301,18 @@ impl Adapter for Slack {
         })
     }
 
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let body = json!({"channel": chat_id, "ts": message_id});
+            self.api()?.call("chat.delete", &body).await.map(drop)
+        })
+    }
+
     fn react<'a>(&'a self, reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
             let name = emoji_name(&reaction.emoji).map_or_else(

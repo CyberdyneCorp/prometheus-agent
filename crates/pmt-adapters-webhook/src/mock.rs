@@ -114,6 +114,7 @@ impl MockPlatform for WebhookSender {
                 message_id: entry["message_id"].as_str().unwrap_or_default().to_owned(),
                 text: entry["text"].as_str().unwrap_or_default().to_owned(),
                 buttons: Vec::new(),
+                thread_id: entry["delivery_id"].as_str().map(str::to_owned),
             })
             .collect()
     }

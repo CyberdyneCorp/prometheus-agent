@@ -351,10 +351,10 @@ impl Email {
 
 impl Adapter for Email {
     fn describe(&self) -> Descriptor {
-        let all: BTreeSet<MediaKind> = [
+        // Mail has no voice notes: a recorded clip is an audio attachment.
+        let files: BTreeSet<MediaKind> = [
             MediaKind::Image,
             MediaKind::Audio,
-            MediaKind::Voice,
             MediaKind::Video,
             MediaKind::Document,
         ]
@@ -364,15 +364,8 @@ impl Adapter for Email {
             .map_or(50_000, |p| p.max_message_length as usize);
         Descriptor {
             splits_long_messages: true,
-            media_in: all,
-            media_out: [
-                MediaKind::Image,
-                MediaKind::Audio,
-                MediaKind::Video,
-                MediaKind::Document,
-            ]
-            .into_iter()
-            .collect(),
+            media_in: files.clone(),
+            media_out: files,
             stateless_send: true,
             ..Descriptor::new(PLATFORM, limit)
         }

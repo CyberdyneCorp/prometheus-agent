@@ -1,6 +1,6 @@
 //! A Discord mock: the REST API (messages limited to 2000 characters,
-//! edits, typing, reactions, channels, interaction callbacks, CDN files,
-//! scripted failures) and a Gateway WebSocket that numbers every event of
+//! edits, deletes, typing, reactions, channels and a thread, interaction
+//! callbacks, CDN files, uploads and voice messages, scripted failures) and a Gateway WebSocket that numbers every event of
 //! a session and replays the missed ones on Resume, as Discord does.
 
 // A fixture: a mock that cannot serve should fail loudly.
@@ -18,8 +18,11 @@ use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
-use pmt_gateway::messaging::Button;
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use pmt_gateway::messaging::conformance::{
+    Failure, MockFile, MockPlatform, MockSent, kind_of_name, mime_of_name,
+};
+use pmt_gateway::messaging::mock_server::form_parts;
+use pmt_gateway::messaging::{Button, MediaKind};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
@@ -34,6 +37,12 @@ pub const DM: &str = "900";
 pub const USER: &str = "4242";
 /// The bot's user id.
 pub const BOT: &str = "1";
+/// A server text channel.
+pub const CHANNEL: &str = "910";
+/// A thread of [`CHANNEL`] (a channel of its own on Discord).
+pub const THREAD: &str = "911";
+/// The `IS_VOICE_MESSAGE` flag.
+const VOICE: u64 = 1 << 13;
 
 /// What the Gateway socket task is told.
 enum Push {
@@ -53,6 +62,8 @@ struct State {
     failures: VecDeque<Failure>,
     files: Vec<(String, Vec<u8>)>,
     uploads: usize,
+    received: Vec<MockFile>,
+    deleted: Vec<String>,
     /// The connected socket's mailbox.
     socket: Option<mpsc::UnboundedSender<Push>>,
     /// Identify close code to answer with (the intents scenario).
@@ -278,6 +289,10 @@ impl DiscordMock {
             ("GET", ["gateway", "bot"]) => (200, json!({"url": format!("ws://{}", self.gateway)})),
             ("POST", ["channels", channel, "messages"]) => self.create(channel, kind, body),
             ("PATCH", ["channels", _, "messages", id]) => self.edit(id, body),
+            ("DELETE", ["channels", _, "messages", id]) => {
+                self.lock().deleted.push((*id).to_owned());
+                (204, Value::Null)
+            }
             ("POST", ["channels", _, "typing"]) => {
                 self.lock().typing += 1;
                 (204, Value::Null)
@@ -313,17 +328,39 @@ impl DiscordMock {
                 ),
             };
         }
+        // A thread is a channel of its own; the mock files it under its
+        // parent.
+        let (chat, thread_id) = if channel == THREAD {
+            (CHANNEL, Some(THREAD.to_owned()))
+        } else {
+            (channel, None)
+        };
+        let parts = form_parts(kind, body);
         let payload: Value = if kind.starts_with("multipart/") {
             state.uploads += 1;
-            let text = String::from_utf8_lossy(body);
-            text.split("name=\"payload_json\"\r\n\r\n")
-                .nth(1)
-                .and_then(|r| r.split("\r\n").next())
-                .and_then(|j| serde_json::from_str(j).ok())
+            parts
+                .iter()
+                .find(|p| p.name == "payload_json")
+                .and_then(|p| serde_json::from_slice(&p.bytes).ok())
                 .unwrap_or(Value::Null)
         } else {
             serde_json::from_slice(body).unwrap_or(Value::Null)
         };
+        let voice = payload["flags"].as_u64().unwrap_or(0) & VOICE != 0;
+        for file in parts.iter().filter(|p| p.file_name.is_some()) {
+            let name = file.file_name.clone().unwrap_or_default();
+            state.received.push(MockFile {
+                chat_id: chat.to_owned(),
+                thread_id: thread_id.clone(),
+                kind: if voice {
+                    MediaKind::Voice
+                } else {
+                    kind_of_name(&name)
+                },
+                name,
+                bytes: file.bytes.clone(),
+            });
+        }
         let content = payload["content"].as_str().unwrap_or_default();
         if content.chars().count() > 2000 {
             return (
@@ -335,10 +372,11 @@ impl DiscordMock {
         state.next_id += 1;
         let id = state.next_id.to_string();
         state.sent.push(MockSent {
-            chat_id: channel.to_owned(),
+            chat_id: chat.to_owned(),
             message_id: id.clone(),
             text: content.to_owned(),
             buttons: buttons(&payload["components"]),
+            thread_id,
         });
         (200, json!({"id": id, "channel_id": channel}))
     }
@@ -461,6 +499,41 @@ impl MockPlatform for DiscordMock {
 
     fn reactions(&self) -> Vec<(String, String)> {
         self.lock().reactions.clone()
+    }
+
+    fn thread(&self) -> Option<(String, String)> {
+        Some((CHANNEL.to_owned(), THREAD.to_owned()))
+    }
+
+    fn inject_media(
+        &self,
+        kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let url = self.add_file(name, bytes.to_vec());
+        let id = self.id();
+        let flags = if kind == MediaKind::Voice { VOICE } else { 0 };
+        self.dispatch(
+            "MESSAGE_CREATE",
+            &json!({
+                "id": id, "channel_id": DM, "content": caption, "flags": flags,
+                "author": {"id": USER, "username": "kit-user"},
+                "timestamp": "2026-11-02T10:00:00+00:00",
+                "attachments": [{"url": url, "filename": name,
+                                 "content_type": mime_of_name(name), "duration_secs": 1.0}]
+            }),
+        );
+        Some(id)
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
+    }
+
+    fn deleted(&self) -> Vec<String> {
+        self.lock().deleted.clone()
     }
 }
 

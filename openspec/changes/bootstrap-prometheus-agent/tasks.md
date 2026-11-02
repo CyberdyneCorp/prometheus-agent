@@ -280,7 +280,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 25.6 Implement the `slack` and `email` adapters; verify against the conformance kit (spec: platform-adapters)
 - [x] 25.7 Implement the `matrix` and `signal` adapters; verify against the conformance kit (spec: platform-adapters)
 - [x] 25.8 Implement the `whatsapp` and `webhook` adapters; verify against the conformance kit (spec: platform-adapters)
-- [ ] 25.9 Ship the adapter conformance kit as `prometheus plugins test-adapter <path>`; verify that it passes for all eight first-party adapters (spec: platform-adapters)
+- [x] 25.9 Ship the adapter conformance kit as `prometheus plugins test-adapter <path>`; verify that it passes for all eight first-party adapters (spec: platform-adapters)
 
 ## 26. M2 Platform adapter features and webhooks
 

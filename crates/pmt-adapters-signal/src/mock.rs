@@ -1,8 +1,8 @@
 //! A signal-cli HTTP daemon mock: the health check, a server-sent event
 //! stream that holds envelopes while no client listens (the daemon's
 //! `on-connection` receive mode, where Signal keeps them), and JSON-RPC
-//! `send` (8,000 characters at most), edits, reactions, typing, groups,
-//! attachments and scripted failures. It speaks HTTP/1.1 by hand because
+//! `send` (8,000 characters at most), edits, remote deletes, reactions,
+//! typing, groups, attachments both ways and scripted failures. It speaks HTTP/1.1 by hand because
 //! the event stream stays open.
 
 // A fixture: a mock that cannot serve should fail loudly.
@@ -13,7 +13,10 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use pmt_gateway::messaging::MediaKind;
+use pmt_gateway::messaging::conformance::{
+    Failure, MockFile, MockPlatform, MockSent, kind_of_name, mime_of_name,
+};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader};
 use tokio::net::TcpStream;
@@ -36,6 +39,8 @@ struct State {
     failures: VecDeque<Failure>,
     attachments: Vec<(String, Vec<u8>)>,
     uploads: Vec<String>,
+    received: Vec<MockFile>,
+    deleted: Vec<String>,
     listener: Option<mpsc::UnboundedSender<Option<Value>>>,
 }
 
@@ -216,6 +221,11 @@ impl SignalMock {
                 self.lock().reactions.push((target, emoji));
                 json!({"timestamp": self.ts(), "results": [{"type": "SUCCESS"}]})
             }
+            "remoteDelete" => {
+                let id = format!("{ACCOUNT}:{}", params["targetTimestamp"]);
+                self.lock().deleted.push(id);
+                json!({"timestamp": self.ts(), "results": [{"type": "SUCCESS"}]})
+            }
             "sendTyping" => {
                 self.lock().typing += 1;
                 json!({})
@@ -282,10 +292,23 @@ impl SignalMock {
             |g| format!("group.{g}"),
         );
         let mut state = self.lock();
+        // signal-cli reads attachments from the paths it is given.
         for path in params["attachments"].as_array().into_iter().flatten() {
-            state
-                .uploads
-                .push(path.as_str().unwrap_or_default().to_owned());
+            let path = path.as_str().unwrap_or_default().to_owned();
+            if let Ok(bytes) = std::fs::read(&path) {
+                let name = std::path::Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                state.received.push(MockFile {
+                    chat_id: chat.clone(),
+                    thread_id: None,
+                    kind: kind_of_name(&name),
+                    name,
+                    bytes,
+                });
+            }
+            state.uploads.push(path);
         }
         if let Some(edited) = params["editTimestamp"].as_i64() {
             let id = format!("{ACCOUNT}:{edited}");
@@ -300,6 +323,7 @@ impl SignalMock {
             message_id: format!("{ACCOUNT}:{ts}"),
             text: text.to_owned(),
             buttons: Vec::new(),
+            thread_id: None,
         });
         let result = json!({"timestamp": ts, "results": [{"type": "SUCCESS"}]});
         response(
@@ -358,6 +382,33 @@ impl MockPlatform for SignalMock {
 
     fn reactions(&self) -> Vec<(String, String)> {
         self.lock().reactions.clone()
+    }
+
+    fn inject_media(
+        &self,
+        kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let id = format!("att-{name}");
+        self.add_attachment(&id, bytes.to_vec());
+        Some(self.receive(&json!({"message": caption, "attachments": [{
+            "id": id, "filename": name, "contentType": mime_of_name(name),
+            "voiceNote": kind == MediaKind::Voice, "size": bytes.len()
+        }]})))
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
+    }
+
+    fn voice_notes_out(&self) -> bool {
+        false
+    }
+
+    fn deleted(&self) -> Vec<String> {
+        self.lock().deleted.clone()
     }
 }
 

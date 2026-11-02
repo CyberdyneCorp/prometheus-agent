@@ -73,10 +73,16 @@ pub(crate) fn message(event: &Value, room: &str, me: &str, members: usize) -> Op
         return None;
     }
     let attachment = media(content);
-    let body = if attachment.is_some() {
-        String::new()
+    let body = content["body"].as_str().unwrap_or_default();
+    // A file's body is its name, or its caption when `filename` names the
+    // file (Matrix 1.10 media captions).
+    let caption = content["filename"]
+        .as_str()
+        .is_some_and(|name| !name.is_empty() && name != body);
+    let body = if attachment.is_none() || caption {
+        body.to_owned()
     } else {
-        content["body"].as_str().unwrap_or_default().to_owned()
+        String::new()
     };
     let thread = (relation["rel_type"].as_str() == Some("m.thread"))
         .then(|| text(&relation["event_id"]))
@@ -291,6 +297,19 @@ mod tests {
                         "m.relates_to": {"rel_type": "m.replace", "event_id": "$0"}}});
         assert_eq!(message(&own, "!r:hs", "@bot:hs", 2), None);
         assert_eq!(message(&edit, "!r:hs", "@bot:hs", 2), None);
+    }
+
+    #[test]
+    fn a_file_with_a_filename_carries_its_body_as_caption() {
+        let event = json!({"type": "m.room.message", "event_id": "$5", "sender": "@u:hs",
+            "content": {"msgtype": "m.image", "body": "look at this", "filename": "cat.png",
+                        "url": "mxc://hs/abc"}});
+        let inbound = message(&event, "!r:hs", "@bot:hs", 2).unwrap();
+        assert_eq!(inbound.text, "look at this");
+        assert_eq!(inbound.attachments[0].name.as_deref(), Some("cat.png"));
+        let plain = json!({"type": "m.room.message", "event_id": "$6", "sender": "@u:hs",
+            "content": {"msgtype": "m.image", "body": "cat.png", "url": "mxc://hs/abc"}});
+        assert_eq!(message(&plain, "!r:hs", "@bot:hs", 2).unwrap().text, "");
     }
 
     #[test]

@@ -1,6 +1,6 @@
-//! A Slack mock: the Web API (messages up to 39,000 characters, Block Kit
-//! buttons, edits, reactions, conversation info, the external file upload
-//! flow, private file downloads, scripted failures) and Socket Mode, which
+//! A Slack mock: the Web API (messages up to 39,000 characters, threads,
+//! Block Kit buttons, edits, deletes, reactions, conversation info, the
+//! external file upload flow, private file downloads, scripted failures) and Socket Mode, which
 //! keeps every envelope until it is acknowledged and delivers the
 //! unacknowledged ones on the next connection, as Slack does.
 
@@ -12,9 +12,11 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use futures_util::{SinkExt as _, StreamExt as _};
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use pmt_gateway::messaging::conformance::{
+    Failure, MockFile, MockPlatform, MockSent, kind_of_name, mime_of_name,
+};
 use pmt_gateway::messaging::mock_server;
-use pmt_gateway::messaging::{Button, HttpRequest, HttpResponse};
+use pmt_gateway::messaging::{Button, HttpRequest, HttpResponse, MediaKind};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
@@ -31,6 +33,10 @@ pub const USER: &str = "U0KIT";
 pub const BOT: &str = "U0BOT";
 /// The workspace.
 pub const TEAM: &str = "T0KIT";
+/// A channel the kit posts threads in.
+pub const CHANNEL: &str = "C0OPS";
+/// A thread of [`CHANNEL`] (its root message's `ts`).
+pub const THREAD: &str = "1700000000.000001";
 const LIMIT: usize = 39_000;
 
 #[derive(Default)]
@@ -44,6 +50,10 @@ struct State {
     failures: VecDeque<Failure>,
     files: Vec<(String, Vec<u8>)>,
     uploads: Vec<String>,
+    /// File names by reserved upload id.
+    reserved: Vec<(String, String)>,
+    received: Vec<MockFile>,
+    deleted: Vec<String>,
     socket: Option<mpsc::UnboundedSender<Option<Value>>>,
     connections: usize,
 }
@@ -244,18 +254,51 @@ impl SlackMock {
                                               "response_metadata": {"next_cursor": ""}})),
             "files.getUploadURLExternal" => {
                 let id = self.ts();
+                let name = args["filename"].as_str().unwrap_or_default().to_owned();
+                self.lock().reserved.push((format!("F{id}"), name));
                 ok(
                     &json!({"upload_url": format!("http://{}/upload/{id}", self.api_addr()),
                            "file_id": format!("F{id}")}),
                 )
             }
-            "files.completeUploadExternal" => {
-                let title = args["files"][0]["title"].as_str().unwrap_or_default();
-                self.lock().uploads.push(title.to_owned());
-                ok(&json!({"files": []}))
+            "files.completeUploadExternal" => self.complete(args),
+            "chat.delete" => {
+                let ts = args["ts"].as_str().unwrap_or_default().to_owned();
+                self.lock().deleted.push(ts);
+                ok(&json!({}))
             }
             _ => refused("unknown_method"),
         }
+    }
+
+    /// Files an upload into its conversation (and thread).
+    fn complete(&self, args: &Value) -> HttpResponse {
+        let id = args["files"][0]["id"].as_str().unwrap_or_default();
+        let title = args["files"][0]["title"].as_str().unwrap_or_default();
+        let mut state = self.lock();
+        state.uploads.push(title.to_owned());
+        let name = state
+            .reserved
+            .iter()
+            .find(|(f, _)| f == id)
+            .map(|(_, n)| n.clone());
+        let upload = format!("upload-{}", id.trim_start_matches('F'));
+        let bytes = state
+            .files
+            .iter()
+            .find(|(n, _)| *n == upload)
+            .map(|(_, b)| b.clone());
+        let (Some(name), Some(bytes)) = (name, bytes) else {
+            return refused("file_not_found");
+        };
+        state.received.push(MockFile {
+            chat_id: args["channel_id"].as_str().unwrap_or_default().to_owned(),
+            thread_id: args["thread_ts"].as_str().map(str::to_owned),
+            kind: kind_of_name(&name),
+            name,
+            bytes,
+        });
+        ok(&json!({"files": []}))
     }
 
     fn post(&self, args: &Value) -> HttpResponse {
@@ -281,6 +324,7 @@ impl SlackMock {
             message_id: ts.clone(),
             text: text.to_owned(),
             buttons: buttons(&args["blocks"]),
+            thread_id: args["thread_ts"].as_str().map(str::to_owned),
         });
         ok(&json!({"channel": channel, "ts": ts}))
     }
@@ -383,6 +427,43 @@ impl MockPlatform for SlackMock {
 
     fn reactions(&self) -> Vec<(String, String)> {
         self.lock().reactions.clone()
+    }
+
+    fn thread(&self) -> Option<(String, String)> {
+        Some((CHANNEL.to_owned(), THREAD.to_owned()))
+    }
+
+    fn inject_media(
+        &self,
+        kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let url = self.add_file(name, bytes.to_vec());
+        // A recorded clip is Slack's voice note.
+        let subtype = if kind == MediaKind::Voice {
+            "slack_audio"
+        } else {
+            ""
+        };
+        Some(self.inject_event(json!({
+            "text": caption,
+            "files": [{"name": name, "mimetype": mime_of_name(name), "subtype": subtype,
+                       "url_private_download": url}]
+        })))
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
+    }
+
+    fn voice_notes_out(&self) -> bool {
+        false
+    }
+
+    fn deleted(&self) -> Vec<String> {
+        self.lock().deleted.clone()
     }
 }
 

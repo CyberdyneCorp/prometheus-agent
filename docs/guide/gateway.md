@@ -152,10 +152,14 @@ prompt = "Review PR #{pull_request.number}: {pull_request.title}"
 
 `prometheus plugins test-adapter <platform>` runs the adapter conformance
 kit (connect and reconnect, descriptor, normalization, deduplication,
-splitting at the declared limit, retry classification, optional
-capabilities, cards) against a built-in mock of any first-party platform,
-prints one `pass`, `FAIL` or `skip` line per check and exits 0 only when
-none failed.
+splitting at the declared limit, retry classification, cards and every
+optional capability: edit, typing, reactions, threads, delete, inbound and
+outbound media with one file per declared kind, streamed reply audio)
+against a built-in mock of any first-party platform, prints one `pass`,
+`FAIL` or `skip` line per check (an undeclared capability is skipped with
+its reason) and exits 0 only when none failed. Where a bot cannot post
+voice notes (Slack, Signal) a voice reply arrives as an audio file;
+WhatsApp's bridge sends every audio file as a voice note.
 
 What the gateway does for every adapter:
 

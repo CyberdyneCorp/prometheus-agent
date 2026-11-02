@@ -1,8 +1,8 @@
 //! A Matrix homeserver mock: `/sync` long polls over a server-side
 //! timeline addressed by `since` tokens (so a client that reconnects with
 //! its cursor misses nothing), sends limited to 32,000 UTF-8 bytes of
-//! body, edits, reactions, redactions, typing, member lists, the media
-//! repository and scripted failures.
+//! body, threads, edits, reactions, redactions, typing, member lists, the
+//! media repository (files both ways) and scripted failures.
 
 // A fixture: a mock that cannot serve should fail loudly.
 #![allow(clippy::missing_panics_doc)]
@@ -13,9 +13,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use percent_encoding::percent_decode_str;
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use pmt_gateway::messaging::conformance::{
+    Failure, MockFile, MockPlatform, MockSent, mime_of_name,
+};
 use pmt_gateway::messaging::mock_server;
-use pmt_gateway::messaging::{HttpRequest, HttpResponse};
+use pmt_gateway::messaging::{HttpRequest, HttpResponse, MediaKind};
 use serde_json::{Value, json};
 use tokio::sync::Notify;
 
@@ -27,6 +29,8 @@ pub const DM: &str = "!dm:kit";
 pub const USER: &str = "@kit:kit";
 /// The bot's user id.
 pub const BOT: &str = "@bot:kit";
+/// A thread root in the DM.
+pub const THREAD: &str = "$root";
 const LIMIT: usize = 32_000;
 
 #[derive(Default)]
@@ -39,6 +43,8 @@ struct State {
     typing: usize,
     reactions: Vec<(String, String)>,
     redactions: usize,
+    deleted: Vec<String>,
+    received: Vec<MockFile>,
     failures: VecDeque<Failure>,
     media: Vec<(String, Vec<u8>)>,
     fail_next_sync: bool,
@@ -138,7 +144,8 @@ impl MatrixMock {
             .starts_with("/_matrix/client/v1/media/download/")
         {
             let id = request.path.rsplit('/').next().unwrap_or_default();
-            let found = self.lock().media.iter().find(|(m, _)| m == id).cloned();
+            let id = percent_decode_str(id).decode_utf8_lossy();
+            let found = self.lock().media.iter().find(|(m, _)| *m == id).cloned();
             return found.map_or_else(
                 || error(404, "M_NOT_FOUND"),
                 |(_, bytes)| mock_server::bytes(200, bytes),
@@ -168,8 +175,11 @@ impl MatrixMock {
                     .await
             }
             ("PUT", ["rooms", room, "send", kind, _]) => self.send(room, kind, &body),
-            ("PUT", ["rooms", _, "redact", _, _]) => {
-                self.lock().redactions += 1;
+            ("PUT", ["rooms", _, "redact", event, _]) => {
+                let mut state = self.lock();
+                state.redactions += 1;
+                state.deleted.push((*event).to_owned());
+                drop(state);
                 mock_server::json(200, &json!({"event_id": format!("${}", self.id())}))
             }
             ("PUT", ["rooms", _, "typing", _]) => {
@@ -264,6 +274,12 @@ impl MatrixMock {
                 new.clone_into(&mut message.text);
             }
         }
+        let thread_id = (relation["rel_type"] == "m.thread")
+            .then(|| relation["event_id"].as_str().map(str::to_owned))
+            .flatten();
+        if let Some(file) = received_file(&state.media, room, thread_id.clone(), body) {
+            state.received.push(file);
+        }
         state.next += 1;
         let id = format!("${}", state.next);
         state.sent.push(MockSent {
@@ -271,9 +287,36 @@ impl MatrixMock {
             message_id: id.clone(),
             text: text.to_owned(),
             buttons: Vec::new(),
+            thread_id,
         });
         mock_server::json(200, &json!({"event_id": id}))
     }
+}
+
+/// The file a media message shows, its content from the repository.
+fn received_file(
+    media: &[(String, Vec<u8>)],
+    room: &str,
+    thread_id: Option<String>,
+    content: &Value,
+) -> Option<MockFile> {
+    let kind = match content["msgtype"].as_str()? {
+        "m.image" => MediaKind::Image,
+        "m.audio" if content["org.matrix.msc3245.voice"].is_object() => MediaKind::Voice,
+        "m.audio" => MediaKind::Audio,
+        "m.video" => MediaKind::Video,
+        "m.file" => MediaKind::Document,
+        _ => return None,
+    };
+    let id = content["url"].as_str()?.strip_prefix("mxc://kit/")?;
+    let bytes = media.iter().find(|(m, _)| m == id)?.1.clone();
+    Some(MockFile {
+        chat_id: room.to_owned(),
+        thread_id,
+        name: content["body"].as_str().unwrap_or_default().to_owned(),
+        kind,
+        bytes,
+    })
 }
 
 fn batch(events: &[Value], end: usize, invites: &[(String, String)]) -> Value {
@@ -342,6 +385,40 @@ impl MockPlatform for MatrixMock {
 
     fn reactions(&self) -> Vec<(String, String)> {
         self.lock().reactions.clone()
+    }
+
+    fn thread(&self) -> Option<(String, String)> {
+        Some((DM.to_owned(), THREAD.to_owned()))
+    }
+
+    fn inject_media(
+        &self,
+        kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let uri = self.add_media(&format!("in-{}", name.replace('.', "_")), bytes.to_vec());
+        let msgtype = match kind {
+            MediaKind::Image => "m.image",
+            MediaKind::Audio | MediaKind::Voice => "m.audio",
+            MediaKind::Video => "m.video",
+            MediaKind::Document => "m.file",
+        };
+        let mut content = json!({"msgtype": msgtype, "body": caption, "filename": name,
+                                 "url": uri, "info": {"mimetype": mime_of_name(name)}});
+        if kind == MediaKind::Voice {
+            content["org.matrix.msc3245.voice"] = json!({});
+        }
+        Some(self.push(&content))
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
+    }
+
+    fn deleted(&self) -> Vec<String> {
+        self.lock().deleted.clone()
     }
 }
 

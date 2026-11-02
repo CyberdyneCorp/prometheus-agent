@@ -243,6 +243,20 @@ impl Adapter for Signal {
         })
     }
 
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let (_, ts) = message_ref(message_id)?;
+            let mut params = recipient(chat_id);
+            params["targetTimestamp"] = json!(ts);
+            self.rpc()?.call("remoteDelete", &params).await.map(drop)
+        })
+    }
+
     fn react<'a>(&'a self, reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
             let (author, ts) = message_ref(&reaction.message_id)?;

@@ -353,6 +353,18 @@ impl Adapter for Telegram {
         })
     }
 
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let body = json!({"chat_id": chat(chat_id), "message_id": number(message_id)?});
+            self.api()?.call("deleteMessage", &body).await.map(drop)
+        })
+    }
+
     fn react<'a>(&'a self, reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
             let emoji = if reaction.remove {

@@ -1,7 +1,8 @@
 //! A Bot API mock server: long polling over a server-side update queue
 //! confirmed by `offset` (as Telegram keeps unconfirmed updates), message
-//! sends limited to 4096 UTF-16 code units, edits, typing, reactions,
-//! button presses, files and scripted failures.
+//! sends limited to 4096 UTF-16 code units, edits, deletes, typing,
+//! reactions, button presses, topics (threads), files both ways and
+//! scripted failures.
 
 // A fixture: a mock that cannot serve should fail loudly.
 #![allow(clippy::missing_panics_doc)]
@@ -18,8 +19,9 @@ use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
-use pmt_gateway::messaging::Button;
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use pmt_gateway::messaging::conformance::{Failure, MockFile, MockPlatform, MockSent};
+use pmt_gateway::messaging::mock_server::{FormPart, form_parts};
+use pmt_gateway::messaging::{Button, MediaKind};
 use serde_json::{Value, json};
 use tokio::sync::Notify;
 
@@ -27,6 +29,8 @@ use tokio::sync::Notify;
 pub const TOKEN: &str = "123:TEST";
 /// The DM chat (and user) the kit talks in.
 pub const DM: i64 = 4242;
+/// The DM topic (thread) the kit posts in.
+pub const TOPIC: &str = "77";
 /// The longest message, in UTF-16 code units.
 const LIMIT: usize = 4096;
 
@@ -43,6 +47,8 @@ struct State {
     drop_next_poll: bool,
     files: Vec<(String, Vec<u8>)>,
     uploads: Vec<String>,
+    received: Vec<MockFile>,
+    deleted: Vec<String>,
 }
 
 /// The mock server.
@@ -134,6 +140,12 @@ impl BotApi {
 
     async fn serve(self: Arc<Self>, request: Request<Incoming>) -> Response<Full<Bytes>> {
         let path = request.uri().path().to_owned();
+        let form = request
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
         let body = request
             .into_body()
             .collect()
@@ -163,7 +175,7 @@ impl BotApi {
         let answer = match method {
             "getUpdates" => self.get_updates(&args).await,
             method if method.starts_with("send") && method != "sendChatAction" => {
-                self.send(method, &args, &body)
+                self.send(method, &args, &form_parts(&form, &body))
             }
             other => self.other(other, &args),
         };
@@ -194,7 +206,7 @@ impl BotApi {
         }
     }
 
-    fn send(&self, method: &str, args: &Value, body: &[u8]) -> (u16, Value) {
+    fn send(&self, method: &str, args: &Value, form: &[FormPart]) -> (u16, Value) {
         let mut state = self.lock();
         if let Some(failure) = state.failures.pop_front() {
             return match failure {
@@ -211,20 +223,26 @@ impl BotApi {
         let id = state.next_message;
         state.next_message += 1;
         if method != "sendMessage" {
-            // A multipart upload: the chat id is a form field.
+            // A multipart upload: the chat and thread are form fields.
             state.uploads.push(method.to_owned());
-            let text = String::from_utf8_lossy(body);
-            let chat = text
-                .split("name=\"chat_id\"\r\n\r\n")
-                .nth(1)
-                .and_then(|r| r.split("\r\n").next())
-                .unwrap_or_default()
-                .to_owned();
+            let field = |name: &str| form.iter().find(|p| p.name == name).map(FormPart::text);
+            let chat = field("chat_id").unwrap_or_default();
+            let thread_id = field("message_thread_id");
+            if let Some(file) = form.iter().find(|p| p.file_name.is_some()) {
+                state.received.push(MockFile {
+                    chat_id: chat.clone(),
+                    thread_id: thread_id.clone(),
+                    name: file.file_name.clone().unwrap_or_default(),
+                    kind: upload_kind(method),
+                    bytes: file.bytes.clone(),
+                });
+            }
             state.sent.push(MockSent {
                 chat_id: chat,
                 message_id: id.to_string(),
                 text: String::new(),
                 buttons: Vec::new(),
+                thread_id,
             });
             return ok(&json!({"message_id": id}));
         }
@@ -238,6 +256,7 @@ impl BotApi {
             message_id: id.to_string(),
             text: text.to_owned(),
             buttons,
+            thread_id: normalize_id(&args["message_thread_id"]),
         });
         ok(&json!({"message_id": id, "chat": {"id": args["chat_id"]}}))
     }
@@ -256,6 +275,11 @@ impl BotApi {
                     .unwrap_or_default()
                     .clone_into(&mut message.text);
                 message.buttons = buttons(&args["reply_markup"]);
+                ok(&json!(true))
+            }
+            "deleteMessage" => {
+                let id = args["message_id"].to_string();
+                state.deleted.push(id);
                 ok(&json!(true))
             }
             "sendChatAction" => {
@@ -307,6 +331,36 @@ impl BotApi {
         let id = state.next_message;
         state.next_message += 1;
         id
+    }
+}
+
+/// What the chat shows an upload as, by its method.
+fn upload_kind(method: &str) -> MediaKind {
+    match method {
+        "sendPhoto" => MediaKind::Image,
+        "sendAudio" => MediaKind::Audio,
+        "sendVoice" => MediaKind::Voice,
+        "sendVideo" => MediaKind::Video,
+        _ => MediaKind::Document,
+    }
+}
+
+/// The message key a file of `kind` arrives under.
+fn message_key(kind: MediaKind) -> &'static str {
+    match kind {
+        MediaKind::Image => "photo",
+        MediaKind::Audio => "audio",
+        MediaKind::Voice => "voice",
+        MediaKind::Video => "video",
+        MediaKind::Document => "document",
+    }
+}
+
+fn normalize_id(value: &Value) -> Option<String> {
+    match value {
+        Value::Number(n) => Some(n.to_string()),
+        Value::String(s) => Some(s.clone()),
+        _ => None,
     }
 }
 
@@ -387,6 +441,44 @@ impl MockPlatform for BotApi {
 
     fn reactions(&self) -> Vec<(String, String)> {
         self.lock().reactions.clone()
+    }
+
+    fn thread(&self) -> Option<(String, String)> {
+        Some((DM.to_string(), TOPIC.to_owned()))
+    }
+
+    fn inject_media(
+        &self,
+        kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let file_id = format!("kit-{name}");
+        self.add_file(&file_id, bytes.to_vec());
+        let file = json!({"file_id": file_id, "file_name": name, "duration": 1});
+        let id = self.next_message();
+        let mut message = json!({
+            "message_id": id, "date": 1_700_000_000,
+            "chat": {"id": DM, "type": "private"},
+            "from": {"id": DM, "first_name": "Kit", "is_bot": false},
+            "caption": caption
+        });
+        message[message_key(kind)] = if kind == MediaKind::Image {
+            json!([file])
+        } else {
+            file
+        };
+        self.push(json!({"message": message}));
+        Some(id.to_string())
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
+    }
+
+    fn deleted(&self) -> Vec<String> {
+        self.lock().deleted.clone()
     }
 }
 

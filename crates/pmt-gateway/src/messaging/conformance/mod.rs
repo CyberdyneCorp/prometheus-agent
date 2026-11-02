@@ -3,10 +3,13 @@
 //! its platform. It connects and reconnects the adapter, checks its
 //! descriptor, inbound normalization and deduplication, splitting at the
 //! declared limit and unit (the mock enforces the platform's real one),
-//! send retry classification, each declared optional capability and the
-//! card rendering of its interactive tier. A platform's mock server
-//! implements [`MockPlatform`]; `prometheus plugins test-adapter` runs the
-//! same suite.
+//! send retry classification, each declared optional capability (every
+//! descriptor capability gets a pass, fail or skip line; see
+//! [`capabilities`]) and the card rendering of its interactive tier. A
+//! platform's mock server implements [`MockPlatform`];
+//! `prometheus plugins test-adapter` runs the same suite.
+
+mod capabilities;
 
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
@@ -19,7 +22,7 @@ use super::adapter::{
     Outgoing, Reaction, SendError,
 };
 use super::dedup::Dedup;
-use super::descriptor::{Descriptor, Interactive, Markup};
+use super::descriptor::{Descriptor, Interactive, Markup, MediaKind};
 use super::key::ChatType;
 use super::split;
 
@@ -50,6 +53,51 @@ pub struct MockSent {
     pub text: String,
     /// Its buttons (`label`, `data`).
     pub buttons: Vec<Button>,
+    /// The thread it landed in.
+    pub thread_id: Option<String>,
+}
+
+/// A file the mock platform accepted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MockFile {
+    /// Chat id.
+    pub chat_id: String,
+    /// The thread it landed in.
+    pub thread_id: Option<String>,
+    /// Its file name.
+    pub name: String,
+    /// What the platform shows it as (a platform that types files by
+    /// name or MIME type shows what [`kind_of_name`] says).
+    pub kind: MediaKind,
+    /// Its content.
+    pub bytes: Vec<u8>,
+}
+
+/// The media kind a platform that types files by name shows a file as.
+#[must_use]
+pub fn kind_of_name(name: &str) -> MediaKind {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp") => MediaKind::Image,
+        Some("ogg" | "oga" | "opus" | "mp3" | "m4a" | "wav" | "flac") => MediaKind::Audio,
+        Some("mp4" | "mov" | "webm") => MediaKind::Video,
+        _ => MediaKind::Document,
+    }
+}
+
+/// The MIME type of a file the kit sends or injects, by name.
+#[must_use]
+pub fn mime_of_name(name: &str) -> &'static str {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("ogg" | "oga" | "opus") => "audio/ogg",
+        Some("mp3") => "audio/mpeg",
+        Some("mp4") => "video/mp4",
+        Some("pdf") => "application/pdf",
+        _ => "application/octet-stream",
+    }
 }
 
 /// A platform mock the kit drives.
@@ -89,6 +137,42 @@ pub trait MockPlatform: Send + Sync {
     /// replies (webhook `log` delivery) has no failures to classify.
     fn sends_can_fail(&self) -> bool {
         true
+    }
+    /// A chat and one of its threads the kit may post in; `None` when the
+    /// mock has none (an adapter declaring `supports_threads` then fails).
+    fn thread(&self) -> Option<(String, String)> {
+        None
+    }
+    /// The platform delivers a DM from the user carrying `caption` and one
+    /// file of `kind` (as the platform sends that kind: a voice note as
+    /// one, where it has them) named `name` holding `bytes`; its message
+    /// id, or `None` when the mock cannot deliver files.
+    fn inject_media(
+        &self,
+        _kind: MediaKind,
+        _name: &str,
+        _bytes: &[u8],
+        _caption: &str,
+    ) -> Option<String> {
+        None
+    }
+    /// Every file the platform accepted, in order.
+    fn files(&self) -> Vec<MockFile> {
+        Vec::new()
+    }
+    /// Whether a bot can post a voice note distinct from an audio file;
+    /// where it cannot (Slack, signal-cli), a voice reply is
+    /// expected to arrive as an audio file.
+    fn voice_notes_out(&self) -> bool {
+        true
+    }
+    /// Ids of the messages deleted.
+    fn deleted(&self) -> Vec<String> {
+        Vec::new()
+    }
+    /// Streamed audio the platform played, one entry per finished stream.
+    fn streamed_audio(&self) -> Vec<Vec<u8>> {
+        Vec::new()
     }
 }
 
@@ -524,6 +608,7 @@ impl Kit {
         } else {
             report.skip("reactions", "not declared");
         }
+        self.capabilities(report).await;
     }
 
     async fn edit(&self, chat: &str) -> Result<(), String> {

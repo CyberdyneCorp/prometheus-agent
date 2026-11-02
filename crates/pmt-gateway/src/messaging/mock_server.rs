@@ -86,3 +86,88 @@ pub fn bytes(status: u16, body: Vec<u8>) -> HttpResponse {
         ..HttpResponse::status(status)
     }
 }
+
+/// One part of a `multipart/form-data` body a mock received.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormPart {
+    /// The field name.
+    pub name: String,
+    /// The file name, for a file.
+    pub file_name: Option<String>,
+    /// The content.
+    pub bytes: Vec<u8>,
+}
+
+impl FormPart {
+    /// The content as text.
+    #[must_use]
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.bytes).into_owned()
+    }
+}
+
+/// The parts of a `multipart/form-data` body sent with `content_type`
+/// (empty when it is not one).
+#[must_use]
+pub fn form_parts(content_type: &str, body: &[u8]) -> Vec<FormPart> {
+    let Some(boundary) = content_type.split("boundary=").nth(1) else {
+        return Vec::new();
+    };
+    let delimiter = format!("--{}", boundary.trim_matches('"'));
+    split_on(body, delimiter.as_bytes())
+        .into_iter()
+        .filter_map(form_part)
+        .collect()
+}
+
+fn split_on<'a>(body: &'a [u8], delimiter: &[u8]) -> Vec<&'a [u8]> {
+    let mut pieces = Vec::new();
+    let mut rest = body;
+    while let Some(at) = rest.windows(delimiter.len()).position(|w| w == delimiter) {
+        pieces.push(&rest[..at]);
+        rest = &rest[at + delimiter.len()..];
+    }
+    pieces.push(rest);
+    pieces
+}
+
+fn form_part(piece: &[u8]) -> Option<FormPart> {
+    let piece = piece.strip_prefix(b"\r\n")?;
+    let end = piece.windows(4).position(|w| w == b"\r\n\r\n")?;
+    let head = String::from_utf8_lossy(&piece[..end]);
+    let content = &piece[end + 4..];
+    let content = content.strip_suffix(b"\r\n").unwrap_or(content);
+    let param = |key: &str| {
+        head.split(&format!("{key}=\""))
+            .nth(1)
+            .and_then(|r| r.split('"').next())
+            .map(str::to_owned)
+    };
+    Some(FormPart {
+        name: param(" name").or_else(|| param(";name"))?,
+        file_name: param("filename"),
+        bytes: content.to_vec(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::messaging::multipart::Form;
+
+    #[test]
+    fn a_form_reads_back_into_its_parts() {
+        let mut form = Form::new();
+        form.text("chat_id", "42");
+        form.file("photo", "a.png", b"P\r\nNG");
+        let kind = form.content_type();
+        let parts = form_parts(&kind, &form.finish());
+        assert_eq!(parts.len(), 2);
+        assert_eq!(
+            (parts[0].name.as_str(), parts[0].text()),
+            ("chat_id", "42".to_owned())
+        );
+        assert_eq!(parts[1].file_name.as_deref(), Some("a.png"));
+        assert_eq!(parts[1].bytes, b"P\r\nNG");
+    }
+}

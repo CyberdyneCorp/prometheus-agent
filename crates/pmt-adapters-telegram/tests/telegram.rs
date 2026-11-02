@@ -204,3 +204,68 @@ async fn the_kit_catches_a_wrong_length_unit() {
         report.render()
     );
 }
+
+/// Telegram's adapter declaring everything but delivering only the
+/// required operations, and dropping the thread of every send.
+struct Hollow(Telegram);
+
+impl Adapter for Hollow {
+    fn describe(&self) -> pmt_gateway::messaging::Descriptor {
+        self.0.describe()
+    }
+
+    fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
+        self.0.connect(link)
+    }
+
+    fn disconnect(&self) -> AdapterFuture<'_, ()> {
+        self.0.disconnect()
+    }
+
+    fn send(
+        &self,
+        message: &Outgoing,
+    ) -> AdapterFuture<'_, Result<pmt_gateway::messaging::Sent, pmt_gateway::messaging::SendError>>
+    {
+        let mut unthreaded = message.clone();
+        unthreaded.thread_id = None;
+        self.0.send(&unthreaded)
+    }
+
+    fn chat_info<'a>(
+        &'a self,
+        chat_id: &'a str,
+    ) -> AdapterFuture<
+        'a,
+        Result<pmt_gateway::messaging::ChatInfo, pmt_gateway::messaging::SendError>,
+    > {
+        self.0.chat_info(chat_id)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_kit_fails_each_declared_capability_the_adapter_does_not_deliver() {
+    let home = tempfile::tempdir().unwrap();
+    let api = BotApi::start().await;
+    let adapter = Telegram::new(&profile(home.path(), "default", true), api.endpoints()).unwrap();
+    let report = conformance::run(Arc::new(Hollow(adapter)), Arc::clone(&api) as _).await;
+    let failed: Vec<&str> = report
+        .checks
+        .iter()
+        .filter(|c| matches!(c.outcome, conformance::Outcome::Fail(_)))
+        .map(|c| c.name)
+        .collect();
+    assert_eq!(
+        failed,
+        [
+            "edit",
+            "typing",
+            "reactions",
+            "threads",
+            "delete",
+            "media in"
+        ],
+        "{}",
+        report.render()
+    );
+}

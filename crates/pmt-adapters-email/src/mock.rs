@@ -1,8 +1,9 @@
 //! A mail server mock: IMAP (LOGIN, SELECT, UID SEARCH UNSEEN, UID FETCH
 //! BODY.PEEK[], UID STORE +FLAGS, LOGOUT) over a mailbox whose messages
 //! stay unseen until a client marks them, and SMTP (EHLO, AUTH PLAIN,
-//! MAIL, RCPT, DATA) recording what was sent, with scripted refusals. Both
-//! speak plain text on loopback ports.
+//! MAIL, RCPT, DATA) recording what was sent (attachments typed by their
+//! MIME type), with scripted refusals. Both speak plain text on loopback
+//! ports.
 
 // A fixture: a mock that cannot serve should fail loudly.
 #![allow(clippy::missing_panics_doc)]
@@ -12,8 +13,11 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
-use mail_parser::MessageParser;
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use mail_parser::{MessageParser, MimeHeaders as _};
+use pmt_gateway::messaging::MediaKind;
+use pmt_gateway::messaging::conformance::{
+    Failure, MockFile, MockPlatform, MockSent, mime_of_name,
+};
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 use tokio::net::TcpStream;
 use tokio::net::tcp::OwnedReadHalf;
@@ -34,6 +38,7 @@ struct State {
     next: u32,
     sent: Vec<MockSent>,
     raw_sent: Vec<Vec<u8>>,
+    received: Vec<MockFile>,
     failures: VecDeque<Failure>,
 }
 
@@ -289,8 +294,26 @@ impl MailMock {
             message_id: field(&|m| Some(format!("<{}>", m.message_id()?))),
             text: field(&|m| Some(m.body_text(0)?.trim_end().to_owned())),
             buttons: Vec::new(),
+            thread_id: None,
         };
+        let files: Vec<MockFile> = parsed
+            .iter()
+            .flat_map(mail_parser::Message::attachments)
+            .map(|part| MockFile {
+                chat_id: sent.chat_id.clone(),
+                thread_id: None,
+                name: part.attachment_name().unwrap_or_default().to_owned(),
+                kind: match part.content_type().map(mail_parser::ContentType::ctype) {
+                    Some("image") => MediaKind::Image,
+                    Some("audio") => MediaKind::Audio,
+                    Some("video") => MediaKind::Video,
+                    _ => MediaKind::Document,
+                },
+                bytes: part.contents().to_vec(),
+            })
+            .collect();
         let mut state = self.lock();
+        state.received.extend(files);
         state.sent.push(sent);
         state.raw_sent.push(raw.to_vec());
     }
@@ -363,6 +386,33 @@ impl MockPlatform for MailMock {
 
     fn hints_retry_after(&self) -> bool {
         false
+    }
+
+    fn inject_media(
+        &self,
+        _kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let n = self.lock().next;
+        let id = format!("<kit-{n}@kit.example>");
+        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let raw = format!(
+            "From: Kit <{USER}>\r\nTo: {MAILBOX}\r\nSubject: Re: kit\r\nMessage-ID: {id}\r\n\
+             Content-Type: multipart/mixed; boundary=\"kit\"\r\n\r\n\
+             --kit\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{caption}\r\n\
+             --kit\r\nContent-Type: {}; name=\"{name}\"\r\n\
+             Content-Disposition: attachment; filename=\"{name}\"\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\n{data}\r\n--kit--\r\n",
+            mime_of_name(name)
+        );
+        self.deliver(raw.as_bytes());
+        Some(id)
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
     }
 }
 

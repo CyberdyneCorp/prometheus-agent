@@ -82,6 +82,32 @@ fn kind(ctype: &str) -> MediaKind {
     }
 }
 
+/// The MIME type an outbound file is labelled with, by extension, so the
+/// recipient's client shows images, audio and video as such.
+fn content_type(name: &str) -> &'static str {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("mp3") => "audio/mpeg",
+        Some("ogg" | "oga" | "opus") => "audio/ogg",
+        Some("m4a") => "audio/mp4",
+        Some("wav") => "audio/wav",
+        Some("flac") => "audio/flac",
+        Some("mp4") => "video/mp4",
+        Some("mov") => "video/quicktime",
+        Some("webm") => "video/webm",
+        Some("pdf") => "application/pdf",
+        Some("txt" | "md") => "text/plain",
+        Some("csv") => "text/csv",
+        Some("json") => "application/json",
+        Some("zip") => "application/zip",
+        _ => "application/octet-stream",
+    }
+}
+
 /// Whether the subject already marks a reply.
 fn is_reply(subject: &str) -> bool {
     subject
@@ -266,9 +292,10 @@ impl Draft<'_> {
         for file in &self.files {
             let _ = write!(
                 out,
-                "--{boundary}\r\nContent-Type: application/octet-stream; name=\"{0}\"\r\nContent-Disposition: attachment; filename=\"{0}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{1}",
+                "--{boundary}\r\nContent-Type: {2}; name=\"{0}\"\r\nContent-Disposition: attachment; filename=\"{0}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n{1}",
                 file.name.replace('"', "'"),
-                base64_lines(&file.bytes)
+                base64_lines(&file.bytes),
+                content_type(&file.name)
             );
         }
         let _ = write!(out, "--{boundary}--\r\n");

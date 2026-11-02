@@ -10,6 +10,7 @@ mod api;
 mod gateway;
 pub mod mock;
 mod normalize;
+mod voice;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -294,16 +295,35 @@ impl Adapter for Discord {
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
         let message = message.clone();
         Box::pin(async move {
-            let body = if message.attachments.is_empty() {
-                Body::Json(payload(&message))
-            } else {
-                with_files(&message)?
+            // A voice note is a message of its own (no text, one clip).
+            let (voices, files) = message
+                .attachments
+                .iter()
+                .cloned()
+                .partition(|f| f.as_voice);
+            let rest = Outgoing {
+                attachments: files,
+                ..message.clone()
             };
+            let mut bodies = Vec::new();
+            if !rest.text.is_empty() || !rest.attachments.is_empty() || voices.is_empty() {
+                bodies.push(if rest.attachments.is_empty() {
+                    Body::Json(payload(&rest))
+                } else {
+                    with_files(&rest)?
+                });
+            }
+            for clip in &voices {
+                bodies.push(voice::message(Path::new(&clip.path))?);
+            }
             let path = format!("/channels/{}/messages", channel(&message));
-            let sent = self.api()?.call(Method::POST, &path, body).await?;
-            Ok(Sent {
-                message_id: sent["id"].as_str().map(str::to_owned),
-            })
+            let api = self.api()?;
+            let mut first = None;
+            for body in bodies {
+                let sent = api.call(Method::POST, &path, body).await?;
+                first = first.or_else(|| sent["id"].as_str().map(str::to_owned));
+            }
+            Ok(Sent { message_id: first })
         })
     }
 
@@ -317,6 +337,24 @@ impl Adapter for Discord {
             let body =
                 Body::Json(json!({"content": message.text, "components": components(message)}));
             self.api()?.call(Method::PATCH, &path, body).await.map(drop)
+        })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let path = format!(
+                "/channels/{}/messages/{message_id}",
+                thread_id.unwrap_or(chat_id)
+            );
+            self.api()?
+                .call(Method::DELETE, &path, Body::Empty)
+                .await
+                .map(drop)
         })
     }
 

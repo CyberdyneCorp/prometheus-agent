@@ -10,8 +10,7 @@ use jiff::Timestamp;
 use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind};
 use serde_json::Value;
 
-/// The `IS_VOICE_MESSAGE` message flag.
-const VOICE_MESSAGE: u64 = 1 << 13;
+use crate::voice::FLAG as VOICE_MESSAGE;
 
 fn text(value: &Value) -> Option<String> {
     value.as_str().filter(|s| !s.is_empty()).map(str::to_owned)

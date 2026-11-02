@@ -1,19 +1,22 @@
 //! A `WhatsApp` bridge mock: the queue `GET /messages` drains (messages wait
 //! there while the adapter is away, as the bridge keeps them), sends of at
-//! most 4,096 characters, edits, media, typing, chat info, a health state
-//! that can be logged out, and scripted failures.
+//! most 4,096 characters, edits, media both ways (inbound files land in the
+//! bridge's cache, outbound ones are read from their path; audio goes out
+//! as a voice note, as bridge.js sends it), typing, chat info, a health
+//! state that can be logged out, and scripted failures.
 
 // A fixture: a mock that cannot serve should fail loudly.
 #![allow(clippy::missing_panics_doc)]
 
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use percent_encoding::percent_decode_str;
-use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use pmt_gateway::messaging::conformance::{Failure, MockFile, MockPlatform, MockSent};
 use pmt_gateway::messaging::mock_server;
-use pmt_gateway::messaging::{HttpRequest, HttpResponse};
+use pmt_gateway::messaging::{HttpRequest, HttpResponse, MediaKind};
 use serde_json::{Value, json};
 
 /// The person the kit talks as (and their direct chat).
@@ -27,6 +30,9 @@ struct State {
     next: u64,
     sent: Vec<MockSent>,
     media: Vec<(String, String)>,
+    received: Vec<MockFile>,
+    /// Where the bridge caches inbound media.
+    cache: Option<PathBuf>,
     typing: usize,
     failures: VecDeque<Failure>,
     fail_next_fetch: bool,
@@ -72,6 +78,11 @@ impl BridgeMock {
         let mut state = self.lock();
         "logged_out".clone_into(&mut state.status);
         state.fail_next_fetch = true;
+    }
+
+    /// Inbound media are cached under `dir` (the bridge's cache).
+    pub fn cache_media_in(&self, dir: PathBuf) {
+        self.lock().cache = Some(dir);
     }
 
     /// `(chat, mediaType)` of the media sent.
@@ -125,11 +136,12 @@ impl BridgeMock {
             }
             ("POST", "/send-media") => {
                 state.next += 1;
-                let entry = (
-                    body["chatId"].as_str().unwrap_or_default().to_owned(),
-                    body["mediaType"].as_str().unwrap_or_default().to_owned(),
-                );
-                state.media.push(entry);
+                let chat = body["chatId"].as_str().unwrap_or_default().to_owned();
+                let kind = body["mediaType"].as_str().unwrap_or_default().to_owned();
+                if let Some(file) = received_file(&chat, &kind, &body) {
+                    state.received.push(file);
+                }
+                state.media.push((chat, kind));
                 mock_server::json(
                     200,
                     &json!({"success": true, "messageId": format!("WA{}", state.next)}),
@@ -151,6 +163,26 @@ impl BridgeMock {
             _ => mock_server::json(404, &json!({"error": "not found"})),
         }
     }
+}
+
+/// The file a `/send-media` call shows in the chat, read from its path
+/// as the bridge does.
+fn received_file(chat: &str, media_type: &str, body: &Value) -> Option<MockFile> {
+    let path = body["filePath"].as_str()?;
+    let bytes = std::fs::read(path).ok()?;
+    let kind = match media_type {
+        "image" => MediaKind::Image,
+        "video" => MediaKind::Video,
+        "audio" => MediaKind::Voice,
+        _ => MediaKind::Document,
+    };
+    Some(MockFile {
+        chat_id: chat.to_owned(),
+        thread_id: None,
+        name: body["fileName"].as_str().unwrap_or_default().to_owned(),
+        kind,
+        bytes,
+    })
 }
 
 fn send(state: &mut State, body: &Value) -> HttpResponse {
@@ -175,6 +207,7 @@ fn send(state: &mut State, body: &Value) -> HttpResponse {
         message_id: id.clone(),
         text: text.to_owned(),
         buttons: Vec::new(),
+        thread_id: None,
     });
     mock_server::json(
         200,
@@ -223,6 +256,34 @@ impl MockPlatform for BridgeMock {
     fn reactions(&self) -> Vec<(String, String)> {
         Vec::new()
     }
+
+    fn inject_media(
+        &self,
+        kind: MediaKind,
+        name: &str,
+        bytes: &[u8],
+        caption: &str,
+    ) -> Option<String> {
+        let dir = self.lock().cache.clone()?;
+        std::fs::create_dir_all(&dir).ok()?;
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).ok()?;
+        let media_type = match kind {
+            MediaKind::Image => "image",
+            MediaKind::Audio => "audio",
+            MediaKind::Voice => "ptt",
+            MediaKind::Video => "video",
+            MediaKind::Document => "document",
+        };
+        Some(
+            self.receive(&json!({"body": caption, "mediaType": media_type,
+                                  "mediaUrls": [path.to_string_lossy()]})),
+        )
+    }
+
+    fn files(&self) -> Vec<MockFile> {
+        self.lock().received.clone()
+    }
 }
 
 /// The adapter, built for a fresh profile of the home at `home` pointing
@@ -243,6 +304,7 @@ pub async fn kit(
     pmt_core::error::Error,
 > {
     let mock = BridgeMock::start().await;
+    mock.cache_media_in(home.join("cache").join("whatsapp-bridge"));
     let setup =
         pmt_gateway::messaging::conformance::kit_setup(home, crate::PLATFORM, &mock.table(), &[])?;
     let adapter = crate::Whatsapp::new(&setup)?;

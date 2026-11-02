@@ -30,6 +30,8 @@ serde_json.workspace = true
 sha2.workspace = true
 # The agent cache sheds agents above a resident-memory mark.
 sysinfo.workspace = true
+# The conformance kit writes the files it sends into a scratch directory.
+tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }
 tokio-tungstenite.workspace = true
 # TLS to the relay connector (the platform verifier comes from pmt-net).
@@ -38,7 +40,6 @@ tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
 tracing-subscriber.workspace = true
 
