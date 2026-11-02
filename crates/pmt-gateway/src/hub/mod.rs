@@ -1,8 +1,11 @@
 //! The daemon's per-session client state (spec: workspace-architecture,
 //! Event sequencing and reconnect replay; Server-to-client requests;
-//! Protocol handshake and versioning): which connections are attached to
-//! which session, each session's numbered event log kept for replay, and
-//! the server-to-client requests waiting for an answer.
+//! Protocol handshake and versioning; tui, Server-to-client requests;
+//! Server request deadlines fail closed; Orphaned attachments are reaped):
+//! which connections are attached to which session and in what role, each
+//! session's numbered event log kept for replay, the server-to-client
+//! requests waiting for an answer, and since when a session has had no
+//! client.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -10,11 +13,14 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use pmt_rpc::Catalog;
-use pmt_rpc::contracts::{Envelope, EventsSince, OpenRequest, RequestCancel, RequestResolved};
+use pmt_rpc::contracts::{
+    AttachRole, Attached, Envelope, EventsSince, OpenRequest, RequestCancel, RequestResolved,
+};
 use pmt_rpc::frame::{self, Id};
 use pmt_rpc::validate::Violation;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::Instant;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::tickets::random_hex;
@@ -33,7 +39,44 @@ pub struct Peer {
     pub advertised: Arc<Vec<String>>,
     /// It answers server-to-client requests.
     pub server_requests: bool,
+    /// The client's id in `request.resolved` (`<kind>-<connection>`).
+    pub client_id: String,
+    /// Driver or observer.
+    pub role: AttachRole,
 }
+
+impl Peer {
+    /// Whether the session's questions go to this connection: a driver
+    /// whose client answers server requests.
+    fn answers(&self) -> bool {
+        self.server_requests && self.role == AttachRole::Driver
+    }
+}
+
+/// Where a re-attaching client left off.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Since {
+    /// The newest sequence number it applied.
+    pub last_seen: u64,
+    /// The epoch that number belongs to (`None`: this daemon's).
+    pub epoch: Option<String>,
+}
+
+/// What became of an answer to a server request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Answered {
+    /// It settled the request.
+    Taken,
+    /// The request had already settled (answered, timed out, cancelled).
+    Settled,
+    /// No such request was sent to this connection, or the answer breaks
+    /// the request's contract.
+    Unknown,
+}
+
+/// How many settled request ids are remembered, so a late answer can be
+/// told apart from an unknown id.
+const SETTLED_KEPT: usize = 1024;
 
 /// What the event logs may hold.
 #[derive(Debug, Clone, Copy)]
@@ -122,6 +165,9 @@ struct Log {
     bytes: usize,
     evicted_through: u64,
     attached: HashMap<ConnId, Peer>,
+    /// When its last client left (`None` while one is attached, or once
+    /// the host closed it).
+    unattended_since: Option<Instant>,
 }
 
 #[derive(Debug)]
@@ -129,7 +175,7 @@ struct Pending {
     session_id: String,
     method: String,
     params: Value,
-    reply: oneshot::Sender<Value>,
+    reply: oneshot::Sender<(Value, String)>,
     sent_to: Vec<ConnId>,
 }
 
@@ -142,6 +188,17 @@ struct State {
     requests: HashMap<String, Pending>,
     /// Each session's interactive owner: the connection and its pid.
     owners: HashMap<String, (ConnId, Option<u32>)>,
+    /// Recently settled request ids, oldest first.
+    settled: VecDeque<String>,
+}
+
+impl State {
+    fn settle(&mut self, id: &str) {
+        if self.settled.len() == SETTLED_KEPT {
+            self.settled.pop_front();
+        }
+        self.settled.push_back(id.to_owned());
+    }
 }
 
 /// Sessions, their event logs and the open server requests.
@@ -156,8 +213,6 @@ pub struct Hub {
 
 /// One event to send: the frame and who may see it.
 struct Delivery {
-    event: String,
-    data: Value,
     envelope: Envelope,
     peers: Vec<Peer>,
 }
@@ -208,22 +263,105 @@ impl Hub {
             .map(|log| log.profile.clone())
     }
 
-    /// Attaches connection `conn` to a registered session; returns its
-    /// newest sequence number.
-    pub fn attach(&self, conn: ConnId, session_id: &str, peer: Peer) -> u64 {
+    /// Attaches connection `conn` to a registered session. With `since`,
+    /// the kept events after it are sent to `peer` first, unless some were
+    /// evicted or `since` belongs to another epoch (`truncated`: the
+    /// client reloads the transcript instead). Requests of the session
+    /// still open are re-sent to a capable driver, which may answer them.
+    pub fn attach(
+        &self,
+        conn: ConnId,
+        session_id: &str,
+        peer: Peer,
+        since: Option<&Since>,
+    ) -> Attached {
         let mut state = self.state();
         let log = state.sessions.entry(session_id.to_owned()).or_default();
+        let truncated = since.is_some_and(|s| {
+            s.epoch.as_deref().is_some_and(|e| e != self.epoch) || s.last_seen < log.evicted_through
+        });
+        if let Some(since) = since.filter(|_| !truncated) {
+            for kept in log
+                .events
+                .iter()
+                .filter(|k| k.envelope.seq > since.last_seen)
+            {
+                self.send_event(&peer, &kept.envelope);
+            }
+        }
+        let latest_seq = log.next_seq;
+        let answers = peer.answers();
+        let tx = peer.tx.clone();
         log.attached.insert(conn, peer);
-        log.next_seq
+        log.unattended_since = None;
+        let mut open_requests = Vec::new();
+        for (id, pending) in &mut state.requests {
+            if pending.session_id != session_id {
+                continue;
+            }
+            if answers && !pending.sent_to.contains(&conn) {
+                pending.sent_to.push(conn);
+                let text = frame::request(&Id::Str(id.clone()), &pending.method, &pending.params);
+                let _ = tx.send(Message::text(text));
+            }
+            open_requests.push(OpenRequest {
+                id: id.clone(),
+                method: pending.method.clone(),
+                params: pending.params.clone(),
+            });
+        }
+        Attached {
+            session_id: session_id.to_owned(),
+            latest_seq,
+            epoch: self.epoch.clone(),
+            truncated,
+            open_requests,
+        }
     }
 
     /// Whether `conn` is attached to `session_id`.
     #[must_use]
     pub fn is_attached(&self, conn: ConnId, session_id: &str) -> bool {
+        self.role(conn, session_id).is_some()
+    }
+
+    /// The role `conn` attached to `session_id` with.
+    #[must_use]
+    pub fn role(&self, conn: ConnId, session_id: &str) -> Option<AttachRole> {
         self.state()
             .sessions
             .get(session_id)
-            .is_some_and(|log| log.attached.contains_key(&conn))
+            .and_then(|log| log.attached.get(&conn))
+            .map(|peer| peer.role)
+    }
+
+    /// Sessions nobody has been attached to for at least `idle`, with no
+    /// open request: candidates for the host to close.
+    #[must_use]
+    pub fn unattended(&self, idle: Duration) -> Vec<(String, String)> {
+        let state = self.state();
+        let now = Instant::now();
+        state
+            .sessions
+            .iter()
+            .filter(|(_, log)| {
+                log.attached.is_empty()
+                    && !log.profile.is_empty()
+                    && log
+                        .unattended_since
+                        .is_some_and(|since| now.duration_since(since) >= idle)
+            })
+            .filter(|(id, _)| !state.requests.values().any(|p| &p.session_id == *id))
+            .map(|(id, log)| (id.clone(), log.profile.clone()))
+            .collect()
+    }
+
+    /// The host closed `session_id`: it is no longer a reaping candidate
+    /// until a client attaches and leaves again.
+    pub fn closed(&self, session_id: &str) {
+        if let Some(log) = self.state().sessions.get_mut(session_id) {
+            log.unattended_since = None;
+        }
     }
 
     /// Makes `conn` (whose client reported `pid`) the interactive owner of
@@ -256,7 +394,7 @@ impl Hub {
         let orphaned = {
             let mut state = self.state();
             if let Some(log) = state.sessions.get_mut(session_id) {
-                log.attached.remove(&conn);
+                leave(log, conn);
             }
             if state
                 .owners
@@ -268,7 +406,7 @@ impl Hub {
             orphan_requests(&mut state, conn)
         };
         for (session, id) in orphaned {
-            self.cancel_event(&session, &id, "detached");
+            self.cancel_event(&session, &id, "no_responder");
         }
     }
 
@@ -277,13 +415,13 @@ impl Hub {
         let orphaned = {
             let mut state = self.state();
             for log in state.sessions.values_mut() {
-                log.attached.remove(&conn);
+                leave(log, conn);
             }
             state.owners.retain(|_, (owner, _)| *owner != conn);
             orphan_requests(&mut state, conn)
         };
         for (session, id) in orphaned {
-            self.cancel_event(&session, &id, "detached");
+            self.cancel_event(&session, &id, "no_responder");
         }
     }
 
@@ -307,7 +445,7 @@ impl Hub {
             session_id: Some(session_id.to_owned()),
             seq: log.next_seq,
             epoch: self.epoch.clone(),
-            data: data.clone(),
+            data,
         };
         let bytes = serde_json::to_string(&envelope).map_or(0, |s| s.len());
         log.events.push_back(Kept {
@@ -320,32 +458,32 @@ impl Hub {
         state.total_bytes += bytes;
         state.order.push_back((session_id.to_owned(), seq));
         self.enforce(&mut state, session_id);
-        Delivery {
-            event: event.to_owned(),
-            data,
-            envelope,
-            peers,
-        }
+        Delivery { envelope, peers }
     }
 
     fn deliver(&self, delivery: &Delivery) {
         for peer in &delivery.peers {
-            if !self
-                .catalog
-                .event_visible(&delivery.event, peer.minor, &peer.advertised)
-            {
-                continue;
-            }
-            let mut envelope = delivery.envelope.clone();
-            let mut data = delivery.data.clone();
-            self.catalog
-                .strip_newer(&delivery.event, &mut data, false, peer.minor);
-            envelope.data = data;
-            let params = serde_json::to_value(&envelope).unwrap_or_default();
-            let _ = peer
-                .tx
-                .send(Message::text(frame::notification(&delivery.event, &params)));
+            self.send_event(peer, &delivery.envelope);
         }
+    }
+
+    /// Sends one event to `peer` when its protocol minor may see it, with
+    /// the fields newer than that minor removed.
+    fn send_event(&self, peer: &Peer, envelope: &Envelope) {
+        let event = envelope.event.as_str();
+        if !self
+            .catalog
+            .event_visible(event, peer.minor, &peer.advertised)
+        {
+            return;
+        }
+        let mut envelope = envelope.clone();
+        self.catalog
+            .strip_newer(event, &mut envelope.data, false, peer.minor);
+        let params = serde_json::to_value(&envelope).unwrap_or_default();
+        let _ = peer
+            .tx
+            .send(Message::text(frame::notification(event, &params)));
     }
 
     /// Evicts the oldest events until every limit holds.
@@ -415,23 +553,35 @@ impl Hub {
         }
     }
 
-    /// Sends server request `method` to the session's capable connections
-    /// and waits up to `timeout` for the first answer. `None` when no
-    /// attached connection declared `server_requests` (at once), on the
-    /// deadline, or when the asker gives up (the future is dropped); the
-    /// last two emit one `request.cancel`.
+    /// Sends server request `method` to the session's capable drivers with
+    /// its `deadline_ms`, and waits up to `timeout` for the first answer.
+    /// `None` when no attached driver declared `server_requests` (at once,
+    /// with one `request.cancel {reason: "no_responder"}`), on the deadline
+    /// (`reason: "timeout"`), or when the asker gives up (the future is
+    /// dropped, `reason: "cancelled"`). Every other recipient of an
+    /// answered request gets `request.resolved` naming the answering
+    /// client.
     pub async fn ask(
         self: &Arc<Self>,
         session_id: &str,
         method: &str,
-        params: Value,
+        mut params: Value,
         timeout: Duration,
     ) -> Option<Value> {
+        if let Some(fields) = params.as_object_mut() {
+            let deadline = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX);
+            fields.insert("deadline_ms".into(), deadline.into());
+        }
         if let Err(violation) = self.catalog.check_outbound(method, &params, false) {
             self.violations.report(method, &violation);
             return None;
         }
-        let (id, answer) = self.open_request(session_id, method, params)?;
+        let Some((id, answer)) = self.open_request(session_id, method, params) else {
+            let id = format!("srq-{}", random_hex(6));
+            self.state().settle(&id);
+            self.cancel_event(session_id, &id, "no_responder");
+            return None;
+        };
         let mut guard = CancelOnDrop {
             hub: Arc::clone(self),
             session_id: session_id.to_owned(),
@@ -440,14 +590,24 @@ impl Hub {
         let outcome = tokio::time::timeout(timeout, answer).await;
         guard.id = None;
         match outcome {
-            Ok(Ok(value)) => {
-                self.publish_typed(session_id, "request.resolved", &RequestResolved { id });
+            Ok(Ok((value, by_client))) => {
+                self.publish_typed(
+                    session_id,
+                    "request.resolved",
+                    &RequestResolved { id, by_client },
+                );
                 Some(value)
             }
             Ok(Err(_)) => None,
             Err(_) => {
-                self.state().requests.remove(&id);
-                self.cancel_event(session_id, &id, "timeout");
+                let removed = {
+                    let mut state = self.state();
+                    state.settle(&id);
+                    state.requests.remove(&id).is_some()
+                };
+                if removed {
+                    self.cancel_event(session_id, &id, "timeout");
+                }
                 None
             }
         }
@@ -458,14 +618,14 @@ impl Hub {
         session_id: &str,
         method: &str,
         params: Value,
-    ) -> Option<(String, oneshot::Receiver<Value>)> {
+    ) -> Option<(String, oneshot::Receiver<(Value, String)>)> {
         let mut state = self.state();
         let capable: Vec<(ConnId, Peer)> = state
             .sessions
             .get(session_id)?
             .attached
             .iter()
-            .filter(|(_, p)| p.server_requests)
+            .filter(|(_, p)| p.answers())
             .map(|(c, p)| (*c, p.clone()))
             .collect();
         if capable.is_empty() {
@@ -490,21 +650,26 @@ impl Hub {
         Some((id, answer))
     }
 
-    /// An answer from connection `conn` to request `id`; `false` when it
-    /// was dropped (closed id, another connection's request, or an answer
-    /// that breaks the contract).
+    /// An answer from client `by_client` on connection `conn` to request
+    /// `id`. Only the first valid answer of a recipient settles it; an
+    /// error answer settles it unanswered.
     pub fn resolve(
         &self,
         conn: ConnId,
+        by_client: &str,
         id: &str,
         answer: Result<Value, pmt_rpc::RpcError>,
-    ) -> bool {
+    ) -> Answered {
         let mut state = self.state();
         let Some(pending) = state.requests.get(id) else {
-            return false;
+            return if state.settled.iter().any(|s| s == id) {
+                Answered::Settled
+            } else {
+                Answered::Unknown
+            };
         };
         if !pending.sent_to.contains(&conn) {
-            return false;
+            return Answered::Unknown;
         }
         if let Ok(value) = &answer
             && let Err(violation) = self.catalog.check_answer(&pending.method, value)
@@ -513,15 +678,16 @@ impl Hub {
                 "dropped an invalid answer to {}: {violation}",
                 pending.method
             );
-            return false;
+            return Answered::Unknown;
         }
         let Some(pending) = state.requests.remove(id) else {
-            return false;
+            return Answered::Unknown;
         };
+        state.settle(id);
         if let Ok(value) = answer {
-            let _ = pending.reply.send(value);
+            let _ = pending.reply.send((value, by_client.to_owned()));
         }
-        true
+        Answered::Taken
     }
 
     /// The session of an open request.
@@ -553,6 +719,14 @@ impl Hub {
     }
 }
 
+/// Removes `conn` from the session's clients; the last one leaving starts
+/// the session's unattended time.
+fn leave(log: &mut Log, conn: ConnId) {
+    if log.attached.remove(&conn).is_some() && log.attached.is_empty() {
+        log.unattended_since = Some(Instant::now());
+    }
+}
+
 fn evict_front(log: &mut Log) -> usize {
     match log.events.pop_front() {
         Some(kept) => {
@@ -576,6 +750,7 @@ fn orphan_requests(state: &mut State, conn: ConnId) -> Vec<(String, String)> {
     }
     for (_, id) in &orphaned {
         state.requests.remove(id);
+        state.settle(id);
     }
     orphaned
 }
@@ -589,7 +764,11 @@ struct CancelOnDrop {
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
         if let Some(id) = self.id.take() {
-            let removed = self.hub.state().requests.remove(&id).is_some();
+            let removed = {
+                let mut state = self.hub.state();
+                state.settle(&id);
+                state.requests.remove(&id).is_some()
+            };
             if removed {
                 self.hub.cancel_event(&self.session_id, &id, "cancelled");
             }

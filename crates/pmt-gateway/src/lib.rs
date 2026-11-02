@@ -7,8 +7,9 @@
 //! - [`control`]: the control channel (tickets, status, stop);
 //! - [`connection`]: one client connection (upgrade checks, handshake,
 //!   framing, liveness);
-//! - [`router`] and [`methods`]: typed method dispatch and the built-in
-//!   session methods with their profile and ownership checks;
+//! - [`router`], [`methods`] and [`discovery`]: typed method dispatch,
+//!   the built-in session methods with their profile and attachment checks,
+//!   and the read-only discovery methods;
 //! - [`hub`]: attachments, per-session event logs with replay, and
 //!   server-to-client requests;
 //! - [`host`]: the agent side the daemon serves sessions with.
@@ -18,6 +19,7 @@
 pub mod connection;
 pub mod control;
 pub mod daemon;
+pub mod discovery;
 pub mod host;
 pub mod hub;
 pub mod methods;
@@ -26,5 +28,5 @@ pub mod server;
 pub mod tickets;
 
 pub use daemon::{Exit, run};
-pub use host::{Host, HostFuture, Link};
+pub use host::{Author, Host, HostFuture, Link};
 pub use server::{Identity, Server, ServerOptions};

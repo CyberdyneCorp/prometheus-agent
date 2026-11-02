@@ -358,8 +358,9 @@ impl Chat<'_, '_> {
 ///
 /// `session.attach` errors.
 pub(super) async fn follow(attached: &mut Attached, start: &Start<'_>) -> Result<u8, Error> {
-    let params = SessionRef {
-        session_id: attached.session.clone(),
+    let params = pmt_rpc::contracts::AttachParams {
+        role: pmt_rpc::contracts::AttachRole::Observer,
+        ..pmt_rpc::contracts::AttachParams::driver(attached.session.clone())
     };
     attached
         .client

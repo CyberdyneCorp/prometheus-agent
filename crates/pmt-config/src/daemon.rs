@@ -52,6 +52,14 @@ pub struct DaemonSection {
     /// Seconds `prometheus daemon restart` waits for running turns to reach
     /// a turn boundary before it replaces the daemon anyway.
     pub restart_drain_secs: u64,
+    /// Interactive clients (`prometheus tui`, the ACP adapter) start the
+    /// daemon detached when it is not running; `false` makes them exit 69
+    /// instead.
+    pub autostart: bool,
+    /// A session with no attached client, no running turn, no open
+    /// request and no queued input is closed after this many seconds.
+    #[schemars(range(min = 1))]
+    pub idle_session_close_secs: u64,
 }
 
 impl Default for DaemonSection {
@@ -59,6 +67,8 @@ impl Default for DaemonSection {
         Self {
             rpc: RpcListenerConfig::default(),
             restart_drain_secs: 120,
+            autostart: true,
+            idle_session_close_secs: 3600,
         }
     }
 }

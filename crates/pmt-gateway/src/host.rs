@@ -10,10 +10,12 @@ use std::time::Duration;
 
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
-    CompactParams, Compacted, ContextUsage, DispatchParams, Dispatched, Event, ForkParams,
-    ResolveParams, ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef,
-    SessionSetup, SubmitParams, Submitted, Transcript,
+    ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions, ConfigValue,
+    ContextUsage, DispatchParams, Dispatched, Event, ForkParams, ModelOptions, ResolveParams,
+    ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
+    SubagentList, SubmitParams, Submitted, Transcript,
 };
+use serde::Serialize;
 
 use crate::hub::Hub;
 
@@ -69,12 +71,15 @@ pub trait Host: Send + Sync + 'static {
     /// Compacts the session's context now.
     fn compact<'a>(&'a self, profile: &'a str, params: CompactParams) -> HostFuture<'a, Compacted>;
 
-    /// Starts a turn; its output goes through `link` and it ends with a
-    /// `turn.finished` event.
+    /// Admits an input stamped with `author`: starts its turn, or, while
+    /// one runs, queues, steers or interrupts per `busy.input_mode` (spec:
+    /// tui, Prompt submission while busy). A turn's output goes through
+    /// `link` and it ends with a `turn.finished` event.
     fn submit<'a>(
         &'a self,
         profile: &'a str,
         params: SubmitParams,
+        author: Author,
         link: Link,
     ) -> HostFuture<'a, Submitted>;
 
@@ -98,6 +103,46 @@ pub trait Host: Send + Sync + 'static {
     /// Forks a session (the parent is unchanged).
     fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef>;
 
+    /// The session's slash commands, with their disposition for `client`
+    /// (`commands.catalog`). Never changes the live session.
+    fn commands<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+        client: ClientKind,
+    ) -> HostFuture<'a, CommandCatalog>;
+
+    /// Entries for a typed path, listed through the session's terminal
+    /// backend; empty, never an error, when the backend is unreachable.
+    fn complete_path<'a>(
+        &'a self,
+        profile: &'a str,
+        params: CompleteParams,
+    ) -> HostFuture<'a, Completions>;
+
+    /// The models the session may switch to.
+    fn model_options<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, ModelOptions>;
+
+    /// The session's delegated children (none until a host delegates).
+    fn subagents<'a>(
+        &'a self,
+        _profile: &'a str,
+        _session_id: &'a str,
+    ) -> HostFuture<'a, SubagentList> {
+        Box::pin(async { Ok(SubagentList::default()) })
+    }
+
+    /// One effective configuration value of `profile`.
+    fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue>;
+
+    /// Closes a session no client is attached to, unless a turn runs or an
+    /// input is queued; `true` when it was closed (or was not loaded).
+    fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool>;
+
     /// Each served profile's configuration state, for `daemon status`.
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         Vec::new()
@@ -109,6 +154,18 @@ pub trait Host: Send + Sync + 'static {
     /// Waits until no turn runs, at most `deadline` (a restart drains to a
     /// turn boundary).
     fn drain(&self, deadline: Duration) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
+}
+
+/// Who submitted an input, stamped by the gateway from the connection
+/// (spec: tui, Turn authors are stamped by the gateway).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Author {
+    /// The client kind from `rpc.hello`.
+    pub client_kind: ClientKind,
+    /// The client's id within the daemon.
+    pub client_id: String,
+    /// Whose authority it acts with: the profile its ticket grants.
+    pub principal: String,
 }
 
 /// A session's way to its attached clients.

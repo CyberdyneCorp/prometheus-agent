@@ -355,6 +355,11 @@ impl Checker<'_> {
         {
             return self.invalid(key, node, format!("{key}: {}", err.message()));
         }
+        if schema.get("x-key-chord") == Some(&Value::Bool(true))
+            && let Err(reason) = crate::keys::Chord::parse(text)
+        {
+            return self.invalid(key, node, format!("{key}: {reason}"));
+        }
         let is_secret_ref = schema.get("x-secret-ref") == Some(&Value::Bool(true));
         if is_secret_ref && !is_secret_name(text) {
             let message = format!(

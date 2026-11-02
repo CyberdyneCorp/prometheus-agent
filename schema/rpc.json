@@ -14,6 +14,26 @@
       ],
       "type": "object"
     },
+    "Admission": {
+      "description": "How `prompt.submit` admitted an input (spec: tui, Prompt submission\nwhile busy).",
+      "oneOf": [
+        {
+          "const": "started",
+          "description": "Its turn started.",
+          "type": "string"
+        },
+        {
+          "const": "queued",
+          "description": "A turn was running: it runs after the queued inputs before it\n(`busy.input_mode = \"queue\"`, or `interrupt`, which stops the\nrunning turn first).",
+          "type": "string"
+        },
+        {
+          "const": "steered",
+          "description": "Handed to the running turn after its current tool step\n(`busy.input_mode = \"steer\"`).",
+          "type": "string"
+        }
+      ]
+    },
     "ApprovalAnswer": {
       "additionalProperties": false,
       "description": "The answer to `approval.request` (also `approval.respond` params,\nwith its `id`).",
@@ -80,6 +100,16 @@
         "call_id": {
           "description": "The model's call id.",
           "type": "string"
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered (set by the\ndaemon when it sends the request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "findings": {
           "description": "Why approval is needed.",
@@ -159,6 +189,58 @@
       ],
       "type": "object"
     },
+    "AttachParams": {
+      "additionalProperties": false,
+      "description": "`session.attach` params.",
+      "properties": {
+        "epoch": {
+          "default": null,
+          "description": "The daemon epoch `last_seen_seq` belongs to; another epoch than the\ndaemon's answers `truncated: true` and replays nothing.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_seen_seq": {
+          "default": null,
+          "description": "The newest sequence number the client applied: the kept events\nafter it are replayed before the answer.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "role": {
+          "$ref": "#/$defs/AttachRole",
+          "default": "driver",
+          "description": "Driver (default) or observer."
+        },
+        "session_id": {
+          "description": "`ses_<ULID>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "AttachRole": {
+      "description": "What an attached connection may do in the session.",
+      "oneOf": [
+        {
+          "const": "driver",
+          "description": "Submits, interrupts and answers the session's requests.",
+          "type": "string"
+        },
+        {
+          "const": "observer",
+          "description": "Reads only: receives events, never server requests, and may not\nsubmit (`-32002 session.observer`).",
+          "type": "string"
+        }
+      ]
+    },
     "Attached": {
       "additionalProperties": false,
       "description": "`session.attach` / `session.resume` result.",
@@ -173,9 +255,22 @@
           "minimum": 0,
           "type": "integer"
         },
+        "open_requests": {
+          "default": [],
+          "description": "Requests of the session still waiting for an answer (re-sent to\nthis connection when it is a capable driver).",
+          "items": {
+            "$ref": "#/$defs/OpenRequest"
+          },
+          "type": "array"
+        },
         "session_id": {
           "description": "The session.",
           "type": "string"
+        },
+        "truncated": {
+          "default": false,
+          "description": "Events after the client's `last_seen_seq` were evicted, or the\nclient's epoch is not this daemon's: reload the transcript\n(`session.transcript`) instead of applying the replayed events.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -207,6 +302,16 @@
         "allow_other": {
           "description": "Surfaces render a free-text `Other` option.",
           "type": "boolean"
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered (set by the\ndaemon when it sends the request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "questions": {
           "description": "The questions, as the `clarify` tool defines them.",
@@ -280,6 +385,101 @@
         }
       ]
     },
+    "CommandCatalog": {
+      "additionalProperties": false,
+      "description": "`commands.catalog` result.",
+      "properties": {
+        "commands": {
+          "description": "Every command of the session, by name.",
+          "items": {
+            "$ref": "#/$defs/CommandEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "commands"
+      ],
+      "type": "object"
+    },
+    "CommandEntry": {
+      "additionalProperties": false,
+      "description": "One `commands.catalog` entry.",
+      "properties": {
+        "aliases": {
+          "default": [],
+          "description": "Other names that resolve to it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "args": {
+          "default": null,
+          "description": "The argument synopsis (`<name> [--now]`), when it takes any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "One line.",
+          "type": "string"
+        },
+        "disposition": {
+          "$ref": "#/$defs/Disposition",
+          "description": "Whether it runs from the asking client's surface."
+        },
+        "name": {
+          "description": "The name without `/`.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why it does not run there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/CommandSource",
+          "description": "Built-in, quick command, skill or client-handled."
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "source",
+        "disposition"
+      ],
+      "type": "object"
+    },
+    "CommandSource": {
+      "description": "Where a command comes from.",
+      "oneOf": [
+        {
+          "const": "builtin",
+          "description": "A built-in command of the daemon's registry.",
+          "type": "string"
+        },
+        {
+          "const": "quick",
+          "description": "A `[quick_commands]` entry.",
+          "type": "string"
+        },
+        {
+          "const": "skill",
+          "description": "An installed skill.",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "description": "Handled by the client itself (never dispatched).",
+          "type": "string"
+        }
+      ]
+    },
     "CompactParams": {
       "additionalProperties": false,
       "description": "`session.compact` params.",
@@ -330,6 +530,114 @@
       ],
       "type": "object"
     },
+    "CompleteParams": {
+      "additionalProperties": false,
+      "description": "`complete.slash` / `complete.path` params.",
+      "properties": {
+        "prefix": {
+          "description": "What is typed so far (`/mod` for a command, `./src/ma` for a path,\nwithout the `@` of a mention).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "prefix"
+      ],
+      "type": "object"
+    },
+    "Completion": {
+      "additionalProperties": false,
+      "description": "One completion.",
+      "properties": {
+        "description": {
+          "default": null,
+          "description": "What it is (a command's description).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "default": false,
+          "description": "A directory (path completion continues inside it).",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "The completed text that replaces the prefix.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "Completions": {
+      "additionalProperties": false,
+      "description": "`complete.slash` / `complete.path` result.",
+      "properties": {
+        "items": {
+          "description": "The candidates, best first.",
+          "items": {
+            "$ref": "#/$defs/Completion"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "ConfigGetParams": {
+      "additionalProperties": false,
+      "description": "`config.get` params.",
+      "properties": {
+        "key": {
+          "description": "A dotted key (`model.default`).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile; required when the connection is granted several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "type": "object"
+    },
+    "ConfigValue": {
+      "additionalProperties": false,
+      "description": "`config.get` result.",
+      "properties": {
+        "key": {
+          "description": "The key.",
+          "type": "string"
+        },
+        "source": {
+          "description": "The layer it comes from (`default`, `file`, `set`, `managed`).",
+          "type": "string"
+        },
+        "value": {
+          "description": "Its effective value (secrets are never configuration values)."
+        }
+      },
+      "required": [
+        "key",
+        "value",
+        "source"
+      ],
+      "type": "object"
+    },
     "ContextUsage": {
       "additionalProperties": false,
       "description": "`session.context_usage` result.",
@@ -340,6 +648,15 @@
           "minimum": 0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "cost_usd": {
+          "default": null,
+          "description": "The session's cost so far in the usage ledger's currency (USD),\npriced calls only.",
+          "format": "double",
+          "type": [
+            "number",
             "null"
           ]
         },
@@ -471,6 +788,26 @@
             "reason"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "Disposition": {
+      "description": "Where a command runs from this surface.",
+      "oneOf": [
+        {
+          "const": "exec",
+          "description": "It runs (`command.dispatch`).",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "Listed, but refused here with `reason`.",
+          "type": "string"
+        },
+        {
+          "const": "hidden",
+          "description": "Not offered on this surface.",
+          "type": "string"
         }
       ]
     },
@@ -698,6 +1035,60 @@
       ],
       "type": "object"
     },
+    "ModelOption": {
+      "additionalProperties": false,
+      "description": "One `model.options` entry.",
+      "properties": {
+        "context_window": {
+          "default": null,
+          "description": "The model's context window, when known.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`<provider>/<model>`.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "The provider.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "ModelOptions": {
+      "additionalProperties": false,
+      "description": "`model.options` result.",
+      "properties": {
+        "current": {
+          "default": null,
+          "description": "The session's model (`<provider>/<model>`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "models": {
+          "description": "The models a `/model` switch may pick, current first.",
+          "items": {
+            "$ref": "#/$defs/ModelOption"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "models"
+      ],
+      "type": "object"
+    },
     "OpenRequest": {
       "additionalProperties": false,
       "description": "A server-to-client request still waiting for an answer.",
@@ -780,7 +1171,7 @@
           "type": "string"
         },
         "reason": {
-          "description": "`timeout` or `cancelled`.",
+          "description": "`timeout`, `cancelled`, or `no_responder` (no attached driver can\nanswer: none was attached when it was asked, or the last one left).",
           "type": "string"
         }
       },
@@ -792,15 +1183,20 @@
     },
     "RequestResolved": {
       "additionalProperties": false,
-      "description": "`request.resolved` payload: another client answered.",
+      "description": "`request.resolved` payload: a client answered.",
       "properties": {
+        "by_client": {
+          "description": "The client that answered (`<client kind>-<connection number>`).",
+          "type": "string"
+        },
         "id": {
           "description": "`srq-<12 hex>`.",
           "type": "string"
         }
       },
       "required": [
-        "id"
+        "id",
+        "by_client"
       ],
       "type": "object"
     },
@@ -911,6 +1307,16 @@
       "additionalProperties": false,
       "description": "`secret.request` params.",
       "properties": {
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered (set by the\ndaemon when it sends the request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "name": {
           "description": "The secret's name.",
           "type": "string"
@@ -983,6 +1389,14 @@
           "description": "Make this connection the session's interactive owner: another\nconnection resuming it exclusively is refused while it is attached.",
           "type": "boolean"
         },
+        "idempotency_key": {
+          "default": null,
+          "description": "Retries with the same key within 300 s return the same session\ninstead of creating another one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "profile": {
           "default": null,
           "description": "The profile; required only when the ticket grants several.",
@@ -1008,6 +1422,18 @@
             "yolo": false
           },
           "description": "How the session runs (a chat's flags)."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClientKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The client creating it; must be the connection's own `client`\nkind (`-32002 rpc.source_mismatch` otherwise). Absent: the\nconnection's kind."
         },
         "source_tag": {
           "default": null,
@@ -1195,10 +1621,63 @@
       ],
       "type": "object"
     },
+    "SubagentList": {
+      "additionalProperties": false,
+      "description": "`subagent.list` result.",
+      "properties": {
+        "subagents": {
+          "description": "The session's children, oldest first.",
+          "items": {
+            "$ref": "#/$defs/SubagentSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "subagents"
+      ],
+      "type": "object"
+    },
+    "SubagentSummary": {
+      "additionalProperties": false,
+      "description": "One delegated child of a session.",
+      "properties": {
+        "session_id": {
+          "description": "Its child session.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`running`, `completed`, `failed` or `stopped`.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child's id.",
+          "type": "string"
+        },
+        "title": {
+          "default": null,
+          "description": "Its task's title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "subagent_id",
+        "session_id",
+        "status"
+      ],
+      "type": "object"
+    },
     "SubmitParams": {
       "additionalProperties": false,
       "description": "`prompt.submit` params.",
       "properties": {
+        "author": {
+          "default": null,
+          "description": "Never accepted: the gateway stamps every input's author from the\nconnection, so a client-supplied one is refused with `-32002\nrpc.forged_author`."
+        },
         "images": {
           "default": [],
           "description": "Images that go with it.",
@@ -1206,6 +1685,14 @@
             "$ref": "#/$defs/PromptImage"
           },
           "type": "array"
+        },
+        "input_id": {
+          "default": null,
+          "description": "The client's id of this input: a resend with the same id returns\nthe original admission instead of running a second turn.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "run_budget_secs": {
           "default": null,
@@ -1234,10 +1721,15 @@
     },
     "Submitted": {
       "additionalProperties": false,
-      "description": "`prompt.submit` result: the turn started; its output arrives as events.",
+      "description": "`prompt.submit` result: the input was admitted; its turn's output\narrives as events.",
       "properties": {
+        "admission": {
+          "$ref": "#/$defs/Admission",
+          "default": "started",
+          "description": "How the input was admitted."
+        },
         "turn_id": {
-          "description": "The turn.",
+          "description": "The admission id: the turn that runs the input (for a steered\ninput, the running turn it joined).",
           "type": "string"
         }
       },
@@ -1267,6 +1759,16 @@
         "command": {
           "description": "The command that needs the password.",
           "type": "string"
+        },
+        "deadline_ms": {
+          "default": null,
+          "description": "Milliseconds until the request settles unanswered (set by the\ndaemon when it sends the request).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "session_id": {
           "description": "The session.",
@@ -1582,6 +2084,7 @@
       "since": "1.0"
     },
     "command.dispatch": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/DispatchParams"
@@ -1592,18 +2095,44 @@
       "since": "1.0"
     },
     "commands.catalog": {
-      "declared": false,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/CommandCatalog"
+      },
       "since": "1.0"
     },
     "complete.path": {
-      "declared": false,
+      "long": true,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/CompleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Completions"
+      },
       "since": "1.0"
     },
     "complete.slash": {
-      "declared": false,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/CompleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Completions"
+      },
+      "since": "1.0"
+    },
+    "config.get": {
+      "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/ConfigGetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ConfigValue"
+      },
       "since": "1.0"
     },
     "cron.blueprints.fill": {
@@ -1618,6 +2147,7 @@
     },
     "daemon.update": {
       "declared": false,
+      "long": true,
       "owner": "workspace-architecture",
       "since": "1.0"
     },
@@ -1777,8 +2307,14 @@
       "since": "1.0"
     },
     "model.options": {
-      "declared": false,
+      "long": true,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/ModelOptions"
+      },
       "since": "1.0"
     },
     "pairing.approve": {
@@ -1829,7 +2365,7 @@
     "session.attach": {
       "owner": "workspace-architecture",
       "params": {
-        "$ref": "#/$defs/SessionRef"
+        "$ref": "#/$defs/AttachParams"
       },
       "result": {
         "$ref": "#/$defs/Attached"
@@ -1837,6 +2373,7 @@
       "since": "1.0"
     },
     "session.compact": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/CompactParams"
@@ -1857,6 +2394,7 @@
       "since": "1.0"
     },
     "session.create": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/SessionCreateParams"
@@ -1887,6 +2425,7 @@
       "since": "1.0"
     },
     "session.fork": {
+      "long": true,
       "owner": "session-storage",
       "params": {
         "$ref": "#/$defs/ForkParams"
@@ -1907,6 +2446,7 @@
       "since": "1.0"
     },
     "session.list": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/SessionListParams"
@@ -1917,6 +2457,7 @@
       "since": "1.0"
     },
     "session.resolve": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/ResolveParams"
@@ -1927,6 +2468,7 @@
       "since": "1.0"
     },
     "session.resume": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/ResumeParams"
@@ -1937,6 +2479,7 @@
       "since": "1.0"
     },
     "session.transcript": {
+      "long": true,
       "owner": "workspace-architecture",
       "params": {
         "$ref": "#/$defs/SessionRef"
@@ -1947,8 +2490,13 @@
       "since": "1.0"
     },
     "subagent.list": {
-      "declared": false,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentList"
+      },
       "since": "1.0"
     },
     "subagent.subscribe": {

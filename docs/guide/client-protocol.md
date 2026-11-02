@@ -90,8 +90,15 @@ taxonomy kind (it fixes the CLI exit status) and `code` the stable dotted
 error code. The [reference](../reference/rpc.md#error-codes) lists the
 error and close codes.
 
-`rpc.ping` is answered from the connection's read loop even while slow
-requests run on the connection's worker pool (`daemon.rpc.workers`).
+`rpc.ping` is answered from the connection's read loop. Requests the
+catalog marks `long` (`session.create`, `session.resume`, `session.list`,
+`session.compact`, `session.transcript`, `session.resolve`, `session.fork`,
+`command.dispatch`, `complete.path`, `model.options`) run as tasks of
+their own on the worker pool (`daemon.rpc.workers`) and may answer out of
+order; every other request of a connection is answered in arrival order.
+A handler that fails unexpectedly answers `-32099 internal error:
+<method>` and the connection stays open. An upgrade to any path but
+`/rpc` closes with 4404.
 Clients ping every 15 s and treat 45 s of silence as a dead connection;
 the daemon closes an idle connection with 4408.
 
@@ -106,11 +113,19 @@ parent is unchanged) and `session.interrupt` stops the running turn.
 Creating or resuming with `exclusive: true` makes the connection the
 session's interactive owner: until it detaches or disconnects, another
 exclusive resume fails with `-32004` `session <id> is open in another
-client (pid <n>)` (attaching read-only and forking still work). A session of another
-profile is refused with `-32002` exactly like a session that does not
-exist, and methods that change a session (`prompt.submit`,
+client (pid <n>)` (attaching read-only and forking still work). Attaching
+to a session of another profile is refused with `-32002` exactly like a
+session that does not exist. Every other method that names a session
+(events, transcript, completion, catalog, subagents, fork, changes) needs
+the connection attached to it (`-32002` with `data.code`
+`session.not_attached`), and the ones that drive it (`prompt.submit`,
 `command.dispatch`, `session.compact`, `session.interrupt`,
-`approval.respond`, `session.detach`) need the connection attached to it.
+`approval.respond`) need it attached as a `driver`, the default role of
+`session.attach {session_id, role}`; an `observer` only reads.
+`session.create` retried with the same `idempotency_key` within 300 s
+returns the same session; its `source`, when given, must be the
+connection's own client kind. Methods that act on a profile take
+`profile` and need it when the ticket grants several.
 
 `session.create` and `session.resume` take a `setup`: the session-shaping
 flags of a chat (`model`, `provider`, `set` overrides, `skills`, `yolo`,
@@ -129,6 +144,19 @@ it as a prompt: `/retry`, `/learn`, skill commands) or `{"type":
 (`/refine`'s summary) arrives as a `session.event` of type
 `command.notice` with `payload.text`.
 
+`prompt.submit` never drops an input: while a turn runs it follows
+`busy.input_mode` (queued, steered into the running turn, or run after
+interrupting it) and says how in `admission` (`started`, `queued`,
+`steered`); a resend with the same `input_id` returns the original
+admission. The gateway stamps each input's author (client kind, client id,
+principal) into its stored message; a client-supplied `author` is refused
+with `-32002 rpc.forged_author`.
+
+`commands.catalog`, `complete.slash`, `complete.path` (listed through the
+session's own file backend), `model.options`, `subagent.list` and
+`config.get` read without touching the live session's system prompt,
+toolset or memory snapshot.
+
 `prompt.submit` returns a `turn_id` at once; the turn's output arrives as
 `session.event` events (one per trajectory event) and ends with
 `turn.finished`, whose `report` is the turn's `--usage-file` document. Every event carries a per-session `seq` and the daemon's
@@ -137,19 +165,27 @@ last_seen}` returns the kept events after `last_seen` (the newest 512
 events or 4 MiB per session), whether older ones were evicted
 (`truncated`), the requests still waiting for an answer, and the current
 `epoch`: a different epoch means the daemon restarted, and the client
-resets its watermark.
+resets its watermark. `session.attach` with `last_seen_seq` and `epoch`
+does the same while re-attaching: the missed events are sent before its
+answer, or, when some were evicted or the epoch changed, its answer says
+`truncated: true` and the client reloads `session.transcript`. A session
+no client has attached to for `daemon.idle_session_close_secs` (3600)
+that runs nothing is closed.
 
 ## Server-to-client requests
 
 When a turn needs a person (an approval, a clarifying question, a secret
 or a sudo password) the daemon sends a JSON-RPC request with an id
 `srq-<12 hex>` to the attached connections that declared
-`capabilities.server_requests` in `rpc.hello`. The first answer wins; the
-others receive `request.resolved`. A request that times out (approvals
-after `approvals.timeout_secs`, others after
+`capabilities.server_requests` in `rpc.hello` and attached as drivers,
+with its `deadline_ms`. The first answer wins; every recipient then
+receives `request.resolved {id, by_client}`. A request that times out
+(approvals after `approvals.timeout_secs`, others after
 `daemon.rpc.request_timeout_secs`) or is cancelled emits exactly one
-`request.cancel`. With no capable client attached the request resolves as
-unanswered at once, which denies an approval.
+`request.cancel`, and a later answer gets `-32004 request <id> already
+settled`. With no capable driver attached, or when the last one leaves,
+the request settles at once as `no_responder` (a `request.cancel` with
+that reason), which denies an approval; the turn keeps running.
 
 ## Talking to the daemon by hand
 

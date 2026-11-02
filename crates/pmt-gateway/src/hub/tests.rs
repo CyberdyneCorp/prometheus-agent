@@ -3,12 +3,12 @@ use std::time::Duration;
 
 use pmt_rpc::Catalog;
 use pmt_rpc::catalog::{INDEX, IndexEntry, Kind};
-use pmt_rpc::contracts::RequestCancel;
+use pmt_rpc::contracts::{AttachRole, RequestCancel};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::{Hub, Limits, Peer, Violations};
+use super::{Answered, Hub, Limits, Peer, Since, Violations};
 
 const S: &str = "ses_01JB7Z3Q5X8V2K4M6N8P0R2T4W";
 
@@ -33,6 +33,8 @@ fn peer(server_requests: bool) -> (Peer, mpsc::UnboundedReceiver<Message>) {
         minor: 0,
         advertised: Arc::default(),
         server_requests,
+        client_id: "tui-1".into(),
+        role: AttachRole::Driver,
     };
     (peer, rx)
 }
@@ -54,7 +56,7 @@ fn events_after_a_dropped_connection_are_replayed_in_order() {
     let hub = hub();
     hub.register(S, "default");
     let (p, mut rx) = peer(false);
-    hub.attach(1, S, p);
+    hub.attach(1, S, p, None);
     for n in 1..=3 {
         hub.publish(S, "session.event", event(n));
     }
@@ -110,7 +112,7 @@ fn the_oldest_session_is_evicted_first_past_the_session_limit() {
 async fn without_a_capable_client_a_request_is_unanswered_at_once() {
     let hub = hub();
     let (p, mut rx) = peer(false);
-    hub.attach(1, S, p);
+    hub.attach(1, S, p, None);
     let asked = tokio::time::timeout(
         Duration::from_millis(100),
         hub.ask(
@@ -123,14 +125,17 @@ async fn without_a_capable_client_a_request_is_unanswered_at_once() {
     .await
     .expect("resolved without waiting for the deadline");
     assert_eq!(asked, None);
-    assert!(frames(&mut rx).is_empty(), "nothing was sent");
+    let sent = frames(&mut rx);
+    assert_eq!(sent.len(), 1, "no request, only its settlement: {sent:?}");
+    assert_eq!(sent[0]["method"], "request.cancel");
+    assert_eq!(sent[0]["params"]["data"]["reason"], "no_responder");
 }
 
 #[tokio::test(start_paused = true)]
 async fn a_timed_out_request_emits_one_cancel_and_drops_late_answers() {
     let hub = hub();
     let (p, mut rx) = peer(true);
-    hub.attach(1, S, p);
+    hub.attach(1, S, p, None);
     let params = json!({"session_id": S, "command": "ls"});
     let asked = hub
         .ask(S, "sudo.request", params, Duration::from_secs(5))
@@ -153,7 +158,19 @@ async fn a_timed_out_request_emits_one_cancel_and_drops_late_answers() {
             reason: "timeout".into()
         }
     );
-    assert!(!hub.resolve(1, &id, Ok(json!({"password": null}))));
+    assert_eq!(
+        hub.resolve(1, "tui-1", &id, Ok(json!({"password": null}))),
+        Answered::Settled
+    );
+    assert_eq!(
+        hub.resolve(
+            1,
+            "tui-1",
+            "srq-000000000000",
+            Ok(json!({"password": null}))
+        ),
+        Answered::Unknown
+    );
 }
 
 #[tokio::test]
@@ -161,8 +178,8 @@ async fn the_first_answer_wins_and_the_others_see_it_resolved() {
     let hub = hub();
     let (a, mut rx_a) = peer(true);
     let (b, mut rx_b) = peer(true);
-    hub.attach(1, S, a);
-    hub.attach(2, S, b);
+    hub.attach(1, S, a, None);
+    hub.attach(2, S, b, None);
     let asking = {
         let hub = Arc::clone(&hub);
         tokio::spawn(async move {
@@ -181,18 +198,32 @@ async fn the_first_answer_wins_and_the_others_see_it_resolved() {
         }
     };
     let id = request["id"].as_str().unwrap().to_owned();
-    assert!(
-        !hub.resolve(3, &id, Ok(json!({"password": "x"}))),
+    assert_eq!(
+        hub.resolve(3, "tui-3", &id, Ok(json!({"password": "x"}))),
+        Answered::Unknown,
         "not sent to conn 3"
     );
-    assert!(
-        !hub.resolve(2, &id, Ok(json!({"pasword": "x"}))),
+    assert_eq!(
+        hub.resolve(2, "desktop-2", &id, Ok(json!({"pasword": "x"}))),
+        Answered::Unknown,
         "invalid answer dropped"
     );
-    assert!(hub.resolve(2, &id, Ok(json!({"password": "pw"}))));
+    assert_eq!(
+        hub.resolve(2, "desktop-2", &id, Ok(json!({"password": "pw"}))),
+        Answered::Taken
+    );
     assert_eq!(asking.await.unwrap(), Some(json!({"password": "pw"})));
-    let b_frames = frames(&mut rx_b);
-    assert!(b_frames.iter().any(|f| f["method"] == "request.resolved"));
+    let a_frames = frames(&mut rx_a);
+    let resolved = a_frames
+        .iter()
+        .find(|f| f["method"] == "request.resolved")
+        .expect("the other window hears who answered");
+    assert_eq!(resolved["params"]["data"]["by_client"], "desktop-2");
+    assert!(
+        frames(&mut rx_b)
+            .iter()
+            .any(|f| f["method"] == "request.resolved")
+    );
 }
 
 #[test]
@@ -203,6 +234,7 @@ fn an_older_minor_gets_no_newer_events_unless_it_advertised_them() {
         kind: Kind::Event,
         owner: "workspace-architecture",
         since: 4,
+        long: false,
     });
     let catalog = Catalog::build(
         pmt_rpc::contracts::Version { major: 1, minor: 4 },
@@ -223,8 +255,8 @@ fn an_older_minor_gets_no_newer_events_unless_it_advertised_them() {
     let (mut aware, mut rx_aware) = peer(false);
     aware.minor = 2;
     aware.advertised = Arc::new(vec!["test.newer".into()]);
-    hub.attach(1, S, old);
-    hub.attach(2, S, aware);
+    hub.attach(1, S, old, None);
+    hub.attach(2, S, aware, None);
     hub.publish(S, "test.newer", json!({}));
     assert!(frames(&mut rx_old).is_empty());
     assert_eq!(frames(&mut rx_aware).len(), 1);
@@ -247,7 +279,7 @@ fn a_payload_that_breaks_its_contract_is_counted_not_sent() {
         Arc::clone(&violations),
     );
     let (p, mut rx) = peer(false);
-    hub.attach(1, S, p);
+    hub.attach(1, S, p, None);
     hub.publish(S, "request.cancel", json!({"id": 4}));
     assert_eq!(violations.count(), 1);
     assert!(frames(&mut rx).is_empty());
@@ -268,4 +300,120 @@ fn one_connection_owns_a_session_until_it_detaches_or_disconnects() {
     assert_eq!(hub.claim(2, S, Some(42)), Ok(()));
     hub.detach_all(2);
     assert_eq!(hub.claim(3, S, None), Ok(()));
+}
+
+#[test]
+fn reattaching_replays_kept_events_after_the_watermark() {
+    let hub = hub();
+    hub.register(S, "default");
+    for n in 1..=4 {
+        hub.publish(S, "session.event", event(n));
+    }
+    let (p, mut rx) = peer(false);
+    let since = Since {
+        last_seen: 2,
+        epoch: Some("epoch-a".into()),
+    };
+    let attached = hub.attach(1, S, p, Some(&since));
+    assert!(!attached.truncated);
+    assert_eq!(attached.latest_seq, 4);
+    let seqs: Vec<u64> = frames(&mut rx)
+        .iter()
+        .map(|f| f["params"]["seq"].as_u64().unwrap())
+        .collect();
+    assert_eq!(seqs, [3, 4], "only what the client missed, in order");
+}
+
+#[test]
+fn another_epoch_or_an_evicted_watermark_is_truncated_without_replay() {
+    let hub = hub_with(Limits {
+        session_events: 2,
+        ..Limits::default()
+    });
+    hub.register(S, "default");
+    for n in 1..=5 {
+        hub.publish(S, "session.event", event(n));
+    }
+    let (p, mut rx) = peer(false);
+    let restarted = Since {
+        last_seen: 900,
+        epoch: Some("epoch-before-restart".into()),
+    };
+    assert!(hub.attach(1, S, p, Some(&restarted)).truncated);
+    assert!(frames(&mut rx).is_empty(), "stale deltas are not replayed");
+    let (p, mut rx) = peer(false);
+    let behind = Since {
+        last_seen: 1,
+        epoch: None,
+    };
+    assert!(hub.attach(2, S, p, Some(&behind)).truncated);
+    assert!(frames(&mut rx).is_empty());
+}
+
+#[tokio::test]
+async fn an_open_request_is_resent_to_a_driver_that_reattaches() {
+    let hub = hub();
+    hub.register(S, "default");
+    let (a, mut rx_a) = peer(true);
+    hub.attach(1, S, a, None);
+    let asking = {
+        let hub = Arc::clone(&hub);
+        tokio::spawn(async move {
+            hub.ask(
+                S,
+                "sudo.request",
+                json!({"session_id": S, "command": "ls"}),
+                Duration::from_secs(5),
+            )
+            .await
+        })
+    };
+    let sent = loop {
+        if let Some(Message::Text(text)) = rx_a.recv().await {
+            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+        }
+    };
+    assert_eq!(
+        sent["params"]["deadline_ms"], 5000,
+        "every request carries its deadline"
+    );
+    let id = sent["id"].as_str().unwrap().to_owned();
+    let (observer, mut rx_o) = peer(true);
+    let observer = Peer {
+        role: AttachRole::Observer,
+        ..observer
+    };
+    let attached = hub.attach(2, S, observer, None);
+    assert_eq!(attached.open_requests.len(), 1, "listed to every attacher");
+    assert!(frames(&mut rx_o).is_empty(), "never sent to an observer");
+    let (b, mut rx_b) = peer(true);
+    hub.attach(3, S, b, None);
+    let resent = frames(&mut rx_b);
+    assert_eq!(resent[0]["id"], id.as_str());
+    assert_eq!(
+        hub.resolve(3, "tui-3", &id, Ok(json!({"password": "pw"}))),
+        Answered::Taken
+    );
+    assert_eq!(asking.await.unwrap(), Some(json!({"password": "pw"})));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_session_without_clients_becomes_a_reaping_candidate() {
+    let hub = hub();
+    hub.register(S, "default");
+    let (p, _rx) = peer(false);
+    hub.attach(1, S, p, None);
+    assert!(hub.unattended(Duration::ZERO).is_empty(), "attached");
+    hub.detach_all(1);
+    assert!(
+        hub.unattended(Duration::from_mins(1)).is_empty(),
+        "too soon"
+    );
+    tokio::time::advance(Duration::from_secs(61)).await;
+    assert_eq!(
+        hub.unattended(Duration::from_mins(1)),
+        [(S.to_owned(), "default".to_owned())]
+    );
+    hub.closed(S);
+    assert!(hub.unattended(Duration::ZERO).is_empty(), "closed once");
 }

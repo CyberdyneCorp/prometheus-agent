@@ -1471,3 +1471,93 @@ capabilities = [
 
 [configuration-and-profiles."Profile creation options"]
 "Channels not cloned by default" = ["crates/prometheus/tests/profile_options.rs::clone_all_leaves_messaging_channels_behind", "crates/pmt-config/src/profiles/tests.rs::clone_all_copies_everything_but_sessions_and_channels"]
+
+# Group 23: TUI (tasks 23.1-23.4). The shared conformance suite of the
+# tui capability's protocol scenarios is crates/pmt-gateway/tests/tui_protocol.rs.
+
+[tui."TUI launch selection"]
+"Piped invocation never opens the TUI" = ["crates/prometheus/tests/tui_cli.rs::a_piped_chat_uses_the_line_mode_and_never_the_alternate_screen"]
+"Forced TUI without a terminal" = ["crates/prometheus/tests/tui_cli.rs::prometheus_tui_without_a_terminal_exits_2"]
+
+[tui."TUI attaches to the gateway daemon as a client"]
+"First launch starts the daemon" = ["crates/prometheus/tests/tui_cli.rs::the_first_tui_starts_the_daemon_detached_and_attaches"]
+"Autostart disabled" = ["crates/prometheus/tests/tui_cli.rs::without_autostart_the_tui_exits_69_and_opens_no_store"]
+
+[tui."Standalone in-process mode"]
+"Standalone beside a live daemon" = ["crates/prometheus/tests/tui_cli.rs::standalone_beside_a_running_daemon_exits_75"]
+
+[tui."Terminal state is always restored"]
+"Panic during render" = ["crates/prometheus/tests/tui_cli.rs::a_panic_while_drawing_restores_the_terminal_reports_and_exits_70"]
+
+[tui."In-TUI update hands off without a relaunch protocol"]
+"Update requested from the TUI" = ["crates/prometheus/tests/tui_cli.rs::update_restores_the_terminal_before_the_updater_and_exits_with_its_code"]
+
+[tui."Client protocol framing"]
+"Garbage frame" = ["crates/pmt-gateway/tests/protocol.rs::a_garbage_frame_gets_32700_and_the_connection_keeps_serving"]
+
+[tui."Hello handshake is mandatory and versioned"]
+"Old client against a new daemon" = ["crates/pmt-gateway/tests/protocol.rs::a_major_mismatch_fails_naming_both_versions_then_closes_4426"]
+"Skipping the handshake" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_first_request_other_than_hello_creates_nothing"]
+
+[tui."Typed method registry is enforced"]
+"Misspelled param" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_misspelled_prompt_param_names_it_and_the_update_command"]
+"Handler without a declaration" = { tests = ["crates/pmt-gateway/src/router.rs::an_unregistered_method_name_fails_at_startup"], note = "handlers register only through a typed `Method` whose name the catalog indexes with a contract; anything else fails registration when the daemon starts, before it serves" }
+
+[tui."Error code and close code taxonomy"]
+"Same refusal, same code everywhere" = { tests = ["crates/pmt-gateway/tests/protocol.rs::a_browser_origin_closes_with_4403"], note = "the TUI listener closes a forbidden Origin with 4403; the dashboard listener arrives with web-dashboard (M3) and must reuse pmt_gateway::connection's admission" }
+"Disabled endpoint" = ["crates/pmt-gateway/tests/tui_protocol.rs::an_endpoint_this_surface_does_not_expose_closes_4404_despite_a_valid_ticket"]
+
+[tui."Session access requires an attachment"]
+"Replaying a foreign session's events" = ["crates/pmt-gateway/tests/tui_protocol.rs::another_profiles_events_are_refused_and_none_returned"]
+"Guessing a session id" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_session_never_attached_is_refused_with_session_not_attached"]
+
+[tui."Event sequencing and reconnect replay"]
+"Reconnect after a daemon restart" = ["crates/pmt-gateway/tests/sessions.rs::a_restarted_daemon_answers_with_a_new_epoch", "crates/pmt-gateway/src/hub/tests.rs::another_epoch_or_an_evicted_watermark_is_truncated_without_replay", "crates/prometheus/tests/tui_cli.rs::after_a_daemon_restart_the_tui_reattaches_to_the_same_session"]
+
+[tui."Transport liveness"]
+"Ping during a long compaction" = ["crates/pmt-gateway/tests/sessions.rs::ping_is_answered_during_a_long_compaction"]
+
+[tui."Long requests do not block the connection"]
+"Slow resume" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_catalog_request_is_not_held_behind_a_slow_resume", "crates/pmt-gateway/tests/tui_protocol.rs::a_panicking_long_request_answers_32099_and_the_connection_stays"]
+
+[tui."Gateway retirement refuses new work"]
+"Prompt during retirement" = ["crates/pmt-gateway/tests/sessions.rs::a_retiring_daemon_refuses_new_work_and_drains_running_turns"]
+
+[tui."Server-to-client requests"]
+"Two windows show the same approval" = ["crates/pmt-gateway/tests/tui_protocol.rs::the_other_window_hears_which_client_answered", "crates/pmt-gateway/src/hub/tests.rs::the_first_answer_wins_and_the_others_see_it_resolved"]
+"No capable client attached" = ["crates/pmt-gateway/tests/tui_protocol.rs::without_a_capable_driver_the_request_settles_as_no_responder"]
+
+[tui."Server request deadlines fail closed"]
+"Late answer" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_late_answer_is_32004_and_the_call_stays_denied"]
+
+[tui."Idempotent session creation"]
+"Lost create response" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_retried_create_with_the_same_key_returns_the_original_session"]
+"Source spoofing" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_create_claiming_another_client_kind_is_refused"]
+
+[tui."Prompt submission while busy"]
+"Duplicate submit after a lost ack" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_resent_input_gets_its_original_admission_and_runs_once"]
+
+[tui."Turn authors are stamped by the gateway"]
+"Forged author" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_client_supplied_author_is_refused_and_inputs_are_stamped"]
+
+[tui."Profile scope on every request"]
+"Config read for a second profile" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_connection_granted_two_profiles_must_name_one"]
+
+[tui."Slash command flow in the TUI"]
+"Skill command" = ["crates/prometheus/tests/tui_cli.rs::a_skill_command_is_dispatched_and_a_path_is_a_prompt", "crates/pmt-tui/src/slash.rs::registered_commands_are_dispatched_with_their_arguments"]
+"A path is not a command" = ["crates/prometheus/tests/tui_cli.rs::a_skill_command_is_dispatched_and_a_path_is_a_prompt", "crates/pmt-tui/src/slash.rs::a_path_or_unknown_word_is_a_prompt"]
+
+[tui."Discovery RPCs preserve the prompt cache"]
+"Listing commands mid-conversation" = ["crates/prometheus/tests/tui_daemon.rs::discovery_calls_leave_the_cached_system_prompt_unchanged"]
+
+[tui."Composer and path completion"]
+"Container backend completion" = { tests = ["crates/pmt-gateway/tests/tui_protocol.rs::path_completion_lists_the_sessions_backend_and_an_unreachable_one_is_empty", "crates/prometheus/tests/tui_daemon.rs::path_completion_lists_the_sessions_working_directory"], note = "complete.path lists through the session's own file backend (the daemon host never reads its own filesystem for it); the container backend arrives with execution-environments (M2 group 35), so the conformance test serves the container's entries from a fake host backend and the local backend is tested end to end" }
+
+[tui."Status line and accessibility"]
+"Narrow terminal" = ["crates/pmt-tui/tests/snapshots.rs::a_40_by_12_terminal_keeps_the_composer_and_the_last_line"]
+
+[tui."Configurable key bindings"]
+"Unknown action" = ["crates/prometheus/tests/tui_cli.rs::an_unknown_key_action_refuses_to_start_naming_the_key"]
+
+[tui."Orphaned attachments are reaped"]
+"Terminal window closed mid-turn" = ["crates/pmt-gateway/tests/tui_protocol.rs::a_dropped_driver_leaves_its_turn_running_and_approvals_settle_no_responder", "crates/pmt-gateway/tests/tui_protocol.rs::a_session_left_without_clients_is_closed_after_the_idle_limit"]

@@ -85,6 +85,8 @@ pub(super) async fn run(
         text: prompt.text,
         images: prompt.images,
         run_budget_secs: attached.run_budget,
+        input_id: None,
+        author: None,
     };
     let turn_id = attached
         .client
@@ -315,7 +317,7 @@ fn approval_text(params: &Value) -> String {
     text
 }
 
-fn decision(line: &str) -> Option<&'static str> {
+pub(crate) fn decision(line: &str) -> Option<&'static str> {
     match line.trim().to_lowercase().as_str() {
         "o" | "once" | "y" | "yes" => Some("once"),
         "s" | "session" => Some("session"),
@@ -348,7 +350,7 @@ fn show_question(out: &dyn Out, question: Option<&Value>) {
 
 /// The `clarify` answer a typed line stands for: choice numbers (several,
 /// comma-separated, for a multi-choice question), free text, or a skip.
-fn clarify_answer(question: &Value, line: &str) -> Value {
+pub(crate) fn clarify_answer(question: &Value, line: &str) -> Value {
     let line = line.trim();
     if line.is_empty() {
         return json!({"status": "skipped"});

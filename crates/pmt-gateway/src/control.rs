@@ -96,6 +96,16 @@ pub(crate) fn answer(server: &Server, request: ControlRequest) -> ControlRespons
             profiles,
             pid,
         } => {
+            if let Some(only) = server.only_pid()
+                && pid != Some(only)
+            {
+                let err = Error::new(
+                    &codes::RPC_TICKET,
+                    format!("this gateway serves only the TUI that runs it (pid {only})"),
+                )
+                .with_hint("it was started with 'prometheus tui --standalone'");
+                return failure(&err);
+            }
             let grant = Grant {
                 profiles,
                 purpose,

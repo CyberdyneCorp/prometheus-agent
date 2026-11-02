@@ -57,6 +57,11 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
         )?);
         let mut options = ServerOptions::new(identity(), host.names());
         options.rpc = config.daemon.rpc.clone();
+        options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
+        options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
+            Some(&home.to_path_buf()),
+            ctx.launch,
+        )));
         let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
         let server = Server::new(options, host)?;
         let drain = Duration::from_secs(config.daemon.restart_drain_secs);
@@ -72,7 +77,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
     })
 }
 
-fn identity() -> Identity {
+pub(super) fn identity() -> Identity {
     use crate::build_info;
     Identity {
         version: build_info::VERSION.to_owned(),

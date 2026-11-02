@@ -26,6 +26,7 @@ pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-skills = { path = "crates/pmt-skills" }
 pmt-store = { path = "crates/pmt-store" }
 pmt-tools = { path = "crates/pmt-tools" }
+pmt-tui = { path = "crates/pmt-tui" }
 pmt-update = { path = "crates/pmt-update" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
@@ -139,6 +140,12 @@ rustyline = { version = "19.0", default-features = false, features = ["with-file
 pulldown-cmark = { version = "0.13", default-features = false }
 # Test-only: drives the line interface through a pseudo-terminal.
 expectrl = "0.9"
+# The full-screen terminal UI: layout and widgets over the crossterm
+# backend (raw mode, alternate screen, mouse, bracketed paste).
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
+crossterm = { version = "0.29", default-features = false, features = ["bracketed-paste", "events", "windows"] }
+# Display width of composer and transcript text.
+unicode-width = "0.2"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }
 
 [workspace.lints.rust]

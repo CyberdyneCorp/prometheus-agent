@@ -66,6 +66,7 @@ pub async fn run(
     server.set_endpoint(endpoint.clone());
     let control_task = tokio::spawn(control.serve(Arc::clone(&server)));
     let accept_task = tokio::spawn(accept(listener, Arc::clone(&server)));
+    let reap_task = tokio::spawn(reap(Arc::clone(&server)));
     lock.publish(&endpoint)?;
     tracing::info!(rpc_url = %endpoint.rpc_url, "daemon ready");
     tokio::select! {
@@ -75,6 +76,7 @@ pub async fn run(
     server.host().drain(drain).await;
     server.closing.cancel();
     let _ = accept_task.await;
+    reap_task.abort();
     let _ = control_task.await;
     wait_for_connections(&server).await;
     Ok(if server.restart_requested() {
@@ -92,6 +94,31 @@ async fn accept(listener: tokio::net::TcpListener, server: Arc<Server>) {
                 if let Ok((stream, _)) = accepted {
                     tokio::spawn(crate::connection::serve(Arc::clone(&server), stream));
                 }
+            }
+        }
+    }
+}
+
+/// Closes sessions no client has attached to for
+/// `daemon.idle_session_close_secs` and that run nothing (spec: tui,
+/// Orphaned attachments are reaped). A session with a running turn or a
+/// queued input is left to finish and retried on the next sweep.
+async fn reap(server: Arc<Server>) {
+    let idle = server.idle_session_close();
+    let every = (idle / 4).clamp(Duration::from_millis(50), Duration::from_mins(1));
+    loop {
+        tokio::select! {
+            () = server.closing.cancelled() => return,
+            () = tokio::time::sleep(every) => {}
+        }
+        for (session, profile) in server.hub().unattended(idle) {
+            match server.host().close_idle(&profile, &session).await {
+                Ok(true) => {
+                    tracing::info!(session, "closed a session no client used for {idle:?}");
+                    server.hub().closed(&session);
+                }
+                Ok(false) => {}
+                Err(err) => tracing::warn!(session, "cannot close an idle session: {err}"),
             }
         }
     }

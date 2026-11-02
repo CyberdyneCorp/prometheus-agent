@@ -20,6 +20,7 @@ mod edit;
 pub mod essential;
 pub mod grants;
 pub mod home;
+pub mod keys;
 pub mod layers;
 pub mod layout;
 pub mod managed;

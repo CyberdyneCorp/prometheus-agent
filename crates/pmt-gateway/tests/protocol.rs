@@ -20,35 +20,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 
-use self::support::{Daemon, hello, options};
-
-/// The next text frame, as JSON.
-async fn next_json(socket: &mut Socket) -> Value {
-    loop {
-        match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
-            Ok(Some(Ok(Message::Text(text)))) => {
-                return serde_json::from_str(text.as_str()).unwrap();
-            }
-            Ok(Some(Ok(_))) => {}
-            other => panic!("no frame: {other:?}"),
-        }
-    }
-}
-
-/// The close code the daemon sends next (frames before it are skipped).
-async fn close_code(socket: &mut Socket) -> u16 {
-    loop {
-        match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
-            Ok(Some(Ok(Message::Close(Some(frame))))) => return u16::from(frame.code),
-            Ok(Some(Ok(_))) => {}
-            other => panic!("no close frame: {other:?}"),
-        }
-    }
-}
-
-async fn send(socket: &mut Socket, value: &Value) {
-    socket.send(Message::text(value.to_string())).await.unwrap();
-}
+use self::support::{Daemon, close_code, hello, next_json, options, send};
 
 async fn say_hello(socket: &mut Socket) -> Value {
     let params = serde_json::to_value(hello(1, 0, false)).unwrap();
@@ -185,6 +157,7 @@ async fn an_older_minor_client_attaches_and_gets_nothing_newer() {
         kind: Kind::Event,
         owner: "workspace-architecture",
         since: 3,
+        long: false,
     });
     let builtin = Catalog::builtin();
     let catalog = Catalog::build(Version { major: 1, minor: 4 }, &index, |d| {

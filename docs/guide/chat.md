@@ -1,11 +1,13 @@
 # Chatting with the agent
 
 `prometheus` with no subcommand is `prometheus chat`. On a terminal (stdin
-and stdout both terminals) it opens the line interface; anywhere else, or
-with `-z`, it runs one turn and prints only the answer. `ui.interface`
-and `--tui`/`--line` choose the interactive interface; this build ships
-the line interface, which also stands in for `tui`. A pipe is always
-one-shot, whatever the configuration says.
+and stdout both terminals) it opens the interactive interface that
+`ui.interface` names: the full-screen [TUI](tui.md) (the default) or the
+line interface; `--tui` and `--line` choose for one run, and `-q/--quiet`
+or `--usage-file` keep the line interface. Anywhere else, or with `-z`, it
+runs one turn and prints only the answer: a pipe is always one-shot,
+whatever the configuration says. No environment variable takes part in
+the choice.
 
 ## One-shot runs
 

@@ -55,9 +55,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `bot.relay.drain` | `agent-interop` | 1.0 | not served yet | |
 | `bot.roster.list` | `bot-mode` | 1.0 | not served yet | |
 | `command.dispatch` | `workspace-architecture` | 1.0 | [`DispatchParams`](#dispatchparams) | [`Dispatched`](#dispatched) |
-| `commands.catalog` | `tui` | 1.0 | not served yet | |
-| `complete.path` | `tui` | 1.0 | not served yet | |
-| `complete.slash` | `tui` | 1.0 | not served yet | |
+| `commands.catalog` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`CommandCatalog`](#commandcatalog) |
+| `complete.path` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
+| `complete.slash` | `tui` | 1.0 | [`CompleteParams`](#completeparams) | [`Completions`](#completions) |
+| `config.get` | `tui` | 1.0 | [`ConfigGetParams`](#configgetparams) | [`ConfigValue`](#configvalue) |
 | `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | not served yet | |
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | not served yet | |
 | `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
@@ -92,14 +93,14 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
-| `model.options` | `tui` | 1.0 | not served yet | |
+| `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | not served yet | |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
 | `screen.handback` | `execution-environments` | 1.0 | not served yet | |
 | `screen.takeover` | `execution-environments` | 1.0 | not served yet | |
-| `session.attach` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Attached`](#attached) |
+| `session.attach` | `workspace-architecture` | 1.0 | [`AttachParams`](#attachparams) | [`Attached`](#attached) |
 | `session.compact` | `workspace-architecture` | 1.0 | [`CompactParams`](#compactparams) | [`Compacted`](#compacted) |
 | `session.context_usage` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`ContextUsage`](#contextusage) |
 | `session.create` | `workspace-architecture` | 1.0 | [`SessionCreateParams`](#sessioncreateparams) | [`SessionRef`](#sessionref) |
@@ -111,7 +112,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
-| `subagent.list` | `tui` | 1.0 | not served yet | |
+| `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.subscribe` | `tui` | 1.0 | not served yet | |
 | `system.health` | `observability` | 1.0 | not served yet | |
 | `system.metrics` | `observability` | 1.0 | not served yet | |
@@ -168,6 +169,16 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 |---|---|---|---|
 | `ok` | boolean | yes | Always true. |
 
+### `Admission`
+
+How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy).
+
+| Value | Meaning |
+|---|---|
+| `started` | Its turn started. |
+| `queued` | A turn was running: it runs after the queued inputs before it (`busy.input_mode = "queue"`, or `interrupt`, which stops the running turn first). |
+| `steered` | Handed to the running turn after its current tool step (`busy.input_mode = "steer"`). |
+
 ### `ApprovalAnswer`
 
 The answer to `approval.request` (also `approval.respond` params, with its `id`).
@@ -195,6 +206,7 @@ Why a call needs approval.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `call_id` | string | yes | The model's call id. |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
 | `findings` | array of [`ApprovalFinding`](#approvalfinding) | yes | Why approval is needed. |
 | `remember` | string or null | no | What `session` and `always` record. |
 | `session_id` | string | yes | The session. |
@@ -212,6 +224,26 @@ Why a call needs approval.
 | `id` | string | yes | The `approval.request` id (`srq-<12 hex>`). |
 | `replacement` | string or null | no | An edited command to run instead. |
 
+### `AttachParams`
+
+`session.attach` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `epoch` | string or null | no | The daemon epoch `last_seen_seq` belongs to; another epoch than the daemon's answers `truncated: true` and replays nothing. |
+| `last_seen_seq` | integer or null | no | The newest sequence number the client applied: the kept events after it are replayed before the answer. |
+| `role` | [`AttachRole`](#attachrole) | no | Driver (default) or observer. |
+| `session_id` | string | yes | `ses_<ULID>`. |
+
+### `AttachRole`
+
+What an attached connection may do in the session.
+
+| Value | Meaning |
+|---|---|
+| `driver` | Submits, interrupts and answers the session's requests. |
+| `observer` | Reads only: receives events, never server requests, and may not submit (`-32002 session.observer`). |
+
 ### `Attached`
 
 `session.attach` / `session.resume` result.
@@ -220,7 +252,9 @@ Why a call needs approval.
 |---|---|---|---|
 | `epoch` | string | yes | The daemon epoch the sequence numbers belong to. |
 | `latest_seq` | integer | yes | The newest event sequence number kept for it. |
+| `open_requests` | array of [`OpenRequest`](#openrequest) | no | Requests of the session still waiting for an answer (re-sent to this connection when it is a capable driver). |
 | `session_id` | string | yes | The session. |
+| `truncated` | boolean | no | Events after the client's `last_seen_seq` were evicted, or the client's epoch is not this daemon's: reload the transcript (`session.transcript`) instead of applying the replayed events. |
 
 ### `ClarifyAnswers`
 
@@ -237,6 +271,7 @@ Why a call needs approval.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `allow_other` | boolean | yes | Surfaces render a free-text `Other` option. |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
 | `questions` | array of any | yes | The questions, as the `clarify` tool defines them. |
 | `session_id` | string | yes | The session. |
 
@@ -262,6 +297,39 @@ Which client is attaching.
 | `acp` | The ACP adapter. |
 | `eval` | `prometheus eval`. |
 
+### `CommandCatalog`
+
+`commands.catalog` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `commands` | array of [`CommandEntry`](#commandentry) | yes | Every command of the session, by name. |
+
+### `CommandEntry`
+
+One `commands.catalog` entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `aliases` | array of string | no | Other names that resolve to it. |
+| `args` | string or null | no | The argument synopsis (`<name> [--now]`), when it takes any. |
+| `description` | string | yes | One line. |
+| `disposition` | [`Disposition`](#disposition) | yes | Whether it runs from the asking client's surface. |
+| `name` | string | yes | The name without `/`. |
+| `reason` | string or null | no | Why it does not run there. |
+| `source` | [`CommandSource`](#commandsource) | yes | Built-in, quick command, skill or client-handled. |
+
+### `CommandSource`
+
+Where a command comes from.
+
+| Value | Meaning |
+|---|---|
+| `builtin` | A built-in command of the daemon's registry. |
+| `quick` | A `[quick_commands]` entry. |
+| `skill` | An installed skill. |
+| `client` | Handled by the client itself (never dispatched). |
+
 ### `CompactParams`
 
 `session.compact` params.
@@ -281,6 +349,52 @@ Which client is attaching.
 | `tokens_after` | integer | yes | Context tokens after. |
 | `tokens_before` | integer | yes | Context tokens before. |
 
+### `CompleteParams`
+
+`complete.slash` / `complete.path` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prefix` | string | yes | What is typed so far (`/mod` for a command, `./src/ma` for a path, without the `@` of a mention). |
+| `session_id` | string | yes | The session. |
+
+### `Completion`
+
+One completion.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `description` | string or null | no | What it is (a command's description). |
+| `dir` | boolean | no | A directory (path completion continues inside it). |
+| `text` | string | yes | The completed text that replaces the prefix. |
+
+### `Completions`
+
+`complete.slash` / `complete.path` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of [`Completion`](#completion) | yes | The candidates, best first. |
+
+### `ConfigGetParams`
+
+`config.get` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | yes | A dotted key (`model.default`). |
+| `profile` | string or null | no | The profile; required when the connection is granted several. |
+
+### `ConfigValue`
+
+`config.get` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | yes | The key. |
+| `source` | string | yes | The layer it comes from (`default`, `file`, `set`, `managed`). |
+| `value` | any | yes | Its effective value (secrets are never configuration values). |
+
 ### `ContextUsage`
 
 `session.context_usage` result.
@@ -288,6 +402,7 @@ Which client is attaching.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `context_window` | integer or null | no | The model's context window, when known. |
+| `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
 
 ### `Decision`
@@ -320,6 +435,16 @@ An approval answer.
 | `` | The command ran; `notice` is its output to show. |
 | `` | Submit `message` as a prompt (with `images`). |
 | `` | The command did not run. |
+
+### `Disposition`
+
+Where a command runs from this surface.
+
+| Value | Meaning |
+|---|---|
+| `exec` | It runs (`command.dispatch`). |
+| `unavailable` | Listed, but refused here with `reason`. |
+| `hidden` | Not offered on this surface. |
 
 ### `Empty`
 
@@ -396,6 +521,25 @@ One event frame: the notification params and the replay item.
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
 
+### `ModelOption`
+
+One `model.options` entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `context_window` | integer or null | no | The model's context window, when known. |
+| `id` | string | yes | `<provider>/<model>`. |
+| `provider` | string | yes | The provider. |
+
+### `ModelOptions`
+
+`model.options` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `current` | string or null | no | The session's model (`<provider>/<model>`). |
+| `models` | array of [`ModelOption`](#modeloption) | yes | The models a `/model` switch may pick, current first. |
+
 ### `OpenRequest`
 
 A server-to-client request still waiting for an answer.
@@ -431,14 +575,15 @@ An image attached to a prompt: a file the daemon reads (checked like `chat --ima
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | `srq-<12 hex>`. |
-| `reason` | string | yes | `timeout` or `cancelled`. |
+| `reason` | string | yes | `timeout`, `cancelled`, or `no_responder` (no attached driver can answer: none was attached when it was asked, or the last one left). |
 
 ### `RequestResolved`
 
-`request.resolved` payload: another client answered.
+`request.resolved` payload: a client answered.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `by_client` | string | yes | The client that answered (`<client kind>-<connection number>`). |
 | `id` | string | yes | `srq-<12 hex>`. |
 
 ### `ResolveKind`
@@ -486,6 +631,7 @@ What `session.resolve` looks up.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
 | `name` | string | yes | The secret's name. |
 | `reason` | string or null | no | Why it is needed. |
 | `session_id` | string | yes | The session. |
@@ -508,8 +654,10 @@ What the daemon serves.
 |---|---|---|---|
 | `cwd` | string or null | no | The working directory of the session. |
 | `exclusive` | boolean | no | Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. |
+| `idempotency_key` | string or null | no | Retries with the same key within 300 s return the same session instead of creating another one. |
 | `profile` | string or null | no | The profile; required only when the ticket grants several. |
 | `setup` | [`SessionSetup`](#sessionsetup) | no | How the session runs (a chat's flags). |
+| `source` | [`ClientKind`](#clientkind) or null | no | The client creating it; must be the connection's own `client` kind (`-32002 rpc.source_mismatch` otherwise). Absent: the connection's kind. |
 | `source_tag` | string or null | no | A source tag recorded on the session. |
 
 ### `SessionList`
@@ -567,24 +715,46 @@ One listed session.
 | `started_at` | string | yes | When it started (RFC 3339). |
 | `title` | string or null | no | Its title, when it has one. |
 
+### `SubagentList`
+
+`subagent.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `subagents` | array of [`SubagentSummary`](#subagentsummary) | yes | The session's children, oldest first. |
+
+### `SubagentSummary`
+
+One delegated child of a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | Its child session. |
+| `status` | string | yes | `running`, `completed`, `failed` or `stopped`. |
+| `subagent_id` | string | yes | The child's id. |
+| `title` | string or null | no | Its task's title. |
+
 ### `SubmitParams`
 
 `prompt.submit` params.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `author` | any | no | Never accepted: the gateway stamps every input's author from the connection, so a client-supplied one is refused with `-32002 rpc.forged_author`. |
 | `images` | array of [`PromptImage`](#promptimage) | no | Images that go with it. |
+| `input_id` | string or null | no | The client's id of this input: a resend with the same id returns the original admission instead of running a second turn. |
 | `run_budget_secs` | integer or null | no | Wall-clock budget of this turn in seconds (`--run-budget`). |
 | `session_id` | string | yes | The session. |
 | `text` | string | yes | The prompt. |
 
 ### `Submitted`
 
-`prompt.submit` result: the turn started; its output arrives as events.
+`prompt.submit` result: the input was admitted; its turn's output arrives as events.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `turn_id` | string | yes | The turn. |
+| `admission` | [`Admission`](#admission) | no | How the input was admitted. |
+| `turn_id` | string | yes | The admission id: the turn that runs the input (for a steered input, the running turn it joined). |
 
 ### `SudoAnswer`
 
@@ -601,6 +771,7 @@ One listed session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `command` | string | yes | The command that needs the password. |
+| `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
 | `session_id` | string | yes | The session. |
 
 ### `Transcript`

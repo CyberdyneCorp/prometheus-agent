@@ -161,8 +161,12 @@ fn ctrl_z_suspends_and_fg_redraws_the_buffer() {
     let home = mock_home();
     let mut sh = shell(home.path());
     sh.expect("$ ").unwrap();
-    sh.send_line(format!("{} --home {}", common::BIN, home.path().display()))
-        .unwrap();
+    sh.send_line(format!(
+        "{} --home {} --set ui.interface=line",
+        common::BIN,
+        home.path().display()
+    ))
+    .unwrap();
     sh.expect("› ").unwrap();
     sh.send("half typed").unwrap();
     sh.expect("half typed").unwrap();

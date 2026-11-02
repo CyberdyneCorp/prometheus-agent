@@ -76,6 +76,9 @@ macro_rules! event {
     };
 }
 
+mod tui;
+pub use tui::*;
+
 /// A `<major>.<minor>` protocol version on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -117,6 +120,21 @@ pub enum ClientKind {
     Acp,
     /// `prometheus eval`.
     Eval,
+}
+
+impl ClientKind {
+    /// The wire name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            Self::Tui => "tui",
+            Self::Desktop => "desktop",
+            Self::Dashboard => "dashboard",
+            Self::Acp => "acp",
+            Self::Eval => "eval",
+        }
+    }
 }
 
 /// What the client can handle.
@@ -235,6 +253,15 @@ pub struct SessionCreateParams {
     /// A source tag recorded on the session.
     #[serde(default)]
     pub source_tag: Option<String>,
+    /// The client creating it; must be the connection's own `client`
+    /// kind (`-32002 rpc.source_mismatch` otherwise). Absent: the
+    /// connection's kind.
+    #[serde(default)]
+    pub source: Option<ClientKind>,
+    /// Retries with the same key within 300 s return the same session
+    /// instead of creating another one.
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
     /// Make this connection the session's interactive owner: another
     /// connection resuming it exclusively is refused while it is attached.
     #[serde(default)]
@@ -384,6 +411,15 @@ pub struct Attached {
     pub latest_seq: u64,
     /// The daemon epoch the sequence numbers belong to.
     pub epoch: String,
+    /// Events after the client's `last_seen_seq` were evicted, or the
+    /// client's epoch is not this daemon's: reload the transcript
+    /// (`session.transcript`) instead of applying the replayed events.
+    #[serde(default)]
+    pub truncated: bool,
+    /// Requests of the session still waiting for an answer (re-sent to
+    /// this connection when it is a capable driver).
+    #[serde(default)]
+    pub open_requests: Vec<OpenRequest>,
 }
 
 /// `session.list` params.
@@ -520,13 +556,17 @@ pub struct Compacted {
 }
 
 /// `session.context_usage` result.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ContextUsage {
     /// Estimated tokens of the active context.
     pub tokens: u64,
     /// The model's context window, when known.
     pub context_window: Option<u64>,
+    /// The session's cost so far in the usage ledger's currency (USD),
+    /// priced calls only.
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
 }
 
 /// `prompt.submit` params.
@@ -543,6 +583,15 @@ pub struct SubmitParams {
     /// Wall-clock budget of this turn in seconds (`--run-budget`).
     #[serde(default)]
     pub run_budget_secs: Option<u64>,
+    /// The client's id of this input: a resend with the same id returns
+    /// the original admission instead of running a second turn.
+    #[serde(default)]
+    pub input_id: Option<String>,
+    /// Never accepted: the gateway stamps every input's author from the
+    /// connection, so a client-supplied one is refused with `-32002
+    /// rpc.forged_author`.
+    #[serde(default)]
+    pub author: Option<Value>,
 }
 
 /// An image attached to a prompt: a file the daemon reads (checked like
@@ -601,12 +650,34 @@ pub enum Dispatched {
     },
 }
 
-/// `prompt.submit` result: the turn started; its output arrives as events.
+/// `prompt.submit` result: the input was admitted; its turn's output
+/// arrives as events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Submitted {
-    /// The turn.
+    /// The admission id: the turn that runs the input (for a steered
+    /// input, the running turn it joined).
     pub turn_id: String,
+    /// How the input was admitted.
+    #[serde(default)]
+    pub admission: Admission,
+}
+
+/// How `prompt.submit` admitted an input (spec: tui, Prompt submission
+/// while busy).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Admission {
+    /// Its turn started.
+    #[default]
+    Started,
+    /// A turn was running: it runs after the queued inputs before it
+    /// (`busy.input_mode = "queue"`, or `interrupt`, which stops the
+    /// running turn first).
+    Queued,
+    /// Handed to the running turn after its current tool step
+    /// (`busy.input_mode = "steer"`).
+    Steered,
 }
 
 /// An approval answer.
@@ -682,6 +753,10 @@ pub struct ApprovalRequestParams {
     pub findings: Vec<ApprovalFinding>,
     /// What `session` and `always` record.
     pub remember: Option<String>,
+    /// Milliseconds until the request settles unanswered (set by the
+    /// daemon when it sends the request).
+    #[serde(default)]
+    pub deadline_ms: Option<u64>,
 }
 
 /// `clarify.request` params.
@@ -694,6 +769,10 @@ pub struct ClarifyRequestParams {
     pub questions: Vec<Value>,
     /// Surfaces render a free-text `Other` option.
     pub allow_other: bool,
+    /// Milliseconds until the request settles unanswered (set by the
+    /// daemon when it sends the request).
+    #[serde(default)]
+    pub deadline_ms: Option<u64>,
 }
 
 /// `clarify.request` result.
@@ -714,6 +793,10 @@ pub struct SecretRequestParams {
     pub name: String,
     /// Why it is needed.
     pub reason: Option<String>,
+    /// Milliseconds until the request settles unanswered (set by the
+    /// daemon when it sends the request).
+    #[serde(default)]
+    pub deadline_ms: Option<u64>,
 }
 
 /// `secret.request` result.
@@ -732,6 +815,10 @@ pub struct SudoRequestParams {
     pub session_id: String,
     /// The command that needs the password.
     pub command: String,
+    /// Milliseconds until the request settles unanswered (set by the
+    /// daemon when it sends the request).
+    #[serde(default)]
+    pub deadline_ms: Option<u64>,
 }
 
 /// `sudo.request` result.
@@ -748,16 +835,19 @@ pub struct SudoAnswer {
 pub struct RequestCancel {
     /// `srq-<12 hex>`.
     pub id: String,
-    /// `timeout` or `cancelled`.
+    /// `timeout`, `cancelled`, or `no_responder` (no attached driver can
+    /// answer: none was attached when it was asked, or the last one left).
     pub reason: String,
 }
 
-/// `request.resolved` payload: another client answered.
+/// `request.resolved` payload: a client answered.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RequestResolved {
     /// `srq-<12 hex>`.
     pub id: String,
+    /// The client that answered (`<client kind>-<connection number>`).
+    pub by_client: String,
 }
 
 /// Why a turn ended in error.
@@ -849,8 +939,9 @@ method!(/// `rpc.ping`, answered from the read loop.
     Ping = "rpc.ping" (Empty) -> Ack);
 method!(/// `session.create`.
     SessionCreate = "session.create" (SessionCreateParams) -> SessionRef);
-method!(/// `session.attach`.
-    SessionAttach = "session.attach" (SessionRef) -> Attached);
+method!(/// `session.attach`: attaches the connection (replaying the kept
+    /// events after `last_seen_seq`).
+    SessionAttach = "session.attach" (AttachParams) -> Attached);
 method!(/// `session.detach`.
     SessionDetach = "session.detach" (SessionRef) -> Ack);
 method!(/// `session.list`.

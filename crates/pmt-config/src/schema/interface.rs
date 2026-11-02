@@ -26,9 +26,82 @@ impl Default for CliConfig {
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct UiConfig {
-    /// Interactive interface on a TTY (M1 ships `line`; `tui` falls back
-    /// to it until the TUI lands).
+    /// Interactive interface when stdin and stdout are terminals: the
+    /// full-screen `tui` or the `line` CLI (`--tui`/`--line` override it).
     pub interface: Interface,
+    /// The full-screen terminal UI.
+    pub tui: TuiConfig,
+}
+
+/// The `[ui.tui]` section (spec: tui, Status line and accessibility;
+/// Configurable key bindings).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct TuiConfig {
+    /// Colour theme: `auto` (dark unless the terminal says otherwise),
+    /// `dark` or `light`; `NO_COLOR` turns colours off whatever it says.
+    pub theme: TuiTheme,
+    /// No spinners or animation: a static busy glyph.
+    pub reduced_motion: bool,
+    /// Key bindings: action name to key chord (`Ctrl+P`, `Alt+Enter`,
+    /// `PageUp`, `F2`); `/keys` lists the effective bindings.
+    pub keys: TuiKeys,
+}
+
+/// TUI colour themes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TuiTheme {
+    /// Picked for the terminal's background (dark when unknown).
+    #[default]
+    Auto,
+    /// Light text on a dark background.
+    Dark,
+    /// Dark text on a light background.
+    Light,
+}
+
+/// A key chord: `[Ctrl+][Alt+][Shift+]<key>` (spec: tui, Configurable key
+/// bindings).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+#[schemars(extend("x-key-chord" = true))]
+pub struct KeyChord(pub String);
+
+/// `[ui.tui.keys]`: one chord per action; an unset action keeps its
+/// default, an unknown action name is refused.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct TuiKeys {
+    /// Send the composer (default `Enter`).
+    pub submit: Option<KeyChord>,
+    /// Insert a line break (default `Alt+Enter`; `Shift+Enter` always
+    /// does on terminals that report it).
+    pub newline: Option<KeyChord>,
+    /// Stop the running turn, else clear the composer (default `Ctrl+C`).
+    pub interrupt: Option<KeyChord>,
+    /// Leave the TUI when the composer is empty (default `Ctrl+D`).
+    pub quit: Option<KeyChord>,
+    /// Scroll the transcript one line up (default `Ctrl+Up`).
+    pub scroll_up: Option<KeyChord>,
+    /// Scroll the transcript one line down (default `Ctrl+Down`).
+    pub scroll_down: Option<KeyChord>,
+    /// Scroll the transcript one page up (default `PageUp`).
+    pub page_up: Option<KeyChord>,
+    /// Scroll the transcript one page down (default `PageDown`).
+    pub page_down: Option<KeyChord>,
+    /// The previous history entry (default `Up`).
+    pub history_prev: Option<KeyChord>,
+    /// The next history entry (default `Down`).
+    pub history_next: Option<KeyChord>,
+    /// Complete the `/command` or `@path` under the cursor (default `Tab`).
+    pub complete: Option<KeyChord>,
+    /// Move to the start of the line (default `Ctrl+A`).
+    pub line_start: Option<KeyChord>,
+    /// Move to the end of the line (default `Ctrl+E`).
+    pub line_end: Option<KeyChord>,
+    /// Clear the composer (default `Ctrl+U`).
+    pub clear_input: Option<KeyChord>,
 }
 
 /// Interactive interfaces.

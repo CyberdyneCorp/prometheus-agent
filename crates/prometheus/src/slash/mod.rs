@@ -280,6 +280,17 @@ impl Registry {
         })
     }
 
+    /// Every built-in command.
+    #[must_use]
+    pub fn builtins(&self) -> &'static [Command] {
+        self.builtins
+    }
+
+    /// Every registered quick, plugin and skill command, by name.
+    pub fn externals(&self) -> impl Iterator<Item = &External> {
+        self.external.values()
+    }
+
     /// The built-in entry named `name` (no alias lookup).
     #[must_use]
     pub fn builtin(&self, name: &str) -> Option<&'static Command> {

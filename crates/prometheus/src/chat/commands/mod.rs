@@ -133,16 +133,24 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
     })
 }
 
-/// The commands of `live`: the built-ins, the profile's quick commands
-/// and the session's skill commands; load warnings are logged.
+/// The commands of the profile without a loaded session: the built-ins
+/// and its quick commands (a session adds its skills).
 ///
 /// # Panics
 ///
 /// Never: the built-in table's names are unique (a unit test checks it).
 #[must_use]
-pub fn registry(scope: &ProfileScope, live: &Live) -> Registry {
+pub fn profile_registry(scope: &ProfileScope) -> Registry {
     let mut registry = Registry::new().expect("the built-in commands are unique");
     quick::register(&mut registry, &scope.config().quick_commands);
+    registry
+}
+
+/// The commands of `live`: the built-ins, the profile's quick commands
+/// and the session's skill commands; load warnings are logged.
+#[must_use]
+pub fn registry(scope: &ProfileScope, live: &Live) -> Registry {
+    let mut registry = profile_registry(scope);
     let core = registry.builtin_names();
     let table = pmt_skills::slash::table(&live.skills, &core);
     for (slug, skill) in &table.commands {

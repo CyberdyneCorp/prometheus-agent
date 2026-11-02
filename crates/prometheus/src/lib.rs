@@ -46,6 +46,8 @@ pub mod startup;
 pub mod surface;
 pub mod tools_cmd;
 pub mod trajectory_cmd;
+#[cfg(feature = "tui")]
+pub mod tui_cmd;
 pub mod update_cmd;
 pub mod usage_cmd;
 pub mod version;

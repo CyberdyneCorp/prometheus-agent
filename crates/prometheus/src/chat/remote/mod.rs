@@ -21,7 +21,7 @@ mod local;
 mod oneshot;
 mod open;
 mod render;
-mod turn;
+pub(crate) mod turn;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -154,7 +154,8 @@ pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Re
                 attached.session = session;
                 match start.mode {
                     Mode::OneShot => oneshot::run(&mut attached, start).await,
-                    Mode::Line => line::run(&mut attached, start).await,
+                    // A TUI run never gets here: it opened the TUI before.
+                    Mode::Line | Mode::Tui => line::run(&mut attached, start).await,
                 }
             }
             Opened::Followed(status) => Ok(status),

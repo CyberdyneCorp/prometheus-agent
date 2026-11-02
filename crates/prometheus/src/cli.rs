@@ -214,6 +214,11 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::DaemonCommand,
     },
+    /// The full-screen terminal UI, attached to the home's gateway daemon
+    /// (started when it is not running), or with `--standalone` to an
+    /// in-process gateway that serves only this TUI.
+    #[cfg(feature = "tui")]
+    Tui(crate::tui_cmd::TuiArgs),
     /// The daemon's client protocol: `rpc schema` prints the schema this
     /// binary speaks.
     Rpc {

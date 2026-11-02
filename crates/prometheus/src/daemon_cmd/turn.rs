@@ -85,6 +85,7 @@ fn approval_params(session_id: &str, request: &ApprovalRequest) -> ApprovalReque
             })
             .collect(),
         remember: request.remember.clone(),
+        deadline_ms: None,
     }
 }
 
@@ -100,6 +101,7 @@ pub(super) async fn clarify(mut prompts: Surface<ClarifyRequest, ClarifyAnswer>,
                 .map(|q| serde_json::to_value(q).unwrap_or(Value::Null))
                 .collect(),
             allow_other: request.allow_other,
+            deadline_ms: None,
         };
         let link = link.clone();
         tokio::spawn(async move {

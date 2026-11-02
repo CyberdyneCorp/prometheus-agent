@@ -283,3 +283,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
 | `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |
 | `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
+| `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |
+| `profile.not_granted` | `permission_denied` | 77 | The request names a profile the connection's ticket does not grant; get a ticket for that profile. |
+| `rpc.forged_author` | `permission_denied` | 77 | `prompt.submit` carried an `author`; the gateway stamps every input's author from the connection and never takes one from a client. |
+| `rpc.source_mismatch` | `permission_denied` | 77 | `session.create` named a `source` other than the connection's own client kind (from `rpc.hello`). |
+| `session.observer` | `permission_denied` | 77 | The connection attached as an observer, which only reads; attach as a driver to submit, interrupt or answer. |
+| `rpc.request_settled` | `conflict` | 75 | The server-to-client request already settled (answered, timed out or cancelled); the late answer changed nothing. |
+| `rpc.internal` | `internal` | 70 | The daemon's handler for the method failed unexpectedly (a crash report was written); the connection stays open. |
+| `tui.not_a_terminal` | `usage` | 2 | `prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping. |

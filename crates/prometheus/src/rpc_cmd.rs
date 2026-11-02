@@ -24,7 +24,8 @@ pub enum RpcCommand {
     Schema,
     /// Perform the handshake with the running daemon, send one request and
     /// print its result as JSON (`rpc.hello` prints the handshake answer
-    /// for the given hello params).
+    /// for the given hello params). A call whose params name a
+    /// `session_id` first attaches the connection to that session.
     Call {
         /// The method, for example `session.list`.
         method: String,
@@ -111,12 +112,31 @@ async fn call(
     }
     let hello = crate::daemon_client::hello(false);
     let (client, _inbox) = crate::daemon_client::connect(record, profile, &hello).await?;
-    let outcome = client.call(method, params).await;
+    let outcome = match attach_first(&client, method, &params).await {
+        Ok(()) => client.call(method, params).await,
+        Err(err) => Err(err),
+    };
     client.close();
     match outcome {
         Ok(result) => print_pretty(&result),
         Err(err) => Ok(print_rpc_error(method, &err)),
     }
+}
+
+/// Session-addressed methods need the connection attached to the session
+/// (spec: tui, Session access requires an attachment): a one-request
+/// debug connection attaches first, unless the call itself attaches,
+/// resumes or detaches.
+async fn attach_first(client: &Client, method: &str, params: &Value) -> Result<(), RpcError> {
+    const ATTACHING: &[&str] = &["session.attach", "session.resume", "session.detach"];
+    let Some(session) = params.get("session_id").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    if ATTACHING.contains(&method) {
+        return Ok(());
+    }
+    let attach = serde_json::json!({ "session_id": session });
+    client.call("session.attach", attach).await.map(|_| ())
 }
 
 /// Prints `{"error": <the JSON-RPC error object>}` on stderr and returns

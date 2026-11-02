@@ -8,6 +8,7 @@
 
 mod host;
 mod serve;
+pub(crate) mod standalone;
 mod turn;
 
 use std::fmt::Write as _;
@@ -114,7 +115,14 @@ fn ensure_output(record: &DaemonRecord) -> Result<u8, Error> {
 
 /// The running daemon, starting one when there is none; `true` when this
 /// call started it.
-fn running_or_start(home: &Path, profile: Option<&str>) -> Result<(DaemonRecord, bool), Error> {
+///
+/// # Errors
+///
+/// `daemon.start_failed`, `home.io`.
+pub(crate) fn running_or_start(
+    home: &Path,
+    profile: Option<&str>,
+) -> Result<(DaemonRecord, bool), Error> {
     if let Some(record) = wait_running(home, Duration::from_secs(5))? {
         return Ok((record, false));
     }

@@ -12,26 +12,27 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_agent::turn::{Interrupt, Issuer, TurnOptions};
+use pmt_agent::turn::{Interrupt, Issuer};
 use pmt_config::{ProfileScope, SharedScope};
-use pmt_core::cancel::CancelToken;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
-use pmt_gateway::{Host, HostFuture, Link};
+use pmt_gateway::{Author, Host, HostFuture, Link};
 use pmt_rpc::contracts::{
-    CompactParams, Compacted, ContextUsage, DispatchParams, Dispatched, ForkParams, ResolveKind,
-    ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SessionSummary, SubmitParams, Submitted, Transcript, TranscriptMessage, TurnEnded, TurnError,
-    TurnFinished,
+    ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions, ConfigValue,
+    ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind, ResolveParams,
+    SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup, SessionSummary,
+    SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError, TurnFinished,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 
 use super::turn::{ToClients, approvals, clarify};
 
 mod commands;
+mod discovery;
 mod reload;
 mod setup;
+mod turns;
 
 use crate::chat::resume;
 use crate::chat::session::{Factory, Live};
@@ -49,6 +50,11 @@ struct Loaded {
     idle: tokio::sync::Notify,
     /// Stops the running turn (`session.interrupt`).
     interrupt: Mutex<Option<Interrupt>>,
+    /// Inputs admitted while a turn ran, first in first out; `busy` is
+    /// only cleared under this lock once it is empty.
+    queue: Mutex<std::collections::VecDeque<turns::Queued>>,
+    /// The running turn's id (a steered input joins it).
+    current: Mutex<Option<String>>,
 }
 
 impl Loaded {
@@ -223,6 +229,8 @@ impl DaemonHost {
             busy: AtomicBool::new(false),
             idle: tokio::sync::Notify::new(),
             interrupt: Mutex::default(),
+            queue: Mutex::default(),
+            current: Mutex::default(),
         });
         loaded.insert(id, Arc::clone(&session));
         Ok(session)
@@ -258,53 +266,17 @@ impl DaemonHost {
             None => Ok(()),
         }
     }
+}
 
-    async fn submit_turn(
-        &self,
-        profile: &Profile,
-        params: SubmitParams,
-        link: Link,
-    ) -> Result<Submitted, Error> {
-        let id = session_id(&params.session_id)?;
-        Self::check_budget(profile, id)?;
-        let session = self.load(profile, id, &link).await?;
-        if session.busy.swap(true, Ordering::AcqRel) {
-            return Err(busy(id));
-        }
-        let input = match setup::input(&session.factory, &session.live, &params).await {
-            Ok(input) => input,
-            Err(err) => {
-                session.busy.store(false, Ordering::Release);
-                session.idle.notify_waiters();
-                return Err(err);
-            }
-        };
-        let turn_id = pmt_agent::turn::TurnId::new().to_string();
-        // The session's configuration: its start snapshot with the live
-        // keys of every reload since.
-        let scope = session.live.config.get();
-        let turns = Arc::clone(&self.turns);
-        turns.fetch_add(1, Ordering::AcqRel);
-        let finished_id = turn_id.clone();
-        let mut options = TurnOptions::new(&CancelToken::new());
-        options.run_budget = params.run_budget_secs.map(Duration::from_secs);
-        *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
-        let record = setup::record(&session.factory, &session.live)?;
-        tokio::spawn(async move {
-            let outcome = session
-                .live
-                .agent
-                .run_turn(Some(&scope), id, input, options)
-                .await;
-            let mut finished = finished(finished_id, outcome);
-            finished.report = serde_json::to_value(record.report(&Ok(0))).ok();
-            link.emit::<TurnEnded>(&finished);
-            session.interrupt.lock().expect("interrupt poisoned").take();
-            session.busy.store(false, Ordering::Release);
-            session.idle.notify_waiters();
-            turns.fetch_sub(1, Ordering::AcqRel);
-        });
-        Ok(Submitted { turn_id })
+/// The stored source of a session a client of kind `client` creates.
+fn source_of(client: Option<ClientKind>) -> Source {
+    match client {
+        Some(ClientKind::Tui) => Source::Tui,
+        Some(ClientKind::Desktop) => Source::Desktop,
+        Some(ClientKind::Dashboard) => Source::Dashboard,
+        Some(ClientKind::Acp) => Source::Acp,
+        Some(ClientKind::Eval) => Source::Eval,
+        Some(ClientKind::Cli) | None => Source::Cli,
     }
 }
 
@@ -356,7 +328,7 @@ impl Host for DaemonHost {
             let setup = params.setup.clone();
             let factory = self.factory(profile, cwd.clone(), &setup)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
-            let mut new = NewSession::new(Source::Cli);
+            let mut new = NewSession::new(source_of(params.source));
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
             if let Some(tag) = &params.source_tag {
@@ -469,10 +441,22 @@ impl Host for DaemonHost {
                 .iter()
                 .filter_map(|m| m.content.as_ref().map(String::len))
                 .sum();
+            let loaded = profile.loaded.lock().await.get(&id).cloned();
+            let context_window = match loaded {
+                Some(session) => {
+                    use pmt_agent::turn::model::ModelPort as _;
+                    session.live.model.route().await.context_window
+                }
+                None => None,
+            };
+            let cost = profile
+                .store
+                .usage_totals(pmt_store::UsageScope::Session(id))?;
             // The same rough estimate the budget engine uses: 4 bytes a token.
             Ok(ContextUsage {
                 tokens: u64::try_from(chars.div_ceil(4)).unwrap_or(u64::MAX),
-                context_window: None,
+                context_window,
+                cost_usd: (cost.calls > cost.unpriced_calls).then_some(cost.cost_usd),
             })
         })
     }
@@ -512,11 +496,54 @@ impl Host for DaemonHost {
         &'a self,
         profile: &'a str,
         params: SubmitParams,
+        author: Author,
         link: Link,
     ) -> HostFuture<'a, Submitted> {
         Box::pin(async move {
             let profile = self.profile(profile)?;
-            self.submit_turn(profile, params, link).await
+            self.submit_turn(profile, params, author, link).await
+        })
+    }
+
+    fn commands<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+        client: ClientKind,
+    ) -> HostFuture<'a, CommandCatalog> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            self.commands_of(profile, session_id, client).await
+        })
+    }
+
+    fn complete_path<'a>(
+        &'a self,
+        _profile: &'a str,
+        params: CompleteParams,
+    ) -> HostFuture<'a, Completions> {
+        Box::pin(async move { Ok(Self::paths_of(&params.session_id, &params.prefix)) })
+    }
+
+    fn model_options<'a>(
+        &'a self,
+        profile: &'a str,
+        session_id: &'a str,
+    ) -> HostFuture<'a, ModelOptions> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            self.models_of(profile, session_id).await
+        })
+    }
+
+    fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {
+        Box::pin(async move { Self::config_value(self.profile(profile)?, key) })
+    }
+
+    fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            Ok(Self::close_unused(profile, self::session_id(session_id)?).await)
         })
     }
 

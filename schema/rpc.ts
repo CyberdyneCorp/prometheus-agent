@@ -42,6 +42,9 @@ export interface Ack {
   ok: boolean;
 }
 
+/** How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy). */
+export type Admission = "started" | "queued" | "steered";
+
 /** The answer to `approval.request` (also `approval.respond` params, with its `id`). */
 export interface ApprovalAnswer {
   /** For a diff approval: the hunks accepted. */
@@ -66,6 +69,8 @@ export interface ApprovalFinding {
 export interface ApprovalRequestParams {
   /** The model's call id. */
   call_id: string;
+  /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
+  deadline_ms?: number | null;
   /** Why approval is needed. */
   findings: Array<ApprovalFinding>;
   /** What `session` and `always` record. */
@@ -90,14 +95,33 @@ export interface ApprovalRespondParams {
   replacement?: string | null;
 }
 
+/** `session.attach` params. */
+export interface AttachParams {
+  /** The daemon epoch `last_seen_seq` belongs to; another epoch than the daemon's answers `truncated: true` and replays nothing. */
+  epoch?: string | null;
+  /** The newest sequence number the client applied: the kept events after it are replayed before the answer. */
+  last_seen_seq?: number | null;
+  /** Driver (default) or observer. */
+  role?: AttachRole;
+  /** `ses_<ULID>`. */
+  session_id: string;
+}
+
+/** What an attached connection may do in the session. */
+export type AttachRole = "driver" | "observer";
+
 /** `session.attach` / `session.resume` result. */
 export interface Attached {
   /** The daemon epoch the sequence numbers belong to. */
   epoch: string;
   /** The newest event sequence number kept for it. */
   latest_seq: number;
+  /** Requests of the session still waiting for an answer (re-sent to this connection when it is a capable driver). */
+  open_requests?: Array<OpenRequest>;
   /** The session. */
   session_id: string;
+  /** Events after the client's `last_seen_seq` were evicted, or the client's epoch is not this daemon's: reload the transcript (`session.transcript`) instead of applying the replayed events. */
+  truncated?: boolean;
 }
 
 /** `clarify.request` result. */
@@ -110,6 +134,8 @@ export interface ClarifyAnswers {
 export interface ClarifyRequestParams {
   /** Surfaces render a free-text `Other` option. */
   allow_other: boolean;
+  /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
+  deadline_ms?: number | null;
   /** The questions, as the `clarify` tool defines them. */
   questions: Array<unknown>;
   /** The session. */
@@ -126,6 +152,33 @@ export interface ClientCapabilities {
 
 /** Which client is attaching. */
 export type ClientKind = "cli" | "tui" | "desktop" | "dashboard" | "acp" | "eval";
+
+/** `commands.catalog` result. */
+export interface CommandCatalog {
+  /** Every command of the session, by name. */
+  commands: Array<CommandEntry>;
+}
+
+/** One `commands.catalog` entry. */
+export interface CommandEntry {
+  /** Other names that resolve to it. */
+  aliases?: Array<string>;
+  /** The argument synopsis (`<name> [--now]`), when it takes any. */
+  args?: string | null;
+  /** One line. */
+  description: string;
+  /** Whether it runs from the asking client's surface. */
+  disposition: Disposition;
+  /** The name without `/`. */
+  name: string;
+  /** Why it does not run there. */
+  reason?: string | null;
+  /** Built-in, quick command, skill or client-handled. */
+  source: CommandSource;
+}
+
+/** Where a command comes from. */
+export type CommandSource = "builtin" | "quick" | "skill" | "client";
 
 /** `session.compact` params. */
 export interface CompactParams {
@@ -145,10 +198,54 @@ export interface Compacted {
   tokens_before: number;
 }
 
+/** `complete.slash` / `complete.path` params. */
+export interface CompleteParams {
+  /** What is typed so far (`/mod` for a command, `./src/ma` for a path, without the `@` of a mention). */
+  prefix: string;
+  /** The session. */
+  session_id: string;
+}
+
+/** One completion. */
+export interface Completion {
+  /** What it is (a command's description). */
+  description?: string | null;
+  /** A directory (path completion continues inside it). */
+  dir?: boolean;
+  /** The completed text that replaces the prefix. */
+  text: string;
+}
+
+/** `complete.slash` / `complete.path` result. */
+export interface Completions {
+  /** The candidates, best first. */
+  items: Array<Completion>;
+}
+
+/** `config.get` params. */
+export interface ConfigGetParams {
+  /** A dotted key (`model.default`). */
+  key: string;
+  /** The profile; required when the connection is granted several. */
+  profile?: string | null;
+}
+
+/** `config.get` result. */
+export interface ConfigValue {
+  /** The key. */
+  key: string;
+  /** The layer it comes from (`default`, `file`, `set`, `managed`). */
+  source: string;
+  /** Its effective value (secrets are never configuration values). */
+  value: unknown;
+}
+
 /** `session.context_usage` result. */
 export interface ContextUsage {
   /** The model's context window, when known. */
   context_window?: number | null;
+  /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
+  cost_usd?: number | null;
   /** Estimated tokens of the active context. */
   tokens: number;
 }
@@ -182,6 +279,9 @@ export type Dispatched = {
   reason: string;
   type: "refused";
 };
+
+/** Where a command runs from this surface. */
+export type Disposition = "exec" | "unavailable" | "hidden";
 
 /** No params. */
 export type Empty = Record<string, unknown>;
@@ -266,6 +366,24 @@ export interface HelloResult {
   server_version: string;
 }
 
+/** One `model.options` entry. */
+export interface ModelOption {
+  /** The model's context window, when known. */
+  context_window?: number | null;
+  /** `<provider>/<model>`. */
+  id: string;
+  /** The provider. */
+  provider: string;
+}
+
+/** `model.options` result. */
+export interface ModelOptions {
+  /** The session's model (`<provider>/<model>`). */
+  current?: string | null;
+  /** The models a `/model` switch may pick, current first. */
+  models: Array<ModelOption>;
+}
+
 /** A server-to-client request still waiting for an answer. */
 export interface OpenRequest {
   /** `srq-<12 hex>`. */
@@ -295,12 +413,14 @@ export type PromptImage = {
 export interface RequestCancel {
   /** `srq-<12 hex>`. */
   id: string;
-  /** `timeout` or `cancelled`. */
+  /** `timeout`, `cancelled`, or `no_responder` (no attached driver can answer: none was attached when it was asked, or the last one left). */
   reason: string;
 }
 
-/** `request.resolved` payload: another client answered. */
+/** `request.resolved` payload: a client answered. */
 export interface RequestResolved {
+  /** The client that answered (`<client kind>-<connection number>`). */
+  by_client: string;
   /** `srq-<12 hex>`. */
   id: string;
 }
@@ -340,6 +460,8 @@ export interface SecretAnswer {
 
 /** `secret.request` params. */
 export interface SecretRequestParams {
+  /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
+  deadline_ms?: number | null;
   /** The secret's name. */
   name: string;
   /** Why it is needed. */
@@ -364,10 +486,14 @@ export interface SessionCreateParams {
   cwd?: string | null;
   /** Make this connection the session's interactive owner: another connection resuming it exclusively is refused while it is attached. */
   exclusive?: boolean;
+  /** Retries with the same key within 300 s return the same session instead of creating another one. */
+  idempotency_key?: string | null;
   /** The profile; required only when the ticket grants several. */
   profile?: string | null;
   /** How the session runs (a chat's flags). */
   setup?: SessionSetup;
+  /** The client creating it; must be the connection's own `client` kind (`-32002 rpc.source_mismatch` otherwise). Absent: the connection's kind. */
+  source?: ClientKind | null;
   /** A source tag recorded on the session. */
   source_tag?: string | null;
 }
@@ -432,10 +558,32 @@ export interface SessionSummary {
   title?: string | null;
 }
 
+/** `subagent.list` result. */
+export interface SubagentList {
+  /** The session's children, oldest first. */
+  subagents: Array<SubagentSummary>;
+}
+
+/** One delegated child of a session. */
+export interface SubagentSummary {
+  /** Its child session. */
+  session_id: string;
+  /** `running`, `completed`, `failed` or `stopped`. */
+  status: string;
+  /** The child's id. */
+  subagent_id: string;
+  /** Its task's title. */
+  title?: string | null;
+}
+
 /** `prompt.submit` params. */
 export interface SubmitParams {
+  /** Never accepted: the gateway stamps every input's author from the connection, so a client-supplied one is refused with `-32002 rpc.forged_author`. */
+  author?: unknown;
   /** Images that go with it. */
   images?: Array<PromptImage>;
+  /** The client's id of this input: a resend with the same id returns the original admission instead of running a second turn. */
+  input_id?: string | null;
   /** Wall-clock budget of this turn in seconds (`--run-budget`). */
   run_budget_secs?: number | null;
   /** The session. */
@@ -444,9 +592,11 @@ export interface SubmitParams {
   text: string;
 }
 
-/** `prompt.submit` result: the turn started; its output arrives as events. */
+/** `prompt.submit` result: the input was admitted; its turn's output arrives as events. */
 export interface Submitted {
-  /** The turn. */
+  /** How the input was admitted. */
+  admission?: Admission;
+  /** The admission id: the turn that runs the input (for a steered input, the running turn it joined). */
   turn_id: string;
 }
 
@@ -460,6 +610,8 @@ export interface SudoAnswer {
 export interface SudoRequestParams {
   /** The command that needs the password. */
   command: string;
+  /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
+  deadline_ms?: number | null;
   /** The session. */
   session_id: string;
 }
@@ -519,10 +671,15 @@ export interface Version {
 export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
+  "commands.catalog": { params: SessionRef; result: CommandCatalog };
+  "complete.path": { params: CompleteParams; result: Completions };
+  "complete.slash": { params: CompleteParams; result: Completions };
+  "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "model.options": { params: SessionRef; result: ModelOptions };
   "prompt.submit": { params: SubmitParams; result: Submitted };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
-  "session.attach": { params: SessionRef; result: Attached };
+  "session.attach": { params: AttachParams; result: Attached };
   "session.compact": { params: CompactParams; result: Compacted };
   "session.context_usage": { params: SessionRef; result: ContextUsage };
   "session.create": { params: SessionCreateParams; result: SessionRef };
@@ -534,6 +691,7 @@ export interface Methods {
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
   "session.transcript": { params: SessionRef; result: Transcript };
+  "subagent.list": { params: SessionRef; result: SubagentList };
 }
 
 export interface ServerRequests {
@@ -558,9 +716,6 @@ export const UNDECLARED = [
   "bot.relay.deliver",
   "bot.relay.drain",
   "bot.roster.list",
-  "commands.catalog",
-  "complete.path",
-  "complete.slash",
   "cron.blueprints.fill",
   "cron.blueprints.list",
   "daemon.update",
@@ -595,11 +750,9 @@ export const UNDECLARED = [
   "moa.presets.delete",
   "moa.presets.list",
   "moa.presets.put",
-  "model.options",
   "pairing.approve",
   "screen.handback",
   "screen.takeover",
-  "subagent.list",
   "subagent.subscribe",
   "system.health",
   "system.metrics",

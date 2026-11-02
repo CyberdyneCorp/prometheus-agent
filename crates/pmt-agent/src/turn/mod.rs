@@ -244,6 +244,9 @@ pub struct TurnInput {
     pub additions: Vec<String>,
     /// Images sent as pixels (already in the session blob store).
     pub images: Vec<transcript::ImageRef>,
+    /// Who submitted it, as the gateway stamped it (kept in the stored
+    /// user message's metadata under `author`).
+    pub author: Option<serde_json::Value>,
 }
 
 impl TurnInput {
@@ -254,6 +257,7 @@ impl TurnInput {
             text: text.into(),
             additions: Vec::new(),
             images: Vec::new(),
+            author: None,
         }
     }
 }

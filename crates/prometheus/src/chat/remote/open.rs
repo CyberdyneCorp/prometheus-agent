@@ -9,8 +9,9 @@ use std::io::Write as _;
 use pmt_core::error::Error;
 use pmt_rpc::client::{Client, error_of};
 use pmt_rpc::contracts::{
-    ForkParams, ResolveKind, ResolveParams, ResumeParams, SessionCreate, SessionCreateParams,
-    SessionFork, SessionRef, SessionResolve, SessionResume, SessionSetup,
+    AttachParams, AttachRole, ForkParams, ResolveKind, ResolveParams, ResumeParams, SessionAttach,
+    SessionCreate, SessionCreateParams, SessionFork, SessionRef, SessionResolve, SessionResume,
+    SessionSetup,
 };
 
 use super::Start;
@@ -65,6 +66,8 @@ pub(super) async fn claim(
         profile: None,
         cwd: Some(start.cwd.to_string_lossy().into_owned()),
         source_tag,
+        source: None,
+        idempotency_key: None,
         exclusive: true,
         setup: start.setup.clone(),
     };
@@ -147,6 +150,15 @@ pub(super) async fn fork(
     session: &str,
     setup: &SessionSetup,
 ) -> Result<String, Error> {
+    // Forking reads the parent: attach to it read-only first.
+    let observe = AttachParams {
+        role: AttachRole::Observer,
+        ..AttachParams::driver(session)
+    };
+    client
+        .call_typed::<SessionAttach>(&observe)
+        .await
+        .map_err(|e| error_of(&e))?;
     let params = ForkParams {
         session_id: session.to_owned(),
         at_message_id: None,

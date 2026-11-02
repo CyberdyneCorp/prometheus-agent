@@ -130,6 +130,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
+        #[cfg(feature = "tui")]
+        Some(Command::Tui(args)) => prometheus::tui_cmd::run(args, &ctx, ui(cli)),
         #[cfg(not(feature = "tui"))]
         Some(Command::Tui(_)) => prometheus::surface::require("tui").map(|()| 0),
         #[cfg(not(feature = "gateway"))]

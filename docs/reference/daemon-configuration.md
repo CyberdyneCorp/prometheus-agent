@@ -8,6 +8,8 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `daemon.autostart` | boolean | `true` | any | `restart` | Interactive clients (`prometheus tui`, the ACP adapter) start the daemon detached when it is not running; `false` makes them exit 69 instead. |
+| `daemon.idle_session_close_secs` | integer | `3600` | ≥ 1 | `restart` | A session with no attached client, no running turn, no open request and no queued input is closed after this many seconds. |
 | `daemon.restart_drain_secs` | integer | `120` | ≥ 0 | `restart` | Seconds `prometheus daemon restart` waits for running turns to reach a turn boundary before it replaces the daemon anyway. |
 | `daemon.rpc.bind` | string | `"127.0.0.1:0"` | any | `restart` | Listen address. Loopback only (`127.0.0.1`, `::1`); port `0` picks a free port, recorded as `rpc_url` in `run/gateway.json`. Remote access goes through the gateway relay, never this listener. |
 | `daemon.rpc.max_frame_bytes` | integer | `16777216` | ≥ 1024 | `restart` | Largest accepted frame; a larger one closes the connection with 4413. |

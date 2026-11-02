@@ -854,6 +854,30 @@ error_codes! {
     /// A turn is already running in the session.
     SESSION_BUSY = ("session.busy", Conflict,
         "The session is running a turn; submit again when it finishes.");
+    /// A session method on a connection not attached to the session.
+    SESSION_NOT_ATTACHED = ("session.not_attached", PermissionDenied,
+        "Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists.");
+    /// A profile the connection's ticket does not grant.
+    PROFILE_NOT_GRANTED = ("profile.not_granted", PermissionDenied,
+        "The request names a profile the connection's ticket does not grant; get a ticket for that profile.");
+    /// An input carried a client-supplied author.
+    RPC_FORGED_AUTHOR = ("rpc.forged_author", PermissionDenied,
+        "`prompt.submit` carried an `author`; the gateway stamps every input's author from the connection and never takes one from a client.");
+    /// `session.create` named another client kind as its source.
+    RPC_SOURCE_MISMATCH = ("rpc.source_mismatch", PermissionDenied,
+        "`session.create` named a `source` other than the connection's own client kind (from `rpc.hello`).");
+    /// An observer tried to drive the session.
+    SESSION_OBSERVER = ("session.observer", PermissionDenied,
+        "The connection attached as an observer, which only reads; attach as a driver to submit, interrupt or answer.");
+    /// An answer to a server request that already settled.
+    RPC_REQUEST_SETTLED = ("rpc.request_settled", Conflict,
+        "The server-to-client request already settled (answered, timed out or cancelled); the late answer changed nothing.");
+    /// A request handler failed unexpectedly.
+    RPC_INTERNAL = ("rpc.internal", Internal,
+        "The daemon's handler for the method failed unexpectedly (a crash report was written); the connection stays open.");
+    /// `prometheus tui` without an interactive terminal.
+    TUI_NOT_A_TERMINAL = ("tui.not_a_terminal", Usage,
+        "`prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

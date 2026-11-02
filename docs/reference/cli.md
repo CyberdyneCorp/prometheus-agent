@@ -37,6 +37,7 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
   runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
@@ -7834,6 +7835,54 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus daemon help help
 ```
 
+## `prometheus tui`
+
+```text
+The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+
+Usage: prometheus tui [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --standalone
+          Run an in-process gateway that holds this home and serves only this TUI, instead of attaching to the home's daemon
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+  -r, --resume <REF>
+          Resume a session: an id, an id prefix, a title or `latest`
+
+  -c, --continue [<NAME>]
+          Continue the newest session of this directory, or of the lineage titled NAME
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -m, --model <MODEL>
+          The model of a new session (`[<provider>/]<model>` or an alias)
+
+      --provider <ID>
+          The provider of a new session
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus rpc`
 
 ```text
@@ -7843,7 +7892,7 @@ Usage: prometheus rpc [OPTIONS] <COMMAND>
 
 Commands:
   schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
-  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
   events  Stream the daemon's event frames as JSON lines until interrupted
   help    Print this message or the help of the given subcommand(s)
 
@@ -7909,7 +7958,7 @@ Options:
 ## `prometheus rpc call`
 
 ```text
-Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
 
 Usage: prometheus rpc call [OPTIONS] <METHOD> [PARAMS]
 
@@ -7994,7 +8043,7 @@ Usage: prometheus rpc help [COMMAND]
 
 Commands:
   schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
-  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
   events  Stream the daemon's event frames as JSON lines until interrupted
   help    Print this message or the help of the given subcommand(s)
 ```
@@ -8010,7 +8059,7 @@ Usage: prometheus rpc help schema
 ## `prometheus rpc help call`
 
 ```text
-Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
 
 Usage: prometheus rpc help call
 ```
@@ -8786,6 +8835,7 @@ Commands:
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
   runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
@@ -10148,6 +10198,14 @@ Print the daemon's process state
 Usage: prometheus help daemon status
 ```
 
+## `prometheus help tui`
+
+```text
+The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+
+Usage: prometheus help tui
+```
+
 ## `prometheus help rpc`
 
 ```text
@@ -10157,7 +10215,7 @@ Usage: prometheus help rpc [COMMAND]
 
 Commands:
   schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
-  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
   events  Stream the daemon's event frames as JSON lines until interrupted
 ```
 
@@ -10172,7 +10230,7 @@ Usage: prometheus help rpc schema
 ## `prometheus help rpc call`
 
 ```text
-Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params)
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
 
 Usage: prometheus help rpc call
 ```

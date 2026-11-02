@@ -290,7 +290,23 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `tools.result_budget.mcp_chars` | integer | `50000` | ≥ 0 | `next_session` | Characters kept inline for MCP tools. |
 | `tools.result_budget.overrides` | table | `{}` | any | `next_session` | Per-tool overrides: tool name to characters. |
 | `toolsets.surfaces` | table | `{}` | any | `next_session` | Default toolsets per surface (otherwise `core`). |
-| `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface on a TTY (M1 ships `line`; `tui` falls back to it until the TUI lands). |
+| `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |
+| `ui.tui.keys.clear_input` | string | unset | any | `next_session` | Clear the composer (default `Ctrl+U`). |
+| `ui.tui.keys.complete` | string | unset | any | `next_session` | Complete the `/command` or `@path` under the cursor (default `Tab`). |
+| `ui.tui.keys.history_next` | string | unset | any | `next_session` | The next history entry (default `Down`). |
+| `ui.tui.keys.history_prev` | string | unset | any | `next_session` | The previous history entry (default `Up`). |
+| `ui.tui.keys.interrupt` | string | unset | any | `next_session` | Stop the running turn, else clear the composer (default `Ctrl+C`). |
+| `ui.tui.keys.line_end` | string | unset | any | `next_session` | Move to the end of the line (default `Ctrl+E`). |
+| `ui.tui.keys.line_start` | string | unset | any | `next_session` | Move to the start of the line (default `Ctrl+A`). |
+| `ui.tui.keys.newline` | string | unset | any | `next_session` | Insert a line break (default `Alt+Enter`; `Shift+Enter` always does on terminals that report it). |
+| `ui.tui.keys.page_down` | string | unset | any | `next_session` | Scroll the transcript one page down (default `PageDown`). |
+| `ui.tui.keys.page_up` | string | unset | any | `next_session` | Scroll the transcript one page up (default `PageUp`). |
+| `ui.tui.keys.quit` | string | unset | any | `next_session` | Leave the TUI when the composer is empty (default `Ctrl+D`). |
+| `ui.tui.keys.scroll_down` | string | unset | any | `next_session` | Scroll the transcript one line down (default `Ctrl+Down`). |
+| `ui.tui.keys.scroll_up` | string | unset | any | `next_session` | Scroll the transcript one line up (default `Ctrl+Up`). |
+| `ui.tui.keys.submit` | string | unset | any | `next_session` | Send the composer (default `Enter`). |
+| `ui.tui.reduced_motion` | boolean | `false` | any | `next_session` | No spinners or animation: a static busy glyph. |
+| `ui.tui.theme` | one of "auto", "dark", "light" | `"auto"` | `"auto"`, `"dark"`, `"light"` | `next_session` | Colour theme: `auto` (dark unless the terminal says otherwise), `dark` or `light`; `NO_COLOR` turns colours off whatever it says. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |

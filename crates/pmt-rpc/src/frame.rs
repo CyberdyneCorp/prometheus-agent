@@ -75,7 +75,18 @@ impl RpcError {
     /// An application error under its kind's code.
     #[must_use]
     pub fn from_error(err: &Error) -> Self {
-        Self::with_code(for_kind(err.kind()), err)
+        // A handler's own params check answers like the contract check.
+        let code = if [
+            codes::RPC_INVALID_PARAMS.code,
+            codes::RPC_UNKNOWN_FIELD.code,
+        ]
+        .contains(&err.code().code)
+        {
+            INVALID_PARAMS
+        } else {
+            for_kind(err.kind())
+        };
+        Self::with_code(code, err)
     }
 
     fn of(code: i64, catalog: &'static ErrorCode, message: impl Into<String>) -> Self {

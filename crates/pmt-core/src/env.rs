@@ -33,6 +33,10 @@ const PMT_LOG: &str = "PMT_LOG";
 /// Debug builds only: the managed configuration directory to use instead
 /// of the machine-wide one (a test seam; release builds ignore it).
 const TEST_MANAGED_DIR: &str = "PMT_TEST_MANAGED_DIR";
+/// Debug builds only: makes the TUI panic while drawing, so the test suite
+/// can check the terminal is restored and the panic report written (a test
+/// seam; release builds ignore it).
+const TEST_TUI_PANIC: &str = "PMT_TEST_TUI_PANIC";
 const RUST_LOG: &str = "RUST_LOG";
 const OWNED_PREFIXES: [&str; 2] = ["PMT_", "PROMETHEUS_"];
 
@@ -117,6 +121,7 @@ pub struct LaunchEnv {
     inherited: BTreeMap<String, OsString>,
     ignored: Vec<IgnoredVar>,
     test_managed_dir: Option<PathBuf>,
+    test_tui_panic: bool,
 }
 
 impl LaunchEnv {
@@ -162,6 +167,7 @@ impl LaunchEnv {
                 Var::UserHome => env.user_home = non_blank(value).map(PathBuf::from),
                 Var::LocalAppData => env.local_app_data = non_blank(value).map(PathBuf::from),
                 Var::TestManagedDir => env.test_managed_dir = non_blank(value).map(PathBuf::from),
+                Var::TestTuiPanic => env.test_tui_panic = true,
                 Var::PmtLog => pmt_log = env.unicode(name, value),
                 Var::RustLog => rust_log = env.unicode(name, value),
                 Var::Visual => visual = env.unicode(name, value).filter(|v| !v.trim().is_empty()),
@@ -202,6 +208,13 @@ impl LaunchEnv {
     #[must_use]
     pub fn test_managed_dir(&self) -> Option<&PathBuf> {
         self.test_managed_dir.as_ref()
+    }
+
+    /// Debug builds: `PMT_TEST_TUI_PANIC` is set, so the TUI panics while
+    /// drawing. Always `false` in release builds.
+    #[must_use]
+    pub fn test_tui_panic(&self) -> bool {
+        self.test_tui_panic
     }
 
     /// `PROMETHEUS_HOME` when set and not blank (`~` is expanded by home
@@ -313,6 +326,7 @@ enum Var {
     Visual,
     Editor,
     TestManagedDir,
+    TestTuiPanic,
     Secret,
     Ignored(Option<String>),
     Other,
@@ -338,6 +352,7 @@ fn classify(name: &str, policy: &EnvPolicy<'_>) -> Var {
         "VISUAL" => return Var::Visual,
         "EDITOR" => return Var::Editor,
         TEST_MANAGED_DIR if cfg!(debug_assertions) => return Var::TestManagedDir,
+        TEST_TUI_PANIC if cfg!(debug_assertions) => return Var::TestTuiPanic,
         _ => {}
     }
     if is_user_home_var(name) {

@@ -10,21 +10,25 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use futures_util::{SinkExt as _, StreamExt as _};
 use pmt_core::error::{Error, codes};
 use pmt_core::runtime::{Role, WriterLock};
-use pmt_gateway::{Exit, Host, HostFuture, Identity, Link, Server, ServerOptions};
+use pmt_gateway::{Author, Exit, Host, HostFuture, Identity, Link, Server, ServerOptions};
 use pmt_rpc::client::{Client, Inbox, Socket, dial, subprotocols};
 use pmt_rpc::contracts::{
-    ApprovalAsk, ApprovalRequestParams, ClientCapabilities, ClientKind, CompactParams, Compacted,
-    ContextUsage, Decision, DispatchParams, Dispatched, ForkParams, HelloParams, ResolveParams,
-    SessionCreateParams, SessionEvent, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SessionSummary, SubmitParams, Submitted, Transcript, TurnEnded, TurnFinished, Version,
+    Admission, ApprovalAsk, ApprovalRequestParams, ClientCapabilities, ClientKind, CommandCatalog,
+    CommandEntry, CommandSource, CompactParams, Compacted, CompleteParams, Completion, Completions,
+    ConfigValue, ContextUsage, Decision, DispatchParams, Dispatched, Disposition, ForkParams,
+    HelloParams, ModelOption, ModelOptions, ResolveParams, SessionCreateParams, SessionEvent,
+    SessionList, SessionListParams, SessionRef, SessionSetup, SessionSummary, SubmitParams,
+    Submitted, Transcript, TranscriptMessage, TurnEnded, TurnFinished, Version,
 };
 use pmt_rpc::control::{self, ControlRequest, Purpose};
 use pmt_rpc::discovery::{Discovery, Endpoint, discover};
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tokio_tungstenite::tungstenite::Message;
 
 /// Sessions by id, with their profile.
 #[derive(Debug, Default)]
@@ -32,7 +36,19 @@ pub struct FakeHost {
     sessions: Mutex<HashMap<String, String>>,
     next: AtomicUsize,
     turns: Arc<AtomicUsize>,
+    /// Every admitted input's stamped author, in order.
+    pub authors: Mutex<Vec<Author>>,
+    /// Turns started, by prompt text.
+    pub started: Mutex<Vec<String>>,
+    /// `config.get` reads, by profile.
+    pub config_reads: Mutex<Vec<String>>,
+    /// Sessions closed as idle.
+    pub closed: Mutex<Vec<String>>,
+    /// Each session's turn answers, kept as its transcript.
+    answers: Answers,
 }
+
+type Answers = Arc<Mutex<HashMap<String, Vec<String>>>>;
 
 impl FakeHost {
     /// Adds a session of `profile`.
@@ -51,7 +67,8 @@ fn event(link: &Link, n: u64) {
     link.emit::<SessionEvent>(&json!({"type": "test.step", "n": n}));
 }
 
-fn finish(link: &Link, turn: &str, answer: &str) {
+fn finish(answers: &Answers, link: &Link, turn: &str, answer: &str) {
+    record_answer(answers, link, answer);
     link.emit::<TurnEnded>(&TurnFinished {
         turn_id: turn.to_owned(),
         exit_reason: "completed".into(),
@@ -62,10 +79,24 @@ fn finish(link: &Link, turn: &str, answer: &str) {
     });
 }
 
+fn record_answer(answers: &Answers, link: &Link, answer: &str) {
+    answers
+        .lock()
+        .unwrap()
+        .entry(link.session_id().to_owned())
+        .or_default()
+        .push(answer.to_owned());
+}
+
 /// What a turn does, by prompt: `steps:<n>:<ms>` emits n events `ms`
 /// apart; `approval` asks for one; `budget` is refused before it starts.
-async fn script(text: String, link: Link, turn: String) {
-    if text == "approval" {
+async fn script(text: String, link: Link, turn: String, answers: Answers) {
+    if text == "approval" || text == "approval-fast" {
+        let deadline = if text == "approval" {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_millis(200)
+        };
         let params = ApprovalRequestParams {
             session_id: link.session_id().to_owned(),
             tool: "terminal".into(),
@@ -73,12 +104,16 @@ async fn script(text: String, link: Link, turn: String) {
             subject: Some("rm -rf build".into()),
             findings: Vec::new(),
             remember: None,
+            deadline_ms: None,
         };
-        let answer = link
-            .ask::<ApprovalAsk>(&params, Some(Duration::from_secs(30)))
-            .await;
+        let answer = link.ask::<ApprovalAsk>(&params, Some(deadline)).await;
         let approved = answer.is_some_and(|a| a.decision != Decision::Deny);
-        finish(&link, &turn, if approved { "approved" } else { "denied" });
+        finish(
+            &answers,
+            &link,
+            &turn,
+            if approved { "approved" } else { "denied" },
+        );
         return;
     }
     if let Some(rest) = text.strip_prefix("steps:") {
@@ -88,7 +123,7 @@ async fn script(text: String, link: Link, turn: String) {
             event(&link, n);
         }
     }
-    finish(&link, &turn, "done");
+    finish(&answers, &link, &turn, "done");
 }
 
 impl Host for FakeHost {
@@ -128,8 +163,20 @@ impl Host for FakeHost {
         Box::pin(async move { Ok(SessionList { sessions }) })
     }
 
-    fn resume<'a>(&'a self, _: &'a str, _: Option<SessionSetup>, _: Link) -> HostFuture<'a, ()> {
-        Box::pin(async { Ok(()) })
+    /// A setup with model `slow` takes two seconds to load.
+    fn resume<'a>(
+        &'a self,
+        _: &'a str,
+        setup: Option<SessionSetup>,
+        _: Link,
+    ) -> HostFuture<'a, ()> {
+        let slow = setup.is_some_and(|s| s.model.as_deref() == Some("slow"));
+        Box::pin(async move {
+            if slow {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            Ok(())
+        })
     }
 
     fn dispatch<'a>(
@@ -140,6 +187,7 @@ impl Host for FakeHost {
     ) -> HostFuture<'a, Dispatched> {
         Box::pin(async move {
             Ok(match params.name.as_str() {
+                "panic" => panic!("a handler bug"),
                 "echo" => Dispatched::Done {
                     notice: params.args,
                 },
@@ -154,8 +202,22 @@ impl Host for FakeHost {
         })
     }
 
-    fn transcript<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, Transcript> {
-        Box::pin(async { Ok(Transcript::default()) })
+    fn transcript<'a>(&'a self, _: &'a str, session_id: &'a str) -> HostFuture<'a, Transcript> {
+        let messages = self
+            .answers
+            .lock()
+            .unwrap()
+            .get(session_id)
+            .into_iter()
+            .flatten()
+            .enumerate()
+            .map(|(n, text)| TranscriptMessage {
+                id: format!("msg_{n}"),
+                role: "assistant".into(),
+                text: Some(text.clone()),
+            })
+            .collect();
+        Box::pin(async { Ok(Transcript { messages }) })
     }
 
     fn context_usage<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ContextUsage> {
@@ -163,6 +225,7 @@ impl Host for FakeHost {
             Ok(ContextUsage {
                 tokens: 10,
                 context_window: None,
+                cost_usd: None,
             })
         })
     }
@@ -183,8 +246,11 @@ impl Host for FakeHost {
         &'a self,
         _: &'a str,
         params: SubmitParams,
+        author: Author,
         link: Link,
     ) -> HostFuture<'a, Submitted> {
+        self.authors.lock().unwrap().push(author);
+        self.started.lock().unwrap().push(params.text.clone());
         Box::pin(async move {
             if params.text == "budget" {
                 return Err(Error::new(
@@ -196,11 +262,15 @@ impl Host for FakeHost {
             let turns = Arc::clone(&self.turns);
             turns.fetch_add(1, Ordering::Relaxed);
             let id = turn.clone();
+            let answers = Arc::clone(&self.answers);
             tokio::spawn(async move {
-                script(params.text, link, id).await;
+                script(params.text, link, id, answers).await;
                 turns.fetch_sub(1, Ordering::Relaxed);
             });
-            Ok(Submitted { turn_id: turn })
+            Ok(Submitted {
+                turn_id: turn,
+                admission: Admission::Started,
+            })
         })
     }
 
@@ -233,6 +303,89 @@ impl Host for FakeHost {
     fn fork<'a>(&'a self, profile: &'a str, _: ForkParams) -> HostFuture<'a, SessionRef> {
         let session_id = self.add(profile);
         Box::pin(async move { Ok(SessionRef { session_id }) })
+    }
+
+    fn commands<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: ClientKind,
+    ) -> HostFuture<'a, CommandCatalog> {
+        let entry = |name: &str, source, disposition| CommandEntry {
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            description: format!("the {name} command"),
+            args: None,
+            source,
+            disposition,
+            reason: None,
+        };
+        let commands = vec![
+            entry("compress", CommandSource::Builtin, Disposition::Exec),
+            entry("compact", CommandSource::Builtin, Disposition::Exec),
+            entry("deploy", CommandSource::Skill, Disposition::Exec),
+            entry("snapshot", CommandSource::Builtin, Disposition::Unavailable),
+            entry(
+                "debug-internals",
+                CommandSource::Builtin,
+                Disposition::Hidden,
+            ),
+        ];
+        Box::pin(async { Ok(CommandCatalog { commands }) })
+    }
+
+    /// The session's backend: a container whose `./src/` holds `main.rs`
+    /// and `lib/`; `/unreachable` is a backend that cannot be reached.
+    fn complete_path<'a>(
+        &'a self,
+        _: &'a str,
+        params: CompleteParams,
+    ) -> HostFuture<'a, Completions> {
+        Box::pin(async move {
+            if params.prefix.starts_with("/unreachable") {
+                return Err(Error::new(&codes::RPC_CONNECTION, "backend unreachable"));
+            }
+            let entries = [("./src/main.rs", false), ("./src/lib/", true)];
+            let items = entries
+                .into_iter()
+                .filter(|(path, _)| path.starts_with(&params.prefix))
+                .map(|(path, dir)| Completion {
+                    text: path.to_owned(),
+                    description: None,
+                    dir,
+                })
+                .collect();
+            Ok(Completions { items })
+        })
+    }
+
+    fn model_options<'a>(&'a self, _: &'a str, _: &'a str) -> HostFuture<'a, ModelOptions> {
+        Box::pin(async {
+            Ok(ModelOptions {
+                current: Some("mock/m1".into()),
+                models: vec![ModelOption {
+                    id: "mock/m1".into(),
+                    provider: "mock".into(),
+                    context_window: Some(8000),
+                }],
+            })
+        })
+    }
+
+    fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {
+        self.config_reads.lock().unwrap().push(profile.to_owned());
+        Box::pin(async move {
+            Ok(ConfigValue {
+                key: key.to_owned(),
+                value: json!("mock/m1"),
+                source: "file".into(),
+            })
+        })
+    }
+
+    fn close_idle<'a>(&'a self, _: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        self.closed.lock().unwrap().push(session_id.to_owned());
+        Box::pin(async { Ok(true) })
     }
 
     fn load(&self) -> (usize, usize) {
@@ -328,9 +481,13 @@ impl Daemon {
     }
 
     pub async fn ticket(&self, profile: &str) -> String {
+        self.ticket_for(Purpose::Interactive, &[profile]).await
+    }
+
+    pub async fn ticket_for(&self, purpose: Purpose, profiles: &[&str]) -> String {
         let request = ControlRequest::Ticket {
-            purpose: Purpose::Interactive,
-            profiles: vec![profile.into()],
+            purpose,
+            profiles: profiles.iter().map(|p| (*p).to_owned()).collect(),
             pid: Some(std::process::id()),
         };
         control::ticket_of(
@@ -348,6 +505,25 @@ impl Daemon {
         dial(&self.endpoint.rpc_url, &subprotocols(&ticket, 1))
             .await
             .unwrap()
+    }
+
+    /// An attached client of kind `kind` for `profile`.
+    pub async fn client_as(
+        &self,
+        kind: ClientKind,
+        profile: &str,
+        server_requests: bool,
+    ) -> (Client, Inbox) {
+        let mut hello = hello(1, 0, server_requests);
+        hello.client = kind;
+        Client::connect(
+            &self.endpoint,
+            Purpose::Interactive,
+            vec![profile.into()],
+            &hello,
+        )
+        .await
+        .unwrap()
     }
 
     /// An attached client for `profile`.
@@ -373,4 +549,32 @@ pub fn hello(major: u16, minor: u16, server_requests: bool) -> HelloParams {
             events: Vec::new(),
         },
     }
+}
+
+/// The next text frame, as JSON.
+pub async fn next_json(socket: &mut Socket) -> Value {
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
+            Ok(Some(Ok(Message::Text(text)))) => {
+                return serde_json::from_str(text.as_str()).unwrap();
+            }
+            Ok(Some(Ok(_))) => {}
+            other => panic!("no frame: {other:?}"),
+        }
+    }
+}
+
+/// The close code the daemon sends next (frames before it are skipped).
+pub async fn close_code(socket: &mut Socket) -> u16 {
+    loop {
+        match tokio::time::timeout(Duration::from_secs(5), socket.next()).await {
+            Ok(Some(Ok(Message::Close(Some(frame))))) => return u16::from(frame.code),
+            Ok(Some(Ok(_))) => {}
+            other => panic!("no close frame: {other:?}"),
+        }
+    }
+}
+
+pub async fn send(socket: &mut Socket, value: &Value) {
+    socket.send(Message::text(value.to_string())).await.unwrap();
 }

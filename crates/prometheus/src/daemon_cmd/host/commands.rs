@@ -21,7 +21,7 @@ use crate::slash::{BusyPolicy, Command, Registry, Resolution, Source, Surface};
 
 /// Commands that change what a client shows or which session it drives:
 /// the client runs them (or uses the session methods for them).
-const CLIENT_COMMANDS: &[&str] = &[
+pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "exit",
     "clear",
     "new",

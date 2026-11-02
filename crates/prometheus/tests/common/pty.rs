@@ -1,4 +1,5 @@
-//! The binary in a pseudo-terminal (expectrl), for line-interface tests.
+//! The binary in a pseudo-terminal (expectrl), for line-interface and
+//! TUI tests.
 
 use std::path::Path;
 use std::process::Command;
@@ -7,11 +8,16 @@ use std::time::Duration;
 use expectrl::session::OsSession;
 use expectrl::{Eof, Expect};
 
+/// Global flags that keep a run on a terminal in the line interface
+/// (`ui.interface` defaults to the TUI).
+pub const LINE: [&str; 2] = ["--set", "ui.interface=line"];
+
 /// The binary in a pseudo-terminal, run from the home directory, with
-/// extra environment `env`.
+/// extra environment `env`, in the line interface.
 pub fn spawn_with(home: &Path, args: &[&str], env: &[(&str, &str)]) -> OsSession {
     let mut cmd: Command = super::command(home);
-    cmd.args(args)
+    cmd.args(LINE)
+        .args(args)
         .current_dir(home)
         .env("TERM", "xterm")
         .env_remove("NO_COLOR");

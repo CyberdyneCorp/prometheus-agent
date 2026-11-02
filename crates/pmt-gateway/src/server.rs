@@ -1,14 +1,18 @@
 //! The daemon's shared state: identity, tickets, the hub, the host and the
 //! router every connection and the control channel use.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use pmt_config::daemon::RpcListenerConfig;
 use pmt_core::error::{Error, codes};
+use pmt_core::panic::CrashReporter;
 use pmt_rpc::Catalog;
-use pmt_rpc::contracts::{HelloResult, PlatformSupport, ServerCapabilities, Version};
+use pmt_rpc::contracts::{
+    AttachRole, ClientKind, HelloResult, PlatformSupport, ServerCapabilities, Version,
+};
 use pmt_rpc::control::DaemonStatus;
 use pmt_rpc::discovery::Endpoint;
 use tokio::sync::{Semaphore, mpsc};
@@ -55,6 +59,16 @@ pub struct ServerOptions {
     /// Abort on a contract violation (debug and test builds) or log and
     /// count it (release builds).
     pub abort_on_violation: bool,
+    /// `daemon.idle_session_close_secs`: a session with no client, no
+    /// running turn, no open request and no queued input is closed after
+    /// this long.
+    pub idle_session_close: Duration,
+    /// Where a panicking request handler's crash report goes; `None`
+    /// keeps none (the request still answers `-32099`).
+    pub crash_reporter: Option<Arc<CrashReporter>>,
+    /// Tickets only for the client process with this pid (an in-process
+    /// gateway that serves its own TUI: `prometheus tui --standalone`).
+    pub only_pid: Option<u32>,
 }
 
 impl ServerOptions {
@@ -70,6 +84,9 @@ impl ServerOptions {
             catalog: None,
             limits: Limits::default(),
             abort_on_violation: cfg!(debug_assertions),
+            idle_session_close: Duration::from_hours(1),
+            crash_reporter: None,
+            only_pid: None,
         }
     }
 }
@@ -77,6 +94,8 @@ impl ServerOptions {
 /// What the client said in `rpc.hello`.
 #[derive(Debug, Clone)]
 pub struct HelloState {
+    /// The client kind.
+    pub client: ClientKind,
     /// Its protocol minor.
     pub minor: u16,
     /// Newer events it understands.
@@ -96,19 +115,36 @@ pub struct Conn {
     pub tx: mpsc::UnboundedSender<Message>,
     /// Set by `rpc.hello`.
     pub hello: OnceLock<HelloState>,
+    /// Its ordinary requests, answered in arrival order.
+    pub(crate) ordered: mpsc::UnboundedSender<crate::connection::Job>,
 }
 
 impl Conn {
-    /// How the hub reaches this connection.
+    /// How the hub reaches this connection attached as `role`.
     #[must_use]
-    pub fn peer(&self) -> Peer {
+    pub fn peer(&self, role: AttachRole) -> Peer {
         let hello = self.hello.get();
         Peer {
             tx: self.tx.clone(),
             minor: hello.map_or(0, |h| h.minor),
             advertised: hello.map(|h| Arc::clone(&h.advertised)).unwrap_or_default(),
             server_requests: hello.is_some_and(|h| h.server_requests),
+            client_id: self.client_id(),
+            role,
         }
+    }
+
+    /// The client kind from `rpc.hello`.
+    #[must_use]
+    pub fn client(&self) -> Option<ClientKind> {
+        self.hello.get().map(|h| h.client)
+    }
+
+    /// The client's id within the daemon: `<kind>-<connection number>`.
+    #[must_use]
+    pub fn client_id(&self) -> String {
+        let kind = self.client().map_or("client", ClientKind::as_str);
+        format!("{kind}-{}", self.id)
     }
 }
 
@@ -148,7 +184,19 @@ pub struct Server {
     started: Instant,
     started_at: String,
     endpoint: OnceLock<Endpoint>,
+    idle_session_close: Duration,
+    crash_reporter: Option<Arc<CrashReporter>>,
+    only_pid: Option<u32>,
+    /// Sessions created with an idempotency key: (profile, key) to the
+    /// session and when it was created.
+    pub(crate) created: tokio::sync::Mutex<HashMap<(String, String), (String, Instant)>>,
+    /// Recent admissions by (session, input id), oldest first: a resent
+    /// input gets its original admission.
+    pub(crate) admitted: tokio::sync::Mutex<std::collections::VecDeque<Admitted>>,
 }
+
+/// One remembered `prompt.submit` admission.
+pub(crate) type Admitted = ((String, String), pmt_rpc::contracts::Submitted);
 
 impl std::fmt::Debug for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -208,6 +256,11 @@ impl Server {
             started: Instant::now(),
             started_at: jiff::Timestamp::now().to_string(),
             endpoint: OnceLock::new(),
+            idle_session_close: options.idle_session_close,
+            crash_reporter: options.crash_reporter,
+            only_pid: options.only_pid,
+            created: tokio::sync::Mutex::default(),
+            admitted: tokio::sync::Mutex::default(),
         };
         Ok(Arc::new(server))
     }
@@ -258,6 +311,24 @@ impl Server {
     #[must_use]
     pub fn profiles(&self) -> &[String] {
         &self.profiles
+    }
+
+    /// How long a session may stay without a client before it is closed.
+    #[must_use]
+    pub fn idle_session_close(&self) -> Duration {
+        self.idle_session_close
+    }
+
+    /// The only client pid tickets are issued to, when restricted.
+    #[must_use]
+    pub fn only_pid(&self) -> Option<u32> {
+        self.only_pid
+    }
+
+    /// Where handler crash reports go.
+    #[must_use]
+    pub fn crash_reporter(&self) -> Option<&Arc<CrashReporter>> {
+        self.crash_reporter.as_ref()
     }
 
     /// Browser origins allowed to upgrade.

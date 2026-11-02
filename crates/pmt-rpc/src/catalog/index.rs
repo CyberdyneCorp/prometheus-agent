@@ -39,6 +39,11 @@ pub struct IndexEntry {
     /// The protocol minor version that introduced it; a client with a
     /// lower minor receives an event only when it advertised the name.
     pub since: u16,
+    /// A method that may run long: it runs as its own task on the worker
+    /// pool and may answer out of order; every other request of a
+    /// connection is answered in arrival order (spec: tui, Long requests
+    /// do not block the connection).
+    pub long: bool,
 }
 
 const fn method(name: &'static str, owner: &'static str) -> IndexEntry {
@@ -47,6 +52,14 @@ const fn method(name: &'static str, owner: &'static str) -> IndexEntry {
         kind: Kind::Method,
         owner,
         since: 0,
+        long: false,
+    }
+}
+
+const fn long(name: &'static str, owner: &'static str) -> IndexEntry {
+    IndexEntry {
+        long: true,
+        ..method(name, owner)
     }
 }
 
@@ -56,6 +69,7 @@ const fn server_request(name: &'static str, owner: &'static str) -> IndexEntry {
         kind: Kind::ServerRequest,
         owner,
         since: 0,
+        long: false,
     }
 }
 
@@ -65,6 +79,7 @@ const fn event(name: &'static str, owner: &'static str) -> IndexEntry {
         kind: Kind::Event,
         owner,
         since: 0,
+        long: false,
     }
 }
 
@@ -76,29 +91,30 @@ pub const INDEX: &[IndexEntry] = &[
     // workspace-architecture
     method("rpc.hello", WA),
     method("rpc.ping", WA),
-    method("session.create", WA),
+    long("session.create", WA),
     method("session.attach", WA),
     method("session.detach", WA),
-    method("session.list", WA),
-    method("session.resume", WA),
-    method("session.compact", WA),
-    method("session.transcript", WA),
+    long("session.list", WA),
+    long("session.resume", WA),
+    long("session.compact", WA),
+    long("session.transcript", WA),
     method("session.events.since", WA),
     method("session.context_usage", WA),
     method("prompt.submit", WA),
     method("session.interrupt", WA),
-    method("session.resolve", WA),
-    method("command.dispatch", WA),
-    method("daemon.update", WA),
+    long("session.resolve", WA),
+    long("command.dispatch", WA),
+    long("daemon.update", WA),
     // session-storage
-    method("session.fork", "session-storage"),
+    long("session.fork", "session-storage"),
     // tui
     method("commands.catalog", "tui"),
     method("complete.slash", "tui"),
-    method("complete.path", "tui"),
-    method("model.options", "tui"),
+    long("complete.path", "tui"),
+    long("model.options", "tui"),
     method("subagent.list", "tui"),
     method("subagent.subscribe", "tui"),
+    method("config.get", "tui"),
     // tool-system
     method("approval.respond", "tool-system"),
     method("tools.list", "tool-system"),

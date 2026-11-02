@@ -143,7 +143,7 @@ Requests declared `long` in the registry (for example `session.resume`, `session
 - **THEN** the catalog response MAY arrive before the resume response and the resume SHALL still complete
 
 ### Requirement: Gateway retirement refuses new work
-While the daemon is retiring (update, restart or shutdown), it SHALL refuse every new request except `rpc.ping` and `session.detach` with `-32006 daemon is restarting; reconnect to continue`, SHALL let running turns finish up to `daemon.restart_drain_secs` (default 120), and SHALL then close connections with 1001.
+While the daemon is retiring (update, restart or shutdown), it SHALL refuse every new request with `-32006 daemon is restarting; reconnect to continue` except `rpc.ping`, `session.detach`, `approval.respond` (so the running turns it drains can finish) and the read-only `session.events.since`, `session.list`, `session.transcript` and `session.context_usage`, SHALL let running turns finish up to `daemon.restart_drain_secs` (default 120), and SHALL then close connections with 1001.
 **Milestone:** M2
 
 #### Scenario: Prompt during retirement
@@ -187,7 +187,7 @@ Every server-to-client request SHALL carry a `deadline_ms` (`approvals.timeout_s
 - **THEN** the response SHALL be `-32002`
 
 ### Requirement: Prompt submission while busy
-`prompt.submit {session_id, input_id, content}` arriving while a turn is running SHALL never be dropped; it SHALL follow `busy.input_mode` (`queue` default, `steer`, `interrupt`; per-platform overrides under `gateway.platforms.<platform>.busy` apply only to messaging sessions), where `steer` injects after the current atomic tool step and never hard-interrupts, `queue` runs the input FIFO after the turn, and `interrupt` cancels the turn at the next safe point and then runs the input; a repeated `input_id` SHALL return the original admission instead of a second turn.
+`prompt.submit {session_id, input_id, text}` arriving while a turn is running SHALL never be dropped; it SHALL follow `busy.input_mode` (`queue` default, `steer`, `interrupt`; per-platform overrides under `gateway.platforms.<platform>.busy` apply only to messaging sessions), where `steer` injects after the current atomic tool step and never hard-interrupts, `queue` runs the input FIFO after the turn, and `interrupt` cancels the turn at the next safe point and then runs the input; a repeated `input_id` SHALL return the original admission instead of a second turn.
 **Milestone:** M2
 
 #### Scenario: Duplicate submit after a lost ack
@@ -212,7 +212,7 @@ Every request that reads or writes profile data SHALL execute under an explicit 
 - **THEN** the response SHALL be `-32602` naming the missing profile and no profile's config SHALL be read
 
 ### Requirement: Slash command flow in the TUI
-The TUI SHALL handle client-local commands from its own typed registry (`/quit`, `/clear`, `/copy`, `/paste`, `/theme`, `/keys`, `/pane`, `/layout`, `/redraw`, `/statusbar`, `/battery`, `/indicator`, `/palette`, `/sessions`, `/terminal-setup`) without a round-trip and send every other `/` input to `command.dispatch {session_id, name, args}`, which SHALL answer one of `{type: "done", notice}`, `{type: "send", message}` (submitted as a prompt) or `{type: "refused", reason}`; text whose first token is not a registered command (for example `/etc/hosts`) SHALL be sent as a prompt.
+The TUI SHALL handle client-local commands from its own typed registry (`/quit`, `/clear`, `/copy`, `/paste`, `/theme`, `/keys`, `/pane`, `/layout`, `/redraw`, `/statusbar`, `/battery`, `/indicator`, `/palette`, `/sessions`, `/terminal-setup`, `/update`, and `/new`, `/resume`, `/fork`, which use the session methods) without a `command.dispatch` round-trip and send every other `/` input to `command.dispatch {session_id, name, args}`, which SHALL answer one of `{type: "done", notice}`, `{type: "send", message}` (submitted as a prompt) or `{type: "refused", reason}`; text whose first token is not a registered command (for example `/etc/hosts`) SHALL be sent as a prompt.
 **Milestone:** M2
 
 #### Scenario: Skill command

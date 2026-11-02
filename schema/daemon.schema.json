@@ -4,6 +4,18 @@
       "additionalProperties": false,
       "description": "The `[daemon]` section (spec: workspace-architecture, One daemon per\nPrometheus home; Stale daemon build detection).",
       "properties": {
+        "autostart": {
+          "default": true,
+          "description": "Interactive clients (`prometheus tui`, the ACP adapter) start the\ndaemon detached when it is not running; `false` makes them exit 69\ninstead.",
+          "type": "boolean"
+        },
+        "idle_session_close_secs": {
+          "default": 3600,
+          "description": "A session with no attached client, no running turn, no open\nrequest and no queued input is closed after this many seconds.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
         "restart_drain_secs": {
           "default": 120,
           "description": "Seconds `prometheus daemon restart` waits for running turns to reach\na turn boundary before it replaces the daemon anyway.",
@@ -210,6 +222,8 @@
     "daemon": {
       "$ref": "#/$defs/DaemonSection",
       "default": {
+        "autostart": true,
+        "idle_session_close_secs": 3600,
         "restart_drain_secs": 120,
         "rpc": {
           "bind": "127.0.0.1:0",

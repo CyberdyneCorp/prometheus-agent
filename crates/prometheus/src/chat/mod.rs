@@ -60,21 +60,34 @@ pub enum Mode {
     OneShot,
     /// The line interface.
     Line,
+    /// The full-screen terminal UI.
+    Tui,
 }
 
-/// The mode of this invocation: one-shot for `-z` or whenever stdin or
-/// stdout is not a terminal (whatever `--tui` or `ui.interface` say);
-/// otherwise the line interface, which also stands in for the TUI until
-/// that surface lands.
+/// The mode of this invocation (spec: tui, TUI launch selection; cli,
+/// Interface selection is TTY-first): one-shot for `-z` or whenever stdin
+/// or stdout is not a terminal (whatever `--tui` or `ui.interface` say);
+/// otherwise `--line` or `--tui` when given, the line interface for
+/// `-q/--quiet` or a `--usage-file` (the TUI writes neither), else
+/// `ui.interface`. No environment variable takes part.
 #[must_use]
-pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface) -> Mode {
+pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface, quiet: bool) -> Mode {
     if args.oneshot() || !terminals {
         return Mode::OneShot;
     }
-    // `--line`, `--tui` and `ui.interface = "tui"` all run the line
-    // interface in this build.
-    let _ = interface;
-    Mode::Line
+    if args.line {
+        return Mode::Line;
+    }
+    if args.tui {
+        return Mode::Tui;
+    }
+    if quiet || args.usage_file.is_some() || !cfg!(feature = "tui") {
+        return Mode::Line;
+    }
+    match interface {
+        Interface::Tui => Mode::Tui,
+        Interface::Line => Mode::Line,
+    }
 }
 
 /// Runs `chat`.
@@ -132,15 +145,31 @@ fn run_recorded(
     } else {
         ctx.scope()?
     };
-    let mode = mode(args, terminal::interactive(), scope.config().ui.interface);
+    let mode = mode(
+        args,
+        terminal::interactive(),
+        scope.config().ui.interface,
+        ui.quiet,
+    );
     // The prompt is read before anything starts, so a missing file or an
     // empty pipe fails fast.
     let first = match (mode, &source) {
         (Mode::OneShot, _) => Some(oneshot::prompt(&source)?),
-        (Mode::Line, PromptSource::Text(text)) => Some(text.clone()),
-        (Mode::Line, PromptSource::File(path)) => Some(oneshot::read_prompt_file(path)?),
-        (Mode::Line, PromptSource::None) => None,
+        (Mode::Line | Mode::Tui, PromptSource::Text(text)) => Some(text.clone()),
+        (Mode::Line | Mode::Tui, PromptSource::File(path)) => {
+            Some(oneshot::read_prompt_file(path)?)
+        }
+        (Mode::Line | Mode::Tui, PromptSource::None) => None,
     };
+    if mode == Mode::Tui {
+        let tui = Tui {
+            args,
+            set: &set,
+            first,
+            images: image_paths,
+        };
+        return tui.run(&ctx, &scope, ui);
+    }
     if !args.in_process
         && let Some(daemon) = crate::daemon_client::running(scope.home())?
     {
@@ -192,6 +221,54 @@ fn run_recorded(
         images,
     };
     crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
+}
+
+/// A chat that opens the TUI.
+struct Tui<'a> {
+    args: &'a ChatArgs,
+    set: &'a [String],
+    first: Option<String>,
+    images: Vec<PathBuf>,
+}
+
+impl Tui<'_> {
+    /// Opens the TUI with the chat's session flags; `--in-process` runs
+    /// its in-process gateway (`prometheus tui --standalone`).
+    #[cfg(feature = "tui")]
+    fn run(self, ctx: &Context<'_>, scope: &pmt_config::ProfileScope, ui: Ui) -> Result<u8, Error> {
+        if let Some(err) = crate::tui_cmd::not_a_terminal() {
+            return Err(err);
+        }
+        if self.args.usage_file.is_some() {
+            return Err(Error::new(
+                &codes::CLI_USAGE,
+                "--usage-file is not written by the TUI; use --line",
+            ));
+        }
+        let cwd = current_dir()?;
+        let launch = crate::tui_cmd::Launch {
+            resume: self.args.resume.clone(),
+            continue_: self.args.continue_.clone(),
+            setup: remote::setup_of(self.args, self.set, &cwd)?,
+            standalone: self.args.in_process,
+            first: self.first,
+            images: self
+                .images
+                .iter()
+                .map(|p| pmt_rpc::contracts::PromptImage::Path(p.to_string_lossy().into_owned()))
+                .collect(),
+            run_budget: self.args.run_budget,
+            terminal: terminal::identity().filter(|_| scope.config().sessions.terminal_continue),
+            cwd,
+        };
+        crate::tui_cmd::start(&launch, scope, ctx, ui)
+    }
+
+    /// A build without the TUI answers `--tui` with exit 69.
+    #[cfg(not(feature = "tui"))]
+    fn run(self, _: &Context<'_>, _: &pmt_config::ProfileScope, _: Ui) -> Result<u8, Error> {
+        crate::surface::require("tui").map(|()| 0)
+    }
 }
 
 /// The first prompt and the `--image` attachments that go with it.
@@ -273,7 +350,8 @@ async fn start(
             live.close(&factory.store, end_reason(status)).await;
             Ok(status)
         }
-        Mode::Line => {
+        // A TUI run never gets here: it opened the TUI before.
+        Mode::Line | Mode::Tui => {
             let asks = asks.unwrap_or_else(repl::Asks::none);
             let start = repl::Start {
                 resumed: resumed.is_some(),
@@ -310,7 +388,7 @@ fn restore_cwd(factory: &mut Factory, id: SessionId, mode: Mode) -> Result<(), E
     factory.options.cwd = current_dir()?;
     let line = format!("cwd restored to {}", recorded.display());
     match mode {
-        Mode::Line => println!("{line}"),
+        Mode::Line | Mode::Tui => println!("{line}"),
         Mode::OneShot => eprintln!("{line}"),
     }
     Ok(())

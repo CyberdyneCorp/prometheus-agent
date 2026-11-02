@@ -49,6 +49,7 @@ fn a_contract_for_an_unregistered_name_fails_at_startup() {
         kind: Kind::Method,
         owner: "x",
         since: 0,
+        long: false,
     });
     assert!(Catalog::build(Catalog::builtin().protocol(), &twice, |_| {}).is_err());
 }

@@ -1,0 +1,12 @@
+  notice 23
+  notice 24
+  notice 25
+  notice 26
+  notice 27
+  notice 28
+  notice 29
+
+the newest line of the transcript
+────────────────────────────────────────
+› g enough to scroll past forty columns
+  default │ mock/m1 │ ctx 25% │ $0.0042

@@ -112,6 +112,12 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::PromptSubmit>()
         .method::<c::CommandDispatch>()
         .method::<c::ApprovalRespond>()
+        .method::<c::CommandsCatalog>()
+        .method::<c::CompleteSlash>()
+        .method::<c::CompletePath>()
+        .method::<c::ModelOptionsList>()
+        .method::<c::SubagentListing>()
+        .method::<c::ConfigGet>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()
@@ -214,7 +220,15 @@ impl Catalog {
             return Err(RpcError::unknown_method(method));
         };
         validate::validate(params, &contract.params, &self.defs).map_err(|v| {
-            RpcError::invalid_params(&v.path, v.unknown_field, &format!("invalid params: {v}"))
+            let message = if v.unknown_field {
+                format!(
+                    "unknown param {}; client and gateway are out of sync, run 'prometheus update'",
+                    v.path
+                )
+            } else {
+                format!("invalid params: {v}")
+            };
+            RpcError::invalid_params(&v.path, v.unknown_field, &message)
         })
     }
 
@@ -286,6 +300,9 @@ impl Catalog {
                 "since".into(),
                 format!("{}.{}", self.protocol.major, entry.since).into(),
             );
+            if entry.long {
+                item.insert("long".into(), true.into());
+            }
             match self.contracts.get(entry.name) {
                 Some(contract) if entry.kind == Kind::Event => {
                     item.insert("payload".into(), contract.params.clone());

@@ -229,7 +229,7 @@ fn alias_ref(alias: &pmt_config::schema::ModelAlias) -> String {
 }
 
 /// The catalog entry of `key`, or a usage error with suggestions.
-fn known_key(key: &str) -> Result<catalog::KeyInfo, Error> {
+pub(crate) fn known_key(key: &str) -> Result<catalog::KeyInfo, Error> {
     catalog::lookup(key).ok_or_else(|| {
         Error::new(
             &codes::CONFIG_INVALID_ARGUMENT,

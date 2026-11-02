@@ -6,9 +6,15 @@
 //! `Origin`, a `prometheus-rpc.v<major>` subprotocol and a valid single-use
 //! `prometheus-ticket.<ticket>` subprotocol; a refused upgrade completes and
 //! is closed at once with 4403 or 4401, so browsers see the close code.
-//! Then `rpc.hello` must come first; `rpc.ping` is answered from the read
-//! loop itself, every other request runs on the bounded worker pool, and a
-//! send blocked for 30 s or 45 s without any frame ends the connection.
+//! An upgrade to any path but `/rpc` is closed with 4404 before its
+//! credential is looked at. Then `rpc.hello` must come first; `rpc.ping` is
+//! answered from the read loop itself; requests the catalog marks `long`
+//! run as their own tasks on the bounded worker pool and may answer out of
+//! order, every other request is answered in arrival order; a handler that
+//! panics answers `-32099` and the connection stays open; a send blocked
+//! for 30 s or 45 s without any frame ends the connection (spec: tui,
+//! Client protocol framing; Long requests do not block the connection;
+//! Gateway retirement refuses new work).
 
 use std::ops::ControlFlow;
 use std::sync::atomic::Ordering;
@@ -32,6 +38,7 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_util::sync::CancellationToken;
 
 use crate::server::{Call, Conn, HelloState, Server};
+use crate::tickets::random_hex;
 use crate::tickets::{Grant, Redeemed};
 
 /// The longest a single send may block.
@@ -39,7 +46,12 @@ pub const SEND_TIMEOUT: Duration = Duration::from_secs(30);
 /// Silence after which the daemon closes with 4408.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(45);
 
+/// The path of the client protocol endpoint; other paths are not served on
+/// this listener.
+pub const RPC_PATH: &str = "/rpc";
+
 /// Methods a retiring daemon still answers: everything else is new work.
+/// `approval.respond` lets draining turns finish; the rest only read.
 const WHILE_RETIRING: &[&str] = &[
     "approval.respond",
     "session.detach",
@@ -89,6 +101,19 @@ fn upgrade(
     admission: &mut Option<Admission>,
 ) -> Result<Response, ErrorResponse> {
     let offered = offered_protocols(request);
+    if request.uri().path() != RPC_PATH {
+        // Upgraded and closed, so a browser sees the code; the ticket is
+        // never redeemed.
+        if let Some(version) = offered.iter().find(|p| p.starts_with("prometheus-rpc.v"))
+            && let Ok(value) = HeaderValue::from_str(version)
+        {
+            response
+                .headers_mut()
+                .insert("Sec-WebSocket-Protocol", value);
+        }
+        *admission = Some(Admission::Refused(CloseCode::EndpointDisabled));
+        return Ok(response);
+    }
     let Some(version) = offered.iter().find(|p| p.starts_with("prometheus-rpc.v")) else {
         let mut refusal =
             ErrorResponse::new(Some("expected subprotocol prometheus-rpc.v<major>".into()));
@@ -172,15 +197,19 @@ async fn run(server: Arc<Server>, socket: Socket, grant: Grant) {
     let (sink, stream) = socket.split();
     let (tx, rx) = mpsc::unbounded_channel();
     let dead = CancellationToken::new();
+    let (ordered, queue) = mpsc::unbounded_channel();
     let conn = Arc::new(Conn {
         id: server.next_conn_id(),
         grant,
         tx,
         hello: OnceLock::new(),
+        ordered,
     });
     server.connections.fetch_add(1, Ordering::Relaxed);
     let writer = tokio::spawn(write_loop(sink, rx, dead.clone()));
+    let in_order = tokio::spawn(ordered_loop(queue));
     read_loop(&server, &conn, stream, &dead).await;
+    in_order.abort();
     server.hub().detach_all(conn.id);
     server.connections.fetch_sub(1, Ordering::Relaxed);
     drop(conn);
@@ -250,7 +279,9 @@ fn text_frame(server: &Arc<Server>, conn: &Arc<Conn>, text: &str) -> ControlFlow
             id: Id::Str(id),
             outcome,
         }) => {
-            server.hub().resolve(conn.id, &id, outcome);
+            server
+                .hub()
+                .resolve(conn.id, &conn.client_id(), &id, outcome);
         }
         Ok(Incoming::Response { .. } | Incoming::Notification { .. }) => {}
     }
@@ -288,18 +319,73 @@ fn request(
         server: Arc::clone(server),
         conn: Arc::clone(conn),
     };
-    let method = method.to_owned();
-    let workers = Arc::clone(&server.workers);
-    tokio::spawn(async move {
-        let Ok(_permit) = workers.acquire_owned().await else {
-            return;
-        };
+    let long = server.catalog().entry(method).is_some_and(|e| e.long);
+    let job = Job {
+        call,
+        id,
+        method: method.to_owned(),
+        params,
+    };
+    if long {
+        let workers = Arc::clone(&server.workers);
+        tokio::spawn(async move {
+            let Ok(_permit) = workers.acquire_owned().await else {
+                return;
+            };
+            job.run().await;
+        });
+    } else {
+        let _ = conn.ordered.send(job);
+    }
+    ControlFlow::Continue(())
+}
+
+/// One request to answer.
+#[derive(Debug)]
+pub struct Job {
+    call: Call,
+    id: Id,
+    method: String,
+    params: Value,
+}
+
+impl Job {
+    /// Runs the handler in a task of its own, so a panic answers `-32099
+    /// internal error: <method>` (with a crash report when the daemon
+    /// keeps them) instead of ending the connection.
+    async fn run(self) {
+        let Self {
+            call,
+            id,
+            method,
+            params,
+        } = self;
         let conn = Arc::clone(&call.conn);
         let server = Arc::clone(&call.server);
         let minor = conn.hello.get().map_or(0, |h| h.minor);
-        let reply = match server.router().dispatch(call, &method, params).await {
+        let name = method.clone();
+        let reporter = server.crash_reporter().cloned();
+        let catalog = Arc::clone(&server);
+        let handler = tokio::spawn(async move {
+            let work = server.router().dispatch(call, &name, params);
+            match reporter {
+                Some(reporter) => {
+                    let task = format!("rpc-{name}-{}", random_hex(4));
+                    pmt_core::panic::isolate(&task, &reporter, work).await.ok()
+                }
+                None => Some(work.await),
+            }
+        });
+        let outcome = if let Ok(Some(outcome)) = handler.await {
+            outcome
+        } else {
+            tracing::error!(method, "an RPC handler panicked");
+            let err = Error::new(&codes::RPC_INTERNAL, format!("internal error: {method}"));
+            Err(RpcError::from_error(&err))
+        };
+        let reply = match outcome {
             Ok(mut result) => {
-                server
+                catalog
                     .catalog()
                     .strip_newer(&method, &mut result, true, minor);
                 frame::result(&id, &result)
@@ -307,8 +393,15 @@ fn request(
             Err(err) => frame::error(Some(&id), &err),
         };
         send(&conn, reply);
-    });
-    ControlFlow::Continue(())
+    }
+}
+
+/// Answers the connection's ordinary requests one at a time, in arrival
+/// order.
+async fn ordered_loop(mut queue: mpsc::UnboundedReceiver<Job>) {
+    while let Some(job) = queue.recv().await {
+        job.run().await;
+    }
 }
 
 fn hello(server: &Server, conn: &Conn, id: &Id, params: &Value) -> ControlFlow<()> {
@@ -345,6 +438,7 @@ fn hello(server: &Server, conn: &Conn, id: &Id, params: &Value) -> ControlFlow<(
         .catalog()
         .strip_newer("rpc.hello", &mut result, true, minor);
     let _ = conn.hello.set(HelloState {
+        client: hello.client,
         minor,
         advertised: Arc::new(advertised),
         server_requests: hello.capabilities.server_requests,

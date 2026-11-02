@@ -1,11 +1,22 @@
 [package]
 name = "pmt-tui"
-description = "Prometheus terminal UI (placeholder)"
+description = "Prometheus full-screen terminal UI: state, layout, rendering, key bindings and terminal restoration"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
+
+[dependencies]
+crossterm.workspace = true
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+ratatui.workspace = true
+unicode-width.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

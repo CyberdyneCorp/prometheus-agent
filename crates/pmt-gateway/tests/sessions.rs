@@ -149,7 +149,14 @@ async fn a_capable_client_answers_the_approval() {
         )
         .await
         .unwrap_err();
-    assert_eq!(late.code, -32_003, "an answer for a closed id is dropped");
+    assert_eq!(
+        late.code, -32_004,
+        "an answer for a settled id changes nothing"
+    );
+    assert_eq!(
+        late.message,
+        format!("request {} already settled", request.id)
+    );
 }
 
 #[tokio::test]
@@ -212,6 +219,17 @@ async fn a_restarted_daemon_answers_with_a_new_epoch() {
     let restarted = Daemon::start_with(support::options(), home).await;
     let (client, _inbox) = restarted.client("default", false).await;
     let theirs = restarted.host.add("default");
+    let reattached = client
+        .call(
+            "session.attach",
+            json!({"session_id": theirs, "last_seen_seq": finished.seq, "epoch": finished.epoch}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        reattached["truncated"], true,
+        "another epoch: reload the transcript, apply no stale delta"
+    );
     let replay = since(
         client
             .call(
