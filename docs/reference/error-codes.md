@@ -307,6 +307,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `gateway.target_refused` | `permission_denied` | 77 | The tool may send only to a platform's home channel, a chat in `allow_chats` or a chat the profile already has a session in. |
 | `gateway.enroll_rejected` | `config` | 78 | The relay connector refused the enrollment token (already used, expired or unknown); ask the relay operator for a new one-time token. |
 | `gateway.relay` | `unavailable` | 69 | The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network. |
+| `plugins.host_unavailable` | `unavailable` | 69 | The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`). |
 | `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
 | `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |
 | `service.unsupported` | `unavailable` | 69 | `prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor. |

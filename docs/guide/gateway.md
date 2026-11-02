@@ -99,6 +99,64 @@ mention the bot. Both send buttons for approvals, typing indicators,
 reactions and files, and both read the token from the owning profile's
 secrets only.
 
+The other first-party adapters:
+
+- **Slack** uses Socket Mode with the app-level token `SLACK_APP_TOKEN`
+  (or `options.app_token_secret`) and the Web API with the bot token
+  `SLACK_BOT_TOKEN`; Slack keeps events nobody acknowledged and delivers
+  them after a reconnect. Cards are Block Kit buttons, edited when an
+  approval is resolved; files use Slack's external upload flow. Native
+  slash commands are not dispatched yet: type the command as a message.
+- **Email** polls the inbox over IMAP every `options.poll_interval_secs`
+  (15) and answers over SMTP as `options.address` with the password in
+  `EMAIL_PASSWORD`. `options.imap_host` and `options.smtp_host` are
+  required; `imap_security`/`smtp_security` are `tls` (IMAP default, and
+  SMTP on port 465), `starttls` (SMTP default) or `plain` (loopback hosts
+  only), and `username` overrides the login name. Mail already in the
+  inbox when the adapter first connects is left alone; replies thread
+  under the mail they answer with a single `Re:`; mail from the mailbox
+  itself, from no-reply or bounce senders, or marked automatic or bulk is
+  not answered. Long replies go out whole.
+- **Matrix** syncs with `options.homeserver` using `MATRIX_ACCESS_TOKEN`;
+  the sync cursor survives reconnects, a two-member room is a direct
+  chat, and invites from `allow_users` are accepted. Rooms are not
+  end-to-end encrypted yet.
+- **Signal** talks to a signal-cli HTTP daemon at `options.http_url` for
+  the account `options.account` (E.164). Run the daemon with
+  `--receive-mode on-connection` so Signal holds messages while the
+  adapter is disconnected; an unreachable daemon is retried with
+  `signal_daemon_unreachable`.
+- **WhatsApp** runs the managed WhatsApp Web bridge runtime for each
+  profile (its linked-device session under
+  `<profile>/platforms/whatsapp/session/`), or uses a bridge already
+  running at `options.bridge_url`. One person is one sender whether
+  WhatsApp names them by phone number or LID. A device logged out from the
+  phone stops the adapter with `whatsapp_logged_out`.
+- **Webhook** serves each route `[gateway.platforms.webhook.routes.<name>]`
+  at `/p/<profile>/webhook/<name>`. A route needs `secret_secret`, a
+  secret its senders sign with (GitHub `X-Hub-Signature-256`, GitLab
+  `X-Gitlab-Token`, Standard Webhooks `webhook-signature`, or
+  `X-Webhook-Signature-V2` with `X-Webhook-Timestamp`), unless it sets
+  `insecure_no_auth = true`, which only a loopback listener allows.
+  `events` limits the accepted event types and `prompt` renders the turn's
+  input from the payload (`{pull_request.title}`, `{__raw__}`). Each
+  delivery runs as its own conversation; replies are recorded in
+  `<profile>/logs/webhook/<route>.jsonl`.
+
+```toml
+[gateway.platforms.webhook.routes.ci]
+secret_secret = "CI_WEBHOOK_SECRET"
+events = ["pull_request"]
+prompt = "Review PR #{pull_request.number}: {pull_request.title}"
+```
+
+`prometheus plugins test-adapter <platform>` runs the adapter conformance
+kit (connect and reconnect, descriptor, normalization, deduplication,
+splitting at the declared limit, retry classification, optional
+capabilities, cards) against a built-in mock of any first-party platform,
+prints one `pass`, `FAIL` or `skip` line per check and exits 0 only when
+none failed.
+
 What the gateway does for every adapter:
 
 - Long replies are split at paragraph, line and word boundaries (never

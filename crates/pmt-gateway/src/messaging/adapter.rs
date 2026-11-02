@@ -505,6 +505,8 @@ pub struct HttpResponse {
     pub status: u16,
     /// `Content-Type`.
     pub content_type: Option<String>,
+    /// Other headers.
+    pub headers: Vec<(String, String)>,
     /// The body.
     pub body: Vec<u8>,
 }
@@ -516,8 +518,26 @@ impl HttpResponse {
         Self {
             status,
             content_type: None,
+            headers: Vec::new(),
             body: Vec::new(),
         }
+    }
+
+    /// A JSON response.
+    #[must_use]
+    pub fn json(status: u16, body: &serde_json::Value) -> Self {
+        Self {
+            content_type: Some("application/json".to_owned()),
+            body: body.to_string().into_bytes(),
+            ..Self::status(status)
+        }
+    }
+
+    /// The response with one more header.
+    #[must_use]
+    pub fn with_header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((name.to_owned(), value.to_owned()));
+        self
     }
 }
 

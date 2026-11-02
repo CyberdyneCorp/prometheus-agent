@@ -119,6 +119,30 @@ pub(super) fn factories(ctx: &Context<'_>) -> BTreeMap<String, AdapterFactory> {
             pmt_adapters_discord::PLATFORM.to_owned(),
             pmt_adapters_discord::factory(),
         ),
+        (
+            pmt_adapters_slack::PLATFORM.to_owned(),
+            pmt_adapters_slack::factory(),
+        ),
+        (
+            pmt_adapters_email::PLATFORM.to_owned(),
+            pmt_adapters_email::factory(),
+        ),
+        (
+            pmt_adapters_matrix::PLATFORM.to_owned(),
+            pmt_adapters_matrix::factory(),
+        ),
+        (
+            pmt_adapters_signal::PLATFORM.to_owned(),
+            pmt_adapters_signal::factory(),
+        ),
+        (
+            pmt_adapters_whatsapp::PLATFORM.to_owned(),
+            pmt_adapters_whatsapp::factory(),
+        ),
+        (
+            pmt_adapters_webhook::PLATFORM.to_owned(),
+            pmt_adapters_webhook::factory(),
+        ),
     ]);
     #[cfg(debug_assertions)]
     if let Some(dir) = ctx.launch.test_adapter_dir() {

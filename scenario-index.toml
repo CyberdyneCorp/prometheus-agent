@@ -1816,3 +1816,24 @@ capabilities = [
 
 [platform-adapters."Adapter state reporting and reconnect"]
 "Degraded is visible" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_connected_adapter_is_degraded_until_a_send_succeeds", "crates/prometheus/tests/gateway_daemon.rs::gateway_status_reports_each_adapter"]
+
+# platform-adapters, the slack, email, matrix, signal, whatsapp and webhook
+# adapters (25.6-25.8) and the conformance kit command (25.9)
+[platform-adapters."Adapter conformance kit (upgrade)"]
+"Wrong unit detected" = { tests = ["crates/pmt-adapters-telegram/tests/telegram.rs::the_kit_catches_a_wrong_length_unit", "crates/prometheus/tests/plugins_cli.rs::the_kit_passes_for_all_eight_first_party_adapters"], note = "the kit's report fails the splitting check; `prometheus plugins test-adapter` exits 1 whenever a check fails and 0 for all eight first-party adapters" }
+
+[platform-adapters."Inbound event normalization"]
+"WhatsApp alias flip" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::whatsapp_alias_flip_keeps_one_sender_and_one_chat", "crates/pmt-adapters-whatsapp/src/normalize.rs::a_person_is_one_sender_and_one_chat_under_either_identifier"]
+
+[platform-adapters."First-party adapter transports and required settings"]
+"Signal daemon unreachable" = ["crates/pmt-adapters-signal/tests/signal.rs::an_unreachable_daemon_is_retried_naming_its_url"]
+
+[platform-adapters."Email adapter behaviour"]
+"Threaded reply" = ["crates/pmt-adapters-email/tests/email.rs::threaded_reply", "crates/pmt-adapters-email/src/mime.rs::a_threaded_reply_has_one_re_prefix_and_the_thread_headers"]
+
+[platform-adapters."WhatsApp pairing and modes"]
+"Logged out from the phone" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::a_logged_out_device_is_fatal_naming_the_pair_command"]
+
+[platform-adapters."Webhook routes"]
+"Event filtered by type" = ["crates/pmt-adapters-webhook/tests/webhook.rs::an_event_outside_the_route_filter_is_ignored"]
+"Prompt rendering" = ["crates/pmt-adapters-webhook/tests/webhook.rs::a_signed_pull_request_becomes_the_rendered_prompt_once", "crates/pmt-adapters-webhook/src/render.rs::prompt_rendering_reads_dot_paths"]

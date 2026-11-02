@@ -25,7 +25,17 @@ dist = true
 [features]
 default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
 tui = ["dep:pmt-tui", "dep:ratatui"]
-gateway = ["dep:pmt-gateway", "dep:pmt-adapters-telegram", "dep:pmt-adapters-discord"]
+gateway = [
+    "dep:pmt-gateway",
+    "dep:pmt-adapters-telegram",
+    "dep:pmt-adapters-discord",
+    "dep:pmt-adapters-slack",
+    "dep:pmt-adapters-email",
+    "dep:pmt-adapters-matrix",
+    "dep:pmt-adapters-signal",
+    "dep:pmt-adapters-whatsapp",
+    "dep:pmt-adapters-webhook",
+]
 dashboard = []
 acp = []
 mcp = []
@@ -42,6 +52,12 @@ pmt-core.workspace = true
 pmt-gateway = { workspace = true, optional = true }
 pmt-adapters-telegram = { workspace = true, optional = true }
 pmt-adapters-discord = { workspace = true, optional = true }
+pmt-adapters-email = { workspace = true, optional = true }
+pmt-adapters-matrix = { workspace = true, optional = true }
+pmt-adapters-signal = { workspace = true, optional = true }
+pmt-adapters-slack = { workspace = true, optional = true }
+pmt-adapters-webhook = { workspace = true, optional = true }
+pmt-adapters-whatsapp = { workspace = true, optional = true }
 pmt-memory.workspace = true
 pmt-net.workspace = true
 pmt-obs.workspace = true

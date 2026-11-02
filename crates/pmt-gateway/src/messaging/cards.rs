@@ -13,9 +13,9 @@
 use std::fmt::Write as _;
 
 use jiff::{SignedDuration, Zoned};
-use sha2::{Digest as _, Sha256};
 
 use super::descriptor::Interactive;
+use super::sign::{constant_time_eq, hmac_sha256};
 
 /// The approval choices, in card order.
 pub(crate) const CHOICES: [&str; 4] = ["once", "session", "always", "deny"];
@@ -91,30 +91,6 @@ impl CardKey {
         let digest = hmac_sha256(&self.0, message.as_bytes());
         crate::tickets::hex(&digest)[..MAC_HEX].to_owned()
     }
-}
-
-/// HMAC-SHA256 (RFC 2104) with a 32-byte key.
-fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
-    let mut inner_pad = [0x36u8; 64];
-    let mut outer_pad = [0x5cu8; 64];
-    for (i, byte) in key.iter().enumerate() {
-        inner_pad[i] ^= byte;
-        outer_pad[i] ^= byte;
-    }
-    let inner = Sha256::new()
-        .chain_update(inner_pad)
-        .chain_update(message)
-        .finalize();
-    Sha256::new()
-        .chain_update(outer_pad)
-        .chain_update(inner)
-        .finalize()
-        .into()
-}
-
-/// Compares without an early exit, so timing tells nothing of the MAC.
-pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 /// A prompt as a chat shows it, before its choices.
@@ -267,20 +243,6 @@ mod tests {
         assert_eq!(
             expiry_line(2_500, &now, ""),
             "Expires at 14:00 UTC (in 3 s)"
-        );
-    }
-
-    #[test]
-    fn hmac_matches_the_rfc_4231_vector() {
-        // RFC 4231 test case 2 uses a 4-byte key; pad it to 32 bytes the
-        // way HMAC does (zeros) and the result is the same.
-        let mut key = [0u8; 32];
-        key[..4].copy_from_slice(b"Jefe");
-        let mac = hmac_sha256(&key, b"what do ya want for nothing?");
-        let hex = crate::tickets::hex(&mac);
-        assert_eq!(
-            hex,
-            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
         );
     }
 

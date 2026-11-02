@@ -14,6 +14,7 @@ use super::BusyInputMode;
 pub use super::gateway_platform::{
     Batching, DedupConfig, DeliveryConfig, MediaConfig, PlatformBusy, PlatformConfig,
     PlatformSessions, PlatformStreaming, ReplyToMode, UnauthorizedDm, VoiceConfig, VoiceReplyMode,
+    WebhookRoute,
 };
 pub use super::gateway_policy::{
     ChatPolicy, HomeChannel, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,

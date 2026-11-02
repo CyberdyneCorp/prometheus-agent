@@ -1,12 +1,10 @@
 //! The Telegram adapter against a mock Bot API (spec: platform-adapters):
 //! the conformance kit, the profile-scoped token, media in and out.
 
-mod mock;
-
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mock::{BotApi, TOKEN};
+use pmt_adapters_telegram::mock::{self, BotApi, TOKEN};
 use pmt_adapters_telegram::{TOKEN_SECRET, Telegram};
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 use pmt_core::secret::SecretString;
@@ -68,9 +66,8 @@ async fn eventually(mut done: impl FnMut() -> bool) {
 #[tokio::test(flavor = "multi_thread")]
 async fn the_adapter_passes_the_conformance_kit() {
     let home = tempfile::tempdir().unwrap();
-    let api = BotApi::start().await;
-    let adapter = Telegram::new(&profile(home.path(), "default", true), api.endpoints()).unwrap();
-    let report = conformance::run(Arc::new(adapter), Arc::clone(&api) as _).await;
+    let (adapter, platform) = mock::kit(home.path()).await.unwrap();
+    let report = conformance::run(adapter, platform).await;
     println!("{}", report.render());
     assert!(report.passed(), "{}", report.render());
 }

@@ -7,6 +7,7 @@
 //! (or the table's `token_secret`), read from that profile's store only.
 
 mod api;
+pub mod mock;
 mod normalize;
 
 use std::path::Path;

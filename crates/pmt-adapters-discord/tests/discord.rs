@@ -2,12 +2,10 @@
 //! platform-adapters): the conformance kit, resume after a dropped
 //! connection, the Message Content intent, media in and out.
 
-mod mock;
-
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mock::{DiscordMock, TOKEN};
+use pmt_adapters_discord::mock::{self, DiscordMock, TOKEN};
 use pmt_adapters_discord::{Discord, TOKEN_SECRET};
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
 use pmt_core::secret::SecretString;

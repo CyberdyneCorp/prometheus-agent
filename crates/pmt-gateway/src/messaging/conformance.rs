@@ -75,6 +75,21 @@ pub trait MockPlatform: Send + Sync {
     fn typing(&self) -> usize;
     /// Reactions added: (message id, emoji).
     fn reactions(&self) -> Vec<(String, String)>;
+    /// The kit serves a `binds_http` adapter at `base` (an
+    /// `http://host:port/p/<profile>/<platform>` prefix); the platform
+    /// posts its requests there.
+    fn listen(&self, _base: &str) {}
+    /// Whether the platform's throttling names a wait (`retry_after`); a
+    /// platform without one (SMTP) is expected to report `rate_limited`
+    /// without a hint.
+    fn hints_retry_after(&self) -> bool {
+        true
+    }
+    /// Whether sends can fail at all: an adapter that only records its
+    /// replies (webhook `log` delivery) has no failures to classify.
+    fn sends_can_fail(&self) -> bool {
+        true
+    }
 }
 
 /// One check's outcome.
@@ -208,6 +223,15 @@ pub async fn run(adapter: Arc<dyn Adapter>, platform: Arc<dyn MockPlatform>) -> 
     let descriptor = adapter.describe();
     report.add("descriptor", check_descriptor(&descriptor));
     let link = Arc::new(KitLink::default());
+    if descriptor.binds_http {
+        match listen(Arc::clone(&adapter)).await {
+            Ok(base) => platform.listen(&base),
+            Err(why) => {
+                report.add("connect", Err(why));
+                return report;
+            }
+        }
+    }
     let connected = connect(&adapter, &link).await;
     let ok = connected.is_ok();
     report.add("connect", connected);
@@ -225,7 +249,14 @@ pub async fn run(adapter: Arc<dyn Adapter>, platform: Arc<dyn MockPlatform>) -> 
     report.add("deduplication", kit.deduplication().await);
     report.add("reconnect", kit.reconnect().await);
     report.add("splitting", kit.splitting().await);
-    report.add("retry classification", kit.retries().await);
+    if kit.platform.sends_can_fail() {
+        report.add("retry classification", kit.retries().await);
+    } else {
+        report.skip(
+            "retry classification",
+            "the adapter records its replies; no send can fail",
+        );
+    }
     kit.optional(&mut report).await;
     kit.cards(&mut report).await;
     report.skip(
@@ -246,6 +277,60 @@ fn check_descriptor(descriptor: &Descriptor) -> Result<(), String> {
     } else {
         Err("the descriptor does not survive its own JSON form".to_owned())
     }
+}
+
+/// Serves `adapter` on a loopback port the way the daemon's shared
+/// listener does (signature checked first); the prefix it answers under.
+async fn listen(adapter: Arc<dyn Adapter>) -> Result<String, String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("cannot listen for the adapter: {e}"))?;
+    let addr = listener
+        .local_addr()
+        .map_err(|e| format!("cannot listen for the adapter: {e}"))?;
+    let prefix = format!("/p/kit/{}", adapter.describe().platform);
+    let base = format!("http://{addr}{prefix}");
+    tokio::spawn(async move {
+        while let Ok((stream, _)) = listener.accept().await {
+            tokio::spawn(serve_connection(
+                Arc::clone(&adapter),
+                prefix.clone(),
+                stream,
+            ));
+        }
+    });
+    Ok(base)
+}
+
+async fn serve_connection(
+    adapter: Arc<dyn Adapter>,
+    prefix: String,
+    stream: tokio::net::TcpStream,
+) {
+    let service = hyper::service::service_fn(move |request| {
+        let (adapter, prefix) = (Arc::clone(&adapter), prefix.clone());
+        async move {
+            let answer = route_kit(adapter.as_ref(), &prefix, request).await;
+            Ok::<_, std::convert::Infallible>(super::http::respond(answer))
+        }
+    });
+    let _ = hyper::server::conn::http1::Builder::new()
+        .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+        .await;
+}
+
+/// A request below the kit's prefix to the adapter; 404 elsewhere.
+async fn route_kit(
+    adapter: &dyn Adapter,
+    prefix: &str,
+    request: hyper::Request<hyper::body::Incoming>,
+) -> super::adapter::HttpResponse {
+    let path = request.uri().path().to_owned();
+    let Some(rest) = path.strip_prefix(prefix) else {
+        return super::adapter::HttpResponse::status(404);
+    };
+    let rest = if rest.is_empty() { "/" } else { rest };
+    super::http::deliver(adapter, rest.to_owned(), request).await
 }
 
 async fn connect(adapter: &Arc<dyn Adapter>, link: &Arc<KitLink>) -> Result<(), String> {
@@ -383,6 +468,7 @@ impl Kit {
 
     async fn retries(&self) -> Result<(), String> {
         let chat = self.dm();
+        let hinted = self.platform.hints_retry_after();
         let message = Outgoing::text(&chat, None, "conformance retry");
         let mut cases = vec![
             (Failure::RateLimited(7), "rate_limited with retry_after 7s"),
@@ -397,7 +483,7 @@ impl Kit {
             let got = self.adapter.send(&message).await;
             let right = match (failure, &got) {
                 (Failure::RateLimited(secs), Err(SendError::RateLimited { retry_after })) => {
-                    *retry_after == Some(Duration::from_secs(secs))
+                    *retry_after == hinted.then(|| Duration::from_secs(secs))
                 }
                 (Failure::ServerError, Err(SendError::Server(_)))
                 | (Failure::Forbidden, Err(SendError::Permanent(_)))
@@ -528,4 +614,41 @@ impl Kit {
             .then_some(())
             .ok_or_else(|| "a button press never arrived as a callback".to_owned())
     }
+}
+
+/// Profile `default` of the home at `home`, enabling `platform` with the
+/// table lines `table` (TOML under `[gateway.platforms.<platform>]`) and
+/// holding `secrets` in its store: what the kit builds an adapter from.
+///
+/// # Errors
+///
+/// The home cannot be laid out, the config is invalid or a secret cannot
+/// be stored.
+pub fn kit_setup(
+    home: &std::path::Path,
+    platform: &str,
+    table: &str,
+    secrets: &[(&str, &str)],
+) -> Result<super::AdapterSetup, pmt_core::error::Error> {
+    use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+
+    let layout = Home::open(home)?;
+    let dir = layout.profile(&ProfileName::parse("default")?)?;
+    let config = format!("[gateway.platforms.{platform}]\nenabled = true\n{table}\n");
+    let file = dir.path().join("config.toml");
+    std::fs::write(&file, config)
+        .map_err(|e| pmt_core::error::Error::io(&pmt_core::error::codes::HOME_IO, &file, &e))?;
+    let scope = ProfileScope::open(dir, &Overrides::default(), Launch::Other)?;
+    for (name, value) in secrets {
+        scope
+            .secrets()
+            .store()
+            .set(name, &pmt_core::secret::SecretString::new(*value))?;
+    }
+    let config = scope.config().gateway.platform(platform);
+    Ok(super::AdapterSetup {
+        scope,
+        platform: platform.to_owned(),
+        config,
+    })
 }

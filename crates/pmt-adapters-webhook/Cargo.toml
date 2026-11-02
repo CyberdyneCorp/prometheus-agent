@@ -1,0 +1,28 @@
+[package]
+name = "pmt-adapters-webhook"
+description = "Prometheus first-party webhook adapter: signed routes on the shared HTTP listener"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Standard Webhooks secrets and signatures are base64.
+base64.workspace = true
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-gateway.workspace = true
+pmt-net.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

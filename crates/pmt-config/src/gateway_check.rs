@@ -83,6 +83,7 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
         }
     }
     check_platform_timing(config)?;
+    check_webhook_routes(config)?;
     check_policies(config, profile_dir)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
@@ -117,6 +118,36 @@ fn check_platform_timing(config: &Config) -> Result<(), Error> {
             return Err(invalid(format!(
                 "gateway.platforms.{platform}.human_delay_ms: [min, max] with min <= max (found [{min}, {max}])"
             )));
+        }
+    }
+    Ok(())
+}
+
+/// Routes belong to the webhook platform; each needs a signing secret
+/// unless it explicitly admits unsigned requests.
+fn check_webhook_routes(config: &Config) -> Result<(), Error> {
+    for (platform, table) in &config.gateway.platforms {
+        for (name, route) in &table.routes {
+            let key = format!("gateway.platforms.{platform}.routes.{name}");
+            if platform != "webhook" {
+                return Err(invalid(format!(
+                    "{key}: only the webhook platform has routes"
+                )));
+            }
+            let valid_name = !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_');
+            if !valid_name {
+                return Err(invalid(format!(
+                    "{key}: a route name uses only a-z, 0-9, '-' and '_'"
+                )));
+            }
+            if route.secret_secret.is_none() && !route.insecure_no_auth {
+                return Err(invalid(format!(
+                    "{key}.secret_secret: required unless insecure_no_auth = true"
+                )));
+            }
         }
     }
     Ok(())
@@ -283,6 +314,32 @@ mod tests {
                 .contains("gateway.platforms.telegram.allow_users")
         );
         assert!(err.message().contains("allow_all"), "{}", err.message());
+    }
+
+    #[test]
+    fn webhook_routes_need_a_secret_and_belong_to_the_webhook_platform() {
+        let check_toml = |text: &str| {
+            let config: Config = toml::from_str(text).unwrap();
+            check(&config, Path::new(""))
+        };
+        let unsigned =
+            check_toml("[gateway.platforms.webhook.routes.ci]\nevents = [\"push\"]\n").unwrap_err();
+        assert!(
+            unsigned
+                .message()
+                .contains("gateway.platforms.webhook.routes.ci.secret_secret"),
+            "{}",
+            unsigned.message()
+        );
+        let elsewhere =
+            check_toml("[gateway.platforms.slack.routes.ci]\nsecret_secret = \"S\"\n").unwrap_err();
+        assert!(elsewhere.message().contains("only the webhook platform"));
+        let bad_name =
+            check_toml("[gateway.platforms.webhook.routes.\"C I\"]\nsecret_secret = \"S\"\n")
+                .unwrap_err();
+        assert!(bad_name.message().contains("a route name uses only"));
+        check_toml("[gateway.platforms.webhook.routes.ci]\nsecret_secret = \"S\"\n").unwrap();
+        check_toml("[gateway.platforms.webhook.routes.local]\ninsecure_no_auth = true\n").unwrap();
     }
 
     fn with_policy(toml_policies: &str) -> Result<(), Error> {

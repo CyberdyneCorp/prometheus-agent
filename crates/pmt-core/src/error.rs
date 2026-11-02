@@ -926,6 +926,10 @@ error_codes! {
     /// The relay connector could not be reached or answered nonsense.
     GATEWAY_RELAY = ("gateway.relay", Unavailable,
         "The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network.");
+    /// A plugin directory given to `plugins test-adapter` needs the WASM
+    /// plugin host, which this build does not have yet.
+    PLUGINS_HOST_UNAVAILABLE = ("plugins.host_unavailable", Unavailable,
+        "The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`).");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

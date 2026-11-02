@@ -40,6 +40,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -8958,6 +8959,108 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus pairing help help
 ```
 
+## `prometheus plugins`
+
+```text
+Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+
+Usage: prometheus plugins [OPTIONS] <COMMAND>
+
+Commands:
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins test-adapter`
+
+```text
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+
+Usage: prometheus plugins test-adapter [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The platform name or plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins help [COMMAND]
+
+Commands:
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+  help          Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins help test-adapter`
+
+```text
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+
+Usage: prometheus plugins help test-adapter
+```
+
+## `prometheus plugins help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins help help
+```
+
 ## `prometheus tui`
 
 ```text
@@ -9961,6 +10064,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -11525,6 +11629,25 @@ Usage: prometheus help pairing deny
 Remove an approved sender
 
 Usage: prometheus help pairing revoke
+```
+
+## `prometheus help plugins`
+
+```text
+Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+
+Usage: prometheus help plugins [COMMAND]
+
+Commands:
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+```
+
+## `prometheus help plugins test-adapter`
+
+```text
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`) or a `platform-adapter` plugin directory
+
+Usage: prometheus help plugins test-adapter
 ```
 
 ## `prometheus help tui`

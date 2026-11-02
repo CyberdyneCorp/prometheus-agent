@@ -83,6 +83,30 @@ pub struct PlatformConfig {
     /// publishes (`prometheus gateway platforms` lists the adapters).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub options: BTreeMap<String, serde_json::Value>,
+    /// Webhook routes by name (`webhook` only), each served at
+    /// `/p/<profile>/webhook/<route>` on the shared listener.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub routes: BTreeMap<String, WebhookRoute>,
+}
+
+/// One `[gateway.platforms.webhook.routes.<name>]` table.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct WebhookRoute {
+    /// Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the
+    /// payload's `event_type`); empty admits every event.
+    pub events: Vec<String>,
+    /// The secret every request must be signed with (GitHub, GitLab,
+    /// Standard Webhooks or the generic scheme).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_secret: Option<SecretName>,
+    /// Admit unsigned requests (only while `gateway.http.listen` is a
+    /// loopback address).
+    pub insecure_no_auth: bool,
+    /// The turn's input: `{a.b.c}` paths into the payload, `{__raw__}`
+    /// the whole payload. Unset: the payload as JSON.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
 }
 
 impl PlatformConfig {

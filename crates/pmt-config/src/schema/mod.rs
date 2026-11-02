@@ -41,7 +41,7 @@ pub use gateway::{
     MediaConfig, NotificationsConfig, OutboxConfig, PlatformBusy, PlatformConfig, PlatformSessions,
     PlatformStreaming, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,
     ReplyToMode, ShutdownConfig, StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig,
-    VoiceReplyMode, resolve_policy,
+    VoiceReplyMode, WebhookRoute, resolve_policy,
 };
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,

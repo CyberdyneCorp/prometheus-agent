@@ -180,6 +180,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.rate_limit.messages_per_minute` | integer | unset | 1 to 10000 | `next_session` | Overrides `messages_per_minute`. |
 | `gateway.platforms.<name>.rate_limit.turns_per_hour` | integer | unset | 1 to 100000 | `next_session` | Overrides `turns_per_hour`. |
 | `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
+| `gateway.platforms.<name>.routes.<name>.events` | array of string | `[]` | any | `next_session` | Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the payload's `event_type`); empty admits every event. |
+| `gateway.platforms.<name>.routes.<name>.insecure_no_auth` | boolean | `false` | any | `next_session` | Admit unsigned requests (only while `gateway.http.listen` is a loopback address). |
+| `gateway.platforms.<name>.routes.<name>.prompt` | string | unset | any | `next_session` | The turn's input: `{a.b.c}` paths into the payload, `{__raw__}` the whole payload. Unset: the payload as JSON. |
+| `gateway.platforms.<name>.routes.<name>.secret_secret` | string | unset | a secret name | `next_session` | The secret every request must be signed with (GitHub, GitLab, Standard Webhooks or the generic scheme). |
 | `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
 | `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
 | `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |

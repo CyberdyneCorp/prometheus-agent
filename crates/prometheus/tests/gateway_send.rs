@@ -76,7 +76,7 @@ fn without_the_daemon_a_stateless_adapter_sends_directly() {
 
 #[test]
 fn send_exit_codes_name_the_problem() {
-    let home = gateway_home("\n[gateway.platforms.slack]\nenabled = true\nallow_all = true\n");
+    let home = gateway_home("\n[gateway.platforms.whatsapp]\nenabled = true\nallow_all = true\n");
     let home = home.path();
     let cases: [(&[&str], i32, &str); 4] = [
         (
@@ -90,9 +90,10 @@ fn send_exit_codes_name_the_problem() {
             "platform 'signal' is not configured in this profile",
         ),
         (
-            &["gateway", "send", "--to", "slack:C1", "hi"],
+            // The bridge runs only inside the daemon: no stateless send.
+            &["gateway", "send", "--to", "whatsapp:1", "hi"],
             69,
-            "daemon required for slack",
+            "daemon required for whatsapp",
         ),
         (
             &["gateway", "send", "--to", "test:1"],

@@ -18,7 +18,7 @@ use hyper_util::rt::TokioIo;
 use tracing::Instrument as _;
 
 use super::Shared;
-use super::adapter::{HttpRequest, HttpResponse};
+use super::adapter::{Adapter, HttpRequest, HttpResponse};
 
 /// The largest request body accepted.
 const MAX_BODY: usize = 16 * 1024 * 1024;
@@ -116,13 +116,21 @@ async fn serve(
         Some(shared) => route(&shared, request).await,
         None => HttpResponse::status(503),
     };
+    Ok(respond(answer))
+}
+
+/// The hyper response of an adapter's answer.
+pub(crate) fn respond(answer: HttpResponse) -> Response<Full<Bytes>> {
     let mut response = Response::builder().status(answer.status);
     if let Some(content_type) = &answer.content_type {
         response = response.header("content-type", content_type);
     }
-    Ok(response
+    for (name, value) in &answer.headers {
+        response = response.header(name, value);
+    }
+    response
         .body(Full::new(Bytes::from(answer.body)))
-        .unwrap_or_else(|_| Response::new(Full::new(Bytes::new()))))
+        .unwrap_or_else(|_| Response::new(Full::new(Bytes::new())))
 }
 
 /// `/p/<profile>/<platform>/<rest>` to its adapter.
@@ -142,6 +150,16 @@ async fn route(shared: &Shared, request: Request<Incoming>) -> HttpResponse {
     else {
         return HttpResponse::status(404);
     };
+    deliver(slot.adapter.as_ref(), rest, request).await
+}
+
+/// Hands a request (its path below the adapter's prefix being `rest`) to
+/// `adapter`: answered 401 unless the adapter verifies it.
+pub(crate) async fn deliver(
+    adapter: &dyn Adapter,
+    rest: String,
+    request: Request<Incoming>,
+) -> HttpResponse {
     let (parts, body) = request.into_parts();
     let Ok(body) = Limited::new(body, MAX_BODY).collect().await else {
         return HttpResponse::status(413);
@@ -162,13 +180,12 @@ async fn route(shared: &Shared, request: Request<Incoming>) -> HttpResponse {
             .collect(),
         body: body.to_bytes().to_vec(),
     };
-    if !slot.adapter.verify_http(&incoming) {
+    if !adapter.verify_http(&incoming) {
         tracing::warn!(
-            profile,
-            platform,
+            platform = adapter.describe().platform,
             "refused an unsigned or wrongly signed webhook request"
         );
         return HttpResponse::status(401);
     }
-    slot.adapter.handle_http(&incoming).await
+    adapter.handle_http(&incoming).await
 }

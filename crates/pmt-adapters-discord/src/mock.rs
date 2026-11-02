@@ -3,7 +3,8 @@
 //! scripted failures) and a Gateway WebSocket that numbers every event of
 //! a session and replays the missed ones on Resume, as Discord does.
 
-#![allow(dead_code, unreachable_pub)] // each test file uses part of it
+// A fixture: a mock that cannot serve should fail loudly.
+#![allow(clippy::missing_panics_doc)]
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
@@ -27,8 +28,9 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 
 /// The bot token the mock accepts.
 pub const TOKEN: &str = "discord-test-token";
-/// The DM channel the kit talks in, and its user.
+/// The DM channel the kit talks in.
 pub const DM: &str = "900";
+/// The user the kit talks as.
 pub const USER: &str = "4242";
 /// The bot's user id.
 pub const BOT: &str = "1";
@@ -105,8 +107,8 @@ impl DiscordMock {
     }
 
     /// The endpoints that reach this mock.
-    pub fn endpoints(&self) -> pmt_adapters_discord::Endpoints {
-        pmt_adapters_discord::Endpoints {
+    pub fn endpoints(&self) -> crate::Endpoints {
+        crate::Endpoints {
             api: format!("http://{}/api/v10", self.rest),
         }
     }
@@ -460,4 +462,32 @@ impl MockPlatform for DiscordMock {
     fn reactions(&self) -> Vec<(String, String)> {
         self.lock().reactions.clone()
     }
+}
+
+/// The adapter, built for a fresh profile of the home at `home` that
+/// holds the mock's token, and the mock it talks to: what
+/// `prometheus plugins test-adapter discord` and the crate's tests run the
+/// conformance kit on.
+///
+/// # Errors
+///
+/// The profile cannot be set up.
+pub async fn kit(
+    home: &std::path::Path,
+) -> Result<
+    (
+        Arc<dyn pmt_gateway::messaging::Adapter>,
+        Arc<dyn MockPlatform>,
+    ),
+    pmt_core::error::Error,
+> {
+    let mock = DiscordMock::start().await;
+    let setup = pmt_gateway::messaging::conformance::kit_setup(
+        home,
+        crate::PLATFORM,
+        "",
+        &[(crate::TOKEN_SECRET, TOKEN)],
+    )?;
+    let adapter = crate::Discord::new(&setup, mock.endpoints())?;
+    Ok((Arc::new(adapter), mock))
 }

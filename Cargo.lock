@@ -1198,6 +1198,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashify"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd1246c0e5493286aeb2dde35b1f4eb9c4ce00e628641210a5e553fc001a1f26"
+dependencies = [
+ "indexmap",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "hashlink"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1850,6 +1862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mail-parser"
+version = "0.11.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec00bda90c6e645a54506c630c2820cd6b1890cfd2b0a169b50f74b2b8c7c86"
+dependencies = [
+ "hashify",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2322,6 +2343,87 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-adapters-email"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "futures-util",
+ "jiff",
+ "mail-parser",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "pmt-adapters-matrix"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "jiff",
+ "percent-encoding",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "pmt-adapters-signal"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "futures-util",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "pmt-adapters-slack"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "pmt-adapters-telegram"
 version = "0.1.0"
 dependencies = [
@@ -2336,6 +2438,45 @@ dependencies = [
  "pmt-gateway",
  "pmt-net",
  "pmt-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "pmt-adapters-webhook"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "reqwest",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "pmt-adapters-whatsapp"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "jiff",
+ "percent-encoding",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "pmt-update",
  "reqwest",
  "serde_json",
  "tempfile",
@@ -2842,7 +2983,13 @@ dependencies = [
  "minisign",
  "nix 0.31.3",
  "pmt-adapters-discord",
+ "pmt-adapters-email",
+ "pmt-adapters-matrix",
+ "pmt-adapters-signal",
+ "pmt-adapters-slack",
  "pmt-adapters-telegram",
+ "pmt-adapters-webhook",
+ "pmt-adapters-whatsapp",
  "pmt-agent",
  "pmt-backup",
  "pmt-config",

@@ -8,6 +8,7 @@
 
 mod api;
 mod gateway;
+pub mod mock;
 mod normalize;
 
 use std::collections::BTreeSet;

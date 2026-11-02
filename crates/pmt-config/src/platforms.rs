@@ -195,13 +195,23 @@ pub struct EmailOptions {
     /// IMAP server host.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub imap_host: Option<String>,
-    /// IMAP server port (TLS).
+    /// IMAP server port.
     pub imap_port: u16,
+    /// IMAP transport security. Unset: `tls`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub imap_security: Option<MailSecurity>,
+    /// The login name, when it is not the address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
     /// SMTP server host.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub smtp_host: Option<String>,
     /// SMTP server port.
     pub smtp_port: u16,
+    /// SMTP transport security. Unset: `tls` on port 465, else
+    /// `starttls`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smtp_security: Option<MailSecurity>,
     /// Seconds between two IMAP polls.
     #[schemars(range(min = 1, max = 3600))]
     pub poll_interval_secs: u64,
@@ -213,10 +223,43 @@ impl Default for EmailOptions {
             address: None,
             imap_host: None,
             imap_port: 993,
+            imap_security: None,
+            username: None,
             smtp_host: None,
             smtp_port: 587,
+            smtp_security: None,
             poll_interval_secs: 15,
         }
+    }
+}
+
+/// How a mail connection is secured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MailSecurity {
+    /// TLS from the first byte.
+    Tls,
+    /// Plain, upgraded with STARTTLS before logging in.
+    Starttls,
+    /// No encryption (loopback hosts only).
+    Plain,
+}
+
+impl EmailOptions {
+    /// The IMAP security in effect.
+    #[must_use]
+    pub fn imap_security(&self) -> MailSecurity {
+        self.imap_security.unwrap_or(MailSecurity::Tls)
+    }
+
+    /// The SMTP security in effect.
+    #[must_use]
+    pub fn smtp_security(&self) -> MailSecurity {
+        self.smtp_security.unwrap_or(if self.smtp_port == 465 {
+            MailSecurity::Tls
+        } else {
+            MailSecurity::Starttls
+        })
     }
 }
 
@@ -244,7 +287,12 @@ pub struct SignalOptions {
 /// `gateway.platforms.whatsapp.options`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
-pub struct WhatsappOptions {}
+pub struct WhatsappOptions {
+    /// A `WhatsApp` bridge already running (`http://127.0.0.1:<port>`).
+    /// Unset: the adapter starts the managed bridge runtime itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bridge_url: Option<String>,
+}
 
 /// `gateway.platforms.webhook.options`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

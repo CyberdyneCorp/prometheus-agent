@@ -235,6 +235,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::PairingCommand,
     },
+    /// Plugin tools: `plugins test-adapter <platform|path>` runs the adapter
+    /// conformance kit against a built-in mock of the platform.
+    Plugins {
+        /// The plugins subcommand.
+        #[command(subcommand)]
+        command: crate::plugins_cmd::PluginsCommand,
+    },
     /// The full-screen terminal UI, attached to the home's gateway daemon
     /// (started when it is not running), or with `--standalone` to an
     /// in-process gateway that serves only this TUI.

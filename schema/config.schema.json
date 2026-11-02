@@ -2603,6 +2603,13 @@
           ],
           "description": "Which parts of a reply quote the message they answer: none, the\nfirst part, or every part. Unset: `first`."
         },
+        "routes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/WebhookRoute"
+          },
+          "description": "Webhook routes by name (`webhook` only), each served at\n`/p/<profile>/webhook/<route>` on the shared listener.",
+          "type": "object"
+        },
         "sessions": {
           "$ref": "#/$defs/PlatformSessions",
           "default": {},
@@ -4616,6 +4623,44 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "WebhookRoute": {
+      "additionalProperties": false,
+      "description": "One `[gateway.platforms.webhook.routes.<name>]` table.",
+      "properties": {
+        "events": {
+          "default": [],
+          "description": "Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the\npayload's `event_type`); empty admits every event.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "insecure_no_auth": {
+          "default": false,
+          "description": "Admit unsigned requests (only while `gateway.http.listen` is a\nloopback address).",
+          "type": "boolean"
+        },
+        "prompt": {
+          "description": "The turn's input: `{a.b.c}` paths into the payload, `{__raw__}`\nthe whole payload. Unset: the payload as JSON.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret every request must be signed with (GitHub, GitLab,\nStandard Webhooks or the generic scheme)."
+        }
+      },
+      "type": "object"
     },
     "WindowsShell": {
       "description": "Windows shells.",
