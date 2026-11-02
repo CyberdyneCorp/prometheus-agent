@@ -1476,7 +1476,7 @@ capabilities = [
 # tui capability's protocol scenarios is crates/pmt-gateway/tests/tui_protocol.rs.
 
 [tui."TUI launch selection"]
-"Piped invocation never opens the TUI" = ["crates/prometheus/tests/tui_cli.rs::a_piped_chat_uses_the_line_mode_and_never_the_alternate_screen"]
+"Piped invocation never opens the TUI" = ["crates/prometheus/tests/tui_cli.rs::a_piped_chat_uses_the_line_mode_and_never_the_alternate_screen", "crates/prometheus/tests/tui_cli.rs::a_chat_with_piped_stdin_and_stdout_answers_in_line_mode"]
 "Forced TUI without a terminal" = ["crates/prometheus/tests/tui_cli.rs::prometheus_tui_without_a_terminal_exits_2"]
 
 [tui."TUI attaches to the gateway daemon as a client"]

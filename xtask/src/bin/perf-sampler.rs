@@ -1,6 +1,6 @@
 //! `perf-sampler BINARY RUNS [chat HOME]`: runs `BINARY --version` (or,
-//! with `chat HOME`, starts `BINARY --home HOME chat --provider mock` in a
-//! pseudo-terminal until its prompt appears) and prints one
+//! with `chat HOME`, starts `BINARY --home HOME chat --line --provider mock`
+//! in a pseudo-terminal until its prompt appears) and prints one
 //! `startup_ms <ms>` line per timed run, then `peak_rss_bytes <n|none>`.
 //! The chat mode then also runs `chat -z` with the mock provider, so the
 //! peak covers the one-shot run the memory budget names.
@@ -126,7 +126,11 @@ mod chat {
         let mut child = Command::new(binary)
             .arg("--home")
             .arg(home)
-            .args(["chat", "--provider", "mock"])
+            // `--line`: the budget is the in-process prompt. The TUI (the
+            // default interface since M2) is a client of the daemon, whose
+            // start is the separate daemon readiness budget, and it would
+            // leave an autostarted daemon running in HOME.
+            .args(["chat", "--line", "--provider", "mock"])
             .env("TERM", "xterm")
             .stdin(tty(&pty.slave)?)
             .stdout(tty(&pty.slave)?)

@@ -97,23 +97,53 @@ fn opened(p: &mut OsSession) {
     p.expect("default").unwrap();
 }
 
-/// Scenario: Piped invocation never opens the TUI.
+/// `script` run by `/bin/sh` in a pseudo-terminal (so whatever it does not
+/// redirect is a terminal), with `ui.interface = "tui"`.
+fn shell_in_terminal(home: &Path, script: &str) -> (String, Option<i32>) {
+    let bin = format!(
+        "'{}' --home '{}' --set ui.interface=tui",
+        common::BIN,
+        home.display()
+    );
+    let mut cmd = Command::new("/bin/sh");
+    cmd.arg("-c").arg(script.replace("BIN", &bin));
+    common::isolate_user_home(&mut cmd, home);
+    cmd.env("TERM", "xterm-256color").env_remove("NO_COLOR");
+    let mut p = OsSession::spawn(cmd).unwrap();
+    p.set_expect_timeout(Some(Duration::from_secs(30)));
+    finish(p)
+}
+
+/// Scenario: Piped invocation never opens the TUI. Stdin stays the
+/// terminal and only stdout goes to a file, so the stdout check alone
+/// decides; without a prompt the line-mode CLI's own error answers.
 #[test]
 fn a_piped_chat_uses_the_line_mode_and_never_the_alternate_screen() {
     let home = mock_home();
     let out_file = home.path().join("out.txt");
-    let mut cmd = Command::new("/bin/sh");
-    cmd.arg("-c").arg(format!(
-        "'{}' --home '{}' chat --query hello > '{}'",
-        common::BIN,
-        home.path().display(),
-        out_file.display()
-    ));
-    common::isolate_user_home(&mut cmd, home.path());
-    cmd.env("TERM", "xterm-256color");
-    let mut p = OsSession::spawn(cmd).unwrap();
-    p.set_expect_timeout(Some(Duration::from_secs(30)));
-    let (screen, code) = finish(p);
+    let (screen, code) =
+        shell_in_terminal(home.path(), &format!("BIN chat > '{}'", out_file.display()));
+    assert_eq!(code, Some(2), "{screen}");
+    assert!(
+        screen.contains("no prompt: pass -z <prompt>, --prompt-file <path> or pipe it on stdin"),
+        "{screen}"
+    );
+    let written = std::fs::read_to_string(&out_file).unwrap();
+    for text in [&screen, &written] {
+        assert!(!text.contains(ENTER), "the alternate screen was entered");
+    }
+}
+
+/// Scenario: Piped invocation never opens the TUI, with the prompt piped
+/// in: the line-mode CLI answers it on stdout.
+#[test]
+fn a_chat_with_piped_stdin_and_stdout_answers_in_line_mode() {
+    let home = mock_home();
+    let out_file = home.path().join("out.txt");
+    let (screen, code) = shell_in_terminal(
+        home.path(),
+        &format!("printf 'hello\\n' | BIN chat > '{}'", out_file.display()),
+    );
     assert_eq!(code, Some(0), "{screen}");
     let written = std::fs::read_to_string(&out_file).unwrap();
     assert!(written.contains("mock: hello"), "{written}");
@@ -214,6 +244,7 @@ fn without_autostart_the_tui_exits_69_and_opens_no_store() {
 fn standalone_beside_a_running_daemon_exits_75() {
     let home = mock_home();
     let daemon = daemon::start(home.path(), &[]);
+    let before = store_files(home.path());
     let p = tui(home.path(), &["tui", "--standalone"], &[]);
     let (screen, code) = finish(p);
     assert_eq!(code, Some(75), "{screen}");
@@ -222,11 +253,26 @@ fn standalone_beside_a_running_daemon_exits_75() {
         home.path().display(),
         daemon.pid
     );
-    assert!(
-        screen.replace("\r\n", "").contains(&expected) || screen.contains("--standalone"),
-        "{screen}"
-    );
+    assert!(screen.contains(&expected), "{screen:?}");
     assert!(!screen.contains(ENTER));
+    assert_eq!(
+        store_files(home.path()),
+        before,
+        "state.db was opened as a writer"
+    );
+}
+
+/// Existence, size and modification time of the default profile's
+/// `state.db` and its write-ahead files: a writer opening the store
+/// creates or touches them.
+fn store_files(home: &Path) -> Vec<Option<(u64, std::time::SystemTime)>> {
+    ["state.db", "state.db-wal", "state.db-shm"]
+        .iter()
+        .map(|name| {
+            let meta = std::fs::metadata(home.join("profiles/default").join(name)).ok()?;
+            Some((meta.len(), meta.modified().unwrap()))
+        })
+        .collect()
 }
 
 /// Standalone mode: an in-process gateway that serves only this TUI and
