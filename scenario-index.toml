@@ -1605,6 +1605,7 @@ capabilities = [
 [messaging-gateway."Profiles served by one daemon"]
 "Eviction flushes into the owning profile" = { tests = ["crates/pmt-gateway/tests/messaging/routing.rs::an_evicted_agent_is_unloaded_in_its_own_profile", "crates/prometheus/tests/gateway_daemon.rs::an_evicted_agent_is_rebuilt_with_the_same_frozen_prompt"], note = "eviction unloads the agent through the session's own profile (Live::unload); built-in memory is written to the session's own profile store at every call, so nothing is left to flush" }
 "Daemon-wide key in a secondary profile" = ["crates/pmt-config/src/validate.rs::daemon_wide_keys_in_a_profile_config_point_to_daemon_toml"]
+"Profile added while running" = ["crates/prometheus/tests/gateway_daemon.rs::a_profile_created_while_running_is_served_after_gateway_reload"]
 "Pairing written to the owning profile" = ["crates/pmt-gateway/tests/messaging/routing.rs::pairing_is_stored_in_the_owning_profile", "crates/prometheus/tests/gateway_daemon.rs::a_pairing_code_is_approved_from_the_cli_whatever_its_formatting"]
 
 [messaging-gateway."Routing identity and deterministic session keys"]

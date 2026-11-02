@@ -120,7 +120,7 @@ pub(crate) fn answer(
                 purpose,
                 pid,
             };
-            match server.tickets.issue(grant, server.profiles()) {
+            match server.tickets.issue(grant, &server.profiles()) {
                 Ok(ticket) => ControlResponse {
                     ticket: Some(ticket),
                     ..ControlResponse::default()

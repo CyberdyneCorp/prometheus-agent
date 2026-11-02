@@ -9,7 +9,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use pmt_config::ProfileScope;
+use pmt_config::{Home, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{Agents, BusyPolicy, Conversation, Lookup};
 use pmt_gateway::{HostFuture, Link};
@@ -17,7 +17,7 @@ use pmt_rpc::contracts::{Dispatched, SessionSetup};
 use pmt_store::{EndReason, LineageKind, NewSession, Origin, Source, Store};
 use tracing::Instrument as _;
 
-use super::{DaemonHost, session_id, session_span, setup};
+use super::{DaemonHost, Profile, session_id, session_span, setup};
 use crate::chat::commands;
 use crate::slash::{self, Resolution, Surface};
 
@@ -50,11 +50,11 @@ fn lookup_of(resolution: Resolution) -> Lookup {
 
 impl Agents for DaemonHost {
     fn store(&self, profile: &str) -> Option<Arc<Store>> {
-        self.profiles.get(profile).map(|p| Arc::clone(&p.store))
+        self.profile(profile).ok().map(|p| Arc::clone(&p.store))
     }
 
     fn scope(&self, profile: &str) -> Option<ProfileScope> {
-        self.profiles.get(profile).map(|p| p.scope())
+        self.profile(profile).ok().map(|p| p.scope())
     }
 
     fn create_conversation<'a>(
@@ -63,7 +63,7 @@ impl Agents for DaemonHost {
         conversation: Conversation,
     ) -> HostFuture<'a, String> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let cwd = Self::cwd_of(profile, None);
             std::fs::create_dir_all(&cwd)
                 .map_err(|e| Error::io(&pmt_core::error::codes::HOME_IO, &cwd, &e))?;
@@ -96,7 +96,7 @@ impl Agents for DaemonHost {
         text: &'a str,
     ) -> HostFuture<'a, bool> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let id = self::session_id(session_id)?;
             let loaded = profile.loaded.lock().await.get(&id).cloned();
             match loaded {
@@ -116,7 +116,7 @@ impl Agents for DaemonHost {
         line: &'a str,
     ) -> HostFuture<'a, Lookup> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let scope = profile.scope();
             let loaded = match self::session_id(session_id) {
                 Ok(id) => profile.loaded.lock().await.get(&id).cloned(),
@@ -140,7 +140,7 @@ impl Agents for DaemonHost {
         let span = session_span(profile, session_id);
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 self.gateway_command(profile, session_id, input, link).await
             }
             .instrument(span),
@@ -150,17 +150,21 @@ impl Agents for DaemonHost {
     fn evict<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 Ok(Self::unload(profile, self::session_id(session_id)?).await)
             }
             .instrument(session_span(profile, session_id)),
         )
     }
 
+    fn serve_new_profiles(&self) -> Vec<String> {
+        self.open_new_profiles()
+    }
+
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 let id = self::session_id(session_id)?;
                 Self::close_loaded(profile, id, EndReason::NewSession).await;
                 // A session that was not loaded (or is held right now) is
@@ -170,5 +174,56 @@ impl Agents for DaemonHost {
             }
             .instrument(session_span(profile, session_id)),
         )
+    }
+}
+
+impl DaemonHost {
+    /// Serves the profiles created since start when the launch profile
+    /// multiplexes (spec: configuration-and-profiles, Served profile set;
+    /// messaging-gateway, Profiles served by one daemon): each opens in
+    /// its own scope; `standalone` ones and ones that fail to load (logged)
+    /// are left out. Returns the names now served.
+    fn open_new_profiles(&self) -> Vec<String> {
+        let Ok(launch) = self.profile(&self.launch_profile) else {
+            return Vec::new();
+        };
+        let scope = launch.scope();
+        if !scope.config().gateway.multiplex {
+            return Vec::new();
+        }
+        // Profiles live at `<home>/profiles/<name>` (design D13).
+        let Some(root) = scope.dir().parent().and_then(std::path::Path::parent) else {
+            return Vec::new();
+        };
+        let (Ok(home), Ok(overrides)) = (Home::open(root), Overrides::parse(&self.set)) else {
+            return Vec::new();
+        };
+        let mut added = Vec::new();
+        for name in home.profiles().unwrap_or_default() {
+            if self.served().contains_key(name.as_str()) {
+                continue;
+            }
+            let opened = home
+                .existing_profile(&name)
+                .and_then(|dir| ProfileScope::open(dir, &overrides, Launch::Other));
+            match opened.and_then(|scope| {
+                if scope.config().gateway.standalone {
+                    return Ok(None);
+                }
+                crate::startup::register_profile(&scope);
+                Profile::open(scope).map(Some)
+            }) {
+                Ok(Some(profile)) => {
+                    self.profiles
+                        .write()
+                        .expect("profiles poisoned")
+                        .insert(name.as_str().to_owned(), profile);
+                    added.push(name.as_str().to_owned());
+                }
+                Ok(None) => {}
+                Err(err) => tracing::error!(profile = name.as_str(), "profile not served: {err}"),
+            }
+        }
+        added
     }
 }

@@ -59,8 +59,8 @@ pub(in crate::daemon_cmd) async fn watch(host: Arc<DaemonHost>) {
     let mut tick = tokio::time::interval(POLL);
     loop {
         tick.tick().await;
-        for profile in host.profiles.values() {
-            host.check(profile).await;
+        for (_, profile) in host.all_profiles() {
+            host.check(&profile).await;
         }
     }
 }
@@ -68,7 +68,7 @@ pub(in crate::daemon_cmd) async fn watch(host: Arc<DaemonHost>) {
 impl DaemonHost {
     /// Each served profile's configuration state, for `daemon status`.
     pub(super) fn config_states(&self) -> Vec<ProfileConfig> {
-        self.profiles
+        self.all_profiles()
             .iter()
             .map(|(name, profile)| {
                 let state = profile.config.lock().expect("config state poisoned");

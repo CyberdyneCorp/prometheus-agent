@@ -447,7 +447,7 @@ impl Daemon {
         let server = Server::new(options, Arc::clone(&host) as Arc<dyn Host>).unwrap();
         let (stop, stopped) = oneshot::channel::<()>();
         let path: PathBuf = home.path().to_owned();
-        let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles().to_vec()).unwrap();
+        let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles()).unwrap();
         let task = {
             let server = Arc::clone(&server);
             tokio::spawn(async move {

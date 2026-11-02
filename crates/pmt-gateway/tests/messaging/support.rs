@@ -394,6 +394,10 @@ impl Agents for FakeAgents {
         Box::pin(async move { Ok(!busy) })
     }
 
+    fn serve_new_profiles(&self) -> Vec<String> {
+        Vec::new()
+    }
+
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
         Box::pin(async move {
             let store = self

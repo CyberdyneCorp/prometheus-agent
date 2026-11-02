@@ -337,3 +337,44 @@ fn gateway_status_reports_each_adapter() {
     assert!(outbox.contains("sent  reply  test:u1"), "{outbox}");
     daemon.stop(home);
 }
+
+#[test]
+fn a_profile_created_while_running_is_served_after_gateway_reload() {
+    let home = gateway_home("");
+    let home = home.path();
+    ok(&run(home, &["config", "set", "gateway.multiplex", "true"]));
+    let daemon = Daemon::start(home);
+    send(home, "default", "u1", "hello");
+    wait_said(home, "default", "fast done");
+    let before = routed(home);
+    ok(&run(home, &["profile", "create", "side"]));
+    let side = home.join("profiles/side/config.toml");
+    let mut config = std::fs::read_to_string(&side).unwrap_or_default();
+    config.push_str(
+        "\n[model]\nprovider = \"mock\"\ndefault = \"mock\"\n\n[gateway.busy]\ndebounce_ms = 0\n\n\
+         [gateway.platforms.test]\nenabled = true\nallow_all = true\n",
+    );
+    std::fs::write(&side, config).unwrap();
+    let status = ok(&run(home, &["gateway", "reload"]));
+    assert!(status.contains("side:"), "{status}");
+    assert!(
+        status.contains("default:\n  test: connected"),
+        "the running adapter was not restarted: {status}"
+    );
+    send(home, "side", "s1", "hi side");
+    wait_said(home, "side", "mock: hi side");
+    send(home, "default", "u1", "still here?");
+    wait("a second default answer", Duration::from_mins(1), || {
+        texts(home, "default")
+            .iter()
+            .filter(|t| t.contains("fast done"))
+            .count()
+            == 2
+    });
+    assert_eq!(
+        routed(home)[0].0,
+        before[0].0,
+        "the default session goes on"
+    );
+    daemon.stop(home);
+}

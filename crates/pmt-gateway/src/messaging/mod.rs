@@ -227,7 +227,7 @@ impl Gateway {
             conn,
         });
         tokio::spawn(peer::read(Arc::clone(&shared), rx).in_current_span());
-        let profiles = server.profiles().to_vec();
+        let profiles = server.profiles();
         if !clean {
             for profile in &profiles {
                 recovery::recover(&shared, profile);
@@ -286,11 +286,19 @@ impl Gateway {
         Ok(pairing)
     }
 
-    /// Starts the adapters served profiles enable that are not running
-    /// (`gateway reload`); running adapters and sessions are untouched.
+    /// `gateway reload`: serves the profiles created since start, then
+    /// starts the adapters served profiles enable that are not running;
+    /// running adapters and sessions are untouched.
     pub fn reload(&self) {
-        for profile in self.shared.server.profiles() {
-            adapters::start_profile(&self.shared, profile);
+        let shared = &self.shared;
+        for profile in shared.agents.serve_new_profiles() {
+            if shared.server.add_profile(&profile) {
+                tracing::info!(profile, "now serving a profile created since start");
+                outbox::spawn(shared, &profile);
+            }
+        }
+        for profile in &shared.server.profiles() {
+            adapters::start_profile(shared, profile);
         }
     }
 
@@ -309,7 +317,7 @@ impl Gateway {
         let shared = &self.shared;
         shared.stop.cancel();
         let drained = lane::drain(shared, shared.options.drain_timeout).await;
-        for profile in shared.server.profiles() {
+        for profile in &shared.server.profiles() {
             shared
                 .options
                 .hooks

@@ -153,7 +153,7 @@ pub(crate) async fn sweep(shared: &Shared) {
 /// Removes routes unused for `gateway.sessions.route_max_age_secs` (their
 /// sessions and transcripts stay).
 pub(crate) fn prune_routes(shared: &Shared) {
-    for profile in shared.server.profiles() {
+    for profile in &shared.server.profiles() {
         let (Some(store), Some(scope)) = (shared.store(profile), shared.agents.scope(profile))
         else {
             continue;

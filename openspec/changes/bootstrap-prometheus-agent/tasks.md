@@ -258,7 +258,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 24. M2 Messaging gateway core
 
-- [ ] 24.1 Implement profiles served by one daemon, routing identity with deterministic session keys, DM/group/thread isolation, and single-flight routing; verify with table tests of session keys (spec: messaging-gateway)
+- [x] 24.1 Implement profiles served by one daemon, routing identity with deterministic session keys, DM/group/thread isolation, and single-flight routing; verify with table tests of session keys (spec: messaging-gateway)
 - [x] 24.2 Implement the busy input policy from config only, command busy policy from the registry, FIFO queued turns, stop preserving the session, and conversations that never rotate on time; verify with gateway tests (spec: messaging-gateway)
 - [x] 24.3 Implement gateway slash commands, quick commands, typed lifecycle hooks and command access tiers; verify that a user without a tier gets a refusal (spec: messaging-gateway)
 - [x] 24.4 Implement the authorization order with a fail-closed default and the pairing flow (`prometheus pairing`); verify that an unpaired user is refused and a paired one is admitted (spec: messaging-gateway)

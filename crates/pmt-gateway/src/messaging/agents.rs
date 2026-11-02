@@ -110,6 +110,11 @@ pub trait Agents: Host {
     /// turn or holds queued input.
     fn evict<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool>;
 
+    /// Starts serving the profiles of the home created since the daemon
+    /// started (with a multiplexing launch profile; `standalone` ones are
+    /// left out) and returns their names (`gateway reload`).
+    fn serve_new_profiles(&self) -> Vec<String>;
+
     /// Ends a session the gateway replaced (`/new`).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 }

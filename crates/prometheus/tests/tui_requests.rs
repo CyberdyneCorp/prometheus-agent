@@ -236,7 +236,7 @@ impl Gateway {
         let (stop, stopped) = oneshot::channel::<()>();
         let path: PathBuf = home.to_owned();
         let task = runtime.spawn(async move {
-            let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles().to_vec())?;
+            let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles())?;
             let shutdown = async {
                 let _ = stopped.await;
             };

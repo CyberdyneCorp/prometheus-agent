@@ -163,7 +163,8 @@ pub struct Server {
     instance_id: String,
     catalog: Arc<Catalog>,
     digest: String,
-    profiles: Vec<String>,
+    /// Grows when `gateway reload` serves a profile created since start.
+    profiles: std::sync::RwLock<Vec<String>>,
     rpc: RpcListenerConfig,
     approvals_timeout: Duration,
     allowed_origins: Vec<String>,
@@ -241,7 +242,7 @@ impl Server {
             instance_id: random_hex(16),
             digest: catalog.digest(),
             catalog,
-            profiles: options.profiles,
+            profiles: std::sync::RwLock::new(options.profiles),
             rpc: options.rpc,
             approvals_timeout: options.approvals_timeout,
             allowed_origins: options.allowed_origins,
@@ -314,9 +315,28 @@ impl Server {
     }
 
     /// The profiles served.
+    ///
+    /// # Panics
+    ///
+    /// When the profile list's lock is poisoned.
     #[must_use]
-    pub fn profiles(&self) -> &[String] {
-        &self.profiles
+    pub fn profiles(&self) -> Vec<String> {
+        self.profiles.read().expect("profiles poisoned").clone()
+    }
+
+    /// Serves `profile` from now on (tickets may grant it); `false` when
+    /// it already was.
+    ///
+    /// # Panics
+    ///
+    /// When the profile list's lock is poisoned.
+    pub fn add_profile(&self, profile: &str) -> bool {
+        let mut profiles = self.profiles.write().expect("profiles poisoned");
+        if profiles.iter().any(|p| p == profile) {
+            return false;
+        }
+        profiles.push(profile.to_owned());
+        true
     }
 
     /// How long a session may stay without a client before it is closed.
@@ -485,7 +505,7 @@ impl Server {
             instance_id: self.instance_id.clone(),
             rpc_url: endpoint.map(|e| e.rpc_url.clone()).unwrap_or_default(),
             rpc_protocol: self.protocol().to_string(),
-            profiles: self.profiles.clone(),
+            profiles: self.profiles(),
             connections: self.connections.load(Ordering::Relaxed),
             sessions,
             active_turns,
