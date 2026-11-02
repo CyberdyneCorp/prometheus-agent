@@ -124,6 +124,17 @@ fn db(home: &Path, profile: &str) -> rusqlite::Connection {
     .unwrap()
 }
 
+/// How many user messages the default profile stored.
+fn stored_prompts(home: &Path) -> i64 {
+    db(home, "default")
+        .query_row(
+            "SELECT count(*) FROM messages WHERE role = 'user'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
 /// `(session, turn_active, resume_pending, restart_count)` of the routed
 /// sessions.
 fn routed(home: &Path) -> Vec<(String, i64, i64, i64)> {
@@ -147,7 +158,9 @@ fn gateway_home(extra: &str) -> tempfile::TempDir {
     let profile = home.path().join("profiles/default");
     std::fs::write(
         profile.join("mock.toml"),
-        "[[rule]]\nuser = \"slow\"\nrepeat = true\nlatency_ms = 60000\ntext = \"slow done\"\n\n\
+        // Only a request whose user text is exactly `slow` is slow: after a
+        // crash, the stored `slow` is merged with the next message.
+        "[[rule]]\nuser_regex = '^slow$'\nrepeat = true\nlatency_ms = 60000\ntext = \"slow done\"\n\n\
          [[rule]]\nrepeat = true\ntext = \"fast done\"\n",
     )
     .unwrap();
@@ -167,8 +180,10 @@ fn a_daemon_killed_mid_turn_recovers_the_conversation() {
     let home = home.path();
     let daemon = Daemon::start(home);
     send(home, "default", "u1", "slow");
+    // Killed once the prompt is stored: repair then merges it into the next
+    // message's request, as after a real crash mid-turn.
     wait("the turn runs", Duration::from_secs(30), || {
-        routed(home).first().is_some_and(|r| r.1 == 1)
+        routed(home).first().is_some_and(|r| r.1 == 1) && stored_prompts(home) == 1
     });
     daemon.kill();
     assert!(!home.join("run/clean_shutdown").exists());
