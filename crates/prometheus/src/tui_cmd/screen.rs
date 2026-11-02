@@ -154,8 +154,9 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
     let ending = tui
         .run(&mut screen, &keys, &mut results, &mut signals)
         .await;
-    keys.stop();
+    // Restore first: stopping the reader is bounded but may give up on it.
     drop(guard);
+    keys.stop();
     ending
 }
 
@@ -353,6 +354,11 @@ impl<'a> Tui<'a> {
 /// Reads terminal events on a thread of its own (crossterm's reads
 /// block) and hands them to the loop; it stops within 50 ms of
 /// [`KeyReader::stop`], before anything else reads the terminal.
+///
+/// Except when the terminal has hung up: crossterm 0.29's read loop then
+/// spins on a readable terminal with nothing to read and never returns to
+/// check its timeout, so [`KeyReader::stop`] waits a bounded time and
+/// leaves such a thread to end with the process.
 struct KeyReader {
     events: tokio::sync::Mutex<mpsc::UnboundedReceiver<TermEvent>>,
     stop: Arc<AtomicBool>,
@@ -385,9 +391,20 @@ impl KeyReader {
         }
     }
 
+    /// How long [`KeyReader::stop`] waits for the thread: a few of its
+    /// 50 ms polls.
+    const STOP_WAIT: Duration = Duration::from_millis(200);
+
     fn stop(mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
+        let Some(thread) = self.thread.take() else {
+            return;
+        };
+        let deadline = std::time::Instant::now() + Self::STOP_WAIT;
+        while !thread.is_finished() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        if thread.is_finished() {
             let _ = thread.join();
         }
     }

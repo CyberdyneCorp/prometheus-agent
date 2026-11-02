@@ -249,7 +249,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 ## 23. M2 TUI
 
 - [x] 23.1 Implement the ratatui TUI launch selection and attachment to the daemon as a client, plus standalone in-process mode; verify with a pty test that `prometheus` on a TTY with `ui.interface = "tui"` attaches (spec: tui)
-- [ ] 23.2 Implement terminal state restoration on every exit path (panic, signal) and the in-TUI update hand-off; verify with pty tests that the terminal mode is restored after SIGTERM (spec: tui)
+- [x] 23.2 Implement terminal state restoration on every exit path (panic, signal) and the in-TUI update hand-off; verify with pty tests that the terminal mode is restored after SIGTERM (spec: tui)
 - [x] 23.3 Implement the TUI side of the protocol (handshake, typed method registry, error and close codes, attachment-scoped session access, sequencing and replay, liveness, non-blocking long requests, retirement, server requests with fail-closed deadlines, idempotent creation, busy submission, author stamping, profile scope); verify against the shared conformance suite (spec: tui)
 - [x] 23.4 Implement the slash command flow, discovery RPCs that preserve the prompt cache, composer with path completion, status line with accessibility, configurable key bindings and orphan attachment reaping; verify with snapshot tests (spec: tui)
 - [ ] 23.5 Implement client-local display commands (status bar and indicator toggles that never reach the daemon), busy indicator styles, the fuzzy command palette (inserts, never runs) and the collapsible startup banner; verify with pty snapshot tests (spec: tui)
