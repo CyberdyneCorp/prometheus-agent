@@ -16,9 +16,9 @@ use serde_json::{Value, json};
 use tracing::Instrument as _;
 
 use super::Shared;
-use super::adapter::{Button, Outgoing, SendError};
+use super::adapter::{Button, Outgoing, Select, SendError};
 use super::adapters::Op;
-use super::{retry, typing};
+use super::{markup, retry, typing};
 
 /// How often the worker looks for due entries without being woken (the
 /// CLI enqueues from another process).
@@ -80,16 +80,18 @@ fn after(now: Timestamp, wait: Duration) -> Timestamp {
 
 /// The message an entry sends: a card's JSON carries buttons.
 fn outgoing(entry: &Outbound) -> Outgoing {
-    let (text, buttons) = if entry.kind == OutboundKind::Approval {
+    let (text, buttons, select) = if entry.kind == OutboundKind::Approval {
         let card: Value = serde_json::from_str(&entry.body).unwrap_or_else(|_| json!({}));
         let buttons: Vec<Button> =
             serde_json::from_value(card["buttons"].clone()).unwrap_or_default();
+        let select: Option<Select> = serde_json::from_value(card["select"].clone()).ok();
         (
             card["text"].as_str().unwrap_or_default().to_owned(),
             buttons,
+            select,
         )
     } else {
-        (entry.body.clone(), Vec::new())
+        (entry.body.clone(), Vec::new(), None)
     };
     Outgoing {
         chat_id: entry.chat_id.clone(),
@@ -97,8 +99,10 @@ fn outgoing(entry: &Outbound) -> Outgoing {
         reply_to: entry.reply_to.clone(),
         text,
         buttons,
+        select,
         attachments: entry.attachments.clone(),
         plain: false,
+        markup: None,
     }
 }
 
@@ -137,7 +141,11 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
         tokio::time::sleep(delay).await;
     }
     let outcome = match &entry.edit_of {
-        Some(id) if slot.can(Op::Edit) => match slot.adapter.edit(id, &message).await {
+        Some(id) if slot.can(Op::Edit) => match slot
+            .adapter
+            .edit(id, &markup::rendered(slot.adapter.as_ref(), &message))
+            .await
+        {
             Ok(()) => Ok(Some(id.clone())),
             Err(err @ (SendError::Unsupported | SendError::Permanent(_))) => {
                 if err == SendError::Unsupported {

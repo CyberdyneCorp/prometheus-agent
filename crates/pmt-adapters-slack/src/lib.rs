@@ -29,7 +29,7 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, Outgoing,
-    Reaction, SendError, Sent,
+    Reaction, Select, SendError, Sent,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -192,7 +192,29 @@ fn blocks(message: &Outgoing) -> Value {
             .collect();
         blocks.push(json!({"type": "actions", "elements": elements}));
     }
+    if let Some(select) = &message.select {
+        blocks.push(checkboxes(select));
+    }
     Value::Array(blocks)
+}
+
+/// A multi-select control: checkboxes and a Submit button carrying the
+/// signed data (the submission reads the checked boxes from the state).
+fn checkboxes(select: &Select) -> Value {
+    let options: Vec<Value> = select
+        .options
+        .iter()
+        .enumerate()
+        .map(|(i, label)| {
+            let label: String = label.chars().take(75).collect();
+            json!({"text": {"type": "plain_text", "text": label}, "value": (i + 1).to_string()})
+        })
+        .collect();
+    json!({"type": "actions", "elements": [
+        {"type": "checkboxes", "action_id": normalize::SELECT_ACTION, "options": options},
+        {"type": "button", "text": {"type": "plain_text", "text": "Submit"},
+         "value": select.data, "action_id": normalize::SUBMIT_ACTION}
+    ]})
 }
 
 /// The Slack name of a reaction emoji (Slack reacts by name).
@@ -259,7 +281,7 @@ impl Adapter for Slack {
                 if let Some(thread) = &message.thread_id {
                     body["thread_ts"] = json!(thread);
                 }
-                if !message.buttons.is_empty() {
+                if !message.buttons.is_empty() || message.select.is_some() {
                     body["blocks"] = blocks(&message);
                 }
                 if message.plain {

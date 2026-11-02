@@ -23,7 +23,8 @@ use pmt_config::platforms::SignalOptions;
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, MediaKind, MediaStream, Outgoing, Reaction, SendError, Sent,
+    ChatInfo, ChatType, Descriptor, Markup, MediaKind, MediaStream, Outgoing, Reaction, SendError,
+    Sent, markup,
 };
 use rpc::Rpc;
 use serde_json::{Value, json};
@@ -43,6 +44,8 @@ pub struct Signal {
     rpc: Option<Rpc>,
     missing: Option<&'static str>,
     stream: Mutex<Option<CancellationToken>>,
+    /// The daemon refused text styles once: send plain text from then on.
+    no_styles: std::sync::atomic::AtomicBool,
 }
 
 impl std::fmt::Debug for Signal {
@@ -61,6 +64,12 @@ fn recipient(chat: &str) -> Value {
     }
 }
 
+/// Whether a refusal says the daemon does not know text styles.
+fn styles_refused(err: &SendError) -> bool {
+    matches!(err, SendError::Permanent(why) if why.to_lowercase().contains("textstyle")
+        || why.to_lowercase().contains("text-style"))
+}
+
 /// `<author>:<timestamp>` split.
 fn message_ref(id: &str) -> Result<(&str, i64), SendError> {
     id.rsplit_once(':')
@@ -69,6 +78,51 @@ fn message_ref(id: &str) -> Result<(&str, i64), SendError> {
 }
 
 impl Signal {
+    /// Sets the text of `params`: the host leaves Markdown, sent as plain
+    /// text with native style ranges (none for a plain resend or once the
+    /// daemon refused styles).
+    fn styled(&self, params: &mut Value, message: &Outgoing) {
+        let plain = message.plain || self.no_styles.load(std::sync::atomic::Ordering::Relaxed);
+        if plain {
+            params["message"] = json!(message.text);
+            return;
+        }
+        let (text, styles) = markup::signal_styles(&message.text);
+        params["message"] = json!(text);
+        if !styles.is_empty() {
+            let specs: Vec<String> = styles.iter().map(markup::Style::spec).collect();
+            params["textStyle"] = json!(specs);
+        }
+    }
+
+    /// Calls `send`; a daemon without text-style support gets the plain
+    /// text instead, with one WARN.
+    async fn call_styled(
+        &self,
+        rpc: &Rpc,
+        mut params: Value,
+        message: &Outgoing,
+    ) -> Result<Value, SendError> {
+        match rpc.call("send", &params).await {
+            Err(err) if params.get("textStyle").is_some() && styles_refused(&err) => {
+                if !self
+                    .no_styles
+                    .swap(true, std::sync::atomic::Ordering::Relaxed)
+                {
+                    tracing::warn!(
+                        platform = PLATFORM,
+                        "the signal-cli daemon does not support text styles; sending plain text"
+                    );
+                }
+                params.as_object_mut().map(|p| p.remove("textStyle"));
+                params["message"] =
+                    json!(markup::render_in(Markup::Plain, PLATFORM, &message.text));
+                rpc.call("send", &params).await
+            }
+            other => other,
+        }
+    }
+
     /// The adapter for `setup`.
     ///
     /// # Errors
@@ -102,6 +156,7 @@ impl Signal {
             rpc,
             missing,
             stream: Mutex::default(),
+            no_styles: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -176,6 +231,7 @@ impl Adapter for Signal {
         let limit = pmt_config::platforms::first_party(PLATFORM)
             .map_or(8000, |p| p.max_message_length as usize);
         Descriptor {
+            markup: Markup::Platform,
             supports_edit: true,
             supports_delete: true,
             supports_typing: true,
@@ -203,7 +259,7 @@ impl Adapter for Signal {
         Box::pin(async move {
             let rpc = self.rpc()?;
             let mut params = recipient(&message.chat_id);
-            params["message"] = json!(message.text);
+            self.styled(&mut params, &message);
             if !message.attachments.is_empty() {
                 let paths: Vec<&str> = message
                     .attachments
@@ -217,7 +273,7 @@ impl Adapter for Signal {
                 params["quoteAuthor"] = json!(author);
                 params["quoteTimestamp"] = json!(ts);
             }
-            let sent = rpc.call("send", &params).await?;
+            let sent = self.call_styled(rpc, params, &message).await?;
             let id = sent["timestamp"]
                 .as_i64()
                 .map(|ts| format!("{}:{ts}", rpc.account));
@@ -233,9 +289,10 @@ impl Adapter for Signal {
         Box::pin(async move {
             let (_, ts) = message_ref(message_id)?;
             let mut params = recipient(&message.chat_id);
-            params["message"] = json!(message.text);
+            self.styled(&mut params, message);
             params["editTimestamp"] = json!(ts);
-            self.rpc()?.call("send", &params).await.map(drop)
+            let rpc = self.rpc()?;
+            self.call_styled(rpc, params, message).await.map(drop)
         })
     }
 

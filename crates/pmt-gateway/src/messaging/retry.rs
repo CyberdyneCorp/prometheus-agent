@@ -11,6 +11,7 @@
 use std::time::Duration;
 
 use super::adapter::{Adapter, Outgoing, SendError, Sent};
+use super::markup;
 
 /// Inline retries after the first attempt.
 const INLINE_RETRIES: u32 = 2;
@@ -41,16 +42,31 @@ fn inline_wait(err: &SendError, attempt: u32) -> Option<Duration> {
     }
 }
 
-/// Sends `message` through `adapter` with the inline retries.
+/// Sends `message` (its text in the agent's Markdown) through `adapter`
+/// with the inline retries: rendered in the adapter's markup, then, when
+/// the platform refuses it, in the markup's fallback dialect if it has
+/// one, then as plain text.
 pub(crate) async fn send(adapter: &dyn Adapter, message: &Outgoing) -> Result<Sent, SendError> {
-    let mut message = message.clone();
+    let descriptor = adapter.describe();
+    let source = message.text.clone();
+    let mut message = markup::rendered_with(&descriptor, message);
     let mut attempt = 0;
     loop {
         match adapter.send(&message).await {
             Ok(sent) => return Ok(sent),
             Err(SendError::Formatting(why)) if !message.plain => {
-                tracing::info!("markup refused ({why}); resending as plain text");
-                message.plain = true;
+                if let Some(dialect) =
+                    markup::downgrade(&descriptor).filter(|_| message.markup.is_none())
+                {
+                    tracing::info!("markup refused ({why}); resending in {dialect:?}");
+                    message.text = markup::render_in(dialect, &descriptor.platform, &source);
+                    message.markup = Some(dialect);
+                } else {
+                    tracing::info!("markup refused ({why}); resending as plain text");
+                    message.plain = true;
+                    message.markup = None;
+                    message.text = markup::render(&descriptor, &source, true);
+                }
             }
             Err(err) => match inline_wait(&err, attempt).filter(|_| attempt < INLINE_RETRIES) {
                 Some(wait) => {

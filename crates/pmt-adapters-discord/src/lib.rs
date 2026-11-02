@@ -15,6 +15,7 @@ mod gateway;
 #[cfg(feature = "kit")]
 pub mod mock;
 mod normalize;
+mod threads;
 mod voice;
 
 use std::collections::BTreeSet;
@@ -31,7 +32,7 @@ use pmt_gateway::messaging::multipart::Form;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, MenuCommand,
-    Outgoing, Reaction, SendError, Sent,
+    Outgoing, Reaction, Select, SendError, Sent,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -61,6 +62,7 @@ pub struct Discord {
     session: Arc<Mutex<gateway::Session>>,
     api: Mutex<Option<Api>>,
     connection: Mutex<Option<CancellationToken>>,
+    channels: Arc<threads::Channels>,
 }
 
 impl std::fmt::Debug for Discord {
@@ -121,6 +123,7 @@ impl Discord {
             session: Arc::default(),
             api: Mutex::default(),
             connection: Mutex::default(),
+            channels: Arc::default(),
         })
     }
 
@@ -179,7 +182,29 @@ fn components(message: &Outgoing) -> Value {
             json!({"type": 1, "components": buttons})
         })
         .collect();
+    let mut rows = rows;
+    if let Some(select) = &message.select {
+        rows.push(select_menu(select));
+    }
     json!(rows)
+}
+
+/// A multi-select as a string select menu (25 options at most): the
+/// submission's values are the picked options' numbers.
+fn select_menu(select: &Select) -> Value {
+    let options: Vec<Value> = select
+        .options
+        .iter()
+        .take(25)
+        .enumerate()
+        .map(|(i, label)| {
+            let label: String = label.chars().take(100).collect();
+            json!({"label": label, "value": (i + 1).to_string()})
+        })
+        .collect();
+    let count = options.len();
+    json!({"type": 1, "components": [{"type": 3, "custom_id": select.data,
+        "options": options, "min_values": 1, "max_values": count}]})
 }
 
 fn payload(message: &Outgoing) -> Value {
@@ -194,8 +219,35 @@ fn payload(message: &Outgoing) -> Value {
     body
 }
 
+/// A new forum post of `message`: titled by its first line, its files on
+/// the starter message.
+fn forum_post(message: &Outgoing) -> Result<Body, SendError> {
+    let title = threads::post_title(if message.text.trim().is_empty() {
+        message.attachments.first().map_or("Message", |a| {
+            a.path.rsplit(['/', '\\']).next().unwrap_or("Message")
+        })
+    } else {
+        &message.text
+    });
+    if message.attachments.is_empty() {
+        return Ok(Body::Json(
+            json!({"name": title, "message": payload(message)}),
+        ));
+    }
+    form(
+        message,
+        |starter| json!({"name": title, "message": starter}),
+    )
+}
+
 /// A message with files, as Discord's multipart form.
 fn with_files(message: &Outgoing) -> Result<Body, SendError> {
+    form(message, |body| body)
+}
+
+/// The multipart form of `message`'s files, its `payload_json` the
+/// message payload as `wrap` places it.
+fn form(message: &Outgoing, wrap: impl FnOnce(Value) -> Value) -> Result<Body, SendError> {
     let mut form = Form::new();
     let mut attachments = Vec::new();
     let mut files = Vec::new();
@@ -211,7 +263,7 @@ fn with_files(message: &Outgoing) -> Result<Body, SendError> {
     }
     let mut body = payload(message);
     body["attachments"] = json!(attachments);
-    form.text("payload_json", &body.to_string());
+    form.text("payload_json", &wrap(body).to_string());
     for (field, name, bytes) in &files {
         form.file(field, name, bytes);
     }
@@ -222,6 +274,20 @@ fn with_files(message: &Outgoing) -> Result<Body, SendError> {
 fn emoji(reaction: &Reaction) -> String {
     percent_encoding::utf8_percent_encode(&reaction.emoji, percent_encoding::NON_ALPHANUMERIC)
         .to_string()
+}
+
+impl Discord {
+    /// A new post in the forum `message.chat_id`.
+    async fn post(&self, api: &Api, message: &Outgoing) -> Result<Sent, SendError> {
+        let path = format!("/channels/{}/threads", message.chat_id);
+        let created = api.call(Method::POST, &path, forum_post(message)?).await?;
+        self.channels.learn(&created);
+        let id = created["message"]["id"]
+            .as_str()
+            .or_else(|| created["id"].as_str())
+            .map(str::to_owned);
+        Ok(Sent { message_id: id })
+    }
 }
 
 impl Adapter for Discord {
@@ -278,7 +344,8 @@ impl Adapter for Discord {
                 api,
                 link,
                 session: Arc::clone(&self.session),
-                require_mention: self.options.require_mention,
+                options: self.options.clone(),
+                channels: Arc::clone(&self.channels),
                 extra_ca: self.extra_ca.clone(),
                 proxy: self.proxy.for_websocket(true),
                 stop,
@@ -318,8 +385,17 @@ impl Adapter for Discord {
             for clip in &voices {
                 bodies.push(voice::message(Path::new(&clip.path))?);
             }
-            let path = format!("/channels/{}/messages", channel(&message));
             let api = self.api()?;
+            let forum = message.thread_id.is_none()
+                && self
+                    .channels
+                    .get(&api, &message.chat_id)
+                    .await
+                    .is_some_and(|c| c.is_forum());
+            if forum {
+                return self.post(&api, &rest).await;
+            }
+            let path = format!("/channels/{}/messages", channel(&message));
             let mut first = None;
             for body in bodies {
                 let sent = api.call(Method::POST, &path, body).await?;
@@ -446,6 +522,33 @@ impl Adapter for Discord {
                     .ok_or_else(|| SendError::Server("no application id".to_owned()))?,
             };
             commands::register(&api, &application, commands).await
+        })
+    }
+
+    fn thread_titled<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        thread_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, ()> {
+        Box::pin(async move {
+            let Some(first) = self.channels.take_first_name(thread_id) else {
+                return;
+            };
+            let Ok(api) = self.api() else { return };
+            let path = format!("/channels/{thread_id}");
+            // Renamed only while nobody changed the first name.
+            let unchanged = api
+                .call(Method::GET, &path, Body::Empty)
+                .await
+                .is_ok_and(|c| c["name"].as_str() == Some(first.as_str()));
+            if unchanged {
+                let name: String = title.chars().take(100).collect();
+                let body = Body::Json(json!({"name": name}));
+                if let Err(err) = api.call(Method::PATCH, &path, body).await {
+                    tracing::debug!("thread not renamed: {}", err.describe());
+                }
+            }
         })
     }
 }

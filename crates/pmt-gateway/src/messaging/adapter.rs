@@ -118,6 +118,27 @@ pub struct Button {
     pub data: String,
 }
 
+/// A multi-select control on an outgoing message (Discord select menus,
+/// Slack checkboxes with a submit button, `WhatsApp` multi-select polls).
+/// A submission arrives as [`Inbound::callback`] `"<data>|<numbers>"`,
+/// the 1-based numbers of the picked options separated by commas.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct Select {
+    /// The signed data the submission carries back.
+    pub data: String,
+    /// The options, in order.
+    pub options: Vec<String>,
+}
+
+impl Select {
+    /// The callback a submission of `picked` (1-based numbers) carries.
+    #[must_use]
+    pub fn submission(data: &str, picked: &[usize]) -> String {
+        let numbers: Vec<String> = picked.iter().map(ToString::to_string).collect();
+        format!("{data}|{}", numbers.join(","))
+    }
+}
+
 /// One message to send.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outgoing {
@@ -131,10 +152,17 @@ pub struct Outgoing {
     pub text: String,
     /// Buttons (adapters with `interactive = native`).
     pub buttons: Vec<Button>,
+    /// A multi-select control (adapters with `interactive = native`; the
+    /// text numbers the options for the others).
+    pub select: Option<Select>,
     /// Files sent with it (from `MEDIA:` directives).
     pub attachments: Vec<OutboundAttachment>,
     /// Send without markup (the resend after a `formatting` refusal).
     pub plain: bool,
+    /// The markup `text` is in when it is not the descriptor's (a
+    /// downgraded resend, such as Telegram `MarkdownV2` after a refused
+    /// rich message).
+    pub markup: Option<Markup>,
 }
 
 impl Outgoing {
@@ -147,8 +175,10 @@ impl Outgoing {
             reply_to: None,
             text: text.to_owned(),
             buttons: Vec::new(),
+            select: None,
             attachments: Vec::new(),
             plain: false,
+            markup: None,
         }
     }
 }
@@ -456,6 +486,16 @@ pub trait Adapter: Send + Sync + 'static {
         _commands: &'a [MenuCommand],
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async { Ok(()) })
+    }
+    /// The session of `thread_id` got its title after its first turn (a
+    /// thread the adapter opened may take it as its name).
+    fn thread_titled<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: &'a str,
+        _title: &'a str,
+    ) -> AdapterFuture<'a, ()> {
+        Box::pin(async {})
     }
     /// What new sessions in `chat_id` / `thread_id` start with.
     fn session_hints(&self, _chat_id: &str, _thread_id: Option<&str>) -> SessionHints {

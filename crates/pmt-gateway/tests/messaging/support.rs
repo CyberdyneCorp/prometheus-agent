@@ -17,7 +17,7 @@ use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, Admission, Agents,
     Attachment, AudioOp, BusyPolicy, ChatInfo, ChatType, Conversation, Descriptor, Gateway, Hooks,
     HttpRequest, HttpResponse, Inbound, Interactive, Lookup, MediaStream, MenuCommand, Options,
-    Outgoing, SendError, SenderVerdict, Sent, SessionHints, Speech,
+    Outgoing, Reaction, SendError, SenderVerdict, Sent, SessionHints, Speech,
 };
 use pmt_gateway::{Author, Host, HostFuture, Identity, Link, Server, ServerOptions};
 use pmt_rpc::contracts::{
@@ -36,6 +36,7 @@ use tokio_util::sync::CancellationToken;
 /// - `approval` asks one approval and answers `approved` or `denied`;
 /// - `clarify` asks a choice question (`red`, `green`, `blue`) and a
 ///   free-text one, and answers `clarified: <answers as JSON>`;
+/// - `clarify-multi` asks a multi-select question of 4 options;
 /// - `stream` streams its answer in pieces first;
 /// - `say:<text>` answers `<text>` verbatim;
 /// - anything else answers `echo: <text>` at once.
@@ -76,6 +77,18 @@ async fn script(
         let answers = answer.map_or(serde_json::Value::Null, |a| a.answers.into());
         return ("completed", Some(format!("clarified: {answers}")));
     }
+    if text == "clarify-multi" {
+        let params = ClarifyRequestParams {
+            session_id: link.session_id().to_owned(),
+            questions: vec![serde_json::json!({"question": "Which days?",
+                "choices": ["mon", "tue", "wed", "thu"], "multi": true})],
+            allow_other: true,
+            deadline_ms: None,
+        };
+        let answer = link.ask::<ClarifyAsk>(&params, Some(timeout)).await;
+        let answers = answer.map_or(serde_json::Value::Null, |a| a.answers.into());
+        return ("completed", Some(format!("clarified: {answers}")));
+    }
     if text == "stream" {
         for piece in ["hello ", "wor", "ld, this is a streamed answer"] {
             link.delta(piece);
@@ -88,6 +101,9 @@ async fn script(
     }
     if let Some(rest) = text.strip_prefix("say:") {
         return ("completed", Some(rest.to_owned()));
+    }
+    if text == "fail" {
+        return ("provider_error", None);
     }
     if let Some(rest) = text.strip_prefix("slow:") {
         let mut parts = rest.splitn(2, ':');
@@ -129,6 +145,8 @@ pub struct FakeAgents {
     pub cwd: Mutex<Option<String>>,
     /// The commands native menus show.
     pub menu: Mutex<Vec<MenuCommand>>,
+    /// The container every session's terminal runs in.
+    pub container: Mutex<Option<pmt_gateway::messaging::attachments::ContainerMounts>>,
 }
 
 impl FakeAgents {
@@ -227,7 +245,12 @@ impl Host for FakeAgents {
                     turn_id,
                     exit_reason: reason.to_owned(),
                     final_response: answer,
-                    error: None,
+                    error: (reason == "provider_error").then(|| pmt_rpc::contracts::TurnError {
+                        kind: "provider".into(),
+                        code: "provider.unavailable".into(),
+                        message: "the provider failed".into(),
+                        hint: None,
+                    }),
                     usage: None,
                     report: None,
                 });
@@ -441,6 +464,14 @@ impl Agents for FakeAgents {
         self.menu.lock().unwrap().clone()
     }
 
+    fn container_mounts(
+        &self,
+        _profile: &str,
+        _session: &str,
+    ) -> Option<pmt_gateway::messaging::attachments::ContainerMounts> {
+        self.container.lock().unwrap().clone()
+    }
+
     fn speech(&self, _profile: &str) -> Option<Arc<dyn Speech>> {
         self.speech.lock().unwrap().clone()
     }
@@ -497,6 +528,8 @@ pub struct FakeAdapter {
     pub sender_checks: AtomicUsize,
     /// Every command menu registered.
     pub menus: Mutex<Vec<Vec<MenuCommand>>>,
+    /// Every reaction added or removed.
+    pub reactions: Mutex<Vec<Reaction>>,
     /// What new sessions of a thread start with, by thread id.
     pub hints: Mutex<HashMap<String, SessionHints>>,
 }
@@ -526,6 +559,7 @@ impl FakeAdapter {
             sender_checks: AtomicUsize::new(0),
             menus: Mutex::default(),
             hints: Mutex::default(),
+            reactions: Mutex::default(),
         })
     }
 
@@ -559,6 +593,20 @@ impl Adapter for FakeAdapter {
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         self.menus.lock().unwrap().push(commands.to_vec());
         Box::pin(async { Ok(()) })
+    }
+
+    fn react<'a>(&'a self, reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {
+        let supported = self.descriptor.lock().unwrap().supports_reactions;
+        if supported {
+            self.reactions.lock().unwrap().push(reaction.clone());
+        }
+        Box::pin(async move {
+            if supported {
+                Ok(())
+            } else {
+                Err(SendError::Unsupported)
+            }
+        })
     }
 
     fn session_hints(&self, _chat_id: &str, thread_id: Option<&str>) -> SessionHints {
@@ -853,6 +901,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         speech: Mutex::default(),
         cwd: Mutex::default(),
         menu: Mutex::default(),
+        container: Mutex::default(),
     })
 }
 

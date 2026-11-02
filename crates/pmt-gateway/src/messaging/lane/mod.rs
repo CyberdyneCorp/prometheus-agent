@@ -14,6 +14,7 @@ mod admin;
 mod clarify;
 mod commands;
 mod input;
+mod lifecycle;
 mod reply;
 mod requests;
 mod turns;
@@ -206,6 +207,9 @@ struct Lane {
     mirrors: Vec<(String, Option<String>)>,
     /// The event being handled was a voice note.
     voice_input: bool,
+    /// The session whose thread already had its title offered (after its
+    /// first turn).
+    titled: Option<String>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -258,6 +262,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         requests: requests::Open::default(),
         deferred: None,
         horizon: 0,
+        titled: None,
         policy: None,
         mirrors: Vec::new(),
         voice_input: false,

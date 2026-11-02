@@ -243,6 +243,8 @@ impl Lane {
                 let speech = self
                     .streams_audio(pending.voice)
                     .then(|| super::reply::Spoken::new(&submitted.turn_id));
+                self.mark(pending.reply_to.as_ref(), super::lifecycle::STARTED)
+                    .await;
                 self.running = Some(Running {
                     turn_id: submitted.turn_id,
                     requester: pending.routing.sender_id.clone(),
@@ -308,6 +310,12 @@ impl Lane {
         };
         let session = self.session.clone().unwrap_or_default();
         self.turn_over(&session);
+        self.mark(
+            running.reply_to.as_ref(),
+            super::lifecycle::outcome(&finished),
+        )
+        .await;
+        self.offer_title(&session).await;
         if !running.stopped {
             let spoken = match running.speech.take() {
                 Some(mut speech) => self.speak_streamed(&mut speech, "", true).await,

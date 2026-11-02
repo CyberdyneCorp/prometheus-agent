@@ -1827,9 +1827,10 @@ capabilities = [
 
 [platform-adapters."First-party adapter transports and required settings"]
 "Signal daemon unreachable" = ["crates/pmt-adapters-signal/tests/signal.rs::an_unreachable_daemon_is_retried_naming_its_url"]
-"Email missing host" = ["crates/pmt-config/src/gateway_check_platforms.rs::email_missing_host_names_the_option"]
+"Email missing host" = ["crates/pmt-config/src/gateway_check_platforms.rs::email_missing_host_names_the_option", "crates/pmt-adapters-email/tests/email.rs::a_missing_imap_host_fails_validation_naming_it"]
 
 [platform-adapters."Email adapter behaviour"]
+"Spoofed From rejected" = ["crates/pmt-adapters-email/tests/email.rs::a_spoofed_from_is_dropped_as_unauthorized", "crates/pmt-adapters-email/src/mime.rs::a_spoofed_from_failing_dmarc_is_dropped"]
 "Threaded reply" = ["crates/pmt-adapters-email/tests/email.rs::threaded_reply", "crates/pmt-adapters-email/src/mime.rs::a_threaded_reply_has_one_re_prefix_and_the_thread_headers"]
 
 [platform-adapters."WhatsApp pairing and modes"]
@@ -1849,3 +1850,43 @@ capabilities = [
 
 [platform-adapters."Webhook direct delivery mode"]
 "Zero-LLM alert forwarding" = ["crates/prometheus/tests/gateway_webhooks.rs::a_deliver_only_route_forwards_an_alert_to_the_home_channel_without_a_model_call", "crates/pmt-adapters-webhook/tests/routes.rs::a_deliver_only_route_forwards_the_rendered_text_without_a_turn"]
+
+[platform-adapters."Adapter proxy settings and environment trust"]
+"Ambient proxy ignored" = ["crates/pmt-adapters-discord/tests/discord.rs::ambient_proxy_variables_are_ignored_unless_the_environment_is_trusted", "crates/pmt-gateway/src/messaging/proxy.rs::ambient_proxy_settings_count_only_with_trust_env"]
+
+[platform-adapters."Native command menus and slash registration"]
+"Priority survives the cap" = ["crates/pmt-adapters-telegram/tests/features.rs::priority_entries_survive_the_menu_cap", "crates/pmt-gateway/src/messaging/menu.rs::priority_survives_the_cap"]
+"Follower does not overwrite" = ["crates/pmt-adapters-discord/tests/discord.rs::a_follower_does_not_overwrite_application_commands", "crates/pmt-adapters-telegram/tests/features.rs::a_follower_never_registers_the_menu"]
+
+[platform-adapters."Markup conversion per platform"]
+"Table on Telegram" = ["crates/pmt-gateway/src/messaging/markup/tests.rs::a_small_table_on_telegram_is_bullet_groups_without_pipes"]
+"Link on SMS" = ["crates/pmt-gateway/src/messaging/markup/tests.rs::a_link_on_a_plain_platform_shows_its_url"]
+
+[platform-adapters."Processing lifecycle reactions"]
+"Failed turn marked" = ["crates/pmt-gateway/tests/messaging/features.rs::a_failed_turn_is_marked_with_eyes_and_a_cross_on_discord"]
+
+[platform-adapters."Clarify multi-select on platforms"]
+"Numbered multi-answer" = ["crates/pmt-gateway/tests/messaging/features.rs::a_numbered_multi_select_takes_several_numbers_and_refuses_out_of_range", "crates/pmt-gateway/src/messaging/lane/clarify.rs::numbered_multi_answers_pick_each_option"]
+"Out of range" = ["crates/pmt-gateway/tests/messaging/features.rs::a_numbered_multi_select_takes_several_numbers_and_refuses_out_of_range", "crates/pmt-gateway/src/messaging/lane/clarify.rs::out_of_range_numbers_name_the_valid_range"]
+
+[platform-adapters."Container media path translation"]
+"Chart rendered in container" = ["crates/pmt-gateway/tests/messaging/features.rs::a_chart_rendered_in_the_container_is_delivered_from_the_host", "crates/pmt-gateway/src/messaging/attachments.rs::a_container_path_is_delivered_as_its_host_file"]
+
+[platform-adapters."Deliverable mode"]
+"Report path becomes an upload" = ["crates/pmt-gateway/tests/messaging/features.rs::a_report_path_in_the_reply_becomes_a_document_upload", "crates/pmt-gateway/src/messaging/deliverable.rs::a_report_path_becomes_an_upload"]
+"Code block untouched" = ["crates/pmt-gateway/tests/messaging/features.rs::a_path_inside_a_code_block_is_delivered_unchanged", "crates/pmt-gateway/src/messaging/deliverable.rs::code_blocks_and_inline_code_are_untouched"]
+
+[platform-adapters."Response-wide delivery modifiers and kanban artifacts"]
+"Image sent uncompressed" = ["crates/pmt-gateway/tests/messaging/features.rs::as_document_makes_a_skill_photo_go_uncompressed", "crates/pmt-gateway/src/messaging/attachments.rs::modifiers_apply_wherever_they_stand"]
+"Kanban artifact delivered" = { tests = ["crates/pmt-gateway/tests/messaging/features.rs::a_completed_kanban_task_uploads_its_artifacts_to_a_slack_channel"], note = "verified at the gateway delivery API (Gateway::deliver_artifacts); kanban itself is M3 (67.x)" }
+
+[platform-adapters."Telegram webhook mode"]
+"Missing webhook secret" = ["crates/pmt-config/src/gateway_check_platforms.rs::telegram_webhook_mode_requires_a_secret_token"]
+"Forged update" = ["crates/pmt-adapters-telegram/tests/features.rs::webhook_mode_admits_signed_updates_and_refuses_forged_ones"]
+
+[platform-adapters."Telegram topics and per-topic skills"]
+"Topic preloads a skill" = ["crates/pmt-adapters-telegram/tests/features.rs::a_dm_topic_is_created_once_and_preloads_its_skill", "crates/pmt-gateway/tests/messaging/features.rs::a_topic_skill_preloads_into_that_topics_own_session"]
+
+[platform-adapters."Discord auto-threading and forum channels"]
+"Mention creates a thread" = ["crates/pmt-adapters-discord/tests/discord.rs::a_mention_creates_a_thread_named_after_the_message", "crates/pmt-adapters-discord/src/threads.rs::thread_names_drop_mentions_and_stay_short"]
+"Excluded channel stays inline" = ["crates/pmt-adapters-discord/tests/discord.rs::an_excluded_channel_stays_inline"]

@@ -271,6 +271,7 @@ fn direct(
         attachments: attachments.to_vec(),
         ..Outgoing::text(&to.chat_id, to.thread_id.as_deref(), text)
     };
+    let message = pmt_gateway::messaging::markup::rendered(adapter.as_ref(), &message);
     crate::model_cmd::block_on(adapter.send(&message))?.map_err(|err| {
         Error::new(
             &codes::GATEWAY_DELIVERY_FAILED,

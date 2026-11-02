@@ -36,7 +36,7 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::sign::constant_time_eq;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, Descriptor, HttpRequest, HttpResponse, Interactive, LengthUnit, MediaKind,
+    ChatInfo, Descriptor, HttpRequest, HttpResponse, Interactive, LengthUnit, Markup, MediaKind,
     MediaStream, MenuCommand, Outgoing, Reaction, SendError, Sent, SessionHints,
 };
 use serde_json::{Value, json};
@@ -159,10 +159,26 @@ fn keyboard(message: &Outgoing) -> Value {
     json!({"inline_keyboard": rows})
 }
 
+/// The Bot API `parse_mode` of a message the host rendered in `markup`
+/// (none for a plain resend).
+fn parse_mode(message: &Outgoing, markup: Markup) -> Option<&'static str> {
+    if message.plain {
+        return None;
+    }
+    match message.markup.unwrap_or(markup) {
+        Markup::Html => Some("HTML"),
+        Markup::Platform => Some("MarkdownV2"),
+        Markup::Plain | Markup::Markdown => None,
+    }
+}
+
 /// The `sendMessage` body of a message: its thread, the message it
-/// answers and its buttons.
-fn text_body(message: &Outgoing) -> Value {
+/// answers, its buttons and its parse mode.
+fn text_body(message: &Outgoing, markup: Markup) -> Value {
     let mut body = json!({"chat_id": chat(&message.chat_id), "text": message.text});
+    if let Some(mode) = parse_mode(message, markup) {
+        body["parse_mode"] = json!(mode);
+    }
     if let Some(thread) = &message.thread_id {
         body["message_thread_id"] = chat(thread);
     }
@@ -212,6 +228,16 @@ fn connect_error(err: &SendError) -> AdapterError {
 }
 
 impl Telegram {
+    /// What the host renders replies in: `MarkdownV2`, or HTML for rich
+    /// messages.
+    fn markup(&self) -> Markup {
+        if self.options.rich_messages {
+            Markup::Html
+        } else {
+            Markup::Platform
+        }
+    }
+
     /// Registers the webhook with its secret token; updates then arrive on
     /// the shared listener.
     async fn start_webhook(&self, ctx: updates::Ctx) -> Result<(), AdapterError> {
@@ -289,6 +315,7 @@ impl Adapter for Telegram {
             media_in: all.clone(),
             media_out: all,
             stateless_send: true,
+            markup: self.markup(),
             binds_http: self.options.mode == TelegramMode::Webhook,
             ..Descriptor::new(PLATFORM, limit)
         }
@@ -331,7 +358,9 @@ impl Adapter for Telegram {
             let api = self.api()?;
             let mut first = None;
             if !message.text.is_empty() || message.attachments.is_empty() {
-                let sent = api.call("sendMessage", &text_body(&message)).await?;
+                let sent = api
+                    .call("sendMessage", &text_body(&message, self.markup()))
+                    .await?;
                 first = normalize::id(&sent["message_id"]);
             }
             for file in &message.attachments {
@@ -354,12 +383,15 @@ impl Adapter for Telegram {
         message: &'a Outgoing,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
-            let body = json!({
+            let mut body = json!({
                 "chat_id": chat(&message.chat_id),
                 "message_id": number(message_id)?,
                 "text": message.text,
                 "reply_markup": keyboard(message),
             });
+            if let Some(mode) = parse_mode(message, self.markup()) {
+                body["parse_mode"] = json!(mode);
+            }
             self.api()?.call("editMessageText", &body).await.map(drop)
         })
     }

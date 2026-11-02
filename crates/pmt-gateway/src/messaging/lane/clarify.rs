@@ -4,9 +4,14 @@
 //! its choices are numbered in the text on every tier and, on `native`
 //! adapters, are also signed `clar:` buttons. The requester answers with a
 //! button, the choice numbers, or free text; questions are asked one at a
-//! time and the request resolves with every answer. A multi-select
-//! question gets no buttons here (one press would answer a single choice):
-//! its platform controls are 26.2's, until then it is answered by numbers.
+//! time and the request resolves with every answer.
+//!
+//! A multi-select question (spec: platform-adapters, Clarify multi-select on
+//! platforms) says "Multiple selections allowed" and takes numbers
+//! separated by commas or spaces (`1, 3`), option texts, or free text as
+//! an "Other" answer; `native` adapters also get a multi-select control
+//! whose submission carries the picked numbers. A number out of range is
+//! answered with the valid range and the question stays open.
 
 use std::fmt::Write as _;
 use std::time::Duration;
@@ -17,7 +22,7 @@ use serde_json::{Value, json};
 use tokio::time::Instant;
 
 use super::Lane;
-use crate::messaging::adapter::{Button, Interactive};
+use crate::messaging::adapter::{Button, Interactive, Select};
 use crate::messaging::cards::{self, Card, CardKind};
 use crate::messaging::key::Routing;
 
@@ -106,7 +111,18 @@ impl Lane {
             let _ = write!(text, "\n{}. {}", n + 1, cards::visible(choice));
         }
         let multi = question["multi"].as_bool().unwrap_or(false);
-        let buttons: Vec<Button> = if self.tier() == Interactive::Native && !multi {
+        if multi {
+            text.push_str(MULTIPLE);
+        }
+        let native = self.tier() == Interactive::Native;
+        let select = (native && multi && !options.is_empty()).then(|| Select {
+            data: self
+                .shared
+                .card_key
+                .data(CardKind::Clarify, &clarify.id, &format!("{index}.m")),
+            options: options.iter().map(|c| cards::label(c)).collect(),
+        });
+        let buttons: Vec<Button> = if native && !multi {
             options
                 .iter()
                 .enumerate()
@@ -124,7 +140,7 @@ impl Lane {
         };
         let session = self.session.clone().unwrap_or_default();
         let key = format!("{session}:{}:q{index}", clarify.id);
-        let body = json!({"text": text, "buttons": buttons}).to_string();
+        let body = json!({"text": text, "buttons": buttons, "select": select}).to_string();
         self.deliver(key, OutboundKind::Approval, body, None);
     }
 
@@ -137,13 +153,22 @@ impl Lane {
         if !clarify.theirs(&routing.sender_id) || text.trim_start().starts_with('/') {
             return false;
         }
-        let answer = clarify_answer(&clarify.questions[clarify.answers.len()], text);
-        self.record_clarify_answer(answer);
+        match clarify_answer(&clarify.questions[clarify.answers.len()], text) {
+            Ok(answer) => self.record_clarify_answer(answer),
+            Err(count) => self.say(&format!("Valid choices are 1-{count}.")),
+        }
         true
     }
 
-    /// A verified `clar:<id>:<question>.<number>` button press.
-    pub(super) fn clarify_pressed(&mut self, routing: &Routing, id: &str, choice: &str) {
+    /// A verified `clar:<id>:<question>.<number>` button press, or a
+    /// `clar:<id>:<question>.m` multi-select submission of `picked`.
+    pub(super) fn clarify_pressed(
+        &mut self,
+        routing: &Routing,
+        id: &str,
+        choice: &str,
+        picked: Option<&str>,
+    ) {
         let Some(clarify) = self.requests.clarify.as_ref().filter(|c| c.id == id) else {
             tracing::info!("ignored a clarify answer for an unknown or settled request");
             return;
@@ -152,22 +177,32 @@ impl Lane {
             self.say(NOT_THE_ASKER);
             return;
         }
-        let picked = choice.split_once('.').and_then(|(q, n)| {
+        let chosen = choice.split_once('.').and_then(|(q, n)| {
             let q: usize = q.parse().ok()?;
-            let n: usize = n.parse().ok()?;
             let question = clarify
                 .questions
                 .get(q)
                 .filter(|_| q == clarify.answers.len())?;
-            choices(question)
-                .get(n.checked_sub(1)?)
-                .map(|c| (*c).to_owned())
+            let numbers = match (n, picked) {
+                ("m", Some(picked)) => picked
+                    .split(',')
+                    .map(|p| p.trim().parse().ok())
+                    .collect::<Option<Vec<usize>>>()?,
+                (n, None) => vec![n.parse().ok()?],
+                _ => return None,
+            };
+            let options = choices(question);
+            numbers
+                .iter()
+                .map(|n| options.get(n.checked_sub(1)?).map(|c| (*c).to_owned()))
+                .collect::<Option<Vec<String>>>()
+                .filter(|c| !c.is_empty())
         });
-        let Some(picked) = picked else {
+        let Some(chosen) = chosen else {
             tracing::info!("ignored a press on an answered clarify question");
             return;
         };
-        self.record_clarify_answer(json!({"status": "answered", "choices": [picked]}));
+        self.record_clarify_answer(json!({"status": "answered", "choices": chosen}));
     }
 
     /// Records the answer to the current question; asks the next one, or
@@ -195,21 +230,82 @@ impl Lane {
     }
 }
 
-/// The clarify answer a chat message stands for: choice numbers or text.
-fn clarify_answer(question: &Value, line: &str) -> Value {
+/// Appended to a multi-select question.
+const MULTIPLE: &str = "\nMultiple selections allowed";
+
+/// The clarify answer a chat message stands for: choice numbers (commas
+/// or spaces between them on a multi-select question), option texts, or
+/// free text; `Err(count)` for a number outside `1..=count`.
+fn clarify_answer(question: &Value, line: &str) -> Result<Value, usize> {
     let line = line.trim();
     let choices = choices(question);
-    let picked: Option<Vec<&str>> = line
-        .split(',')
-        .map(|n| {
-            n.trim()
-                .parse::<usize>()
-                .ok()
-                .and_then(|n| choices.get(n.wrapping_sub(1)).copied())
-        })
+    let multi = question["multi"].as_bool().unwrap_or(false);
+    let separators: &[char] = if multi { &[',', ' '] } else { &[','] };
+    let numbers: Option<Vec<usize>> = line
+        .split(separators)
+        .filter(|t| !t.trim().is_empty())
+        .map(|t| t.trim().parse().ok())
         .collect();
-    match picked {
+    if let Some(numbers) = numbers.filter(|n| !n.is_empty() && !choices.is_empty()) {
+        if numbers.iter().any(|n| *n == 0 || *n > choices.len()) {
+            return Err(choices.len());
+        }
+        let picked: Vec<&str> = numbers.iter().map(|n| choices[n - 1]).collect();
+        return Ok(json!({"status": "answered", "choices": picked}));
+    }
+    let named = |text: &str| {
+        choices
+            .iter()
+            .find(|c| c.eq_ignore_ascii_case(text.trim()))
+            .copied()
+    };
+    let parts: Vec<&str> = if multi {
+        line.split(',').collect()
+    } else {
+        vec![line]
+    };
+    let picked: Option<Vec<&str>> = parts.iter().map(|p| named(p)).collect();
+    Ok(match picked {
         Some(picked) if !picked.is_empty() => json!({"status": "answered", "choices": picked}),
         _ => json!({"status": "answered", "text": line}),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn question(multi: bool) -> Value {
+        json!({"question": "Which?", "choices": ["red", "green", "blue", "gold"], "multi": multi})
+    }
+
+    #[test]
+    fn numbered_multi_answers_pick_each_option() {
+        assert_eq!(
+            clarify_answer(&question(true), "1, 3").unwrap(),
+            json!({"status": "answered", "choices": ["red", "blue"]})
+        );
+        assert_eq!(
+            clarify_answer(&question(true), "2 4").unwrap(),
+            json!({"status": "answered", "choices": ["green", "gold"]})
+        );
+        assert_eq!(
+            clarify_answer(&question(true), "Red, gold").unwrap(),
+            json!({"status": "answered", "choices": ["red", "gold"]})
+        );
+        assert_eq!(
+            clarify_answer(&question(true), "something else").unwrap(),
+            json!({"status": "answered", "text": "something else"})
+        );
+    }
+
+    #[test]
+    fn out_of_range_numbers_name_the_valid_range() {
+        assert_eq!(clarify_answer(&question(true), "7"), Err(4));
+        assert_eq!(clarify_answer(&question(false), "0"), Err(4));
+        assert_eq!(
+            clarify_answer(&question(false), "blue").unwrap(),
+            json!({"status": "answered", "choices": ["blue"]})
+        );
     }
 }

@@ -19,6 +19,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::api::{Api, Body};
 use crate::normalize;
+use crate::threads::{Channels, Routed};
+use pmt_config::platforms::DiscordOptions;
 
 /// `GUILDS | GUILD_MESSAGES | GUILD_MESSAGE_REACTIONS | DIRECT_MESSAGES |
 /// MESSAGE_CONTENT`.
@@ -43,7 +45,8 @@ pub(crate) struct Run {
     pub(crate) api: Api,
     pub(crate) link: Arc<dyn AdapterLink>,
     pub(crate) session: Arc<Mutex<Session>>,
-    pub(crate) require_mention: bool,
+    pub(crate) options: DiscordOptions,
+    pub(crate) channels: Arc<Channels>,
     pub(crate) extra_ca: Option<PathBuf>,
     /// The proxy the WebSocket tunnels through, if any.
     pub(crate) proxy: Option<String>,
@@ -264,9 +267,24 @@ impl Run {
                     .expect("session poisoned")
                     .bot_id
                     .clone();
-                if let Some(event) = normalize::message(data, &bot, self.require_mention) {
+                let routed = Routed {
+                    api: &self.api,
+                    channels: &self.channels,
+                    options: &self.options,
+                };
+                if let Some((event, mentioned)) = normalize::message(data, &bot)
+                    && let Some(event) = routed.route(event, mentioned, data).await
+                {
                     self.link.submit(event).await;
                 }
+                Flow::Continue
+            }
+            "GUILD_CREATE" => {
+                self.channels.learn_guild(data);
+                Flow::Continue
+            }
+            "CHANNEL_CREATE" | "CHANNEL_UPDATE" | "THREAD_CREATE" | "THREAD_UPDATE" => {
+                self.channels.learn(data);
                 Flow::Continue
             }
             "INTERACTION_CREATE" => {

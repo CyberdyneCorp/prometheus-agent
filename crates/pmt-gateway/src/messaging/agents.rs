@@ -121,6 +121,16 @@ pub trait Agents: Host {
     /// suspension).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// The mounts of `session`'s container, when its terminal runs in
+    /// one (its reply's container paths are then translated to host
+    /// paths).
+    fn container_mounts(
+        &self,
+        _profile: &str,
+        _session: &str,
+    ) -> Option<crate::messaging::attachments::ContainerMounts> {
+        None
+    }
     /// The gateway-surface commands and user-invocable skills of
     /// `profile`, for native command menus.
     fn menu_commands(&self, _profile: &str) -> Vec<crate::messaging::adapter::MenuCommand> {

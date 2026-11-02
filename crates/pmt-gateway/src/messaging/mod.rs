@@ -24,12 +24,14 @@ pub mod adapter;
 mod adapters;
 mod admit;
 pub mod agents;
+mod artifacts;
 pub mod attachments;
 pub mod auth;
 mod cache;
 mod cards;
 pub mod conformance;
 mod dedup;
+pub mod deliverable;
 pub mod descriptor;
 pub mod health;
 pub mod hooks;
@@ -39,6 +41,7 @@ pub mod key;
 mod lane;
 mod limits;
 mod locks;
+pub mod markup;
 mod media;
 pub mod menu;
 pub(crate) mod methods;
@@ -78,7 +81,7 @@ pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Admission, Attachment, AudioOp, Button, ChatInfo, Descriptor,
     HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind, MediaStream,
-    MenuCommand, Outgoing, Reaction, SendError, SenderVerdict, Sent, SessionHints,
+    MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict, Sent, SessionHints,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup};
 pub use hooks::{Hook, Hooks, PreCommand};

@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use jiff::Timestamp;
-use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind};
+use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind, Select};
 use serde_json::Value;
 
 use crate::voice::FLAG as VOICE_MESSAGE;
@@ -44,9 +44,10 @@ fn attachments(message: &Value) -> Vec<Attachment> {
         .collect()
 }
 
-/// A `MESSAGE_CREATE` as an event; `None` for the bot's own messages and,
-/// with `require_mention`, server messages that do not mention it.
-pub(crate) fn message(message: &Value, bot_id: &str, require_mention: bool) -> Option<Inbound> {
+/// A `MESSAGE_CREATE` as an event, and whether it mentions the bot;
+/// `None` for the bot's own messages. Mention gating and threads are
+/// [`crate::threads`]'.
+pub(crate) fn message(message: &Value, bot_id: &str) -> Option<(Inbound, bool)> {
     let author = &message["author"];
     let sender = text(&author["id"])?;
     if sender == bot_id {
@@ -56,9 +57,6 @@ pub(crate) fn message(message: &Value, bot_id: &str, require_mention: bool) -> O
     let mentioned = message["mentions"]
         .as_array()
         .is_some_and(|m| m.iter().any(|u| u["id"].as_str() == Some(bot_id)));
-    if guild.is_some() && require_mention && !mentioned {
-        return None;
-    }
     let chat_type = if guild.is_some() {
         ChatType::Group
     } else {
@@ -76,7 +74,7 @@ pub(crate) fn message(message: &Value, bot_id: &str, require_mention: bool) -> O
         .and_then(|t| t.parse::<Timestamp>().ok())
         .unwrap_or_else(Timestamp::now);
     inbound.attachments = attachments(message);
-    Some(inbound)
+    Some((inbound, mentioned))
 }
 
 /// The text of an application (slash) command interaction:
@@ -128,7 +126,19 @@ pub(crate) fn interaction(interaction: &Value) -> Option<Inbound> {
     if kind == Some(2) {
         inbound.text = command_text(&interaction["data"])?;
     } else {
-        inbound.callback = text(&interaction["data"]["custom_id"]);
+        let data = &interaction["data"];
+        let custom_id = text(&data["custom_id"])?;
+        inbound.callback = Some(match data["values"].as_array() {
+            // A submitted select menu: the picked options' numbers.
+            Some(values) => {
+                let picked: Vec<usize> = values
+                    .iter()
+                    .filter_map(|v| v.as_str()?.parse().ok())
+                    .collect();
+                Select::submission(&custom_id, &picked)
+            }
+            None => custom_id,
+        });
         inbound.reply_to = text(&interaction["message"]["id"]);
     }
     Some(inbound)
@@ -149,7 +159,8 @@ mod tests {
             "attachments": [{"url": "https://cdn/x.ogg", "filename": "voice-message.ogg",
                              "content_type": "audio/ogg", "duration_secs": 3.2}]
         });
-        let event = message(&raw, "bot", true).unwrap();
+        let (event, mentioned) = message(&raw, "bot").unwrap();
+        assert!(mentioned);
         assert_eq!(event.chat_type, ChatType::Group);
         assert_eq!(event.scope_id.as_deref(), Some("g1"));
         assert_eq!(event.sender_name.as_deref(), Some("Ada"));
@@ -157,10 +168,9 @@ mod tests {
         assert_eq!(event.attachments[0].duration_secs, Some(4));
         let unmentioned = json!({"id": "m2", "channel_id": "c1", "guild_id": "g1",
                                  "author": {"id": "u1"}, "content": "hi", "mentions": []});
-        assert!(message(&unmentioned, "bot", true).is_none());
-        assert!(message(&unmentioned, "bot", false).is_some());
+        assert!(!message(&unmentioned, "bot").unwrap().1);
         let own = json!({"id": "m3", "channel_id": "c1", "author": {"id": "bot"}, "content": "x"});
-        assert!(message(&own, "bot", false).is_none());
+        assert!(message(&own, "bot").is_none());
     }
 
     #[test]
@@ -174,6 +184,17 @@ mod tests {
         let bare = json!({"id": "i3", "type": 2, "channel_id": "c1", "user": {"id": "u1"},
                           "data": {"name": "stop"}});
         assert_eq!(interaction(&bare).unwrap().text, "/stop");
+    }
+
+    #[test]
+    fn a_submitted_select_menu_carries_its_numbers() {
+        let raw = json!({"id": "i4", "type": 3, "channel_id": "c1", "user": {"id": "u1"},
+                         "data": {"custom_id": "clar:x:0.m:mac", "component_type": 3,
+                                  "values": ["2", "4"]}});
+        assert_eq!(
+            interaction(&raw).unwrap().callback.as_deref(),
+            Some("clar:x:0.m:mac|2,4")
+        );
     }
 
     #[test]

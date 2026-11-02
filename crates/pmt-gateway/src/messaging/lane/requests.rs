@@ -220,6 +220,11 @@ impl Lane {
     /// A pressed card button (`appr:` or `clar:<id>:<choice>:<mac>`):
     /// rejected and logged unless its MAC verifies under this boot's key.
     pub(super) fn callback(&mut self, routing: &Routing, data: &str) {
+        // A multi-select submission carries its picks after the signed part.
+        let (data, picked) = match data.split_once('|') {
+            Some((signed, picked)) => (signed, Some(picked)),
+            None => (data, None),
+        };
         let Some((kind, id, choice)) = self.shared.card_key.verify(data) else {
             tracing::warn!(
                 platform = routing.platform,
@@ -229,7 +234,7 @@ impl Lane {
             return;
         };
         if kind == CardKind::Clarify {
-            self.clarify_pressed(routing, id, choice);
+            self.clarify_pressed(routing, id, choice, picked);
             return;
         }
         let Some(decision) = decision_of(choice) else {

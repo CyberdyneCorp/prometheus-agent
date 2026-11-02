@@ -6,7 +6,7 @@
 //! and a pressed Block Kit button is a callback carrying its value.
 
 use jiff::Timestamp;
-use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind};
+use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind, Select};
 use serde_json::Value;
 
 /// Message subtypes that carry a human's (or bot's) new message; edits,
@@ -100,13 +100,44 @@ pub(crate) fn message(event: &Value, team: Option<&str>, bot_user: &str) -> Opti
     })
 }
 
-/// A `block_actions` payload (a pressed button) as a callback event.
+/// The action id of a multi-select's checkboxes.
+pub(crate) const SELECT_ACTION: &str = "pmt_select";
+/// The action id of a multi-select's Submit button.
+pub(crate) const SUBMIT_ACTION: &str = "pmt_submit";
+
+/// The checked boxes of a multi-select, from the payload's state.
+fn checked(payload: &Value) -> Vec<usize> {
+    let mut numbers: Vec<usize> = payload["state"]["values"]
+        .as_object()
+        .into_iter()
+        .flat_map(|blocks| blocks.values())
+        .filter_map(|actions| actions.get(SELECT_ACTION))
+        .flat_map(|select| {
+            select["selected_options"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .filter_map(|o| o["value"].as_str().and_then(|v| v.parse().ok()))
+        .collect();
+    numbers.sort_unstable();
+    numbers
+}
+
+/// A `block_actions` payload (a pressed button, or a multi-select's
+/// Submit) as a callback event; ticking a box alone is not one.
 pub(crate) fn action(payload: &Value) -> Option<Inbound> {
     if payload["type"].as_str() != Some("block_actions") {
         return None;
     }
     let pressed = payload["actions"].as_array()?.first()?;
-    let data = text(&pressed["value"])?;
+    if pressed["action_id"] == SELECT_ACTION {
+        return None;
+    }
+    let mut data = text(&pressed["value"])?;
+    if pressed["action_id"] == SUBMIT_ACTION {
+        data = Select::submission(&data, &checked(payload));
+    }
     let chat =
         text(&payload["channel"]["id"]).or_else(|| text(&payload["container"]["channel_id"]))?;
     let message = text(&payload["message"]["ts"])
@@ -135,6 +166,29 @@ pub(crate) fn action(payload: &Value) -> Option<Inbound> {
     inbound.reply_to = Some(message).filter(|m| !m.is_empty());
     inbound.callback = Some(data);
     Some(inbound)
+}
+
+#[cfg(test)]
+mod select_tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn a_submitted_multi_select_carries_the_checked_numbers() {
+        let state = json!({"values": {"b1": {SELECT_ACTION: {"type": "checkboxes",
+            "selected_options": [{"value": "3"}, {"value": "1"}]}}}});
+        let submit = json!({"type": "block_actions", "trigger_id": "t1", "user": {"id": "U1"},
+            "channel": {"id": "D1"}, "message": {"ts": "1.1"}, "state": state,
+            "actions": [{"action_id": SUBMIT_ACTION, "value": "clar:x:0.m:mac"}]});
+        assert_eq!(
+            action(&submit).unwrap().callback.as_deref(),
+            Some("clar:x:0.m:mac|1,3")
+        );
+        let tick = json!({"type": "block_actions", "user": {"id": "U1"}, "channel": {"id": "D1"},
+            "actions": [{"action_id": SELECT_ACTION, "selected_options": []}]});
+        assert!(action(&tick).is_none());
+    }
 }
 
 #[cfg(test)]

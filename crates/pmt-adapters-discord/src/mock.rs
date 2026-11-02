@@ -43,6 +43,10 @@ pub const CHANNEL: &str = "910";
 pub const THREAD: &str = "911";
 /// The bot's application id.
 pub const APPLICATION: &str = "777";
+/// A forum channel of the server.
+pub const FORUM: &str = "920";
+/// The server.
+pub const GUILD: &str = "800";
 /// The `IS_VOICE_MESSAGE` flag.
 const VOICE: u64 = 1 << 13;
 
@@ -76,6 +80,8 @@ struct State {
     command_puts: Vec<Value>,
     /// Every interaction callback body.
     callbacks: Vec<Value>,
+    /// Server channels and threads by id (anything else is a DM).
+    channels: std::collections::HashMap<String, Value>,
 }
 
 /// The mock.
@@ -93,6 +99,14 @@ impl DiscordMock {
         let mock = Arc::new(Self {
             state: Mutex::new(State {
                 next_id: 1000,
+                channels: [
+                    (CHANNEL, json!({"id": CHANNEL, "type": 0, "guild_id": GUILD, "name": "ops"})),
+                    (THREAD, json!({"id": THREAD, "type": 11, "guild_id": GUILD, "parent_id": CHANNEL, "name": "kit thread"})),
+                    (FORUM, json!({"id": FORUM, "type": 15, "guild_id": GUILD, "name": "reports"})),
+                ]
+                .into_iter()
+                .map(|(id, c)| (id.to_owned(), c))
+                .collect(),
                 ..State::default()
             }),
             rest: rest.local_addr().unwrap(),
@@ -321,10 +335,34 @@ impl DiscordMock {
                 self.lock().reactions.push(((*id).to_owned(), emoji));
                 (204, Value::Null)
             }
-            ("GET", ["channels", id]) => (
-                200,
-                json!({"id": id, "type": 1, "recipients": [{"id": USER, "username": "kit-user"}]}),
-            ),
+            ("GET", ["channels", id]) => {
+                let known = self.lock().channels.get(*id).cloned();
+                (
+                    200,
+                    known.unwrap_or_else(|| {
+                        json!({"id": id, "type": 1, "recipients": [{"id": USER, "username": "kit-user"}]})
+                    }),
+                )
+            }
+            ("PATCH", ["channels", id]) => {
+                let update: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+                let mut state = self.lock();
+                match state.channels.get_mut(*id) {
+                    Some(channel) => {
+                        channel["name"] = update["name"].clone();
+                        (200, channel.clone())
+                    }
+                    None => (404, json!({"message": "Unknown Channel", "code": 10003})),
+                }
+            }
+            ("POST", ["channels", channel, "messages", _, "threads"]) => {
+                let args: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+                (
+                    200,
+                    self.open_thread(channel, args["name"].as_str().unwrap_or_default()),
+                )
+            }
+            ("POST", ["channels", forum, "threads"]) => self.forum_post(forum, kind, body),
             ("POST", ["interactions", _, _, "callback"]) => {
                 let body = serde_json::from_slice(body).unwrap_or(Value::Null);
                 self.lock().callbacks.push(body);
@@ -338,6 +376,89 @@ impl DiscordMock {
             ("GET", ["oauth2", "applications", "@me"]) => (200, json!({"id": APPLICATION})),
             _ => (404, json!({"message": "404: Not Found", "code": 0})),
         }
+    }
+
+    fn open_thread(&self, parent: &str, name: &str) -> Value {
+        let mut state = self.lock();
+        state.next_id += 1;
+        let id = state.next_id.to_string();
+        let thread =
+            json!({"id": id, "type": 11, "guild_id": GUILD, "parent_id": parent, "name": name});
+        state.channels.insert(id, thread.clone());
+        thread
+    }
+
+    /// A new forum post: a thread whose starter message is the payload's
+    /// `message`.
+    fn forum_post(&self, forum: &str, kind: &str, body: &[u8]) -> (u16, Value) {
+        let parts = form_parts(kind, body);
+        let args: Value = if kind.starts_with("multipart/") {
+            parts
+                .iter()
+                .find(|p| p.name == "payload_json")
+                .and_then(|p| serde_json::from_slice(&p.bytes).ok())
+                .unwrap_or(Value::Null)
+        } else {
+            serde_json::from_slice(body).unwrap_or(Value::Null)
+        };
+        let mut thread = self.open_thread(forum, args["name"].as_str().unwrap_or_default());
+        let id = thread["id"].as_str().unwrap_or_default().to_owned();
+        let mut state = self.lock();
+        for file in parts.iter().filter(|p| p.file_name.is_some()) {
+            let name = file.file_name.clone().unwrap_or_default();
+            state.received.push(MockFile {
+                chat_id: forum.to_owned(),
+                thread_id: Some(id.clone()),
+                kind: kind_of_name(&name),
+                name,
+                bytes: file.bytes.clone(),
+            });
+        }
+        state.sent.push(MockSent {
+            chat_id: forum.to_owned(),
+            message_id: id.clone(),
+            text: args["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            buttons: Vec::new(),
+            thread_id: Some(id.clone()),
+        });
+        thread["message"] = json!({"id": id});
+        (201, thread)
+    }
+
+    /// Renames a channel, as a user would.
+    pub fn rename_channel(&self, id: &str, name: &str) {
+        if let Some(channel) = self.lock().channels.get_mut(id) {
+            channel["name"] = json!(name);
+        }
+    }
+
+    /// A channel's current name.
+    pub fn channel_name(&self, id: &str) -> Option<String> {
+        self.lock()
+            .channels
+            .get(id)
+            .and_then(|c| c["name"].as_str().map(str::to_owned))
+    }
+
+    /// Threads opened on `parent`, as `(id, name)`.
+    pub fn threads_of(&self, parent: &str) -> Vec<(String, String)> {
+        let mut threads: Vec<(String, String)> = self
+            .lock()
+            .channels
+            .values()
+            .filter(|c| c["parent_id"] == parent && c["id"] != THREAD)
+            .map(|c| {
+                (
+                    c["id"].as_str().unwrap_or_default().to_owned(),
+                    c["name"].as_str().unwrap_or_default().to_owned(),
+                )
+            })
+            .collect();
+        threads.sort();
+        threads
     }
 
     fn create(&self, channel: &str, kind: &str, body: &[u8]) -> (u16, Value) {
@@ -357,11 +478,16 @@ impl DiscordMock {
         }
         // A thread is a channel of its own; the mock files it under its
         // parent.
-        let (chat, thread_id) = if channel == THREAD {
-            (CHANNEL, Some(THREAD.to_owned()))
-        } else {
-            (channel, None)
+        let parent = state
+            .channels
+            .get(channel)
+            .filter(|c| c["type"] == 11)
+            .and_then(|c| c["parent_id"].as_str().map(str::to_owned));
+        let (chat, thread_id) = match parent {
+            Some(parent) => (parent, Some(channel.to_owned())),
+            None => (channel.to_owned(), None),
         };
+        let chat = chat.as_str();
         let parts = form_parts(kind, body);
         let payload: Value = if kind.starts_with("multipart/") {
             state.uploads += 1;

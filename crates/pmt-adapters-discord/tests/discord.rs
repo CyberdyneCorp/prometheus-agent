@@ -367,3 +367,148 @@ async fn a_slash_command_runs_as_its_command_text() {
     assert_eq!(callback["data"]["flags"], 64);
     adapter.disconnect().await;
 }
+
+fn server_message(id: &str, channel: &str, text: &str, mentions_bot: bool) -> serde_json::Value {
+    let mentions = if mentions_bot {
+        serde_json::json!([{"id": mock::BOT}])
+    } else {
+        serde_json::json!([])
+    };
+    serde_json::json!({"id": id, "channel_id": channel, "guild_id": mock::GUILD, "content": text,
+        "author": {"id": mock::USER, "username": "kit-user"}, "mentions": mentions,
+        "timestamp": "2026-11-02T10:00:00+00:00", "attachments": []})
+}
+
+async fn connected(extra: &str) -> (tempfile::TempDir, Arc<DiscordMock>, Discord, Arc<Recorder>) {
+    let home = tempfile::tempdir().unwrap();
+    let mock = DiscordMock::start().await;
+    let adapter = Discord::new(&profile_with(home.path(), true, extra), mock.endpoints()).unwrap();
+    let link = Arc::new(Recorder::default());
+    adapter.connect(Arc::clone(&link) as _).await.unwrap();
+    (home, mock, adapter, link)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_mention_creates_a_thread_named_after_the_message() {
+    let (_home, mock, adapter, link) = connected("options = { require_mention = true }\n").await;
+    let text = format!("<@{}> summarize the incident", mock::BOT);
+    mock.dispatch(
+        "MESSAGE_CREATE",
+        &server_message("5001", mock::CHANNEL, &text, true),
+    );
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    let threads = mock.threads_of(mock::CHANNEL);
+    assert_eq!(threads.len(), 1);
+    let (thread, name) = &threads[0];
+    assert_eq!(name, "summarize the incident");
+    let event = link.events.lock().unwrap()[0].clone();
+    assert_eq!(event.chat_id, mock::CHANNEL);
+    assert_eq!(event.thread_id.as_deref(), Some(thread.as_str()));
+    // The answer goes into the thread.
+    adapter
+        .send(&Outgoing::text(mock::CHANNEL, Some(thread), "on it"))
+        .await
+        .unwrap();
+    let sent = mock.sent().pop().unwrap();
+    assert_eq!(sent.thread_id.as_deref(), Some(thread.as_str()));
+    // The conversation goes on in the thread without a mention.
+    mock.dispatch(
+        "MESSAGE_CREATE",
+        &server_message("5002", thread, "and the root cause?", false),
+    );
+    eventually(|| link.events.lock().unwrap().len() == 2).await;
+    let follow = link.events.lock().unwrap()[1].clone();
+    assert_eq!(follow.thread_id.as_deref(), Some(thread.as_str()));
+    // After the first turn the thread takes the session's title.
+    adapter
+        .thread_titled(mock::CHANNEL, thread, "Incident summary")
+        .await;
+    assert_eq!(
+        mock.channel_name(thread).as_deref(),
+        Some("Incident summary")
+    );
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_excluded_channel_stays_inline() {
+    let extra = format!(
+        "options = {{ no_thread_channels = [\"{}\"] }}\n",
+        mock::CHANNEL
+    );
+    let (_home, mock, adapter, link) = connected(&extra).await;
+    let text = format!("<@{}> summarize the incident", mock::BOT);
+    mock.dispatch(
+        "MESSAGE_CREATE",
+        &server_message("5003", mock::CHANNEL, &text, true),
+    );
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    assert!(mock.threads_of(mock::CHANNEL).is_empty());
+    assert!(link.events.lock().unwrap()[0].thread_id.is_none());
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_renamed_thread_keeps_its_name_and_replies_stay_inline() {
+    let (_home, mock, adapter, link) = connected("").await;
+    let mut reply = server_message(
+        "5004",
+        mock::CHANNEL,
+        &format!("<@{}> again", mock::BOT),
+        true,
+    );
+    reply["message_reference"] = serde_json::json!({"message_id": "4999"});
+    mock.dispatch("MESSAGE_CREATE", &reply);
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    assert!(
+        mock.threads_of(mock::CHANNEL).is_empty(),
+        "replies never open threads"
+    );
+    mock.dispatch(
+        "MESSAGE_CREATE",
+        &server_message(
+            "5005",
+            mock::CHANNEL,
+            &format!("<@{}> deploy status", mock::BOT),
+            true,
+        ),
+    );
+    eventually(|| link.events.lock().unwrap().len() == 2).await;
+    let (thread, _) = mock.threads_of(mock::CHANNEL)[0].clone();
+    // Someone renames it before the first turn ends: the title is not applied.
+    mock.rename_channel(&thread, "renamed by hand");
+    adapter
+        .thread_titled(mock::CHANNEL, &thread, "Session title")
+        .await;
+    assert_eq!(
+        mock.channel_name(&thread).as_deref(),
+        Some("renamed by hand")
+    );
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn agent_initiated_sends_to_a_forum_open_posts_titled_by_their_first_line() {
+    let (_home, mock, adapter, _link) = connected("").await;
+    let sent = adapter
+        .send(&Outgoing::text(
+            mock::FORUM,
+            None,
+            "Weekly report\nAll green.",
+        ))
+        .await
+        .unwrap();
+    let posts = mock.threads_of(mock::FORUM);
+    assert_eq!(posts.len(), 1);
+    assert_eq!(posts[0].1, "Weekly report");
+    assert_eq!(sent.message_id.as_deref(), Some(posts[0].0.as_str()));
+    // A reply to the post stays in it.
+    adapter
+        .send(&Outgoing::text(mock::FORUM, Some(&posts[0].0), "follow-up"))
+        .await
+        .unwrap();
+    assert_eq!(mock.threads_of(mock::FORUM).len(), 1);
+    let last = mock.sent().pop().unwrap();
+    assert_eq!(last.thread_id.as_deref(), Some(posts[0].0.as_str()));
+    adapter.disconnect().await;
+}

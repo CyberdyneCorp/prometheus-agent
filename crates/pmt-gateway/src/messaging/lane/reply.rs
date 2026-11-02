@@ -22,7 +22,7 @@ use crate::messaging::adapters::Op;
 use crate::messaging::attachments::{self, Roots};
 use crate::messaging::descriptor::Descriptor;
 use crate::messaging::shape::{self, Owner};
-use crate::messaging::{media, voice};
+use crate::messaging::{deliverable, media, voice};
 
 /// What a turn's reply needs from the turn.
 pub(super) struct Answer<'a> {
@@ -54,6 +54,20 @@ impl Spoken {
     }
 }
 
+/// A file goes as the closest kind the platform sends: a document where
+/// documents cannot be uploaded goes as its own kind, a voice note where
+/// voice notes cannot be sent as audio.
+fn fit_kinds(files: &mut [OutboundAttachment], descriptor: &Descriptor) {
+    for file in files {
+        if file.as_document && !descriptor.sends(MediaKind::Document) {
+            file.as_document = false;
+        }
+        if file.as_voice && !descriptor.sends(MediaKind::Voice) {
+            file.as_voice = false;
+        }
+    }
+}
+
 impl Lane {
     /// The text of a finished turn, or nothing to say.
     fn answer_text(finished: &TurnFinished) -> Option<String> {
@@ -69,19 +83,30 @@ impl Lane {
         let Some(text) = Self::answer_text(answer.finished) else {
             return;
         };
+        let descriptor = self
+            .shared
+            .adapters
+            .descriptor(&self.profile, &self.routing.platform)
+            .unwrap_or_else(|| Descriptor::new(&self.routing.platform, 4096));
+        let roots = self.roots(answer.session);
         let (text, files) = attachments::directives(&text);
-        let (files, notes) = self.roots(answer.session).filter(files);
+        let detect = self
+            .config()
+            .is_none_or(|s| s.config().gateway.delivery.detect_paths);
+        let (text, detected) = if detect {
+            deliverable::extract(&text, &roots, &descriptor.media_out)
+        } else {
+            (text, Vec::new())
+        };
+        let (mut files, notes) = roots.filter(files);
+        files.extend(detected);
+        fit_kinds(&mut files, &descriptor);
         let text = [text]
             .into_iter()
             .chain(notes)
             .filter(|t| !t.is_empty())
             .collect::<Vec<_>>()
             .join("\n\n");
-        let descriptor = self
-            .shared
-            .adapters
-            .descriptor(&self.profile, &self.routing.platform)
-            .unwrap_or_else(|| Descriptor::new(&self.routing.platform, 4096));
         let parts = shape::parts(
             &self.shared,
             &self.profile,
@@ -111,7 +136,10 @@ impl Lane {
             .config()
             .map(|s| s.dir().to_path_buf())
             .unwrap_or_default();
-        Roots::of_profile(&dir, workspace.as_deref())
+        Roots {
+            container: self.shared.agents.container_mounts(&self.profile, session),
+            ..Roots::of_profile(&dir, workspace.as_deref())
+        }
     }
 
     fn enqueue_parts(

@@ -28,7 +28,8 @@ use pmt_config::platforms::WhatsappOptions;
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
-    Attachment, ChatInfo, ChatType, Descriptor, MediaKind, MediaStream, Outgoing, SendError, Sent,
+    Attachment, ChatInfo, ChatType, Descriptor, Markup, MediaKind, MediaStream, Outgoing,
+    SendError, Sent,
 };
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
@@ -298,6 +299,7 @@ impl Adapter for Whatsapp {
         let mut out = all.clone();
         out.remove(&MediaKind::Audio);
         Descriptor {
+            markup: Markup::Platform,
             supports_edit: true,
             supports_typing: true,
             media_in: all,

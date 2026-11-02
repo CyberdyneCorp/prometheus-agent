@@ -184,7 +184,8 @@ impl Adapters {
         let slot = self
             .ready(profile, platform)
             .ok_or_else(|| SendError::Network("the adapter is not connected".to_owned()))?;
-        let sent = slot.adapter.send(message).await?;
+        let message = super::markup::rendered(slot.adapter.as_ref(), message);
+        let sent = slot.adapter.send(&message).await?;
         self.confirm(profile, platform);
         Ok(sent)
     }
@@ -200,7 +201,8 @@ impl Adapters {
         let slot = self
             .ready(profile, platform)
             .ok_or_else(|| SendError::Network("the adapter is not connected".to_owned()))?;
-        slot.adapter.edit(message_id, message).await
+        let message = super::markup::rendered(slot.adapter.as_ref(), message);
+        slot.adapter.edit(message_id, &message).await
     }
 
     /// Every adapter's state.

@@ -27,8 +27,8 @@ use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, LengthUnit, MediaKind, MediaStream, Outgoing, Reaction,
-    SendError, Sent,
+    ChatInfo, ChatType, Descriptor, LengthUnit, Markup, MediaKind, MediaStream, Outgoing, Reaction,
+    SendError, Sent, markup,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -252,6 +252,21 @@ fn relate(content: &mut Value, message: &Outgoing) {
     }
 }
 
+/// An `m.text` event of a message: the host renders replies as HTML
+/// (`formatted_body`), its visible text is the plain `body`; a plain
+/// resend has no HTML.
+fn text_content(message: &Outgoing) -> Value {
+    if message.plain {
+        return json!({"msgtype": "m.text", "body": message.text});
+    }
+    json!({
+        "msgtype": "m.text",
+        "body": markup::html_to_text(&message.text),
+        "format": "org.matrix.custom.html",
+        "formatted_body": message.text,
+    })
+}
+
 impl Adapter for Matrix {
     fn describe(&self) -> Descriptor {
         let all: BTreeSet<MediaKind> = [
@@ -266,6 +281,7 @@ impl Adapter for Matrix {
         let limit = pmt_config::platforms::first_party(PLATFORM)
             .map_or(32_000, |p| p.max_message_length as usize);
         Descriptor {
+            markup: Markup::Html,
             length_unit: LengthUnit::Utf8Bytes,
             supports_edit: true,
             supports_delete: true,
@@ -294,7 +310,7 @@ impl Adapter for Matrix {
         Box::pin(async move {
             let mut first = None;
             if !message.text.is_empty() || message.attachments.is_empty() {
-                let mut content = json!({"msgtype": "m.text", "body": message.text});
+                let mut content = text_content(&message);
                 relate(&mut content, &message);
                 first = Some(
                     self.send_event(&message.chat_id, "m.room.message", &content)
@@ -317,12 +333,14 @@ impl Adapter for Matrix {
         message: &'a Outgoing,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
-            let content = json!({
-                "msgtype": "m.text",
-                "body": format!("* {}", message.text),
-                "m.new_content": {"msgtype": "m.text", "body": message.text},
-                "m.relates_to": {"rel_type": "m.replace", "event_id": message_id},
-            });
+            let new = text_content(message);
+            let mut content = new.clone();
+            content["body"] = json!(format!("* {}", new["body"].as_str().unwrap_or_default()));
+            if let Some(html) = new["formatted_body"].as_str() {
+                content["formatted_body"] = json!(format!("* {html}"));
+            }
+            content["m.new_content"] = new;
+            content["m.relates_to"] = json!({"rel_type": "m.replace", "event_id": message_id});
             self.send_event(&message.chat_id, "m.room.message", &content)
                 .await
                 .map(drop)
