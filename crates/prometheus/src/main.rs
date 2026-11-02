@@ -74,6 +74,9 @@ fn main() -> ExitCode {
     // hooks): the names are reserved before any config loads.
     pmt_config::gateway_check::reserve_command_names(prometheus::slash::reserved_names());
     pmt_config::gateway_check::register_toolsets(prometheus::tools_cmd::expand_toolsets);
+    pmt_config::gateway_check::register_skills(prometheus::skills_cmd::policy_skill_resolver(
+        launch.user_home().cloned(),
+    ));
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));

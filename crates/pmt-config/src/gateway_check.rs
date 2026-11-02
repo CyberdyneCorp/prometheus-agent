@@ -5,6 +5,7 @@
 //! command never shadows a command of the shared registry.
 
 use std::collections::BTreeSet;
+use std::path::Path;
 use std::sync::OnceLock;
 
 use pmt_core::error::{Error, codes};
@@ -26,6 +27,21 @@ pub fn register_toolsets(expand: ToolsetExpander) {
     let _ = TOOLSETS.set(expand);
 }
 
+/// Finds the first of `names` that is not a skill of the profile in
+/// `profile_dir` under `config` (`None`: all resolve), the way a session
+/// resolves them.
+pub type SkillResolver = Box<dyn Fn(&Config, &Path, &[String]) -> Option<String> + Send + Sync>;
+
+/// The skill catalog lookup, set once by the binary that owns the catalog.
+/// Unset (libraries, tests): only disabled skills are refused.
+static SKILLS: OnceLock<SkillResolver> = OnceLock::new();
+
+/// Registers the skill lookup used to refuse a chat policy naming an
+/// unknown skill. The first call wins.
+pub fn register_skills(resolve: SkillResolver) {
+    let _ = SKILLS.set(resolve);
+}
+
 /// The shared slash command registry's names and aliases, set once by the
 /// binary that owns the registry. Unset (libraries, tests): no quick
 /// command name is reserved.
@@ -37,13 +53,14 @@ pub fn reserve_command_names(names: impl IntoIterator<Item = impl Into<String>>)
     let _ = RESERVED.set(names.into_iter().map(Into::into).collect());
 }
 
-/// Refuses a wildcard allowlist entry and a quick command that collides
-/// with a registry command.
+/// Refuses a wildcard allowlist entry, a quick command that collides
+/// with a registry command and a chat policy that widens or names unknown
+/// toolsets or skills of the profile in `profile_dir`.
 ///
 /// # Errors
 ///
 /// `config.invalid` naming the key.
-pub fn check(config: &Config) -> Result<(), Error> {
+pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     for (platform, table) in &config.gateway.platforms {
         if table.allow_users.iter().any(|user| user.contains('*')) {
             return Err(Error::new(
@@ -65,7 +82,7 @@ pub fn check(config: &Config) -> Result<(), Error> {
             )));
         }
     }
-    check_policies(config)?;
+    check_policies(config, profile_dir)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
     for name in config.quick_commands.keys() {
@@ -85,7 +102,7 @@ fn invalid(message: String) -> Error {
     Error::new(&codes::CONFIG_INVALID, message)
 }
 
-fn check_policies(config: &Config) -> Result<(), Error> {
+fn check_policies(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     let policies = &config.gateway.chat_policies;
     for (index, policy) in policies.iter().enumerate() {
         let key = format!("gateway.chat_policies[{index}]");
@@ -103,7 +120,7 @@ fn check_policies(config: &Config) -> Result<(), Error> {
             )));
         }
         check_policy_toolsets(config, policy, &key)?;
-        check_policy_skills(config, policy, &key)?;
+        check_policy_skills(config, profile_dir, policy, &key)?;
     }
     Ok(())
 }
@@ -152,15 +169,26 @@ fn check_policy_toolsets(config: &Config, policy: &ChatPolicy, key: &str) -> Res
     Ok(())
 }
 
-fn check_policy_skills(config: &Config, policy: &ChatPolicy, key: &str) -> Result<(), Error> {
-    let disabled = policy
-        .skills
-        .iter()
-        .flatten()
-        .find(|s| config.skills.disabled.contains(s));
-    match disabled {
-        Some(name) => Err(invalid(format!(
+fn check_policy_skills(
+    config: &Config,
+    profile_dir: &Path,
+    policy: &ChatPolicy,
+    key: &str,
+) -> Result<(), Error> {
+    let Some(skills) = policy.skills.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok(());
+    };
+    if let Some(name) = skills.iter().find(|s| config.skills.disabled.contains(s)) {
+        return Err(invalid(format!(
             "{key}.skills: '{name}' is disabled in this profile (skills.disabled); a policy can only narrow the enabled skills"
+        )));
+    }
+    let unknown = SKILLS
+        .get()
+        .and_then(|resolve| resolve(config, profile_dir, skills));
+    match unknown {
+        Some(name) => Err(invalid(format!(
+            "{key}.skills: unknown skill '{name}'; `prometheus skills list` shows the profile's skills"
         ))),
         None => Ok(()),
     }
@@ -224,7 +252,7 @@ mod tests {
                 ..PlatformConfig::default()
             },
         );
-        let err = check(&config).unwrap_err();
+        let err = check(&config, Path::new("")).unwrap_err();
         assert_eq!(err.code(), &codes::CONFIG_INVALID);
         assert!(
             err.message()
@@ -235,7 +263,7 @@ mod tests {
 
     fn with_policy(toml_policies: &str) -> Result<(), Error> {
         let config: Config = toml::from_str(toml_policies).unwrap();
-        check(&config)
+        check(&config, Path::new(""))
     }
 
     #[test]
@@ -317,7 +345,7 @@ mod tests {
 
     #[test]
     fn an_enabled_health_export_needs_a_safe_endpoint() {
-        let parse = |text: &str| check(&toml::from_str::<Config>(text).unwrap());
+        let parse = |text: &str| check(&toml::from_str::<Config>(text).unwrap(), Path::new(""));
         assert!(parse("[observability.gateway_health]\nenabled = true\n").is_err());
         assert!(
             parse("[observability.gateway_health]\nenabled = true\nendpoint = \"http://collector.example/v1/metrics\"\n")

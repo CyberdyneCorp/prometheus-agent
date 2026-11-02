@@ -99,6 +99,9 @@ fn relay(config: &DaemonConfig, scope: &ProfileScope) -> Result<Option<RelayOpti
 
 /// The adapter factories of this build, by platform name.
 pub(super) fn factories(ctx: &Context<'_>) -> BTreeMap<String, AdapterFactory> {
+    // Release builds have no test adapter to insert (yet no first-party
+    // factory either), so the binding is only mutated in debug builds.
+    #[cfg_attr(not(debug_assertions), allow(unused_mut))]
     let mut factories: BTreeMap<String, AdapterFactory> = BTreeMap::new();
     #[cfg(debug_assertions)]
     if let Some(dir) = ctx.launch.test_adapter_dir() {

@@ -932,6 +932,9 @@ error_codes! {
     /// The OS service manager refused or is missing.
     SERVICE_MANAGER = ("service.manager", Unavailable,
         "The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output.");
+    /// No supported service manager on this OS.
+    SERVICE_UNSUPPORTED = ("service.unsupported", Unavailable,
+        "`prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

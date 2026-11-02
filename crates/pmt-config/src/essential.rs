@@ -42,15 +42,17 @@ pub fn check(config: &Config) -> Result<(), Error> {
 }
 
 /// Every whole-config check beyond the schema: provider transports,
-/// quick commands and the essential skill. Run when a profile loads and before any write.
+/// quick commands, gateway keys (chat policies resolve skills in
+/// `profile_dir`) and the essential skill. Run when a profile loads and
+/// before any write.
 ///
 /// # Errors
 ///
 /// The first failing check's error.
-pub fn semantic(config: &Config) -> Result<(), Error> {
+pub fn semantic(config: &Config, profile_dir: &std::path::Path) -> Result<(), Error> {
     crate::provider_urls::check(config)?;
     crate::quick_commands::check(config)?;
-    crate::gateway_check::check(config)?;
+    crate::gateway_check::check(config, profile_dir)?;
     check(config)
 }
 

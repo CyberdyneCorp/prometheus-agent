@@ -41,9 +41,14 @@ update) and 1, never after 0 (stop) or 78 (configuration error).
 Re-running the command rewrites the same unit; `--no-start` installs
 without starting; `prometheus daemon uninstall-service` removes it.
 `--system --run-as-user <user>` installs a boot-time unit instead and
-needs root (exit 77 otherwise). `prometheus doctor` reports units left by
-a Hermes gateway or an earlier layout, with the command that replaces
-them.
+needs root (exit 77 otherwise). On other systems (Android/Termux, the
+BSDs) the command exits 69 (`service.unsupported`): run
+`prometheus daemon run` under your own supervisor. `prometheus doctor`
+reports units left by a Hermes gateway (every profile's
+`hermes-gateway[-<profile>].service` or `ai.hermes.gateway[-<suffix>]`,
+user and system scope) or an earlier layout, with the exact command that
+stops and removes each and installs the Prometheus service in its place.
+It never removes them itself.
 
 `prometheus gateway list` shows every running daemon of your OS user,
 whatever its home (with `--json`: home, pid, start time, build, profiles,

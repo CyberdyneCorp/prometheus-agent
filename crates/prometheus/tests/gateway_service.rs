@@ -129,6 +129,53 @@ fn system_scope_needs_root() {
     assert_eq!(commands(seam.path()), "", "nothing was installed");
 }
 
+#[test]
+fn doctor_reports_legacy_units_with_the_command_that_replaces_them() {
+    let home = temp_home();
+    let seam = temp_home();
+    let user_unit = seam
+        .path()
+        .join("home/.config/systemd/user/hermes-gateway-work.service");
+    let system_unit = seam
+        .path()
+        .join("system/etc/systemd/system/hermes-gateway.service");
+    for (unit, text) in [
+        (&user_unit, "[Unit]\n"),
+        (&system_unit, "[Service]\nUser=alice\n"),
+    ] {
+        std::fs::create_dir_all(unit.parent().unwrap()).unwrap();
+        std::fs::write(unit, text).unwrap();
+    }
+    let out = command(home.path())
+        .args(["doctor", "daemon"])
+        .env("PMT_TEST_SERVICE_DIR", seam.path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let text = stdout(&out);
+    let install = format!(
+        "prometheus --home '{}' daemon install-service",
+        home.path().display()
+    );
+    assert!(
+        text.contains(&format!(
+            "systemctl --user disable --now hermes-gateway-work.service && rm '{}' && \
+             systemctl --user daemon-reload && {install}",
+            user_unit.display()
+        )),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "sudo systemctl disable --now hermes-gateway.service && sudo rm '{}' && \
+             sudo systemctl daemon-reload && sudo {install} --system --run-as-user 'alice'",
+            system_unit.display()
+        )),
+        "{text}"
+    );
+    assert!(user_unit.exists() && system_unit.exists(), "never removed");
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn reinstalling_the_launch_agent_rewrites_one_plist() {

@@ -167,7 +167,7 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "store" => groups::store(inputs),
         "daemon" => {
             let mut checks = daemon::checks(inputs.scope.home()).await;
-            checks.extend(daemon::legacy_units(inputs.ctx.launch.user_home()));
+            checks.extend(daemon::legacy_units(inputs.ctx, inputs.scope.home()));
             checks
         }
         "sandbox" => system::sandbox(inputs),

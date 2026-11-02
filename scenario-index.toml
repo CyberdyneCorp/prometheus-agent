@@ -1418,6 +1418,7 @@ capabilities = [
 "Second foreground daemon refused" = ["crates/prometheus/tests/daemon_cli.rs::a_second_daemon_exits_75_without_opening_any_store"]
 "Idempotent start" = ["crates/prometheus/tests/daemon_cli.rs::starting_a_running_daemon_is_a_no_op"]
 "Stale endpoint file after crash" = ["crates/prometheus/tests/daemon_cli.rs::a_stale_endpoint_file_is_replaced_by_the_new_daemon"]
+"Invalid config does not crash-loop" = { tests = ["crates/prometheus/tests/daemon_cli.rs::an_invalid_profile_config_exits_78_naming_the_key", "crates/prometheus/src/daemon_cmd/service/units.rs::the_systemd_user_unit_restarts_on_75_and_1_but_not_78", "crates/prometheus/src/daemon_cmd/service/units.rs::the_launch_agent_turns_78_into_a_clean_exit", "crates/prometheus/src/daemon_cmd/service/units.rs::the_windows_wrapper_supervises_and_the_fallback_starts"], note = "the daemon exits 78 naming busy.input_mode; each generated supervisor unit refuses to restart on 78 (systemd RestartPreventExitStatus=78, launchd maps 78 to a clean exit, the Windows wrapper loop exits on 78)" }
 
 [messaging-gateway."Loopback client attachment"]
 "Wrong token rejected" = ["crates/pmt-gateway/tests/protocol.rs::an_unknown_ticket_closes_with_4401_and_no_frame_is_processed"]
@@ -1712,7 +1713,7 @@ capabilities = [
 
 [messaging-gateway."Per-OS service installation without elevation"]
 "Re-install is idempotent" = { tests = ["crates/prometheus/tests/gateway_service.rs::reinstalling_the_launch_agent_rewrites_one_plist", "crates/prometheus/tests/gateway_service.rs::reinstalling_the_user_unit_rewrites_one_unit"], note = "macOS and Linux tests run on their CI hosts against the PMT_TEST_SERVICE_DIR seam (units written under the seam, launchctl/systemctl invocations recorded)" }
-"Windows fallback without Task Scheduler rights" = { tests = ["crates/prometheus/tests/gateway_service.rs::without_task_scheduler_rights_a_startup_launcher_is_used"], note = "runs on the Windows CI host; schtasks refusal is simulated by the PMT_TEST_SERVICE_DIR seam" }
+"Windows fallback without Task Scheduler rights" = { tests = ["crates/prometheus/tests/gateway_service.rs::without_task_scheduler_rights_a_startup_launcher_is_used"], note = "runs in the CI \"Windows service install tests\" step on both Windows targets; schtasks refusal is simulated by the PMT_TEST_SERVICE_DIR seam" }
 "System scope needs root" = ["crates/prometheus/tests/gateway_service.rs::system_scope_needs_root"]
 
 [messaging-gateway."Daemon inventory across homes"]

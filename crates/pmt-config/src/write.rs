@@ -205,7 +205,7 @@ impl ConfigFile {
         let mut doc = parse::document(&self.path, &old)?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        crate::essential::semantic(&parse::config(&self.path, &new)?)?;
+        crate::essential::semantic(&parse::config(&self.path, &new)?, profile_dir(&self.path))?;
         if new == old {
             return Ok(());
         }
@@ -261,7 +261,12 @@ pub(crate) fn check_document(path: &Path, text: &str) -> Result<(), Error> {
             ),
         ));
     }
-    crate::essential::semantic(&parse::config(path, text)?)
+    crate::essential::semantic(&parse::config(path, text)?, profile_dir(path))
+}
+
+/// The profile directory of its `config.toml`.
+fn profile_dir(config_file: &Path) -> &Path {
+    config_file.parent().unwrap_or(Path::new(""))
 }
 
 #[cfg(test)]

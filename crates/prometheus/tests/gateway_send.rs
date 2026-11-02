@@ -257,3 +257,31 @@ fn the_send_tool_refuses_unknown_chats_and_reaches_known_ones() {
     );
     daemon.stop(home);
 }
+
+#[test]
+fn a_policy_naming_an_unknown_skill_fails_validation_by_name() {
+    let home = gateway_home(
+        "\n[[gateway.chat_policies]]\nplatform = \"test\"\nchat_id = \"555\"\nskills = [\"prometheus-agent\", \"no-such-skill\"]\n",
+    );
+    let out = run(home.path(), &["config", "validate"]);
+    assert_eq!(out.status.code(), Some(78), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("gateway.chat_policies[0].skills: unknown skill 'no-such-skill'"),
+        "{}",
+        stderr(&out)
+    );
+    let skill = home.path().join("profiles/default/skills/triage/SKILL.md");
+    std::fs::create_dir_all(skill.parent().unwrap()).unwrap();
+    std::fs::write(
+        &skill,
+        "---\nname: triage\ndescription: Sort incoming reports.\n---\nSort them.\n",
+    )
+    .unwrap();
+    let config = home.path().join("profiles/default/config.toml");
+    let text = std::fs::read_to_string(&config)
+        .unwrap()
+        .replace("no-such-skill", "triage");
+    std::fs::write(&config, text).unwrap();
+    let out = run(home.path(), &["config", "validate"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+}

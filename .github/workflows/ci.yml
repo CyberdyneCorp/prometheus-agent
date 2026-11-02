@@ -185,6 +185,14 @@ jobs:
           path: target/aarch64-linux-android/debug/prometheus
           if-no-files-found: error
 
+      # Supervisor units on Windows (messaging-gateway, Per-OS service
+      # installation without elevation): the Scheduled Task, its
+      # Startup-folder fallback when Task Scheduler refuses, and the daemon
+      # inventory under %LOCALAPPDATA%.
+      - name: Windows service install tests
+        if: runner.os == 'Windows'
+        run: cargo test -p prometheus --test gateway_service --features gateway --locked --target "${{ matrix.target }}"
+
       # Windows-only code with tests of its own: owner-only DACLs and
       # no-follow opens of private files (security-boundaries, Private file
       # modes). The full suite runs on the Unix check jobs.

@@ -123,11 +123,11 @@ async fn config(record: &DaemonRecord) -> Vec<Check> {
 /// gateway (spec: messaging-gateway, Per-OS service installation without
 /// elevation): reported with the command that replaces each, never removed.
 #[cfg(feature = "gateway")]
-pub(super) fn legacy_units(user_home: Option<&std::path::PathBuf>) -> Vec<Check> {
-    let Some(user_home) = user_home else {
-        return Vec::new();
-    };
-    crate::daemon_cmd::service::legacy_units(user_home)
+pub(super) fn legacy_units(
+    ctx: &crate::context::Context<'_>,
+    home: &std::path::Path,
+) -> Vec<Check> {
+    crate::daemon_cmd::service::legacy_units(ctx, home)
         .into_iter()
         .map(|unit| {
             Check::new(
@@ -140,15 +140,12 @@ pub(super) fn legacy_units(user_home: Option<&std::path::PathBuf>) -> Vec<Check>
                     unit.path.display()
                 ),
             )
-            .with_hint(format!(
-                "prometheus daemon install-service, then disable and remove {}",
-                unit.path.display()
-            ))
+            .with_hint(unit.replace)
         })
         .collect()
 }
 
 #[cfg(not(feature = "gateway"))]
-pub(super) fn legacy_units(_: Option<&std::path::PathBuf>) -> Vec<Check> {
+pub(super) fn legacy_units(_: &crate::context::Context<'_>, _: &std::path::Path) -> Vec<Check> {
     Vec::new()
 }

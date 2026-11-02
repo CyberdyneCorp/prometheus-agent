@@ -13,6 +13,14 @@
 //! `commands.log` instead of running them (`refuse-<program>` makes that
 //! program fail, `root` makes the caller root), so the flow is testable.
 
+// On OSes without a known supervisor only the unsupported-OS fallback is
+// compiled, so the shared plumbing below goes unused there.
+#![cfg_attr(
+    not(any(target_os = "linux", target_os = "macos", windows)),
+    allow(dead_code, unused_imports)
+)]
+
+mod legacy;
 mod units;
 
 use std::path::{Path, PathBuf};
@@ -21,6 +29,7 @@ use clap::Args;
 use pmt_core::error::{Error, codes};
 
 use crate::context::Context;
+pub use legacy::LegacyUnit;
 use units::Daemon;
 #[cfg(target_os = "macos")]
 use units::LAUNCHD_LABEL;
@@ -109,7 +118,7 @@ struct Host {
 impl Host {
     fn new(ctx: &Context<'_>) -> Result<Self, Error> {
         let home = ctx.home()?.root().to_path_buf();
-        let user_home = ctx.launch.user_home().cloned().ok_or_else(|| {
+        let (user_home, system_root) = roots(ctx).ok_or_else(|| {
             Error::new(
                 &codes::HOME_UNRESOLVED,
                 "the user's home directory is unknown",
@@ -122,14 +131,7 @@ impl Host {
                 format!("cannot find this binary: {e}"),
             )
         })?;
-        let (runner, user_home, system_root) = match test_dir(ctx) {
-            Some(dir) => (
-                Runner::Recorded(dir.clone()),
-                dir.join("home"),
-                dir.join("system"),
-            ),
-            None => (Runner::Real, user_home, PathBuf::from("/")),
-        };
+        let runner = test_dir(ctx).map_or(Runner::Real, Runner::Recorded);
         Ok(Self {
             runner,
             user_home,
@@ -162,6 +164,15 @@ impl Host {
                 format!("{program} {} failed: {why}", args.join(" ")),
             )
         })
+    }
+}
+
+/// The user's home and the prefix of system paths, both under the test
+/// seam when it is set.
+fn roots(ctx: &Context<'_>) -> Option<(PathBuf, PathBuf)> {
+    match test_dir(ctx) {
+        Some(dir) => Some((dir.join("home"), dir.join("system"))),
+        None => Some((ctx.launch.user_home()?.clone(), PathBuf::from("/"))),
     }
 }
 
@@ -245,15 +256,13 @@ fn install_on_os(host: &Host, run_as: Option<&str>, start: bool) -> Result<Strin
     let system = run_as.is_some();
     let path = systemd_path(host, system);
     write(&path, &units::systemd(&host.daemon(run_as)))?;
-    let scope: &[&str] = if system { &[] } else { &["--user"] };
-    let with = |rest: &[&str]| [scope, rest].concat();
-    host.manager("systemctl", &with(&["daemon-reload"]))?;
+    host.manager("systemctl", &systemctl_args(system, &["daemon-reload"]))?;
     let enable: &[&str] = if start {
         &["enable", "--now", SYSTEMD_UNIT]
     } else {
         &["enable", SYSTEMD_UNIT]
     };
-    host.manager("systemctl", &with(enable))?;
+    host.manager("systemctl", &systemctl_args(system, enable))?;
     let mut note = String::new();
     if !system {
         // Lingering keeps the user's daemon alive after logout; a refusal
@@ -267,6 +276,14 @@ fn install_on_os(host: &Host, run_as: Option<&str>, start: bool) -> Result<Strin
         path.display(),
         if start { "started" } else { "not started" }
     ))
+}
+
+/// `systemctl` arguments: per-user units go through `--user`.
+#[cfg(target_os = "linux")]
+fn systemctl_args<'a>(system: bool, rest: &[&'a str]) -> Vec<&'a str> {
+    let mut args = if system { Vec::new() } else { vec!["--user"] };
+    args.extend_from_slice(rest);
+    args
 }
 
 #[cfg(target_os = "linux")]
@@ -288,14 +305,13 @@ fn uninstall_on_os(host: &Host, system: bool) -> Result<String, Error> {
     if !path.exists() {
         return Ok("no service installed".to_owned());
     }
-    let scope: &[&str] = if system { &[] } else { &["--user"] };
     // Stopping a unit that is not running is not an error worth stopping for.
     let _ = host.runner.run(
         "systemctl",
-        &[scope, &["disable", "--now", SYSTEMD_UNIT]].concat(),
+        &systemctl_args(system, &["disable", "--now", SYSTEMD_UNIT]),
     );
     remove(&path)?;
-    host.manager("systemctl", &[scope, &["daemon-reload"]].concat())?;
+    host.manager("systemctl", &systemctl_args(system, &["daemon-reload"]))?;
     Ok(format!("removed {}", path.display()))
 }
 
@@ -435,62 +451,38 @@ fn uninstall_on_os(host: &Host, _system: bool) -> Result<String, Error> {
     })
 }
 
-/// A unit left by an earlier layout or an imported Hermes gateway, which
-/// `prometheus doctor` reports with the command that replaces it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LegacyUnit {
-    /// Where it is.
-    pub path: PathBuf,
-    /// What installed it.
-    pub origin: &'static str,
+/// Other OSes (Android/Termux, the BSDs) have none of the supervisors this
+/// command knows, so it says so instead of writing a unit nothing reads.
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn unsupported() -> Error {
+    Error::new(
+        &codes::SERVICE_UNSUPPORTED,
+        format!("no supported service manager on {}", std::env::consts::OS),
+    )
+    .with_hint("start the daemon from your own supervisor with `prometheus daemon run`")
 }
 
-/// Legacy supervisor units of the current user.
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn install_on_os(_: &Host, _: Option<&str>, _: bool) -> Result<String, Error> {
+    Err(unsupported())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+fn uninstall_on_os(_: &Host, _: bool) -> Result<String, Error> {
+    Err(unsupported())
+}
+
+/// Legacy supervisor units for `prometheus doctor`, searched where
+/// `install-service` would write (the test seam included) for `home`.
 #[must_use]
-pub fn legacy_units(user_home: &Path) -> Vec<LegacyUnit> {
-    let candidates: &[(&str, &str)] = &[
-        (
-            ".config/systemd/user/hermes-gateway.service",
-            "Hermes gateway",
-        ),
-        (
-            ".config/systemd/user/prometheus-gateway.service",
-            "an earlier Prometheus layout",
-        ),
-        (
-            "Library/LaunchAgents/ai.hermes.gateway.plist",
-            "Hermes gateway",
-        ),
-        (
-            "Library/LaunchAgents/ai.prometheus.gateway.plist",
-            "an earlier Prometheus layout",
-        ),
-    ];
-    candidates
-        .iter()
-        .map(|(relative, origin)| LegacyUnit {
-            path: user_home.join(relative),
-            origin,
-        })
-        .filter(|unit| unit.path.exists())
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hermes_and_old_units_are_found() {
-        let home = tempfile::tempdir().unwrap();
-        assert!(legacy_units(home.path()).is_empty());
-        let unit = home
-            .path()
-            .join(".config/systemd/user/hermes-gateway.service");
-        std::fs::create_dir_all(unit.parent().unwrap()).unwrap();
-        std::fs::write(&unit, "[Unit]\n").unwrap();
-        let found = legacy_units(home.path());
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].origin, "Hermes gateway");
-    }
+pub fn legacy_units(ctx: &Context<'_>, home: &Path) -> Vec<LegacyUnit> {
+    let Some((user_home, system_root)) = roots(ctx) else {
+        return Vec::new();
+    };
+    let default_home = pmt_config::home::default_home(ctx.launch).is_some_and(|d| d == home);
+    legacy::legacy_units(&legacy::Roots {
+        user_home: &user_home,
+        system_root: &system_root,
+        home: (!default_home).then_some(home),
+    })
 }
