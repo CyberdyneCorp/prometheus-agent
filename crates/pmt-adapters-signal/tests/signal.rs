@@ -74,26 +74,20 @@ async fn an_unreachable_daemon_is_retried_naming_its_url() {
 }
 
 #[tokio::test]
-async fn a_missing_account_is_named() {
+async fn a_missing_account_fails_validation_naming_it() {
     let home = tempfile::tempdir().unwrap();
-    let setup = kit_setup(
+    let err = kit_setup(
         home.path(),
         "signal",
         "options = { http_url = \"http://127.0.0.1:1\" }",
         &[],
     )
-    .unwrap();
-    let err = Signal::new(&setup)
-        .unwrap()
-        .connect(Arc::new(Recorder::default()))
-        .await
-        .unwrap_err();
-    assert!(!err.retryable);
+    .unwrap_err();
     assert!(
-        err.message
+        err.message()
             .contains("gateway.platforms.signal.options.account"),
         "{}",
-        err.message
+        err.message()
     );
 }
 

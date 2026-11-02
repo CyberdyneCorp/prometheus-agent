@@ -40,12 +40,14 @@ mod lane;
 mod limits;
 mod locks;
 mod media;
+pub mod menu;
 pub(crate) mod methods;
 pub mod mock_server;
 pub mod multipart;
 mod outbox;
 mod peer;
 pub mod policy;
+pub mod proxy;
 mod recovery;
 mod relay;
 mod retry;
@@ -76,7 +78,7 @@ pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Admission, Attachment, AudioOp, Button, ChatInfo, Descriptor,
     HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind, MediaStream,
-    Outgoing, Reaction, SendError, SenderVerdict, Sent,
+    MenuCommand, Outgoing, Reaction, SendError, SenderVerdict, Sent, SessionHints,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup};
 pub use hooks::{Hook, Hooks, PreCommand};
@@ -418,6 +420,7 @@ impl Gateway {
         for profile in &shared.server.profiles() {
             adapters::start_profile(shared, profile);
         }
+        adapters::refresh_menus(shared);
     }
 
     /// Injects a background notification into a conversation (spec:

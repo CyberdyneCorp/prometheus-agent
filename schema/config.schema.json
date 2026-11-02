@@ -1132,6 +1132,11 @@
       "additionalProperties": false,
       "description": "`[gateway.delivery]`.",
       "properties": {
+        "detect_paths": {
+          "default": true,
+          "description": "Deliver files a final reply names by bare path (outside code) as\nuploads, removing the path from the text.",
+          "type": "boolean"
+        },
         "max_parts": {
           "default": 10,
           "description": "A reply that would need more parts is sent as its first part plus\na truncation notice, with the full text attached.",
@@ -1402,6 +1407,96 @@
       "type": "object",
       "x-apply": "live"
     },
+    "FilterFile": {
+      "additionalProperties": false,
+      "description": "`{path, file}`.",
+      "properties": {
+        "file": {
+          "description": "A file of accepted values, one per line, relative to the profile\ndirectory.",
+          "type": "string"
+        },
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "file"
+      ],
+      "type": "object"
+    },
+    "FilterPath": {
+      "additionalProperties": false,
+      "description": "`{path}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "FilterPattern": {
+      "additionalProperties": false,
+      "description": "`{path, pattern}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "A regular expression.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "pattern"
+      ],
+      "type": "object"
+    },
+    "FilterValue": {
+      "additionalProperties": false,
+      "description": "`{path, value}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value compared."
+        }
+      },
+      "required": [
+        "path",
+        "value"
+      ],
+      "type": "object"
+    },
+    "FilterValues": {
+      "additionalProperties": false,
+      "description": "`{path, values}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        },
+        "values": {
+          "description": "The accepted values.",
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "values"
+      ],
+      "type": "object"
+    },
     "FirecrawlConfig": {
       "additionalProperties": false,
       "description": "The `[web.firecrawl]` section.",
@@ -1497,6 +1592,7 @@
         "delivery": {
           "$ref": "#/$defs/DeliveryConfig",
           "default": {
+            "detect_paths": true,
             "max_parts": 10
           },
           "description": "Long replies.",
@@ -1540,6 +1636,24 @@
           "description": "Messaging platforms this profile answers on, keyed by platform\n(`telegram`, `discord`, ...). A profile clone leaves them out\nunless `--clone-channels` is given, so two profiles never answer\nthe same bot account.",
           "type": "object",
           "x-apply": "next_session"
+        },
+        "proxy_url": {
+          "description": "The proxy every adapter without its own `proxy_url` uses\n(`http://`, `https://` or `socks5://`, without a password; a URL\nwith credentials goes in a secret named by `proxy_url_secret`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proxy_url_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the shared proxy URL when it carries\ncredentials."
         },
         "quick_commands": {
           "$ref": "#/$defs/GatewayQuickCommands",
@@ -1592,6 +1706,11 @@
           },
           "description": "Token streaming to platforms.",
           "x-apply": "live"
+        },
+        "trust_env": {
+          "default": false,
+          "description": "Honour inherited proxy environment variables (`HTTPS_PROXY`, ...)\nand the OS proxy settings when no proxy is configured; off, adapters\nconnect directly.",
+          "type": "boolean"
         },
         "voice": {
           "$ref": "#/$defs/VoiceConfig",
@@ -2573,6 +2692,16 @@
             "null"
           ]
         },
+        "max_body_bytes": {
+          "description": "Largest request body a webhook route reads (`webhook` only), in\nbytes; larger requests are answered 413 unread. Unset: 1048576.",
+          "format": "uint64",
+          "maximum": 16777216,
+          "minimum": 1024,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "max_message_length": {
           "description": "Lowers the adapter's message length limit (in its own unit); it\ncan never raise it.",
           "format": "uint32",
@@ -2587,10 +2716,35 @@
           "description": "The adapter's own settings, validated against the schema it\npublishes (`prometheus gateway platforms` lists the adapters).",
           "type": "object"
         },
+        "proxy_url": {
+          "description": "The proxy this adapter's outbound HTTP and WebSocket traffic uses\n(`http://`, `https://` or `socks5://`, without a password; a URL\nwith credentials goes in a secret named by `proxy_url_secret`).\nUnset: `gateway.proxy_url`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proxy_url_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding this adapter's proxy URL when it carries\ncredentials."
+        },
         "rate_limit": {
           "$ref": "#/$defs/RateLimitOverride",
           "default": {},
           "description": "Rate limits on this platform (overrides `gateway.rate_limit`)."
+        },
+        "reactions": {
+          "description": "Mark the triggering message with processing reactions (eyes, then a\ncheck mark or a cross). Unset: on for Discord and Slack, off\nelsewhere.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "reply_to_mode": {
           "anyOf": [
@@ -4624,10 +4778,199 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "WebhookFilter": {
+      "description": "One filter condition over `payload.<path>`, `event` or\n`headers.<Name>`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The path resolves.",
+          "properties": {
+            "exists": {
+              "$ref": "#/$defs/FilterPath"
+            }
+          },
+          "required": [
+            "exists"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The path does not resolve.",
+          "properties": {
+            "missing": {
+              "$ref": "#/$defs/FilterPath"
+            }
+          },
+          "required": [
+            "missing"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value equals `value`.",
+          "properties": {
+            "equals": {
+              "$ref": "#/$defs/FilterValue"
+            }
+          },
+          "required": [
+            "equals"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value differs from `value` (or is missing).",
+          "properties": {
+            "not_equals": {
+              "$ref": "#/$defs/FilterValue"
+            }
+          },
+          "required": [
+            "not_equals"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The string contains `value`, or the list holds it.",
+          "properties": {
+            "contains": {
+              "$ref": "#/$defs/FilterValue"
+            }
+          },
+          "required": [
+            "contains"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value is one of `values`.",
+          "properties": {
+            "in": {
+              "$ref": "#/$defs/FilterValues"
+            }
+          },
+          "required": [
+            "in"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value is a line of `file` (relative to the profile directory).",
+          "properties": {
+            "in_file": {
+              "$ref": "#/$defs/FilterFile"
+            }
+          },
+          "required": [
+            "in_file"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The string matches the regular expression `pattern`.",
+          "properties": {
+            "regex": {
+              "$ref": "#/$defs/FilterPattern"
+            }
+          },
+          "required": [
+            "regex"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Every condition holds.",
+          "properties": {
+            "all": {
+              "items": {
+                "$ref": "#/$defs/WebhookFilter"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "all"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "At least one condition holds.",
+          "properties": {
+            "any": {
+              "items": {
+                "$ref": "#/$defs/WebhookFilter"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "any"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The condition does not hold.",
+          "properties": {
+            "not": {
+              "$ref": "#/$defs/WebhookFilter"
+            }
+          },
+          "required": [
+            "not"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "WebhookFilters": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WebhookFilter",
+          "description": "One condition."
+        },
+        {
+          "description": "Every condition.",
+          "items": {
+            "$ref": "#/$defs/WebhookFilter"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A route's filters: one condition or a list that must all hold."
+    },
     "WebhookRoute": {
       "additionalProperties": false,
-      "description": "One `[gateway.platforms.webhook.routes.<name>]` table.",
+      "description": "One webhook route.",
       "properties": {
+        "deliver": {
+          "description": "Where the answer goes: `log` (recorded under\n`<profile>/logs/webhook/<route>.jsonl`), `origin`, `github_comment`\nor a send target `platform[:chat_id[:thread_id]]`. Unset: `log`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deliver_extra": {
+          "description": "More send targets that receive a copy.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deliver_only": {
+          "default": false,
+          "description": "Run no model: the rendered prompt is sent verbatim to `deliver`.",
+          "type": "boolean"
+        },
         "events": {
           "default": [],
           "description": "Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the\npayload's `event_type`); empty admits every event.",
@@ -4635,6 +4978,17 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "filters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookFilters"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Conditions a payload must meet; a request that fails them is\nanswered `ignored` with reason `filter`."
         },
         "insecure_no_auth": {
           "default": false,
@@ -4648,6 +5002,29 @@
             "null"
           ]
         },
+        "rate_limit_per_min": {
+          "default": 30,
+          "description": "Requests per minute the route admits (fixed window); more are\nanswered 429.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "script": {
+          "description": "A transform script under the profile's `scripts/` directory, run in\nthe sandbox with the payload JSON on stdin.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "script_timeout_secs": {
+          "default": 30,
+          "description": "Seconds the transform script may run.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
         "secret_secret": {
           "anyOf": [
             {
@@ -4658,6 +5035,23 @@
             }
           ],
           "description": "The secret every request must be signed with (GitHub, GitLab,\nStandard Webhooks or the generic scheme)."
+        },
+        "skills": {
+          "description": "Skills preloaded into each delivery's session (ignored with\n`deliver_only`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "toolsets": {
+          "description": "Toolsets of each delivery's session, replacing the default webhook\ntoolset rather than adding to it.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -4896,6 +5290,7 @@
           "ttl_secs": 300
         },
         "delivery": {
+          "detect_paths": true,
           "max_parts": 10
         },
         "media": {
@@ -4936,6 +5331,7 @@
           "enabled": false,
           "transport": "auto"
         },
+        "trust_env": false,
         "voice": {
           "echo_transcripts": true,
           "reply_mode": "mirror",

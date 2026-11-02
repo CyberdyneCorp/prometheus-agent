@@ -150,6 +150,72 @@ fn form_part(piece: &[u8]) -> Option<FormPart> {
     })
 }
 
+/// What a [`proxy`] was asked to reach: `CONNECT host:port` tunnels and
+/// absolute-form `GET http://...` forwards, in order.
+pub type ProxyLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
+
+/// A loopback HTTP proxy (tunnels and plain forwards) that records every
+/// destination; its address and log.
+///
+/// # Errors
+///
+/// No loopback port can be bound.
+pub async fn proxy() -> std::io::Result<(SocketAddr, ProxyLog)> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let log = ProxyLog::default();
+    let seen = std::sync::Arc::clone(&log);
+    tokio::spawn(async move {
+        while let Ok((client, _)) = listener.accept().await {
+            tokio::spawn(relay(client, std::sync::Arc::clone(&seen)));
+        }
+    });
+    Ok((addr, log))
+}
+
+async fn relay(mut client: tokio::net::TcpStream, log: ProxyLog) {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let mut head = Vec::new();
+    while !head.ends_with(b"\r\n\r\n") {
+        let mut byte = [0u8; 1];
+        if client.read(&mut byte).await.unwrap_or(0) == 0 {
+            return;
+        }
+        head.push(byte[0]);
+    }
+    let text = String::from_utf8_lossy(&head).into_owned();
+    let mut words = text.split_whitespace();
+    let (Some(method), Some(target)) = (words.next(), words.next()) else {
+        return;
+    };
+    log.lock()
+        .expect("proxy log poisoned")
+        .push(format!("{method} {target}"));
+    let (authority, rewritten) = if method == "CONNECT" {
+        (target.to_owned(), None)
+    } else {
+        let rest = target.strip_prefix("http://").unwrap_or(target);
+        let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+        let request = text.replacen(target, &format!("/{path}"), 1);
+        (authority.to_owned(), Some(request))
+    };
+    let Ok(mut upstream) = tokio::net::TcpStream::connect(&authority).await else {
+        let _ = client.write_all(b"HTTP/1.1 502 Bad Gateway\r\n\r\n").await;
+        return;
+    };
+    let ready = match rewritten {
+        None => {
+            client
+                .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+                .await
+        }
+        Some(request) => upstream.write_all(request.as_bytes()).await,
+    };
+    if ready.is_ok() {
+        let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

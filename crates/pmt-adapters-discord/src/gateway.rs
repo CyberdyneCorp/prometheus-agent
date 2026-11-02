@@ -34,6 +34,8 @@ pub(crate) struct Session {
     pub(crate) seq: Option<u64>,
     pub(crate) resume_url: Option<String>,
     pub(crate) bot_id: String,
+    /// The bot's application (its slash commands are registered on it).
+    pub(crate) application_id: Option<String>,
 }
 
 /// One connection's context.
@@ -43,6 +45,8 @@ pub(crate) struct Run {
     pub(crate) session: Arc<Mutex<Session>>,
     pub(crate) require_mention: bool,
     pub(crate) extra_ca: Option<PathBuf>,
+    /// The proxy the WebSocket tunnels through, if any.
+    pub(crate) proxy: Option<String>,
     pub(crate) stop: CancellationToken,
 }
 
@@ -99,7 +103,7 @@ pub(crate) async fn open(run: Run, url: &str) -> Result<(), AdapterError> {
                 true,
             )
         })?;
-    let socket = ws::connect(request, run.extra_ca.as_deref())
+    let socket = ws::connect_via(request, run.extra_ca.as_deref(), run.proxy.as_deref())
         .await
         .map_err(|e| lost("discord_unreachable", e, true))?;
     let (ready_tx, ready_rx) = oneshot::channel();
@@ -249,6 +253,7 @@ impl Run {
                 if let Some(id) = data["user"]["id"].as_str() {
                     id.clone_into(&mut session.bot_id);
                 }
+                session.application_id = data["application"]["id"].as_str().map(str::to_owned);
                 Flow::Ready
             }
             "RESUMED" => Flow::Ready,
@@ -275,15 +280,23 @@ impl Run {
         }
     }
 
-    /// Answers a button press so the user's client stops waiting (the
-    /// card itself is updated by the gateway).
+    /// Answers an interaction so the user's client stops waiting: a
+    /// button press silently (the card itself is updated by the gateway),
+    /// a slash command with a private "Running /<cmd>…" note.
     async fn acknowledge(&self, interaction: &Value) {
         let (Some(id), Some(token)) = (interaction["id"].as_str(), interaction["token"].as_str())
         else {
             return;
         };
         let path = format!("/interactions/{id}/{token}/callback");
-        let body = Body::Json(json!({"type": 6}));
+        let body = if interaction["type"].as_u64() == Some(2) {
+            let name = interaction["data"]["name"].as_str().unwrap_or_default();
+            Body::Json(
+                json!({"type": 4, "data": {"content": format!("Running /{name}…"), "flags": 64}}),
+            )
+        } else {
+            Body::Json(json!({"type": 6}))
+        };
         if let Err(err) = self.api.call(reqwest::Method::POST, &path, body).await {
             tracing::debug!("interaction not acknowledged: {}", err.describe());
         }

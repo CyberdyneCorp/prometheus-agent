@@ -10,8 +10,17 @@
 //! `<profile>/logs/webhook/<route>.jsonl` (`log` delivery). Because only
 //! verified requests reach the adapter, it vouches for its senders
 //! (`enforces_own_access_policy = allowlist`).
+//!
+//! Before a turn starts, a request passes, in order: the route's
+//! per-minute limit, its event list, its declarative filters, the
+//! one-hour idempotency window and its transform script. A
+//! `deliver_only` route then forwards the rendered prompt to its target
+//! without any model call.
 
+mod filter;
+mod guard;
 mod render;
+mod script;
 mod signature;
 
 /// The mock platform the conformance kit runs this adapter against; only
@@ -25,6 +34,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use pmt_config::ProfileScope;
 use pmt_config::schema::WebhookRoute;
@@ -33,7 +43,7 @@ use pmt_gateway::messaging::sign::hex;
 use pmt_gateway::messaging::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     Admission, ChatInfo, ChatType, Descriptor, HttpRequest, HttpResponse, Inbound, Interactive,
-    LengthUnit, Outgoing, SendError, SenderVerdict, Sent,
+    LengthUnit, Outgoing, SendError, SenderVerdict, Sent, SessionHints,
 };
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -62,6 +72,8 @@ pub struct Webhook {
     secrets: Mutex<Option<BTreeMap<String, Option<String>>>>,
     link: Mutex<Option<Arc<dyn AdapterLink>>>,
     sent: AtomicU64,
+    max_body: usize,
+    guard: guard::Guard,
 }
 
 impl std::fmt::Debug for Webhook {
@@ -75,6 +87,15 @@ impl std::fmt::Debug for Webhook {
 
 fn status(code: u16, body: &Value) -> HttpResponse {
     HttpResponse::json(code, body)
+}
+
+/// One verified request on its way to a turn or a target.
+struct Call<'a> {
+    route_name: &'a str,
+    route: &'a WebhookRoute,
+    event: Option<&'a str>,
+    delivery: &'a str,
+    text: &'a str,
 }
 
 /// The event type GitHub, GitLab or the payload names.
@@ -107,6 +128,8 @@ impl Webhook {
             secrets: Mutex::default(),
             link: Mutex::default(),
             sent: AtomicU64::new(0),
+            max_body: usize::try_from(setup.config.webhook_body_limit()).unwrap_or(usize::MAX),
+            guard: guard::Guard::default(),
         }
     }
 
@@ -185,6 +208,10 @@ impl Webhook {
         if request.method != "POST" {
             return status(405, &json!({"error": "POST only"}));
         }
+        let now = tokio::time::Instant::now();
+        if !self.guard.admit(route_name, route.rate_limit_per_min, now) {
+            return status(429, &json!({"status": "rate_limited"}));
+        }
         let Ok(payload) = serde_json::from_slice::<Value>(&request.body) else {
             return status(400, &json!({"error": "the body is not JSON"}));
         };
@@ -192,30 +219,128 @@ impl Webhook {
         if !route.events.is_empty() && !event.as_ref().is_some_and(|e| route.events.contains(e)) {
             return status(200, &json!({"status": "ignored", "event": event}));
         }
-        let Some(link) = self.link.lock().expect("link poisoned").clone() else {
-            return HttpResponse::status(503);
-        };
+        if !self.passes_filters(route, &payload, event.as_deref(), request) {
+            return status(
+                200,
+                &json!({"status": "ignored", "reason": "filter", "route": route_name}),
+            );
+        }
         let delivery = delivery_id(request);
+        if self.guard.seen(route_name, &delivery, now) {
+            return status(200, &json!({"status": "duplicate"}));
+        }
+        let Some(payload) = self.transform(route_name, route, payload).await else {
+            self.guard.remember(route_name, &delivery, now);
+            return status(200, &json!({"status": "ignored", "reason": "script"}));
+        };
+        let text = render::render(route.prompt.as_deref(), &payload);
+        let call = Call {
+            route_name,
+            route,
+            event: event.as_deref(),
+            delivery: &delivery,
+            text: &text,
+        };
+        let (answer, handled) = if route.deliver_only {
+            self.forward(&call).await
+        } else {
+            self.start_turn(&call).await
+        };
+        if handled {
+            self.guard.remember(route_name, &delivery, now);
+        }
+        answer
+    }
+
+    fn passes_filters(
+        &self,
+        route: &WebhookRoute,
+        payload: &Value,
+        event: Option<&str>,
+        request: &HttpRequest,
+    ) -> bool {
+        let Some(filters) = &route.filters else {
+            return true;
+        };
+        let subject = filter::Subject {
+            payload,
+            event,
+            request,
+            profile_dir: self.scope.dir(),
+        };
+        filter::matches(filters.conditions(), &subject)
+    }
+
+    /// The payload after the route's transform script; `None` drops the
+    /// event.
+    async fn transform(&self, name: &str, route: &WebhookRoute, payload: Value) -> Option<Value> {
+        let Some(script) = &route.script else {
+            return Some(payload);
+        };
+        let timeout = Duration::from_secs(route.script_timeout_secs.max(1));
+        match script::run(&self.scope, name, script, timeout, &payload).await {
+            script::Outcome::Payload(next) => Some(next),
+            script::Outcome::Ignore(why) => {
+                tracing::info!(platform = PLATFORM, route = name, "event ignored: {why}");
+                None
+            }
+        }
+    }
+
+    /// Sends the rendered text to the route's target, without a turn.
+    async fn forward(&self, call: &Call<'_>) -> (HttpResponse, bool) {
+        let Some(link) = self.link.lock().expect("link poisoned").clone() else {
+            return (HttpResponse::status(503), false);
+        };
+        let target = call.route.deliver_target();
+        match link.deliver(target, call.text).await {
+            Ok(destination) => {
+                tracing::info!(
+                    platform = PLATFORM,
+                    route = call.route_name,
+                    destination,
+                    "webhook event forwarded"
+                );
+                let body = json!({"status": "delivered", "route": call.route_name,
+                                  "target": target, "delivery_id": call.delivery});
+                (status(200, &body), true)
+            }
+            Err(why) => {
+                tracing::warn!(
+                    platform = PLATFORM,
+                    route = call.route_name,
+                    "webhook delivery to {target} failed: {why}"
+                );
+                (status(502, &json!({"error": "Delivery failed"})), false)
+            }
+        }
+    }
+
+    /// Submits the rendered text as a turn of the delivery's own thread.
+    async fn start_turn(&self, call: &Call<'_>) -> (HttpResponse, bool) {
+        let Some(link) = self.link.lock().expect("link poisoned").clone() else {
+            return (HttpResponse::status(503), false);
+        };
         let mut inbound = Inbound::text(
             ChatType::Dm,
-            route_name,
-            &sender(route_name),
-            &render::render(route.prompt.as_deref(), &payload),
+            call.route_name,
+            &sender(call.route_name),
+            call.text,
         );
-        inbound.message_id.clone_from(&delivery);
-        inbound.sender_name = Some(format!("webhook {route_name}"));
+        inbound.message_id = call.delivery.to_owned();
+        inbound.sender_name = Some(format!("webhook {}", call.route_name));
         // Each delivery runs in its own conversation.
-        inbound.thread_id = Some(delivery.clone());
-        let body = json!({"status": "accepted", "route": route_name, "event": event,
-                          "delivery_id": delivery});
+        inbound.thread_id = Some(call.delivery.to_owned());
+        let body = json!({"status": "accepted", "route": call.route_name, "event": call.event,
+                          "delivery_id": call.delivery});
         match link.submit(inbound).await {
-            Admission::Accepted | Admission::Queued => status(202, &body),
-            Admission::Duplicate => status(200, &json!({"status": "duplicate"})),
-            Admission::RateLimited => status(429, &json!({"status": "rate_limited"})),
+            Admission::Accepted | Admission::Queued => (status(202, &body), true),
+            Admission::Duplicate => (status(200, &json!({"status": "duplicate"})), true),
+            Admission::RateLimited => (status(429, &json!({"status": "rate_limited"})), false),
             Admission::Unauthorized | Admission::PairingIssued => {
-                status(403, &json!({"status": "unauthorized"}))
+                (status(403, &json!({"status": "unauthorized"})), false)
             }
-            Admission::Dropped => status(503, &json!({"status": "dropped"})),
+            Admission::Dropped => (status(503, &json!({"status": "dropped"})), false),
         }
     }
 
@@ -341,6 +466,21 @@ impl Adapter for Webhook {
                 signature::verify(request, secret, jiff::Timestamp::now().as_second())
             }
         }
+    }
+
+    fn max_body_bytes(&self) -> usize {
+        self.max_body
+    }
+
+    fn session_hints(&self, chat_id: &str, _thread_id: Option<&str>) -> SessionHints {
+        self.routes
+            .get(chat_id)
+            .filter(|r| !r.deliver_only)
+            .map(|route| SessionHints {
+                skills: route.skills.clone(),
+                toolsets: route.toolsets.clone(),
+            })
+            .unwrap_or_default()
     }
 
     fn handle_http<'a>(&'a self, request: &'a HttpRequest) -> AdapterFuture<'a, HttpResponse> {

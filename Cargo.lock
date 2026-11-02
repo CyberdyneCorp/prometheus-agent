@@ -2357,6 +2357,7 @@ dependencies = [
  "pmt-gateway",
  "pmt-net",
  "pmt-store",
+ "rcgen",
  "serde_json",
  "tempfile",
  "tokio",
@@ -2463,11 +2464,14 @@ dependencies = [
  "pmt-core",
  "pmt-gateway",
  "pmt-net",
+ "pmt-sandbox",
+ "regex",
  "reqwest",
  "serde_json",
  "sha2 0.11.1",
  "tempfile",
  "tokio",
+ "toml",
  "tracing",
 ]
 
@@ -2554,6 +2558,7 @@ dependencies = [
  "known-folders",
  "nix 0.31.3",
  "pmt-core",
+ "regex",
  "schemars",
  "serde",
  "serde_json",
@@ -2602,6 +2607,7 @@ version = "0.1.0"
 name = "pmt-gateway"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "bytes",
  "futures-util",
  "getrandom 0.4.3",
@@ -2614,6 +2620,7 @@ dependencies = [
  "pmt-net",
  "pmt-rpc",
  "pmt-store",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2 0.11.1",

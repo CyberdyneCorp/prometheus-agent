@@ -30,6 +30,8 @@ tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+# A self-signed TLS server for the certificate verification test.
+rcgen.workspace = true
 # The tests run the adapter against its mock.
 pmt-adapters-email = { path = ".", features = ["kit"] }
 pmt-store.workspace = true

@@ -335,3 +335,39 @@ fn warn_unserved(shared: &Shared, profile: &str, platform: &str, owner: &str) {
         );
     }
 }
+
+/// Whether `sender` would be admitted in a direct message on `platform`
+/// of `profile` (the same order as an event's admission, without pairing
+/// codes or side effects); any lookup failure denies.
+pub(crate) async fn sender_admitted(
+    shared: &Arc<Shared>,
+    profile: &str,
+    platform: &str,
+    sender: &str,
+) -> bool {
+    let (Some(scope), Some(store), Some(descriptor)) = (
+        shared.agents.scope(profile),
+        shared.store(profile),
+        shared.adapters.descriptor(profile, platform),
+    ) else {
+        return false;
+    };
+    let table = scope.config().gateway.platform(platform);
+    let inbound = Inbound::text(super::key::ChatType::Dm, sender, sender, "");
+    let mut facts = Facts {
+        descriptor: &descriptor,
+        config: &table,
+        inbound: &inbound,
+        paired: store.is_paired(platform, sender).unwrap_or(false),
+        adapter: SenderVerdict::Unknown,
+    };
+    if auth::authorize(&facts).is_some() {
+        return true;
+    }
+    if auth::asks_adapter(&descriptor)
+        && let Some(adapter) = shared.adapters.adapter(profile, platform)
+    {
+        facts.adapter = auth::adapter_verdict(adapter.as_ref(), &inbound).await;
+    }
+    auth::authorize(&facts).is_some()
+}

@@ -57,6 +57,8 @@ pub struct Slack {
     endpoints: Endpoints,
     client: reqwest::Client,
     extra_ca: Option<std::path::PathBuf>,
+    /// How the WebSocket reaches the platform.
+    proxy: pmt_gateway::messaging::proxy::Proxy,
     api: Mutex<Option<Api>>,
     socket: Mutex<Option<CancellationToken>>,
 }
@@ -81,21 +83,14 @@ impl Slack {
             pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
         let network = &setup.scope.config().network;
         let extra_ca = network.extra_ca_file.as_deref().map(Into::into);
-        let policy = pmt_net::OutboundPolicy {
-            force_ipv4: network.force_ipv4,
-            extra_ca_file: network.extra_ca_file.as_deref().map(Into::into),
-            proxy: None,
-        };
-        let client = pmt_net::http::client_builder(&policy)?
-            // Adapters never pick up ambient proxy settings.
-            .no_proxy()
-            .build()
-            .map_err(|e| {
-                Error::new(
-                    &pmt_core::error::codes::NET_CLIENT_INIT,
-                    format!("cannot build the Slack client: {e}"),
-                )
-            })?;
+        // Direct unless a proxy is configured or the environment trusted.
+        let (builder, proxy) = pmt_gateway::messaging::proxy::client_builder(setup)?;
+        let client = builder.build().map_err(|e| {
+            Error::new(
+                &pmt_core::error::codes::NET_CLIENT_INIT,
+                format!("cannot build the Slack client: {e}"),
+            )
+        })?;
         Ok(Self {
             scope: setup.scope.clone(),
             bot_secret: setup
@@ -109,6 +104,7 @@ impl Slack {
             endpoints,
             client,
             extra_ca,
+            proxy,
             api: Mutex::default(),
             socket: Mutex::default(),
         })
@@ -162,6 +158,7 @@ impl Slack {
             bot_user: me["user_id"].as_str().unwrap_or_default().to_owned(),
             team: me["team_id"].as_str().map(str::to_owned),
             extra_ca: self.extra_ca.clone(),
+            proxy: self.proxy.for_websocket(true),
             stop,
         })
         .await

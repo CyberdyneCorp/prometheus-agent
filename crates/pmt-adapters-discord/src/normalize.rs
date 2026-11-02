@@ -79,9 +79,31 @@ pub(crate) fn message(message: &Value, bot_id: &str, require_mention: bool) -> O
     Some(inbound)
 }
 
-/// A component interaction (a pressed button) as an event.
+/// The text of an application (slash) command interaction:
+/// `/<name> <args>`.
+fn command_text(data: &Value) -> Option<String> {
+    let name = text(&data["name"])?;
+    let args = data["options"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|o| o["name"] == "args")
+        .and_then(|o| o["value"].as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    Some(if args.is_empty() {
+        format!("/{name}")
+    } else {
+        format!("/{name} {args}")
+    })
+}
+
+/// A component interaction (a pressed button) or a slash command as an
+/// event.
 pub(crate) fn interaction(interaction: &Value) -> Option<Inbound> {
-    if interaction["type"].as_u64() != Some(3) {
+    let kind = interaction["type"].as_u64();
+    if !matches!(kind, Some(2 | 3)) {
         return None;
     }
     let user = if interaction["member"].is_object() {
@@ -103,8 +125,12 @@ pub(crate) fn interaction(interaction: &Value) -> Option<Inbound> {
     inbound.message_id = format!("ix:{}", text(&interaction["id"])?);
     inbound.scope_id = text(&interaction["guild_id"]);
     inbound.sender_name = text(&user["global_name"]).or_else(|| text(&user["username"]));
-    inbound.callback = text(&interaction["data"]["custom_id"]);
-    inbound.reply_to = text(&interaction["message"]["id"]);
+    if kind == Some(2) {
+        inbound.text = command_text(&interaction["data"])?;
+    } else {
+        inbound.callback = text(&interaction["data"]["custom_id"]);
+        inbound.reply_to = text(&interaction["message"]["id"]);
+    }
     Some(inbound)
 }
 
@@ -135,6 +161,19 @@ mod tests {
         assert!(message(&unmentioned, "bot", false).is_some());
         let own = json!({"id": "m3", "channel_id": "c1", "author": {"id": "bot"}, "content": "x"});
         assert!(message(&own, "bot", false).is_none());
+    }
+
+    #[test]
+    fn a_slash_command_interaction_is_its_command_text() {
+        let raw = json!({"id": "i2", "token": "t", "type": 2, "channel_id": "c1",
+                         "guild_id": "g1", "member": {"user": {"id": "u1"}},
+                         "data": {"name": "model", "options": [{"name": "args", "type": 3, "value": " gpt "}]}});
+        let event = interaction(&raw).unwrap();
+        assert_eq!(event.text, "/model gpt");
+        assert!(event.callback.is_none());
+        let bare = json!({"id": "i3", "type": 2, "channel_id": "c1", "user": {"id": "u1"},
+                          "data": {"name": "stop"}});
+        assert_eq!(interaction(&bare).unwrap().text, "/stop");
     }
 
     #[test]

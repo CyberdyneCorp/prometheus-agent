@@ -149,6 +149,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.chat_policies` | array of table | `[]` | any | `next_session` | Per-chat policies; each applies to sessions created after it changed (`/policy apply --now` replaces a chat's session at once). |
 | `gateway.dedup.max_entries` | integer | `2000` | 1 to 1000000 | `live` | Message ids remembered per adapter (the oldest are forgotten first). |
 | `gateway.dedup.ttl_secs` | integer | `300` | 1 to 86400 | `live` | A redelivered inbound event within this many seconds is dropped as a duplicate. |
+| `gateway.delivery.detect_paths` | boolean | `true` | any | `live` | Deliver files a final reply names by bare path (outside code) as uploads, removing the path from the text. |
 | `gateway.delivery.max_parts` | integer | `10` | 2 to 100 | `live` | A reply that would need more parts is sent as its first part plus a truncation notice, with the full text attached. |
 | `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
 | `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
@@ -173,17 +174,30 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.home_channel.name` | string | unset | any | `next_session` | A display name (also accepted as `platform:#name` in send targets). |
 | `gateway.platforms.<name>.home_channel.thread_id` | string | unset | any | `next_session` | The thread (forum topic) inside the chat. |
 | `gateway.platforms.<name>.human_delay_ms` | array | unset | any | `next_session` | A uniformly random delay `[min, max]` in milliseconds before each outbound part. Unset: none. |
+| `gateway.platforms.<name>.max_body_bytes` | integer | unset | 1024 to 16777216 | `next_session` | Largest request body a webhook route reads (`webhook` only), in bytes; larger requests are answered 413 unread. Unset: 1048576. |
 | `gateway.platforms.<name>.max_message_length` | integer | unset | ≥ 16 | `next_session` | Lowers the adapter's message length limit (in its own unit); it can never raise it. |
 | `gateway.platforms.<name>.options` | table | unset | any | `next_session` | The adapter's own settings, validated against the schema it publishes (`prometheus gateway platforms` lists the adapters). |
+| `gateway.platforms.<name>.proxy_url` | string | unset | any | `next_session` | The proxy this adapter's outbound HTTP and WebSocket traffic uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). Unset: `gateway.proxy_url`. |
+| `gateway.platforms.<name>.proxy_url_secret` | string | unset | a secret name | `next_session` | The secret holding this adapter's proxy URL when it carries credentials. |
 | `gateway.platforms.<name>.rate_limit.burst` | integer | unset | 1 to 10000 | `next_session` | Overrides `burst`. |
 | `gateway.platforms.<name>.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `next_session` | Overrides `daily_cost_usd`. |
 | `gateway.platforms.<name>.rate_limit.messages_per_minute` | integer | unset | 1 to 10000 | `next_session` | Overrides `messages_per_minute`. |
 | `gateway.platforms.<name>.rate_limit.turns_per_hour` | integer | unset | 1 to 100000 | `next_session` | Overrides `turns_per_hour`. |
+| `gateway.platforms.<name>.reactions` | boolean | unset | any | `next_session` | Mark the triggering message with processing reactions (eyes, then a check mark or a cross). Unset: on for Discord and Slack, off elsewhere. |
 | `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
+| `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `origin`, `github_comment` or a send target `platform[:chat_id[:thread_id]]`. Unset: `log`. |
+| `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
+| `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |
 | `gateway.platforms.<name>.routes.<name>.events` | array of string | `[]` | any | `next_session` | Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the payload's `event_type`); empty admits every event. |
+| `gateway.platforms.<name>.routes.<name>.filters` | any or array of any | unset | any | `next_session` | Conditions a payload must meet; a request that fails them is answered `ignored` with reason `filter`. |
 | `gateway.platforms.<name>.routes.<name>.insecure_no_auth` | boolean | `false` | any | `next_session` | Admit unsigned requests (only while `gateway.http.listen` is a loopback address). |
 | `gateway.platforms.<name>.routes.<name>.prompt` | string | unset | any | `next_session` | The turn's input: `{a.b.c}` paths into the payload, `{__raw__}` the whole payload. Unset: the payload as JSON. |
+| `gateway.platforms.<name>.routes.<name>.rate_limit_per_min` | integer | `30` | 1 to 100000 | `next_session` | Requests per minute the route admits (fixed window); more are answered 429. |
+| `gateway.platforms.<name>.routes.<name>.script` | string | unset | any | `next_session` | A transform script under the profile's `scripts/` directory, run in the sandbox with the payload JSON on stdin. |
+| `gateway.platforms.<name>.routes.<name>.script_timeout_secs` | integer | `30` | 1 to 3600 | `next_session` | Seconds the transform script may run. |
 | `gateway.platforms.<name>.routes.<name>.secret_secret` | string | unset | a secret name | `next_session` | The secret every request must be signed with (GitHub, GitLab, Standard Webhooks or the generic scheme). |
+| `gateway.platforms.<name>.routes.<name>.skills` | array of string | unset | any | `next_session` | Skills preloaded into each delivery's session (ignored with `deliver_only`). |
+| `gateway.platforms.<name>.routes.<name>.toolsets` | array | unset | any | `next_session` | Toolsets of each delivery's session, replacing the default webhook toolset rather than adding to it. |
 | `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
 | `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
 | `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |
@@ -191,6 +205,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.typing_indicator` | boolean | unset | any | `next_session` | Show the platform's typing indicator while a turn runs. Unset: `true`. |
 | `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
 | `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
+| `gateway.proxy_url` | string | unset | any | `restart` | The proxy every adapter without its own `proxy_url` uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). |
+| `gateway.proxy_url_secret` | string | unset | a secret name | `restart` | The secret holding the shared proxy URL when it carries credentials. |
 | `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
 | `gateway.rate_limit.burst` | integer | `10` | 1 to 10000 | `live` | Messages a sender may send at once above the sustained rate. |
 | `gateway.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `live` | USD a sender's turns may cost per local day (from the usage ledger); unset is no cap. |
@@ -207,6 +223,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.streaming.edit_interval_ms` | integer | `800` | 100 to 60000 | `live` | Least time between two edits of a draft. |
 | `gateway.streaming.enabled` | boolean | `false` | any | `live` | Stream answers while they are written. A platform can turn it off for itself, never on when this is off. |
 | `gateway.streaming.transport` | one of "auto", "draft", "edit", "off" | `"auto"` | `"auto"`, `"draft"`, `"edit"`, `"off"` | `live` | How a streamed draft reaches the platform. |
+| `gateway.trust_env` | boolean | `false` | any | `restart` | Honour inherited proxy environment variables (`HTTPS_PROXY`, ...) and the OS proxy settings when no proxy is configured; off, adapters connect directly. |
 | `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
 | `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
 | `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |

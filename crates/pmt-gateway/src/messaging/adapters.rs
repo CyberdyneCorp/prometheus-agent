@@ -435,6 +435,9 @@ async fn connect_once(
         };
         slot.set(AdapterState::Degraded, Some(&unconfirmed));
     }
+    if outcome.is_ok() {
+        register_menu(shared, key, slot);
+    }
     Some(outcome)
 }
 
@@ -714,5 +717,82 @@ impl AdapterLink for Link {
         if matches!(state, AdapterState::Retrying | AdapterState::Fatal) {
             slot.lost.notify_one();
         }
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        target: &'a str,
+        text: &'a str,
+    ) -> AdapterFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let shared = self.shared.upgrade().ok_or("the gateway stopped")?;
+            let gateway = super::Gateway { shared };
+            let resolved = gateway
+                .resolve_target(&self.profile, target)
+                .await
+                .map_err(|e| e.message().to_owned())?;
+            gateway
+                .enqueue(&self.profile, &resolved, text, &[])
+                .map(|_| resolved.label())
+                .map_err(|e| e.message().to_owned())
+        })
+    }
+
+    fn authorized<'a>(&'a self, sender_id: &'a str) -> AdapterFuture<'a, bool> {
+        Box::pin(async move {
+            match self.shared.upgrade() {
+                Some(shared) => {
+                    super::admit::sender_admitted(&shared, &self.profile, &self.platform, sender_id)
+                        .await
+                }
+                None => false,
+            }
+        })
+    }
+}
+
+/// Registers the profile's commands as the adapter's native menu (after
+/// a connect); a failure is logged and never fails the connection.
+fn register_menu(shared: &Weak<Shared>, key: &(String, String), slot: &Arc<Slot>) {
+    let Some(shared) = shared.upgrade() else {
+        return;
+    };
+    let commands = shared.agents.menu_commands(&key.0);
+    let adapter = Arc::clone(&slot.adapter);
+    let platform = key.1.clone();
+    tokio::spawn(
+        async move {
+            if let Err(err) = adapter.register_commands(&commands).await {
+                tracing::warn!(
+                    platform,
+                    "the command menu was not registered: {}",
+                    err.describe()
+                );
+            }
+        }
+        .in_current_span(),
+    );
+}
+
+/// Registers the menus of every connected adapter again (the command
+/// registry may have changed).
+pub(crate) fn refresh_menus(shared: &Arc<Shared>) {
+    let weak = Arc::downgrade(shared);
+    let slots: Vec<((String, String), Arc<Slot>)> = shared
+        .adapters
+        .slots
+        .read()
+        .expect("adapters poisoned")
+        .iter()
+        .filter(|(_, slot)| {
+            matches!(
+                slot.state(),
+                AdapterState::Connected | AdapterState::Degraded
+            )
+        })
+        .map(|(key, slot)| (key.clone(), Arc::clone(slot)))
+        .collect();
+    for (key, slot) in slots {
+        register_menu(&weak, &key, &slot);
     }
 }

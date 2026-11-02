@@ -263,7 +263,8 @@ async fn the_kit_fails_each_declared_capability_the_adapter_does_not_deliver() {
             "reactions",
             "threads",
             "delete",
-            "media in"
+            "media in",
+            "command menu"
         ],
         "{}",
         report.render()

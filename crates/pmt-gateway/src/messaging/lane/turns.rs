@@ -108,7 +108,7 @@ impl Lane {
         reason: Option<ResetReason>,
         parent: Option<String>,
     ) -> Result<String, Error> {
-        let policy = self.current_policy(routing);
+        let policy = self.session_policy(routing);
         let conversation = Conversation {
             platform: routing.platform.clone(),
             chat_id: routing.chat_id.clone(),

@@ -29,6 +29,8 @@ pub const MAILBOX: &str = "agent@kit.example";
 pub const PASSWORD: &str = "kit-password";
 /// The person the kit writes as.
 pub const USER: &str = "kit@kit.example";
+/// The receiving server whose `Authentication-Results` the adapter trusts.
+pub const AUTHSERV: &str = "mx.kit.example";
 
 #[derive(Default)]
 struct State {
@@ -83,7 +85,7 @@ impl MailMock {
     /// The table lines that point the adapter at this mock.
     pub fn table(&self) -> String {
         format!(
-            "options = {{ address = \"{MAILBOX}\", imap_host = \"127.0.0.1\", imap_port = {}, imap_security = \"plain\", smtp_host = \"127.0.0.1\", smtp_port = {}, smtp_security = \"plain\", poll_interval_secs = 1 }}",
+            "options = {{ address = \"{MAILBOX}\", imap_host = \"127.0.0.1\", imap_port = {}, imap_security = \"plain\", smtp_host = \"127.0.0.1\", smtp_port = {}, smtp_security = \"plain\", poll_interval_secs = 1, authserv_id = \"{AUTHSERV}\" }}",
             self.imap.port(),
             self.smtp.port()
         )
@@ -107,7 +109,7 @@ impl MailMock {
         let n = self.lock().next;
         let id = format!("<kit-{n}@kit.example>");
         let raw = format!(
-            "From: Kit <{USER}>\r\nTo: {MAILBOX}\r\nSubject: {subject}\r\nMessage-ID: {id}\r\n{extra_headers}Content-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
+            "Authentication-Results: {AUTHSERV}; dkim=pass header.d=kit.example; dmarc=pass header.from=kit.example\r\nFrom: Kit <{USER}>\r\nTo: {MAILBOX}\r\nSubject: {subject}\r\nMessage-ID: {id}\r\n{extra_headers}Content-Type: text/plain; charset=utf-8\r\n\r\n{body}\r\n"
         );
         self.deliver(raw.as_bytes());
         id
@@ -399,7 +401,8 @@ impl MockPlatform for MailMock {
         let id = format!("<kit-{n}@kit.example>");
         let data = base64::engine::general_purpose::STANDARD.encode(bytes);
         let raw = format!(
-            "From: Kit <{USER}>\r\nTo: {MAILBOX}\r\nSubject: Re: kit\r\nMessage-ID: {id}\r\n\
+            "Authentication-Results: {AUTHSERV}; dmarc=pass header.from=kit.example\r\n\
+             From: Kit <{USER}>\r\nTo: {MAILBOX}\r\nSubject: Re: kit\r\nMessage-ID: {id}\r\n\
              Content-Type: multipart/mixed; boundary=\"kit\"\r\n\r\n\
              --kit\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{caption}\r\n\
              --kit\r\nContent-Type: {}; name=\"{name}\"\r\n\

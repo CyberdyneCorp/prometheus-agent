@@ -7,7 +7,7 @@
 use futures_util::StreamExt as _;
 
 use super::{Kit, MockFile, Report, eventually, mime_of_name};
-use crate::messaging::adapter::{Attachment, AudioOp, OutboundAttachment, Outgoing};
+use crate::messaging::adapter::{Attachment, AudioOp, MenuCommand, OutboundAttachment, Outgoing};
 use crate::messaging::descriptor::MediaKind;
 
 /// The file name the kit uses for a kind (its extension types it).
@@ -53,6 +53,11 @@ impl Kit {
         } else {
             report.skip("streaming tts", "not declared");
         }
+        if self.platform.menu().is_some() {
+            report.add("command menu", self.menu().await);
+        } else {
+            report.skip("command menu", "no native command menu");
+        }
         let receipts = self.descriptor.delivery_receipts || self.descriptor.read_receipts;
         report.skip(
             "receipts",
@@ -62,6 +67,37 @@ impl Kit {
                 "not declared"
             },
         );
+    }
+
+    /// Registers more commands than any platform menu holds: the menu
+    /// must show a non-empty prefix of them, in order.
+    async fn menu(&self) -> Result<(), String> {
+        let commands: Vec<MenuCommand> = (0..150)
+            .map(|i| MenuCommand {
+                name: format!("kit_menu_{i:03}"),
+                description: format!("kit command {i}"),
+                takes_args: i % 2 == 0,
+            })
+            .collect();
+        self.adapter
+            .register_commands(&commands)
+            .await
+            .map_err(|e| format!("registration failed: {}", e.describe()))?;
+        let shown = self.platform.menu().unwrap_or_default();
+        if shown.is_empty() {
+            return Err("the platform's menu is empty after registration".to_owned());
+        }
+        let prefix: Vec<&str> = commands
+            .iter()
+            .take(shown.len())
+            .map(|c| c.name.as_str())
+            .collect();
+        if shown.iter().map(String::as_str).ne(prefix) {
+            return Err(format!(
+                "the menu is not the registered commands in order: {shown:?}"
+            ));
+        }
+        Ok(())
     }
 
     /// What an outbound file of `kind` shows as on this platform: a voice

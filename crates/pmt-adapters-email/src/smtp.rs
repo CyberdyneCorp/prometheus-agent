@@ -3,20 +3,18 @@
 //! map onto the gateway's send errors: a `4.7.x` deferral is throttling,
 //! other `4xx` are temporary, `5xx` refusals are permanent.
 
-use std::path::Path;
-
 use base64::Engine as _;
 use pmt_config::platforms::MailSecurity;
 use pmt_gateway::messaging::SendError;
 
-use crate::wire::{Wire, WireError};
+use crate::wire::{TlsPolicy, Wire, WireError};
 
 /// Where and as whom to send.
 pub(crate) struct Relay<'a> {
     pub(crate) host: &'a str,
     pub(crate) port: u16,
     pub(crate) security: MailSecurity,
-    pub(crate) extra_ca: Option<&'a Path>,
+    pub(crate) tls: &'a TlsPolicy,
     pub(crate) user: &'a str,
     pub(crate) password: &'a str,
 }
@@ -95,7 +93,7 @@ pub(crate) async fn send(
     to: &str,
     message: &[u8],
 ) -> Result<(), SendError> {
-    let wire = Wire::connect(relay.host, relay.port, relay.security, relay.extra_ca)
+    let wire = Wire::connect(relay.host, relay.port, relay.security, relay.tls)
         .await
         .map_err(|e| network(&e))?;
     let mut session = Session { wire };
@@ -105,7 +103,7 @@ pub(crate) async fn send(
         session.expect(Some("STARTTLS"), 220).await?;
         session.wire = session
             .wire
-            .upgrade(relay.extra_ca)
+            .upgrade(relay.tls)
             .await
             .map_err(|e| network(&e))?;
         session.expect(Some("EHLO prometheus"), 250).await?;

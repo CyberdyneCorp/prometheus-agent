@@ -6,6 +6,7 @@ mod busy;
 mod cards;
 mod commands;
 mod delivery;
+mod features;
 mod health;
 mod limits;
 mod media;

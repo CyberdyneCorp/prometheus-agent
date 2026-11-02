@@ -11,7 +11,8 @@ repository.workspace = true
 pmt-core.workspace = true
 # The one HTTP client every outbound caller builds on, with rustls; the
 # crypto provider (ring) and verifier are supplied by `tls`.
-reqwest = { workspace = true, features = ["rustls-no-provider"] }
+# `socks`: adapters may reach their platform through a SOCKS5 proxy.
+reqwest = { workspace = true, features = ["rustls-no-provider", "socks"] }
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
 rustls-native-certs.workspace = true

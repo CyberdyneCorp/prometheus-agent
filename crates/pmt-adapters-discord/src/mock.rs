@@ -41,6 +41,8 @@ pub const BOT: &str = "1";
 pub const CHANNEL: &str = "910";
 /// A thread of [`CHANNEL`] (a channel of its own on Discord).
 pub const THREAD: &str = "911";
+/// The bot's application id.
+pub const APPLICATION: &str = "777";
 /// The `IS_VOICE_MESSAGE` flag.
 const VOICE: u64 = 1 << 13;
 
@@ -70,6 +72,10 @@ struct State {
     refuse_identify: Option<u16>,
     identifies: usize,
     resumes: usize,
+    /// Every `PUT /applications/{id}/commands` body.
+    command_puts: Vec<Value>,
+    /// Every interaction callback body.
+    callbacks: Vec<Value>,
 }
 
 /// The mock.
@@ -122,6 +128,16 @@ impl DiscordMock {
         crate::Endpoints {
             api: format!("http://{}/api/v10", self.rest),
         }
+    }
+
+    /// Every application command overwrite received.
+    pub fn command_puts(&self) -> Vec<Value> {
+        self.lock().command_puts.clone()
+    }
+
+    /// Every interaction callback body received.
+    pub fn callbacks(&self) -> Vec<Value> {
+        self.lock().callbacks.clone()
     }
 
     /// The next Identify is refused with close code `code`.
@@ -217,7 +233,8 @@ impl DiscordMock {
                 let ready = json!({"op": 0, "t": "READY", "s": state.events.len() as u64 + 1, "d": {
                     "session_id": "sess-1",
                     "resume_gateway_url": format!("ws://{}", self.gateway),
-                    "user": {"id": BOT, "username": "kit-bot", "bot": true}
+                    "user": {"id": BOT, "username": "kit-bot", "bot": true},
+                    "application": {"id": APPLICATION}
                 }});
                 let seq = state.events.len() as u64 + 1;
                 state.events.push((seq, ready.clone()));
@@ -308,7 +325,17 @@ impl DiscordMock {
                 200,
                 json!({"id": id, "type": 1, "recipients": [{"id": USER, "username": "kit-user"}]}),
             ),
-            ("POST", ["interactions", _, _, "callback"]) => (204, Value::Null),
+            ("POST", ["interactions", _, _, "callback"]) => {
+                let body = serde_json::from_slice(body).unwrap_or(Value::Null);
+                self.lock().callbacks.push(body);
+                (204, Value::Null)
+            }
+            ("PUT", ["applications", APPLICATION, "commands"]) => {
+                let body: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+                self.lock().command_puts.push(body.clone());
+                (200, body)
+            }
+            ("GET", ["oauth2", "applications", "@me"]) => (200, json!({"id": APPLICATION})),
             _ => (404, json!({"message": "404: Not Found", "code": 0})),
         }
     }
@@ -534,6 +561,17 @@ impl MockPlatform for DiscordMock {
 
     fn deleted(&self) -> Vec<String> {
         self.lock().deleted.clone()
+    }
+
+    fn menu(&self) -> Option<Vec<String>> {
+        let last = self.lock().command_puts.last().cloned();
+        Some(
+            last.and_then(|body| body.as_array().cloned())
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|c| c["name"].as_str().map(str::to_owned))
+                .collect(),
+        )
     }
 }
 

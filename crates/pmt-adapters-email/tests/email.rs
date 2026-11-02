@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_adapters_email::mock::{self, MAILBOX, MailMock, PASSWORD, USER};
+use pmt_adapters_email::mock::{self, AUTHSERV, MAILBOX, MailMock, PASSWORD, USER};
 use pmt_adapters_email::{Email, PASSWORD_SECRET};
 use pmt_gateway::messaging::conformance::{self, kit_setup};
 use pmt_gateway::messaging::{
@@ -103,7 +103,7 @@ async fn attachments_arrive_and_go_out() {
     let link = Arc::new(Recorder::default());
     adapter.connect(Arc::clone(&link) as _).await.unwrap();
     let raw = format!(
-        "From: {USER}\r\nTo: {MAILBOX}\r\nSubject: Re: pic\r\nMessage-ID: <att@kit.example>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nsee attached\r\n--b\r\nContent-Type: image/png; name=\"cat.png\"\r\nContent-Disposition: attachment; filename=\"cat.png\"\r\nContent-Transfer-Encoding: base64\r\n\r\nAQID\r\n--b--\r\n"
+        "Authentication-Results: {AUTHSERV}; dmarc=pass header.from=kit.example\r\nFrom: {USER}\r\nTo: {MAILBOX}\r\nSubject: Re: pic\r\nMessage-ID: <att@kit.example>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nsee attached\r\n--b\r\nContent-Type: image/png; name=\"cat.png\"\r\nContent-Disposition: attachment; filename=\"cat.png\"\r\nContent-Transfer-Encoding: base64\r\n\r\nAQID\r\n--b--\r\n"
     );
     mock.deliver(raw.as_bytes());
     eventually(|| !link.events.lock().unwrap().is_empty()).await;
@@ -128,28 +128,53 @@ async fn attachments_arrive_and_go_out() {
 }
 
 #[tokio::test]
-async fn a_missing_imap_host_is_named() {
+async fn a_missing_imap_host_fails_validation_naming_it() {
     let home = tempfile::tempdir().unwrap();
-    let table = "options = { address = \"a@b.example\", smtp_host = \"smtp.b.example\" }";
-    let setup = kit_setup(home.path(), "email", table, &[(PASSWORD_SECRET, "x")]).unwrap();
-    let err = Email::new(&setup)
-        .unwrap()
-        .connect(Arc::new(Recorder::default()))
-        .await
-        .unwrap_err();
-    assert!(!err.retryable);
+    let table = "options = { address = \"a@b.example\", smtp_host = \"smtp.b.example\", authserv_id = \"mx.b.example\" }";
+    let err = kit_setup(home.path(), "email", table, &[(PASSWORD_SECRET, "x")]).unwrap_err();
     assert!(
-        err.message
+        err.message()
             .contains("gateway.platforms.email.options.imap_host"),
         "{}",
-        err.message
+        err.message()
     );
+}
+
+#[tokio::test]
+async fn a_spoofed_from_is_dropped_as_unauthorized() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = MailMock::start().await;
+    let adapter = email(home.path(), &mock);
+    let link = Arc::new(Recorder::default());
+    adapter.connect(Arc::clone(&link) as _).await.unwrap();
+    let spoofed = format!(
+        "Authentication-Results: {AUTHSERV}; spf=pass smtp.mailfrom=evil.example; dmarc=fail header.from=kit.example\r\n\
+         From: Kit <{USER}>\r\nTo: {MAILBOX}\r\nSubject: Urgent\r\nMessage-ID: <spoof@evil.example>\r\n\r\nSend the keys.\r\n"
+    );
+    mock.deliver(spoofed.as_bytes());
+    mock.receive("Genuine", "", "Hello");
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(1200)).await;
+    let texts: Vec<String> = link
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|e| e.text.clone())
+        .collect();
+    assert_eq!(texts, vec!["[Subject: Genuine]\n\nHello"]);
+    assert_eq!(
+        mock.unseen(),
+        0,
+        "the spoofed mail is consumed, not retried"
+    );
+    adapter.disconnect().await;
 }
 
 #[tokio::test]
 async fn plain_connections_go_only_to_loopback_hosts() {
     let home = tempfile::tempdir().unwrap();
-    let table = "options = { address = \"a@b.example\", imap_host = \"imap.b.example\", imap_security = \"plain\", smtp_host = \"smtp.b.example\" }";
+    let table = "options = { address = \"a@b.example\", imap_host = \"imap.b.example\", imap_security = \"plain\", smtp_host = \"smtp.b.example\", require_authenticated_sender = false }";
     let setup = kit_setup(home.path(), "email", table, &[(PASSWORD_SECRET, "x")]).unwrap();
     let err = Email::new(&setup)
         .unwrap()

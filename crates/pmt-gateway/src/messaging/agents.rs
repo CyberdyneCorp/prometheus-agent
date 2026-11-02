@@ -121,6 +121,11 @@ pub trait Agents: Host {
     /// suspension).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 
+    /// The gateway-surface commands and user-invocable skills of
+    /// `profile`, for native command menus.
+    fn menu_commands(&self, _profile: &str) -> Vec<crate::messaging::adapter::MenuCommand> {
+        Vec::new()
+    }
     /// The profile's speech providers, when it has any (voice messages
     /// are then transcribed and replies may be spoken).
     fn speech(&self, _profile: &str) -> Option<Arc<dyn crate::messaging::voice::Speech>> {

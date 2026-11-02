@@ -37,6 +37,19 @@ impl Lane {
         resolve_policy(&scope.config().gateway.chat_policies, &facts).map(|(_, p)| p.clone())
     }
 
+    /// The policy a new session of `routing` starts with: the matching
+    /// chat policy plus what the adapter asks of sessions in that chat or
+    /// thread (a topic's skill, a webhook route's skills and toolsets).
+    pub(super) fn session_policy(&self, routing: &Routing) -> Option<ChatPolicy> {
+        let hints = self
+            .shared
+            .adapters
+            .adapter(&self.profile, &routing.platform)
+            .map(|a| a.session_hints(&routing.chat_id, routing.thread_id.as_deref()))
+            .unwrap_or_default();
+        with_hints(self.current_policy(routing), hints, routing)
+    }
+
     /// Freezes `policy` for `session` (stored with the session).
     pub(super) fn freeze_policy(&mut self, session: &str, policy: Option<ChatPolicy>) {
         if let (Some(store), Ok(id)) = (self.shared.store(&self.profile), session.parse()) {
@@ -197,4 +210,31 @@ fn describe(policy: Option<&ChatPolicy>) -> String {
     } else {
         parts.join("; ")
     }
+}
+
+/// `policy` with the adapter's session hints added: hinted skills join the
+/// policy's, hinted toolsets replace them.
+fn with_hints(
+    policy: Option<ChatPolicy>,
+    hints: crate::messaging::adapter::SessionHints,
+    routing: &Routing,
+) -> Option<ChatPolicy> {
+    if hints.is_empty() {
+        return policy;
+    }
+    let mut policy = policy.unwrap_or_else(|| ChatPolicy {
+        platform: routing.platform.clone(),
+        chat_id: Some(routing.chat_id.clone()),
+        ..ChatPolicy::default()
+    });
+    let skills = policy.skills.get_or_insert_with(Vec::new);
+    for skill in hints.skills {
+        if !skills.contains(&skill) {
+            skills.push(skill);
+        }
+    }
+    if hints.toolsets.is_some() {
+        policy.toolsets = hints.toolsets;
+    }
+    Some(policy)
 }

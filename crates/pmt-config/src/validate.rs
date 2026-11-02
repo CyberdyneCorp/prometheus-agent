@@ -232,6 +232,9 @@ impl Checker<'_> {
         if let Some(variants) = schema.get("anyOf").and_then(Value::as_array) {
             return self.check_any_of(node, schema, variants, key);
         }
+        if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
+            return self.check_one_of(node, variants, key);
+        }
         if !type_matches(schema, node) {
             let message = format!(
                 "{key}: expected {}, found {}",
@@ -330,6 +333,36 @@ impl Checker<'_> {
             );
             self.invalid(key, node, message);
         }
+    }
+
+    /// A tagged value (a table with one variant key, such as a webhook
+    /// filter): the variant whose keys the table uses decides; when none
+    /// does, the error lists the variants' keys.
+    fn check_one_of(&mut self, node: &Node, variants: &'static [Value], key: &str) {
+        let keys_of = |variant: &Value| -> Vec<String> {
+            variant
+                .get("properties")
+                .and_then(Value::as_object)
+                .map(|p| p.keys().cloned().collect())
+                .unwrap_or_default()
+        };
+        let fitting = variants.iter().map(resolve).find(|variant| {
+            let Kind::Table(entries) = &node.kind else {
+                return type_matches(variant, node);
+            };
+            let keys = keys_of(variant);
+            type_matches(variant, node) && entries.iter().all(|(name, ..)| keys.contains(name))
+        });
+        if let Some(variant) = fitting {
+            return self.check(node, variant, key);
+        }
+        let names: Vec<String> = variants.iter().map(resolve).flat_map(keys_of).collect();
+        let message = format!(
+            "{key}: expected a table with one of the keys {}, found {}",
+            names.join(", "),
+            node.toml_type()
+        );
+        self.invalid(key, node, message);
     }
 
     /// A schema-free table (plugin or skill settings) has no types to

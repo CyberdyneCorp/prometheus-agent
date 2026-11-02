@@ -10,8 +10,9 @@ use std::collections::BTreeMap;
 use std::sync::{LazyLock, RwLock};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+pub use crate::platform_options::*;
 
 /// A first-party adapter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,8 +137,13 @@ fn no_options() -> Value {
     serde_json::json!({"type": "object", "properties": {}, "additionalProperties": false})
 }
 
+/// An options schema with nested types inlined: the validator follows
+/// `$ref`s into the configuration schema, not into this one.
 fn schema_of<T: JsonSchema>() -> Value {
-    serde_json::to_value(schemars::schema_for!(T)).expect("the schema serializes")
+    let generator = schemars::generate::SchemaSettings::draft2020_12()
+        .with(|s| s.inline_subschemas = true)
+        .into_generator();
+    serde_json::to_value(generator.into_root_schema_for::<T>()).expect("the schema serializes")
 }
 
 static NONE: LazyLock<Value> = LazyLock::new(no_options);
@@ -149,155 +155,6 @@ static MATRIX: LazyLock<Value> = LazyLock::new(schema_of::<MatrixOptions>);
 static SIGNAL: LazyLock<Value> = LazyLock::new(schema_of::<SignalOptions>);
 static WHATSAPP: LazyLock<Value> = LazyLock::new(schema_of::<WhatsappOptions>);
 static WEBHOOK: LazyLock<Value> = LazyLock::new(schema_of::<WebhookOptions>);
-
-/// `gateway.platforms.telegram.options`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct TelegramOptions {
-    /// Seconds one long-poll `getUpdates` call waits for updates.
-    #[schemars(range(min = 1, max = 50))]
-    pub poll_timeout_secs: u64,
-}
-
-impl Default for TelegramOptions {
-    fn default() -> Self {
-        Self {
-            poll_timeout_secs: 30,
-        }
-    }
-}
-
-/// `gateway.platforms.discord.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct DiscordOptions {
-    /// Answer only messages that mention the bot in server channels
-    /// (direct messages are always answered).
-    pub require_mention: bool,
-}
-
-/// `gateway.platforms.slack.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct SlackOptions {
-    /// The secret holding the Socket Mode app-level token.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub app_token_secret: Option<crate::schema::SecretName>,
-}
-
-/// `gateway.platforms.email.options`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct EmailOptions {
-    /// The mailbox address the agent answers as.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-    /// IMAP server host.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub imap_host: Option<String>,
-    /// IMAP server port.
-    pub imap_port: u16,
-    /// IMAP transport security. Unset: `tls`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub imap_security: Option<MailSecurity>,
-    /// The login name, when it is not the address.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
-    /// SMTP server host.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub smtp_host: Option<String>,
-    /// SMTP server port.
-    pub smtp_port: u16,
-    /// SMTP transport security. Unset: `tls` on port 465, else
-    /// `starttls`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub smtp_security: Option<MailSecurity>,
-    /// Seconds between two IMAP polls.
-    #[schemars(range(min = 1, max = 3600))]
-    pub poll_interval_secs: u64,
-}
-
-impl Default for EmailOptions {
-    fn default() -> Self {
-        Self {
-            address: None,
-            imap_host: None,
-            imap_port: 993,
-            imap_security: None,
-            username: None,
-            smtp_host: None,
-            smtp_port: 587,
-            smtp_security: None,
-            poll_interval_secs: 15,
-        }
-    }
-}
-
-/// How a mail connection is secured.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MailSecurity {
-    /// TLS from the first byte.
-    Tls,
-    /// Plain, upgraded with STARTTLS before logging in.
-    Starttls,
-    /// No encryption (loopback hosts only).
-    Plain,
-}
-
-impl EmailOptions {
-    /// The IMAP security in effect.
-    #[must_use]
-    pub fn imap_security(&self) -> MailSecurity {
-        self.imap_security.unwrap_or(MailSecurity::Tls)
-    }
-
-    /// The SMTP security in effect.
-    #[must_use]
-    pub fn smtp_security(&self) -> MailSecurity {
-        self.smtp_security.unwrap_or(if self.smtp_port == 465 {
-            MailSecurity::Tls
-        } else {
-            MailSecurity::Starttls
-        })
-    }
-}
-
-/// `gateway.platforms.matrix.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct MatrixOptions {
-    /// The homeserver URL.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub homeserver: Option<String>,
-}
-
-/// `gateway.platforms.signal.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct SignalOptions {
-    /// The signal-cli HTTP daemon.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub http_url: Option<String>,
-    /// The account number, in E.164.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account: Option<String>,
-}
-
-/// `gateway.platforms.whatsapp.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct WhatsappOptions {
-    /// A `WhatsApp` bridge already running (`http://127.0.0.1:<port>`).
-    /// Unset: the adapter starts the managed bridge runtime itself.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bridge_url: Option<String>,
-}
-
-/// `gateway.platforms.webhook.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct WebhookOptions {}
 
 /// Reads a platform's `options` table as its typed options (defaults for
 /// missing keys).

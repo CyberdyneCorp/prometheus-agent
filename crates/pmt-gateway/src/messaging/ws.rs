@@ -25,6 +25,20 @@ pub type Socket = WebSocketStream<Box<dyn Stream>>;
 ///
 /// What failed: unreachable host, TLS, or the handshake.
 pub async fn connect(request: Request, extra_ca_file: Option<&Path>) -> Result<Socket, String> {
+    connect_via(request, extra_ca_file, None).await
+}
+
+/// [`connect`] through the proxy at `proxy` (see [`super::proxy`]), or
+/// directly.
+///
+/// # Errors
+///
+/// What failed: unreachable proxy or host, TLS, or the handshake.
+pub async fn connect_via(
+    request: Request,
+    extra_ca_file: Option<&Path>,
+    proxy: Option<&str>,
+) -> Result<Socket, String> {
     let uri = request.uri().clone();
     let host = uri
         .host()
@@ -34,9 +48,14 @@ pub async fn connect(request: Request, extra_ca_file: Option<&Path>) -> Result<S
         .to_owned();
     let tls = uri.scheme_str() == Some("wss");
     let port = uri.port_u16().unwrap_or(if tls { 443 } else { 80 });
-    let tcp = TcpStream::connect((host.as_str(), port))
-        .await
-        .map_err(|e| format!("cannot reach {host}:{port}: {e}"))?;
+    let tcp: Box<dyn Stream> = match proxy {
+        Some(proxy) => super::proxy::tunnel(proxy, &host, port, extra_ca_file).await?,
+        None => Box::new(
+            TcpStream::connect((host.as_str(), port))
+                .await
+                .map_err(|e| format!("cannot reach {host}:{port}: {e}"))?,
+        ),
+    };
     let stream: Box<dyn Stream> = if tls {
         let config = pmt_net::tls::client_config(extra_ca_file).map_err(|e| e.to_string())?;
         let name = ServerName::try_from(host.clone())
@@ -47,7 +66,7 @@ pub async fn connect(request: Request, extra_ca_file: Option<&Path>) -> Result<S
             .map_err(|e| format!("TLS with {host} failed: {e}"))?;
         Box::new(tls)
     } else {
-        Box::new(tcp)
+        tcp
     };
     let (socket, _) = tokio_tungstenite::client_async(request, stream)
         .await

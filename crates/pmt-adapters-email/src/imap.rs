@@ -3,11 +3,9 @@
 //! fetch one without marking it, mark it seen. UIDs are used throughout so
 //! a reconnect names the same messages.
 
-use std::path::Path;
-
 use pmt_config::platforms::MailSecurity;
 
-use crate::wire::{Wire, WireError};
+use crate::wire::{TlsPolicy, Wire, WireError};
 
 /// Why an IMAP step failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +60,7 @@ pub(crate) struct Login<'a> {
     pub(crate) host: &'a str,
     pub(crate) port: u16,
     pub(crate) security: MailSecurity,
-    pub(crate) extra_ca: Option<&'a Path>,
+    pub(crate) tls: &'a TlsPolicy,
     pub(crate) user: &'a str,
     pub(crate) password: &'a str,
 }
@@ -70,7 +68,7 @@ pub(crate) struct Login<'a> {
 impl Imap {
     /// Connects, logs in and selects `INBOX`.
     pub(crate) async fn login(login: &Login<'_>) -> Result<Self, ImapError> {
-        let wire = Wire::connect(login.host, login.port, login.security, login.extra_ca).await?;
+        let wire = Wire::connect(login.host, login.port, login.security, login.tls).await?;
         let mut session = Self { wire, tag: 0 };
         let greeting = session.wire.line().await?;
         if !greeting.starts_with("* OK") && !greeting.starts_with("* PREAUTH") {
@@ -78,7 +76,7 @@ impl Imap {
         }
         if login.security == MailSecurity::Starttls {
             session.command("STARTTLS").await?;
-            session.wire = session.wire.upgrade(login.extra_ca).await?;
+            session.wire = session.wire.upgrade(login.tls).await?;
         }
         let command = format!("LOGIN {} {}", quote(login.user), quote(login.password));
         session.command(&command).await?;

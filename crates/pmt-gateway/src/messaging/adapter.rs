@@ -310,6 +310,51 @@ pub trait AdapterLink: Send + Sync {
     fn submit(&self, inbound: Inbound) -> AdapterFuture<'_, Admission>;
     /// Reports a state change.
     fn report(&self, state: AdapterState, error: Option<AdapterError>);
+    /// Sends `text` to a send target of the adapter's profile
+    /// (`platform[:chat_id[:thread_id]]`) without an agent turn (webhook
+    /// direct delivery); the resolved destination's label, or why it could
+    /// not be queued.
+    fn deliver<'a>(
+        &'a self,
+        _target: &'a str,
+        _text: &'a str,
+    ) -> AdapterFuture<'a, Result<String, String>> {
+        Box::pin(async { Err("delivery is not available".to_owned()) })
+    }
+    /// Whether `sender_id` may use the bot in a direct message (inline
+    /// pickers answer nothing to anyone else).
+    fn authorized<'a>(&'a self, _sender_id: &'a str) -> AdapterFuture<'a, bool> {
+        Box::pin(async { false })
+    }
+}
+
+/// One entry of a native command menu: a gateway command or a skill.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MenuCommand {
+    /// Name without `/`.
+    pub name: String,
+    /// One line describing it.
+    pub description: String,
+    /// It takes arguments.
+    pub takes_args: bool,
+}
+
+/// What an adapter asks of the sessions it starts in one chat or thread
+/// (a Telegram topic's skill, a webhook route's skills and toolsets).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionHints {
+    /// Skills preloaded into each new session.
+    pub skills: Vec<String>,
+    /// Toolsets replacing the session's defaults.
+    pub toolsets: Option<Vec<String>>,
+}
+
+impl SessionHints {
+    /// Whether it asks for nothing.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.skills.is_empty() && self.toolsets.is_none()
+    }
 }
 
 /// A messaging adapter.
@@ -397,7 +442,29 @@ pub trait Adapter: Send + Sync + 'static {
     fn handle_http<'a>(&'a self, _request: &'a HttpRequest) -> AdapterFuture<'a, HttpResponse> {
         Box::pin(async { HttpResponse::status(404) })
     }
+    /// The largest request body the adapter reads on the shared listener;
+    /// a larger one is answered 413 before it is read.
+    fn max_body_bytes(&self) -> usize {
+        DEFAULT_MAX_BODY
+    }
+    /// Registers `commands` as the platform's native command menu
+    /// (adapters with one); called after each connect and after a
+    /// registry change. An adapter configured as a follower registers and
+    /// removes nothing.
+    fn register_commands<'a>(
+        &'a self,
+        _commands: &'a [MenuCommand],
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Ok(()) })
+    }
+    /// What new sessions in `chat_id` / `thread_id` start with.
+    fn session_hints(&self, _chat_id: &str, _thread_id: Option<&str>) -> SessionHints {
+        SessionHints::default()
+    }
 }
+
+/// The body limit of the shared listener when the adapter sets none.
+pub const DEFAULT_MAX_BODY: usize = 16 * 1024 * 1024;
 
 /// Reads the credential `name` from the owning profile's secrets store
 /// only (never another profile's, never the environment).

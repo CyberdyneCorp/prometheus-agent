@@ -49,6 +49,13 @@ struct State {
     uploads: Vec<String>,
     received: Vec<MockFile>,
     deleted: Vec<String>,
+    /// Every call of a method without its own handling, in order.
+    calls: Vec<(String, Value)>,
+    /// `setWebhook`'s URL and secret token while a webhook is set.
+    webhook: Option<(String, String)>,
+    /// Chats where `createForumTopic` fails ("the chat is not a forum").
+    not_forums: Vec<String>,
+    next_thread: i64,
 }
 
 /// The mock server.
@@ -78,6 +85,7 @@ impl BotApi {
             state: Mutex::new(State {
                 next_update: 1,
                 next_message: 100,
+                next_thread: 500,
                 ..State::default()
             }),
             arrived: Notify::new(),
@@ -126,16 +134,62 @@ impl BotApi {
         self.state.lock().unwrap()
     }
 
-    fn push(&self, update: Value) {
+    /// Queues an update; while a webhook is set it is posted there
+    /// instead, with the secret token, as Telegram does.
+    pub fn push(&self, update: Value) {
         let mut state = self.lock();
         let id = state.next_update;
         state.next_update += 1;
         let mut update = update;
         update["update_id"] = json!(id);
-        state.updates.push((id, update.clone()));
-        state.last_update = Some(update);
+        state.last_update = Some(update.clone());
+        if let Some((url, secret)) = state.webhook.clone() {
+            drop(state);
+            tokio::spawn(async move {
+                let client = pmt_net::http::client_builder(&pmt_net::OutboundPolicy::default())
+                    .unwrap()
+                    .no_proxy()
+                    .build()
+                    .unwrap();
+                let _ = client
+                    .post(url)
+                    .header("x-telegram-bot-api-secret-token", secret)
+                    .header("content-type", "application/json")
+                    .body(update.to_string())
+                    .send()
+                    .await;
+            });
+            return;
+        }
+        state.updates.push((id, update));
         drop(state);
         self.arrived.notify_waiters();
+    }
+
+    /// The arguments of every call of `method` (methods the mock does not
+    /// otherwise model), in order.
+    pub fn calls(&self, method: &str) -> Vec<Value> {
+        self.lock()
+            .calls
+            .iter()
+            .filter(|(m, _)| m == method)
+            .map(|(_, args)| args.clone())
+            .collect()
+    }
+
+    /// Every method called, in order (getUpdates included).
+    pub fn methods(&self) -> Vec<String> {
+        self.lock().calls.iter().map(|(m, _)| m.clone()).collect()
+    }
+
+    /// `createForumTopic` fails in `chat` from now on.
+    pub fn not_a_forum(&self, chat: &str) {
+        self.lock().not_forums.push(chat.to_owned());
+    }
+
+    /// The webhook URL and secret token, while one is set.
+    pub fn webhook(&self) -> Option<(String, String)> {
+        self.lock().webhook.clone()
     }
 
     async fn serve(self: Arc<Self>, request: Request<Incoming>) -> Response<Full<Bytes>> {
@@ -172,6 +226,7 @@ impl BotApi {
             return respond(refused(401, "Unauthorized"));
         }
         let args: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+        self.lock().calls.push((method.to_owned(), args.clone()));
         let answer = match method {
             "getUpdates" => self.get_updates(&args).await,
             method if method.starts_with("send") && method != "sendChatAction" => {
@@ -296,7 +351,28 @@ impl BotApi {
             "getChat" => {
                 ok(&json!({"id": args["chat_id"], "type": "private", "first_name": "Kit"}))
             }
-            "answerCallbackQuery" => ok(&json!(true)),
+            "answerCallbackQuery" | "setMyCommands" | "deleteMyCommands" | "answerInlineQuery" => {
+                ok(&json!(true))
+            }
+            "setWebhook" => {
+                let url = args["url"].as_str().unwrap_or_default().to_owned();
+                let secret = args["secret_token"].as_str().unwrap_or_default().to_owned();
+                state.webhook = Some((url, secret));
+                ok(&json!(true))
+            }
+            "deleteWebhook" => {
+                state.webhook = None;
+                ok(&json!(true))
+            }
+            "createForumTopic" => {
+                let chat = args["chat_id"].to_string().trim_matches('"').to_owned();
+                if state.not_forums.contains(&chat) {
+                    return refused(400, "Bad Request: the chat is not a forum");
+                }
+                state.next_thread += 1;
+                let thread = state.next_thread;
+                ok(&json!({"message_thread_id": thread, "name": args["name"]}))
+            }
             "getFile" => {
                 let id = args["file_id"].as_str().unwrap_or_default();
                 let size = state
@@ -479,6 +555,17 @@ impl MockPlatform for BotApi {
 
     fn deleted(&self) -> Vec<String> {
         self.lock().deleted.clone()
+    }
+
+    fn menu(&self) -> Option<Vec<String>> {
+        let last = self.calls("setMyCommands").pop();
+        Some(
+            last.and_then(|args| args["commands"].as_array().cloned())
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|c| c["command"].as_str().map(str::to_owned))
+                .collect(),
+        )
     }
 }
 

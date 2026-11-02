@@ -8,6 +8,8 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Proxy credentials (HTTP CONNECT basic authorization).
+base64.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 # Random instance ids, epochs, tickets and server-request ids.
@@ -23,6 +25,8 @@ pmt-net.workspace = true
 pmt-rpc.workspace = true
 # Conversation routes, pairing and the outbox live in each profile's state.db.
 pmt-store.workspace = true
+# Adapters build their HTTP clients through the gateway's proxy rules.
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Tickets are kept only as hashes; the Windows control pipe is named by

@@ -7,6 +7,13 @@
 //! marks mail already in the inbox seen; afterwards every unseen mail is
 //! answered, also mail that arrived while disconnected. Long replies go
 //! out whole (`splits_long_messages`); choices are numbered.
+//!
+//! A mail counts only when the topmost `Authentication-Results` header,
+//! added by the receiving server `options.authserv_id`, authenticates its
+//! From domain (unless `options.require_authenticated_sender = false`):
+//! a spoofed From of an allowlisted address is dropped as unauthorized.
+//! Certificates are verified unless `options.tls_verify = false`, which is
+//! logged at WARN on every start for a non-loopback server.
 
 mod imap;
 mod mime;
@@ -19,7 +26,7 @@ mod smtp;
 mod wire;
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -84,7 +91,7 @@ struct Inner {
     scope: ProfileScope,
     secret: String,
     options: EmailOptions,
-    extra_ca: Option<PathBuf>,
+    tls: wire::TlsPolicy,
     /// Mail already in the inbox was marked seen (first connect only).
     primed: AtomicBool,
     threads: Mutex<Threads>,
@@ -121,13 +128,16 @@ impl Inner {
                 .token_secret
                 .as_ref()
                 .map_or_else(|| PASSWORD_SECRET.to_owned(), |s| s.0.clone()),
-            extra_ca: setup
-                .scope
-                .config()
-                .network
-                .extra_ca_file
-                .as_deref()
-                .map(Into::into),
+            tls: wire::TlsPolicy {
+                extra_ca: setup
+                    .scope
+                    .config()
+                    .network
+                    .extra_ca_file
+                    .as_deref()
+                    .map(Into::into),
+                verify: options.tls_verify,
+            },
             options,
             primed: AtomicBool::new(false),
             threads: Mutex::default(),
@@ -167,7 +177,7 @@ impl Inner {
             host: &mailbox.imap_host,
             port: self.options.imap_port,
             security: self.options.imap_security(),
-            extra_ca: self.extra_ca.as_deref(),
+            tls: &self.tls,
             user: &mailbox.user,
             password,
         };
@@ -191,6 +201,14 @@ impl Inner {
     ) -> Result<(), AdapterError> {
         let mailbox = self.mailbox()?;
         let password = credential(&self.scope, &self.secret)?;
+        let remote =
+            !wire::is_loopback(&mailbox.imap_host) || !wire::is_loopback(&mailbox.smtp_host);
+        if !self.options.tls_verify && remote {
+            tracing::warn!(
+                platform = PLATFORM,
+                "gateway.platforms.email.options.tls_verify = false: mail server certificates are not verified"
+            );
+        }
         let mut session = self.login(&mailbox, &password).await?;
         if !self.primed.load(Ordering::Acquire) {
             // Mail that predates the adapter is not answered.
@@ -247,7 +265,7 @@ impl Inner {
     ) -> Result<(), ImapError> {
         for uid in session.unseen().await? {
             if let Some(raw) = session.fetch(uid).await?
-                && let Some(mail) = mime::parse(&raw, address)
+                && let Some(mail) = mime::parse(&raw, address, &self.reading())
             {
                 let mut inbound = mail.inbound;
                 inbound.attachments = self.keep_parts(&inbound.message_id, mail.parts);
@@ -260,6 +278,17 @@ impl Inner {
             session.mark_seen(uid).await?;
         }
         Ok(())
+    }
+
+    /// How inbound mail is read under the options.
+    fn reading(&self) -> mime::Reading<'_> {
+        mime::Reading {
+            authserv_id: self
+                .options
+                .require_authenticated_sender
+                .then_some(self.options.authserv_id.as_deref().unwrap_or_default()),
+            skip_attachments: self.options.skip_attachments,
+        }
     }
 
     fn keep_parts(&self, message_id: &str, parts: Vec<mime::Part>) -> Vec<Attachment> {
@@ -319,7 +348,7 @@ impl Inner {
             host: &mailbox.smtp_host,
             port: self.options.smtp_port,
             security: self.options.smtp_security(),
-            extra_ca: self.extra_ca.as_deref(),
+            tls: &self.tls,
             user: &mailbox.user,
             password: &password,
         };

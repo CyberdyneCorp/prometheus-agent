@@ -17,13 +17,17 @@ use pmt_gateway::messaging::{
 use pmt_store::gateway::outbox::OutboundAttachment;
 
 fn profile(home: &std::path::Path, token: bool) -> AdapterSetup {
+    profile_with(home, token, "")
+}
+
+fn profile_with(home: &std::path::Path, token: bool, extra: &str) -> AdapterSetup {
     let layout = Home::open(home).unwrap();
     let dir = layout
         .profile(&ProfileName::parse("default").unwrap())
         .unwrap();
     std::fs::write(
         dir.path().join("config.toml"),
-        "[gateway.platforms.discord]\nenabled = true\n",
+        format!("[gateway.platforms.discord]\nenabled = true\n{extra}"),
     )
     .unwrap();
     let scope = ProfileScope::open(dir, &Overrides::default(), Launch::Other).unwrap();
@@ -169,4 +173,197 @@ async fn files_download_from_the_cdn_and_upload_as_attachments() {
     adapter.send(&message).await.unwrap();
     assert_eq!(mock.uploads(), 1);
     assert_eq!(mock.sent().last().unwrap().text, "the chart");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_configured_proxy_carries_rest_and_gateway_traffic() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = DiscordMock::start().await;
+    let (proxy, log) = pmt_gateway::messaging::mock_server::proxy().await.unwrap();
+    let setup = profile_with(
+        home.path(),
+        true,
+        &format!("proxy_url = \"http://{proxy}\"\n"),
+    );
+    let adapter = Discord::new(&setup, mock.endpoints()).unwrap();
+    let link = Arc::new(Recorder::default());
+    adapter.connect(Arc::clone(&link) as _).await.unwrap();
+    adapter
+        .send(&Outgoing::text("100", None, "through the proxy"))
+        .await
+        .unwrap();
+    let seen = log.lock().unwrap().clone();
+    assert!(
+        seen.iter().any(|d| d.starts_with("CONNECT ")),
+        "the Gateway WebSocket tunnels through the proxy: {seen:?}"
+    );
+    assert!(
+        seen.iter()
+            .any(|d| d.starts_with("POST http://") || d.starts_with("GET http://")),
+        "REST calls go through the proxy: {seen:?}"
+    );
+    adapter.disconnect().await;
+}
+
+/// Runs [`ambient_child`] in a child process whose environment names
+/// `proxy` in every proxy variable; whether it succeeded.
+fn run_ambient_child(proxy: std::net::SocketAddr, trust_env: bool) -> bool {
+    let url = format!("http://{proxy}");
+    std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "ambient_child", "--ignored", "--test-threads=1"])
+        .env("HTTP_PROXY", &url)
+        .env("HTTPS_PROXY", &url)
+        .env("ALL_PROXY", &url)
+        .env(
+            "PMT_TEST_DISCORD_TRUST_ENV",
+            if trust_env { "1" } else { "0" },
+        )
+        .status()
+        .unwrap()
+        .success()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ambient_proxy_variables_are_ignored_unless_the_environment_is_trusted() {
+    let (proxy, log) = pmt_gateway::messaging::mock_server::proxy().await.unwrap();
+    let ignored = tokio::task::spawn_blocking(move || run_ambient_child(proxy, false));
+    assert!(ignored.await.unwrap());
+    assert!(
+        log.lock().unwrap().is_empty(),
+        "HTTPS_PROXY was used: {:?}",
+        log.lock().unwrap()
+    );
+    let trusted = tokio::task::spawn_blocking(move || run_ambient_child(proxy, true));
+    assert!(trusted.await.unwrap());
+    assert!(
+        !log.lock().unwrap().is_empty(),
+        "with gateway.trust_env the environment's proxy carries the traffic"
+    );
+}
+
+/// The child of the test above: connects and sends once with the
+/// inherited proxy environment.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "run by ambient_proxy_variables_are_ignored_unless_the_environment_is_trusted"]
+async fn ambient_child() {
+    let trust = std::env::var("PMT_TEST_DISCORD_TRUST_ENV").as_deref() == Ok("1");
+    let home = tempfile::tempdir().unwrap();
+    let setup = profile_with(home.path(), true, "");
+    let setup = if trust {
+        let file = setup.scope.dir().join("config.toml");
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, format!("[gateway]\ntrust_env = true\n\n{text}")).unwrap();
+        profile_reopen(home.path())
+    } else {
+        setup
+    };
+    let mock = DiscordMock::start().await;
+    let adapter = Discord::new(&setup, mock.endpoints()).unwrap();
+    adapter
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    adapter
+        .send(&Outgoing::text("100", None, "hello"))
+        .await
+        .unwrap();
+    adapter.disconnect().await;
+}
+
+fn profile_reopen(home: &std::path::Path) -> AdapterSetup {
+    let layout = Home::open(home).unwrap();
+    let dir = layout
+        .profile(&ProfileName::parse("default").unwrap())
+        .unwrap();
+    let scope = ProfileScope::open(dir, &Overrides::default(), Launch::Other).unwrap();
+    let config = scope.config().gateway.platform("discord");
+    AdapterSetup {
+        scope,
+        platform: "discord".into(),
+        config,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_proxy_the_adapter_connects_directly() {
+    // `gateway.trust_env` is unset, so ambient proxy variables (which a
+    // test cannot set safely) are never consulted: the adapter is direct.
+    let home = tempfile::tempdir().unwrap();
+    let setup = profile(home.path(), true);
+    assert_eq!(
+        pmt_gateway::messaging::proxy::Proxy::of(&setup).unwrap(),
+        pmt_gateway::messaging::proxy::Proxy::Direct
+    );
+    let mock = DiscordMock::start().await;
+    let adapter = Discord::new(&setup, mock.endpoints()).unwrap();
+    adapter
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    assert_eq!(mock.handshakes().0, 1);
+    adapter.disconnect().await;
+}
+
+fn many(n: usize) -> Vec<pmt_gateway::messaging::MenuCommand> {
+    (0..n)
+        .map(|i| pmt_gateway::messaging::MenuCommand {
+            name: format!("cmd{i}"),
+            description: format!("command {i}"),
+            takes_args: true,
+        })
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn application_commands_are_registered_up_to_the_limit() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = DiscordMock::start().await;
+    let adapter = Discord::new(&profile(home.path(), true), mock.endpoints()).unwrap();
+    adapter
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    adapter.register_commands(&many(104)).await.unwrap();
+    let puts = mock.command_puts();
+    assert_eq!(puts.len(), 1);
+    assert_eq!(puts[0].as_array().unwrap().len(), 100);
+    assert_eq!(puts[0][0]["options"][0]["name"], "args");
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_follower_does_not_overwrite_application_commands() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = DiscordMock::start().await;
+    let setup = profile_with(home.path(), true, "options = { slash_commands = false }\n");
+    let adapter = Discord::new(&setup, mock.endpoints()).unwrap();
+    adapter
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    adapter.register_commands(&many(5)).await.unwrap();
+    assert!(mock.command_puts().is_empty());
+    adapter.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_slash_command_runs_as_its_command_text() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = DiscordMock::start().await;
+    let adapter = Discord::new(&profile(home.path(), true), mock.endpoints()).unwrap();
+    let link = Arc::new(Recorder::default());
+    adapter.connect(Arc::clone(&link) as _).await.unwrap();
+    mock.dispatch(
+        "INTERACTION_CREATE",
+        &serde_json::json!({"id": "i1", "token": "tok", "type": 2, "channel_id": mock::DM,
+            "user": {"id": mock::USER}, "data": {"name": "model",
+            "options": [{"name": "args", "type": 3, "value": "fast"}]}}),
+    );
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    assert_eq!(link.events.lock().unwrap()[0].text, "/model fast");
+    eventually(|| !mock.callbacks().is_empty()).await;
+    let callback = &mock.callbacks()[0];
+    assert_eq!(callback["type"], 4);
+    assert_eq!(callback["data"]["flags"], 64);
+    adapter.disconnect().await;
 }

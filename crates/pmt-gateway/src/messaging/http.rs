@@ -20,9 +20,6 @@ use tracing::Instrument as _;
 use super::Shared;
 use super::adapter::{Adapter, HttpRequest, HttpResponse};
 
-/// The largest request body accepted.
-const MAX_BODY: usize = 16 * 1024 * 1024;
-
 /// Where the listener binds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HttpOptions {
@@ -161,7 +158,17 @@ pub(crate) async fn deliver(
     request: Request<Incoming>,
 ) -> HttpResponse {
     let (parts, body) = request.into_parts();
-    let Ok(body) = Limited::new(body, MAX_BODY).collect().await else {
+    let limit = adapter.max_body_bytes();
+    // A declared length over the limit is refused before anything is read.
+    let declared = parts
+        .headers
+        .get(hyper::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|len| len > limit as u64) {
+        return HttpResponse::status(413);
+    }
+    let Ok(body) = Limited::new(body, limit).collect().await else {
         return HttpResponse::status(413);
     };
     let incoming = HttpRequest {

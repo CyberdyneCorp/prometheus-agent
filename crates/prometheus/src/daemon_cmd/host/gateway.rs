@@ -6,12 +6,13 @@
 //! gateway surface, and unloading an idle agent without ending its
 //! session.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use pmt_config::{Home, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
-use pmt_gateway::messaging::{Agents, BusyPolicy, Conversation, Lookup};
+use pmt_gateway::messaging::{Agents, BusyPolicy, Conversation, Lookup, MenuCommand};
 use pmt_gateway::{HostFuture, Link};
 use pmt_rpc::contracts::{Dispatched, SessionSetup};
 use pmt_store::{EndReason, LineageKind, NewSession, Origin, Source, Store};
@@ -20,6 +21,52 @@ use tracing::Instrument as _;
 use super::{DaemonHost, Profile, session_id, session_span, setup};
 use crate::chat::commands;
 use crate::slash::{self, Resolution, Surface};
+
+/// The gateway-surface commands of `scope` (built-ins and quick
+/// commands) and its user-invocable skills, for native command menus.
+fn menu_commands(scope: &ProfileScope, user_home: Option<&Path>) -> Vec<MenuCommand> {
+    let registry = commands::profile_registry(scope);
+    let builtins = registry
+        .builtins()
+        .iter()
+        .filter(|c| c.on(Surface::Gateway))
+        .map(|c| MenuCommand {
+            name: c.name.to_owned(),
+            description: c.description.to_owned(),
+            takes_args: !c.args.is_empty(),
+        });
+    let externals = registry
+        .externals()
+        .filter(|e| e.surfaces.contains(&Surface::Gateway))
+        .map(|e| MenuCommand {
+            name: e.name.clone(),
+            description: e.description.clone(),
+            takes_args: true,
+        });
+    let catalog = pmt_skills::eject::profile_catalog(
+        scope,
+        None,
+        user_home,
+        pmt_skills::bundled::Bundled::builtin(),
+    );
+    let disabled = &scope.config().skills.disabled;
+    let enabled = catalog
+        .skills
+        .iter()
+        .filter(|s| !disabled.contains(&s.name));
+    let table =
+        pmt_skills::slash::SlashTable::new(enabled.map(AsRef::as_ref), &registry.builtin_names());
+    let skills = table.commands.iter().map(|(slug, name)| MenuCommand {
+        name: slug.clone(),
+        description: catalog
+            .skills
+            .iter()
+            .find(|s| &s.name == name)
+            .map_or_else(|| format!("skill {name}"), |s| s.description.clone()),
+        takes_args: true,
+    });
+    builtins.chain(externals).chain(skills).collect()
+}
 
 fn busy_policy(policy: slash::BusyPolicy) -> BusyPolicy {
     match policy {
@@ -167,6 +214,16 @@ impl Agents for DaemonHost {
 
     fn serve_new_profiles(&self) -> Vec<String> {
         self.open_new_profiles()
+    }
+
+    fn menu_commands(&self, profile: &str) -> Vec<MenuCommand> {
+        let Ok(profile) = self.profile(profile) else {
+            return Vec::new();
+        };
+        menu_commands(
+            &profile.scope(),
+            self.launch.user_home().map(PathBuf::as_path),
+        )
     }
 
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {

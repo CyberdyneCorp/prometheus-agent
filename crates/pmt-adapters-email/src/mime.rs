@@ -116,11 +116,102 @@ fn is_reply(subject: &str) -> bool {
         .is_some_and(|p| p.eq_ignore_ascii_case("re:"))
 }
 
+/// How inbound mail is read.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Reading<'a> {
+    /// The receiving server whose `Authentication-Results` must
+    /// authenticate the From domain; `None` accepts unauthenticated mail.
+    pub(crate) authserv_id: Option<&'a str>,
+    /// Attachment parts are ignored.
+    pub(crate) skip_attachments: bool,
+}
+
+/// The `method=result` pairs and `ptype.property=value` facts of one
+/// result in an `Authentication-Results` value.
+fn result_of(part: &str) -> (&str, &str, Vec<(&str, &str)>) {
+    let mut words = part.split_whitespace();
+    let (method, result) = words
+        .next()
+        .and_then(|w| w.split_once('='))
+        .unwrap_or_default();
+    let facts = words.filter_map(|w| w.split_once('=')).collect();
+    (method, result, facts)
+}
+
+/// Whether the topmost `Authentication-Results` header comes from
+/// `authserv_id` and authenticates `domain`: DMARC when it was evaluated,
+/// else an aligned DKIM or SPF pass.
+pub(crate) fn authenticated(
+    message: &mail_parser::Message<'_>,
+    authserv_id: &str,
+    domain: &str,
+) -> bool {
+    let Some(value) = message
+        .headers()
+        .iter()
+        .find(|h| h.name().eq_ignore_ascii_case("Authentication-Results"))
+        .and_then(|h| {
+            message
+                .raw_message()
+                .get(h.offset_start() as usize..h.offset_end() as usize)
+        })
+        .map(|raw| String::from_utf8_lossy(raw).replace(['\r', '\n'], " "))
+    else {
+        return false;
+    };
+    let mut parts = value.split(';');
+    let server = parts
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .next()
+        .unwrap_or_default();
+    if !server.eq_ignore_ascii_case(authserv_id) {
+        return false;
+    }
+    let results: Vec<_> = parts.map(result_of).collect();
+    let aligned = |facts: &[(&str, &str)], keys: &[&str]| {
+        facts.iter().any(|(k, v)| {
+            keys.contains(&k.to_ascii_lowercase().as_str())
+                && v.trim_matches('"')
+                    .rsplit('@')
+                    .next()
+                    .is_some_and(|d| d.eq_ignore_ascii_case(domain))
+        })
+    };
+    if let Some((_, result, facts)) = results
+        .iter()
+        .find(|(m, ..)| m.eq_ignore_ascii_case("dmarc"))
+    {
+        return result.eq_ignore_ascii_case("pass")
+            && (facts.is_empty() || aligned(facts, &["header.from"]));
+    }
+    results.iter().any(|(method, result, facts)| {
+        result.eq_ignore_ascii_case("pass")
+            && match method.to_ascii_lowercase().as_str() {
+                "dkim" => aligned(facts, &["header.d", "header.i"]),
+                "spf" => aligned(facts, &["smtp.mailfrom"]),
+                _ => false,
+            }
+    })
+}
+
 /// The inbound event of a raw mail sent to `mailbox`; `None` for mail
-/// that is not a message to answer.
-pub(crate) fn parse(raw: &[u8], mailbox: &str) -> Option<Mail> {
+/// that is not a message to answer (or, when authentication is required,
+/// whose sender is not authenticated).
+pub(crate) fn parse(raw: &[u8], mailbox: &str, reading: &Reading<'_>) -> Option<Mail> {
     let message = MessageParser::default().parse(raw)?;
     let from = message.from()?.first()?.address()?.to_lowercase();
+    if let Some(server) = reading.authserv_id {
+        let domain = from.rsplit('@').next().unwrap_or_default();
+        if !authenticated(&message, server, domain) {
+            tracing::warn!(
+                platform = "email",
+                "dropped mail claiming to be from {from}: {server} did not authenticate the sender (Authentication-Results)"
+            );
+            return None;
+        }
+    }
     let automatic = message
         .header("Auto-Submitted")
         .and_then(HeaderValue::as_text)
@@ -154,6 +245,7 @@ pub(crate) fn parse(raw: &[u8], mailbox: &str) -> Option<Mail> {
     }
     let parts = message
         .attachments()
+        .filter(|_| !reading.skip_attachments)
         .map(|part| Part {
             kind: kind(part.content_type().map_or("application", |c| c.ctype())),
             name: part.attachment_name().map(str::to_owned),
@@ -313,13 +405,97 @@ mod tests {
         format!("{headers}\r\n\r\n{body}").into_bytes()
     }
 
+    fn authenticated_mail(results: &str) -> Vec<u8> {
+        mail(
+            &format!(
+                "{results}From: Boss <boss@example.org>\r\nTo: agent@example.org\r\nSubject: Pay\r\nMessage-ID: <s@x>"
+            ),
+            "Wire the money.\r\n",
+        )
+    }
+
+    const GOOGLE: Reading<'static> = Reading {
+        authserv_id: Some("mx.google.com"),
+        skip_attachments: false,
+    };
+
+    #[test]
+    fn a_spoofed_from_failing_dmarc_is_dropped() {
+        let spoofed = authenticated_mail(
+            "Authentication-Results: mx.google.com;\r\n dkim=none; spf=pass smtp.mailfrom=evil.example; dmarc=fail (p=REJECT) header.from=example.org\r\n",
+        );
+        assert!(parse(&spoofed, MAILBOX, &GOOGLE).is_none());
+        let genuine = authenticated_mail(
+            "Authentication-Results: mx.google.com; dkim=pass header.i=@example.org; dmarc=pass (p=NONE) header.from=example.org\r\n",
+        );
+        assert!(parse(&genuine, MAILBOX, &GOOGLE).is_some());
+    }
+
+    #[test]
+    fn only_the_topmost_header_of_the_trusted_server_counts() {
+        // A forged result below the receiving server's own header.
+        let forged = authenticated_mail(
+            "Authentication-Results: mx.google.com; spf=fail smtp.mailfrom=example.org\r\nAuthentication-Results: mx.google.com; dmarc=pass header.from=example.org\r\n",
+        );
+        assert!(parse(&forged, MAILBOX, &GOOGLE).is_none());
+        let other_server = authenticated_mail(
+            "Authentication-Results: mail.evil.example; dmarc=pass header.from=example.org\r\n",
+        );
+        assert!(parse(&other_server, MAILBOX, &GOOGLE).is_none());
+        let missing = authenticated_mail("");
+        assert!(parse(&missing, MAILBOX, &GOOGLE).is_none());
+        assert!(parse(&missing, MAILBOX, &Reading::default()).is_some());
+        let aligned_dkim = authenticated_mail(
+            "Authentication-Results: mx.google.com; dkim=pass header.d=example.org\r\n",
+        );
+        assert!(parse(&aligned_dkim, MAILBOX, &GOOGLE).is_some());
+    }
+
+    #[test]
+    fn skipped_attachments_are_not_kept() {
+        let raw = mail(
+            "From: a@example.org\r\nTo: agent@example.org\r\nSubject: f\r\nMessage-ID: <f@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=B",
+            "--B\r\nContent-Type: text/plain\r\n\r\nsee file\r\n--B\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\n\r\n%PDF\r\n--B--\r\n",
+        );
+        assert_eq!(
+            parse(&raw, MAILBOX, &Reading::default())
+                .unwrap()
+                .parts
+                .len(),
+            1
+        );
+        let skip = Reading {
+            skip_attachments: true,
+            ..Reading::default()
+        };
+        let parsed = parse(&raw, MAILBOX, &skip).unwrap();
+        assert!(parsed.parts.is_empty());
+        assert_eq!(parsed.inbound.text, "[Subject: f]\n\nsee file");
+    }
+
+    #[test]
+    fn html_only_mail_is_read_as_text() {
+        let raw = mail(
+            "From: a@example.org\r\nTo: agent@example.org\r\nSubject: h\r\nMessage-ID: <h@x>\r\nContent-Type: text/html",
+            "<html><body><p>Hello <b>there</b></p></body></html>\r\n",
+        );
+        let text = parse(&raw, MAILBOX, &Reading::default())
+            .unwrap()
+            .inbound
+            .text;
+        assert!(
+            text.contains("Hello there") && !text.contains('<'),
+            "{text}"
+        );
+    }
+
     #[test]
     fn a_mail_is_a_dm_from_its_sender_keyed_by_message_id() {
         let raw = mail(
             "From: Kit <Kit@Example.org>\r\nTo: agent@example.org\r\nSubject: Weekly report\r\nMessage-ID: <a@x>\r\nDate: Thu, 1 Jan 2026 10:00:00 +0000",
             "Please summarize.\r\n",
         );
-        let parsed = parse(&raw, MAILBOX).unwrap();
+        let parsed = parse(&raw, MAILBOX, &Reading::default()).unwrap();
         assert_eq!(parsed.inbound.message_id, "<a@x>");
         assert_eq!(parsed.inbound.sender_id, "kit@example.org");
         assert_eq!(parsed.inbound.chat_id, "kit@example.org");
@@ -337,7 +513,7 @@ mod tests {
             "From: kit@example.org\r\nSubject: Re: Weekly report\r\nMessage-ID: <b@x>\r\nIn-Reply-To: <a@x>\r\nReferences: <root@x>",
             "Thanks",
         );
-        let parsed = parse(&raw, MAILBOX).unwrap();
+        let parsed = parse(&raw, MAILBOX, &Reading::default()).unwrap();
         assert_eq!(parsed.inbound.text, "Thanks");
         assert_eq!(parsed.inbound.reply_to.as_deref(), Some("<a@x>"));
         assert_eq!(parsed.thread.references, ["<root@x>", "<a@x>"]);
@@ -353,7 +529,10 @@ mod tests {
             "From: kit@example.org\r\nPrecedence: bulk\r\nMessage-ID: <c@x>",
             "From: kit@example.org\r\nList-Unsubscribe: <mailto:u@x>\r\nMessage-ID: <c@x>",
         ] {
-            assert!(parse(&mail(headers, "x"), MAILBOX).is_none(), "{headers}");
+            assert!(
+                parse(&mail(headers, "x"), MAILBOX, &Reading::default()).is_none(),
+                "{headers}"
+            );
         }
     }
 

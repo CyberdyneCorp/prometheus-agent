@@ -129,19 +129,13 @@ async fn media_downloads_and_uploads_and_reactions_are_redacted_to_remove() {
 }
 
 #[tokio::test]
-async fn a_missing_homeserver_is_named() {
+async fn a_missing_homeserver_fails_validation_naming_it() {
     let home = tempfile::tempdir().unwrap();
-    let setup = kit_setup(home.path(), "matrix", "", &[(TOKEN_SECRET, TOKEN)]).unwrap();
-    let err = Matrix::new(&setup)
-        .unwrap()
-        .connect(Arc::new(Recorder::default()))
-        .await
-        .unwrap_err();
-    assert!(!err.retryable);
+    let err = kit_setup(home.path(), "matrix", "", &[(TOKEN_SECRET, TOKEN)]).unwrap_err();
     assert!(
-        err.message
+        err.message()
             .contains("gateway.platforms.matrix.options.homeserver"),
         "{}",
-        err.message
+        err.message()
     );
 }

@@ -25,6 +25,7 @@ mod models;
 mod operations;
 mod state;
 mod tools;
+mod webhook;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -67,6 +68,9 @@ pub use tools::{
     FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
     TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
     WindowsShell,
+};
+pub use webhook::{
+    FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
 };
 
 /// The `config.toml` schema version this build writes and reads.

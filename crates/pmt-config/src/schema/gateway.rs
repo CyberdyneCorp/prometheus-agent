@@ -79,6 +79,19 @@ pub struct GatewayConfig {
     /// Voice messages in and out.
     #[schemars(extend("x-apply" = "live"))]
     pub voice: VoiceConfig,
+    /// The proxy every adapter without its own `proxy_url` uses
+    /// (`http://`, `https://` or `socks5://`, without a password; a URL
+    /// with credentials goes in a secret named by `proxy_url_secret`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<String>,
+    /// The secret holding the shared proxy URL when it carries
+    /// credentials.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url_secret: Option<super::SecretName>,
+    /// Honour inherited proxy environment variables (`HTTPS_PROXY`, ...)
+    /// and the OS proxy settings when no proxy is configured; off, adapters
+    /// connect directly.
+    pub trust_env: bool,
 }
 
 /// `[gateway.sessions]`.

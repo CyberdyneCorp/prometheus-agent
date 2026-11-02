@@ -16,8 +16,8 @@ use pmt_core::id::SessionId;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, Admission, Agents,
     Attachment, AudioOp, BusyPolicy, ChatInfo, ChatType, Conversation, Descriptor, Gateway, Hooks,
-    HttpRequest, HttpResponse, Inbound, Interactive, Lookup, MediaStream, Options, Outgoing,
-    SendError, SenderVerdict, Sent, Speech,
+    HttpRequest, HttpResponse, Inbound, Interactive, Lookup, MediaStream, MenuCommand, Options,
+    Outgoing, SendError, SenderVerdict, Sent, SessionHints, Speech,
 };
 use pmt_gateway::{Author, Host, HostFuture, Identity, Link, Server, ServerOptions};
 use pmt_rpc::contracts::{
@@ -127,6 +127,8 @@ pub struct FakeAgents {
     pub speech: Mutex<Option<Arc<dyn Speech>>>,
     /// The working directory new sessions record.
     pub cwd: Mutex<Option<String>>,
+    /// The commands native menus show.
+    pub menu: Mutex<Vec<MenuCommand>>,
 }
 
 impl FakeAgents {
@@ -435,6 +437,10 @@ impl Agents for FakeAgents {
         Vec::new()
     }
 
+    fn menu_commands(&self, _profile: &str) -> Vec<MenuCommand> {
+        self.menu.lock().unwrap().clone()
+    }
+
     fn speech(&self, _profile: &str) -> Option<Arc<dyn Speech>> {
         self.speech.lock().unwrap().clone()
     }
@@ -489,6 +495,10 @@ pub struct FakeAdapter {
     pub verdicts: Mutex<HashMap<String, Result<SenderVerdict, AdapterError>>>,
     /// Sender checks asked.
     pub sender_checks: AtomicUsize,
+    /// Every command menu registered.
+    pub menus: Mutex<Vec<Vec<MenuCommand>>>,
+    /// What new sessions of a thread start with, by thread id.
+    pub hints: Mutex<HashMap<String, SessionHints>>,
 }
 
 impl FakeAdapter {
@@ -514,6 +524,8 @@ impl FakeAdapter {
             http_secret: Mutex::default(),
             verdicts: Mutex::default(),
             sender_checks: AtomicUsize::new(0),
+            menus: Mutex::default(),
+            hints: Mutex::default(),
         })
     }
 
@@ -539,6 +551,20 @@ impl FakeAdapter {
 impl Adapter for FakeAdapter {
     fn describe(&self) -> Descriptor {
         self.descriptor.lock().unwrap().clone()
+    }
+
+    fn register_commands<'a>(
+        &'a self,
+        commands: &'a [MenuCommand],
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.menus.lock().unwrap().push(commands.to_vec());
+        Box::pin(async { Ok(()) })
+    }
+
+    fn session_hints(&self, _chat_id: &str, thread_id: Option<&str>) -> SessionHints {
+        thread_id
+            .and_then(|t| self.hints.lock().unwrap().get(t).cloned())
+            .unwrap_or_default()
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
@@ -770,8 +796,24 @@ impl Setup {
 /// sender unless `table` says otherwise) and no debounce.
 pub fn config(platform: &str, table: &str) -> String {
     format!(
-        "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.platforms.{platform}]\nenabled = true\n{table}\n"
+        "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.platforms.{platform}]\nenabled = true\n{}{table}\n",
+        required_options(platform)
     )
+}
+
+/// The settings an enabled first-party platform cannot load without (the
+/// fake adapter stands in for the real one).
+fn required_options(platform: &str) -> &'static str {
+    match platform {
+        "email" => {
+            "options = { address = \"agent@example.org\", imap_host = \"imap.example.org\", smtp_host = \"smtp.example.org\", require_authenticated_sender = false }\n"
+        }
+        "matrix" => "options = { homeserver = \"https://matrix.example.org\" }\n",
+        "signal" => {
+            "options = { http_url = \"http://127.0.0.1:8080\", account = \"+15550000001\" }\n"
+        }
+        _ => "",
+    }
 }
 
 /// A `config.toml` where `platform` admits everyone.
@@ -810,6 +852,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         conversations: Mutex::default(),
         speech: Mutex::default(),
         cwd: Mutex::default(),
+        menu: Mutex::default(),
     })
 }
 

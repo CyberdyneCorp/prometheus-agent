@@ -77,22 +77,14 @@ impl Signal {
     pub fn new(setup: &AdapterSetup) -> Result<Self, Error> {
         let options: SignalOptions =
             pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
-        let network = &setup.scope.config().network;
-        let policy = pmt_net::OutboundPolicy {
-            force_ipv4: network.force_ipv4,
-            extra_ca_file: network.extra_ca_file.as_deref().map(Into::into),
-            proxy: None,
-        };
-        let client = pmt_net::http::client_builder(&policy)?
-            // Adapters never pick up ambient proxy settings.
-            .no_proxy()
-            .build()
-            .map_err(|e| {
-                Error::new(
-                    &pmt_core::error::codes::NET_CLIENT_INIT,
-                    format!("cannot build the Signal client: {e}"),
-                )
-            })?;
+        // Direct unless a proxy is configured or the environment trusted.
+        let (builder, _) = pmt_gateway::messaging::proxy::client_builder(setup)?;
+        let client = builder.build().map_err(|e| {
+            Error::new(
+                &pmt_core::error::codes::NET_CLIENT_INIT,
+                format!("cannot build the Signal client: {e}"),
+            )
+        })?;
         let (rpc, missing) = match (options.http_url, options.account) {
             (Some(url), Some(account)) => (
                 Some(Rpc {

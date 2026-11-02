@@ -174,6 +174,11 @@ pub trait MockPlatform: Send + Sync {
     fn streamed_audio(&self) -> Vec<Vec<u8>> {
         Vec::new()
     }
+    /// The names in the platform's native command menu as last
+    /// registered; `None` for a platform without one.
+    fn menu(&self) -> Option<Vec<String>> {
+        None
+    }
 }
 
 /// One check's outcome.

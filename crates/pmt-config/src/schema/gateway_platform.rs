@@ -13,6 +13,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use super::gateway_policy::{HomeChannel, RateLimitOverride};
+pub use super::webhook::WebhookRoute;
 use super::{BusyInputMode, SecretName};
 
 /// One `[gateway.platforms.<name>]` table: the keys every adapter shares.
@@ -87,26 +88,26 @@ pub struct PlatformConfig {
     /// `/p/<profile>/webhook/<route>` on the shared listener.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub routes: BTreeMap<String, WebhookRoute>,
-}
-
-/// One `[gateway.platforms.webhook.routes.<name>]` table.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-pub struct WebhookRoute {
-    /// Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the
-    /// payload's `event_type`); empty admits every event.
-    pub events: Vec<String>,
-    /// The secret every request must be signed with (GitHub, GitLab,
-    /// Standard Webhooks or the generic scheme).
+    /// Largest request body a webhook route reads (`webhook` only), in
+    /// bytes; larger requests are answered 413 unread. Unset: 1048576.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub secret_secret: Option<SecretName>,
-    /// Admit unsigned requests (only while `gateway.http.listen` is a
-    /// loopback address).
-    pub insecure_no_auth: bool,
-    /// The turn's input: `{a.b.c}` paths into the payload, `{__raw__}`
-    /// the whole payload. Unset: the payload as JSON.
+    #[schemars(range(min = 1024, max = 16_777_216))]
+    pub max_body_bytes: Option<u64>,
+    /// The proxy this adapter's outbound HTTP and WebSocket traffic uses
+    /// (`http://`, `https://` or `socks5://`, without a password; a URL
+    /// with credentials goes in a secret named by `proxy_url_secret`).
+    /// Unset: `gateway.proxy_url`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt: Option<String>,
+    pub proxy_url: Option<String>,
+    /// The secret holding this adapter's proxy URL when it carries
+    /// credentials.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url_secret: Option<SecretName>,
+    /// Mark the triggering message with processing reactions (eyes, then a
+    /// check mark or a cross). Unset: on for Discord and Slack, off
+    /// elsewhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reactions: Option<bool>,
 }
 
 impl PlatformConfig {
@@ -114,6 +115,22 @@ impl PlatformConfig {
     #[must_use]
     pub fn typing(&self) -> bool {
         self.typing_indicator.unwrap_or(true)
+    }
+
+    /// Whether processing reactions are on for `platform` (spec:
+    /// platform-adapters, Processing lifecycle reactions).
+    #[must_use]
+    pub fn reactions_on(&self, platform: &str) -> bool {
+        self.reactions.unwrap_or(matches!(
+            platform,
+            "discord" | "slack" | "feishu" | "dingtalk"
+        ))
+    }
+
+    /// The webhook body limit in effect.
+    #[must_use]
+    pub fn webhook_body_limit(&self) -> u64 {
+        self.max_body_bytes.unwrap_or(1_048_576)
     }
 
     /// The reply-to mode (default `first`).
@@ -249,11 +266,17 @@ pub struct DeliveryConfig {
     /// a truncation notice, with the full text attached.
     #[schemars(range(min = 2, max = 100))]
     pub max_parts: u32,
+    /// Deliver files a final reply names by bare path (outside code) as
+    /// uploads, removing the path from the text.
+    pub detect_paths: bool,
 }
 
 impl Default for DeliveryConfig {
     fn default() -> Self {
-        Self { max_parts: 10 }
+        Self {
+            max_parts: 10,
+            detect_paths: true,
+        }
     }
 }
 

@@ -1827,6 +1827,7 @@ capabilities = [
 
 [platform-adapters."First-party adapter transports and required settings"]
 "Signal daemon unreachable" = ["crates/pmt-adapters-signal/tests/signal.rs::an_unreachable_daemon_is_retried_naming_its_url"]
+"Email missing host" = ["crates/pmt-config/src/gateway_check_platforms.rs::email_missing_host_names_the_option"]
 
 [platform-adapters."Email adapter behaviour"]
 "Threaded reply" = ["crates/pmt-adapters-email/tests/email.rs::threaded_reply", "crates/pmt-adapters-email/src/mime.rs::a_threaded_reply_has_one_re_prefix_and_the_thread_headers"]
@@ -1837,3 +1838,14 @@ capabilities = [
 [platform-adapters."Webhook routes"]
 "Event filtered by type" = ["crates/pmt-adapters-webhook/tests/webhook.rs::an_event_outside_the_route_filter_is_ignored"]
 "Prompt rendering" = ["crates/pmt-adapters-webhook/tests/webhook.rs::a_signed_pull_request_becomes_the_rendered_prompt_once", "crates/pmt-adapters-webhook/src/render.rs::prompt_rendering_reads_dot_paths"]
+
+# platform-adapters, adapter features and webhooks (26.x)
+[platform-adapters."Webhook limits, idempotency and responses"]
+"Redelivery deduplicated" = ["crates/pmt-adapters-webhook/tests/routes.rs::a_redelivery_within_the_hour_starts_no_second_turn", "crates/pmt-adapters-webhook/src/guard.rs::deliveries_are_remembered_for_an_hour"]
+
+[platform-adapters."Webhook payload filters and transform scripts"]
+"Only failing CI runs" = ["crates/pmt-adapters-webhook/tests/routes.rs::only_failing_ci_runs_pass_the_filter", "crates/pmt-adapters-webhook/src/filter.rs::only_failing_ci_runs_pass_the_equals_filter"]
+"Script escapes scripts directory" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_script_outside_the_scripts_directory_is_path_traversal"]
+
+[platform-adapters."Webhook direct delivery mode"]
+"Zero-LLM alert forwarding" = ["crates/prometheus/tests/gateway_webhooks.rs::a_deliver_only_route_forwards_an_alert_to_the_home_channel_without_a_model_call", "crates/pmt-adapters-webhook/tests/routes.rs::a_deliver_only_route_forwards_the_rendered_text_without_a_turn"]

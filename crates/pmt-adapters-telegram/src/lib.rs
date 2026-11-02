@@ -5,30 +5,39 @@
 //! keyboards for cards, typing, reactions, edits, and media in both
 //! directions. The token is the profile's secret `TELEGRAM_BOT_TOKEN`
 //! (or the table's `token_secret`), read from that profile's store only.
+//!
+//! In webhook mode (`options.mode = "webhook"`) updates arrive as posts on
+//! the shared listener at `/p/<profile>/telegram/`, each carrying the
+//! secret token registered with `setWebhook`; switching back to polling
+//! deletes the webhook first. The bot's command menu and inline picker,
+//! and its topics, are their own modules.
 
 mod api;
+mod commands;
 /// The mock platform the conformance kit runs this adapter against; only
 /// in builds with the `kit` feature (tests, `prometheus` with
 /// `adapter-kits`), so release binaries do not carry it.
 #[cfg(feature = "kit")]
 pub mod mock;
 mod normalize;
+mod topics;
+mod updates;
 
 use std::path::Path;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::AtomicI64;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use api::Api;
 pub use api::Endpoints;
 use pmt_config::ProfileScope;
-use pmt_config::platforms::TelegramOptions;
+use pmt_config::platforms::{TelegramMode, TelegramOptions};
 use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
+use pmt_gateway::messaging::sign::constant_time_eq;
 use pmt_gateway::messaging::{
-    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
-    Attachment, ChatInfo, Descriptor, Interactive, LengthUnit, MediaKind, MediaStream, Outgoing,
-    Reaction, SendError, Sent,
+    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
+    ChatInfo, Descriptor, HttpRequest, HttpResponse, Interactive, LengthUnit, MediaKind,
+    MediaStream, MenuCommand, Outgoing, Reaction, SendError, Sent, SessionHints,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -55,6 +64,12 @@ pub struct Telegram {
     offset: Arc<AtomicI64>,
     api: Mutex<Option<Api>>,
     poller: Mutex<Option<CancellationToken>>,
+    /// Every command and skill (the inline picker searches them all).
+    commands: Arc<Mutex<Vec<MenuCommand>>>,
+    topics: Arc<topics::Topics>,
+    /// In webhook mode: how updates are handled and the secret token
+    /// each post must carry.
+    hook: Mutex<Option<(updates::Ctx, String)>>,
 }
 
 impl std::fmt::Debug for Telegram {
@@ -75,22 +90,14 @@ impl Telegram {
     pub fn new(setup: &AdapterSetup, endpoints: Endpoints) -> Result<Self, Error> {
         let options: TelegramOptions =
             pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
-        let network = &setup.scope.config().network;
-        let policy = pmt_net::OutboundPolicy {
-            force_ipv4: network.force_ipv4,
-            extra_ca_file: network.extra_ca_file.as_deref().map(Into::into),
-            proxy: None,
-        };
-        let client = pmt_net::http::client_builder(&policy)?
-            // Adapters never pick up ambient proxy settings.
-            .no_proxy()
-            .build()
-            .map_err(|e| {
-                Error::new(
-                    &pmt_core::error::codes::NET_CLIENT_INIT,
-                    format!("cannot build the Telegram client: {e}"),
-                )
-            })?;
+        // Direct unless a proxy is configured or the environment trusted.
+        let (builder, _) = pmt_gateway::messaging::proxy::client_builder(setup)?;
+        let client = builder.build().map_err(|e| {
+            Error::new(
+                &pmt_core::error::codes::NET_CLIENT_INIT,
+                format!("cannot build the Telegram client: {e}"),
+            )
+        })?;
         let secret = setup
             .config
             .token_secret
@@ -99,12 +106,18 @@ impl Telegram {
         Ok(Self {
             scope: setup.scope.clone(),
             secret,
-            options,
             endpoints,
             client,
             offset: Arc::default(),
             api: Mutex::default(),
             poller: Mutex::default(),
+            commands: Arc::default(),
+            topics: Arc::new(topics::Topics::load(
+                setup.scope.path("platforms/telegram/topics.json"),
+                &options,
+            )),
+            hook: Mutex::default(),
+            options,
         })
     }
 
@@ -128,7 +141,7 @@ impl Telegram {
 }
 
 /// A chat or thread id as the Bot API takes it (numbers stay numbers).
-fn chat(id: &str) -> Value {
+pub(crate) fn chat(id: &str) -> Value {
     id.parse::<i64>().map_or_else(|_| json!(id), |n| json!(n))
 }
 
@@ -184,68 +197,6 @@ fn upload_kind(path: &Path, as_document: bool, as_voice: bool) -> (&'static str,
     }
 }
 
-/// Polls `getUpdates` until stopped or the connection fails; the cursor
-/// moves past an update only after the gateway took it.
-async fn poll(
-    api: Api,
-    link: Arc<dyn AdapterLink>,
-    offset: Arc<AtomicI64>,
-    timeout_secs: u64,
-    stop: CancellationToken,
-) {
-    loop {
-        let body = json!({
-            "offset": offset.load(Ordering::Acquire),
-            "timeout": timeout_secs,
-            "allowed_updates": ["message", "callback_query"],
-        });
-        let wait = Duration::from_secs(timeout_secs + 10);
-        let polled = tokio::select! {
-            () = stop.cancelled() => return,
-            polled = api.call_within("getUpdates", &body, wait) => polled,
-        };
-        let updates = match polled {
-            Ok(updates) => updates,
-            Err(err) => return lost(link.as_ref(), &err),
-        };
-        for raw in updates.as_array().into_iter().flatten() {
-            if let Some(update) = normalize::update(raw) {
-                if let Some(query) = &update.callback_query {
-                    let _ = api
-                        .call("answerCallbackQuery", &json!({"callback_query_id": query}))
-                        .await;
-                }
-                link.submit(update.inbound).await;
-            }
-            if let Some(id) = raw["update_id"].as_i64() {
-                offset.store(id + 1, Ordering::Release);
-            }
-        }
-    }
-}
-
-/// Reports a failed poll: retried by the gateway unless the token is bad.
-fn lost(link: &dyn AdapterLink, err: &SendError) {
-    let (state, code, retryable) = match err {
-        SendError::Permanent(why) if why.starts_with("401") => {
-            (AdapterState::Fatal, "unauthorized", false)
-        }
-        SendError::Permanent(why) if why.starts_with("409") => {
-            (AdapterState::Retrying, "telegram_conflict", true)
-        }
-        _ => (AdapterState::Retrying, "telegram_unreachable", true),
-    };
-    tracing::warn!(platform = PLATFORM, "polling stopped: {}", err.describe());
-    link.report(
-        state,
-        Some(AdapterError {
-            retryable,
-            code: code.to_owned(),
-            message: err.describe(),
-        }),
-    );
-}
-
 fn connect_error(err: &SendError) -> AdapterError {
     let unauthorized = matches!(err, SendError::Permanent(why) if why.starts_with("401"));
     AdapterError {
@@ -257,6 +208,60 @@ fn connect_error(err: &SendError) -> AdapterError {
         }
         .to_owned(),
         message: format!("Telegram: {}", err.describe()),
+    }
+}
+
+impl Telegram {
+    /// Registers the webhook with its secret token; updates then arrive on
+    /// the shared listener.
+    async fn start_webhook(&self, ctx: updates::Ctx) -> Result<(), AdapterError> {
+        let missing = |what: &str| AdapterError {
+            retryable: false,
+            code: "missing_option".to_owned(),
+            message: format!(
+                "gateway.platforms.telegram.options.{what} is required in webhook mode"
+            ),
+        };
+        let name = self
+            .options
+            .webhook_secret_secret
+            .as_ref()
+            .ok_or_else(|| missing("webhook_secret_secret"))?;
+        let url = self
+            .options
+            .webhook_public_url
+            .clone()
+            .ok_or_else(|| missing("webhook_public_url"))?;
+        let secret = credential(&self.scope, &name.0)?;
+        let body = json!({"url": url, "secret_token": secret,
+                          "allowed_updates": updates::ALLOWED});
+        ctx.api
+            .call("setWebhook", &body)
+            .await
+            .map_err(|e| connect_error(&e))?;
+        *self.hook.lock().expect("hook poisoned") = Some((ctx, secret));
+        Ok(())
+    }
+
+    /// Deletes any webhook (Telegram refuses `getUpdates` while one is
+    /// set), then polls.
+    async fn start_polling(&self, ctx: updates::Ctx) -> Result<(), AdapterError> {
+        ctx.api
+            .call("deleteWebhook", &json!({"drop_pending_updates": false}))
+            .await
+            .map_err(|e| connect_error(&e))?;
+        let stop = CancellationToken::new();
+        if let Some(old) = self
+            .poller
+            .lock()
+            .expect("poller poisoned")
+            .replace(stop.clone())
+        {
+            old.cancel();
+        }
+        let timeout = self.options.poll_timeout_secs;
+        tokio::spawn(updates::poll(ctx, Arc::clone(&self.offset), timeout, stop));
+        Ok(())
     }
 }
 
@@ -284,6 +289,7 @@ impl Adapter for Telegram {
             media_in: all.clone(),
             media_out: all,
             stateless_send: true,
+            binds_http: self.options.mode == TelegramMode::Webhook,
             ..Descriptor::new(PLATFORM, limit)
         }
     }
@@ -295,19 +301,19 @@ impl Adapter for Telegram {
             api.call("getMe", &json!({}))
                 .await
                 .map_err(|e| connect_error(&e))?;
-            let stop = CancellationToken::new();
-            if let Some(old) = self
-                .poller
-                .lock()
-                .expect("poller poisoned")
-                .replace(stop.clone())
-            {
-                old.cancel();
-            }
             *self.api.lock().expect("api poisoned") = Some(api.clone());
-            let timeout = self.options.poll_timeout_secs;
-            tokio::spawn(poll(api, link, Arc::clone(&self.offset), timeout, stop));
-            Ok(())
+            self.topics.create_missing(&api).await;
+            let ctx = updates::Ctx {
+                api: api.clone(),
+                link,
+                commands: Arc::clone(&self.commands),
+                topics: Arc::clone(&self.topics),
+                ignore_root_dm: self.options.ignore_root_dm,
+            };
+            match self.options.mode {
+                TelegramMode::Webhook => self.start_webhook(ctx).await,
+                TelegramMode::Polling => self.start_polling(ctx).await,
+            }
         })
     }
 
@@ -315,6 +321,7 @@ impl Adapter for Telegram {
         if let Some(stop) = self.poller.lock().expect("poller poisoned").take() {
             stop.cancel();
         }
+        self.hook.lock().expect("hook poisoned").take();
         Box::pin(async {})
     }
 
@@ -430,5 +437,55 @@ impl Adapter for Telegram {
         attachment: &'a Attachment,
     ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
         Box::pin(async move { self.api()?.download(&attachment.location).await })
+    }
+
+    fn verify_http(&self, request: &HttpRequest) -> bool {
+        let hook = self.hook.lock().expect("hook poisoned");
+        let Some((_, secret)) = hook.as_ref() else {
+            return false;
+        };
+        request
+            .header("x-telegram-bot-api-secret-token")
+            .is_some_and(|token| constant_time_eq(token.as_bytes(), secret.as_bytes()))
+    }
+
+    fn handle_http<'a>(&'a self, request: &'a HttpRequest) -> AdapterFuture<'a, HttpResponse> {
+        Box::pin(async move {
+            let ctx = self
+                .hook
+                .lock()
+                .expect("hook poisoned")
+                .as_ref()
+                .map(|(c, _)| c.clone());
+            let Some(ctx) = ctx else {
+                return HttpResponse::status(503);
+            };
+            if request.method != "POST" {
+                return HttpResponse::status(405);
+            }
+            let Ok(update) = serde_json::from_slice::<Value>(&request.body) else {
+                return HttpResponse::status(400);
+            };
+            updates::handle(&ctx, &update).await;
+            HttpResponse::status(200)
+        })
+    }
+
+    fn register_commands<'a>(
+        &'a self,
+        commands: &'a [MenuCommand],
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            *self.commands.lock().expect("commands poisoned") = commands::sanitized(commands);
+            commands::register(&self.api()?, &self.options, commands).await
+        })
+    }
+
+    fn session_hints(&self, chat_id: &str, thread_id: Option<&str>) -> SessionHints {
+        let skill = thread_id.and_then(|thread| self.topics.skill(chat_id, thread));
+        SessionHints {
+            skills: skill.into_iter().collect(),
+            toolsets: None,
+        }
     }
 }

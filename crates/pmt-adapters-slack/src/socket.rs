@@ -40,6 +40,8 @@ pub(crate) struct Run {
     pub(crate) bot_user: String,
     pub(crate) team: Option<String>,
     pub(crate) extra_ca: Option<PathBuf>,
+    /// The proxy the WebSocket tunnels through, if any.
+    pub(crate) proxy: Option<String>,
     pub(crate) stop: CancellationToken,
 }
 
@@ -71,7 +73,7 @@ pub(crate) async fn open(run: Run) -> Result<(), AdapterError> {
             true,
         )
     })?;
-    let socket = ws::connect(request, run.extra_ca.as_deref())
+    let socket = ws::connect_via(request, run.extra_ca.as_deref(), run.proxy.as_deref())
         .await
         .map_err(|e| lost("slack_unreachable", e, true))?;
     let (ready_tx, ready_rx) = oneshot::channel();

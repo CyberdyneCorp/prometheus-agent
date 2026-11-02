@@ -7,6 +7,7 @@
 //! profile's store only.
 
 mod api;
+mod commands;
 mod gateway;
 /// The mock platform the conformance kit runs this adapter against; only
 /// in builds with the `kit` feature (tests, `prometheus` with
@@ -29,8 +30,8 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::multipart::Form;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, Outgoing,
-    Reaction, SendError, Sent,
+    ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, MenuCommand,
+    Outgoing, Reaction, SendError, Sent,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -55,6 +56,8 @@ pub struct Discord {
     endpoints: Endpoints,
     client: reqwest::Client,
     extra_ca: Option<PathBuf>,
+    /// How the WebSocket reaches the platform.
+    proxy: pmt_gateway::messaging::proxy::Proxy,
     session: Arc<Mutex<gateway::Session>>,
     api: Mutex<Option<Api>>,
     connection: Mutex<Option<CancellationToken>>,
@@ -94,21 +97,14 @@ impl Discord {
             pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
         let network = &setup.scope.config().network;
         let extra_ca = network.extra_ca_file.as_deref().map(PathBuf::from);
-        let policy = pmt_net::OutboundPolicy {
-            force_ipv4: network.force_ipv4,
-            extra_ca_file: extra_ca.clone(),
-            proxy: None,
-        };
-        let client = pmt_net::http::client_builder(&policy)?
-            // Adapters never pick up ambient proxy settings.
-            .no_proxy()
-            .build()
-            .map_err(|e| {
-                Error::new(
-                    &pmt_core::error::codes::NET_CLIENT_INIT,
-                    format!("cannot build the Discord client: {e}"),
-                )
-            })?;
+        // Direct unless a proxy is configured or the environment trusted.
+        let (builder, proxy) = pmt_gateway::messaging::proxy::client_builder(setup)?;
+        let client = builder.build().map_err(|e| {
+            Error::new(
+                &pmt_core::error::codes::NET_CLIENT_INIT,
+                format!("cannot build the Discord client: {e}"),
+            )
+        })?;
         let secret = setup
             .config
             .token_secret
@@ -121,6 +117,7 @@ impl Discord {
             endpoints,
             client,
             extra_ca,
+            proxy,
             session: Arc::default(),
             api: Mutex::default(),
             connection: Mutex::default(),
@@ -283,6 +280,7 @@ impl Adapter for Discord {
                 session: Arc::clone(&self.session),
                 require_mention: self.options.require_mention,
                 extra_ca: self.extra_ca.clone(),
+                proxy: self.proxy.for_websocket(true),
                 stop,
             };
             gateway::open(run, &url).await
@@ -421,5 +419,33 @@ impl Adapter for Discord {
         attachment: &'a Attachment,
     ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
         Box::pin(async move { self.api()?.download(&attachment.location).await })
+    }
+
+    fn register_commands<'a>(
+        &'a self,
+        commands: &'a [MenuCommand],
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            if !self.options.slash_commands {
+                return Ok(());
+            }
+            let api = self.api()?;
+            let known = self
+                .session
+                .lock()
+                .expect("session poisoned")
+                .application_id
+                .clone();
+            let application = match known {
+                Some(id) => id,
+                None => api
+                    .call(Method::GET, "/oauth2/applications/@me", Body::Empty)
+                    .await?["id"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| SendError::Server("no application id".to_owned()))?,
+            };
+            commands::register(&api, &application, commands).await
+        })
     }
 }
