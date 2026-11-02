@@ -233,7 +233,7 @@ impl Lane {
         self.renew(&routing, reset).await;
     }
 
-    /// Replaces the key's session (the old one ends).
+    /// Replaces the key's session (the old one ends in `transition`).
     pub(super) async fn renew(&mut self, routing: &Routing, reset: bool) {
         let reason = if reset {
             ResetReason::Reset
@@ -241,22 +241,8 @@ impl Lane {
             ResetReason::New
         };
         let previous = self.current_session();
-        match self
-            .transition(routing, Some(reason), previous.clone())
-            .await
-        {
-            Ok(_) => {
-                if let Some(old) = previous
-                    && let Err(err) = self
-                        .shared
-                        .agents
-                        .end_conversation(&self.profile, &old)
-                        .await
-                {
-                    tracing::warn!("the replaced session did not end: {err}");
-                }
-                self.say(NEW_SESSION);
-            }
+        match self.transition(routing, Some(reason), previous).await {
+            Ok(_) => self.say(NEW_SESSION),
             Err(err) => self.say(err.message()),
         }
     }

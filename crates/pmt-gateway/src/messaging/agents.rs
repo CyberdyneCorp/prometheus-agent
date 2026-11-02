@@ -115,6 +115,7 @@ pub trait Agents: Host {
     /// left out) and returns their names (`gateway reload`).
     fn serve_new_profiles(&self) -> Vec<String>;
 
-    /// Ends a session the gateway replaced (`/new`).
+    /// Ends a session the gateway replaced (`/new`, `/reset`, stuck-loop
+    /// suspension).
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
 }

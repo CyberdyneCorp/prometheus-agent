@@ -1689,4 +1689,4 @@ capabilities = [
 "Revoked token keeps local clients alive" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_revoked_token_keeps_local_clients_alive_by_default", "crates/pmt-gateway/tests/messaging/recovery.rs::with_exit_the_daemon_stops_when_every_adapter_is_down"]
 
 [messaging-gateway."Gateway lifecycle hooks are typed"]
-"Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs"]
+"Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs", "crates/pmt-gateway/tests/messaging/commands.rs::reset_ends_the_replaced_session_for_its_own_profile_hooks"]

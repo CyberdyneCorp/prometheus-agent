@@ -98,7 +98,9 @@ impl Lane {
         }
     }
 
-    /// Creates the key's next session and routes the key to it.
+    /// Creates the key's next session and routes the key to it. The
+    /// replaced session ends (`/new`, `/reset`, suspension); a stale
+    /// route's session had already ended elsewhere.
     pub(super) async fn transition(
         &mut self,
         routing: &Routing,
@@ -110,7 +112,7 @@ impl Lane {
             chat_id: routing.chat_id.clone(),
             thread_id: routing.thread_id.clone(),
             user_id: routing.sender_id.clone(),
-            parent,
+            parent: parent.clone(),
         };
         let agents = &self.shared.agents;
         let session = agents
@@ -130,6 +132,11 @@ impl Lane {
         store.bind_route(&route, reason)?;
         self.adopt(&session);
         self.horizon = self.status.seq.load(std::sync::atomic::Ordering::Acquire);
+        if let (Some(old), Some(reason)) = (parent.as_deref(), reason)
+            && reason != ResetReason::StaleRoute
+        {
+            self.end_replaced(old, &session, routing, reason).await;
+        }
         let hooks = &self.shared.options.hooks;
         let payload = json!({
             "session_id": session,
@@ -143,6 +150,25 @@ impl Lane {
             hooks.emit(&self.profile, "on_session_reset", payload).await;
         }
         Ok(session)
+    }
+
+    /// Ends `old`, replaced by `session`, and runs the profile's
+    /// `on_session_end` hooks; a session that could not be ended keeps
+    /// running, so no hook fires for it.
+    async fn end_replaced(&self, old: &str, session: &str, routing: &Routing, reason: ResetReason) {
+        let agents = &self.shared.agents;
+        if let Err(err) = agents.end_conversation(&self.profile, old).await {
+            tracing::warn!("the replaced session did not end: {err}");
+            return;
+        }
+        let payload = json!({
+            "session_id": old,
+            "platform": routing.platform,
+            "reset_reason": reason.as_str(),
+            "replaced_by": session,
+        });
+        let hooks = &self.shared.options.hooks;
+        hooks.emit(&self.profile, "on_session_end", payload).await;
     }
 
     /// Starts a turn with `pending` in the key's session.

@@ -240,3 +240,39 @@ async fn concurrent_new_commands_create_one_session() {
     .await;
     assert_eq!(h.sessions().len(), 2, "one session from the burst of /new");
 }
+
+#[tokio::test]
+async fn reset_ends_the_replaced_session_for_its_own_profile_hooks() {
+    let hooks = Arc::new(Hooks::default());
+    let mine = Recorder::new(json!({}));
+    hooks
+        .register("default", "on_session_end", mine.clone())
+        .unwrap();
+    let work = Recorder::new(json!({}));
+    hooks
+        .register("work", "on_session_end", work.clone())
+        .unwrap();
+    let h = Harness::start(Setup {
+        hooks,
+        profiles: vec![("default", open("telegram")), ("work", open("telegram"))],
+        ..Setup::new("")
+    })
+    .await;
+    h.dm("telegram", "1", "first").await;
+    said(&h.adapter("telegram"), "echo: first").await;
+    assert!(mine.names().is_empty(), "no session ended yet");
+    let key = "default:telegram:dm:1";
+    let old = h.store().route(key).unwrap().unwrap().session_id;
+    h.dm("telegram", "1", "/reset").await;
+    said(&h.adapter("telegram"), "New session started.").await;
+    let new = h.store().route(key).unwrap().unwrap().session_id;
+    let calls = mine.calls.lock().unwrap().clone();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    let (name, payload) = &calls[0];
+    assert_eq!(name, "on_session_end");
+    assert_eq!(payload["session_id"], old.to_string());
+    assert_eq!(payload["replaced_by"], new.to_string());
+    assert_eq!(payload["reset_reason"], "reset");
+    assert_eq!(payload["schema_version"], "prometheus.hooks.v1");
+    assert!(work.names().is_empty(), "another profile's hook never runs");
+}

@@ -3,15 +3,35 @@
 //! down policy). A crash is the gateway's runtime dropped mid-work: every
 //! task dies at once, as when the process is killed.
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use pmt_core::error::Error;
 use pmt_gateway::messaging::{
-    AdapterError, AdapterState, CLEAN_SHUTDOWN, ChatType, Inbound, RESTARTED,
+    AdapterError, AdapterState, CLEAN_SHUTDOWN, ChatType, Hook, Hooks, Inbound, RESTARTED,
 };
 use pmt_store::gateway::outbox::{NewOutbound, OutboundKind, OutboundState};
 use pmt_store::gateway::routes::ResetReason;
+use serde_json::Value;
 
 use crate::support::{Harness, Setup, eventually, open, said};
+
+/// Records the payloads of `on_session_end`.
+#[derive(Default)]
+struct Ended(Mutex<Vec<Value>>);
+
+impl Hook for Ended {
+    fn call(
+        &self,
+        _name: &str,
+        payload: &Value,
+    ) -> Pin<Box<dyn Future<Output = Result<Value, Error>> + Send + '_>> {
+        self.0.lock().unwrap().push(payload.clone());
+        Box::pin(async { Ok(Value::Null) })
+    }
+}
 
 fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
@@ -115,7 +135,16 @@ fn the_third_restart_during_a_turn_suspends_the_session() {
         });
     }
     phase(async {
-        let h = Harness::start_in(home, Setup::new(&open("telegram"))).await;
+        let hooks = Arc::new(Hooks::default());
+        let ended = Arc::new(Ended::default());
+        hooks
+            .register("default", "on_session_end", ended.clone())
+            .unwrap();
+        let setup = Setup {
+            hooks,
+            ..Setup::new(&open("telegram"))
+        };
+        let h = Harness::start_in(home, setup).await;
         let old = h
             .store()
             .route("default:telegram:dm:1")
@@ -135,6 +164,14 @@ fn the_third_restart_during_a_turn_suspends_the_session() {
         let state = h.store().routed_session(new).unwrap().unwrap();
         assert_eq!(state.reset_reason, Some(ResetReason::Suspended));
         said(&h.adapter("telegram"), "this is a fresh session").await;
+        assert!(
+            h.store().session(old).unwrap().ended_at.is_some(),
+            "the suspended session ends when it is replaced"
+        );
+        let payloads = ended.0.lock().unwrap().clone();
+        assert_eq!(payloads.len(), 1, "{payloads:?}");
+        assert_eq!(payloads[0]["session_id"], old.to_string());
+        assert_eq!(payloads[0]["reset_reason"], "suspended");
     });
 }
 

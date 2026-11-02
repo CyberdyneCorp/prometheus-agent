@@ -260,7 +260,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 24.1 Implement profiles served by one daemon, routing identity with deterministic session keys, DM/group/thread isolation, and single-flight routing; verify with table tests of session keys (spec: messaging-gateway)
 - [x] 24.2 Implement the busy input policy from config only, command busy policy from the registry, FIFO queued turns, stop preserving the session, and conversations that never rotate on time; verify with gateway tests (spec: messaging-gateway)
-- [ ] 24.3 Implement gateway slash commands, quick commands, typed lifecycle hooks and command access tiers; verify that a user without a tier gets a refusal (spec: messaging-gateway)
+- [x] 24.3 Implement gateway slash commands, quick commands, typed lifecycle hooks and command access tiers; verify that a user without a tier gets a refusal (spec: messaging-gateway)
 - [x] 24.4 Implement the authorization order with a fail-closed default and the pairing flow (`prometheus pairing`); verify that an unpaired user is refused and a paired one is admitted (spec: messaging-gateway)
 - [x] 24.5 Implement approval requests routed to every surface, streaming to platforms, background/internal notifications and a durable delivery outbox; verify with a fake adapter (spec: messaging-gateway)
 - [x] 24.6 Implement crash recovery with a clean-shutdown marker, stuck-loop suspension, agent cache and eviction and the all-adapters-down policy; verify by killing the daemon mid-turn and checking recovery (spec: messaging-gateway)

@@ -442,8 +442,13 @@ jobs:
             exit 0
           fi
           git worktree add --detach "$RUNNER_TEMP/perf-base" FETCH_HEAD
+          # The base builds into a target dir of its own: cargo hashes path
+          # crates relative to the workspace root, so a shared dir gives base
+          # and head the same unit hashes, and the base checkout's newer
+          # mtimes make its stale crates look fresh to the head build.
+          mkdir -p "$GITHUB_WORKSPACE/target"
           (cd "$RUNNER_TEMP/perf-base" &&
-            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" scripts/check --perf \
+            CARGO_TARGET_DIR="$RUNNER_TEMP/perf-base-target" scripts/check --perf \
               --update-baseline --baseline "$GITHUB_WORKSPACE/target/perf-base.json")
           echo "PERF_BASELINE=target/perf-base.json" >>"$GITHUB_ENV"
 
