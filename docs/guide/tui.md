@@ -39,7 +39,8 @@ rows. `NO_COLOR` (or `--no-color`) drops colours.
 `ui.tui.theme` picks `dark` or `light`; with `auto` (the default) the TUI
 follows `COLORFGBG` when it is set, else asks the terminal for its
 background colour (an OSC 11 query answered within 100 ms), else uses
-dark. `/theme` shows the theme in use and where it came from, `/theme
+dark. On Windows the query runs on the console with virtual-terminal input
+turned on for its duration, so Windows Terminal's answer is read too. `/theme` shows the theme in use and where it came from, `/theme
 light` switches for this run.
 
 While a turn runs the status line leads with a busy indicator in the

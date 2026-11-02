@@ -49,7 +49,10 @@ fn focus_hides_tool_lines_and_restores_the_previous_mode() {
     p.expect("4 tools").unwrap();
     prompt(&mut p);
     p.send_line("/focus on").unwrap();
-    p.expect("focus on").unwrap();
+    // The reply, not the echo of the typed command: a line printed while
+    // it is typed (the turn's trailing blank line) redraws the read
+    // still open with the old `› ` prompt.
+    p.expect("focus on: tool progress hidden").unwrap();
     let badge = p.expect("› ").unwrap();
     let before = String::from_utf8_lossy(badge.before()).into_owned();
     assert!(before.contains("focus"), "{before:?}");

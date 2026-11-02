@@ -4,8 +4,24 @@
 //! query given within [`QUERY_TIMEOUT`], else dark. An explicit theme skips
 //! detection, so startup never waits on a terminal that does not answer for
 //! longer than the timeout.
+//!
+//! A Unix terminal answers on its input like any key; a Windows console
+//! delivers the answer only with virtual-terminal input on (see
+//! [`windows`]).
 
 use std::time::Duration;
+
+#[cfg(all(windows, test))]
+mod console_input;
+#[cfg(windows)]
+mod windows;
+
+#[cfg(windows)]
+pub use self::windows::query;
+
+/// What the TUI writes to ask for the background colour.
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
+const QUERY: &[u8] = b"\x1b]11;?\x07";
 
 use pmt_config::schema::TuiTheme;
 
@@ -82,7 +98,7 @@ pub fn query() -> Option<TuiTheme> {
     use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 
     let mut out = std::io::stdout();
-    out.write_all(b"\x1b]11;?\x07").ok()?;
+    out.write_all(QUERY).ok()?;
     out.flush().ok()?;
     let stdin = std::io::stdin();
     let deadline = std::time::Instant::now() + QUERY_TIMEOUT;
@@ -110,16 +126,15 @@ pub fn query() -> Option<TuiTheme> {
     }
 }
 
-/// Windows consoles are not queried: `auto` falls back to `COLORFGBG`
-/// and then dark.
-#[cfg(not(unix))]
+/// Neither Unix nor Windows: no terminal to ask.
+#[cfg(not(any(unix, windows)))]
 #[must_use]
 pub fn query() -> Option<TuiTheme> {
     None
 }
 
 /// The reply has its terminator (BEL or ST) after the `]11;` prefix.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 fn complete(reply: &[u8]) -> bool {
     let Some(at) = reply.windows(4).position(|w| w == b"]11;") else {
         return false;

@@ -144,6 +144,8 @@ expectrl = "0.9"
 # backend (raw mode, alternate screen, mouse, bracketed paste).
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 crossterm = { version = "0.29", default-features = false, features = ["bracketed-paste", "events", "windows"] }
+# Safe console-mode and input-record calls (Windows OSC 11 query).
+crossterm_winapi = "0.9"
 # Display width of composer and transcript text.
 unicode-width = "0.2"
 clap = { version = "4.5", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions", "derive"] }

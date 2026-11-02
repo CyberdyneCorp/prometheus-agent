@@ -11,7 +11,7 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use common::tui::{ENTER, enter, finish, opened, see, tui};
+use common::tui::{enter, finish, opened, see, see_repainted, tui};
 use common::{daemon, mock_home};
 use expectrl::Expect;
 
@@ -25,8 +25,8 @@ fn sb_hides_the_status_bar_and_saves_ui_status_bar_false() {
     let home = mock_home();
     let _daemon = daemon::start(home.path(), &[]);
     let mut p = tui(home.path(), &[], &[]);
-    p.expect(ENTER).unwrap();
-    see(&mut p, "default │ mock/mock");
+    opened(&mut p);
+    see_repainted(&mut p, "default │ mock/mock");
     enter(&mut p, "/sb");
     see(&mut p, "status bar hidden (ui.status_bar = false)");
     enter(&mut p, "/quit");
@@ -57,8 +57,7 @@ fn battery_on_without_a_battery_is_saved_and_shows_nothing() {
     let mut shown = see(&mut p, "no battery detected, so none is shown");
     enter(&mut p, "/battery status");
     shown += &see(&mut p, "no battery detected");
-    enter(&mut p, "/redraw");
-    shown += &see(&mut p, "default │ mock/mock");
+    shown += &see_repainted(&mut p, "default │ mock/mock");
     enter(&mut p, "/quit");
     let (text, code) = finish(p);
     assert_eq!(code, Some(0));
@@ -72,8 +71,8 @@ fn a_battery_leads_the_status_line_when_shown() {
     common::append_config(home.path(), "\n[ui]\nstatus_bar_battery = true\n");
     let _daemon = daemon::start(home.path(), &[]);
     let mut p = tui(home.path(), &[], &[("PMT_TEST_BATTERY", "64,charging")]);
-    p.expect(ENTER).unwrap();
-    see(&mut p, "▮ 64%+ │ default");
+    opened(&mut p);
+    see_repainted(&mut p, "▮ 64%+ │ default");
     enter(&mut p, "/battery status");
     see(&mut p, "battery: 64% (charging)");
     enter(&mut p, "/quit");
@@ -214,6 +213,8 @@ fn redraw_clears_and_repaints_the_screen() {
     let _daemon = daemon::start(home.path(), &[]);
     let mut p = tui(home.path(), &[], &[]);
     opened(&mut p);
+    // Once the model is known, a repaint shows the status line whole.
+    see_repainted(&mut p, "default │ mock/mock");
     enter(&mut p, "/redraw");
     p.expect("\u{1b}[2J").unwrap();
     // Everything is painted again, the banner's title included.

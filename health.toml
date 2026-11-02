@@ -22,6 +22,9 @@ unsafe_modules = [
     "crates/pmt-sandbox/src/windows/launch.rs",
     # Console code pages (UTF-8 console for the CLI and its children).
     "crates/pmt-sandbox/src/windows/console.rs",
+    # Test-only: types a terminal's reply into the test's own console
+    # (WriteConsoleInputW) for the Windows OSC 11 query test.
+    "crates/pmt-tui/src/background/console_input.rs",
 ]
 
 # Existing items over budget. Exceptions may only shrink: an item that grows

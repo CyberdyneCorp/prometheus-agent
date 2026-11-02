@@ -1589,7 +1589,7 @@ capabilities = [
 "Unsupported macro" = ["crates/pmt-tui/src/math.rs::unsupported_math_is_the_literal_tex_in_a_code_span", "crates/prometheus/tests/tui_paste.rs::answers_render_math_and_show_unsupported_tex_literally"]
 
 [tui."Terminal background detection"]
-"Light terminal without COLORFGBG" = ["crates/prometheus/tests/tui_paste.rs::a_white_osc11_answer_picks_the_light_theme", "crates/pmt-tui/src/background.rs::an_osc11_reply_gives_the_background_brightness"]
+"Light terminal without COLORFGBG" = ["crates/prometheus/tests/tui_paste.rs::a_white_osc11_answer_picks_the_light_theme", "crates/pmt-tui/src/background/mod.rs::an_osc11_reply_gives_the_background_brightness", "crates/pmt-tui/src/background/windows.rs::a_console_reply_is_read_within_the_timeout_and_the_mode_restored"]
 
 [tui."Collapsible startup banner"]
 "Many skills installed" = ["crates/prometheus/tests/tui_display.rs::the_banner_keeps_skills_collapsed_until_enter_opens_them", "crates/pmt-tui/src/banner.rs::eighty_skills_show_only_their_header_and_count_until_opened"]

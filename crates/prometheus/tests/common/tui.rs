@@ -56,6 +56,11 @@ pub fn finish(mut p: OsSession) -> (String, Option<i32>) {
 /// that change, so the spaces of a line are not always written). Returns
 /// everything read up to and including it.
 pub fn see(p: &mut OsSession, text: &str) -> String {
+    try_see(p, text).unwrap()
+}
+
+/// [`see`] that reports a timeout instead of panicking.
+fn try_see(p: &mut OsSession, text: &str) -> Result<String, expectrl::Error> {
     let escape = |word: &str| {
         word.chars()
             .map(|c| {
@@ -73,12 +78,33 @@ pub fn see(p: &mut OsSession, text: &str) -> String {
         .map(escape)
         .collect::<Vec<_>>()
         .join(gap);
-    let found = p.expect(expectrl::Regex(pattern)).unwrap();
+    let found = p.expect(expectrl::Regex(pattern))?;
     let mut read = String::from_utf8_lossy(found.before()).into_owned();
     for matched in found.matches() {
         read.push_str(&String::from_utf8_lossy(matched));
     }
-    read
+    Ok(read)
+}
+
+/// Waits until a full repaint shows `text`, typing `/redraw` until it
+/// does (30 s at most). For screen text that arrives asynchronously, such
+/// as the status line's model (`model.options`) or battery: drawn into an
+/// existing frame, only its changed cells are written, so the whole line
+/// is on the wire only after a repaint that follows its arrival.
+pub fn see_repainted(p: &mut OsSession, text: &str) -> String {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    // A timeout leaves the unread output buffered, so each try rescans it.
+    p.set_expect_timeout(Some(Duration::from_secs(1)));
+    let found = loop {
+        enter(p, "/redraw");
+        match try_see(p, text) {
+            Ok(found) => break found,
+            Err(expectrl::Error::ExpectTimeout) if std::time::Instant::now() < deadline => {}
+            Err(err) => panic!("{text:?} never shown after a repaint: {err}"),
+        }
+    };
+    p.set_expect_timeout(Some(Duration::from_secs(30)));
+    found
 }
 
 /// Types `text` and Enter (a carriage return, as a terminal sends it).

@@ -2658,6 +2658,7 @@ name = "pmt-tui"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "crossterm_winapi",
  "jiff",
  "nix 0.31.3",
  "pmt-config",
@@ -2665,6 +2666,7 @@ dependencies = [
  "ratatui",
  "tempfile",
  "unicode-width",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

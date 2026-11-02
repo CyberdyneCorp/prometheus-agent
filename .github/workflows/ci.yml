@@ -206,6 +206,13 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test -p pmt-tools --locked --target "${{ matrix.target }}"
 
+      # TUI background detection on a Windows console (tui, Terminal
+      # background detection): the OSC 11 reply is read as console key
+      # events with VT input on, within 100 ms, and the mode is restored.
+      - name: Windows TUI console tests
+        if: runner.os == 'Windows'
+        run: cargo test -p pmt-tui --lib --locked --target "${{ matrix.target }}" -- background
+
       # Release verification, receipts, the update lock and the Windows
       # rename-aside swap of a running executable (distribution-and-update).
       - name: Windows update tests
