@@ -120,6 +120,12 @@ pub fn files_under(dir: &Path) -> Vec<std::path::PathBuf> {
 #[cfg(unix)]
 pub mod pty;
 
+#[cfg(unix)]
+pub mod tui;
+
+#[cfg(feature = "gateway")]
+pub mod daemon;
+
 /// A 1x1 PNG.
 pub const PNG: &[u8] = &[
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,

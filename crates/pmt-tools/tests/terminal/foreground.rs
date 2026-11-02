@@ -140,14 +140,15 @@ async fn an_interrupt_ends_a_long_command_and_terms_its_group() {
         .trim()
         .parse()
         .unwrap();
+    // The trap creates the file before it writes to it: wait for the line.
     for _ in 0..100 {
-        if marker.exists() {
+        if std::fs::read_to_string(&marker).is_ok_and(|text| text.ends_with('\n')) {
             break;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert_eq!(
-        std::fs::read_to_string(&marker).unwrap().trim(),
+        std::fs::read_to_string(&marker).unwrap_or_default().trim(),
         "term",
         "no SIGTERM"
     );

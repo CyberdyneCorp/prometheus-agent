@@ -1,0 +1,10 @@
+› summarise the build log
+· read_file
+
+The build failed in the linker step: two crates define the same
+symbol.
+
+
+──────────────────────────────────────────────────────────────────────
+› [Pasted text #1: 300 lines] [Image #1] what failed?
+  default │ mock/m1 │ ctx 25% │ $0.0042

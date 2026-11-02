@@ -10,34 +10,38 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
-  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
-  config      Read, change, validate and explain the profile's config.toml
-  secrets     Store, list and remove the profile's secrets (values never on the command line)
-  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants      List and revoke the profile's permanent capability grants and approvals
-  backup      Back up the whole home to a .tar.zst archive, or restore one
-  snapshots   Snapshot and restore the selected profile's critical state
-  profile     List, create, select, rename and delete profiles
-  sessions    List, search, export and manage the profile's sessions
-  logs        Show structured log records of a component (`list` names them)
-  usage       Totals of model and metered tool calls from the usage ledger
-  prompt      Measure the system prompt and tool schemas a new session would send
-  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory  Render the recorded trajectory of a session
-  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth        Add, list and remove provider API keys and subscription sign-ins
-  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets    List toolsets and show the tools a toolset resolves to
-  approvals   Check how the approval gate treats a command, without running it
-  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help        Print this message or the help of the given subcommand(s)
+  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  config       Read, change, validate and explain the profile's config.toml
+  secrets      Store, list and remove the profile's secrets (values never on the command line)
+  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants       List and revoke the profile's permanent capability grants and approvals
+  backup       Back up the whole home to a .tar.zst archive, or restore one
+  snapshots    Snapshot and restore the selected profile's critical state
+  profile      List, create, select, rename and delete profiles
+  sessions     List, search, export and manage the profile's sessions
+  logs         Show structured log records of a component (`list` names them)
+  usage        Totals of model and metered tool calls from the usage ledger
+  prompt       Measure the system prompt and tool schemas a new session would send
+  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory   Render the recorded trajectory of a session
+  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth         Add, list and remove provider API keys and subscription sign-ins
+  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets     List toolsets and show the tools a toolset resolves to
+  approvals    Check how the approval gate treats a command, without running it
+  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -109,7 +113,7 @@ Options:
           Working directory of the session (also scopes `-c` and `latest`)
 
       --in-process
-          Run the session in this process (the only mode until the daemon lands)
+          Run the session in this process instead of attaching to the home's running gateway daemon (which then holds the home: exit 75)
 
       --tui
           Use the full-screen interface
@@ -228,7 +232,7 @@ Options:
           Working directory of the session (also scopes `-c` and `latest`)
 
       --in-process
-          Run the session in this process (the only mode until the daemon lands)
+          Run the session in this process instead of attaching to the home's running gateway daemon (which then holds the home: exit 75)
 
       --tui
           Use the full-screen interface
@@ -4123,6 +4127,9 @@ Usage: prometheus profile [OPTIONS] <COMMAND>
 Commands:
   list    List the profiles; the active one is marked
   create  Create a profile, optionally copying another one once
+  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import  Create a profile from an archive `profile export` wrote
   use     Make a profile the one used without -p (`use default` clears the choice)
   show    Show a profile (default: the selected one)
   rename  Rename a profile
@@ -4206,14 +4213,155 @@ Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
-      --clone-secrets
-          With --clone-from, also copy the secrets
+      --clone-all
+          Copy everything from the source profile (--clone-from, else the selected profile) except sessions, state.db, logs, snapshots and backups
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
+      --clone-secrets
+          With a clone, also copy the secrets
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --clone-channels
+          With a clone, also copy the messaging adapter configuration and pairing data (left out by default so two profiles never answer the same bot account)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --sync-imports
+          With a clone, also copy the import sync registry
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
       --no-skills
           Start without bundled skills (`skills.include_bundled = false`); the essential skill stays
+
+      --description <TEXT>
+          A description shown by `profile show` and `profile list`
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --no-alias
+          Do not write the alias launcher `<name>` (see `profile alias`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile alias`
+
+```text
+Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+
+Usage: prometheus profile alias [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --as <ALIAS>
+          The launcher's name (default: the profile name)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile export`
+
+```text
+Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+
+Usage: prometheus profile export [OPTIONS] --output <FILE> <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -o, --output <FILE>
+          The archive to write
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --with-sessions
+          Also include the sessions (state.db and its blobs)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --with-secrets
+          Also include the secrets, encrypted with a passphrase read at a hidden prompt (or from stdin)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile import`
+
+```text
+Create a profile from an archive `profile export` wrote
+
+Usage: prometheus profile import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          The archive
+
+Options:
+      --as <NAME>
+          The new profile's name (default: the exported profile's)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -4398,6 +4546,9 @@ Usage: prometheus profile help [COMMAND]
 Commands:
   list    List the profiles; the active one is marked
   create  Create a profile, optionally copying another one once
+  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import  Create a profile from an archive `profile export` wrote
   use     Make a profile the one used without -p (`use default` clears the choice)
   show    Show a profile (default: the selected one)
   rename  Rename a profile
@@ -4419,6 +4570,30 @@ Usage: prometheus profile help list
 Create a profile, optionally copying another one once
 
 Usage: prometheus profile help create
+```
+
+## `prometheus profile help alias`
+
+```text
+Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+
+Usage: prometheus profile help alias
+```
+
+## `prometheus profile help export`
+
+```text
+Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+
+Usage: prometheus profile help export
+```
+
+## `prometheus profile help import`
+
+```text
+Create a profile from an archive `profile export` wrote
+
+Usage: prometheus profile help import
 ```
 
 ## `prometheus profile help use`
@@ -7347,6 +7522,658 @@ Options:
           Print help
 ```
 
+## `prometheus daemon`
+
+```text
+Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+
+Usage: prometheus daemon [OPTIONS] <COMMAND>
+
+Commands:
+  run      Run the daemon in the foreground (what `start` launches)
+  start    Start the daemon in the background; does nothing when it runs
+  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop     Stop the daemon after its running turns finish
+  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status   Print the daemon's process state
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon run`
+
+```text
+Run the daemon in the foreground (what `start` launches)
+
+Usage: prometheus daemon run [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon start`
+
+```text
+Start the daemon in the background; does nothing when it runs
+
+Usage: prometheus daemon start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon ensure`
+
+```text
+Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+
+Usage: prometheus daemon ensure [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon stop`
+
+```text
+Stop the daemon after its running turns finish
+
+Usage: prometheus daemon stop [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon restart`
+
+```text
+Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+
+Usage: prometheus daemon restart [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon status`
+
+```text
+Print the daemon's process state
+
+Usage: prometheus daemon status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus daemon help [COMMAND]
+
+Commands:
+  run      Run the daemon in the foreground (what `start` launches)
+  start    Start the daemon in the background; does nothing when it runs
+  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop     Stop the daemon after its running turns finish
+  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status   Print the daemon's process state
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus daemon help run`
+
+```text
+Run the daemon in the foreground (what `start` launches)
+
+Usage: prometheus daemon help run
+```
+
+## `prometheus daemon help start`
+
+```text
+Start the daemon in the background; does nothing when it runs
+
+Usage: prometheus daemon help start
+```
+
+## `prometheus daemon help ensure`
+
+```text
+Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+
+Usage: prometheus daemon help ensure
+```
+
+## `prometheus daemon help stop`
+
+```text
+Stop the daemon after its running turns finish
+
+Usage: prometheus daemon help stop
+```
+
+## `prometheus daemon help restart`
+
+```text
+Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+
+Usage: prometheus daemon help restart
+```
+
+## `prometheus daemon help status`
+
+```text
+Print the daemon's process state
+
+Usage: prometheus daemon help status
+```
+
+## `prometheus daemon help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus daemon help help
+```
+
+## `prometheus tui`
+
+```text
+The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+
+Usage: prometheus tui [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --standalone
+          Run an in-process gateway that holds this home and serves only this TUI, instead of attaching to the home's daemon
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+  -r, --resume <REF>
+          Resume a session: an id, an id prefix, a title or `latest`
+
+  -c, --continue [<NAME>]
+          Continue the newest session of this directory, or of the lineage titled NAME
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -m, --model <MODEL>
+          The model of a new session (`[<provider>/]<model>` or an alias)
+
+      --provider <ID>
+          The provider of a new session
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc`
+
+```text
+The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+
+Usage: prometheus rpc [OPTIONS] <COMMAND>
+
+Commands:
+  schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
+  events  Stream the daemon's event frames as JSON lines until interrupted
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc schema`
+
+```text
+Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+
+Usage: prometheus rpc schema [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc call`
+
+```text
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
+
+Usage: prometheus rpc call [OPTIONS] <METHOD> [PARAMS]
+
+Arguments:
+  <METHOD>
+          The method, for example `session.list`
+
+  [PARAMS]
+          Its params as a JSON object (default `{}`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc events`
+
+```text
+Stream the daemon's event frames as JSON lines until interrupted
+
+Usage: prometheus rpc events [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <ID>
+          Attach to this session and stream its events too
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --since <SEQ>
+          With --session: first replay the kept events after this sequence number (0 replays every kept event)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus rpc help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus rpc help [COMMAND]
+
+Commands:
+  schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
+  events  Stream the daemon's event frames as JSON lines until interrupted
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus rpc help schema`
+
+```text
+Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+
+Usage: prometheus rpc help schema
+```
+
+## `prometheus rpc help call`
+
+```text
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
+
+Usage: prometheus rpc help call
+```
+
+## `prometheus rpc help events`
+
+```text
+Stream the daemon's event frames as JSON lines until interrupted
+
+Usage: prometheus rpc help events
+```
+
+## `prometheus rpc help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus rpc help help
+```
+
+## `prometheus completions`
+
+```text
+Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+
+Usage: prometheus completions [OPTIONS] <SHELL>
+
+Arguments:
+  <SHELL>
+          The shell
+
+          Possible values:
+          - bash:       GNU bash (3.2 and later)
+          - zsh:        zsh
+          - fish:       fish
+          - powershell: `PowerShell`
+          - elvish:     elvish
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus __complete`
+
+```text
+The completion candidates for a command line (called by the scripts `completions` prints; reads local files only)
+
+Usage: prometheus __complete [OPTIONS] <SHELL> [-- <WORDS>...]
+
+Arguments:
+  <SHELL>
+          The shell asking
+
+          Possible values:
+          - bash:       GNU bash (3.2 and later)
+          - zsh:        zsh
+          - fish:       fish
+          - powershell: `PowerShell`
+          - elvish:     elvish
+
+  [WORDS]...
+          The command line before the cursor, binary name first
+
+Options:
+      --current <CURRENT>
+          The word under the cursor; without it, the last word
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus self-test`
 
 ```text
@@ -7981,34 +8808,38 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
-  chat        Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version     Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup       Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor      Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug       Diagnostics: `debug summary` prints a plain-text setup summary for support threads
-  config      Read, change, validate and explain the profile's config.toml
-  secrets     Store, list and remove the profile's secrets (values never on the command line)
-  skills      List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  memory      Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants      List and revoke the profile's permanent capability grants and approvals
-  backup      Back up the whole home to a .tar.zst archive, or restore one
-  snapshots   Snapshot and restore the selected profile's critical state
-  profile     List, create, select, rename and delete profiles
-  sessions    List, search, export and manage the profile's sessions
-  logs        Show structured log records of a component (`list` names them)
-  usage       Totals of model and metered tool calls from the usage ledger
-  prompt      Measure the system prompt and tool schemas a new session would send
-  demo        Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory  Render the recorded trajectory of a session
-  model       Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  fallback    List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth        Add, list and remove provider API keys and subscription sign-ins
-  tools       List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets    List toolsets and show the tools a toolset resolves to
-  approvals   Check how the approval gate treats a command, without running it
-  update      Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  runtimes    List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help        Print this message or the help of the given subcommand(s)
+  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug        Diagnostics: `debug summary` prints a plain-text setup summary for support threads
+  config       Read, change, validate and explain the profile's config.toml
+  secrets      Store, list and remove the profile's secrets (values never on the command line)
+  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants       List and revoke the profile's permanent capability grants and approvals
+  backup       Back up the whole home to a .tar.zst archive, or restore one
+  snapshots    Snapshot and restore the selected profile's critical state
+  profile      List, create, select, rename and delete profiles
+  sessions     List, search, export and manage the profile's sessions
+  logs         Show structured log records of a component (`list` names them)
+  usage        Totals of model and metered tool calls from the usage ledger
+  prompt       Measure the system prompt and tool schemas a new session would send
+  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory   Render the recorded trajectory of a session
+  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth         Add, list and remove provider API keys and subscription sign-ins
+  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets     List toolsets and show the tools a toolset resolves to
+  approvals    Check how the approval gate treats a command, without running it
+  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus help chat`
@@ -8722,6 +9553,9 @@ Usage: prometheus help profile [COMMAND]
 Commands:
   list    List the profiles; the active one is marked
   create  Create a profile, optionally copying another one once
+  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import  Create a profile from an archive `profile export` wrote
   use     Make a profile the one used without -p (`use default` clears the choice)
   show    Show a profile (default: the selected one)
   rename  Rename a profile
@@ -8742,6 +9576,30 @@ Usage: prometheus help profile list
 Create a profile, optionally copying another one once
 
 Usage: prometheus help profile create
+```
+
+## `prometheus help profile alias`
+
+```text
+Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+
+Usage: prometheus help profile alias
+```
+
+## `prometheus help profile export`
+
+```text
+Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+
+Usage: prometheus help profile export
+```
+
+## `prometheus help profile import`
+
+```text
+Create a profile from an archive `profile export` wrote
+
+Usage: prometheus help profile import
 ```
 
 ## `prometheus help profile use`
@@ -9276,6 +10134,131 @@ Update this install to its channel's newest signed release, check for one (exit 
 Usage: prometheus help update
 ```
 
+## `prometheus help daemon`
+
+```text
+Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+
+Usage: prometheus help daemon [COMMAND]
+
+Commands:
+  run      Run the daemon in the foreground (what `start` launches)
+  start    Start the daemon in the background; does nothing when it runs
+  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop     Stop the daemon after its running turns finish
+  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status   Print the daemon's process state
+```
+
+## `prometheus help daemon run`
+
+```text
+Run the daemon in the foreground (what `start` launches)
+
+Usage: prometheus help daemon run
+```
+
+## `prometheus help daemon start`
+
+```text
+Start the daemon in the background; does nothing when it runs
+
+Usage: prometheus help daemon start
+```
+
+## `prometheus help daemon ensure`
+
+```text
+Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+
+Usage: prometheus help daemon ensure
+```
+
+## `prometheus help daemon stop`
+
+```text
+Stop the daemon after its running turns finish
+
+Usage: prometheus help daemon stop
+```
+
+## `prometheus help daemon restart`
+
+```text
+Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+
+Usage: prometheus help daemon restart
+```
+
+## `prometheus help daemon status`
+
+```text
+Print the daemon's process state
+
+Usage: prometheus help daemon status
+```
+
+## `prometheus help tui`
+
+```text
+The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+
+Usage: prometheus help tui
+```
+
+## `prometheus help rpc`
+
+```text
+The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+
+Usage: prometheus help rpc [COMMAND]
+
+Commands:
+  schema  Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+  call    Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
+  events  Stream the daemon's event frames as JSON lines until interrupted
+```
+
+## `prometheus help rpc schema`
+
+```text
+Print the client-protocol schema (methods, server requests and events, each with its owning capability and contract)
+
+Usage: prometheus help rpc schema
+```
+
+## `prometheus help rpc call`
+
+```text
+Perform the handshake with the running daemon, send one request and print its result as JSON (`rpc.hello` prints the handshake answer for the given hello params). A call whose params name a `session_id` first attaches the connection to that session
+
+Usage: prometheus help rpc call
+```
+
+## `prometheus help rpc events`
+
+```text
+Stream the daemon's event frames as JSON lines until interrupted
+
+Usage: prometheus help rpc events
+```
+
+## `prometheus help completions`
+
+```text
+Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+
+Usage: prometheus help completions
+```
+
+## `prometheus help __complete`
+
+```text
+The completion candidates for a command line (called by the scripts `completions` prints; reads local files only)
+
+Usage: prometheus help __complete
+```
+
 ## `prometheus help self-test`
 
 ```text
@@ -9408,6 +10391,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 
 | Schema | Command |
 |---|---|
+| `prometheus.profile_export.v1` | `prometheus profile export` |
 | `prometheus.doctor.v1` | `prometheus doctor` |
 | `prometheus.update_status.v1` | `prometheus update --status` |
 | `prometheus.update_check.v1` | `prometheus update --check` |
@@ -9452,3 +10436,4 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.toolsets.v1` | `prometheus toolsets list` |
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
+| `prometheus.daemon_status.v1` | `prometheus daemon status` |

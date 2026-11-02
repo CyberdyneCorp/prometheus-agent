@@ -1,0 +1,24 @@
+The build failed in the linker step: two crates define the
+same symbol.
+  submit         Enter
+  newline        Alt+Enter
+  interrupt      Ctrl+C
+  quit           Ctrl+D
+  scroll_up      Ctrl+Up
+  scroll_down    Ctrl+Down
+  page_up        PageUp
+  page_down      PageDown
+  history_prev   Up
+  history_next   Down
+  complete       Tab
+  line_start     Ctrl+A
+  line_end       Ctrl+E
+  clear_input    Ctrl+U
+  palette        Ctrl+P
+  sessions       Ctrl+X
+  paste_image    Ctrl+V
+  expand_paste   Ctrl+O
+  banner         Ctrl+B
+────────────────────────────────────────────────────────────
+›
+  default │ mock/m1 │ ctx 25% │ $0.0042

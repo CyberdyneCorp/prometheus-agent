@@ -22,8 +22,8 @@ use pmt_agent::tools::{AgentTools, SessionSearch};
 use pmt_agent::turn::{
     Agent, AgentSetup, EventSink, NoEvents, PromptSetup, RefreshPrompt, SessionTools,
 };
-use pmt_config::ProfileScope;
 use pmt_config::grants::{GrantsFile, SessionGrants, Subject, baseline};
+use pmt_config::{ProfileScope, SharedScope};
 use pmt_core::capability::CapabilitySet;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
@@ -73,6 +73,15 @@ pub struct Options {
     pub ignore_rules: bool,
 }
 
+/// The clients of one daemon session: they see its events and answer its
+/// secret prompts (a factory serves several sessions, each with its own).
+pub struct Clients {
+    /// Where the session's trajectory events also go.
+    pub events: Arc<dyn EventSink>,
+    /// Asks the session's clients for a skill's missing secret.
+    pub secrets: Arc<dyn SecretPrompt>,
+}
+
 /// What every session of this process shares.
 pub struct Factory {
     /// The profile.
@@ -97,6 +106,9 @@ pub struct Factory {
     /// The browser tools every session shares, set up by the first
     /// session (`None`: they could not be, see the WARN).
     browser: OnceLock<Option<browser::Shared>>,
+    /// The profile's configuration as it is now: `scope` until a daemon
+    /// reload replaces it (shared tools read their `live` keys from it).
+    current: SharedScope,
 }
 
 /// One running session.
@@ -123,14 +135,20 @@ pub struct Live {
     pub memory: Arc<MemorySession>,
     /// Counts tool-calling iterations towards a background skill review.
     pub skill_nudge: Mutex<Nudge>,
-    /// The toolset selection the surface was built from.
-    pub selection: Selection,
+    /// The toolset selection the session's tools are built from (`/tools
+    /// --now` replaces it).
+    selection: Mutex<Selection>,
     /// Notices to show once at start.
     pub notices: Vec<String>,
     /// What this run did (`--usage-file`).
     pub record: Arc<crate::chat::usage_file::RunRecord>,
     /// Tool activity to render (taken by the interface).
     pub progress: Option<tokio::sync::mpsc::UnboundedReceiver<progress::Progress>>,
+    /// The configuration the session runs with now: `scope`, with the
+    /// `live` keys of each reload a daemon applies (spec: configuration-
+    /// and-profiles, Live reload with apply classes). Turns and tools
+    /// read it at use.
+    pub config: SharedScope,
     agent_tools: Arc<AgentTools>,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
@@ -168,6 +186,7 @@ impl Factory {
         ));
         let redactor = scope.secrets().redactor().unwrap_or_default();
         Ok(Self {
+            current: SharedScope::new(scope.clone()),
             scope,
             store,
             models,
@@ -183,6 +202,14 @@ impl Factory {
             install_asks: None,
             browser: OnceLock::new(),
         })
+    }
+
+    /// Reads the profile's `live` keys from `current` (a daemon's
+    /// reloaded configuration) instead of the snapshot it was built with.
+    #[must_use]
+    pub fn with_current(mut self, current: SharedScope) -> Self {
+        self.current = current;
+        self
     }
 
     /// Sends runtime install questions (`Install <name> <version>
@@ -203,6 +230,7 @@ impl Factory {
             .get_or_init(|| {
                 browser::Shared::new(
                     &self.scope,
+                    &self.current,
                     &self.launch,
                     &self.redactor,
                     self.install_asks.clone(),
@@ -307,6 +335,22 @@ impl Factory {
         id: SessionId,
         target: &pmt_providers::resolve::Target,
     ) -> Result<Live, Error> {
+        self.open_with(id, target, None).await
+    }
+
+    /// Like [`Factory::open`], also sending every trajectory event to
+    /// `clients` (a daemon session's attached clients), which answer its
+    /// secret prompts too.
+    ///
+    /// # Errors
+    ///
+    /// As [`Factory::open`].
+    pub async fn open_with(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        clients: Option<Clients>,
+    ) -> Result<Live, Error> {
         let scope = &self.scope;
         let config = scope.config();
         let interactive = self.options.interactive;
@@ -324,10 +368,12 @@ impl Factory {
             id,
             &selection,
             &inline_shell,
+            clients.as_ref(),
         )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
-        let environment = self.environment(id, target, &capabilities)?;
+        let live_config = SharedScope::new(scope.clone());
+        let environment = self.environment(id, target, &capabilities, &live_config)?;
         if let Some(terminal) = &environment.terminal {
             terminal.set_secret_source(skills.secret_source());
         }
@@ -361,9 +407,12 @@ impl Factory {
             Arc::clone(&tool_port) as _,
             prompt,
         );
-        let events = trajectory
+        let mut events = trajectory
             .clone()
             .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
+        if let Some(clients) = clients {
+            events = Arc::new(progress::Both(events, clients.events));
+        }
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
         setup.events = Arc::new(tee);
@@ -386,9 +435,10 @@ impl Factory {
             skills,
             memory,
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
-            selection,
+            selection: Mutex::new(selection),
             notices,
             progress,
+            config: live_config,
             record: Arc::clone(&self.record),
             agent_tools,
             capabilities,
@@ -432,9 +482,11 @@ impl Factory {
         id: SessionId,
         target: &pmt_providers::resolve::Target,
         capabilities: &CapabilitySet,
+        config: &SharedScope,
     ) -> Result<env::Attached, Error> {
         env::attach(&env::EnvInputs {
             scope: &self.scope,
+            config,
             session_id: &id.to_string(),
             launch: &self.launch,
             cwd: &self.options.cwd,
@@ -483,12 +535,13 @@ impl Factory {
 
     /// The skills' view of the session: the CLI surface and its tools,
     /// snippets run in the session sandbox, and on an interactive session
-    /// missing secrets asked for locally.
+    /// missing secrets asked for locally (or by the session's `clients`).
     fn skills_setup(
         &self,
         id: SessionId,
         selection: &Selection,
         inline_shell: &Arc<skills::DeferredShell>,
+        clients: Option<&Clients>,
     ) -> SessionSetup {
         let mut setup =
             SessionSetup::new(self.scope.clone(), Arc::clone(&self.store), id.to_string());
@@ -496,7 +549,9 @@ impl Factory {
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
-        setup.secret_prompt.clone_from(&self.secret_prompt);
+        setup.secret_prompt = clients
+            .map(|c| Arc::clone(&c.secrets))
+            .or_else(|| self.secret_prompt.clone());
         setup
     }
 
@@ -657,6 +712,23 @@ fn refresher(
 }
 
 impl Live {
+    /// The toolset selection the session's tools are built from.
+    #[must_use]
+    pub fn selection(&self) -> Selection {
+        self.selection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Records the selection the session's tools were rebuilt from.
+    pub fn set_selection(&self, selection: Selection) {
+        *self
+            .selection
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = selection;
+    }
+
     /// Records `session.start` for `session` on `target`'s route.
     async fn emit_start(
         &self,
@@ -692,6 +764,20 @@ impl Live {
     /// Ends the session row with `reason`, records `session.end` and
     /// closes the trajectory.
     pub async fn close(self, store: &Store, reason: EndReason) {
+        self.end(store, reason).await;
+        let trajectory = self.trajectory;
+        drop(self.agent);
+        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
+            && let Err(err) = writer.finish()
+        {
+            tracing::warn!(error = %err, "could not close the trajectory");
+        }
+    }
+
+    /// Ends the session row with `reason` and records `session.end`,
+    /// leaving the trajectory file open: for a session something else
+    /// still holds when the process stops (prefer [`Live::close`]).
+    pub async fn end(&self, store: &Store, reason: EndReason) {
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))
@@ -701,13 +787,6 @@ impl Live {
         }
         if let Some(browser) = &self.browser {
             browser.close_session(&self.id.to_string()).await;
-        }
-        let trajectory = self.trajectory;
-        drop(self.agent);
-        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
-            && let Err(err) = writer.finish()
-        {
-            tracing::warn!(error = %err, "could not close the trajectory");
         }
     }
 }

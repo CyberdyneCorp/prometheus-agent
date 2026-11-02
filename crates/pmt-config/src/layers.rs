@@ -1,7 +1,9 @@
 //! Configuration layering (spec: configuration-and-profiles, Configuration
-//! layering): schema defaults < the profile `config.toml` < `--set
-//! key=value` overrides, which are never persisted. Every effective value
-//! records the layer that supplied it, for `config explain`.
+//! layering; Managed configuration layer): schema defaults < the profile
+//! `config.toml` < `--set key=value` overrides, which are never persisted
+//! < the administrator's `managed.toml`, whose values win and whose locked
+//! keys `--set` may not touch. Every effective value records the layer
+//! that supplied it, for `config explain`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -31,6 +33,8 @@ pub enum Source {
     },
     /// A `--set` override of this invocation.
     Override,
+    /// The administrator-managed `managed.toml`.
+    Managed,
 }
 
 impl fmt::Display for Source {
@@ -45,6 +49,7 @@ impl fmt::Display for Source {
                 write!(f, "{name}:{line}")
             }
             Self::Override => f.write_str("--set"),
+            Self::Managed => f.write_str(crate::managed::MANAGED_FILE),
         }
     }
 }
@@ -164,6 +169,7 @@ pub struct Layered {
     path: PathBuf,
     file_keys: BTreeMap<String, usize>,
     override_keys: BTreeSet<String>,
+    managed_keys: BTreeSet<String>,
 }
 
 impl Layered {
@@ -183,10 +189,19 @@ impl Layered {
             text,
             &mut file_keys,
         );
-        let config = if overrides.is_empty() {
+        let managed: &[(String, toml_edit::Value)] = match crate::managed::current()? {
+            Some(managed) => {
+                if let Some((key, _)) = overrides.entries.iter().find(|(k, _)| managed.locks(k)) {
+                    return Err(crate::managed::locked_error(key));
+                }
+                managed.values()
+            }
+            None => &[],
+        };
+        let config = if overrides.is_empty() && managed.is_empty() {
             file_config
         } else {
-            apply(text, overrides)?
+            apply(text, overrides, managed)?
         };
         let effective = serde_json::to_value(&config).expect("a config serializes");
         Ok(Self {
@@ -195,6 +210,7 @@ impl Layered {
             path: path.to_owned(),
             file_keys,
             override_keys: overrides.entries.iter().map(|(k, _)| k.clone()).collect(),
+            managed_keys: managed.iter().map(|(k, _)| k.clone()).collect(),
         })
     }
 
@@ -219,6 +235,9 @@ impl Layered {
     #[must_use]
     pub fn source(&self, key: &str) -> Source {
         let covers = |k: &String| k == key || k.starts_with(&format!("{key}."));
+        if self.managed_keys.iter().any(covers) {
+            return Source::Managed;
+        }
         if self.override_keys.iter().any(covers) {
             return Source::Override;
         }
@@ -231,11 +250,16 @@ impl Layered {
         }
     }
 
-    /// Every key set by the file or an override whose effective value
-    /// differs from its default, in key order.
+    /// Every key set by the file, an override or the managed layer whose
+    /// effective value differs from its default, in key order.
     #[must_use]
     pub fn changed(&self) -> Vec<String> {
-        let keys: BTreeSet<&String> = self.file_keys.keys().chain(&self.override_keys).collect();
+        let keys: BTreeSet<&String> = self
+            .file_keys
+            .keys()
+            .chain(&self.override_keys)
+            .chain(&self.managed_keys)
+            .collect();
         keys.into_iter()
             .filter(|key| {
                 let default = catalog::lookup(key).and_then(|info| info.default);
@@ -246,14 +270,98 @@ impl Layered {
     }
 }
 
-/// The file with the overrides applied, as a typed config.
-fn apply(text: &str, overrides: &Overrides) -> Result<Config, Error> {
+impl Layered {
+    /// This snapshot with every `live` key that differs in `current` taken
+    /// from `current` (value and source); every other key keeps this
+    /// snapshot's value. A running session's effective configuration
+    /// after a reload (spec: configuration-and-profiles, Live reload with
+    /// apply classes).
+    ///
+    /// # Errors
+    ///
+    /// `config.invalid` if the merged values do not form a valid
+    /// configuration (both inputs are valid, so this means a schema bug).
+    pub fn with_live(&self, current: &Self) -> Result<Self, Error> {
+        let live: Vec<String> = crate::reload::changes(&self.config, &current.config)
+            .into_iter()
+            .filter(|c| c.apply == catalog::ApplyClass::Live)
+            .map(|c| c.key)
+            .collect();
+        if live.is_empty() {
+            return Ok(self.clone());
+        }
+        let mut merged = self.clone();
+        for key in &live {
+            set_path(&mut merged.effective, key, current.value(key).cloned());
+            merged.file_keys.remove(key);
+            merged.override_keys.remove(key);
+            merged.managed_keys.remove(key);
+            if let Some(line) = current.file_keys.get(key) {
+                merged.file_keys.insert(key.clone(), *line);
+            }
+            if current.override_keys.contains(key) {
+                merged.override_keys.insert(key.clone());
+            }
+            if current.managed_keys.contains(key) {
+                merged.managed_keys.insert(key.clone());
+            }
+        }
+        merged.config = serde_json::from_value(merged.effective.clone()).map_err(|e| {
+            Error::new(
+                &codes::CONFIG_INVALID,
+                format!("live keys {live:?} do not merge: {e}"),
+            )
+        })?;
+        Ok(merged)
+    }
+}
+
+/// Sets the dotted `key` of `root` to `value`, creating tables on the
+/// way; `None` removes it, and with it any table it leaves empty.
+fn set_path(root: &mut Value, key: &str, value: Option<Value>) {
+    let segments: Vec<&str> = key.split('.').collect();
+    set_in(root, &segments, value);
+}
+
+/// [`set_path`] below `node`; whether `node` is left an empty table.
+fn set_in(node: &mut Value, segments: &[&str], value: Option<Value>) -> bool {
+    let (Value::Object(map), Some((first, rest))) = (node, segments.split_first()) else {
+        return false;
+    };
+    let name = (*first).to_owned();
+    if rest.is_empty() {
+        match value {
+            Some(value) => map.insert(name, value),
+            None => map.remove(&name),
+        };
+    } else if value.is_some() || map.contains_key(&name) {
+        let child = map
+            .entry(name.clone())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        if set_in(child, rest, value) {
+            map.remove(&name);
+        }
+    }
+    map.is_empty()
+}
+
+/// The file with the overrides, then the managed values, applied, as a
+/// typed config.
+fn apply(
+    text: &str,
+    overrides: &Overrides,
+    managed: &[(String, toml_edit::Value)],
+) -> Result<Config, Error> {
     let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
         Error::new(&codes::CONFIG_PARSE, e.message().to_owned())
     })?;
     for (key, value) in &overrides.entries {
         edit::set(&mut doc, key, value.clone())
             .map_err(|message| Error::new(&codes::CONFIG_INVALID_ARGUMENT, message))?;
+    }
+    for (key, value) in managed {
+        edit::set(&mut doc, key, value.clone())
+            .map_err(|message| Error::new(&codes::CONFIG_MANAGED_INVALID, message))?;
     }
     toml::from_str(&doc.to_string()).map_err(|e| {
         Error::new(
@@ -300,6 +408,38 @@ mod tests {
             &Overrides::parse(sets).unwrap(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn a_session_takes_the_reloaded_live_keys_and_keeps_the_rest() {
+        let started = layered(
+            "[budgets]\nturn_usd = 1.0\n[prompt]\nload_identity = true\n[quick_commands.gone]\ntype = \"alias\"\ntarget = \"/help\"\n",
+            &[],
+        );
+        let reloaded = layered(
+            "[budgets]\nturn_usd = 2.0\n[tool_output]\nmax_chars = 10\n[prompt]\nload_identity = false\n",
+            &[],
+        );
+        let merged = started.with_live(&reloaded).unwrap();
+        let config = merged.config();
+        assert!((config.budgets.turn_usd - 2.0).abs() < f64::EPSILON);
+        assert_eq!(config.tool_output.max_chars, 10);
+        assert!(
+            config.prompt.load_identity,
+            "next_session keys keep the start value"
+        );
+        assert!(
+            config.quick_commands.is_empty(),
+            "a removed live entry goes"
+        );
+        assert!(matches!(
+            merged.source("tool_output.max_chars"),
+            Source::File { line: 4, .. }
+        ));
+        assert_eq!(
+            merged.value("budgets.turn_usd"),
+            Some(&serde_json::json!(2.0))
+        );
     }
 
     #[test]

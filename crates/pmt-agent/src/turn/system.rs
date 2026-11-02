@@ -26,7 +26,10 @@ impl Turn<'_> {
             };
         let tools = setup.tools.definitions();
         let inputs = self.inputs(route, tools.iter().map(|t| t.name.clone()).collect());
-        let built = tokio::task::spawn_blocking(move || prompt::build(&inputs))
+        // The blocking pool does not inherit the span: its records (a
+        // blocked context file) must keep the session's profile and ids.
+        let span = tracing::Span::current();
+        let built = tokio::task::spawn_blocking(move || span.in_scope(|| prompt::build(&inputs)))
             .await
             .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("prompt build: {e}")))??;
         // Rebuilt bytes equal to the stored ones keep the stored prompt.

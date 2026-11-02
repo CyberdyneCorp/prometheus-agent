@@ -1,0 +1,13 @@
+# Each test of pmt-tools' browser binary starts a real headless Chromium.
+# Run in parallel with each other (and the rest of the suite), several
+# browsers starting at once on a small CI runner can take longer than the
+# 30 s launch and CDP command timeouts, which shows up as unrelated
+# "did not start within 30 s" / "timed out after 30 s" failures. Two at a
+# time keeps the suite's wall time close while leaving each launch the
+# CPU it needs.
+[test-groups]
+browser = { max-threads = 2 }
+
+[[profile.default.overrides]]
+filter = "package(pmt-tools) & binary(browser)"
+test-group = "browser"

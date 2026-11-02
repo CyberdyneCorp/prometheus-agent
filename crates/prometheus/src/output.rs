@@ -26,6 +26,11 @@ pub struct JsonShape {
 /// Every shape a listing or status command emits. A command adds its shape
 /// here when it gains `--json`.
 pub const JSON_SHAPES: &[JsonShape] = &[
+    // `profile import --json` prints the imported archive's manifest too.
+    JsonShape {
+        schema: "prometheus.profile_export.v1",
+        command: "profile export",
+    },
     JsonShape {
         schema: "prometheus.doctor.v1",
         command: "doctor",
@@ -201,6 +206,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
         schema: "prometheus.approvals_test.v1",
         command: "approvals test",
+    },
+    JsonShape {
+        schema: "prometheus.daemon_status.v1",
+        command: "daemon status",
     },
 ];
 

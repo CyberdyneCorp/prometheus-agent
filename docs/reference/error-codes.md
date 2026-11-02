@@ -70,6 +70,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `config.credential_value` | `usage` | 2 | A value that looks like a credential (API key, token, private key) was given for a non-secret configuration key; store it with `prometheus secrets set <NAME>`. |
 | `config.credential_in_file` | `config` | 78 | A profile `config.toml` holds a value that looks like a credential (API key, token, private key) in a non-secret key; move it into the secrets store with `prometheus secrets set <NAME>` and reference it by name. |
 | `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
+| `config.managed_key` | `permission_denied` | 77 | The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it. |
+| `config.managed_invalid` | `config` | 78 | `managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it. |
 | `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
 | `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
 | `profile.not_found` | `usage` | 2 | The profile named by `-p` or `active_profile` does not exist in this home; create it with `prometheus profile create <name>`. |
@@ -79,10 +81,14 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `secret.missing` | `config` | 78 | A secret the profile needs is not in its secrets store (nor, for the launch profile, in the environment); set it with `prometheus secrets set <NAME>`. |
 | `secret.store` | `config` | 78 | The profile's secrets store (`secrets.toml` or the OS keychain) cannot be read, parsed or written. |
 | `secret.keychain_unavailable` | `unavailable` | 69 | `secrets.backend = "keychain"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend. |
+| `secret.managed` | `permission_denied` | 77 | The secret comes from the administrator-managed `managed-secrets.toml`, which takes precedence over every profile store and the environment; it cannot be set or unset per profile. |
 | `secret.reveal_refused` | `permission_denied` | 77 | `prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file. |
 | `profile.reserved` | `usage` | 2 | A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`). |
 | `profile.exists` | `usage` | 2 | `prometheus profile create` or `rename` names a profile that already exists. |
 | `profile.protected` | `usage` | 2 | The `default` profile cannot be deleted or renamed. |
+| `profile.alias_refused` | `usage` | 2 | `profile alias` refuses a launcher name that is reserved, is a `prometheus` subcommand, would shadow an existing executable on `PATH`, or is not a valid profile-style name. |
+| `profile.archive_invalid` | `invalid_input` | 65 | The file is not a profile archive written by `prometheus profile export`, a member is outside the allowed set, or it is damaged; nothing was imported. |
+| `profile.archive_passphrase` | `auth` | 78 | The archive's secrets are encrypted with another passphrase (Argon2id key, XChaCha20-Poly1305); nothing was imported. |
 | `profile.in_use` | `conflict` | 75 | A running daemon or interactive client uses the profile; stop it and retry. |
 | `profile.deleted` | `not_found` | 66 | The profile was deleted (`profiles/.deleted/<name>` exists); nothing may write to it until it is created again. |
 | `backup.running` | `conflict` | 75 | Another `prometheus backup create` is running for this home. |
@@ -111,6 +117,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
 | `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
 | `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
+| `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |
 | `session.too_large_to_resume` | `invalid_input` | 65 | The session's active lineage has more messages than `sessions.max_resume_messages`; compact it with /compress or fork it. |
@@ -258,3 +265,29 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `runtime.not_installed` | `unavailable` | 69 | The runtime is not in the store and `runtimes.allow_lazy_install = false`; install it with `prometheus runtimes install <name>`. |
 | `runtime.declined` | `cancelled` | 130 | The install prompt was answered no; nothing was downloaded. |
 | `runtime.io` | `io` | 74 | A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed. |
+| `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
+| `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
+| `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |
+| `rpc.unknown_field` | `invalid_input` | 65 | The params name a field the method's contract does not declare; `data.path` is its JSON pointer (JSON-RPC `-32602`). |
+| `rpc.invalid_params` | `invalid_input` | 65 | The params are not an object, miss a required field or have a value of the wrong type; `data.path` points at it (JSON-RPC `-32602`). |
+| `rpc.handshake_required` | `protocol` | 76 | The first request on a connection must be `rpc.hello`. |
+| `rpc.protocol_mismatch` | `protocol` | 76 | The client and the daemon speak different major versions of the client protocol; update the older side (`prometheus update`). |
+| `rpc.not_served` | `unavailable` | 69 | The method is declared in the RPC catalog by a capability this daemon does not serve yet. |
+| `rpc.contract_violation` | `internal` | 70 | The daemon produced a result or event payload that does not match its contract (a bug; it is logged and counted in `prometheus.rpc.contract_violations`). |
+| `rpc.request_closed` | `not_found` | 66 | The answered server-to-client request is not open any more (answered elsewhere, timed out or cancelled); the answer was dropped. |
+| `rpc.retiring` | `unavailable` | 69 | The daemon is restarting and refuses new work; reconnect to continue. |
+| `rpc.session_denied` | `permission_denied` | 77 | The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere. |
+| `rpc.connection` | `unavailable` | 69 | The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message). |
+| `rpc.ticket` | `auth` | 78 | The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`). |
+| `daemon.not_running` | `unavailable` | 69 | No gateway daemon runs for this home; start it with `prometheus daemon start`. |
+| `daemon.start_failed` | `unavailable` | 69 | `prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message. |
+| `daemon.no_profile` | `config` | 78 | Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve. |
+| `session.busy` | `conflict` | 75 | The session is running a turn; submit again when it finishes. |
+| `session.not_attached` | `permission_denied` | 77 | Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists. |
+| `profile.not_granted` | `permission_denied` | 77 | The request names a profile the connection's ticket does not grant; get a ticket for that profile. |
+| `rpc.forged_author` | `permission_denied` | 77 | `prompt.submit` carried an `author`; the gateway stamps every input's author from the connection and never takes one from a client. |
+| `rpc.source_mismatch` | `permission_denied` | 77 | `session.create` named a `source` other than the connection's own client kind (from `rpc.hello`). |
+| `session.observer` | `permission_denied` | 77 | The connection attached as an observer, which only reads; attach as a driver to submit, interrupt or answer. |
+| `rpc.request_settled` | `conflict` | 75 | The server-to-client request already settled (answered, timed out or cancelled); the late answer changed nothing. |
+| `rpc.internal` | `internal` | 70 | The daemon's handler for the method failed unexpectedly (a crash report was written); the connection stays open. |
+| `tui.not_a_terminal` | `usage` | 2 | `prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping. |

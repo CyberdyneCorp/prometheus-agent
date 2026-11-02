@@ -58,7 +58,7 @@ pub struct Options {
     /// SIGTERM-to-SIGKILL wait (`tools.kill_grace_secs`).
     pub kill_grace: Duration,
     /// Characters returned per call (`tool_output.max_chars`).
-    pub max_chars: usize,
+    pub max_chars: crate::setting::Limit,
     /// Scrubs output before it is returned.
     pub redactor: Redactor,
     /// Where completion notifications go.
@@ -71,7 +71,7 @@ impl std::fmt::Debug for Options {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Options")
             .field("kill_grace", &self.kill_grace)
-            .field("max_chars", &self.max_chars)
+            .field("max_chars", &(self.max_chars)())
             .finish_non_exhaustive()
     }
 }
@@ -370,7 +370,7 @@ impl ProcessRegistry {
 
     fn shaped(&self, text: &str) -> String {
         let clean = shape::clean(text, &[], &self.options.redactor);
-        shape::truncate(&clean, self.options.max_chars).0
+        shape::truncate(&clean, (self.options.max_chars)()).0
     }
 
     fn poll(&self, entry: &Entry) -> Value {

@@ -80,6 +80,9 @@ struct Shared {
     suspend: Mutex<Option<(String, String)>>,
     /// The line is a secret: drawn as `*` and never remembered.
     masked: AtomicBool,
+    /// The bottom status line's text (`None`: no status line).
+    status: Mutex<Option<String>>,
+    bottom: Mutex<super::bottom_line::BottomLine>,
 }
 
 /// How long [`Input::flush`] waits for earlier output.
@@ -100,6 +103,21 @@ pub struct Input {
     reading: bool,
     shared: Arc<Shared>,
     printing: Option<std::thread::JoinHandle<()>>,
+}
+
+/// Prints through the input's printer thread (above the prompt while a
+/// line is being read).
+#[derive(Clone)]
+pub struct Printer(Option<std_mpsc::Sender<Output>>);
+
+impl Printer {
+    /// Prints `text` (one or more lines) after everything printed before.
+    pub fn print(&self, text: &str) {
+        let text = text.strip_suffix('\n').unwrap_or(text);
+        if let Some(output) = &self.0 {
+            let _ = output.send(Output::Text(format!("{text}\n")));
+        }
+    }
 }
 
 /// What the editor needs.
@@ -156,6 +174,22 @@ impl Input {
         self.shared.masked.store(masked, Ordering::Relaxed);
     }
 
+    /// Sets the bottom status line drawn before each read (`None` gives
+    /// the row back).
+    pub fn set_status(&self, text: Option<String>) {
+        *self
+            .shared
+            .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = text;
+    }
+
+    /// `/redraw`: clears the screen; the next read reprints the prompt and
+    /// the status line.
+    pub fn redraw(&self) {
+        self.print("\x1b[r\x1b[2J\x1b[H");
+    }
+
     /// Marks whether a turn runs (Ctrl+Z is refused meanwhile).
     pub fn set_busy(&self, busy: bool) {
         self.shared.busy.store(busy, Ordering::Relaxed);
@@ -197,6 +231,12 @@ impl Input {
         }
     }
 
+    /// A handle that prints like [`Input::print`] from anywhere.
+    #[must_use]
+    pub fn printer(&self) -> Printer {
+        Printer(self.output.clone())
+    }
+
     /// Waits (at most [`FLUSH_WAIT`]) until everything printed so far is
     /// out: before the editor draws a prompt, and before a child process
     /// takes the terminal.
@@ -219,6 +259,11 @@ impl Drop for Input {
         if let Some(printing) = self.printing.take() {
             let _ = printing.join();
         }
+        self.shared
+            .bottom
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .release();
     }
 }
 
@@ -274,6 +319,16 @@ fn editor_thread(
         .map(|p| Box::new(p) as Box<dyn ExternalPrinter + Send>);
     let _ = printer.send(external);
     while let Ok(prompt) = wanted.recv() {
+        let status = shared
+            .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        shared
+            .bottom
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .show(status.as_deref());
         let event = match read_line(&mut editor, shared, &prompt) {
             Ok(line) if shared.masked.load(Ordering::Relaxed) => Event::Line(line),
             Ok(line) => {

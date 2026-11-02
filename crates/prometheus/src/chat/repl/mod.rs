@@ -9,9 +9,9 @@
 //! their busy policy and prompts (approvals, clarify questions, memory
 //! approvals, confirmations) are answered from the next line.
 
+mod bottom_line;
 mod commands;
-mod compose;
-pub mod info;
+pub(crate) mod compose;
 pub mod input;
 mod layout;
 mod progress;
@@ -24,12 +24,10 @@ pub mod shell;
 mod turn;
 
 use std::collections::VecDeque;
-use std::io::IsTerminal as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use pmt_agent::tools::clarify::{ClarifyAnswer, ClarifyRequest};
-use pmt_config::schema::ToolProgress;
 use pmt_core::error::Error;
 use pmt_core::human::Surface as Prompts;
 use pmt_store::EndReason;
@@ -40,8 +38,9 @@ use self::input::{Event, Input};
 use self::prompts::Pending;
 pub use self::prompts::{CliSecretPrompt, MemoryApprover, MemoryAsk, SecretAsk};
 use super::Ui;
+use super::display::Display;
 use super::session::{Factory, Live};
-use super::theme::{Role, Theme};
+use super::theme::Role;
 use crate::chat::session::browser::InstallAsk;
 use crate::slash::{self, Registry};
 
@@ -68,18 +67,6 @@ pub struct Start {
 enum Flow {
     Continue,
     Exit,
-}
-
-/// Display state the user can change in the session.
-struct Display {
-    theme: Theme,
-    color: bool,
-    quiet: bool,
-    progress: ToolProgress,
-    /// `/focus on`: the mode `/focus off` restores.
-    focus: Option<ToolProgress>,
-    /// `display.timestamps` (`/timestamps`).
-    timestamps: bool,
 }
 
 /// The REPL.
@@ -113,6 +100,8 @@ struct Repl {
     shell_context: Vec<String>,
     /// A turn runs (`/status`).
     running: bool,
+    /// The bottom status line's toggles (`/statusbar`, `/battery`).
+    status_bar: crate::chat::status_bar::StatusBar,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -170,12 +159,8 @@ pub async fn run(
         .launch()
         .inherited("NO_COLOR")
         .is_some_and(|v| !v.is_empty());
-    let color =
-        super::theme::color_enabled(ui.no_color, no_color_env, std::io::stdout().is_terminal());
-    let theme = Theme::load(factory.scope.dir(), &config.display.theme).unwrap_or_else(|why| {
-        tracing::warn!(theme = %config.display.theme, %why, "theme unavailable; using default");
-        Theme::load(factory.scope.dir(), "default").expect("built-in theme")
-    });
+    let display = Display::new(&factory.scope, ui.no_color || no_color_env, ui.quiet);
+    let status_bar = crate::chat::status_bar::StatusBar::new(&factory.scope, factory.launch());
     let input = Input::start(input::Setup {
         history: factory.scope.dir().join("cli_history"),
         cwd: factory.options.cwd.clone(),
@@ -188,14 +173,7 @@ pub async fn run(
         live: None,
         input,
         registry: Registry::new()?,
-        display: Display {
-            theme,
-            color,
-            quiet: ui.quiet,
-            progress: config.display.tool_progress,
-            focus: None,
-            timestamps: config.display.timestamps,
-        },
+        display,
         queue: VecDeque::new(),
         pending: None,
         approvals: None,
@@ -213,6 +191,7 @@ pub async fn run(
         confirm_destructive: config.cli.confirm_destructive,
         shell_context: Vec::new(),
         running: false,
+        status_bar,
     };
     repl.attach(live);
     if let Some(prompt) = &asks.secret_prompt {
@@ -250,6 +229,7 @@ impl Repl {
     /// Reads and handles one event at the idle prompt.
     async fn idle_event(&mut self) -> Flow {
         let prompt = self.prompt();
+        self.show_status();
         self.input.request(&prompt);
         let event = tokio::select! {
             event = self.input.next() => event,
@@ -314,6 +294,25 @@ impl Repl {
         Flow::Continue
     }
 
+    /// Hands the bottom status line to the editor (drawn before the read;
+    /// none when quiet or turned off).
+    fn show_status(&self) {
+        let text = (!self.display.quiet).then(|| {
+            let target = self.live().model.target();
+            let model = format!(
+                "{}/{}",
+                target.provider,
+                target.model.as_deref().unwrap_or("default")
+            );
+            crate::chat::status_bar::line_text(
+                &self.status_bar,
+                self.factory.scope.name().as_str(),
+                Some(&model),
+            )
+        });
+        self.input.set_status(text.flatten());
+    }
+
     fn live(&self) -> &Live {
         self.live.as_ref().expect("a live session")
     }
@@ -343,30 +342,24 @@ impl Repl {
 
     /// The commands of this session: built-ins, quick commands and skills.
     fn load_registry(&mut self) {
-        let mut registry = match Registry::new() {
-            Ok(registry) => registry,
-            Err(err) => {
-                self.error(&err);
-                return;
-            }
-        };
-        quick::register(&mut registry, &self.factory.scope.config().quick_commands);
-        let core = registry.builtin_names();
-        let table = pmt_skills::slash::table(&self.live().skills, &core);
-        for (slug, skill) in &table.commands {
-            let declaration = slash::Declaration {
-                name: slug.clone(),
-                description: format!("skill {skill}"),
-                ..slash::Declaration::default()
-            };
-            if let Err(err) = registry.register(&declaration, slash::Source::Skill) {
-                self.error(&err);
-            }
+        self.registry = crate::chat::commands::registry(&self.factory.scope, self.live());
+    }
+
+    /// What the shared session commands run against.
+    fn ctx<'a>(&'a self, live: &'a Live) -> crate::chat::commands::Ctx<'a> {
+        let posted = self.posted.clone();
+        crate::chat::commands::Ctx {
+            factory: &self.factory,
+            live,
+            scope: &self.factory.scope,
+            registry: &self.registry,
+            surface: slash::Surface::Cli,
+            timestamps: self.display.timestamps,
+            running: self.running,
+            post: Arc::new(move |text| {
+                let _ = posted.send(text);
+            }),
         }
-        for warning in &registry.warnings {
-            tracing::warn!("{warning}");
-        }
-        self.registry = registry;
     }
 
     fn prompt(&self) -> String {

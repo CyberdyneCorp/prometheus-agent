@@ -140,7 +140,7 @@ fn is_env_template(name: &str) -> bool {
     matches!(name, ".env.example" | ".env.sample" | ".env.template")
 }
 
-fn is_invisible(c: char) -> bool {
+pub(crate) fn is_invisible(c: char) -> bool {
     matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
 }
 

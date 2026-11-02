@@ -27,17 +27,6 @@ pub(super) struct TurnView {
     assistant: Option<String>,
 }
 
-/// The name of a progress mode.
-#[must_use]
-pub(super) fn mode_name(mode: ToolProgress) -> &'static str {
-    match mode {
-        ToolProgress::Off => "off",
-        ToolProgress::New => "new",
-        ToolProgress::All => "all",
-        ToolProgress::Verbose => "verbose",
-    }
-}
-
 /// `text` cut to `limit` characters (0: no limit).
 #[must_use]
 pub(super) fn preview(text: &str, limit: u32) -> String {
@@ -163,75 +152,22 @@ impl Repl {
 
     /// `/focus [on|off|status]`.
     pub(super) fn focus(&mut self, args: &str) -> String {
-        match args.trim() {
-            "on" => {
-                if self.display.focus.is_none() {
-                    self.display.focus = Some(self.display.progress);
-                    self.display.progress = ToolProgress::Off;
-                }
-                "focus on: tool progress hidden".to_owned()
-            }
-            "off" => match self.display.focus.take() {
-                Some(previous) => {
-                    self.display.progress = previous;
-                    format!("focus off: tool progress {}", mode_name(previous))
-                }
-                None => "focus is off".to_owned(),
-            },
-            _ => match self.display.focus {
-                Some(_) => "focus is on".to_owned(),
-                None => format!(
-                    "focus is off (tool progress {})",
-                    mode_name(self.display.progress)
-                ),
-            },
-        }
+        self.display.focus(args)
     }
 
-    /// `/verbose`: the next progress mode (the one focus restores while
-    /// focus is on).
+    /// `/verbose`: the next progress mode.
     pub(super) fn verbose(&mut self) -> String {
-        let slot = match &mut self.display.focus {
-            Some(saved) => saved,
-            None => &mut self.display.progress,
-        };
-        *slot = match *slot {
-            ToolProgress::Off => ToolProgress::New,
-            ToolProgress::New => ToolProgress::All,
-            ToolProgress::All => ToolProgress::Verbose,
-            ToolProgress::Verbose => ToolProgress::Off,
-        };
-        format!("tool progress: {}", mode_name(*slot))
+        self.display.verbose()
     }
 
-    /// `/timestamps [on|off|status]` (alias `/ts`), saved in
-    /// `display.timestamps`.
+    /// `/timestamps [on|off|status]`, saved in `display.timestamps`.
     pub(super) fn timestamps(&mut self, args: &str) -> Result<String, Error> {
-        let on = match args.trim() {
-            "on" => true,
-            "off" => false,
-            _ => {
-                let state = if self.display.timestamps { "on" } else { "off" };
-                return Ok(format!("timestamps are {state}"));
-            }
-        };
-        self.factory
-            .scope
-            .profile()
-            .config_file()
-            .set("display.timestamps", if on { "true" } else { "false" })?;
-        self.display.timestamps = on;
-        Ok(format!("timestamps {}", if on { "on" } else { "off" }))
+        self.display.set_timestamps(&self.factory.scope, args)
     }
 
     /// `text` with the time prefix when timestamps are on.
     pub(super) fn stamped(&self, text: &str) -> String {
-        if !self.display.timestamps {
-            return text.to_owned();
-        }
-        let format = &self.factory.scope.config().display.timestamp_format;
-        let now = jiff::Zoned::now();
-        format!("[{}] {text}", now.strftime(format.as_str()))
+        self.display.stamped(&self.factory.scope, text)
     }
 }
 

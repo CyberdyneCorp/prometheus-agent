@@ -45,9 +45,30 @@ fn main() -> ExitCode {
         Ok(launch) => launch,
         Err(err) => return failure(&err, cli.json),
     };
+    // Completion runs on every TAB: it reads local files only, before
+    // anything (logging, the home layout) could write one.
+    if let Some(Command::Complete {
+        shell,
+        current,
+        words,
+    }) = &cli.command
+    {
+        let done = prometheus::completions::complete(*shell, current.as_deref(), words, &launch);
+        return ExitCode::from(done.unwrap_or(0));
+    }
     // Commands that need the home report the resolution error themselves.
     // `demo` runs in a temporary home of its own and never touches the
     // user's: it writes no log files and keeps no crash reports there.
+    // The administrator's managed layer is machine-wide: loaded once, for
+    // every profile this process touches.
+    let (managed_dir, owner) = match launch.test_managed_dir() {
+        Some(dir) => (dir.clone(), pmt_config::managed::Owner::CurrentUser),
+        None => (
+            pmt_config::managed::platform_dir(),
+            pmt_config::managed::Owner::Root,
+        ),
+    };
+    pmt_config::managed::init(&managed_dir, owner);
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
@@ -99,9 +120,18 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
+        #[cfg(feature = "gateway")]
+        Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
+        #[cfg(not(feature = "gateway"))]
+        Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
+        Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
+        Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
+        Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
         Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
+        #[cfg(feature = "tui")]
+        Some(Command::Tui(args)) => prometheus::tui_cmd::run(args, &ctx, ui(cli)),
         #[cfg(not(feature = "tui"))]
         Some(Command::Tui(_)) => prometheus::surface::require("tui").map(|()| 0),
         #[cfg(not(feature = "gateway"))]

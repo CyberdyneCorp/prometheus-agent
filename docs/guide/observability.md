@@ -49,6 +49,12 @@ errors     <home>/profiles/default/logs/prometheus.log
 gateway    <home>/logs/gateway.log
 ```
 
+A gateway daemon writes its own records (startup, connections, the idle
+session reaper) as the `gateway` component; the work on a session it
+hosts is recorded in that session's profile, so with `gateway.multiplex`
+each served profile's sessions and startup warnings are in its own
+`logs/`.
+
 `errors` selects warnings and errors of every component. The filters
 combine:
 

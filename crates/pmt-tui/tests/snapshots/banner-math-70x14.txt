@@ -1,0 +1,14 @@
+Prometheus 0.1.0 · default · mock/m1
+▾ Tools (3)
+  read_file, terminal, patch
+▸ Skills (80)
+▸ System Prompt (1)
+▸ MCP Servers (0)
+
+Energy is E = mc², a half is ½, it costs $5 and $10;
+$\begin{tikzpicture}$ is not supported.
+
+
+──────────────────────────────────────────────────────────────────────
+›
+

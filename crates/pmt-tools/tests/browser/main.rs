@@ -138,9 +138,15 @@ async fn a_crashed_browser_is_replaced_and_its_record_removed() {
     let pid = first.pid().unwrap();
     let old_records = records(&fixture.browser_cache());
     assert_eq!(old_records.len(), 1);
-    drop(first);
     kill(pid);
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // A loaded runner can take a while to tear a killed browser down; the
+    // manager replaces it once it is seen dead.
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while first.is_alive() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(!first.is_alive(), "the killed browser is seen dead");
+    drop(first);
     let (result, body) = run(&exec, "print(ensure_real_tab() is not None)").await;
     assert_eq!(result.status, Status::Ok, "{body}");
     let second = manager.session("ses_b/default").await.unwrap();

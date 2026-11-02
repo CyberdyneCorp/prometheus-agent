@@ -19,11 +19,16 @@ toml.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# The current user's uid (managed secrets ownership in test directories).
+nix = { workspace = true, features = ["user"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store.workspace = true
+known-folders.workspace = true
 
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))'.dependencies]
 dbus-secret-service-keyring-store.workspace = true

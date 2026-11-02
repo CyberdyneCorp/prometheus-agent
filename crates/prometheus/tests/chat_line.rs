@@ -46,7 +46,8 @@ fn script(home: &Path, text: &str) -> String {
 /// The binary in a pseudo-terminal, run from the home directory.
 fn spawn(home: &Path, args: &[&str]) -> OsSession {
     let mut cmd: Command = common::command(home);
-    cmd.args(args)
+    cmd.args(["--set", "ui.interface=line"])
+        .args(args)
         .current_dir(home)
         .env("TERM", "xterm")
         .env_remove("NO_COLOR");
@@ -459,7 +460,11 @@ fn newest(home: &Path) -> String {
 #[test]
 fn continue_prefers_the_session_last_used_from_this_terminal() {
     let home = mock_home();
-    let chat = format!("{} --home {}", common::BIN, home.path().display());
+    let chat = format!(
+        "{} --home {} --set ui.interface=line",
+        common::BIN,
+        home.path().display()
+    );
     let mut sessions = Vec::new();
     let mut terminals = Vec::new();
     for word in ["alpha", "beta"] {

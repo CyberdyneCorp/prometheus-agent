@@ -13,7 +13,7 @@ use pmt_core::human::Prompt;
 use pmt_core::secret::SecretString;
 use pmt_memory::session::Approver;
 use pmt_skills::secrets::SecretPrompt;
-use pmt_tools::approval::{ApprovalRequest, Decision};
+use pmt_tools::approval::{ApprovalRequest, Decision, printable};
 use tokio::sync::{mpsc, oneshot};
 
 /// A memory change waiting for the person.
@@ -156,11 +156,14 @@ impl Pending {
 
 /// The question text of an approval.
 pub(super) fn approval_question(request: &ApprovalRequest) -> String {
+    // The subject and findings may come from the model: escaped so a
+    // control sequence cannot hide part of what is approved.
     let subject = request.subject.as_deref().unwrap_or(&request.tool);
     format!(
-        "{} wants to run: {subject}\n  why: {}",
-        request.tool,
-        request.summary()
+        "{} wants to run: {}\n  why: {}",
+        printable(&request.tool),
+        printable(subject),
+        printable(&request.summary())
     )
 }
 
@@ -251,6 +254,25 @@ mod tests {
     use pmt_agent::tools::clarify::Question;
 
     use super::*;
+
+    /// A control sequence in the model's command cannot hide part of it
+    /// on the in-process approval prompt.
+    #[test]
+    fn the_approval_question_shows_control_sequences() {
+        let request = ApprovalRequest {
+            tool: "terminal".into(),
+            call_id: "c1".into(),
+            subject: Some("rm -rf ~\u{1b}[2K\rls".into()),
+            findings: Vec::new(),
+            remember: None,
+        };
+        let text = approval_question(&request);
+        assert!(
+            text.starts_with("terminal wants to run: rm -rf ~^[[2K\\rls\n"),
+            "{text}"
+        );
+        assert!(!text.contains('\u{1b}') && !text.contains('\r'), "{text}");
+    }
 
     #[test]
     fn lines_map_to_answers() {

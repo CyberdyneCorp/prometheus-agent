@@ -8,6 +8,8 @@ pub mod args;
 pub(crate) mod edit;
 mod explain;
 
+use std::fmt::Write as _;
+
 use pmt_config::{catalog, reference};
 use pmt_core::error::{Error, codes};
 use serde::Serialize;
@@ -60,16 +62,20 @@ fn show(ctx: &Context<'_>, effective: bool) -> Result<u8, Error> {
         path: String,
         effective: bool,
         config: Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        managed: Option<ManagedShown>,
     }
     let scope = ctx.scope()?;
     let path = scope.profile().config_file().path().to_owned();
+    let managed = pmt_config::managed::current()?.filter(|m| m.config_loaded());
     if !ctx.json {
         let text = if effective {
             toml::to_string(scope.config()).expect("a config serializes to TOML")
         } else {
             scope.profile().config_file().read()?.0
         };
-        return print_raw(&text);
+        let header = managed.map(managed_header).unwrap_or_default();
+        return print_raw(&format!("{header}{text}"));
     }
     let config = if effective {
         serde_json::to_value(scope.config()).expect("a config serializes to JSON")
@@ -84,8 +90,62 @@ fn show(ctx: &Context<'_>, effective: bool) -> Result<u8, Error> {
         path: path.display().to_string(),
         effective,
         config,
+        managed: managed.map(ManagedShown::of),
     };
     document("config show", &shown)
+}
+
+/// The managed layer in `config show --json`.
+#[derive(Serialize)]
+struct ManagedShown {
+    path: String,
+    keys: Vec<ManagedKey>,
+}
+
+#[derive(Serialize)]
+struct ManagedKey {
+    key: String,
+    locked: bool,
+}
+
+impl ManagedShown {
+    fn of(managed: &pmt_config::managed::Managed) -> Self {
+        Self {
+            path: managed.config_path().display().to_string(),
+            keys: managed_keys(managed)
+                .into_iter()
+                .map(|(key, locked)| ManagedKey { key, locked })
+                .collect(),
+        }
+    }
+}
+
+/// Every managed or locked key, with whether it is locked.
+fn managed_keys(managed: &pmt_config::managed::Managed) -> Vec<(String, bool)> {
+    let mut keys: std::collections::BTreeMap<String, bool> = managed
+        .values()
+        .iter()
+        .map(|(key, _)| (key.clone(), false))
+        .collect();
+    for key in managed.locked() {
+        keys.insert(key.clone(), true);
+    }
+    keys.into_iter().collect()
+}
+
+/// The comment header naming the administrator's layer (spec:
+/// configuration-and-profiles, Managed secrets and managed visibility).
+fn managed_header(managed: &pmt_config::managed::Managed) -> String {
+    let mut header = format!(
+        "# managed by your administrator: {}\n",
+        managed.config_path().display()
+    );
+    for (key, locked) in managed_keys(managed) {
+        let suffix = if locked { " (locked)" } else { "" };
+        let _ = writeln!(header, "#   {key}{suffix}");
+    }
+    header.push('\n');
+    header
 }
 
 fn get(ctx: &Context<'_>, key: &str) -> Result<u8, Error> {
@@ -169,7 +229,7 @@ fn alias_ref(alias: &pmt_config::schema::ModelAlias) -> String {
 }
 
 /// The catalog entry of `key`, or a usage error with suggestions.
-fn known_key(key: &str) -> Result<catalog::KeyInfo, Error> {
+pub(crate) fn known_key(key: &str) -> Result<catalog::KeyInfo, Error> {
     catalog::lookup(key).ok_or_else(|| {
         Error::new(
             &codes::CONFIG_INVALID_ARGUMENT,

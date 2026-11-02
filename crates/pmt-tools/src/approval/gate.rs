@@ -80,6 +80,9 @@ pub struct GateSetup {
 #[derive(Debug)]
 pub struct CommandGate {
     setup: GateSetup,
+    /// `[approvals]` as of now: a live key, replaced when the profile's
+    /// configuration is reloaded.
+    approvals: std::sync::RwLock<ApprovalsConfig>,
     yolo: AtomicBool,
     session: Mutex<Vec<String>>,
     unobtainable: AtomicU32,
@@ -91,6 +94,7 @@ impl CommandGate {
     pub fn new(setup: GateSetup) -> Self {
         let yolo = AtomicBool::new(setup.yolo);
         Self {
+            approvals: std::sync::RwLock::new(setup.approvals.clone()),
             setup,
             yolo,
             session: Mutex::new(Vec::new()),
@@ -105,6 +109,21 @@ impl CommandGate {
     #[must_use]
     pub fn unobtainable(&self) -> u32 {
         self.unobtainable.load(Ordering::Relaxed)
+    }
+
+    /// Applies a reloaded `[approvals]` (an apply class `live` section) to
+    /// the running session.
+    pub fn set_approvals(&self, approvals: ApprovalsConfig) {
+        *self
+            .approvals
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = approvals;
+    }
+
+    fn approvals(&self) -> std::sync::RwLockReadGuard<'_, ApprovalsConfig> {
+        self.approvals
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     /// `/yolo`: bypass on or off for the rest of the session.
@@ -127,7 +146,7 @@ impl CommandGate {
     /// Whether approvals are bypassed (`mode = "off"` or yolo).
     #[must_use]
     pub fn bypassing(&self) -> bool {
-        self.yolo() || self.setup.approvals.mode == ApprovalMode::Off
+        self.yolo() || self.approvals().mode == ApprovalMode::Off
     }
 
     /// `[approvals].allow` as on disk now, then this session's approvals.
@@ -149,9 +168,10 @@ impl CommandGate {
     /// Gates one command line of `tool`.
     pub async fn check_command(&self, tool: &str, call_id: &str, line: &str) -> GateVerdict {
         let allow = self.allow_rules();
+        let deny = self.approvals().deny.clone();
         let policy = Policy {
             bypass: self.bypassing(),
-            deny: &self.setup.approvals.deny,
+            deny: &deny,
             allow: &allow,
             floors: &self.setup.floors,
         };
@@ -251,9 +271,9 @@ impl CommandGate {
         let context = self.setup.context;
         let mode = match context {
             Context::Interactive => return self.ask(request).await,
-            Context::Cron => self.setup.approvals.cron_mode,
-            Context::SingleQuery => self.setup.approvals.single_query_mode,
-            Context::Unattended => self.setup.approvals.unattended_mode,
+            Context::Cron => self.approvals().cron_mode,
+            Context::SingleQuery => self.approvals().single_query_mode,
+            Context::Unattended => self.approvals().unattended_mode,
         };
         if request.remember.is_none() || mode == UnattendedApproval::Deny {
             self.unobtainable.fetch_add(1, Ordering::Relaxed);

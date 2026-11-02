@@ -17,7 +17,7 @@ use crate::chat::attach;
 use crate::config_cmd::edit::{DEFAULT_EDITOR, launch_editor};
 
 /// What an empty composition prints.
-pub(super) const EMPTY: &str = "empty prompt; nothing sent";
+pub(crate) const EMPTY: &str = "empty prompt; nothing sent";
 
 impl Repl {
     /// `/image <path>` attaches, bare `/image` lists, `/image clear` drops.
@@ -76,24 +76,10 @@ impl Repl {
     /// Opens the editor on a private temporary file holding `initial`;
     /// `None` when the saved file is empty (or still the empty start).
     fn edit_message(&self, initial: &str) -> Result<Option<String>, Error> {
-        let dir = self.factory.scope.path("cache/compose");
-        let io = |e: std::io::Error| {
-            Error::new(
-                &codes::HOME_IO,
-                format!("cannot prepare the message file: {e}"),
-            )
-        };
-        private_fs::create_dir(&dir).map_err(io)?;
-        let path = dir.join(format!("prompt-{}.md", MessageId::new().ulid()));
-        private_fs::write_atomic(&path, initial.as_bytes()).map_err(io)?;
         let editor = self.factory.launch().editor().unwrap_or(DEFAULT_EDITOR);
         // The editor takes the terminal: earlier output first.
         self.input.flush();
-        let result =
-            launch_editor(editor, &path).and_then(|()| std::fs::read_to_string(&path).map_err(io));
-        let _ = std::fs::remove_file(&path);
-        let text = result?;
-        Ok((!text.trim().is_empty()).then_some(text))
+        edit_message(&self.factory.scope.path("cache/compose"), editor, initial)
     }
 }
 
@@ -105,4 +91,32 @@ fn resolve(path: &str, cwd: &std::path::Path) -> PathBuf {
     } else {
         cwd.join(path)
     }
+}
+
+/// Opens `editor` on a private file in `dir` holding `initial`; `None`
+/// when the saved file is empty (or still the empty start). The caller
+/// flushes its output first: the editor takes the terminal.
+///
+/// # Errors
+///
+/// `home.io` when the file cannot be prepared; the editor's failure.
+pub(crate) fn edit_message(
+    dir: &std::path::Path,
+    editor: &str,
+    initial: &str,
+) -> Result<Option<String>, Error> {
+    let io = |e: std::io::Error| {
+        Error::new(
+            &codes::HOME_IO,
+            format!("cannot prepare the message file: {e}"),
+        )
+    };
+    private_fs::create_dir(dir).map_err(io)?;
+    let path = dir.join(format!("prompt-{}.md", MessageId::new().ulid()));
+    private_fs::write_atomic(&path, initial.as_bytes()).map_err(io)?;
+    let result =
+        launch_editor(editor, &path).and_then(|()| std::fs::read_to_string(&path).map_err(io));
+    let _ = std::fs::remove_file(&path);
+    let text = result?;
+    Ok((!text.trim().is_empty()).then_some(text))
 }

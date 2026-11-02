@@ -1,11 +1,13 @@
 # Chatting with the agent
 
 `prometheus` with no subcommand is `prometheus chat`. On a terminal (stdin
-and stdout both terminals) it opens the line interface; anywhere else, or
-with `-z`, it runs one turn and prints only the answer. `ui.interface`
-and `--tui`/`--line` choose the interactive interface; this build ships
-the line interface, which also stands in for `tui`. A pipe is always
-one-shot, whatever the configuration says.
+and stdout both terminals) it opens the interactive interface that
+`ui.interface` names: the full-screen [TUI](tui.md) (the default) or the
+line interface; `--tui` and `--line` choose for one run, and `-q/--quiet`
+or `--usage-file` keep the line interface. Anywhere else, or with `-z`, it
+runs one turn and prints only the answer: a pipe is always one-shot,
+whatever the configuration says. No environment variable takes part in
+the choice.
 
 ## One-shot runs
 
@@ -213,6 +215,48 @@ once when idle); `/queue list`, `/queue edit <n> <text>`, `/queue rm
 manage the queue, with 1-based indexes (`no queued item <n>` otherwise).
 Text typed during a turn with `busy.input_mode = "queue"` joins the same
 queue.
+
+## With a running gateway daemon
+
+When the home's gateway daemon runs (`prometheus daemon start`, see
+[the daemon and its client protocol](client-protocol.md)), `prometheus
+chat` attaches to it as a client instead of running the agent in this
+process: the daemon creates or resumes the session, runs its turns and
+owns the session store, so the session is visible to every other client
+while it runs. Without a daemon the chat runs in-process as above;
+`--in-process` insists on that, and exits 75 while a daemon holds the
+home. A profile the daemon does not serve cannot chat while it runs
+(exit 75; see `gateway.multiplex`).
+
+The chat's flags shape the daemon's session as they would an in-process
+one: `-m`, `--provider`, `--set`, `--toolsets`, `--skills`, `--approvals`,
+`--yolo`, `--max-iterations`, `--pass-session-id`, `--no-context-files`,
+`--ignore-user-config`, `--ignore-rules`, `--mock-script` and `--base-url`
+(with `--api-key-stdin`, the key held in the daemon's memory only) go to
+the daemon with the session; `--image` files go with the prompt (the
+daemon reads them, so give paths it can reach), `--run-budget` applies to
+each turn and `--usage-file` is written from the daemon's turn reports.
+
+One-shot runs behave as they do in-process (the answer on stdout, the same
+`--json` document and exit statuses). The line interface uses the same
+line editor, theme and Markdown rendering as in-process and shows
+`attached to the gateway daemon (pid <n>) · session <id>`; Ctrl+C
+interrupts the running turn, lines typed during a turn run after it, and
+approval and clarify questions are answered at the prompt. Commands that
+change only what your terminal shows or which session it drives run in
+the chat (`/exit`, `/new`, `/clear`, `/fork`, `/resume`, `/stop`,
+`/image`, `/queue`, `/prompt`, `/theme`, `/verbose`, `/focus`,
+`/timestamps`); every other command, skill and quick command runs on the
+daemon's session (`/model`, `/usage`, `/title`, `/history`,
+`/reload-secrets`, `/reload-skills`, `/compress`, `/retry`, `/undo`...)
+with the same output as in-process. `/snapshot restore` is refused while
+the daemon serves the store; `!` shell escapes are not available while
+attached.
+
+A session has one interactive owner at a time. Resuming a session that
+another chat has open prints `session <id> is open in another client (pid
+<n>)` and offers to follow it read-only or fork it at its last message (a
+one-shot run exits 75 instead).
 
 ## Themes
 

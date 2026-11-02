@@ -6,7 +6,8 @@
 # targets build and pass the same offline smoke run (task 21.2;
 # scripts/ci/offline-demo). The perf job runs
 # `scripts/check --perf` on one fixed reference runner, where the regression
-# check compares with main's baseline (perf/README.md).
+# check compares with the base branch measured in the same job
+# (perf/README.md).
 #
 # Every action is pinned to a full commit SHA; the comment names its tag.
 
@@ -14,8 +15,8 @@ name: CI
 
 on:
   workflow_dispatch:
+  # Every base branch: stacked milestone PRs target each other, not main.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
@@ -73,6 +74,11 @@ jobs:
       - name: Install musl-tools
         if: endsWith(matrix.target, '-musl')
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+
+      # The shell-completion tests load the scripts in bash and zsh.
+      - name: Install zsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh
 
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
@@ -199,6 +205,13 @@ jobs:
       - name: Windows terminal tests
         if: runner.os == 'Windows'
         run: cargo test -p pmt-tools --locked --target "${{ matrix.target }}"
+
+      # TUI background detection on a Windows console (tui, Terminal
+      # background detection): the OSC 11 reply is read as console key
+      # events with VT input on, within 100 ms, and the mode is restored.
+      - name: Windows TUI console tests
+        if: runner.os == 'Windows'
+        run: cargo test -p pmt-tui --lib --locked --target "${{ matrix.target }}" -- background
 
       # Release verification, receipts, the update lock and the Windows
       # rename-aside swap of a running executable (distribution-and-update).
@@ -389,11 +402,7 @@ jobs:
   perf:
     name: perf (startup, memory, size)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      # Downloading the baseline artifact of another workflow run.
-      actions: read
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -403,44 +412,40 @@ jobs:
           cache-key: perf
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Record the main-branch baseline
+      # A push to main checks the absolute budgets only.
+      - name: Check the absolute budgets
         if: github.event_name == 'push'
         run: scripts/check --perf --update-baseline --baseline target/perf-main.json
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: github.event_name == 'push'
-        with:
-          name: perf-baseline
-          path: target/perf-main.json
-          retention-days: 90
-          if-no-files-found: error
-
-      # Without an artifact from main the absolute budgets still apply, and
-      # the checked-in perf/baseline.json is the fallback. A pull request
-      # that changes perf/reference.json re-baselines deliberately (the new
-      # reference-runner numbers are reviewed in its diff) and is compared
-      # with that file instead of main.
-      - name: Fetch the main-branch baseline
+      # The baseline is the pull request's base branch measured in this same
+      # job, on this same machine, right before the head. A baseline recorded
+      # by another run lands on another runner, and the chat prompt median
+      # alone moved 22-32 ms between runs of one branch, past the 15% gate.
+      # A pull request that changes perf/reference.json re-baselines
+      # deliberately (the new reference-runner numbers are reviewed in its
+      # diff) and is compared with that file instead. Without a base branch
+      # (workflow_dispatch) the checked-in perf/baseline.json applies.
+      - name: Measure the base branch
         if: github.event_name != 'push'
         env:
-          GH_TOKEN: ${{ github.token }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ -n "$BASE_REF" ] && git fetch --depth=1 origin "$BASE_REF" &&
-            ! git diff --quiet FETCH_HEAD HEAD -- perf/reference.json; then
+          if [ -z "$BASE_REF" ]; then
+            echo "no base branch; using perf/baseline.json"
+            echo "PERF_BASELINE=perf/baseline.json" >>"$GITHUB_ENV"
+            exit 0
+          fi
+          git fetch --depth=1 origin "$BASE_REF"
+          if ! git diff --quiet FETCH_HEAD HEAD -- perf/reference.json; then
             echo "perf/reference.json changed in this pull request; comparing with it"
             echo "PERF_BASELINE=perf/reference.json" >>"$GITHUB_ENV"
             exit 0
           fi
-          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
-            --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
-          if [ -n "$run_id" ] &&
-            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name perf-baseline --dir target; then
-            echo "PERF_BASELINE=target/perf-main.json" >>"$GITHUB_ENV"
-          else
-            echo "no perf-baseline artifact from main; using perf/baseline.json"
-            echo "PERF_BASELINE=perf/baseline.json" >>"$GITHUB_ENV"
-          fi
+          git worktree add --detach "$RUNNER_TEMP/perf-base" FETCH_HEAD
+          (cd "$RUNNER_TEMP/perf-base" &&
+            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" scripts/check --perf \
+              --update-baseline --baseline "$GITHUB_WORKSPACE/target/perf-base.json")
+          echo "PERF_BASELINE=target/perf-base.json" >>"$GITHUB_ENV"
 
       - name: Check the budgets
         if: github.event_name != 'push'

@@ -143,7 +143,7 @@ Requests declared `long` in the registry (for example `session.resume`, `session
 - **THEN** the catalog response MAY arrive before the resume response and the resume SHALL still complete
 
 ### Requirement: Gateway retirement refuses new work
-While the daemon is retiring (update, restart or shutdown), it SHALL refuse every new request except `rpc.ping` and `session.detach` with `-32006 daemon is restarting; reconnect to continue`, SHALL let running turns finish up to `daemon.restart_drain_secs` (default 120), and SHALL then close connections with 1001.
+While the daemon is retiring (update, restart or shutdown), it SHALL refuse every new request with `-32006 daemon is restarting; reconnect to continue` except `rpc.ping`, `session.detach`, `approval.respond` (so the running turns it drains can finish) and the read-only `session.events.since`, `session.list`, `session.transcript` and `session.context_usage`, SHALL let running turns finish up to `daemon.restart_drain_secs` (default 120), SHALL then end every session it loaded (`end_reason` `user_exit`, or `interrupted` for a turn stopped at the drain deadline, with the trajectory's `session.end`) and close connections with 1001. A one-shot run's session (`chat -z` attached to the daemon) SHALL end `user_exit` once its turn is done, as the same run in-process does.
 **Milestone:** M2
 
 #### Scenario: Prompt during retirement
@@ -151,8 +151,13 @@ While the daemon is retiring (update, restart or shutdown), it SHALL refuse ever
 - **THEN** the response SHALL be `-32006` and no turn SHALL start
 
 ### Requirement: Server-to-client requests
-The daemon SHALL ask clients questions (`approval.request`, `clarify.request`, `secret.request`, `sudo.request`) as JSON-RPC requests with ids `srq-<12 hex>` sent to every attached client whose `rpc.hello` advertised `capabilities.server_requests = true` and whose role is `driver`; the first valid answer SHALL settle the request and the daemon SHALL emit `request.resolved {id, by_client}` to all other recipients; when no attached client can answer, the request SHALL settle immediately with outcome `no_responder` instead of waiting out its deadline.
+The daemon SHALL ask clients questions (`approval.request`, `clarify.request`, `secret.request`, `sudo.request`) as JSON-RPC requests with ids `srq-<12 hex>` sent to every attached client whose `rpc.hello` advertised `capabilities.server_requests = true` and whose role is `driver`; the first valid answer SHALL settle the request and the daemon SHALL emit `request.resolved {id, by_client}` to all other recipients; when no attached client can answer, the request SHALL settle immediately with outcome `no_responder` instead of waiting out its deadline. The TUI SHALL answer all four kinds on a card that counts down to the request's deadline and is withdrawn on `request.resolved` or `request.cancel`; `secret.request` and `sudo.request` SHALL be answered from a masked input that is never drawn (one bullet per typed character), never written to the input history and never shown in the transcript, sending the value on Enter and declining (`null`) on Esc, Ctrl+C or an empty input.
 **Milestone:** M2
+
+#### Scenario: Masked secret entry
+- **GIVEN** the TUI attached as a driver
+- **WHEN** the daemon sends `secret.request` and the user types the value and presses Enter
+- **THEN** the daemon SHALL receive the value, and neither the screen, the input history nor the transcript SHALL contain it; a `sudo.request` answered with Esc SHALL be declined with a `null` password
 
 #### Scenario: Two windows show the same approval
 - **GIVEN** a TUI and a desktop window both attached as drivers
@@ -187,7 +192,7 @@ Every server-to-client request SHALL carry a `deadline_ms` (`approvals.timeout_s
 - **THEN** the response SHALL be `-32002`
 
 ### Requirement: Prompt submission while busy
-`prompt.submit {session_id, input_id, content}` arriving while a turn is running SHALL never be dropped; it SHALL follow `busy.input_mode` (`queue` default, `steer`, `interrupt`; per-platform overrides under `gateway.platforms.<platform>.busy` apply only to messaging sessions), where `steer` injects after the current atomic tool step and never hard-interrupts, `queue` runs the input FIFO after the turn, and `interrupt` cancels the turn at the next safe point and then runs the input; a repeated `input_id` SHALL return the original admission instead of a second turn.
+`prompt.submit {session_id, input_id, text}` arriving while a turn is running SHALL never be dropped; it SHALL follow `busy.input_mode` (`queue` default, `steer`, `interrupt`; per-platform overrides under `gateway.platforms.<platform>.busy` apply only to messaging sessions), where `steer` injects after the current atomic tool step and never hard-interrupts, `queue` runs the input FIFO after the turn, and `interrupt` cancels the turn at the next safe point and then runs the input; a repeated `input_id` SHALL return the original admission instead of a second turn.
 **Milestone:** M2
 
 #### Scenario: Duplicate submit after a lost ack
@@ -212,7 +217,7 @@ Every request that reads or writes profile data SHALL execute under an explicit 
 - **THEN** the response SHALL be `-32602` naming the missing profile and no profile's config SHALL be read
 
 ### Requirement: Slash command flow in the TUI
-The TUI SHALL handle client-local commands from its own typed registry (`/quit`, `/clear`, `/copy`, `/paste`, `/theme`, `/keys`, `/pane`, `/layout`, `/redraw`, `/statusbar`, `/battery`, `/indicator`, `/palette`, `/sessions`, `/terminal-setup`) without a round-trip and send every other `/` input to `command.dispatch {session_id, name, args}`, which SHALL answer one of `{type: "done", notice}`, `{type: "send", message}` (submitted as a prompt) or `{type: "refused", reason}`; text whose first token is not a registered command (for example `/etc/hosts`) SHALL be sent as a prompt.
+The TUI SHALL handle client-local commands from its own typed registry (`/quit`, `/clear`, `/copy`, `/paste`, `/theme`, `/keys`, `/pane`, `/layout`, `/redraw`, `/statusbar`, `/battery`, `/indicator`, `/palette`, `/sessions`, `/terminal-setup`, `/update`, and `/new`, `/resume`, `/fork`, which use the session methods) without a `command.dispatch` round-trip and send every other `/` input to `command.dispatch {session_id, name, args}`, which SHALL answer one of `{type: "done", notice}`, `{type: "send", message}` (submitted as a prompt) or `{type: "refused", reason}`; text whose first token is not a registered command (for example `/etc/hosts`) SHALL be sent as a prompt.
 **Milestone:** M2
 
 #### Scenario: Skill command

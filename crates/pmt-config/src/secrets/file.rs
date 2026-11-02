@@ -66,7 +66,7 @@ impl FileStore {
     }
 }
 
-fn parse(path: &Path, text: &str) -> Result<BTreeMap<String, SecretString>, Error> {
+pub(crate) fn parse(path: &Path, text: &str) -> Result<BTreeMap<String, SecretString>, Error> {
     // The TOML error text can quote the offending line, which may hold a
     // value; report only its position.
     let table: toml::Table = toml::from_str(text).map_err(|e| {

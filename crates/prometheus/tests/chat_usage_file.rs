@@ -121,7 +121,7 @@ fn the_usage_file_is_written_on_sigint() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    wait_for_the_turn(home.path());
     kill(
         Pid::from_raw(i32::try_from(child.id()).unwrap()),
         Signal::SIGINT,
@@ -131,6 +131,39 @@ fn the_usage_file_is_written_on_sigint() {
     let report = report(&file);
     assert_eq!(report["exit_code"], 130);
     assert_eq!(report["exit_reason"], "interrupted");
+}
+
+/// Waits until the run's turn has stored its user message. The signal
+/// listeners are installed before the turn is first polled, so from then
+/// on a SIGINT is the run's to handle; a fixed sleep raced process start
+/// on slow runners (the child then died of the signal, without a status).
+#[cfg(unix)]
+fn wait_for_the_turn(home: &Path) {
+    use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+    let deadline = std::time::Instant::now() + std::time::Duration::from_mins(1);
+    let started = || -> Option<bool> {
+        let home = Home::open(home).ok()?;
+        let profile = home
+            .existing_profile(&ProfileName::parse("default").unwrap())
+            .ok()?;
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).ok()?;
+        let store = pmt_store::Store::open(&scope).ok()?;
+        let sessions = store
+            .list_sessions(&pmt_store::ListOptions {
+                all: true,
+                ..pmt_store::ListOptions::default()
+            })
+            .ok()?;
+        let id = sessions.first()?.id;
+        Some(store.active_lineage_messages(id).ok()? > 0)
+    };
+    while started() != Some(true) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the turn did not start within a minute"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
 }
 
 /// The system prompt the newest session started with (its stored tiers).

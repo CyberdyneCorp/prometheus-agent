@@ -6,6 +6,7 @@
 
 - [Configuration, secrets and profiles](guide/configuration-and-profiles.md)
 - [Chatting with the agent](guide/chat.md)
+- [The terminal UI](guide/tui.md)
 - [The offline demo](guide/demo.md)
 - [Installing and updating](guide/install-and-update.md)
 - [Setup, onboarding and doctor](guide/setup-and-doctor.md)
@@ -24,6 +25,7 @@
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)
+- [The daemon and its client protocol](guide/client-protocol.md)
 
 # Reference
 
@@ -31,6 +33,7 @@
 - [Daemon configuration](reference/daemon-configuration.md)
 - [CLI](reference/cli.md)
 - [Error codes](reference/error-codes.md)
+- [Client protocol](reference/rpc.md)
 - [Tools](reference/tools.md)
 - [System prompt layers](reference/system-prompt.md)
 

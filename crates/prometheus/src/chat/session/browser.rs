@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use pmt_config::ProfileScope;
+use pmt_config::{ProfileScope, SharedScope};
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
 use pmt_core::secret::Redactor;
@@ -56,6 +56,7 @@ impl Shared {
     /// An invalid `daemon.toml` or `security.egress`, or no HTTP client.
     pub fn new(
         scope: &ProfileScope,
+        current: &SharedScope,
         launch: &LaunchEnv,
         redactor: &Redactor,
         asks: Option<mpsc::UnboundedSender<InstallAsk>>,
@@ -69,9 +70,10 @@ impl Shared {
         )?;
         let egress = &config.security.egress;
         let destinations = DestinationPolicy::new(egress.allow_private, &egress.fake_ip_ranges)?;
-        let live = scope.clone();
+        // `browser.inactivity_timeout_secs` is live: read at each use.
+        let live = current.clone();
         let manager = BrowserManager::new(BrowserSetup {
-            config: Arc::new(move || live.config().browser.clone()),
+            config: Arc::new(move || live.get().config().browser.clone()),
             runtime: policies.chromium,
             env: ChildEnv::build(launch, EnvRequest::default()),
             cache_dir: scope.path("cache/browser"),

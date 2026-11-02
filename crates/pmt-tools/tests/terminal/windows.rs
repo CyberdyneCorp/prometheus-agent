@@ -104,7 +104,7 @@ fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> LocalTerminal
     env.set_temp_dir(&scratch);
     LocalTerminal::new(LocalSetup {
         terminal: TerminalConfig::default(),
-        max_chars: 50_000,
+        max_chars: pmt_tools::setting::fixed(50_000),
         kill_grace: Duration::from_secs(2),
         sandbox: Arc::new(sandbox),
         env,

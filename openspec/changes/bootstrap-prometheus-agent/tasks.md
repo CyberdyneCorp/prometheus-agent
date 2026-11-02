@@ -233,28 +233,28 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 22. M2 Daemon and client RPC protocol
 
-- [ ] 22.1 Implement `pmt-gateway` daemon start/stop/status with one daemon per home, the discovery file and local control channel, and `daemon ensure --json`; verify that a second daemon start finds the first and exits non-zero (spec: workspace-architecture, spec: messaging-gateway)
-- [ ] 22.2 Implement ticket-authenticated loopback WebSocket attachment and the shared close-code table (1000…4426); verify that a bad ticket closes with 4401 and a bad Origin with 4403 (spec: workspace-architecture)
-- [ ] 22.3 Implement JSON-RPC 2.0 framing, the error-code table, `rpc.hello` handshake and versioning (major mismatch → -32008/4426); verify with protocol conformance tests (spec: workspace-architecture)
-- [ ] 22.4 Generate `schema/rpc.json` and TypeScript bindings from the Rust types and add them to the freshness check; verify that changing a param type without regenerating fails CI (spec: workspace-architecture)
-- [ ] 22.5 Implement the catalog index of capability-owned RPC methods and events (each name registered with its owning capability, served over the protocol and exported into `schema/rpc.json`); verify that the catalog lists every capability method and that an unregistered method name fails at startup (spec: workspace-architecture)
-- [ ] 22.6 Implement strict param validation, profile and ownership checks on every session method, server-to-client requests, event sequencing with reconnect replay, liveness/backpressure, and stale-build detection; verify with tests for replay after a dropped connection (spec: workspace-architecture)
-- [ ] 22.7 Implement `prometheus rpc` (debug client); verify that it can call `rpc.hello` and a session method (spec: workspace-architecture)
-- [ ] 22.8 Implement CLI daemon attachment with in-process fallback and a single interactive owner per session; verify that two CLIs attaching to one session get an ownership error for the second (spec: cli)
-- [ ] 22.9 Implement live config reload with apply classes, the managed configuration layer, profile alias launchers, the served profile set and profile export without credentials by default; verify with tests that a reload marked `next_session` does not alter a live session (spec: configuration-and-profiles)
-- [ ] 22.10 Implement managed secrets with managed visibility (managed keys shown as managed and read-only) and profile creation options (clone config, skills or memory; messaging channels not cloned by default); verify with CLI tests (spec: configuration-and-profiles)
-- [ ] 22.11 Add shell completions (`prometheus completions <shell>`); verify generated completions load in bash and zsh (spec: cli)
-- [ ] 22.12 Document the client protocol (generated reference plus guide) and verify the docs build (spec: workspace-architecture)
+- [x] 22.1 Implement `pmt-gateway` daemon start/stop/status with one daemon per home, the discovery file and local control channel, and `daemon ensure --json`; verify that a second daemon start finds the first and exits non-zero (spec: workspace-architecture, spec: messaging-gateway)
+- [x] 22.2 Implement ticket-authenticated loopback WebSocket attachment and the shared close-code table (1000…4426); verify that a bad ticket closes with 4401 and a bad Origin with 4403 (spec: workspace-architecture)
+- [x] 22.3 Implement JSON-RPC 2.0 framing, the error-code table, `rpc.hello` handshake and versioning (major mismatch → -32008/4426); verify with protocol conformance tests (spec: workspace-architecture)
+- [x] 22.4 Generate `schema/rpc.json` and TypeScript bindings from the Rust types and add them to the freshness check; verify that changing a param type without regenerating fails CI (spec: workspace-architecture)
+- [x] 22.5 Implement the catalog index of capability-owned RPC methods and events (each name registered with its owning capability, served over the protocol and exported into `schema/rpc.json`); verify that the catalog lists every capability method and that an unregistered method name fails at startup (spec: workspace-architecture)
+- [x] 22.6 Implement strict param validation, profile and ownership checks on every session method, server-to-client requests, event sequencing with reconnect replay, liveness/backpressure, and stale-build detection; verify with tests for replay after a dropped connection (spec: workspace-architecture)
+- [x] 22.7 Implement `prometheus rpc` (debug client); verify that it can call `rpc.hello` and a session method (spec: workspace-architecture)
+- [x] 22.8 Implement CLI daemon attachment with in-process fallback and a single interactive owner per session; verify that two CLIs attaching to one session get an ownership error for the second (spec: cli)
+- [x] 22.9 Implement live config reload with apply classes, the managed configuration layer, profile alias launchers, the served profile set and profile export without credentials by default; verify with tests that a reload marked `next_session` does not alter a live session (spec: configuration-and-profiles)
+- [x] 22.10 Implement managed secrets with managed visibility (managed keys shown as managed and read-only) and profile creation options (clone config, skills or memory; messaging channels not cloned by default); verify with CLI tests (spec: configuration-and-profiles)
+- [x] 22.11 Add shell completions (`prometheus completions <shell>`); verify generated completions load in bash and zsh (spec: cli)
+- [x] 22.12 Document the client protocol (generated reference plus guide) and verify the docs build (spec: workspace-architecture)
 
 ## 23. M2 TUI
 
-- [ ] 23.1 Implement the ratatui TUI launch selection and attachment to the daemon as a client, plus standalone in-process mode; verify with a pty test that `prometheus` on a TTY with `ui.interface = "tui"` attaches (spec: tui)
-- [ ] 23.2 Implement terminal state restoration on every exit path (panic, signal) and the in-TUI update hand-off; verify with pty tests that the terminal mode is restored after SIGTERM (spec: tui)
-- [ ] 23.3 Implement the TUI side of the protocol (handshake, typed method registry, error and close codes, attachment-scoped session access, sequencing and replay, liveness, non-blocking long requests, retirement, server requests with fail-closed deadlines, idempotent creation, busy submission, author stamping, profile scope); verify against the shared conformance suite (spec: tui)
-- [ ] 23.4 Implement the slash command flow, discovery RPCs that preserve the prompt cache, composer with path completion, status line with accessibility, configurable key bindings and orphan attachment reaping; verify with snapshot tests (spec: tui)
-- [ ] 23.5 Implement client-local display commands (status bar and indicator toggles that never reach the daemon), busy indicator styles, the fuzzy command palette (inserts, never runs) and the collapsible startup banner; verify with pty snapshot tests (spec: tui)
-- [ ] 23.6 Implement large pastes collapsing into chips, clipboard image attachments (with the over-SSH fallback), LaTeX math rendering with an unsupported-macro fallback and terminal background detection without `COLORFGBG`; verify with snapshot tests (spec: tui)
-- [ ] 23.7 Implement the live session switcher and auto-resume of the last TUI session after a dropped connection; verify with a pty test that reconnects after the transport is killed (spec: tui)
+- [x] 23.1 Implement the ratatui TUI launch selection and attachment to the daemon as a client, plus standalone in-process mode; verify with a pty test that `prometheus` on a TTY with `ui.interface = "tui"` attaches (spec: tui)
+- [x] 23.2 Implement terminal state restoration on every exit path (panic, signal) and the in-TUI update hand-off; verify with pty tests that the terminal mode is restored after SIGTERM (spec: tui)
+- [x] 23.3 Implement the TUI side of the protocol (handshake, typed method registry, error and close codes, attachment-scoped session access, sequencing and replay, liveness, non-blocking long requests, retirement, server requests with fail-closed deadlines, idempotent creation, busy submission, author stamping, profile scope); verify against the shared conformance suite (spec: tui)
+- [x] 23.4 Implement the slash command flow, discovery RPCs that preserve the prompt cache, composer with path completion, status line with accessibility, configurable key bindings and orphan attachment reaping; verify with snapshot tests (spec: tui)
+- [x] 23.5 Implement client-local display commands (status bar and indicator toggles that never reach the daemon), busy indicator styles, the fuzzy command palette (inserts, never runs) and the collapsible startup banner; verify with pty snapshot tests (spec: tui)
+- [x] 23.6 Implement large pastes collapsing into chips, clipboard image attachments (with the over-SSH fallback), LaTeX math rendering with an unsupported-macro fallback and terminal background detection without `COLORFGBG`; verify with snapshot tests (spec: tui)
+- [x] 23.7 Implement the live session switcher and auto-resume of the last TUI session after a dropped connection; verify with a pty test that reconnects after the transport is killed (spec: tui)
 
 ## 24. M2 Messaging gateway core
 

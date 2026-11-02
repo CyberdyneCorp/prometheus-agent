@@ -133,3 +133,17 @@ impl EventSink for Tee {
         self.inner.emit(emit)
     }
 }
+
+/// Sends every event to two sinks, in order (a daemon session's trajectory
+/// and its attached clients).
+pub struct Both(pub Arc<dyn EventSink>, pub Arc<dyn EventSink>);
+
+impl EventSink for Both {
+    fn emit(&self, emit: Emit) -> BoxFuture<'_, Result<(), pmt_core::Error>> {
+        Box::pin(async move {
+            let first = self.0.emit(emit.clone()).await;
+            self.1.emit(emit).await?;
+            first
+        })
+    }
+}

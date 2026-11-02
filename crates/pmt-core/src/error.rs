@@ -214,6 +214,12 @@ error_codes! {
     /// `config.toml` was written by a newer prometheus.
     CONFIG_TOO_NEW = ("config.too_new", Config,
         "`config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus.");
+    /// A writer tried to change a key the administrator locked.
+    CONFIG_MANAGED_KEY = ("config.managed_key", PermissionDenied,
+        "The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it.");
+    /// The administrator-managed configuration layer is invalid.
+    CONFIG_MANAGED_INVALID = ("config.managed_invalid", Config,
+        "`managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it.");
     /// The configuration editor could not be started or failed.
     CONFIG_EDITOR = ("config.editor", Unavailable,
         "The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error.");
@@ -242,6 +248,9 @@ error_codes! {
     /// The OS keychain backend is not available on this machine.
     SECRET_KEYCHAIN_UNAVAILABLE = ("secret.keychain_unavailable", Unavailable,
         "`secrets.backend = \"keychain\"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend.");
+    /// `prometheus secrets` tried to change an administrator-managed secret.
+    SECRET_MANAGED = ("secret.managed", PermissionDenied,
+        "The secret comes from the administrator-managed `managed-secrets.toml`, which takes precedence over every profile store and the environment; it cannot be set or unset per profile.");
     /// Revealing a secret was refused because stdout is not a terminal.
     SECRET_REVEAL_REFUSED = ("secret.reveal_refused", PermissionDenied,
         "`prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file.");
@@ -254,6 +263,15 @@ error_codes! {
     /// The operation is not allowed on the default profile.
     PROFILE_PROTECTED = ("profile.protected", Usage,
         "The `default` profile cannot be deleted or renamed.");
+    /// An alias launcher would shadow something or has a bad name.
+    PROFILE_ALIAS_REFUSED = ("profile.alias_refused", Usage,
+        "`profile alias` refuses a launcher name that is reserved, is a `prometheus` subcommand, would shadow an existing executable on `PATH`, or is not a valid profile-style name.");
+    /// A profile archive is not one `profile export` wrote, or is damaged.
+    PROFILE_ARCHIVE_INVALID = ("profile.archive_invalid", InvalidInput,
+        "The file is not a profile archive written by `prometheus profile export`, a member is outside the allowed set, or it is damaged; nothing was imported.");
+    /// The passphrase does not open an archive's secrets.
+    PROFILE_ARCHIVE_PASSPHRASE = ("profile.archive_passphrase", Auth,
+        "The archive's secrets are encrypted with another passphrase (Argon2id key, XChaCha20-Poly1305); nothing was imported.");
     /// A running process uses the profile.
     PROFILE_IN_USE = ("profile.in_use", Conflict,
         "A running daemon or interactive client uses the profile; stop it and retry.");
@@ -338,6 +356,9 @@ error_codes! {
     /// A rewind target is missing or not a user message.
     STORE_REWIND_TARGET_INVALID = ("store.rewind_target_invalid", InvalidInput,
         "Rewind targets an active user message of the session; the given message is missing, inactive or not a user message.");
+    /// The fork point is not an active message of the session.
+    STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
+        "`session.fork` names an `at_message_id` that is not an active message of the forked session.");
     /// The transcript changed since the rewind or restore was planned.
     STORE_REWIND_CONFLICT = ("store.rewind_conflict", Conflict,
         "The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry.");
@@ -779,6 +800,84 @@ error_codes! {
     /// A runtime store file could not be read or written.
     RUNTIME_IO = ("runtime.io", Io,
         "A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed.");
+    /// A client frame is not JSON (JSON-RPC -32700).
+    RPC_PARSE = ("rpc.parse", InvalidInput,
+        "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");
+    /// A frame is JSON but not a JSON-RPC 2.0 request (-32600).
+    RPC_INVALID_REQUEST = ("rpc.invalid_request", InvalidInput,
+        "A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`).");
+    /// The method is not in the catalog (-32601).
+    RPC_UNKNOWN_METHOD = ("rpc.unknown_method", Usage,
+        "The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`.");
+    /// Params name a field the method does not declare (-32602).
+    RPC_UNKNOWN_FIELD = ("rpc.unknown_field", InvalidInput,
+        "The params name a field the method's contract does not declare; `data.path` is its JSON pointer (JSON-RPC `-32602`).");
+    /// Params miss a field or have the wrong type (-32602).
+    RPC_INVALID_PARAMS = ("rpc.invalid_params", InvalidInput,
+        "The params are not an object, miss a required field or have a value of the wrong type; `data.path` points at it (JSON-RPC `-32602`).");
+    /// A request came before `rpc.hello`.
+    RPC_HANDSHAKE_REQUIRED = ("rpc.handshake_required", Protocol,
+        "The first request on a connection must be `rpc.hello`.");
+    /// Client and daemon speak different protocol majors.
+    RPC_PROTOCOL_MISMATCH = ("rpc.protocol_mismatch", Protocol,
+        "The client and the daemon speak different major versions of the client protocol; update the older side (`prometheus update`).");
+    /// The method is declared by a capability this build does not serve yet.
+    RPC_NOT_SERVED = ("rpc.not_served", Unavailable,
+        "The method is declared in the RPC catalog by a capability this daemon does not serve yet.");
+    /// The daemon produced a result or payload that breaks its contract.
+    RPC_CONTRACT_VIOLATION = ("rpc.contract_violation", Internal,
+        "The daemon produced a result or event payload that does not match its contract (a bug; it is logged and counted in `prometheus.rpc.contract_violations`).");
+    /// A server-to-client request is no longer open.
+    RPC_REQUEST_CLOSED = ("rpc.request_closed", NotFound,
+        "The answered server-to-client request is not open any more (answered elsewhere, timed out or cancelled); the answer was dropped.");
+    /// The daemon is restarting and accepts no new work.
+    RPC_RETIRING = ("rpc.retiring", Unavailable,
+        "The daemon is restarting and refuses new work; reconnect to continue.");
+    /// A session is not visible to, or not attached by, the connection.
+    RPC_SESSION_DENIED = ("rpc.session_denied", PermissionDenied,
+        "The session is not one of the connection's profile, or a mutating method was called without attaching to it; the error does not say whether the session exists elsewhere.");
+    /// The connection to the daemon failed or closed.
+    RPC_CONNECTION = ("rpc.connection", Unavailable,
+        "The connection to the daemon could not be opened or was closed (the WebSocket close code is in the message).");
+    /// No ticket, an unknown, expired or reused one, or a bad request on the control channel.
+    RPC_TICKET = ("rpc.ticket", Auth,
+        "The control channel refused the ticket request (unknown profile or purpose, several profiles for a purpose other than `profile-admin`).");
+    /// No daemon runs for the home.
+    DAEMON_NOT_RUNNING = ("daemon.not_running", Unavailable,
+        "No gateway daemon runs for this home; start it with `prometheus daemon start`.");
+    /// The daemon did not become ready.
+    DAEMON_START_FAILED = ("daemon.start_failed", Unavailable,
+        "`prometheus daemon start` launched the daemon but it exited or did not publish its endpoint in time; see `prometheus logs daemon` and the exit status in the message.");
+    /// No profile of the home can be served.
+    DAEMON_NO_PROFILE = ("daemon.no_profile", Config,
+        "Every profile of the home failed to load (each error is logged), so the daemon has nothing to serve.");
+    /// A turn is already running in the session.
+    SESSION_BUSY = ("session.busy", Conflict,
+        "The session is running a turn; submit again when it finishes.");
+    /// A session method on a connection not attached to the session.
+    SESSION_NOT_ATTACHED = ("session.not_attached", PermissionDenied,
+        "Every session-addressed method needs the connection to attach to the session first (`session.attach`); the error does not say whether the session exists.");
+    /// A profile the connection's ticket does not grant.
+    PROFILE_NOT_GRANTED = ("profile.not_granted", PermissionDenied,
+        "The request names a profile the connection's ticket does not grant; get a ticket for that profile.");
+    /// An input carried a client-supplied author.
+    RPC_FORGED_AUTHOR = ("rpc.forged_author", PermissionDenied,
+        "`prompt.submit` carried an `author`; the gateway stamps every input's author from the connection and never takes one from a client.");
+    /// `session.create` named another client kind as its source.
+    RPC_SOURCE_MISMATCH = ("rpc.source_mismatch", PermissionDenied,
+        "`session.create` named a `source` other than the connection's own client kind (from `rpc.hello`).");
+    /// An observer tried to drive the session.
+    SESSION_OBSERVER = ("session.observer", PermissionDenied,
+        "The connection attached as an observer, which only reads; attach as a driver to submit, interrupt or answer.");
+    /// An answer to a server request that already settled.
+    RPC_REQUEST_SETTLED = ("rpc.request_settled", Conflict,
+        "The server-to-client request already settled (answered, timed out or cancelled); the late answer changed nothing.");
+    /// A request handler failed unexpectedly.
+    RPC_INTERNAL = ("rpc.internal", Internal,
+        "The daemon's handler for the method failed unexpectedly (a crash report was written); the connection stays open.");
+    /// `prometheus tui` without an interactive terminal.
+    TUI_NOT_A_TERMINAL = ("tui.not_a_terminal", Usage,
+        "`prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

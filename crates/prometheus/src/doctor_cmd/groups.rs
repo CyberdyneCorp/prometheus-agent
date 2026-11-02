@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use pmt_core::doctor::{Check, Status};
 use pmt_core::error::Error;
-use pmt_core::runtime::{Role, live_record};
 
 use super::Inputs;
 use crate::setup_cmd::sections::required_secrets;
@@ -149,7 +148,49 @@ pub(super) fn config(inputs: &Inputs<'_>) -> Vec<Check> {
             ignored.doctor_message(),
         ));
     }
+    checks.extend(managed());
     checks
+}
+
+/// The administrator-managed layer: its resolved paths and whether each
+/// file was loaded (spec: configuration-and-profiles, Managed secrets and
+/// managed visibility).
+fn managed() -> Vec<Check> {
+    let managed = match pmt_config::managed::current() {
+        Ok(Some(managed)) => managed,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            return vec![Check::new(
+                "config",
+                "managed",
+                Status::Fail,
+                err.message().to_owned(),
+            )];
+        }
+    };
+    let state = |loaded: bool| if loaded { "loaded" } else { "not present" };
+    vec![
+        Check::new(
+            "config",
+            "managed",
+            Status::Ok,
+            format!(
+                "managed configuration {}: {}",
+                managed.config_path().display(),
+                state(managed.config_loaded())
+            ),
+        ),
+        Check::new(
+            "config",
+            "managed_secrets",
+            Status::Ok,
+            format!(
+                "managed secrets {}: {}",
+                managed.secrets_path().display(),
+                state(managed.secrets_loaded())
+            ),
+        ),
+    ]
 }
 
 /// `secrets`: store permissions and referenced-but-missing secrets.
@@ -212,38 +253,6 @@ pub(super) fn store(inputs: &Inputs<'_>) -> Vec<Check> {
             ),
         ],
     }
-}
-
-/// `daemon`: a running daemon must be this build.
-pub(super) fn daemon(inputs: &Inputs<'_>) -> Vec<Check> {
-    let check = match live_record(inputs.scope.home(), Role::Daemon) {
-        Ok(None) => Check::new(
-            "daemon",
-            "running",
-            Status::Ok,
-            "not running (sessions run in-process)",
-        ),
-        Ok(Some(record)) if record.version == crate::build_info::VERSION => Check::new(
-            "daemon",
-            "running",
-            Status::Ok,
-            format!("running (pid {}, version {})", record.pid, record.version),
-        ),
-        Ok(Some(record)) => Check::new(
-            "daemon",
-            "running",
-            Status::Warn,
-            format!(
-                "running version {} (pid {}), this binary is {}",
-                record.version,
-                record.pid,
-                crate::build_info::VERSION
-            ),
-        )
-        .with_hint("restart the daemon to run this build"),
-        Err(err) => Check::new("daemon", "running", Status::Warn, err.message().to_owned()),
-    };
-    vec![check]
 }
 
 /// `runtimes`: the store policy and the verification state of every

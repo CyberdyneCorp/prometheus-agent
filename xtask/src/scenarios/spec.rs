@@ -7,6 +7,7 @@ use std::path::Path;
 /// One scenario of a requirement.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Scenario {
+    pub milestone: String,
     pub capability: String,
     pub requirement: String,
     pub name: String,
@@ -49,6 +50,7 @@ pub(crate) fn parse(capability: &str, text: &str, milestone: &str) -> Vec<Scenar
         }
         found.extend(block.lines().filter_map(|line| {
             line.strip_prefix("#### Scenario: ").map(|name| Scenario {
+                milestone: milestone.to_owned(),
                 capability: capability.to_owned(),
                 requirement: requirement.to_owned(),
                 name: name.trim().to_owned(),

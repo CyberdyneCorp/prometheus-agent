@@ -123,6 +123,10 @@ pub(super) async fn run(
 ) -> Result<TurnResult, Error> {
     let setup = &agent.setup;
     let id = TurnId::new();
+    // `cron.timezone` is live: a reloaded zone counts from this turn on.
+    agent
+        .budgets
+        .set_zone(pmt_obs::time::profile_zone(&scope.config().cron)?);
     // `@` references are expanded before admission: the admitted message
     // is the expanded one.
     let (input, notices) = expand(agent, input).await;
@@ -246,7 +250,12 @@ impl<'a> Turn<'a> {
             Some(steer) => format!("{steer}\n\n{}", input.text),
             None => input.text,
         };
-        let row = transcript::user_row(&text, &input.additions, &input.images);
+        let mut row = transcript::user_row(&text, &input.additions, &input.images);
+        if let Some(author) = input.author {
+            let mut metadata = row.metadata.take().unwrap_or_else(|| serde_json::json!({}));
+            metadata["author"] = author;
+            row.metadata = Some(metadata);
+        }
         let message_id = row.id;
         let wire = row.content.clone().unwrap_or_default();
         self.append(&row)?;

@@ -28,6 +28,9 @@ pub fn schema() -> &'static serde_json::Value {
 #[serde(deny_unknown_fields)]
 #[schemars(title = "Prometheus daemon.toml", extend("x-apply" = "restart"))]
 pub struct DaemonConfig {
+    /// The gateway daemon: its client listener and lifecycle.
+    #[serde(default)]
+    pub daemon: DaemonSection,
     /// Limits applied to every `prometheus` process of this home.
     #[serde(default)]
     pub process: ProcessConfig,
@@ -37,6 +40,110 @@ pub struct DaemonConfig {
     /// The managed runtime store (`prometheus runtimes`).
     #[serde(default)]
     pub runtimes: RuntimesConfig,
+}
+
+/// The `[daemon]` section (spec: workspace-architecture, One daemon per
+/// Prometheus home; Stale daemon build detection).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct DaemonSection {
+    /// The local client protocol listener.
+    pub rpc: RpcListenerConfig,
+    /// Seconds `prometheus daemon restart` waits for running turns to reach
+    /// a turn boundary before it replaces the daemon anyway.
+    pub restart_drain_secs: u64,
+    /// Interactive clients (`prometheus tui`, the ACP adapter) start the
+    /// daemon detached when it is not running; `false` makes them exit 69
+    /// instead.
+    pub autostart: bool,
+    /// A session with no attached client, no running turn, no open
+    /// request and no queued input is closed after this many seconds.
+    #[schemars(range(min = 1))]
+    pub idle_session_close_secs: u64,
+}
+
+impl Default for DaemonSection {
+    fn default() -> Self {
+        Self {
+            rpc: RpcListenerConfig::default(),
+            restart_drain_secs: 120,
+            autostart: true,
+            idle_session_close_secs: 3600,
+        }
+    }
+}
+
+/// `[daemon.rpc]`: the loopback WebSocket every local client attaches to
+/// (spec: workspace-architecture, Ticket-authenticated loopback attachment;
+/// JSON-RPC framing and error codes; Server-to-client requests; Connection
+/// liveness and backpressure).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct RpcListenerConfig {
+    /// Listen address. Loopback only (`127.0.0.1`, `::1`); port `0` picks
+    /// a free port, recorded as `rpc_url` in `run/gateway.json`. Remote
+    /// access goes through the gateway relay, never this listener.
+    pub bind: String,
+    /// Largest accepted frame; a larger one closes the connection with 4413.
+    #[schemars(range(min = 1024))]
+    pub max_frame_bytes: u64,
+    /// Requests run concurrently per connection; `rpc.ping` never waits
+    /// for one.
+    #[schemars(range(min = 1, max = 256))]
+    pub workers: u32,
+    /// Deadline of server-to-client requests other than approvals (which
+    /// use the profile's `approvals.timeout_secs`).
+    #[schemars(range(min = 1))]
+    pub request_timeout_secs: u64,
+}
+
+impl Default for RpcListenerConfig {
+    fn default() -> Self {
+        Self {
+            bind: "127.0.0.1:0".to_owned(),
+            max_frame_bytes: 16 * 1024 * 1024,
+            workers: 8,
+            request_timeout_secs: 600,
+        }
+    }
+}
+
+impl RpcListenerConfig {
+    /// The parsed listen address.
+    ///
+    /// # Errors
+    ///
+    /// The validation message for a malformed or non-loopback address.
+    pub fn bind_addr(&self) -> Result<std::net::SocketAddr, String> {
+        let addr: std::net::SocketAddr = self.bind.parse().map_err(|_| {
+            format!(
+                "daemon.rpc.bind: '{}' is not an address such as 127.0.0.1:0",
+                self.bind
+            )
+        })?;
+        if addr.ip().is_loopback() {
+            Ok(addr)
+        } else {
+            Err(format!(
+                "daemon.rpc.bind: '{}' is not a loopback address; the client listener is loopback-only and remote access goes through the relay (gateway.relay)",
+                self.bind
+            ))
+        }
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        self.bind_addr()?;
+        if self.max_frame_bytes < 1024 {
+            return Err("daemon.rpc.max_frame_bytes: must be at least 1024".to_owned());
+        }
+        if !(1..=256).contains(&self.workers) {
+            return Err("daemon.rpc.workers: must be between 1 and 256".to_owned());
+        }
+        if self.request_timeout_secs == 0 {
+            return Err("daemon.rpc.request_timeout_secs: must be at least 1".to_owned());
+        }
+        Ok(())
+    }
 }
 
 /// The runtime names of the binary's pinned runtime index (spec:
@@ -212,6 +319,11 @@ impl DaemonConfig {
                 "update.snapshot_keep: must be between 1 and 100",
             ));
         }
+        config
+            .daemon
+            .rpc
+            .validate()
+            .map_err(|message| parse_error(&message))?;
         if let Some(unknown) = config
             .runtimes
             .exclude
@@ -370,6 +482,22 @@ mod tests {
             DaemonConfig::load(home.path()).unwrap().runtimes.exclude,
             ["chromium"]
         );
+    }
+
+    #[test]
+    fn public_rpc_bind_is_refused_naming_the_relay() {
+        let err = load("[daemon.rpc]\nbind = \"0.0.0.0:7777\"\n").unwrap_err();
+        assert_eq!(err.exit_code(), 78);
+        assert!(
+            err.message().contains(
+                "the client listener is loopback-only and remote access goes through the relay"
+            ),
+            "{err}"
+        );
+        let config = load("[daemon.rpc]\nbind = \"[::1]:0\"\n").unwrap();
+        assert!(config.daemon.rpc.bind_addr().unwrap().ip().is_loopback());
+        assert_eq!(config.daemon.rpc.workers, 8);
+        assert_eq!(config.daemon.restart_drain_secs, 120);
     }
 
     #[test]

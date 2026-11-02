@@ -96,7 +96,7 @@ async fn a_command_printing_the_key_reaches_the_model_redacted() {
     );
     let terminal = LocalTerminal::new(LocalSetup {
         terminal: TerminalConfig::default(),
-        max_chars: 50_000,
+        max_chars: pmt_tools::setting::fixed(50_000),
         kill_grace: Duration::from_secs(2),
         sandbox,
         shell: shell::resolve_unix(env.get("PATH")),

@@ -139,6 +139,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
+| `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | Platform user ids with the admin command tier. |
+| `gateway.platforms.<name>.allow_all` | boolean | `false` | any | `next_session` | Admit everyone (logged at WARN on every start). |
+| `gateway.platforms.<name>.allow_chats` | array of string | `[]` | any | `next_session` | Chats every member of which is admitted. |
+| `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing. |
+| `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
+| `gateway.platforms.<name>.home_channel` | string | unset | any | `next_session` | The chat that receives notifications and scheduled output. |
+| `gateway.platforms.<name>.token_secret` | string | unset | a secret name | `next_session` | The secret holding the adapter's credential (never the value). |
+| `gateway.standalone` | boolean | `false` | any | `restart` | Never serve this profile from a multiplexing daemon (it gets a daemon of its own home). |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
@@ -281,7 +290,34 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `tools.result_budget.mcp_chars` | integer | `50000` | ≥ 0 | `next_session` | Characters kept inline for MCP tools. |
 | `tools.result_budget.overrides` | table | `{}` | any | `next_session` | Per-tool overrides: tool name to characters. |
 | `toolsets.surfaces` | table | `{}` | any | `next_session` | Default toolsets per surface (otherwise `core`). |
-| `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface on a TTY (M1 ships `line`; `tui` falls back to it until the TUI lands). |
+| `ui.composer.paste_collapse_chars` | integer | `2000` | ≥ 0 | `next_session` | A paste of at least this many characters collapses into a chip; `0` disables the character threshold. |
+| `ui.composer.paste_collapse_lines` | integer | `5` | ≥ 0 | `next_session` | A paste of at least this many lines collapses into a chip; `0` disables the line threshold. |
+| `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |
+| `ui.status_bar` | boolean | `true` | any | `next_session` | Show the status bar (`/statusbar`, `/sb`); in the line interface a single bottom status line on a terminal. |
+| `ui.status_bar_battery` | boolean | `false` | any | `next_session` | Show the battery level as the first status item (`/battery`); omitted on machines without a battery. |
+| `ui.tui.auto_resume` | one of "off", "recent" | `"off"` | `"off"`, `"recent"` | `next_session` | `recent`: a TUI launched without `--resume`, `--continue` or a prompt re-attaches to the session this profile last used in the TUI from the same working directory. |
+| `ui.tui.busy_indicator` | one of "kaomoji", "emoji", "unicode", "ascii" | `"kaomoji"` | `"kaomoji"`, `"emoji"`, `"unicode"`, `"ascii"` | `next_session` | The glyphs of the busy indicator (`/indicator`). |
+| `ui.tui.keys.banner` | string | unset | any | `next_session` | Move to the startup banner's section headers (default `Ctrl+B`). |
+| `ui.tui.keys.clear_input` | string | unset | any | `next_session` | Clear the composer (default `Ctrl+U`). |
+| `ui.tui.keys.complete` | string | unset | any | `next_session` | Complete the `/command` or `@path` under the cursor (default `Tab`). |
+| `ui.tui.keys.expand_paste` | string | unset | any | `next_session` | Expand the paste chip before the cursor into its text (default `Ctrl+O`). |
+| `ui.tui.keys.history_next` | string | unset | any | `next_session` | The next history entry (default `Down`). |
+| `ui.tui.keys.history_prev` | string | unset | any | `next_session` | The previous history entry (default `Up`). |
+| `ui.tui.keys.interrupt` | string | unset | any | `next_session` | Stop the running turn, else clear the composer (default `Ctrl+C`). |
+| `ui.tui.keys.line_end` | string | unset | any | `next_session` | Move to the end of the line (default `Ctrl+E`). |
+| `ui.tui.keys.line_start` | string | unset | any | `next_session` | Move to the start of the line (default `Ctrl+A`). |
+| `ui.tui.keys.newline` | string | unset | any | `next_session` | Insert a line break (default `Alt+Enter`; `Shift+Enter` always does on terminals that report it). |
+| `ui.tui.keys.page_down` | string | unset | any | `next_session` | Scroll the transcript one page down (default `PageDown`). |
+| `ui.tui.keys.page_up` | string | unset | any | `next_session` | Scroll the transcript one page up (default `PageUp`). |
+| `ui.tui.keys.palette` | string | unset | any | `next_session` | Open the command palette (default `Ctrl+P`). |
+| `ui.tui.keys.paste_image` | string | unset | any | `next_session` | Attach the clipboard's image (default `Ctrl+V`). |
+| `ui.tui.keys.quit` | string | unset | any | `next_session` | Leave the TUI when the composer is empty (default `Ctrl+D`). |
+| `ui.tui.keys.scroll_down` | string | unset | any | `next_session` | Scroll the transcript one line down (default `Ctrl+Down`). |
+| `ui.tui.keys.scroll_up` | string | unset | any | `next_session` | Scroll the transcript one line up (default `Ctrl+Up`). |
+| `ui.tui.keys.sessions` | string | unset | any | `next_session` | Open the live session switcher (default `Ctrl+X`). |
+| `ui.tui.keys.submit` | string | unset | any | `next_session` | Send the composer (default `Enter`). |
+| `ui.tui.reduced_motion` | boolean | `false` | any | `next_session` | No spinners or animation: a static busy glyph. |
+| `ui.tui.theme` | one of "auto", "dark", "light" | `"auto"` | `"auto"`, `"dark"`, `"light"` | `next_session` | Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer to a background-colour query, else dark), `dark` or `light`; `NO_COLOR` turns colours off whatever it says. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |

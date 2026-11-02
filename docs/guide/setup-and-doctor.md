@@ -113,3 +113,32 @@ by this build). Everything else is reported with a hint and left as it
 is. Note that every command tightens loose permissions of the home and
 the profile's `config.toml` and `secrets.toml` when it opens them
 (logged as a WARN); doctor reports what it found before that happens.
+
+## Shell completions
+
+`prometheus completions <bash|zsh|fish|powershell|elvish>` prints a short
+script that registers completion for `prometheus` and `pmt`. Load it from
+your shell's startup file:
+
+| Shell | Line |
+|---|---|
+| bash | `eval "$(prometheus completions bash)"` |
+| zsh | `source <(prometheus completions zsh)` (after `compinit`) |
+| fish | `prometheus completions fish \| source` |
+| PowerShell | `prometheus completions powershell \| Out-String \| Invoke-Expression` |
+| elvish | `eval (prometheus completions elvish \| slurp)` |
+
+On each TAB the script asks the binary itself (the hidden
+`prometheus __complete` command) for the candidates, so completions follow
+the installed version after an update. Besides subcommands, flags and
+their fixed values, it completes profile names, session ids and titles
+(for `-r`, `-c` and the `sessions` commands), config keys, skill names and,
+in `-z /...`, slash commands. It reads local files only: it never starts
+the daemon, opens a network connection or writes anything.
+
+```console
+$ prometheus completions bash
+# prometheus completions for bash; load with:
+$ prometheus __complete bash -- prometheus config set agent.max_it
+agent.max_iterations
+```

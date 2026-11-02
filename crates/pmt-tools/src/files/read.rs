@@ -125,7 +125,7 @@ impl FileSession {
             ));
         }
         let hash = tracker::hash(bytes);
-        let page = paginate(&all, args.offset, args.limit, self.setup.read_max_chars);
+        let page = paginate(&all, args.offset, args.limit, (self.setup.read_max_chars)());
         let key = ReadKey {
             path: path.to_path_buf(),
             offset: args.offset,

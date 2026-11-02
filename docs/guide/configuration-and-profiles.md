@@ -93,6 +93,36 @@ the previous file under `<profile>/backups/config/`.
 `prometheus config edit` opens the file in `$VISUAL` / `$EDITOR` and does
 not save until the result is valid.
 
+### Live reload
+
+A running gateway daemon watches each served profile's `config.toml`. A
+saved change is validated first: an invalid file is reported (in the
+daemon's log, `prometheus daemon status` and `prometheus doctor`) and the
+daemon keeps serving the previous configuration. A valid one applies by
+each key's apply class (`config explain <key>` shows it): `live` keys at
+once, running sessions included (budgets, `tool_output.max_chars`,
+`files.read_max_chars`, approvals and the rest apply from the session's
+next turn or tool call, over the session's own `--set` overrides),
+`next_session` keys to sessions created afterwards (a running session
+keeps what it started with), and `restart` keys after `prometheus daemon
+restart` (`daemon status` lists them as pending).
+
+### Settings your administrator manages
+
+An administrator can manage settings for every user of a machine in
+`/etc/prometheus/managed.toml` (`%ProgramData%\Prometheus\managed.toml`
+on Windows). It uses the same keys as `config.toml`, its values win over
+every profile's, and the keys it lists in `locked = [...]` cannot be
+changed: `config set`, `config unset`, `config edit` and `--set` refuse
+them with `config key '<key>' is managed by your administrator` (exit 77).
+`managed-secrets.toml` beside it (mode 0600 or 0640, owned by root) holds
+secrets that take precedence over every profile store and the environment;
+`prometheus secrets set` and `unset` refuse those names. `prometheus config
+show` starts with a header naming the managed file and every managed or
+locked key, and `prometheus doctor config` reports both files and whether
+they were loaded. An invalid managed file stops every command (exit 78)
+until it is fixed.
+
 ## Secrets are not configuration
 
 API keys and tokens never go into `config.toml`. A value that looks like a
@@ -207,6 +237,52 @@ profile in use by a running daemon or chat is refused (exit 75), and a
 tombstone in `profiles/.deleted/` keeps any still-running process from
 recreating the deleted directory. `prometheus profile create` with the same
 name brings it back as a new, empty profile.
+
+### Creation options
+
+`prometheus profile create` also takes:
+
+- `--clone-all`: copy everything from the source profile (`--clone-from`,
+  else the selected profile), plugins, cron job definitions and themes
+  included, but never its sessions, `state.db`, logs, snapshots or backups;
+- `--clone-channels`: with a clone, keep the messaging adapters
+  (`[gateway.platforms.*]`) and pairing data. Without it a clone drops
+  them, so two profiles never answer the same bot account;
+- `--sync-imports`: with a clone, also copy the import sync registry;
+- `--no-skills`: start without bundled skills;
+- `--description <text>`: shown by `profile list` and `profile show`;
+- `--no-alias`: skip the alias launcher (below).
+
+```console
+$ prometheus profile create notes --description "reading notes" --no-alias
+$ prometheus profile show notes
+description: reading notes
+```
+
+### Alias launchers
+
+`prometheus profile alias <name> [--as <alias>]` writes a launcher
+`<alias>` (default: the profile name) into `~/.local/bin`
+(`%LOCALAPPDATA%\Prometheus\bin` on Windows) that runs `prometheus -p
+<name> "$@"`, so `work chat` means `prometheus -p work chat`. A profile
+created under another home (`--home` or `PROMETHEUS_HOME`) gets a launcher
+that passes `--home <that home>` as well. Every new
+profile gets one unless `--no-alias` is given. A reserved name, a
+`prometheus` subcommand or an existing executable on `PATH` is refused
+(exit 2 naming it); a launcher written earlier is rewritten.
+
+### Export and import
+
+`prometheus profile export <name> -o <file>.tar.zst` writes the profile's
+configuration, identity file, memory, skills, themes, scripts and cron job
+definitions. It never holds secrets, `state.db`, blobs, logs or backups
+unless asked: `--with-sessions` adds the sessions, and `--with-secrets`
+adds the secrets encrypted with a key derived from a passphrase you type
+at a hidden prompt (Argon2id, XChaCha20-Poly1305).
+`prometheus profile import <file> [--as <name>]` verifies every member
+against the archive's manifest and asks for the passphrase before it
+creates the profile, so a damaged archive or a wrong passphrase changes
+nothing.
 
 ## Backups and snapshots
 

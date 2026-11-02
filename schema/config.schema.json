@@ -220,6 +220,21 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "AutoResume": {
+      "description": "What a TUI opens when nothing names a session.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "A new session.",
+          "type": "string"
+        },
+        {
+          "const": "recent",
+          "description": "The session last used in the TUI from this directory.",
+          "type": "string"
+        }
+      ]
+    },
     "AuxiliaryConfig": {
       "additionalProperties": false,
       "description": "The `[auxiliary]` section: one optional table per auxiliary task.",
@@ -545,6 +560,31 @@
       "type": "object",
       "x-apply": "live"
     },
+    "BusyIndicator": {
+      "description": "Busy indicator styles.",
+      "oneOf": [
+        {
+          "const": "kaomoji",
+          "description": "Small faces.",
+          "type": "string"
+        },
+        {
+          "const": "emoji",
+          "description": "Moon phases.",
+          "type": "string"
+        },
+        {
+          "const": "unicode",
+          "description": "Rotating quarter circles.",
+          "type": "string"
+        },
+        {
+          "const": "ascii",
+          "description": "A rotating bar.",
+          "type": "string"
+        }
+      ]
+    },
     "BusyInputMode": {
       "description": "Busy input modes.",
       "oneOf": [
@@ -582,6 +622,27 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "ComposerConfig": {
+      "additionalProperties": false,
+      "description": "The `[ui.composer]` section (spec: tui, Large pastes collapse into\nchips).",
+      "properties": {
+        "paste_collapse_chars": {
+          "default": 2000,
+          "description": "A paste of at least this many characters collapses into a chip;\n`0` disables the character threshold.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "paste_collapse_lines": {
+          "default": 5,
+          "description": "A paste of at least this many lines collapses into a chip; `0`\ndisables the line threshold.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "CompressionConfig": {
       "additionalProperties": false,
@@ -1133,6 +1194,33 @@
       },
       "type": "object"
     },
+    "GatewayConfig": {
+      "additionalProperties": false,
+      "description": "The `[gateway]` section.",
+      "properties": {
+        "multiplex": {
+          "default": false,
+          "description": "In the daemon's launch profile: serve every profile of the home\n(each in its own scope) instead of the launch profile only.",
+          "type": "boolean"
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformConfig"
+          },
+          "default": {},
+          "description": "Messaging platforms this profile answers on, keyed by platform\n(`telegram`, `discord`, ...). A profile clone leaves them out\nunless `--clone-channels` is given, so two profiles never answer\nthe same bot account.",
+          "type": "object",
+          "x-apply": "next_session"
+        },
+        "standalone": {
+          "default": false,
+          "description": "Never serve this profile from a multiplexing daemon (it gets a\ndaemon of its own home).",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
     "GuardrailThresholds": {
       "additionalProperties": false,
       "description": "Repetition thresholds of the tool loop guardrails.",
@@ -1232,6 +1320,11 @@
           "type": "string"
         }
       ]
+    },
+    "KeyChord": {
+      "description": "A key chord: `[Ctrl+][Alt+][Shift+]<key>` (spec: tui, Configurable key\nbindings).",
+      "type": "string",
+      "x-key-chord": true
     },
     "KeylessConfig": {
       "additionalProperties": false,
@@ -1787,6 +1880,65 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "PlatformConfig": {
+      "additionalProperties": false,
+      "description": "One `[gateway.platforms.<name>]` table: the keys every adapter shares.",
+      "properties": {
+        "admins": {
+          "default": [],
+          "description": "Platform user ids with the admin command tier.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_all": {
+          "default": false,
+          "description": "Admit everyone (logged at WARN on every start).",
+          "type": "boolean"
+        },
+        "allow_chats": {
+          "default": [],
+          "description": "Chats every member of which is admitted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_users": {
+          "default": [],
+          "description": "Platform user ids admitted without pairing.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Start this adapter with the daemon.",
+          "type": "boolean"
+        },
+        "home_channel": {
+          "description": "The chat that receives notifications and scheduled output.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the adapter's credential (never the value)."
+        }
+      },
+      "type": "object"
     },
     "PlatformHint": {
       "additionalProperties": false,
@@ -2990,14 +3142,370 @@
       },
       "type": "object"
     },
+    "TuiConfig": {
+      "additionalProperties": false,
+      "description": "The `[ui.tui]` section (spec: tui, Status line and accessibility;\nConfigurable key bindings; Busy indicator styles; Auto-resume of the\nlast TUI session).",
+      "properties": {
+        "auto_resume": {
+          "$ref": "#/$defs/AutoResume",
+          "default": "off",
+          "description": "`recent`: a TUI launched without `--resume`, `--continue` or a\nprompt re-attaches to the session this profile last used in the\nTUI from the same working directory."
+        },
+        "busy_indicator": {
+          "$ref": "#/$defs/BusyIndicator",
+          "default": "kaomoji",
+          "description": "The glyphs of the busy indicator (`/indicator`)."
+        },
+        "keys": {
+          "$ref": "#/$defs/TuiKeys",
+          "default": {
+            "banner": null,
+            "clear_input": null,
+            "complete": null,
+            "expand_paste": null,
+            "history_next": null,
+            "history_prev": null,
+            "interrupt": null,
+            "line_end": null,
+            "line_start": null,
+            "newline": null,
+            "page_down": null,
+            "page_up": null,
+            "palette": null,
+            "paste_image": null,
+            "quit": null,
+            "scroll_down": null,
+            "scroll_up": null,
+            "sessions": null,
+            "submit": null
+          },
+          "description": "Key bindings: action name to key chord (`Ctrl+P`, `Alt+Enter`,\n`PageUp`, `F2`); `/keys` lists the effective bindings."
+        },
+        "reduced_motion": {
+          "default": false,
+          "description": "No spinners or animation: a static busy glyph.",
+          "type": "boolean"
+        },
+        "theme": {
+          "$ref": "#/$defs/TuiTheme",
+          "default": "auto",
+          "description": "Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer\nto a background-colour query, else dark), `dark` or `light`;\n`NO_COLOR` turns colours off whatever it says."
+        }
+      },
+      "type": "object"
+    },
+    "TuiKeys": {
+      "additionalProperties": false,
+      "description": "`[ui.tui.keys]`: one chord per action; an unset action keeps its\ndefault, an unknown action name is refused.",
+      "properties": {
+        "banner": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Move to the startup banner's section headers (default `Ctrl+B`)."
+        },
+        "clear_input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Clear the composer (default `Ctrl+U`)."
+        },
+        "complete": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Complete the `/command` or `@path` under the cursor (default `Tab`)."
+        },
+        "expand_paste": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Expand the paste chip before the cursor into its text (default\n`Ctrl+O`)."
+        },
+        "history_next": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The next history entry (default `Down`)."
+        },
+        "history_prev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The previous history entry (default `Up`)."
+        },
+        "interrupt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stop the running turn, else clear the composer (default `Ctrl+C`)."
+        },
+        "line_end": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Move to the end of the line (default `Ctrl+E`)."
+        },
+        "line_start": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Move to the start of the line (default `Ctrl+A`)."
+        },
+        "newline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Insert a line break (default `Alt+Enter`; `Shift+Enter` always\ndoes on terminals that report it)."
+        },
+        "page_down": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Scroll the transcript one page down (default `PageDown`)."
+        },
+        "page_up": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Scroll the transcript one page up (default `PageUp`)."
+        },
+        "palette": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Open the command palette (default `Ctrl+P`)."
+        },
+        "paste_image": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Attach the clipboard's image (default `Ctrl+V`)."
+        },
+        "quit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Leave the TUI when the composer is empty (default `Ctrl+D`)."
+        },
+        "scroll_down": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Scroll the transcript one line down (default `Ctrl+Down`)."
+        },
+        "scroll_up": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Scroll the transcript one line up (default `Ctrl+Up`)."
+        },
+        "sessions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Open the live session switcher (default `Ctrl+X`)."
+        },
+        "submit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Send the composer (default `Enter`)."
+        }
+      },
+      "type": "object"
+    },
+    "TuiTheme": {
+      "description": "TUI colour themes.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Picked for the terminal's background (dark when unknown).",
+          "type": "string"
+        },
+        {
+          "const": "dark",
+          "description": "Light text on a dark background.",
+          "type": "string"
+        },
+        {
+          "const": "light",
+          "description": "Dark text on a light background.",
+          "type": "string"
+        }
+      ]
+    },
     "UiConfig": {
       "additionalProperties": false,
       "description": "The `[ui]` section.",
       "properties": {
+        "composer": {
+          "$ref": "#/$defs/ComposerConfig",
+          "default": {
+            "paste_collapse_chars": 2000,
+            "paste_collapse_lines": 5
+          },
+          "description": "The composer of the TUI."
+        },
         "interface": {
           "$ref": "#/$defs/Interface",
           "default": "tui",
-          "description": "Interactive interface on a TTY (M1 ships `line`; `tui` falls back\nto it until the TUI lands)."
+          "description": "Interactive interface when stdin and stdout are terminals: the\nfull-screen `tui` or the `line` CLI (`--tui`/`--line` override it)."
+        },
+        "status_bar": {
+          "default": true,
+          "description": "Show the status bar (`/statusbar`, `/sb`); in the line interface a\nsingle bottom status line on a terminal.",
+          "type": "boolean"
+        },
+        "status_bar_battery": {
+          "default": false,
+          "description": "Show the battery level as the first status item (`/battery`);\nomitted on machines without a battery.",
+          "type": "boolean"
+        },
+        "tui": {
+          "$ref": "#/$defs/TuiConfig",
+          "default": {
+            "auto_resume": "off",
+            "busy_indicator": "kaomoji",
+            "keys": {
+              "banner": null,
+              "clear_input": null,
+              "complete": null,
+              "expand_paste": null,
+              "history_next": null,
+              "history_prev": null,
+              "interrupt": null,
+              "line_end": null,
+              "line_start": null,
+              "newline": null,
+              "page_down": null,
+              "page_up": null,
+              "palette": null,
+              "paste_image": null,
+              "quit": null,
+              "scroll_down": null,
+              "scroll_up": null,
+              "sessions": null,
+              "submit": null
+            },
+            "reduced_motion": false,
+            "theme": "auto"
+          },
+          "description": "The full-screen terminal UI."
         }
       },
       "type": "object",
@@ -3304,6 +3812,15 @@
       },
       "description": "`read_file` limits."
     },
+    "gateway": {
+      "$ref": "#/$defs/GatewayConfig",
+      "default": {
+        "multiplex": false,
+        "platforms": {},
+        "standalone": false
+      },
+      "description": "The profile's part in the home's gateway daemon."
+    },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",
       "default": {
@@ -3578,7 +4095,40 @@
     "ui": {
       "$ref": "#/$defs/UiConfig",
       "default": {
-        "interface": "tui"
+        "composer": {
+          "paste_collapse_chars": 2000,
+          "paste_collapse_lines": 5
+        },
+        "interface": "tui",
+        "status_bar": true,
+        "status_bar_battery": false,
+        "tui": {
+          "auto_resume": "off",
+          "busy_indicator": "kaomoji",
+          "keys": {
+            "banner": null,
+            "clear_input": null,
+            "complete": null,
+            "expand_paste": null,
+            "history_next": null,
+            "history_prev": null,
+            "interrupt": null,
+            "line_end": null,
+            "line_start": null,
+            "newline": null,
+            "page_down": null,
+            "page_up": null,
+            "palette": null,
+            "paste_image": null,
+            "quit": null,
+            "scroll_down": null,
+            "scroll_up": null,
+            "sessions": null,
+            "submit": null
+          },
+          "reduced_motion": false,
+          "theme": "auto"
+        }
       },
       "description": "Interactive interface selection."
     },

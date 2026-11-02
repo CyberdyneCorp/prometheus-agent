@@ -63,6 +63,7 @@ fn set(ctx: &Context<'_>, name: &str, argv_value: &[String]) -> Result<u8, Error
         )));
     }
     pmt_config::secrets::check_name(name)?;
+    pmt_config::managed::check_secret_writable(name)?;
     let scope = ctx.scope()?;
     let value = prompt::read_secret(name)?;
     let store = scope.secrets().store();
@@ -72,6 +73,7 @@ fn set(ctx: &Context<'_>, name: &str, argv_value: &[String]) -> Result<u8, Error
 
 fn unset(ctx: &Context<'_>, name: &str) -> Result<u8, Error> {
     pmt_config::secrets::check_name(name)?;
+    pmt_config::managed::check_secret_writable(name)?;
     let scope = ctx.scope()?;
     let removed = scope.secrets().store().remove(name)?;
     report(
@@ -136,6 +138,7 @@ fn describe(row: &Listed) -> String {
         Source::File => "file",
         Source::Keychain => "keychain",
         Source::Env => "env",
+        Source::Managed => "managed (read-only)",
     };
     let variable = row
         .variable

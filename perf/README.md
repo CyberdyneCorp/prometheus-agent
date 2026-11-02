@@ -46,21 +46,28 @@ A local `scripts/check` runs the gate as its last step, against the checked-in
 `perf/baseline.json`; on a platform without an entry there only the absolute
 budgets apply. CI's platform jobs run `scripts/check --no-perf`, because the
 budgets are defined for the reference runner and shared runners are too noisy
-to gate on. The budgets and the regression check against `main` run in their own job,
+to gate on. The budgets and the regression check against the base branch run in their own job,
 `perf` in `.github/workflows/ci.yml`, on the reference runner (GitHub-hosted
 `ubuntu-24.04`, x86_64), so every comparison is between runs on the same
 kind of machine:
 
-1. On every push to `main`, run `scripts/check --perf --update-baseline --baseline target/perf-main.json`
-   and upload `target/perf-main.json` as the `perf-baseline` artifact.
-2. On every pull request, download the latest `perf-baseline` artifact from
-   `main` and run `scripts/check --perf --baseline target/perf-main.json`; a
-   non-zero exit fails the job. Without an artifact the absolute budgets
-   still apply, and the checked-in `perf/baseline.json` is used as a fallback.
+1. On every push to `main`, run `scripts/check --perf --update-baseline --baseline target/perf-main.json`,
+   which checks the absolute budgets.
+2. On every pull request, check out the base branch in a worktree, record
+   its measurements with `scripts/check --perf --update-baseline --baseline target/perf-base.json`,
+   then run `scripts/check --perf --baseline target/perf-base.json` on the
+   head; a non-zero exit fails the job. Both measurements come from the same
+   machine minutes apart. A baseline recorded by another run lands on another
+   runner: the chat prompt median of one M2 branch moved between 22.6 and
+   32.5 ms across its runs, so comparing across runners failed the 15% gate
+   at random. Stacked pull requests compare with the branch they target.
+   Without a base branch (`workflow_dispatch`) the checked-in
+   `perf/baseline.json` applies.
 3. A pull request whose growth is deliberate re-baselines in the open: it
    commits the reference runner's measurements (the `perf (linux-x86_64):`
    line of its own perf job) to `perf/reference.json`, and while the pull
-   request changes that file the job compares with it instead of `main`.
+   request changes that file the job compares with it instead of the base
+   branch.
    The new numbers are part of the reviewed diff; the absolute budgets
    always apply. The M1 branch did this five times. First (0.62 -> 8.49 MiB binary,
    2.49 -> 4.28 MiB peak RSS: SQLite, the HTTP client, the keychain and

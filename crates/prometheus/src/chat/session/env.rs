@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use pmt_config::ProfileScope;
+use pmt_config::{ProfileScope, SharedScope};
 use pmt_core::capability::{CapabilitySet, Places};
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
@@ -29,6 +29,9 @@ use super::browser::Shared;
 pub struct EnvInputs<'a> {
     /// The profile.
     pub scope: &'a ProfileScope,
+    /// The session's configuration as it is now (its `live` keys follow
+    /// reloads).
+    pub config: &'a SharedScope,
     /// The session id.
     pub session_id: &'a str,
     /// The launch environment.
@@ -165,7 +168,7 @@ fn files(
         control: ControlPaths {
             prometheus_home: inputs.scope.home().to_path_buf(),
         },
-        read_max_chars: 100_000,
+        read_max_chars: limit(inputs.config, |c| c.files.read_max_chars),
         linter: Linter::builtin(),
     })
 }
@@ -204,7 +207,7 @@ fn terminal(
     let config = inputs.scope.config();
     LocalTerminal::new(LocalSetup {
         terminal: config.terminal.clone(),
-        max_chars: 50_000,
+        max_chars: limit(inputs.config, |c| c.tool_output.max_chars),
         kill_grace: Duration::from_secs(2),
         sandbox: commands.sandbox,
         env: commands.env,
@@ -252,4 +255,10 @@ fn web(scope: &ProfileScope) -> Option<WebSession> {
         &lookup,
         FullTextStore::for_profile(scope.dir()),
     ))
+}
+
+/// A `live` size limit of the session's configuration, read at each use.
+fn limit(config: &SharedScope, key: fn(&pmt_config::Config) -> u64) -> pmt_tools::setting::Limit {
+    let config = config.clone();
+    Arc::new(move || usize::try_from(key(config.get().config())).unwrap_or(usize::MAX))
 }

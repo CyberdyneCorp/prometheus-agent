@@ -101,6 +101,7 @@ fn key_sources(profile: &Profile) -> Result<BTreeMap<String, &'static str>, Erro
                 Source::File => "file",
                 Source::Keychain => "keychain",
                 Source::Env => "env",
+                Source::Managed => "managed",
             };
             (row.name, source)
         })

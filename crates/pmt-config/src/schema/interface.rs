@@ -22,13 +22,173 @@ impl Default for CliConfig {
 }
 
 /// The `[ui]` section.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct UiConfig {
-    /// Interactive interface on a TTY (M1 ships `line`; `tui` falls back
-    /// to it until the TUI lands).
+    /// Interactive interface when stdin and stdout are terminals: the
+    /// full-screen `tui` or the `line` CLI (`--tui`/`--line` override it).
     pub interface: Interface,
+    /// Show the status bar (`/statusbar`, `/sb`); in the line interface a
+    /// single bottom status line on a terminal.
+    pub status_bar: bool,
+    /// Show the battery level as the first status item (`/battery`);
+    /// omitted on machines without a battery.
+    pub status_bar_battery: bool,
+    /// The composer of the TUI.
+    pub composer: ComposerConfig,
+    /// The full-screen terminal UI.
+    pub tui: TuiConfig,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            interface: Interface::default(),
+            status_bar: true,
+            status_bar_battery: false,
+            composer: ComposerConfig::default(),
+            tui: TuiConfig::default(),
+        }
+    }
+}
+
+/// The `[ui.composer]` section (spec: tui, Large pastes collapse into
+/// chips).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ComposerConfig {
+    /// A paste of at least this many lines collapses into a chip; `0`
+    /// disables the line threshold.
+    pub paste_collapse_lines: u32,
+    /// A paste of at least this many characters collapses into a chip;
+    /// `0` disables the character threshold.
+    pub paste_collapse_chars: u32,
+}
+
+impl Default for ComposerConfig {
+    fn default() -> Self {
+        Self {
+            paste_collapse_lines: 5,
+            paste_collapse_chars: 2000,
+        }
+    }
+}
+
+/// The `[ui.tui]` section (spec: tui, Status line and accessibility;
+/// Configurable key bindings; Busy indicator styles; Auto-resume of the
+/// last TUI session).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct TuiConfig {
+    /// Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer
+    /// to a background-colour query, else dark), `dark` or `light`;
+    /// `NO_COLOR` turns colours off whatever it says.
+    pub theme: TuiTheme,
+    /// No spinners or animation: a static busy glyph.
+    pub reduced_motion: bool,
+    /// The glyphs of the busy indicator (`/indicator`).
+    pub busy_indicator: BusyIndicator,
+    /// `recent`: a TUI launched without `--resume`, `--continue` or a
+    /// prompt re-attaches to the session this profile last used in the
+    /// TUI from the same working directory.
+    pub auto_resume: AutoResume,
+    /// Key bindings: action name to key chord (`Ctrl+P`, `Alt+Enter`,
+    /// `PageUp`, `F2`); `/keys` lists the effective bindings.
+    pub keys: TuiKeys,
+}
+
+/// Busy indicator styles.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BusyIndicator {
+    /// Small faces.
+    #[default]
+    Kaomoji,
+    /// Moon phases.
+    Emoji,
+    /// Rotating quarter circles.
+    Unicode,
+    /// A rotating bar.
+    Ascii,
+}
+
+/// What a TUI opens when nothing names a session.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoResume {
+    /// A new session.
+    #[default]
+    Off,
+    /// The session last used in the TUI from this directory.
+    Recent,
+}
+
+/// TUI colour themes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TuiTheme {
+    /// Picked for the terminal's background (dark when unknown).
+    #[default]
+    Auto,
+    /// Light text on a dark background.
+    Dark,
+    /// Dark text on a light background.
+    Light,
+}
+
+/// A key chord: `[Ctrl+][Alt+][Shift+]<key>` (spec: tui, Configurable key
+/// bindings).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+#[schemars(extend("x-key-chord" = true))]
+pub struct KeyChord(pub String);
+
+/// `[ui.tui.keys]`: one chord per action; an unset action keeps its
+/// default, an unknown action name is refused.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct TuiKeys {
+    /// Send the composer (default `Enter`).
+    pub submit: Option<KeyChord>,
+    /// Insert a line break (default `Alt+Enter`; `Shift+Enter` always
+    /// does on terminals that report it).
+    pub newline: Option<KeyChord>,
+    /// Stop the running turn, else clear the composer (default `Ctrl+C`).
+    pub interrupt: Option<KeyChord>,
+    /// Leave the TUI when the composer is empty (default `Ctrl+D`).
+    pub quit: Option<KeyChord>,
+    /// Scroll the transcript one line up (default `Ctrl+Up`).
+    pub scroll_up: Option<KeyChord>,
+    /// Scroll the transcript one line down (default `Ctrl+Down`).
+    pub scroll_down: Option<KeyChord>,
+    /// Scroll the transcript one page up (default `PageUp`).
+    pub page_up: Option<KeyChord>,
+    /// Scroll the transcript one page down (default `PageDown`).
+    pub page_down: Option<KeyChord>,
+    /// The previous history entry (default `Up`).
+    pub history_prev: Option<KeyChord>,
+    /// The next history entry (default `Down`).
+    pub history_next: Option<KeyChord>,
+    /// Complete the `/command` or `@path` under the cursor (default `Tab`).
+    pub complete: Option<KeyChord>,
+    /// Move to the start of the line (default `Ctrl+A`).
+    pub line_start: Option<KeyChord>,
+    /// Move to the end of the line (default `Ctrl+E`).
+    pub line_end: Option<KeyChord>,
+    /// Clear the composer (default `Ctrl+U`).
+    pub clear_input: Option<KeyChord>,
+    /// Open the command palette (default `Ctrl+P`).
+    pub palette: Option<KeyChord>,
+    /// Open the live session switcher (default `Ctrl+X`).
+    pub sessions: Option<KeyChord>,
+    /// Attach the clipboard's image (default `Ctrl+V`).
+    pub paste_image: Option<KeyChord>,
+    /// Expand the paste chip before the cursor into its text (default
+    /// `Ctrl+O`).
+    pub expand_paste: Option<KeyChord>,
+    /// Move to the startup banner's section headers (default `Ctrl+B`).
+    pub banner: Option<KeyChord>,
 }
 
 /// Interactive interfaces.

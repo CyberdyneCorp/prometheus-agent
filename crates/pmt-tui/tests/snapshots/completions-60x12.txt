@@ -1,0 +1,12 @@
+› summarise the build log
+· read_file
+
+The build failed in the linker step: two crates define the
+same symbol.
+
+
+/compact  compact the context now
+/compress  summarise older turns
+────────────────────────────────────────────────────────────
+› /comp
+  default │ mock/m1 │ ctx 25% │ $0.0042
