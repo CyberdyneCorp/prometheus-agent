@@ -46,9 +46,12 @@ BSDs) the command exits 69 (`service.unsupported`): run
 `prometheus daemon run` under your own supervisor. `prometheus doctor`
 reports units left by a Hermes gateway (every profile's
 `hermes-gateway[-<profile>].service` or `ai.hermes.gateway[-<suffix>]`,
-user and system scope) or an earlier layout, with the exact command that
-stops and removes each and installs the Prometheus service in its place.
-It never removes them itself.
+user and system scope; on Windows the Scheduled Task
+`Hermes_Gateway[_<suffix>]` and the Startup-folder launchers
+`Hermes_Gateway[_<suffix>].vbs`/`.cmd`) or an earlier layout, with the
+exact command (cmd.exe syntax on Windows) that stops and removes each and
+installs the Prometheus service in its place. It never removes them
+itself.
 
 `prometheus gateway list` shows every running daemon of your OS user,
 whatever its home (with `--json`: home, pid, start time, build, profiles,

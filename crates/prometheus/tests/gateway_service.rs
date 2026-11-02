@@ -129,6 +129,7 @@ fn system_scope_needs_root() {
     assert_eq!(commands(seam.path()), "", "nothing was installed");
 }
 
+#[cfg(unix)]
 #[test]
 fn doctor_reports_legacy_units_with_the_command_that_replaces_them() {
     let home = temp_home();
@@ -174,6 +175,55 @@ fn doctor_reports_legacy_units_with_the_command_that_replaces_them() {
         "{text}"
     );
     assert!(user_unit.exists() && system_unit.exists(), "never removed");
+}
+
+/// `prometheus doctor daemon` against the recording seam.
+#[cfg(windows)]
+fn doctor(home: &Path, seam: &Path) -> String {
+    let out = command(home)
+        .args(["doctor", "daemon"])
+        .env("PMT_TEST_SERVICE_DIR", seam)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    stdout(&out)
+}
+
+#[cfg(windows)]
+#[test]
+fn doctor_reports_hermes_windows_launchers_with_the_command_that_replaces_them() {
+    let home = temp_home();
+    let seam = temp_home();
+    std::fs::write(
+        seam.path().join("output-schtasks"),
+        "\"\\Hermes_Gateway\",\"N/A\",\"Ready\"\r\n\"\\Prometheus Daemon\",\"N/A\",\"Ready\"\r\n",
+    )
+    .unwrap();
+    let startup = seam
+        .path()
+        .join(r"home\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup");
+    std::fs::create_dir_all(&startup).unwrap();
+    let launcher = startup.join("Hermes_Gateway_work.vbs");
+    std::fs::write(&launcher, "").unwrap();
+    let text = doctor(home.path(), seam.path());
+    let install = format!(
+        "prometheus --home \"{}\" daemon install-service",
+        home.path().display()
+    );
+    assert!(
+        text.contains(&format!(
+            "schtasks /End /TN \"Hermes_Gateway\" & schtasks /Delete /TN \"Hermes_Gateway\" /F && {install}"
+        )),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!("del \"{}\" && {install}", launcher.display())),
+        "{text}"
+    );
+    assert!(!text.contains("Prometheus Daemon"), "{text}");
+    assert!(launcher.exists(), "never removed");
+    let log = commands(seam.path());
+    assert!(!log.contains("/Delete"), "nothing removed: {log}");
 }
 
 #[cfg(target_os = "macos")]

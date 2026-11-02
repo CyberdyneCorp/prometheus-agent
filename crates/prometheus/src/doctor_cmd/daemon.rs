@@ -134,11 +134,7 @@ pub(super) fn legacy_units(
                 "daemon",
                 "legacy_unit",
                 Status::Warn,
-                format!(
-                    "{} left a supervisor unit at {}",
-                    unit.origin,
-                    unit.path.display()
-                ),
+                format!("{} left a supervisor unit: {}", unit.origin, unit.location),
             )
             .with_hint(unit.replace)
         })

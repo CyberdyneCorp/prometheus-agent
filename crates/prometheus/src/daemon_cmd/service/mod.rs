@@ -11,7 +11,8 @@
 //! Debug builds with `PMT_TEST_SERVICE_DIR` write every unit under that
 //! directory and record the service-manager commands in its
 //! `commands.log` instead of running them (`refuse-<program>` makes that
-//! program fail, `root` makes the caller root), so the flow is testable.
+//! program fail, `output-<program>` is what it prints, `root` makes the
+//! caller root), so the flow is testable.
 
 // On OSes without a known supervisor only the unsupported-OS fallback is
 // compiled, so the shared plumbing below goes unused there.
@@ -21,6 +22,7 @@
 )]
 
 mod legacy;
+mod legacy_windows;
 mod units;
 
 use std::path::{Path, PathBuf};
@@ -94,7 +96,10 @@ impl Runner {
                 if dir.join(format!("refuse-{program}")).exists() {
                     Err("Access is denied.".to_owned())
                 } else {
-                    Ok(String::new())
+                    Ok(
+                        std::fs::read_to_string(dir.join(format!("output-{program}")))
+                            .unwrap_or_default(),
+                    )
                 }
             }
         }
@@ -480,9 +485,21 @@ pub fn legacy_units(ctx: &Context<'_>, home: &Path) -> Vec<LegacyUnit> {
         return Vec::new();
     };
     let default_home = pmt_config::home::default_home(ctx.launch).is_some_and(|d| d == home);
+    // Task Scheduler is queried, not read from disk; a refusal leaves only
+    // the Startup-folder launchers to report.
+    let tasks = if cfg!(windows) {
+        let runner = test_dir(ctx).map_or(Runner::Real, Runner::Recorded);
+        runner
+            .run("schtasks", &["/Query", "/FO", "CSV", "/NH"])
+            .map(|csv| legacy_windows::task_names(&csv))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     legacy::legacy_units(&legacy::Roots {
         user_home: &user_home,
         system_root: &system_root,
         home: (!default_home).then_some(home),
+        tasks: &tasks,
     })
 }

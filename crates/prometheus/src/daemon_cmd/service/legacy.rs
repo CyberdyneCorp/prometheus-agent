@@ -6,19 +6,22 @@
 //! Hermes names its units per profile (`hermes-gateway.service` for the
 //! default home, `hermes-gateway-<profile>.service` otherwise; the same
 //! with `ai.hermes.gateway[-<suffix>]` on macOS), in the user scope and in
-//! the system scope, so every scope is searched for the whole family.
+//! the system scope, so every scope is searched for the whole family. On
+//! Windows Hermes installs the Scheduled Task `Hermes_Gateway[_<suffix>]`
+//! or, when Task Scheduler refuses, a Startup-folder launcher of the same
+//! name (`legacy_windows`).
 
 use std::path::{Path, PathBuf};
 
 /// A legacy unit and the command that replaces it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LegacyUnit {
-    /// Where it is.
-    pub path: PathBuf,
+    /// Where it is (a file path, or the Scheduled Task's name).
+    pub location: String,
     /// What installed it.
     pub origin: &'static str,
-    /// The shell command that stops and removes it and installs the
-    /// Prometheus service in its place.
+    /// The shell command (POSIX sh, or cmd.exe on Windows) that stops and
+    /// removes it and installs the Prometheus service in its place.
     pub replace: String,
 }
 
@@ -29,42 +32,37 @@ enum Manager {
 }
 
 /// One family of unit files: `<base><ext>` or `<base>-<suffix><ext>` in
-/// `dir` (relative to the user's home, or to the system root).
+/// `dir` (path components under the user's home, or the system root).
 struct Family {
-    dir: &'static str,
+    dir: &'static [&'static str],
     system: bool,
     manager: Manager,
     base: &'static str,
     origin: &'static str,
 }
 
-const HERMES: &str = "Hermes gateway";
+pub(super) const HERMES: &str = "Hermes gateway";
 const EARLIER: &str = "an earlier Prometheus layout";
 
+const SYSTEMD_USER: &[&str] = &[".config", "systemd", "user"];
+const SYSTEMD_SYSTEM: &[&str] = &["etc", "systemd", "system"];
+const LAUNCH_AGENTS: &[&str] = &["Library", "LaunchAgents"];
+const LAUNCH_DAEMONS: &[&str] = &["Library", "LaunchDaemons"];
+
 const FAMILIES: &[Family] = &[
-    Family::systemd(".config/systemd/user", false, "hermes-gateway", HERMES),
-    Family::systemd(".config/systemd/user", false, "prometheus-gateway", EARLIER),
-    Family::systemd("etc/systemd/system", true, "hermes-gateway", HERMES),
-    Family::systemd("etc/systemd/system", true, "prometheus-gateway", EARLIER),
-    Family::launchd("Library/LaunchAgents", false, "ai.hermes.gateway", HERMES),
-    Family::launchd(
-        "Library/LaunchAgents",
-        false,
-        "ai.prometheus.gateway",
-        EARLIER,
-    ),
-    Family::launchd("Library/LaunchDaemons", true, "ai.hermes.gateway", HERMES),
-    Family::launchd(
-        "Library/LaunchDaemons",
-        true,
-        "ai.prometheus.gateway",
-        EARLIER,
-    ),
+    Family::systemd(SYSTEMD_USER, false, "hermes-gateway", HERMES),
+    Family::systemd(SYSTEMD_USER, false, "prometheus-gateway", EARLIER),
+    Family::systemd(SYSTEMD_SYSTEM, true, "hermes-gateway", HERMES),
+    Family::systemd(SYSTEMD_SYSTEM, true, "prometheus-gateway", EARLIER),
+    Family::launchd(LAUNCH_AGENTS, false, "ai.hermes.gateway", HERMES),
+    Family::launchd(LAUNCH_AGENTS, false, "ai.prometheus.gateway", EARLIER),
+    Family::launchd(LAUNCH_DAEMONS, true, "ai.hermes.gateway", HERMES),
+    Family::launchd(LAUNCH_DAEMONS, true, "ai.prometheus.gateway", EARLIER),
 ];
 
 impl Family {
     const fn systemd(
-        dir: &'static str,
+        dir: &'static [&'static str],
         system: bool,
         base: &'static str,
         origin: &'static str,
@@ -79,7 +77,7 @@ impl Family {
     }
 
     const fn launchd(
-        dir: &'static str,
+        dir: &'static [&'static str],
         system: bool,
         base: &'static str,
         origin: &'static str,
@@ -118,11 +116,28 @@ pub(super) struct Roots<'a> {
     /// The Prometheus home when it is not the default one (the replacing
     /// install must name it).
     pub(super) home: Option<&'a Path>,
+    /// Scheduled Task names (Windows; `schtasks /Query` CSV first column).
+    pub(super) tasks: &'a [String],
 }
 
-/// Every legacy supervisor unit, user scope first, sorted by path.
+/// Every legacy supervisor unit of this OS's supervisors.
 #[must_use]
 pub(super) fn legacy_units(roots: &Roots<'_>) -> Vec<LegacyUnit> {
+    if cfg!(windows) {
+        super::legacy_windows::units(roots)
+    } else {
+        unix_units(roots)
+    }
+}
+
+/// `components` joined under `base` one at a time, so the separators are
+/// the OS's own.
+pub(super) fn under(base: &Path, components: &[&str]) -> PathBuf {
+    components.iter().fold(base.to_path_buf(), |p, c| p.join(c))
+}
+
+/// systemd and launchd units, user scope first, sorted by path.
+fn unix_units(roots: &Roots<'_>) -> Vec<LegacyUnit> {
     let mut found = Vec::new();
     for family in FAMILIES {
         let base = if family.system {
@@ -130,7 +145,7 @@ pub(super) fn legacy_units(roots: &Roots<'_>) -> Vec<LegacyUnit> {
         } else {
             roots.user_home
         };
-        let dir = base.join(family.dir);
+        let dir = under(base, family.dir);
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
@@ -143,9 +158,9 @@ pub(super) fn legacy_units(roots: &Roots<'_>) -> Vec<LegacyUnit> {
             if let Some(name) = family.unit_name(file) {
                 let replace = replace_command(family, name, &path, roots.home);
                 found.push(LegacyUnit {
+                    location: path.display().to_string(),
                     origin: family.origin,
                     replace,
-                    path,
                 });
             }
         }
@@ -211,6 +226,10 @@ mod tests {
         std::fs::write(path, text).unwrap();
     }
 
+    fn file(dir: &Path, components: &[&str], name: &str) -> PathBuf {
+        under(dir, components).join(name)
+    }
+
     #[test]
     fn hermes_profile_and_system_units_are_found_with_their_replacement() {
         let dir = tempfile::tempdir().unwrap();
@@ -220,32 +239,34 @@ mod tests {
             user_home: &user,
             system_root: &system,
             home: None,
+            tasks: &[],
         };
-        assert!(legacy_units(&roots).is_empty());
+        assert!(unix_units(&roots).is_empty());
+        let user_unit = file(&user, SYSTEMD_USER, "hermes-gateway-work.service");
+        put(&user_unit, "[Unit]\n");
         put(
-            &user.join(".config/systemd/user/hermes-gateway-work.service"),
-            "[Unit]\n",
-        );
-        put(
-            &user.join(".config/systemd/user/hermes-gateway-ticket.json"),
+            &file(&user, SYSTEMD_USER, "hermes-gateway-ticket.json"),
             "{}",
         );
+        put(&file(&user, SYSTEMD_USER, "hermes-gatewayx.service"), "");
         put(
-            &user.join(".config/systemd/user/hermes-gatewayx.service"),
-            "",
-        );
-        put(
-            &system.join("etc/systemd/system/hermes-gateway.service"),
+            &file(&system, SYSTEMD_SYSTEM, "hermes-gateway.service"),
             "[Service]\nUser=alice\n",
         );
         put(
-            &user.join("Library/LaunchAgents/ai.hermes.gateway-coder.plist"),
+            &file(&user, LAUNCH_AGENTS, "ai.hermes.gateway-coder.plist"),
             "",
         );
-        let found = legacy_units(&roots);
+        let found = unix_units(&roots);
         let names: Vec<_> = found
             .iter()
-            .map(|u| u.path.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|u| {
+                Path::new(&u.location)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
             .collect();
         assert_eq!(
             names,
@@ -256,7 +277,6 @@ mod tests {
             ]
         );
         assert!(found.iter().all(|u| u.origin == HERMES));
-        let user_unit = user.join(".config/systemd/user/hermes-gateway-work.service");
         assert_eq!(
             found[0].replace,
             format!(
@@ -292,15 +312,16 @@ mod tests {
     fn a_custom_home_is_named_in_the_replacement() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("work home");
+        let system = dir.path().join("system");
         put(
-            &dir.path()
-                .join("system/Library/LaunchDaemons/ai.prometheus.gateway.plist"),
+            &file(&system, LAUNCH_DAEMONS, "ai.prometheus.gateway.plist"),
             "<dict>\n<key>UserName</key>\n<string>bob</string>\n</dict>",
         );
-        let found = legacy_units(&Roots {
+        let found = unix_units(&Roots {
             user_home: &dir.path().join("home"),
-            system_root: &dir.path().join("system"),
+            system_root: &system,
             home: Some(&home),
+            tasks: &[],
         });
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].origin, EARLIER);
