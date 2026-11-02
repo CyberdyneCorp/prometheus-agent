@@ -11,7 +11,7 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use common::tui::{ENTER, enter, finish, opened, see, tui, tui_with};
+use common::tui::{ENTER, enter, finish, opened, see, see_repainted, tui, tui_with};
 use common::{PNG, daemon, mock_home};
 use expectrl::Expect;
 
@@ -67,8 +67,10 @@ fn a_300_line_paste_is_one_chip_and_the_prompt_carries_every_line() {
     p.send(format!("\u{1b}[200~{log}\u{1b}[201~")).unwrap();
     see(&mut p, "[Pasted text #1: 300 lines]");
     enter(&mut p, " what failed?");
-    see(&mut p, "what failed?");
-    p.expect("log line 300").unwrap();
+    // The transcript's echo (or the mock's reply) ends with the prompt's
+    // last line; the composer only ever shows the chip. A repaint, since
+    // the line lands on cells that held another one.
+    see_repainted(&mut p, "log line 300 what failed?");
     enter(&mut p, "/quit");
     assert_eq!(finish(p).1, Some(0));
     let users = user_messages(home.path());

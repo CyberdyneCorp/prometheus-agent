@@ -10,7 +10,7 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use common::tui::{enter, finish, opened, see, tui};
+use common::tui::{enter, finish, opened, see, see_repainted, tui};
 use common::{daemon, mock_home, ok, run};
 use expectrl::Expect;
 
@@ -59,22 +59,25 @@ fn a_new_session_from_the_switcher_runs_while_the_first_keeps_running() {
     see(&mut p, "+new");
     p.send("\u{1b}[B").unwrap();
     p.send("second prompt").unwrap();
-    see(&mut p, "+new [default model, Tab changes] ›");
+    // The draft's row: `+new` itself may already be on the screen (drawn
+    // when Down highlighted it), so only the cells after it are written.
+    see(&mut p, "[default model, Tab changes] ›");
     std::thread::sleep(Duration::from_millis(300));
     p.send("\r").unwrap();
-    see(&mut p, "fast done");
-    see(&mut p, "2 live");
+    // From here on the composer has the focus, so every check waits for a
+    // full repaint: new lines land on cells that held the other session's
+    // text and only the differing ones are written.
+    see_repainted(&mut p, "fast done");
+    see_repainted(&mut p, "2 live");
     // The first session's turn ended in the background meanwhile.
-    see(&mut p, "finished a turn in the background");
+    see_repainted(&mut p, "finished a turn in the background");
     // Back to the first one through the switcher.
     p.send("\u{18}").unwrap();
     see(&mut p, "sessions:");
     p.send("\u{1b}[A").unwrap();
     p.send("\r").unwrap();
-    see(&mut p, &format!("session {first}"));
-    // Its transcript, painted whole.
-    enter(&mut p, "/redraw");
-    see(&mut p, "slow done");
+    see_repainted(&mut p, &format!("session {first}"));
+    see_repainted(&mut p, "slow done");
     enter(&mut p, "/quit");
     assert_eq!(finish(p).1, Some(0));
     let all = sessions(home.path());
