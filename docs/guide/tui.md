@@ -40,8 +40,13 @@ glyph.
 
 An approval card is answered with `o` (once), `s` (session), `a` (always)
 or `d` (deny) on an empty composer; a question card with a choice number,
-your own text, or an empty line to skip. A card answered in another
-window, timed out or left without anyone to answer is withdrawn.
+your own text, or an empty line to skip. When the agent needs a secret
+(a skill's missing key) or the sudo password, the card takes masked
+input: what you type is shown only as bullets, never enters the input
+history or the transcript, and is sent with Enter; Esc, Ctrl+C or an
+empty input declines. Each card counts down to its deadline; a card
+answered in another window, timed out or left without anyone to answer
+is withdrawn.
 
 Text typed while a turn runs follows `busy.input_mode`: it is queued and
 runs next (`queue`), handed to the running turn after its current tool

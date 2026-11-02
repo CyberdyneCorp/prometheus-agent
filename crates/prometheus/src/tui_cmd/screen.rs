@@ -74,9 +74,12 @@ pub(super) struct Tui<'a> {
     pub(super) open: &'a Open<'a>,
     pub(super) history: History,
     /// Server requests waiting for an answer; the first is on screen.
-    pub(super) asking: VecDeque<ServerCall>,
+    pub(super) asking: VecDeque<Asked>,
     /// The answers given so far to the shown clarify request's questions.
     pub(super) clarify: Vec<serde_json::Value>,
+    /// What was typed into a secret or sudo card: kept apart from the
+    /// composer so it is never drawn, never in the history.
+    pub(super) masked: String,
     /// Turns this TUI admitted that have not finished.
     pub(super) pending: HashSet<String>,
     /// Where background requests report.
@@ -87,6 +90,26 @@ pub(super) struct Tui<'a> {
     panic_on_draw: bool,
     /// The connection is lost: give up re-attaching after this.
     lost: Option<Lost>,
+}
+
+/// A server request on screen or waiting for it.
+pub(super) struct Asked {
+    pub(super) call: ServerCall,
+    /// When it settles unanswered (its `deadline_ms` from arrival).
+    pub(super) deadline: Option<tokio::time::Instant>,
+}
+
+impl Asked {
+    pub(super) fn new(call: ServerCall) -> Self {
+        let deadline = call.params["deadline_ms"]
+            .as_u64()
+            .map(|ms| tokio::time::Instant::now() + Duration::from_millis(ms));
+        Self { call, deadline }
+    }
+
+    pub(super) fn method(&self) -> &str {
+        &self.call.method
+    }
 }
 
 /// A lost connection being re-established.
@@ -159,6 +182,7 @@ impl<'a> Tui<'a> {
             history,
             asking: VecDeque::new(),
             clarify: Vec::new(),
+            masked: String::new(),
             pending: HashSet::new(),
             done,
             ending: None,
@@ -206,8 +230,10 @@ impl<'a> Tui<'a> {
                     self.on_done(result).await;
                 }
                 code = signals.next() => return Ok(Ending::Signal(code)),
-                _ = tick.tick(), if self.app.status.busy => {
+                _ = tick.tick(), if self.app.status.busy || self.counting_down() => {
                     self.app.status.frame = self.app.status.frame.wrapping_add(1);
+                    // The card's countdown.
+                    self.show_question();
                 }
             }
         }
@@ -222,6 +248,11 @@ impl<'a> Tui<'a> {
             })
             .map(drop)
             .map_err(|e| terminal_error(&e))
+    }
+
+    /// The card on screen has a deadline to count down.
+    fn counting_down(&self) -> bool {
+        self.asking.front().is_some_and(|a| a.deadline.is_some())
     }
 
     /// Shows a notice line.
@@ -277,6 +308,7 @@ impl<'a> Tui<'a> {
         self.app.status.note = Some("reconnecting".to_owned());
         self.asking.clear();
         self.clarify.clear();
+        self.masked.clear();
         self.app.card = None;
         self.app.status.approvals = 0;
         self.lost = Some(Lost {

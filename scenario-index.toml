@@ -1524,6 +1524,7 @@ capabilities = [
 "Prompt during retirement" = ["crates/pmt-gateway/tests/sessions.rs::a_retiring_daemon_refuses_new_work_and_drains_running_turns"]
 
 [tui."Server-to-client requests"]
+"Masked secret entry" = ["crates/prometheus/tests/tui_requests.rs::secret_and_sudo_requests_are_answered_masked_and_can_be_declined", "crates/prometheus/tests/tui_requests.rs::an_unanswered_secret_request_counts_down_and_is_withdrawn", "crates/prometheus/src/tui_cmd/session.rs::a_secret_card_shows_one_bullet_per_typed_character_and_never_the_value", "crates/prometheus/src/tui_cmd/session.rs::a_card_counts_down_to_its_deadline"]
 "Two windows show the same approval" = ["crates/pmt-gateway/tests/tui_protocol.rs::the_other_window_hears_which_client_answered", "crates/pmt-gateway/src/hub/tests.rs::the_first_answer_wins_and_the_others_see_it_resolved"]
 "No capable client attached" = ["crates/pmt-gateway/tests/tui_protocol.rs::without_a_capable_driver_the_request_settles_as_no_responder"]
 

@@ -1,7 +1,8 @@
 //! What the session sends the TUI: its events become transcript lines, its
-//! questions (approvals, clarify) become a card above the composer that
-//! the next answer settles, and a request settled elsewhere (answered by
-//! another window, timed out, no responder) withdraws its card.
+//! questions (approvals, clarify, secret and sudo entry) become a card
+//! above the composer that the next answer settles, counting down to its
+//! deadline, and a request settled elsewhere (answered by another window,
+//! timed out, no responder) withdraws its card.
 
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
@@ -13,7 +14,8 @@ use pmt_tui::app::Card;
 use pmt_tui::transcript::Kind;
 use serde_json::{Value, json};
 
-use super::screen::{Done, Tui};
+use super::masked;
+use super::screen::{Asked, Done, Tui};
 
 /// How to answer an approval card.
 const APPROVAL_HINT: &str = "[o]nce  [s]ession  [a]lways  [d]eny";
@@ -118,15 +120,12 @@ impl Tui<'_> {
     /// A server request: shown when nothing else is asked, else queued.
     pub(super) fn on_request(&mut self, call: ServerCall) {
         match call.method.as_str() {
-            "approval.request" | "clarify.request" => {
-                self.asking.push_back(call);
+            "approval.request" | "clarify.request" | masked::SECRET | masked::SUDO => {
+                self.asking.push_back(Asked::new(call));
                 self.show_question();
             }
-            _ => {
-                let err = RpcError::from_error(&pmt_core::Error::new(
-                    &pmt_core::error::codes::CHAT_APPROVAL_REQUIRED,
-                    "the TUI does not answer this request",
-                ));
+            other => {
+                let err = RpcError::unknown_method(other);
                 self.link.client.respond(&call.id, Err(err));
             }
         }
@@ -137,19 +136,21 @@ impl Tui<'_> {
         self.app.status.approvals = self
             .asking
             .iter()
-            .filter(|c| c.method == "approval.request")
+            .filter(|a| a.method() == "approval.request")
             .count();
         let asked = self.clarify.len();
-        self.app.card = self.asking.front().map(|call| card(call, asked));
+        let typed = self.masked.chars().count();
+        self.app.card = self.asking.front().map(|a| card(a, asked, typed));
     }
 
     fn withdraw(&mut self, data: &Value, why: &str) {
         let id = data["id"].as_str().unwrap_or_default();
         let before = self.asking.len();
-        if self.asking.front().is_some_and(|c| c.id == id) {
+        if self.asking.front().is_some_and(|a| a.call.id == id) {
             self.clarify.clear();
+            self.masked.clear();
         }
-        self.asking.retain(|c| c.id != id);
+        self.asking.retain(|a| a.call.id != id);
         if self.asking.len() != before {
             self.notice(format!("(the question {why})"));
             self.show_question();
@@ -159,14 +160,18 @@ impl Tui<'_> {
     /// Answers the question on the card with `line`; `false` when there is
     /// none or `line` is no answer to it (then it is a normal input).
     pub(super) fn answer(&mut self, line: &str) -> bool {
-        let Some(call) = self.asking.front() else {
+        let Some(asked) = self.asking.front() else {
             return false;
         };
+        let call = &asked.call;
         let answer = if call.method == "approval.request" {
             let Some(decision) = crate::chat::remote::turn::decision(line) else {
                 return false;
             };
             json!({ "decision": decision })
+        } else if masked::is_masked(&call.method) {
+            // Answered from the card's own masked input, never a line.
+            return false;
         } else {
             let questions = call.params["questions"]
                 .as_array()
@@ -254,38 +259,51 @@ impl Tui<'_> {
     }
 }
 
-/// The card of a request; for a clarify request, of its question `index`.
-fn card(call: &ServerCall, index: usize) -> Card {
-    let p = &call.params;
-    let within = p["deadline_ms"]
-        .as_u64()
-        .map(|ms| format!("   (answer within {} s)", ms.div_ceil(1000)))
+/// The card of a request; for a clarify request, of its question `index`;
+/// `typed` is how many characters a secret or sudo card holds.
+fn card(asked: &Asked, index: usize, typed: usize) -> Card {
+    let within = asked
+        .deadline
+        .map(|deadline| {
+            let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+            let secs = u64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(u64::MAX);
+            format!("   (answer within {secs} s)")
+        })
         .unwrap_or_default();
-    if call.method == "approval.request" {
-        let findings: Vec<String> = p["findings"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|f| {
-                format!(
-                    "{}: {} ({})",
-                    f["detector"].as_str().unwrap_or_default(),
-                    f["reason"].as_str().unwrap_or_default(),
-                    f["fragment"].as_str().unwrap_or_default()
-                )
-            })
-            .collect();
-        return Card {
-            title: format!(
-                "approval needed: {} {}",
-                p["tool"].as_str().unwrap_or("tool"),
-                p["subject"].as_str().unwrap_or_default()
-            ),
-            body: findings.join("\n"),
-            hint: format!("{APPROVAL_HINT}{within}"),
-        };
+    let p = &asked.call.params;
+    match asked.method() {
+        "approval.request" => approval_card(p, &within),
+        masked::SECRET | masked::SUDO => masked::card(asked.method(), p, typed, &within),
+        _ => clarify_card(&p["questions"][index], &within),
     }
-    let question = &p["questions"][index];
+}
+
+fn approval_card(p: &Value, within: &str) -> Card {
+    let findings: Vec<String> = p["findings"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|f| {
+            format!(
+                "{}: {} ({})",
+                f["detector"].as_str().unwrap_or_default(),
+                f["reason"].as_str().unwrap_or_default(),
+                f["fragment"].as_str().unwrap_or_default()
+            )
+        })
+        .collect();
+    Card {
+        title: format!(
+            "approval needed: {} {}",
+            p["tool"].as_str().unwrap_or("tool"),
+            p["subject"].as_str().unwrap_or_default()
+        ),
+        body: findings.join("\n"),
+        hint: format!("{APPROVAL_HINT}{within}"),
+    }
+}
+
+fn clarify_card(question: &Value, within: &str) -> Card {
     let choices: Vec<String> = question["choices"]
         .as_array()
         .into_iter()
@@ -297,5 +315,48 @@ fn card(call: &ServerCall, index: usize) -> Card {
         title: question["question"].as_str().unwrap_or_default().to_owned(),
         body: choices.join("\n"),
         hint: format!("{CLARIFY_HINT}{within}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use pmt_rpc::client::ServerCall;
+    use serde_json::json;
+
+    use super::{Asked, card};
+
+    fn asked(method: &str, deadline_ms: Option<u64>) -> Asked {
+        let mut params = json!({"name": "DEPLOY_TOKEN", "command": "sudo id", "tool": "terminal"});
+        if let Some(ms) = deadline_ms {
+            params["deadline_ms"] = json!(ms);
+        }
+        Asked::new(ServerCall {
+            id: "srq-000000000001".into(),
+            method: method.into(),
+            params,
+        })
+    }
+
+    #[test]
+    fn a_card_counts_down_to_its_deadline() {
+        let mut waiting = asked("sudo.request", Some(2_500));
+        assert!(card(&waiting, 0, 0).hint.ends_with("(answer within 3 s)"));
+        waiting.deadline = waiting.deadline.map(|d| d - Duration::from_secs(1));
+        assert!(card(&waiting, 0, 0).hint.ends_with("(answer within 2 s)"));
+        waiting.deadline = waiting.deadline.map(|d| d - Duration::from_secs(5));
+        assert!(card(&waiting, 0, 0).hint.ends_with("(answer within 0 s)"));
+        let open = asked("approval.request", None);
+        assert!(!card(&open, 0, 0).hint.contains("within"));
+    }
+
+    #[test]
+    fn a_secret_card_shows_one_bullet_per_typed_character_and_never_the_value() {
+        let shown = card(&asked("secret.request", None), 0, 5);
+        assert_eq!(shown.title, "secret needed: DEPLOY_TOKEN");
+        assert!(shown.body.ends_with("› •••••"), "{}", shown.body);
+        let sudo = card(&asked("sudo.request", None), 0, 0);
+        assert_eq!(sudo.body, "for: sudo id\n› ");
     }
 }

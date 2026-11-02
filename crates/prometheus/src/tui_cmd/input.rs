@@ -23,7 +23,9 @@ impl Tui<'_> {
     /// One terminal event.
     pub(super) fn on_terminal(&mut self, event: Event) {
         match event {
+            Event::Key(key) if self.masked_front() => self.masked_key(&key),
             Event::Key(key) => self.on_key(&key),
+            Event::Paste(text) if self.masked_front() => self.masked_paste(&text),
             Event::Paste(text) => self.app.composer.insert_str(&text),
             Event::Mouse(mouse) => match mouse.kind {
                 MouseEventKind::ScrollUp => self.app.scroll_up(3),
@@ -66,11 +68,11 @@ impl Tui<'_> {
         let approval = self
             .asking
             .front()
-            .is_some_and(|call| call.method == "approval.request");
+            .is_some_and(|asked| asked.method() == "approval.request");
         approval && "osad".contains(c) && self.answer(&c.to_string())
     }
 
-    fn on_action(&mut self, action: Action) {
+    pub(super) fn on_action(&mut self, action: Action) {
         if action != Action::Complete {
             self.app.completions.clear();
         }

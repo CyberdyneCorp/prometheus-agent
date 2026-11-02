@@ -13,67 +13,10 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
+use common::tui::{ENTER, LEAVE, enter, finish, opened, see, tui};
 use common::{daemon, mock_home, ok, run, stderr};
 use expectrl::session::OsSession;
-use expectrl::{ControlCode, Eof, Expect};
-
-/// Entering and leaving the alternate screen.
-const ENTER: &str = "\u{1b}[?1049h";
-const LEAVE: &str = "\u{1b}[?1049l";
-
-/// The binary on a terminal with `ui.interface` at its default (`tui`).
-fn tui(home: &Path, args: &[&str], env: &[(&str, &str)]) -> OsSession {
-    let mut cmd: Command = common::command(home);
-    cmd.args(args)
-        .current_dir(home)
-        .env("TERM", "xterm-256color")
-        .env_remove("NO_COLOR");
-    for (key, value) in env {
-        cmd.env(key, value);
-    }
-    let mut session = OsSession::spawn(cmd).unwrap();
-    session.get_process_mut().set_window_size(100, 30).unwrap();
-    session.set_expect_timeout(Some(Duration::from_secs(30)));
-    session
-}
-
-/// Everything the process writes until it exits, and its exit status.
-fn finish(mut p: OsSession) -> (String, Option<i32>) {
-    let found = p.expect(Eof).unwrap();
-    // Eof matches everything left in the buffer.
-    let text = String::from_utf8_lossy(found.as_bytes()).into_owned();
-    let status = format!("{:?}", p.get_process_mut().wait().unwrap());
-    // `Exited(Pid(n), code)`; a signal death has no exit code.
-    let code = status
-        .strip_prefix("Exited(")
-        .and_then(|rest| rest.trim_end_matches(')').rsplit(", ").next())
-        .and_then(|code| code.parse().ok());
-    (text, code)
-}
-
-/// Waits until the screen shows `text`: its words in order, with only
-/// cursor moves or blanks between them (the TUI redraws only the cells
-/// that change, so the spaces of a line are not always written).
-fn see(p: &mut OsSession, text: &str) {
-    let escape = |word: &str| {
-        word.chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() {
-                    c.to_string()
-                } else {
-                    format!("\\x{{{:x}}}", u32::from(c))
-                }
-            })
-            .collect::<String>()
-    };
-    let gap = r"(?:\x1b\[[0-9;?]*[A-Za-z]| )*";
-    let pattern = text
-        .split_whitespace()
-        .map(escape)
-        .collect::<Vec<_>>()
-        .join(gap);
-    p.expect(expectrl::Regex(pattern)).unwrap();
-}
+use expectrl::{ControlCode, Expect};
 
 /// Whether the terminal behind `handle` is cooked: line editing and
 /// signal keys on (raw mode turns both off; echo is as the pseudo-terminal
@@ -84,17 +27,6 @@ fn cooked(handle: &std::fs::File) -> bool {
     attrs
         .local_flags
         .contains(LocalFlags::ICANON | LocalFlags::ISIG)
-}
-
-/// Types `text` and Enter (a carriage return, as a terminal sends it).
-fn enter(p: &mut OsSession, text: &str) {
-    p.send(format!("{text}\r")).unwrap();
-}
-
-/// Waits for the TUI's composer on the alternate screen.
-fn opened(p: &mut OsSession) {
-    p.expect(ENTER).unwrap();
-    p.expect("default").unwrap();
 }
 
 /// `script` run by `/bin/sh` in a pseudo-terminal (so whatever it does not

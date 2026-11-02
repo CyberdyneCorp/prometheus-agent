@@ -12,6 +12,7 @@
 
 mod input;
 mod link;
+mod masked;
 mod screen;
 mod session;
 mod signals;

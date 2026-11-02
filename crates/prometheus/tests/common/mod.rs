@@ -120,6 +120,9 @@ pub fn files_under(dir: &Path) -> Vec<std::path::PathBuf> {
 #[cfg(unix)]
 pub mod pty;
 
+#[cfg(unix)]
+pub mod tui;
+
 #[cfg(feature = "gateway")]
 pub mod daemon;
 

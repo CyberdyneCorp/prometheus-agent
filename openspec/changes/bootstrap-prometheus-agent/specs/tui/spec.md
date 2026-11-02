@@ -151,8 +151,13 @@ While the daemon is retiring (update, restart or shutdown), it SHALL refuse ever
 - **THEN** the response SHALL be `-32006` and no turn SHALL start
 
 ### Requirement: Server-to-client requests
-The daemon SHALL ask clients questions (`approval.request`, `clarify.request`, `secret.request`, `sudo.request`) as JSON-RPC requests with ids `srq-<12 hex>` sent to every attached client whose `rpc.hello` advertised `capabilities.server_requests = true` and whose role is `driver`; the first valid answer SHALL settle the request and the daemon SHALL emit `request.resolved {id, by_client}` to all other recipients; when no attached client can answer, the request SHALL settle immediately with outcome `no_responder` instead of waiting out its deadline.
+The daemon SHALL ask clients questions (`approval.request`, `clarify.request`, `secret.request`, `sudo.request`) as JSON-RPC requests with ids `srq-<12 hex>` sent to every attached client whose `rpc.hello` advertised `capabilities.server_requests = true` and whose role is `driver`; the first valid answer SHALL settle the request and the daemon SHALL emit `request.resolved {id, by_client}` to all other recipients; when no attached client can answer, the request SHALL settle immediately with outcome `no_responder` instead of waiting out its deadline. The TUI SHALL answer all four kinds on a card that counts down to the request's deadline and is withdrawn on `request.resolved` or `request.cancel`; `secret.request` and `sudo.request` SHALL be answered from a masked input that is never drawn (one bullet per typed character), never written to the input history and never shown in the transcript, sending the value on Enter and declining (`null`) on Esc, Ctrl+C or an empty input.
 **Milestone:** M2
+
+#### Scenario: Masked secret entry
+- **GIVEN** the TUI attached as a driver
+- **WHEN** the daemon sends `secret.request` and the user types the value and presses Enter
+- **THEN** the daemon SHALL receive the value, and neither the screen, the input history nor the transcript SHALL contain it; a `sudo.request` answered with Esc SHALL be declined with a `null` password
 
 #### Scenario: Two windows show the same approval
 - **GIVEN** a TUI and a desktop window both attached as drivers
