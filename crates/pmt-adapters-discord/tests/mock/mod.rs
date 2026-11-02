@@ -1,0 +1,463 @@
+//! A Discord mock: the REST API (messages limited to 2000 characters,
+//! edits, typing, reactions, channels, interaction callbacks, CDN files,
+//! scripted failures) and a Gateway WebSocket that numbers every event of
+//! a session and replays the missed ones on Resume, as Discord does.
+
+#![allow(dead_code, unreachable_pub)] // each test file uses part of it
+
+use std::collections::VecDeque;
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+
+use bytes::Bytes;
+use futures_util::{SinkExt as _, StreamExt as _};
+use http_body_util::{BodyExt as _, Full};
+use hyper::body::Incoming;
+use hyper::service::service_fn;
+use hyper::{Request, Response};
+use hyper_util::rt::TokioIo;
+use pmt_gateway::messaging::Button;
+use pmt_gateway::messaging::conformance::{Failure, MockPlatform, MockSent};
+use serde_json::{Value, json};
+use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+
+/// The bot token the mock accepts.
+pub const TOKEN: &str = "discord-test-token";
+/// The DM channel the kit talks in, and its user.
+pub const DM: &str = "900";
+pub const USER: &str = "4242";
+/// The bot's user id.
+pub const BOT: &str = "1";
+
+/// What the Gateway socket task is told.
+enum Push {
+    Event(Value),
+    Close(u16),
+}
+
+#[derive(Default)]
+struct State {
+    /// Every dispatch of the session, with its sequence number.
+    events: Vec<(u64, Value)>,
+    last_message: Option<Value>,
+    next_id: u64,
+    sent: Vec<MockSent>,
+    typing: usize,
+    reactions: Vec<(String, String)>,
+    failures: VecDeque<Failure>,
+    files: Vec<(String, Vec<u8>)>,
+    uploads: usize,
+    /// The connected socket's mailbox.
+    socket: Option<mpsc::UnboundedSender<Push>>,
+    /// Identify close code to answer with (the intents scenario).
+    refuse_identify: Option<u16>,
+    identifies: usize,
+    resumes: usize,
+}
+
+/// The mock.
+pub struct DiscordMock {
+    state: Mutex<State>,
+    rest: SocketAddr,
+    gateway: SocketAddr,
+}
+
+impl DiscordMock {
+    /// Starts the REST and Gateway servers on free loopback ports.
+    pub async fn start() -> Arc<Self> {
+        let rest = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let gateway = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mock = Arc::new(Self {
+            state: Mutex::new(State {
+                next_id: 1000,
+                ..State::default()
+            }),
+            rest: rest.local_addr().unwrap(),
+            gateway: gateway.local_addr().unwrap(),
+        });
+        let server = Arc::clone(&mock);
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = rest.accept().await {
+                let server = Arc::clone(&server);
+                tokio::spawn(async move {
+                    let service = service_fn(move |req| {
+                        let server = Arc::clone(&server);
+                        async move { Ok::<_, Infallible>(server.rest(req).await) }
+                    });
+                    let _ = hyper::server::conn::http1::Builder::new()
+                        .serve_connection(TokioIo::new(stream), service)
+                        .await;
+                });
+            }
+        });
+        let server = Arc::clone(&mock);
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = gateway.accept().await {
+                let server = Arc::clone(&server);
+                tokio::spawn(async move { server.socket(stream).await });
+            }
+        });
+        mock
+    }
+
+    /// The endpoints that reach this mock.
+    pub fn endpoints(&self) -> pmt_adapters_discord::Endpoints {
+        pmt_adapters_discord::Endpoints {
+            api: format!("http://{}/api/v10", self.rest),
+        }
+    }
+
+    /// The next Identify is refused with close code `code`.
+    pub fn refuse_identify(&self, code: u16) {
+        self.lock().refuse_identify = Some(code);
+    }
+
+    /// (Identify, Resume) counts.
+    pub fn handshakes(&self) -> (usize, usize) {
+        let state = self.lock();
+        (state.identifies, state.resumes)
+    }
+
+    /// Stores a CDN file at `/cdn/<name>`; its URL.
+    pub fn add_file(&self, name: &str, bytes: Vec<u8>) -> String {
+        self.lock().files.push((name.to_owned(), bytes));
+        format!("http://{}/cdn/{name}", self.rest)
+    }
+
+    /// Multipart uploads received.
+    pub fn uploads(&self) -> usize {
+        self.lock().uploads
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.state.lock().unwrap()
+    }
+
+    fn id(&self) -> String {
+        let mut state = self.lock();
+        state.next_id += 1;
+        state.next_id.to_string()
+    }
+
+    /// Records a dispatch and sends it when a socket is connected.
+    pub fn dispatch(&self, kind: &str, data: &Value) {
+        let mut state = self.lock();
+        let seq = state.events.len() as u64 + 1;
+        let event = json!({"op": 0, "t": kind, "s": seq, "d": data});
+        state.events.push((seq, event.clone()));
+        if let Some(socket) = &state.socket {
+            let _ = socket.send(Push::Event(event));
+        }
+    }
+
+    async fn socket(self: Arc<Self>, stream: tokio::net::TcpStream) {
+        let Ok(socket) = tokio_tungstenite::accept_async(stream).await else {
+            return;
+        };
+        let (mut sink, mut source) = socket.split();
+        let hello = json!({"op": 10, "d": {"heartbeat_interval": 45_000}});
+        let _ = sink.send(Message::text(hello.to_string())).await;
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        loop {
+            tokio::select! {
+                push = rx.recv() => match push {
+                    Some(Push::Event(event)) => {
+                        let _ = sink.send(Message::text(event.to_string())).await;
+                    }
+                    Some(Push::Close(code)) => {
+                        let frame = CloseFrame { code: CloseCode::from(code), reason: "".into() };
+                        let _ = sink.send(Message::Close(Some(frame))).await;
+                        return;
+                    }
+                    None => return,
+                },
+                frame = source.next() => {
+                    let Some(Ok(Message::Text(text))) = frame else { return };
+                    let payload: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+                    for reply in self.gateway_op(&payload, &tx) {
+                        let _ = sink.send(reply).await;
+                    }
+                }
+            }
+        }
+    }
+
+    fn gateway_op(&self, payload: &Value, tx: &mpsc::UnboundedSender<Push>) -> Vec<Message> {
+        let mut state = self.lock();
+        match payload["op"].as_u64() {
+            Some(1) => vec![Message::text(json!({"op": 11}).to_string())],
+            Some(2) => {
+                state.identifies += 1;
+                if let Some(code) = state.refuse_identify.take() {
+                    let _ = tx.send(Push::Close(code));
+                    return Vec::new();
+                }
+                if payload["d"]["token"].as_str() != Some(TOKEN) {
+                    let _ = tx.send(Push::Close(4004));
+                    return Vec::new();
+                }
+                state.socket = Some(tx.clone());
+                let ready = json!({"op": 0, "t": "READY", "s": state.events.len() as u64 + 1, "d": {
+                    "session_id": "sess-1",
+                    "resume_gateway_url": format!("ws://{}", self.gateway),
+                    "user": {"id": BOT, "username": "kit-bot", "bot": true}
+                }});
+                let seq = state.events.len() as u64 + 1;
+                state.events.push((seq, ready.clone()));
+                vec![Message::text(ready.to_string())]
+            }
+            Some(6) => {
+                state.resumes += 1;
+                state.socket = Some(tx.clone());
+                let after = payload["d"]["seq"].as_u64().unwrap_or(0);
+                let mut replies: Vec<Message> = state
+                    .events
+                    .iter()
+                    .filter(|(seq, _)| *seq > after)
+                    .map(|(_, e)| Message::text(e.to_string()))
+                    .collect();
+                replies.push(Message::text(
+                    json!({"op": 0, "t": "RESUMED", "s": null, "d": {}}).to_string(),
+                ));
+                replies
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    async fn rest(self: Arc<Self>, request: Request<Incoming>) -> Response<Full<Bytes>> {
+        let method = request.method().as_str().to_owned();
+        let path = request.uri().path().to_owned();
+        let authorized = request
+            .headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            == Some(&*format!("Bot {TOKEN}"));
+        let kind = request
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let body = request
+            .into_body()
+            .collect()
+            .await
+            .map(|b| b.to_bytes().to_vec())
+            .unwrap_or_default();
+        if let Some(name) = path.strip_prefix("/cdn/") {
+            let found = self
+                .lock()
+                .files
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, b)| b.clone());
+            return match found {
+                Some(bytes) => Response::new(Full::new(Bytes::from(bytes))),
+                None => respond(404, &json!({"message": "Unknown"})),
+            };
+        }
+        if !authorized {
+            return respond(401, &json!({"message": "401: Unauthorized", "code": 0}));
+        }
+        let path = path.trim_start_matches("/api/v10").to_owned();
+        let (status, answer) = self.route(&method, &path, &kind, &body);
+        respond(status, &answer)
+    }
+
+    fn route(&self, method: &str, path: &str, kind: &str, body: &[u8]) -> (u16, Value) {
+        let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+        match (method, parts.as_slice()) {
+            ("GET", ["users", "@me"]) => (200, json!({"id": BOT, "username": "kit-bot"})),
+            ("GET", ["gateway", "bot"]) => (200, json!({"url": format!("ws://{}", self.gateway)})),
+            ("POST", ["channels", channel, "messages"]) => self.create(channel, kind, body),
+            ("PATCH", ["channels", _, "messages", id]) => self.edit(id, body),
+            ("POST", ["channels", _, "typing"]) => {
+                self.lock().typing += 1;
+                (204, Value::Null)
+            }
+            ("PUT", ["channels", _, "messages", id, "reactions", emoji, "@me"]) => {
+                let emoji = percent_encoding::percent_decode_str(emoji)
+                    .decode_utf8_lossy()
+                    .into_owned();
+                self.lock().reactions.push(((*id).to_owned(), emoji));
+                (204, Value::Null)
+            }
+            ("GET", ["channels", id]) => (
+                200,
+                json!({"id": id, "type": 1, "recipients": [{"id": USER, "username": "kit-user"}]}),
+            ),
+            ("POST", ["interactions", _, _, "callback"]) => (204, Value::Null),
+            _ => (404, json!({"message": "404: Not Found", "code": 0})),
+        }
+    }
+
+    fn create(&self, channel: &str, kind: &str, body: &[u8]) -> (u16, Value) {
+        let mut state = self.lock();
+        if let Some(failure) = state.failures.pop_front() {
+            return match failure {
+                Failure::RateLimited(secs) => (
+                    429,
+                    json!({"message": "You are being rate limited.", "retry_after": secs, "global": false}),
+                ),
+                Failure::ServerError => (500, json!({"message": "500: Internal Server Error"})),
+                Failure::Markup | Failure::Forbidden => (
+                    403,
+                    json!({"message": "Missing Permissions", "code": 50013}),
+                ),
+            };
+        }
+        let payload: Value = if kind.starts_with("multipart/") {
+            state.uploads += 1;
+            let text = String::from_utf8_lossy(body);
+            text.split("name=\"payload_json\"\r\n\r\n")
+                .nth(1)
+                .and_then(|r| r.split("\r\n").next())
+                .and_then(|j| serde_json::from_str(j).ok())
+                .unwrap_or(Value::Null)
+        } else {
+            serde_json::from_slice(body).unwrap_or(Value::Null)
+        };
+        let content = payload["content"].as_str().unwrap_or_default();
+        if content.chars().count() > 2000 {
+            return (
+                400,
+                json!({"message": "Invalid Form Body", "code": 50035,
+                       "errors": {"content": {"_errors": [{"code": "BASE_TYPE_MAX_LENGTH"}]}}}),
+            );
+        }
+        state.next_id += 1;
+        let id = state.next_id.to_string();
+        state.sent.push(MockSent {
+            chat_id: channel.to_owned(),
+            message_id: id.clone(),
+            text: content.to_owned(),
+            buttons: buttons(&payload["components"]),
+        });
+        (200, json!({"id": id, "channel_id": channel}))
+    }
+
+    fn edit(&self, id: &str, body: &[u8]) -> (u16, Value) {
+        let payload: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+        let mut state = self.lock();
+        let Some(message) = state.sent.iter_mut().find(|m| m.message_id == id) else {
+            return (404, json!({"message": "Unknown Message", "code": 10008}));
+        };
+        payload["content"]
+            .as_str()
+            .unwrap_or_default()
+            .clone_into(&mut message.text);
+        message.buttons = buttons(&payload["components"]);
+        (200, json!({"id": id}))
+    }
+
+    /// Delivers a DM with a file attached.
+    pub fn inject_file(&self, url: &str, name: &str, content_type: &str) -> String {
+        let id = self.id();
+        self.dispatch(
+            "MESSAGE_CREATE",
+            &json!({
+                "id": id, "channel_id": DM, "content": "",
+                "author": {"id": USER, "username": "kit-user"},
+                "timestamp": "2026-11-02T10:00:00+00:00",
+                "attachments": [{"url": url, "filename": name, "content_type": content_type}]
+            }),
+        );
+        id
+    }
+}
+
+fn buttons(components: &Value) -> Vec<Button> {
+    components
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|row| row["components"].as_array().cloned().unwrap_or_default())
+        .map(|b| Button {
+            label: b["label"].as_str().unwrap_or_default().to_owned(),
+            data: b["custom_id"].as_str().unwrap_or_default().to_owned(),
+        })
+        .collect()
+}
+
+fn respond(status: u16, body: &Value) -> Response<Full<Bytes>> {
+    let text = if body.is_null() {
+        String::new()
+    } else {
+        body.to_string()
+    };
+    Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .body(Full::new(Bytes::from(text)))
+        .unwrap()
+}
+
+impl MockPlatform for DiscordMock {
+    fn dm(&self) -> (String, String) {
+        (DM.to_owned(), USER.to_owned())
+    }
+
+    fn inject(&self, text: &str) -> String {
+        let id = self.id();
+        let message = json!({
+            "id": id, "channel_id": DM, "content": text,
+            "author": {"id": USER, "username": "kit-user"},
+            "timestamp": "2026-11-02T10:00:00+00:00", "attachments": []
+        });
+        self.lock().last_message = Some(message.clone());
+        self.dispatch("MESSAGE_CREATE", &message);
+        id
+    }
+
+    fn redeliver(&self) {
+        let last = self.lock().last_message.clone();
+        if let Some(message) = last {
+            self.dispatch("MESSAGE_CREATE", &message);
+        }
+    }
+
+    fn drop_connection(&self) {
+        // A resumable close: the client resumes and gets what it missed.
+        if let Some(socket) = self.lock().socket.take() {
+            let _ = socket.send(Push::Close(4000));
+        }
+    }
+
+    fn press(&self, message_id: &str, data: &str) {
+        let id = self.id();
+        self.dispatch(
+            "INTERACTION_CREATE",
+            &json!({
+                "id": id, "token": "itoken", "type": 3, "channel_id": DM,
+                "user": {"id": USER, "username": "kit-user"},
+                "data": {"custom_id": data, "component_type": 2},
+                "message": {"id": message_id}
+            }),
+        );
+    }
+
+    fn fail_next(&self, failure: Failure) {
+        self.lock().failures.push_back(failure);
+    }
+
+    fn reports_markup_errors(&self) -> bool {
+        false
+    }
+
+    fn sent(&self) -> Vec<MockSent> {
+        self.lock().sent.clone()
+    }
+
+    fn typing(&self) -> usize {
+        self.lock().typing
+    }
+
+    fn reactions(&self) -> Vec<(String, String)> {
+        self.lock().reactions.clone()
+    }
+}

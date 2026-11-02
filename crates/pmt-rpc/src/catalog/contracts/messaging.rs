@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::Method;
+use super::{Event, Method};
 
 /// `pairing.approve` params.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -34,3 +34,27 @@ pub struct PairingApproved {
 method!(/// `pairing.approve`: approves a pending pairing code of the
     /// profile; the sender is told in their DM.
     PairingApprove = "pairing.approve" (PairingApproveParams) -> PairingApproved);
+
+/// `adapter.state` payload: one messaging adapter changed state (spec:
+/// platform-adapters, Adapter state reporting and reconnect).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AdapterStatePayload {
+    /// The owning profile.
+    pub profile: String,
+    /// Platform name.
+    pub platform: String,
+    /// `disabled`, `connecting`, `connected`, `degraded`, `retrying` or
+    /// `fatal`.
+    pub state: String,
+    /// Error code of a `degraded`, `retrying` or `fatal` adapter.
+    #[serde(default)]
+    pub code: Option<String>,
+    /// What happened.
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+event!(/// `adapter.state`: a messaging adapter of a profile the client is
+    /// attached to changed state.
+    AdapterStateChanged = "adapter.state" (AdapterStatePayload));

@@ -345,6 +345,35 @@ pub trait Adapter: Send + Sync + 'static {
     }
 }
 
+/// Reads the credential `name` from the owning profile's secrets store
+/// only (never another profile's, never the environment).
+///
+/// # Errors
+///
+/// `missing_secret` (fatal) naming the secret and the profile;
+/// `secrets_unreadable` (retryable) when the store cannot be read.
+pub fn credential(scope: &ProfileScope, name: &str) -> Result<String, AdapterError> {
+    let profile = scope.name().as_str();
+    match scope.secrets().store().get(name) {
+        Ok(Some(value)) => Ok(value.expose().to_owned()),
+        Ok(None) => Err(AdapterError {
+            retryable: false,
+            code: "missing_secret".to_owned(),
+            message: format!(
+                "secret {name} is missing from profile '{profile}'; set it with `prometheus -p {profile} secrets set {name}`"
+            ),
+        }),
+        Err(err) => Err(AdapterError {
+            retryable: true,
+            code: "secrets_unreadable".to_owned(),
+            message: format!(
+                "the secrets of profile '{profile}' cannot be read: {}",
+                err.message()
+            ),
+        }),
+    }
+}
+
 /// A chat's name and kind (`chat-info`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatInfo {

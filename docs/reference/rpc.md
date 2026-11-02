@@ -146,7 +146,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Name | Owner | Since | Payload |
 |---|---|---|---|
 | `achievement.unlocked` | `pets` | 1.0 | not served yet |
-| `adapter.state` | `messaging-gateway` | 1.0 | not served yet |
+| `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | not served yet |
 | `health.changed` | `observability` | 1.0 | not served yet |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
@@ -169,6 +169,18 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `ok` | boolean | yes | Always true. |
+
+### `AdapterStatePayload`
+
+`adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `code` | string or null | no | Error code of a `degraded`, `retrying` or `fatal` adapter. |
+| `message` | string or null | no | What happened. |
+| `platform` | string | yes | Platform name. |
+| `profile` | string | yes | The owning profile. |
+| `state` | string | yes | `disabled`, `connecting`, `connected`, `degraded`, `retrying` or `fatal`. |
 
 ### `Admission`
 

@@ -42,6 +42,20 @@ export interface Ack {
   ok: boolean;
 }
 
+/** `adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect). */
+export interface AdapterStatePayload {
+  /** Error code of a `degraded`, `retrying` or `fatal` adapter. */
+  code?: string | null;
+  /** What happened. */
+  message?: string | null;
+  /** Platform name. */
+  platform: string;
+  /** The owning profile. */
+  profile: string;
+  /** `disabled`, `connecting`, `connected`, `degraded`, `retrying` or `fatal`. */
+  state: string;
+}
+
 /** How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy). */
 export type Admission = "started" | "queued" | "steered";
 
@@ -754,6 +768,7 @@ export interface ServerRequests {
 }
 
 export interface Events {
+  "adapter.state": AdapterStatePayload;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
@@ -822,7 +837,6 @@ export const UNDECLARED = [
   "worktree.prune",
   "worktree.status",
   "achievement.unlocked",
-  "adapter.state",
   "automation.state",
   "health.changed",
   "local_model.context_grown",

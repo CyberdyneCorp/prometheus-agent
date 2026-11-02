@@ -22,6 +22,8 @@ pmt-obs = { path = "crates/pmt-obs" }
 pmt-providers = { path = "crates/pmt-providers" }
 pmt-rpc = { path = "crates/pmt-rpc" }
 pmt-gateway = { path = "crates/pmt-gateway" }
+pmt-adapters-telegram = { path = "crates/pmt-adapters-telegram" }
+pmt-adapters-discord = { path = "crates/pmt-adapters-discord" }
 pmt-sandbox = { path = "crates/pmt-sandbox" }
 pmt-skills = { path = "crates/pmt-skills" }
 pmt-store = { path = "crates/pmt-store" }

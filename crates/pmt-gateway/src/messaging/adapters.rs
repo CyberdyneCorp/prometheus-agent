@@ -70,6 +70,8 @@ pub(crate) struct Slot {
     /// The adapter reported a lost connection.
     lost: Notify,
     stop: CancellationToken,
+    /// Where state changes are announced (`adapter.state`).
+    shared: Weak<Shared>,
 }
 
 impl Slot {
@@ -109,10 +111,17 @@ impl Slot {
     }
 
     fn set(&self, state: AdapterState, error: Option<&AdapterError>) {
-        let mut status = self.status.lock().expect("status poisoned");
-        status.state = state;
-        status.code = error.map(|e| e.code.clone());
-        status.message = error.map(|e| e.message.clone());
+        let announced = {
+            let mut status = self.status.lock().expect("status poisoned");
+            let changed = status.state != state || status.code.as_ref() != error.map(|e| &e.code);
+            status.state = state;
+            status.code = error.map(|e| e.code.clone());
+            status.message = error.map(|e| e.message.clone());
+            changed.then(|| status.clone())
+        };
+        if let (Some(status), Some(shared)) = (announced, self.shared.upgrade()) {
+            announce(&shared, &status);
+        }
     }
 }
 
@@ -343,6 +352,7 @@ fn launch_slot(
         lock: Mutex::default(),
         lost: Notify::new(),
         stop: shared.stop.child_token(),
+        shared: Arc::downgrade(shared),
     });
     shared
         .adapters
@@ -535,6 +545,21 @@ fn loaded_descriptor(
         descriptor.max_message_length = limit;
     }
     Ok(descriptor)
+}
+
+/// Tells the profile's attached clients an adapter's new state.
+fn announce(shared: &Shared, status: &AdapterStatus) {
+    let payload = json!({
+        "profile": status.profile,
+        "platform": status.platform,
+        "state": status.state,
+        "code": status.code,
+        "message": status.message,
+    });
+    shared
+        .server
+        .hub()
+        .broadcast(&status.profile, "adapter.state", payload, shared.conn);
 }
 
 async fn platform_event(shared: &Shared, key: &(String, String), error: &AdapterError) {

@@ -88,6 +88,17 @@ batching = { delay_ms = 300, split_delay_ms = 1000 }
 options = { require_mention = true } # checked against the adapter's schema
 ```
 
+Telegram reads its bot token from the secret `TELEGRAM_BOT_TOKEN` and
+long-polls the Bot API (`options.poll_timeout_secs`, default 30); updates
+that arrive while it is disconnected are fetched once it reconnects.
+Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
+resumes the session after a dropped connection, so missed messages are
+replayed; the bot needs the Message Content privileged intent, and
+`options.require_mention = true` answers server messages only when they
+mention the bot. Both send buttons for approvals, typing indicators,
+reactions and files, and both read the token from the owning profile's
+secrets only.
+
 What the gateway does for every adapter:
 
 - Long replies are split at paragraph, line and word boundaries (never
@@ -219,12 +230,13 @@ without an agent turn. Targets are `platform` (its home channel),
 piped stdin, and a line `MEDIA:<path>` attaches a file (`[[as_document]]`
 sends images uncompressed). With the daemon running the message goes
 through its outbox and the command waits for the delivery; without it,
-platforms that can send statelessly send directly and the others need the
-daemon:
+platforms that can send statelessly (Telegram, Discord) send directly with
+the profile's token and the others need the daemon (exit 69). Here the
+token was never stored, so the direct send fails:
 
 ```console
-$ prometheus gateway send --to telegram:-1001234567890 "RAM 92%" # exits 69
-error: daemon required for telegram
+$ prometheus gateway send --to telegram:-1001234567890 "RAM 92%" # exits 1
+error: not delivered to telegram:-1001234567890: refused: secret TELEGRAM_BOT_TOKEN is missing from profile 'default'; set it with `prometheus -p default secrets set TELEGRAM_BOT_TOKEN`
 ```
 
 A script typically runs `echo "RAM 92%" | prometheus gateway send --to

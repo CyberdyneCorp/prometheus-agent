@@ -412,3 +412,46 @@ async fn two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401()
     said(&h.adapter_of("default", "webhook"), "echo: deploy done").await;
     said(&h.adapter_of("work", "webhook"), "echo: build red").await;
 }
+
+#[tokio::test]
+async fn attached_clients_see_adapter_state_changes() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    h.dm("telegram", "1", "first").await;
+    said(&h.adapter("telegram"), "echo: first").await;
+    let session = h.sessions()[0].to_string();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let desktop = pmt_gateway::hub::Peer {
+        tx,
+        minor: h.server.protocol().minor,
+        advertised: std::sync::Arc::default(),
+        server_requests: false,
+        client_id: "desktop-901".into(),
+        role: pmt_rpc::contracts::AttachRole::Observer,
+    };
+    h.server.hub().attach(901_000, &session, desktop, None);
+    let link = h.adapter("telegram").link.lock().unwrap().clone().unwrap();
+    link.report(
+        AdapterState::Retrying,
+        Some(pmt_gateway::messaging::AdapterError {
+            retryable: true,
+            code: "telegram_unreachable".into(),
+            message: "connection reset".into(),
+        }),
+    );
+    let frame = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let message = rx.recv().await.expect("a frame");
+            let text = message.into_text().unwrap().to_string();
+            if text.contains("\"adapter.state\"") {
+                return text;
+            }
+        }
+    })
+    .await
+    .expect("an adapter.state event");
+    assert!(frame.contains("\"state\":\"retrying\""), "{frame}");
+    assert!(
+        frame.contains("\"code\":\"telegram_unreachable\""),
+        "{frame}"
+    );
+}

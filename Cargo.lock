@@ -2297,6 +2297,54 @@ name = "pmt-acp"
 version = "0.1.0"
 
 [[package]]
+name = "pmt-adapters-discord"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "jiff",
+ "percent-encoding",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "pmt-adapters-telegram"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-gateway",
+ "pmt-net",
+ "pmt-store",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "pmt-agent"
 version = "0.1.0"
 dependencies = [
@@ -2793,6 +2841,8 @@ dependencies = [
  "jiff",
  "minisign",
  "nix 0.31.3",
+ "pmt-adapters-discord",
+ "pmt-adapters-telegram",
  "pmt-agent",
  "pmt-backup",
  "pmt-config",

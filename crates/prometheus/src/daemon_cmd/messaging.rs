@@ -3,8 +3,8 @@
 //! (all-adapters-down policy, relay connector), and the launch profile's
 //! shutdown, agent-cache and health-export settings. First-party platform
 //! adapters register their factories here as they land
-//! (platform-adapters); until then an enabled platform is reported `fatal`
-//! with `unknown_platform`.
+//! (platform-adapters); an enabled platform without one is reported
+//! `fatal` with `unknown_platform`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -108,10 +108,18 @@ fn relay(config: &DaemonConfig, scope: &ProfileScope) -> Result<Option<RelayOpti
 
 /// The adapter factories of this build, by platform name.
 pub(super) fn factories(ctx: &Context<'_>) -> BTreeMap<String, AdapterFactory> {
-    // Release builds have no test adapter to insert (yet no first-party
-    // factory either), so the binding is only mutated in debug builds.
+    // Release builds have no test adapter to insert.
     #[cfg_attr(not(debug_assertions), allow(unused_mut))]
-    let mut factories: BTreeMap<String, AdapterFactory> = BTreeMap::new();
+    let mut factories: BTreeMap<String, AdapterFactory> = BTreeMap::from([
+        (
+            pmt_adapters_telegram::PLATFORM.to_owned(),
+            pmt_adapters_telegram::factory(),
+        ),
+        (
+            pmt_adapters_discord::PLATFORM.to_owned(),
+            pmt_adapters_discord::factory(),
+        ),
+    ]);
     #[cfg(debug_assertions)]
     if let Some(dir) = ctx.launch.test_adapter_dir() {
         factories.insert(

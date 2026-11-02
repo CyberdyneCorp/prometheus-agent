@@ -1739,7 +1739,14 @@ capabilities = [
 "Unknown chat refused" = ["crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_unknown_chats_and_reaches_known_ones", "crates/pmt-gateway/tests/messaging/targets.rs::the_tool_may_reach_only_home_allowed_or_known_chats"]
 "Guard fault fails closed" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_send_tool_asks_the_relay_and_fails_closed"]
 
-# platform-adapters, host side of the adapter contract (25.1-25.4)
+# platform-adapters, host side of the adapter contract (25.1-25.4) and
+# the telegram and discord adapters (25.5)
+[platform-adapters."Adapter contract"]
+"Reconnect does not drop updates" = ["crates/pmt-adapters-telegram/tests/telegram.rs::updates_arriving_while_disconnected_arrive_once_after_reconnecting", "crates/pmt-adapters-telegram/tests/telegram.rs::the_adapter_passes_the_conformance_kit", "crates/pmt-adapters-discord/tests/discord.rs::a_lost_connection_resumes_and_replays_what_was_missed"]
+
+[platform-adapters."Scoped credential access"]
+"Secondary profile secret miss" = ["crates/pmt-adapters-telegram/tests/telegram.rs::a_secondary_profile_never_uses_the_default_profiles_token"]
+
 [platform-adapters."Capability descriptor is the single source of truth"]
 "Missing limit fails load" = ["crates/pmt-gateway/src/messaging/descriptor.rs::a_descriptor_without_a_limit_fails_to_load", "crates/pmt-gateway/tests/messaging/platforms.rs::a_descriptor_without_a_positive_limit_fails_the_load"]
 "One limit everywhere" = ["crates/pmt-gateway/tests/messaging/platforms.rs::one_limit_everywhere_comes_from_the_descriptor", "crates/prometheus/tests/gateway_daemon.rs::gateway_platforms_prints_each_loaded_descriptor"]
@@ -1752,7 +1759,7 @@ capabilities = [
 
 [platform-adapters."Default first-party message limits"]
 "Raising a limit is rejected" = ["crates/pmt-config/src/validate_platforms.rs::raising_a_first_party_limit_is_rejected", "crates/pmt-gateway/tests/messaging/platforms.rs::a_lowered_limit_applies_and_a_raised_one_fails_the_load"]
-"Telegram counts UTF-16" = ["crates/pmt-gateway/src/messaging/split.rs::utf16_limits_count_astral_characters_twice"]
+"Telegram counts UTF-16" = ["crates/pmt-gateway/src/messaging/split.rs::utf16_limits_count_astral_characters_twice", "crates/pmt-adapters-telegram/tests/telegram.rs::the_adapter_passes_the_conformance_kit"]
 
 [platform-adapters."Platform configuration shape"]
 "Inline token rejected" = ["crates/pmt-config/src/validate_platforms.rs::an_inline_token_points_to_the_secrets_store"]

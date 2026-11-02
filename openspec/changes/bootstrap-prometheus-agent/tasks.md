@@ -272,11 +272,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 25. M2 Platform adapters
 
-- [ ] 25.1 Implement the adapter contract host side (capability descriptor as source of truth, degradation of optional capabilities, typed platform names, platform config shape, scoped credential access, credential locks across homes); verify with a mock adapter (spec: platform-adapters)
-- [ ] 25.2 Implement inbound normalization, typed admission, dedup and text batching, fence-aware splitting with default limits, oversized output handling and send retries; verify with unit tests for splitting inside code fences (spec: platform-adapters)
-- [ ] 25.3 Implement inbound media limits and caching, outbound attachments with path safety, voice transcription, voice replies/streaming TTS, typing indicator and human delay; verify with the mock platform (spec: platform-adapters)
-- [ ] 25.4 Implement the shared HTTP listener for webhook platforms, adapter state reporting and reconnect, interactive approval cards and access-policy delegation; verify with integration tests (spec: platform-adapters)
-- [ ] 25.5 Implement the `telegram` and `discord` adapters; verify each against the conformance kit with a mock platform server (spec: platform-adapters)
+- [x] 25.1 Implement the adapter contract host side (capability descriptor as source of truth, degradation of optional capabilities, typed platform names, platform config shape, scoped credential access, credential locks across homes); verify with a mock adapter (spec: platform-adapters)
+- [x] 25.2 Implement inbound normalization, typed admission, dedup and text batching, fence-aware splitting with default limits, oversized output handling and send retries; verify with unit tests for splitting inside code fences (spec: platform-adapters)
+- [x] 25.3 Implement inbound media limits and caching, outbound attachments with path safety, voice transcription, voice replies/streaming TTS, typing indicator and human delay; verify with the mock platform (spec: platform-adapters)
+- [x] 25.4 Implement the shared HTTP listener for webhook platforms, adapter state reporting and reconnect, interactive approval cards and access-policy delegation; verify with integration tests (spec: platform-adapters)
+- [x] 25.5 Implement the `telegram` and `discord` adapters; verify each against the conformance kit with a mock platform server (spec: platform-adapters)
 - [ ] 25.6 Implement the `slack` and `email` adapters; verify against the conformance kit (spec: platform-adapters)
 - [ ] 25.7 Implement the `matrix` and `signal` adapters; verify against the conformance kit (spec: platform-adapters)
 - [ ] 25.8 Implement the `whatsapp` and `webhook` adapters; verify against the conformance kit (spec: platform-adapters)

@@ -14,6 +14,46 @@
       ],
       "type": "object"
     },
+    "AdapterStatePayload": {
+      "additionalProperties": false,
+      "description": "`adapter.state` payload: one messaging adapter changed state (spec:\nplatform-adapters, Adapter state reporting and reconnect).",
+      "properties": {
+        "code": {
+          "default": null,
+          "description": "Error code of a `degraded`, `retrying` or `fatal` adapter.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "default": null,
+          "description": "What happened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "Platform name.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The owning profile.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`disabled`, `connecting`, `connected`, `degraded`, `retrying` or\n`fatal`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "platform",
+        "state"
+      ],
+      "type": "object"
+    },
     "Admission": {
       "description": "How `prompt.submit` admitted an input (spec: tui, Prompt submission\nwhile busy).",
       "oneOf": [
@@ -2109,8 +2149,10 @@
       "since": "1.0"
     },
     "adapter.state": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "payload": {
+        "$ref": "#/$defs/AdapterStatePayload"
+      },
       "since": "1.0"
     },
     "automation.state": {
