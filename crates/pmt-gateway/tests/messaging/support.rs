@@ -99,6 +99,9 @@ async fn script(
             Some("hello world, this is a streamed answer".into()),
         );
     }
+    if let Some(rest) = text.strip_prefix("tools:") {
+        return tools(rest, link).await;
+    }
     if let Some(rest) = text.strip_prefix("say:") {
         return ("completed", Some(rest.to_owned()));
     }
@@ -115,6 +118,41 @@ async fn script(
         };
     }
     ("completed", Some(format!("echo: {text}")))
+}
+
+/// `tools:<n>[:fail]`: says "Let me look." then calls `terminal` `n`
+/// times (as `session.event`s), then answers `tools done` or fails.
+async fn tools(rest: &str, link: &Link) -> (&'static str, Option<String>) {
+    let mut parts = rest.split(':');
+    let n: usize = parts.next().unwrap_or("1").parse().unwrap_or(1);
+    let fail = parts.next() == Some("fail");
+    let event = |kind: &str, payload: serde_json::Value| {
+        link.emit::<pmt_rpc::contracts::SessionEvent>(
+            &serde_json::json!({"type": kind, "payload": payload}),
+        );
+    };
+    event(
+        "assistant.message",
+        serde_json::json!({"text": "Let me look."}),
+    );
+    for i in 0..n {
+        let call = format!("c{i}");
+        event(
+            "tool.call",
+            serde_json::json!({"call_id": call, "tool": "terminal",
+                "arguments": {"command": format!("ls /tmp/{i} sk-proj-abcdefghijklmnopqrstuvwxyz")}}),
+        );
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        event(
+            "tool.result",
+            serde_json::json!({"call_id": call, "output": "ok"}),
+        );
+    }
+    if fail {
+        ("provider_error", None)
+    } else {
+        ("completed", Some("tools done".into()))
+    }
 }
 
 struct Profile {
@@ -345,6 +383,8 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("platform", &[], BusyPolicy::Immediate),
     ("restart", &[], BusyPolicy::Immediate),
     ("update", &[], BusyPolicy::Immediate),
+    ("verbose", &[], BusyPolicy::Immediate),
+    ("footer", &[], BusyPolicy::Immediate),
 ];
 
 impl Agents for FakeAgents {
@@ -549,6 +589,8 @@ pub struct FakeAdapter {
     pub reactions: Mutex<Vec<Reaction>>,
     /// What new sessions of a thread start with, by thread id.
     pub hints: Mutex<HashMap<String, SessionHints>>,
+    /// Messages deleted, by id.
+    pub deleted: Mutex<Vec<String>>,
 }
 
 impl FakeAdapter {
@@ -577,6 +619,7 @@ impl FakeAdapter {
             menus: Mutex::default(),
             hints: Mutex::default(),
             reactions: Mutex::default(),
+            deleted: Mutex::default(),
         })
     }
 
@@ -680,6 +723,16 @@ impl Adapter for FakeAdapter {
             .lock()
             .unwrap()
             .push(Did::Edit(message_id.to_owned(), message.clone()));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.deleted.lock().unwrap().push(message_id.to_owned());
         Box::pin(async { Ok(()) })
     }
 

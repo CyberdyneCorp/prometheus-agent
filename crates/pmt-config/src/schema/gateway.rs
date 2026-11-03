@@ -11,6 +11,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::BusyInputMode;
+pub use super::gateway_display::{
+    ChatToolProgress, EffectiveDisplay, GatewayDisplay, MessageTimestamps, PhraseMode,
+    PlatformDisplay, StatusPhrases,
+};
 pub use super::gateway_platform::{
     Batching, DedupConfig, DeliveryConfig, MediaConfig, PlatformBusy, PlatformConfig,
     PlatformSessions, PlatformStreaming, ReplyToMode, UnauthorizedDm, VoiceConfig, VoiceReplyMode,
@@ -97,6 +101,13 @@ pub struct GatewayConfig {
     /// as long it is interrupted as stalled. `0` disables the watchdog.
     #[schemars(extend("x-apply" = "live"))]
     pub session_stall_timeout_secs: Seconds<900>,
+    /// How turns look in a chat (tool progress, footers, notices),
+    /// overridable per platform.
+    #[schemars(extend("x-apply" = "live"))]
+    pub display: GatewayDisplay,
+    /// The send time in front of each user message the model sees.
+    #[schemars(extend("x-apply" = "next_session"))]
+    pub message_timestamps: MessageTimestamps,
     /// An adapter outside `connected` for longer than this is flagged for
     /// attention (`adapter.state`, `/platforms`, `gateway status`) and the
     /// profile's other home channels are told once per outage.

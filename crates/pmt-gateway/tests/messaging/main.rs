@@ -7,6 +7,7 @@ mod cards;
 mod commands;
 mod controls;
 mod delivery;
+mod display;
 mod features;
 mod health;
 mod limits;

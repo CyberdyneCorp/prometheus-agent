@@ -105,6 +105,19 @@ fn outgoing(entry: &Outbound) -> Outgoing {
     }
 }
 
+/// Whether automatic warnings are muted on `platform` of `profile`
+/// (spec: messaging-gateway, Warning notification suppression).
+fn suppressed(shared: &Shared, profile: &str, platform: &str) -> bool {
+    shared.agents.scope(profile).is_some_and(|scope| {
+        scope
+            .config()
+            .gateway
+            .display
+            .for_platform(platform)
+            .suppress_warnings
+    })
+}
+
 async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound) {
     let config = shared.outbox_config(profile);
     let now = Timestamp::now();
@@ -115,6 +128,15 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
             &entry,
             OutboundState::Failed,
             "expired before it could be sent",
+        );
+        return;
+    }
+    if entry.kind == OutboundKind::Warning && suppressed(shared, profile, &entry.platform) {
+        settle(
+            store,
+            &entry,
+            OutboundState::Suppressed,
+            "warning notifications are suppressed on this platform",
         );
         return;
     }

@@ -20,6 +20,7 @@ pub mod daemon_relay;
 mod edit;
 pub mod essential;
 pub mod gateway_check;
+mod gateway_check_display;
 mod gateway_check_platforms;
 pub mod grants;
 pub mod home;

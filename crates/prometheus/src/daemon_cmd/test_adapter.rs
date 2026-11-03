@@ -84,12 +84,16 @@ async fn read(root: PathBuf, link: Arc<dyn AdapterLink>) {
 }
 
 fn append(root: &Path, file: &str, value: &Value) {
+    // Sends from the outbox and direct ones (progress, drafts) run
+    // concurrently: one lock and one write per line keep lines whole.
+    static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = WRITING.lock();
     if let Ok(mut out) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(root.join(file))
     {
-        let _ = writeln!(out, "{value}");
+        let _ = out.write_all(format!("{value}\n").as_bytes());
     }
 }
 

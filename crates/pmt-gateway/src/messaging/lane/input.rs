@@ -90,6 +90,8 @@ impl Lane {
             routing,
             reply_to: Some(inbound.message_id.clone()).filter(|id| !id.is_empty()),
             voice: self.voice_input,
+            sent_at: inbound.timestamp,
+            addressed: !inbound.addressing.not_addressed,
         };
         if self.running.is_some() && pending.text.is_empty() {
             // Media follow-ups never interrupt or steer.
@@ -240,7 +242,15 @@ impl Lane {
             return;
         }
         self.last_ack = Some(now);
-        self.say(text);
+        let detail = self
+            .running
+            .as_ref()
+            .filter(|_| self.display().busy_ack_detail)
+            .map(|r| r.progress.activity(now));
+        match detail {
+            Some(detail) => self.say(&format!("{text} ({detail})")),
+            None => self.say(text),
+        }
     }
 }
 
@@ -253,6 +263,7 @@ fn join(into: &mut Pending, more: Pending) {
     }
     into.images.extend(more.images);
     into.voice |= more.voice;
+    into.addressed |= more.addressed;
     into.routing = more.routing;
     if more.reply_to.is_some() {
         into.reply_to = more.reply_to;

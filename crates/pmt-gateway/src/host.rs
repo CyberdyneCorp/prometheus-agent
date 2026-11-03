@@ -173,6 +173,13 @@ pub struct Author {
     pub client_id: String,
     /// Whose authority it acts with: the profile its ticket grants.
     pub principal: String,
+    /// When a messaging user sent it (RFC 3339), kept with the message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sent_at: Option<String>,
+    /// The send time the model sees in front of the text, in a session
+    /// created with message timestamps; never stored in the text.
+    #[serde(skip)]
+    pub prefix: Option<String>,
 }
 
 /// Receives a turn's answer text as it streams.

@@ -133,6 +133,10 @@ impl Lane {
             thread_id: routing.thread_id.clone(),
         };
         store.bind_route(&route, reason)?;
+        let timestamps = self
+            .config()
+            .is_some_and(|s| s.config().gateway.message_timestamps.enabled);
+        store.set_session_timestamps(route.session_id, timestamps)?;
         self.adopt(&session);
         self.freeze_policy(&session, policy);
         self.horizon = self.status.seq.load(std::sync::atomic::Ordering::Acquire);
@@ -205,6 +209,8 @@ impl Lane {
             client_kind: "gateway".to_owned(),
             client_id: format!("{}:{}", pending.routing.platform, pending.routing.sender_id),
             principal: self.profile.clone(),
+            sent_at: Some(pending.sent_at.to_string()),
+            prefix: self.timestamp_prefix(&session, pending.sent_at),
         };
         let params = SubmitParams {
             session_id: session.clone(),
@@ -258,6 +264,8 @@ impl Lane {
                     _typing: typing,
                     speech,
                     watch: super::watchdog::Watch::new(Instant::now()),
+                    progress: super::progress::Progress::new(Instant::now()),
+                    addressed: pending.addressed,
                 });
             }
             Err(err) => {
@@ -265,6 +273,26 @@ impl Lane {
                 self.say(err.message());
             }
         }
+    }
+
+    /// `[Tue 2026-04-28 13:40:53 CEST]` for a session created with message
+    /// timestamps (in the profile's `cron.timezone`, else the host's).
+    fn timestamp_prefix(&self, session: &str, sent_at: Timestamp) -> Option<String> {
+        let store = self.shared.store(&self.profile)?;
+        let on = session
+            .parse()
+            .ok()
+            .and_then(|id| store.session_timestamps(id).ok())
+            .unwrap_or(false);
+        if !on {
+            return None;
+        }
+        let zone = self
+            .config()
+            .and_then(|s| s.config().cron.timezone.clone())
+            .and_then(|name| jiff::tz::TimeZone::get(&name).ok())
+            .unwrap_or_else(jiff::tz::TimeZone::system);
+        Some(stamp(sent_at, &zone))
     }
 
     /// The session's link; streaming platforms (and a reply streamed as
@@ -340,8 +368,11 @@ impl Lane {
                 reply_to: running.reply_to.as_ref(),
                 voice: running.voice,
                 spoken,
+                addressed: running.addressed,
             };
             self.deliver_answer(answer).await;
+            let succeeded = finished.error.is_none() && finished.exit_reason == "completed";
+            self.clean_up_progress(&running.progress, succeeded).await;
         }
         self.shared
             .options
@@ -448,4 +479,13 @@ impl Lane {
             draft.message_id = None;
         }
     }
+}
+
+/// A send time as the model sees it.
+pub(crate) fn stamp(at: Timestamp, zone: &jiff::tz::TimeZone) -> String {
+    format!(
+        "[{}]",
+        at.to_zoned(zone.clone())
+            .strftime("%a %Y-%m-%d %H:%M:%S %Z")
+    )
 }

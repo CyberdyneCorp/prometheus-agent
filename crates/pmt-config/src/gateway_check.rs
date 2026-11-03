@@ -85,6 +85,7 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     check_platform_timing(config)?;
     crate::gateway_check_platforms::check(config)?;
     check_policies(config, profile_dir)?;
+    crate::gateway_check_display::check(config, profile_dir)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
     for name in config.quick_commands.keys() {

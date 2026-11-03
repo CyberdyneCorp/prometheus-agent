@@ -794,6 +794,36 @@
       },
       "type": "object"
     },
+    "ChatToolProgress": {
+      "description": "How tool calls show in a chat.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Nothing.",
+          "type": "string"
+        },
+        {
+          "const": "new",
+          "description": "A line when the tool changes.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "A line per tool call.",
+          "type": "string"
+        },
+        {
+          "const": "verbose",
+          "description": "Every call with a longer preview, and each result.",
+          "type": "string"
+        },
+        {
+          "const": "log",
+          "description": "Nothing in the chat; each call is appended to\n`<home>/logs/<profile>/tool_calls.log`.",
+          "type": "string"
+        }
+      ]
+    },
     "CliConfig": {
       "additionalProperties": false,
       "description": "The `[cli]` section.",
@@ -1598,6 +1628,12 @@
           "description": "Long replies.",
           "x-apply": "live"
         },
+        "display": {
+          "$ref": "#/$defs/GatewayDisplay",
+          "default": {},
+          "description": "How turns look in a chat (tool progress, footers, notices),\noverridable per platform.",
+          "x-apply": "live"
+        },
         "media": {
           "$ref": "#/$defs/MediaConfig",
           "default": {
@@ -1606,6 +1642,14 @@
           },
           "description": "Inbound media.",
           "x-apply": "live"
+        },
+        "message_timestamps": {
+          "$ref": "#/$defs/MessageTimestamps",
+          "default": {
+            "enabled": false
+          },
+          "description": "The send time in front of each user message the model sees.",
+          "x-apply": "next_session"
         },
         "multiplex": {
           "default": false,
@@ -1738,6 +1782,112 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "GatewayDisplay": {
+      "additionalProperties": false,
+      "description": "`[gateway.display]`.",
+      "properties": {
+        "busy_ack_detail": {
+          "description": "Busy acknowledgements name what the running turn is doing (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cleanup_progress": {
+          "description": "Delete the progress bubbles after a successful final reply on\nadapters that can delete (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interim_assistant_messages": {
+          "description": "Send what the model says between tool calls (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "long_running_notifications": {
+          "description": "One edited `Working — <n> min` bubble every 180 seconds of a long\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformDisplay"
+          },
+          "description": "Per-platform overrides, by platform name.",
+          "type": "object"
+        },
+        "runtime_footer": {
+          "description": "Append a model / context / directory footer to final replies\n(default false; `/footer on|off` per chat).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "status_phrases": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusPhrases"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Working-status phrases."
+        },
+        "suppress_warning_notifications": {
+          "description": "Mute automatic warning and error notices on this destination\n(default false; logs and stored state are unchanged).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_preview_length": {
+          "description": "Characters of a tool call's arguments shown (default 40).",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tool_progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChatToolProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`off`, `new`, `all` (default; `off` on Telegram), `verbose` or\n`log`."
+        },
+        "tool_progress_command": {
+          "description": "`/verbose` cycles the chat's tool progress mode (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_progress_grouping": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolProgressGrouping"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`accumulate` (default: one edited bubble) or `separate`."
+        }
+      },
+      "type": "object"
     },
     "GatewayHealthConfig": {
       "additionalProperties": false,
@@ -2162,6 +2312,18 @@
         }
       ]
     },
+    "MessageTimestamps": {
+      "additionalProperties": false,
+      "description": "`[gateway.message_timestamps]`.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Prefix each user message the model sees with its send time in the\nprofile's time zone (`[Tue 2026-04-28 13:40:53 CEST]`). Frozen per\nsession when it is created: a change applies to new sessions.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "ModelAlias": {
       "anyOf": [
         {
@@ -2570,6 +2732,21 @@
       },
       "type": "object"
     },
+    "PhraseMode": {
+      "description": "How a status phrase file combines with the built-in phrases.",
+      "oneOf": [
+        {
+          "const": "append",
+          "description": "After the built-in phrases.",
+          "type": "string"
+        },
+        {
+          "const": "replace",
+          "description": "Instead of them.",
+          "type": "string"
+        }
+      ]
+    },
     "PlatformBusy": {
       "additionalProperties": false,
       "description": "`[gateway.platforms.<name>.busy]`: unset keys follow `busy.input_mode`\nand `gateway.busy`.",
@@ -2837,6 +3014,105 @@
             "type": "string"
           },
           "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "PlatformDisplay": {
+      "additionalProperties": false,
+      "description": "One platform's display overrides; each unset key inherits from\n`[gateway.display]`, then the built-in default.",
+      "properties": {
+        "busy_ack_detail": {
+          "description": "Busy acknowledgements name what the running turn is doing (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cleanup_progress": {
+          "description": "Delete the progress bubbles after a successful final reply on\nadapters that can delete (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interim_assistant_messages": {
+          "description": "Send what the model says between tool calls (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "long_running_notifications": {
+          "description": "One edited `Working — <n> min` bubble every 180 seconds of a long\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "runtime_footer": {
+          "description": "Append a model / context / directory footer to final replies\n(default false; `/footer on|off` per chat).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "status_phrases": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusPhrases"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Working-status phrases."
+        },
+        "suppress_warning_notifications": {
+          "description": "Mute automatic warning and error notices on this destination\n(default false; logs and stored state are unchanged).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_preview_length": {
+          "description": "Characters of a tool call's arguments shown (default 40).",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tool_progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChatToolProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`off`, `new`, `all` (default; `off` on Telegram), `verbose` or\n`log`."
+        },
+        "tool_progress_command": {
+          "description": "`/verbose` cycles the chat's tool progress mode (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_progress_grouping": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolProgressGrouping"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`accumulate` (default: one edited bubble) or `separate`."
         }
       },
       "type": "object"
@@ -3877,6 +4153,25 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "StatusPhrases": {
+      "additionalProperties": false,
+      "description": "`status_phrases`: the working-status phrases a surface rotates through\n(never interpolating tool arguments).",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/PhraseMode",
+          "default": "append",
+          "description": "`append` (default) or `replace`."
+        },
+        "path": {
+          "description": "A file under the profile directory, one phrase per line (at most\n80 phrases of 160 characters).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
       "type": "object"
     },
     "StorageConfig": {
@@ -5332,9 +5627,13 @@
           "detect_paths": true,
           "max_parts": 10
         },
+        "display": {},
         "media": {
           "cache_max_age_secs": 86400,
           "max_inbound_bytes": 134217728
+        },
+        "message_timestamps": {
+          "enabled": false
         },
         "multiplex": false,
         "notifications": {

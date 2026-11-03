@@ -80,10 +80,11 @@ impl Lane {
     }
 
     /// A trajectory event of the session.
-    pub(super) fn session_event(&mut self, kind: &str, _payload: &Value) {
+    pub(super) async fn session_event(&mut self, kind: &str, payload: &Value) {
         if PROGRESS.contains(&kind) {
             self.progressed();
         }
+        self.show_progress(kind, payload).await;
     }
 
     /// When the watchdog looks at the running turn next.

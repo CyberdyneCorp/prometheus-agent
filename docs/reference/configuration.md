@@ -151,8 +151,33 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.dedup.ttl_secs` | integer | `300` | 1 to 86400 | `live` | A redelivered inbound event within this many seconds is dropped as a duplicate. |
 | `gateway.delivery.detect_paths` | boolean | `true` | any | `live` | Deliver files a final reply names by bare path (outside code) as uploads, removing the path from the text. |
 | `gateway.delivery.max_parts` | integer | `10` | 2 to 100 | `live` | A reply that would need more parts is sent as its first part plus a truncation notice, with the full text attached. |
+| `gateway.display.busy_ack_detail` | boolean | unset | any | `live` | Busy acknowledgements name what the running turn is doing (default false). |
+| `gateway.display.cleanup_progress` | boolean | unset | any | `live` | Delete the progress bubbles after a successful final reply on adapters that can delete (default false). |
+| `gateway.display.interim_assistant_messages` | boolean | unset | any | `live` | Send what the model says between tool calls (default true). |
+| `gateway.display.long_running_notifications` | boolean | unset | any | `live` | One edited `Working — <n> min` bubble every 180 seconds of a long turn (default true). |
+| `gateway.display.platforms.<name>.busy_ack_detail` | boolean | unset | any | `live` | Busy acknowledgements name what the running turn is doing (default false). |
+| `gateway.display.platforms.<name>.cleanup_progress` | boolean | unset | any | `live` | Delete the progress bubbles after a successful final reply on adapters that can delete (default false). |
+| `gateway.display.platforms.<name>.interim_assistant_messages` | boolean | unset | any | `live` | Send what the model says between tool calls (default true). |
+| `gateway.display.platforms.<name>.long_running_notifications` | boolean | unset | any | `live` | One edited `Working — <n> min` bubble every 180 seconds of a long turn (default true). |
+| `gateway.display.platforms.<name>.runtime_footer` | boolean | unset | any | `live` | Append a model / context / directory footer to final replies (default false; `/footer on\|off` per chat). |
+| `gateway.display.platforms.<name>.status_phrases.mode` | one of "append", "replace" | `"append"` | `"append"`, `"replace"` | `live` | `append` (default) or `replace`. |
+| `gateway.display.platforms.<name>.status_phrases.path` | string | unset | any | `live` | A file under the profile directory, one phrase per line (at most 80 phrases of 160 characters). |
+| `gateway.display.platforms.<name>.suppress_warning_notifications` | boolean | unset | any | `live` | Mute automatic warning and error notices on this destination (default false; logs and stored state are unchanged). |
+| `gateway.display.platforms.<name>.tool_preview_length` | integer | unset | 0 to 2000 | `live` | Characters of a tool call's arguments shown (default 40). |
+| `gateway.display.platforms.<name>.tool_progress` | one of "off", "new", "all", "verbose", "log" | unset | `"off"`, `"new"`, `"all"`, `"verbose"`, `"log"` | `live` | `off`, `new`, `all` (default; `off` on Telegram), `verbose` or `log`. |
+| `gateway.display.platforms.<name>.tool_progress_command` | boolean | unset | any | `live` | `/verbose` cycles the chat's tool progress mode (default false). |
+| `gateway.display.platforms.<name>.tool_progress_grouping` | one of "accumulate", "separate" | unset | `"accumulate"`, `"separate"` | `live` | `accumulate` (default: one edited bubble) or `separate`. |
+| `gateway.display.runtime_footer` | boolean | unset | any | `live` | Append a model / context / directory footer to final replies (default false; `/footer on\|off` per chat). |
+| `gateway.display.status_phrases.mode` | one of "append", "replace" | `"append"` | `"append"`, `"replace"` | `live` | `append` (default) or `replace`. |
+| `gateway.display.status_phrases.path` | string | unset | any | `live` | A file under the profile directory, one phrase per line (at most 80 phrases of 160 characters). |
+| `gateway.display.suppress_warning_notifications` | boolean | unset | any | `live` | Mute automatic warning and error notices on this destination (default false; logs and stored state are unchanged). |
+| `gateway.display.tool_preview_length` | integer | unset | 0 to 2000 | `live` | Characters of a tool call's arguments shown (default 40). |
+| `gateway.display.tool_progress` | one of "off", "new", "all", "verbose", "log" | unset | `"off"`, `"new"`, `"all"`, `"verbose"`, `"log"` | `live` | `off`, `new`, `all` (default; `off` on Telegram), `verbose` or `log`. |
+| `gateway.display.tool_progress_command` | boolean | unset | any | `live` | `/verbose` cycles the chat's tool progress mode (default false). |
+| `gateway.display.tool_progress_grouping` | one of "accumulate", "separate" | unset | `"accumulate"`, `"separate"` | `live` | `accumulate` (default: one edited bubble) or `separate`. |
 | `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
 | `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
+| `gateway.message_timestamps.enabled` | boolean | `false` | any | `next_session` | Prefix each user message the model sees with its send time in the profile's time zone (`[Tue 2026-04-28 13:40:53 CEST]`). Frozen per session when it is created: a change applies to new sessions. |
 | `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
 | `gateway.notifications.background` | one of "concise", "all", "result", "error", "off" | `"concise"` | `"concise"`, `"all"`, `"result"`, `"error"`, `"off"` | `live` | Which background process and subagent events reach the chat. |
 | `gateway.outbox.max_age_secs` | integer | `86400` | ≥ 1 | `restart` | An entry older than this becomes `failed`. |

@@ -132,6 +132,7 @@ pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<(Inbound, bool)>
         is_bot: false,
         callback: None,
         profile: None,
+        addressing: pmt_gateway::messaging::Addressing::default(),
     };
     Some((inbound, from_me))
 }

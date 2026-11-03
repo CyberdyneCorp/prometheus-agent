@@ -22,6 +22,14 @@ const NOW: Arg = arg("now", ArgKind::Flag, false);
 const EVERYWHERE: &[Surface] = super::ALL_SURFACES;
 /// Commands only messaging platforms have.
 const GATEWAY: &[Surface] = &[Surface::Gateway];
+/// `/verbose`: terminals, and chats whose display policy lets them cycle
+/// tool progress.
+const TERMINALS_AND_CHATS: &[Surface] = &[
+    Surface::Cli,
+    Surface::Tui,
+    Surface::Desktop,
+    Surface::Gateway,
+];
 const CHATS: &[Surface] = &[
     Surface::Cli,
     Surface::Tui,
@@ -396,7 +404,7 @@ pub static BUILTINS: &[Command] = &[
         Config,
         "Cycle tool progress: off, new, all, verbose",
         &[],
-        TERMINALS,
+        TERMINALS_AND_CHATS,
         Immediate,
         Effect::Immediate,
     ),
@@ -642,6 +650,20 @@ pub static BUILTINS: &[Command] = &[
         Config,
         "Update prometheus after a confirmation, or check for a release (admin tier)",
         &[arg("check", ArgKind::Choice(&["check"]), false)],
+        GATEWAY,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "footer",
+        &[],
+        Config,
+        "Add or drop the model, context and directory footer on replies in this chat",
+        &[arg(
+            "state",
+            ArgKind::Choice(&["on", "off", "status"]),
+            false,
+        )],
         GATEWAY,
         Immediate,
         Effect::None,

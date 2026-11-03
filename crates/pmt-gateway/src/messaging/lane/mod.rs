@@ -18,6 +18,7 @@ mod controls;
 mod input;
 mod lifecycle;
 mod pages;
+mod progress;
 mod reply;
 mod requests;
 mod resume;
@@ -169,6 +170,11 @@ struct Pending {
     reply_to: Option<String>,
     /// The user spoke (the reply may be spoken back).
     voice: bool,
+    /// When the person sent it (the model may see it).
+    sent_at: jiff::Timestamp,
+    /// The adapter did not mark it `not_addressed_to_bot`: an intentionally
+    /// silent answer still gets a short notice.
+    addressed: bool,
 }
 
 /// The turn the gateway started in the session.
@@ -189,6 +195,10 @@ struct Running {
     speech: Option<reply::Spoken>,
     /// The stall watchdog's view of the turn.
     watch: watchdog::Watch,
+    /// Tool progress and long-running notices shown in the chat.
+    progress: progress::Progress,
+    /// The input was addressed to the bot.
+    addressed: bool,
 }
 
 /// A transition run once the stopped turn has ended.
@@ -234,6 +244,8 @@ struct Lane {
     held: Option<resume::Held>,
     /// `/restart` and `/update` confirmations waiting for an answer.
     confirms: Vec<confirm::Confirm>,
+    /// The chat's `/verbose` tool progress mode.
+    progress_mode: Option<pmt_config::schema::ChatToolProgress>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -293,6 +305,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         voice_input: false,
         held: None,
         confirms: Vec::new(),
+        progress_mode: None,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -400,6 +413,7 @@ impl Lane {
             self.stall_due(),
             self.held.as_ref().map(resume::Held::deadline),
             self.confirms.iter().map(confirm::Confirm::deadline).min(),
+            self.working_due(),
         ]
         .into_iter()
         .flatten()
@@ -414,6 +428,7 @@ impl Lane {
         self.check_stall(now).await;
         self.check_held(now).await;
         self.expire_confirmations(now);
+        self.check_working(now).await;
     }
 
     async fn handle(&mut self, msg: Msg) {
@@ -435,7 +450,7 @@ impl Lane {
                 self.progressed();
                 self.delta(&text).await;
             }
-            Msg::Event { kind, payload } => self.session_event(&kind, &payload),
+            Msg::Event { kind, payload } => self.session_event(&kind, &payload).await,
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),
             Msg::Resolved { id, by_client } => self.resolved(&id, &by_client),
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),
@@ -518,6 +533,8 @@ impl Lane {
                 routing: self.routing.clone(),
                 reply_to: None,
                 voice: false,
+                sent_at: jiff::Timestamp::now(),
+                addressed: true,
             });
         } else {
             self.say_as(OutboundKind::Notification, &event.text, None);

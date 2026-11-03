@@ -52,6 +52,46 @@ impl Lane {
         self.say(&reply);
     }
 
+    /// `/footer [on|off|status]`: the chat's runtime footer, stored with
+    /// the chat (the display policy's `runtime_footer` applies until set).
+    pub(super) fn footer_command(&self, routing: &Routing, args: &str) {
+        let Some(store) = self.shared.store(&self.profile) else {
+            return;
+        };
+        let chosen = match args.trim() {
+            "on" => Some(true),
+            "off" => Some(false),
+            "" | "status" => {
+                let stored = store
+                    .chat_prefs(&routing.platform, &routing.chat_id)
+                    .unwrap_or_default()
+                    .footer;
+                let on = stored.unwrap_or_else(|| self.display().runtime_footer);
+                let source = if stored.is_some() {
+                    "this chat"
+                } else {
+                    "display policy"
+                };
+                self.say(&format!(
+                    "Footer: {} ({source})",
+                    if on { "on" } else { "off" }
+                ));
+                return;
+            }
+            _ => {
+                self.say("Usage: /footer [on | off | status]");
+                return;
+            }
+        };
+        match store.set_chat_footer(&routing.platform, &routing.chat_id, chosen) {
+            Ok(()) => self.say(&format!(
+                "Footer {} for this chat.",
+                if chosen == Some(true) { "on" } else { "off" }
+            )),
+            Err(err) => self.say(err.message()),
+        }
+    }
+
     /// `/busy [queue|steer|interrupt|status]`.
     pub(super) fn busy_command(&self, routing: &Routing, args: &str) {
         match args.trim() {

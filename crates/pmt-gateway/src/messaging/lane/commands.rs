@@ -146,6 +146,8 @@ impl Lane {
             )),
             "platform" => self.platform_command(&call.routing, &call.args).await,
             "restart" => self.restart_command(&call.routing),
+            "verbose" => self.verbose_command(),
+            "footer" => self.footer_command(&call.routing, &call.args),
             "update" => self.update_command(&call.routing, &call.args).await,
             "retry" => {
                 self.retry_releases();
@@ -169,6 +171,8 @@ impl Lane {
             routing: call.routing.clone(),
             reply_to: None,
             voice: false,
+            sent_at: jiff::Timestamp::now(),
+            addressed: true,
         };
         match call.busy {
             BusyPolicy::Reject => self.say(&rejected(&call.name)),
@@ -207,6 +211,8 @@ impl Lane {
                     routing,
                     reply_to: None,
                     voice: false,
+                    sent_at: jiff::Timestamp::now(),
+                    addressed: true,
                 };
                 if self.running.is_some() {
                     self.queue_human(pending);
@@ -282,6 +288,8 @@ impl Lane {
             routing,
             reply_to: None,
             voice: false,
+            sent_at: jiff::Timestamp::now(),
+            addressed: true,
         };
         if self.running.is_none() {
             self.start_turn(pending).await;

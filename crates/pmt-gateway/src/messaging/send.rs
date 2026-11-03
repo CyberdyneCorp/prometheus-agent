@@ -30,6 +30,9 @@ pub struct SendRequest {
     pub text: String,
     /// Files sent with it.
     pub attachments: Vec<OutboundAttachment>,
+    /// An automatic warning or failure notice (a failed scheduled job, a
+    /// kanban failure): muted where `suppress_warning_notifications` is on.
+    pub warning: bool,
 }
 
 /// A destination `gateway send --list` shows.
@@ -218,7 +221,18 @@ impl Gateway {
     /// As [`resolve_target`](Self::resolve_target); store errors.
     pub async fn send(&self, profile: &str, request: &SendRequest) -> Result<Outbound, Error> {
         let resolved = self.resolve_target(profile, &request.target).await?;
-        self.enqueue(profile, &resolved, &request.text, &request.attachments)
+        let kind = if request.warning {
+            OutboundKind::Warning
+        } else {
+            OutboundKind::Notification
+        };
+        self.enqueue_as(
+            profile,
+            &resolved,
+            &request.text,
+            &request.attachments,
+            kind,
+        )
     }
 
     /// Queues one message for an already resolved destination: split at
@@ -234,6 +248,17 @@ impl Gateway {
         to: &Resolved,
         text: &str,
         attachments: &[OutboundAttachment],
+    ) -> Result<Outbound, Error> {
+        self.enqueue_as(profile, to, text, attachments, OutboundKind::Notification)
+    }
+
+    fn enqueue_as(
+        &self,
+        profile: &str,
+        to: &Resolved,
+        text: &str,
+        attachments: &[OutboundAttachment],
+        kind: OutboundKind,
     ) -> Result<Outbound, Error> {
         let store = self.shared.profile_store(profile)?;
         let key = format!("send:{}", crate::tickets::random_hex(12));
@@ -269,7 +294,7 @@ impl Gateway {
                 thread_id: to.thread_id.clone(),
                 reply_to: None,
                 edit_of: None,
-                kind: OutboundKind::Notification,
+                kind,
                 body,
                 attachments: attached,
             };

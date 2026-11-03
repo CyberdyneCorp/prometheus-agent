@@ -107,6 +107,7 @@ pub(crate) fn message(event: &Value, room: &str, me: &str, members: usize) -> Op
         is_bot: false,
         callback: None,
         profile: None,
+        addressing: pmt_gateway::messaging::Addressing::default(),
     })
 }
 

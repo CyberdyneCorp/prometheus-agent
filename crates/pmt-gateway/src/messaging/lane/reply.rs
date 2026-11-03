@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use pmt_config::schema::ReplyToMode;
 use pmt_rpc::contracts::TurnFinished;
-use pmt_store::gateway::outbox::{NewOutbound, OutboundAttachment, OutboundKind};
+use pmt_store::gateway::outbox::{NewOutbound, OutboundAttachment, OutboundKind, OutboundState};
 
 use super::Lane;
 use super::turns::Draft;
@@ -34,6 +34,23 @@ pub(super) struct Answer<'a> {
     pub(super) voice: bool,
     /// The reply's audio already streamed to completion.
     pub(super) spoken: bool,
+    /// The input was addressed to the bot.
+    pub(super) addressed: bool,
+}
+
+/// Final responses that mean "say nothing" (spec: messaging-gateway,
+/// Intentional silence tokens), compared trimmed and case-normalized.
+const SILENCE: &[&str] = &[
+    "[silent]", "silent", "no_reply", "no reply", "[静默]", "静默", "[沉默]", "沉默",
+];
+
+/// What an addressed message answered with silence gets instead.
+pub(crate) const NOTHING_TO_ADD: &str = "(nothing to add)";
+
+/// Whether `text` is exactly an intentional silence token.
+pub(crate) fn is_silence(text: &str) -> bool {
+    let normalized = text.trim().to_lowercase();
+    SILENCE.contains(&normalized.as_str())
 }
 
 /// A reply's audio streamed sentence by sentence while it is written.
@@ -83,6 +100,10 @@ impl Lane {
         let Some(text) = Self::answer_text(answer.finished) else {
             return;
         };
+        if answer.finished.error.is_none() && is_silence(&text) {
+            self.stay_silent(&answer, &text);
+            return;
+        }
         let descriptor = self
             .shared
             .adapters
@@ -101,9 +122,11 @@ impl Lane {
         let (mut files, notes) = roots.filter(files);
         files.extend(detected);
         fit_kinds(&mut files, &descriptor);
+        let footer = self.footer(answer.session, &descriptor).await;
         let text = [text]
             .into_iter()
             .chain(notes)
+            .chain(footer)
             .filter(|t| !t.is_empty())
             .collect::<Vec<_>>()
             .join("\n\n");
@@ -121,6 +144,80 @@ impl Lane {
         if !answer.spoken {
             self.speak(&answer, &text, &descriptor).await;
         }
+    }
+
+    /// An intentionally silent answer: nothing is sent (the outbox records
+    /// it `silent`), unless the input was addressed to the bot, which then
+    /// hears "(nothing to add)".
+    fn stay_silent(&self, answer: &Answer<'_>, text: &str) {
+        let mut new = NewOutbound {
+            idempotency_key: format!("{}:{}:0", answer.session, answer.finished.turn_id),
+            session_id: Some(answer.session.to_owned()),
+            platform: self.routing.platform.clone(),
+            chat_id: self.routing.chat_id.clone(),
+            thread_id: self.routing.thread_id.clone(),
+            reply_to: answer.reply_to.cloned(),
+            edit_of: answer.draft.message_id.clone(),
+            kind: OutboundKind::Reply,
+            body: text.to_owned(),
+            attachments: Vec::new(),
+        };
+        if answer.addressed {
+            NOTHING_TO_ADD.clone_into(&mut new.body);
+            self.shared.deliver(&self.profile, &new);
+            return;
+        }
+        let recorded = self
+            .shared
+            .store(&self.profile)
+            .map(|store| store.record_unsent(&new, OutboundState::Silent));
+        if let Some(Err(err)) = recorded {
+            tracing::warn!("silent reply not recorded: {err}");
+        }
+    }
+
+    /// The runtime footer of a final reply, when the platform's display
+    /// policy or the chat's `/footer` asks for it: model, context use and
+    /// working directory, in italics where the platform has them. It is
+    /// added to what is sent only, never to the transcript.
+    async fn footer(&self, session: &str, descriptor: &Descriptor) -> Option<String> {
+        let store = self.shared.store(&self.profile)?;
+        let chat = store
+            .chat_prefs(&self.routing.platform, &self.routing.chat_id)
+            .unwrap_or_default();
+        if !chat.footer.unwrap_or_else(|| self.display().runtime_footer) {
+            return None;
+        }
+        let row = session.parse().ok().and_then(|id| store.session(id).ok());
+        let mut parts = Vec::new();
+        if let Some(model) = row.as_ref().and_then(|s| s.model.clone()) {
+            parts.push(model);
+        }
+        let usage = self
+            .shared
+            .agents
+            .context_usage(&self.profile, session)
+            .await;
+        if let Ok(usage) = usage
+            && let Some(window) = usage.context_window.filter(|w| *w > 0)
+        {
+            parts.push(format!("{}% context", usage.tokens * 100 / window));
+        }
+        if let Some(dir) = row.and_then(|s| s.cwd).and_then(|cwd| {
+            PathBuf::from(cwd)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+        }) {
+            parts.push(dir);
+        }
+        if parts.is_empty() {
+            return None;
+        }
+        let line = parts.join(" \u{b7} ");
+        Some(match descriptor.markup {
+            crate::messaging::adapter::Markup::Plain => line,
+            _ => format!("_{line}_"),
+        })
     }
 
     /// Where attachments may come from in this session.

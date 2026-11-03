@@ -86,9 +86,10 @@ use tracing::Instrument as _;
 
 pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
-    AdapterState, AdapterStatus, Admission, Attachment, AudioOp, Button, ChatInfo, Descriptor,
-    HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind, MediaStream,
-    MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict, Sent, SessionHints,
+    AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
+    Descriptor, HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind,
+    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict, Sent,
+    SessionHints,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup, UpdateFromChat};
 pub use hooks::{Hook, Hooks, PreCommand};

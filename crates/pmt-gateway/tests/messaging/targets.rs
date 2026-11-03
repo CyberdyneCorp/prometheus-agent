@@ -13,6 +13,7 @@ fn request(target: &str, text: &str) -> SendRequest {
         target: target.into(),
         text,
         attachments,
+        warning: false,
     }
 }
 

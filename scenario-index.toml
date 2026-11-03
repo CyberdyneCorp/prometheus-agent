@@ -1929,3 +1929,20 @@ capabilities = [
 [messaging-gateway."Restart and update from chat"]
 "Restart confirmed in the same thread" = ["crates/pmt-gateway/tests/messaging/operations.rs::a_restart_confirmed_in_a_thread_is_announced_there_by_the_next_daemon"]
 "Update confirmation denied" = ["crates/pmt-gateway/tests/messaging/operations.rs::a_denied_update_confirmation_aborts_without_running_the_updater"]
+
+[messaging-gateway."Display policy and per-platform overrides"]
+"Mobile default" = ["crates/pmt-gateway/tests/messaging/display.rs::by_default_telegram_shows_no_progress_and_discord_one_accumulating_bubble", "crates/pmt-config/src/schema/gateway_display.rs::telegram_shows_no_progress_by_default"]
+"Failed run keeps breadcrumbs" = ["crates/pmt-gateway/tests/messaging/display.rs::a_failed_run_keeps_its_progress_and_a_successful_one_cleans_up"]
+
+[messaging-gateway."Runtime metadata footer"]
+"Footer not in context" = ["crates/prometheus/tests/gateway_display.rs::the_footer_is_sent_but_never_stored_in_the_transcript", "crates/pmt-gateway/tests/messaging/display.rs::the_footer_ends_final_replies_where_the_chat_turned_it_on"]
+
+[messaging-gateway."Warning notification suppression"]
+"Cron failure muted on one platform" = { tests = ["crates/pmt-gateway/tests/messaging/display.rs::a_suppressed_warning_is_settled_without_reaching_its_platform", "crates/pmt-config/src/schema/gateway_display.rs::a_platform_value_wins_and_an_absent_one_inherits"], note = "verified at the gateway delivery API (Gateway::send with warning = true); the scheduler that records the run failed is 41.x" }
+
+[messaging-gateway."Message timestamps in model context"]
+"Toggle applies to new sessions only" = ["crates/prometheus/tests/gateway_display.rs::timestamps_apply_to_sessions_created_after_they_are_enabled"]
+
+[messaging-gateway."Intentional silence tokens"]
+"Group chatter stays silent" = ["crates/pmt-gateway/tests/messaging/display.rs::unaddressed_silence_sends_nothing_and_addressed_silence_gets_a_notice"]
+"Direct question gets a notice" = ["crates/pmt-gateway/tests/messaging/display.rs::unaddressed_silence_sends_nothing_and_addressed_silence_gets_a_notice"]

@@ -273,6 +273,28 @@ impl Store {
     ///
     /// `store.sqlite`.
     pub fn enqueue_outbound(&self, new: &NewOutbound) -> Result<(Outbound, bool), Error> {
+        self.store_outbound(new, OutboundState::Queued)
+    }
+
+    /// Records an entry that is settled from the start and never sent
+    /// (`suppressed`, `silent`).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn record_unsent(
+        &self,
+        new: &NewOutbound,
+        state: OutboundState,
+    ) -> Result<(Outbound, bool), Error> {
+        self.store_outbound(new, state)
+    }
+
+    fn store_outbound(
+        &self,
+        new: &NewOutbound,
+        state: OutboundState,
+    ) -> Result<(Outbound, bool), Error> {
         let now = millis(Timestamp::now());
         let attachments = if new.attachments.is_empty() {
             None
@@ -288,7 +310,7 @@ impl Store {
                     "INSERT INTO gateway_outbox (idempotency_key, session_id, platform, chat_id, \
                      thread_id, reply_to, edit_of, kind, body, state, next_attempt_at, \
                      created_at, updated_at, attachments) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, \
-                     ?9, 'queued', ?10, ?10, ?10, ?11) ON CONFLICT (idempotency_key) DO NOTHING",
+                     ?9, ?12, ?10, ?10, ?10, ?11) ON CONFLICT (idempotency_key) DO NOTHING",
                     params![
                         new.idempotency_key,
                         new.session_id,
@@ -300,7 +322,8 @@ impl Store {
                         new.kind.as_str(),
                         new.body,
                         now,
-                        attachments
+                        attachments,
+                        state.as_str()
                     ],
                 )
                 .map_err(sql)?;

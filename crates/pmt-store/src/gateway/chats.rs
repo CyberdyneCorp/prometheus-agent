@@ -45,6 +45,41 @@ impl Store {
         })
     }
 
+    /// Freezes whether `session`'s user messages carry their send time
+    /// for the model.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn set_session_timestamps(&self, session: SessionId, on: bool) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE gateway_sessions SET timestamps = ?2 WHERE session_id = ?1",
+                params![session.to_string(), i64::from(on)],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
+    }
+
+    /// Whether `session` was created with message timestamps.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn session_timestamps(&self, session: SessionId) -> Result<bool, Error> {
+        self.read(|conn| {
+            conn.query_row(
+                "SELECT timestamps FROM gateway_sessions WHERE session_id = ?1",
+                [session.to_string()],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(sql)
+            .map(|v| v.unwrap_or(0) != 0)
+        })
+    }
+
     /// The policy frozen for a routed session (JSON).
     ///
     /// # Errors

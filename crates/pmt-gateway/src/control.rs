@@ -180,6 +180,7 @@ async fn send(
                 as_voice: false,
             })
             .collect(),
+        warning: false,
     };
     match messaging.send(profile, &request).await {
         Ok(entry) => {

@@ -270,6 +270,7 @@ async fn long_scheduled_output_is_truncated_with_the_full_text_attached() {
         target: "telegram".into(),
         text: output.clone(),
         attachments: Vec::new(),
+        warning: false,
     };
     h.gateway.send("default", &request).await.unwrap();
     let adapter = h.adapter("telegram");

@@ -97,6 +97,7 @@ pub(crate) fn message(event: &Value, team: Option<&str>, bot_user: &str) -> Opti
         is_bot: event["bot_id"].is_string() || subtype == "bot_message",
         callback: None,
         profile: None,
+        addressing: pmt_gateway::messaging::Addressing::default(),
     })
 }
 

@@ -84,6 +84,25 @@ pub struct Inbound {
     /// The profile a multiplexing connector (the relay) addresses; `None`
     /// is the adapter's own profile.
     pub profile: Option<String>,
+    /// How it addresses the bot.
+    pub addressing: Addressing,
+}
+
+/// How an inbound message addresses the bot, as the adapter sees it (spec:
+/// messaging-gateway, Group mention gating and observe mode; Bot-authored
+/// message admission; Intentional silence tokens).
+#[allow(clippy::struct_excessive_bools)] // independent facts about one message
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Addressing {
+    /// It carries a literal inline mention of the bot (`@bot`, `<@id>`).
+    pub mentioned: bool,
+    /// It replies to one of the bot's messages.
+    pub replies_to_bot: bool,
+    /// It is in a thread the bot already takes part in.
+    pub in_bot_thread: bool,
+    /// The adapter marks it `not_addressed_to_bot` (chatter the bot may
+    /// read without being asked, such as a free-response channel).
+    pub not_addressed: bool,
 }
 
 impl Inbound {
@@ -105,6 +124,7 @@ impl Inbound {
             is_bot: false,
             callback: None,
             profile: None,
+            addressing: Addressing::default(),
         }
     }
 }

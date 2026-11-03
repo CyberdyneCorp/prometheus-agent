@@ -369,6 +369,8 @@ async fn submit(call: Call, params: c::SubmitParams) -> Result<c::Submitted, Rpc
             .to_owned(),
         client_id: call.conn.client_id(),
         principal: profile.clone(),
+        sent_at: None,
+        prefix: None,
     };
     let Some(input_id) = params.input_id.clone() else {
         return admit(&call, &profile, params, author).await;

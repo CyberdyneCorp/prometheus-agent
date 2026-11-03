@@ -97,6 +97,7 @@ pub(crate) fn inbound(frame: &Value) -> Option<(String, Inbound)> {
         is_bot: frame["is_bot"].as_bool().unwrap_or(false),
         callback: text(frame, "callback"),
         profile: text(frame, "profile"),
+        addressing: crate::messaging::adapter::Addressing::default(),
     };
     Some((platform, inbound))
 }

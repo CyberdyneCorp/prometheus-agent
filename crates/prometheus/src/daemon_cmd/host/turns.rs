@@ -53,6 +53,7 @@ impl DaemonHost {
         Self::check_budget(profile, id)?;
         let session = self.load(profile, id, &link).await?;
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
+        input.prefix.clone_from(&author.prefix);
         input.author = serde_json::to_value(&author).ok();
         let job = Queued {
             input,

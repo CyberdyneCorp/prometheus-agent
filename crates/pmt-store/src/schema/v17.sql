@@ -6,6 +6,8 @@
 -- `gateway_sessions.resume_at`: when a restart left the session's turn
 -- `resume_pending` (the pending turn is discarded after
 -- `gateway.sessions.resume_pending_ttl_secs`).
+-- `gateway_sessions.timestamps`: `gateway.message_timestamps.enabled` as it
+-- was when the session was created (frozen with it).
 -- `gateway_adapter_pauses`: adapters an admin paused (`/platform pause`,
 -- `prometheus gateway pause`); kept across restarts.
 -- `gateway_chat_prefs`: per-chat choices made in the chat (`/footer`, the
@@ -17,6 +19,8 @@
 -- listings only; they still send queued entries.
 
 ALTER TABLE gateway_sessions ADD COLUMN resume_at INTEGER;
+
+ALTER TABLE gateway_sessions ADD COLUMN timestamps INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE gateway_adapter_pauses (
     platform  TEXT    PRIMARY KEY,

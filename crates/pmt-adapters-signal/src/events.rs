@@ -200,6 +200,7 @@ fn message(envelope: &Value) -> Option<Inbound> {
         is_bot: false,
         callback: None,
         profile: None,
+        addressing: pmt_gateway::messaging::Addressing::default(),
     })
 }
 

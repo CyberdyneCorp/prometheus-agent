@@ -429,6 +429,44 @@ and its source, for example "steer (platform override)".
   `prometheus gateway status`), and each other connected platform's home
   channel hears about it once per outage.
 
+### Display policy
+
+`[gateway.display]` shapes how a turn looks in a chat; any key can be
+overridden for one platform under `[gateway.display.platforms.<name>]`
+(the platform value wins, an absent one inherits):
+
+```toml
+[gateway.display]
+tool_progress = "all"            # off | new | all | verbose | log (Telegram: off)
+tool_progress_grouping = "accumulate"   # or "separate"
+tool_preview_length = 40
+interim_assistant_messages = true
+long_running_notifications = true      # "Working — <n> min", every 3 min
+busy_ack_detail = false
+cleanup_progress = false         # delete progress after a successful reply
+tool_progress_command = false    # let chats cycle it with /verbose
+runtime_footer = false           # or /footer on|off per chat
+suppress_warning_notifications = false
+status_phrases = { path = "phrases.txt", mode = "append" }
+
+[gateway.display.platforms.discord]
+cleanup_progress = true
+```
+
+With `tool_progress = "log"` nothing is shown and each call is appended,
+secret-redacted, to `<home>/logs/<profile>/tool_calls.log` (rotated at 5
+MiB, 3 backups). The footer (model, context use, directory) is added to
+what is sent only, never to the transcript. Muted warnings (failed jobs,
+watchdog and adapter notices) are recorded as `suppressed` in the outbox;
+approvals, clarify questions and replies are never muted.
+
+A final answer that is exactly `[SILENT]`, `NO_REPLY` (or another silence
+token) sends nothing in chatter the platform marks as not addressed to the
+bot, and "(nothing to add)" to a person who asked. With
+`[gateway.message_timestamps] enabled = true`, sessions created afterwards
+show the model each message's send time (`[Tue 2026-04-28 13:40:53 CEST]`,
+in `cron.timezone`); the stored text stays clean.
+
 ### Adapter operations, restart and update
 
 `/platforms` (alias `/gateway`, also in `prometheus chat` and the TUI) lists
