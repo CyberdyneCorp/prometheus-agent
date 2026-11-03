@@ -12,7 +12,9 @@ use std::sync::atomic::Ordering;
 
 use pmt_config::{Home, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
-use pmt_gateway::messaging::{Agents, BusyPolicy, Conversation, Lookup, MenuCommand};
+use pmt_gateway::messaging::{
+    Agents, BusyPolicy, Conversation, Lookup, MenuCommand, UpdateFromChat,
+};
 use pmt_gateway::{HostFuture, Link};
 use pmt_rpc::contracts::{Dispatched, SessionSetup};
 use pmt_store::{EndReason, LineageKind, NewSession, Origin, Source, Store};
@@ -249,6 +251,20 @@ impl Agents for DaemonHost {
             &profile.store,
             self.launch.user_home().map(PathBuf::as_path),
         )
+    }
+
+    fn update_from_chat<'a>(&'a self, request: &'a UpdateFromChat) -> HostFuture<'a, String> {
+        Box::pin(async move {
+            let home = self
+                .profile(&self.launch_profile)?
+                .scope()
+                .home()
+                .to_path_buf();
+            let check = request.check;
+            tokio::task::spawn_blocking(move || super::super::update_chat::run(&home, check))
+                .await
+                .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
+        })
     }
 
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {

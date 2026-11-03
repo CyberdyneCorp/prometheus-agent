@@ -275,6 +275,11 @@
       "additionalProperties": false,
       "description": "The `[update]` section (spec: distribution-and-update). The release\nchannel is not here: it belongs to the install receipt.",
       "properties": {
+        "allow_from_chat": {
+          "default": false,
+          "description": "Let gateway admins run `/update` from a chat.",
+          "type": "boolean"
+        },
         "auto_apply": {
           "default": false,
           "description": "Install a release found by the background check without asking.",
@@ -379,6 +384,7 @@
     "update": {
       "$ref": "#/$defs/UpdateConfig",
       "default": {
+        "allow_from_chat": false,
         "auto_apply": false,
         "check_interval_secs": 86400,
         "mirror_fallback": false,

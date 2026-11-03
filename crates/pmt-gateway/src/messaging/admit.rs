@@ -93,6 +93,10 @@ async fn decide(
     let Some(descriptor) = shared.adapters.descriptor(owner, platform) else {
         return Admission::Dropped;
     };
+    if super::operate::is_paused(shared, owner, platform) {
+        tracing::debug!(profile = owner, platform, "dropped: the adapter is paused");
+        return Admission::Paused;
+    }
     if let Some(command) = command_alias(&descriptor, &inbound.text) {
         inbound.text = command;
     }

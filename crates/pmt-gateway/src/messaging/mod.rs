@@ -51,6 +51,7 @@ mod menus;
 pub(crate) mod methods;
 pub mod mock_server;
 pub mod multipart;
+pub mod operate;
 mod outbox;
 mod peer;
 pub mod policy;
@@ -58,6 +59,7 @@ pub mod proxy;
 pub mod proxy_env;
 mod recovery;
 mod relay;
+mod restart;
 mod retry;
 mod send;
 pub mod shape;
@@ -88,7 +90,7 @@ pub use adapter::{
     HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind, MediaStream,
     MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict, Sent, SessionHints,
 };
-pub use agents::{Agents, BusyPolicy, Conversation, Lookup};
+pub use agents::{Agents, BusyPolicy, Conversation, Lookup, UpdateFromChat};
 pub use hooks::{Hook, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
@@ -350,6 +352,7 @@ impl Gateway {
         for profile in &profiles {
             outbox::spawn(&shared, profile);
         }
+        restart::announce(&shared);
         cache::spawn(&shared);
         menus::spawn(&shared);
         attention::spawn(&shared);
@@ -385,7 +388,12 @@ impl Gateway {
     /// Every adapter's state.
     #[must_use]
     pub fn statuses(&self) -> Vec<AdapterStatus> {
-        self.shared.adapters.statuses()
+        let shared = &self.shared;
+        let mut all = shared.adapters.statuses();
+        for status in &mut all {
+            status.paused = operate::is_paused(shared, &status.profile, &status.platform);
+        }
+        all
     }
 
     /// The address of the shared webhook listener, once it runs.
@@ -467,6 +475,8 @@ impl Gateway {
         adapters::disconnect_all(shared).await;
         if drained {
             recovery::write_marker(&shared.options.home);
+        } else if shared.server.restart_requested() {
+            restart::mark_interrupted(&shared.options.home);
         }
     }
 }

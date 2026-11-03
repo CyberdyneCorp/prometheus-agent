@@ -75,6 +75,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "sessions" => info::sessions(ctx, args),
         "history" => info::history(ctx, args),
         "status" => info::status(ctx),
+        "platforms" => info::platforms(ctx).await,
         "version" => Ok(format!("prometheus {}", crate::build_info::identity())),
         "toolsets" => {
             crate::tools_cmd::slash_toolsets(&ctx.factory.registry, &ctx.live.selection())

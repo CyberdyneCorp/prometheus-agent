@@ -194,7 +194,9 @@ impl Lane {
             return;
         };
         let Some(approval) = approval else {
-            self.say(NOTHING_PENDING);
+            if !self.answer_confirmation(routing, true) {
+                self.say(NOTHING_PENDING);
+            }
             return;
         };
         self.decide(routing, &approval, decision);
@@ -209,7 +211,9 @@ impl Lane {
             self.named(args).0.into_iter().collect()
         };
         if targets.is_empty() {
-            self.say(NOTHING_PENDING);
+            if !self.answer_confirmation(routing, false) {
+                self.say(NOTHING_PENDING);
+            }
             return;
         }
         for approval in targets {
@@ -236,6 +240,7 @@ impl Lane {
         match kind {
             CardKind::Clarify => return self.clarify_pressed(routing, id, choice, picked),
             CardKind::Page => return self.page_pressed(routing, id, choice),
+            CardKind::Confirm => return self.confirm_pressed(routing, id, choice),
             CardKind::Approval => {}
         }
         let Some(decision) = decision_of(choice) else {

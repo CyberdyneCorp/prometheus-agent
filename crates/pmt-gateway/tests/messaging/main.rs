@@ -11,6 +11,7 @@ mod features;
 mod health;
 mod limits;
 mod media;
+mod operations;
 mod pause;
 mod platforms;
 mod recovery;

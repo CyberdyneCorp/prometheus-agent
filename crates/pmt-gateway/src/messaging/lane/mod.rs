@@ -13,6 +13,7 @@
 mod admin;
 mod clarify;
 mod commands;
+mod confirm;
 mod controls;
 mod input;
 mod lifecycle;
@@ -70,6 +71,11 @@ pub(crate) enum Msg {
     Cancelled { id: String, reason: String },
     /// A background notification.
     Internal(Background),
+    /// A confirmation was answered yes: run its action.
+    Confirmed {
+        action: confirm::Action,
+        routing: Box<Routing>,
+    },
     /// A message another session sent to this chat (`send_message`), to
     /// mirror into this session once no turn runs.
     Mirror {
@@ -226,6 +232,8 @@ struct Lane {
     /// A turn a restart left `resume_pending` holds the queue until this
     /// deadline (`/retry`, `/discard`, or the expiry release it).
     held: Option<resume::Held>,
+    /// `/restart` and `/update` confirmations waiting for an answer.
+    confirms: Vec<confirm::Confirm>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -284,6 +292,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         mirrors: Vec::new(),
         voice_input: false,
         held: None,
+        confirms: Vec::new(),
     };
     let span = tracing::info_span!(
         "conversation",
@@ -390,6 +399,7 @@ impl Lane {
             self.buffer.as_ref().map(input::Buffer::due),
             self.stall_due(),
             self.held.as_ref().map(resume::Held::deadline),
+            self.confirms.iter().map(confirm::Confirm::deadline).min(),
         ]
         .into_iter()
         .flatten()
@@ -403,6 +413,7 @@ impl Lane {
         }
         self.check_stall(now).await;
         self.check_held(now).await;
+        self.expire_confirmations(now);
     }
 
     async fn handle(&mut self, msg: Msg) {
@@ -429,6 +440,7 @@ impl Lane {
             Msg::Resolved { id, by_client } => self.resolved(&id, &by_client),
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),
             Msg::Internal(event) => self.internal(event),
+            Msg::Confirmed { action, routing } => self.confirmed(action, &routing).await,
             Msg::Mirror { text, from_session } => {
                 self.mirrors.push((text, from_session));
                 if self.running.is_none() {

@@ -326,6 +326,46 @@ fn authored(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
+/// `/platforms` (alias `/gateway`) on a local surface (spec: messaging-
+/// gateway, Adapter operations from chat): the profile's messaging adapters
+/// as the home's daemon reports them; chats answer it in the gateway.
+///
+/// # Errors
+///
+/// `home.io` reading the discovery file, control channel errors.
+pub async fn platforms(ctx: &Ctx<'_>) -> Result<String, Error> {
+    let home = ctx.scope.home().to_path_buf();
+    let profile = ctx.scope.name().to_string();
+    let record = tokio::task::spawn_blocking(move || crate::daemon_client::running(&home))
+        .await
+        .map_err(|e| Error::new(&codes::RPC_INTERNAL, format!("daemon lookup failed: {e}")))??;
+    let Some(record) = record else {
+        return Ok(
+            "The gateway daemon is not running, so no messaging adapter is connected \
+                   (start it with 'prometheus daemon start')."
+                .to_owned(),
+        );
+    };
+    let response = pmt_rpc::control::call(
+        &record.endpoint.control,
+        &pmt_rpc::control::ControlRequest::Status,
+    )
+    .await?;
+    let lines: Vec<String> = response
+        .status
+        .map(|s| s.adapters)
+        .unwrap_or_default()
+        .iter()
+        .filter(|a| a.profile == profile)
+        .map(pmt_rpc::control::AdapterReport::line)
+        .collect();
+    Ok(if lines.is_empty() {
+        format!("No messaging adapters are enabled for profile '{profile}'.")
+    } else {
+        lines.join("\n")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

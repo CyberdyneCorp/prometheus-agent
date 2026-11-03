@@ -1922,3 +1922,10 @@ capabilities = [
 [messaging-gateway."Session stall watchdog and reconnect attention"]
 "Stalled turn interrupted" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_stalled_turn_is_noticed_once_then_interrupted", "crates/pmt-gateway/src/messaging/lane/watchdog.rs::five_minutes_without_progress"]
 "Long outage escalated once" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_long_outage_is_escalated_once_to_the_other_home_channel", "crates/pmt-gateway/src/messaging/attention.rs::an_eleven_minute_outage_is_named_in_minutes"]
+
+[messaging-gateway."Adapter operations from chat"]
+"Breaker cleared" = ["crates/pmt-gateway/tests/messaging/operations.rs::resume_clears_the_backoff_and_reconnects_at_once", "crates/pmt-gateway/tests/messaging/operations.rs::a_paused_adapter_drops_its_messages_and_stays_paused_across_restarts", "crates/prometheus/tests/gateway_platforms.rs::a_pause_set_without_the_daemon_holds_until_resumed_through_it"]
+
+[messaging-gateway."Restart and update from chat"]
+"Restart confirmed in the same thread" = ["crates/pmt-gateway/tests/messaging/operations.rs::a_restart_confirmed_in_a_thread_is_announced_there_by_the_next_daemon"]
+"Update confirmation denied" = ["crates/pmt-gateway/tests/messaging/operations.rs::a_denied_update_confirmation_aborts_without_running_the_updater"]

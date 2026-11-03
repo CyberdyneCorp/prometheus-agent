@@ -140,6 +140,13 @@ impl Lane {
             "commands" => self.commands_command(&call.routing, &call.args),
             "busy" => self.busy_command(&call.routing, &call.args),
             "discard" => self.discard_command().await,
+            "platforms" => self.say(&crate::messaging::operate::listing(
+                &self.shared,
+                &self.profile,
+            )),
+            "platform" => self.platform_command(&call.routing, &call.args).await,
+            "restart" => self.restart_command(&call.routing),
+            "update" => self.update_command(&call.routing, &call.args).await,
             "retry" => {
                 self.retry_releases();
                 self.registry(call).await;

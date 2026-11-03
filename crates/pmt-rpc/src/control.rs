@@ -59,6 +59,16 @@ pub enum ControlRequest {
     },
     /// The daemon's process state.
     Status,
+    /// Pauses or resumes one messaging adapter of a profile (`prometheus
+    /// gateway pause|resume <platform>`); answers the new status.
+    GatewayPlatform {
+        /// The owning profile.
+        profile: String,
+        /// The platform.
+        platform: String,
+        /// Pause (`true`) or resume.
+        pause: bool,
+    },
     /// Starts the messaging adapters served profiles enable that are not
     /// running (`prometheus gateway reload`); answers the new status.
     GatewayReload,
@@ -301,6 +311,29 @@ pub fn ticket_of(response: ControlResponse) -> Result<Ticket, Error> {
     response
         .ticket
         .ok_or_else(|| Error::new(&codes::RPC_TICKET, "the daemon granted no ticket"))
+}
+
+impl AdapterReport {
+    /// `platform: state (code): message [paused] [needs attention]`.
+    #[must_use]
+    pub fn line(&self) -> String {
+        use std::fmt::Write as _;
+
+        let mut line = format!("{}: {}", self.platform, self.state);
+        if let Some(code) = &self.code {
+            let _ = write!(line, " ({code})");
+        }
+        if let Some(message) = &self.message {
+            let _ = write!(line, ": {message}");
+        }
+        if self.paused {
+            line.push_str(" [paused]");
+        }
+        if self.attention {
+            line.push_str(" [needs attention]");
+        }
+        line
+    }
 }
 
 #[cfg(test)]

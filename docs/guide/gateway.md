@@ -429,6 +429,33 @@ and its source, for example "steer (platform override)".
   `prometheus gateway status`), and each other connected platform's home
   channel hears about it once per outage.
 
+### Adapter operations, restart and update
+
+`/platforms` (alias `/gateway`, also in `prometheus chat` and the TUI) lists
+the profile's adapters with their state, error code and pause flag. Admins
+run `/platform pause <name>` to stop dispatching an adapter's inbound
+messages without disconnecting it (they are acknowledged and dropped;
+replies still go out) and `/platform resume <name>` to lift the pause,
+reset the reconnect backoff and reconnect at once. The pause is kept in
+the profile's `state.db` across restarts; the CLI does the same:
+
+```text
+prometheus gateway pause discord
+prometheus gateway resume discord
+```
+
+`/restart` and `/update` are admin-tier and ask for a confirmation in the
+same chat and thread first (buttons, or `/approve` / `/deny`); a denial or
+no answer within `approvals.timeout_secs` aborts with nothing changed.
+After a confirmed `/restart` the daemon drains and exits 75 for its
+supervisor, and the next daemon posts `Gateway restarted (<version>, build
+<id>)` in the requesting thread. A restart that cut running turns short
+also tells each platform's home channel once, unless
+`gateway.platforms.<name>.restart_notification = false`. `/update` needs
+`update.allow_from_chat = true` in `daemon.toml` (otherwise "updates from
+chat are disabled (update.allow_from_chat = false)"); `/update check` only
+looks for a release.
+
 ## Home channels and one-shot sends
 
 Each platform has at most one home channel: where scheduled output,

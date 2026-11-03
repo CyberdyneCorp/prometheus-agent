@@ -36,6 +36,9 @@ pub(crate) enum CardKind {
     /// A paged listing's previous/next button (`page`): the id names the
     /// listing, the choice is the page to show.
     Page,
+    /// A gateway confirmation (`conf`: `/restart`, `/update`): the choice
+    /// is `yes` or `no`.
+    Confirm,
 }
 
 impl CardKind {
@@ -44,6 +47,7 @@ impl CardKind {
             Self::Approval => "appr",
             Self::Clarify => "clar",
             Self::Page => "page",
+            Self::Confirm => "conf",
         }
     }
 
@@ -52,6 +56,7 @@ impl CardKind {
             "appr" => Some(Self::Approval),
             "clar" => Some(Self::Clarify),
             "page" => Some(Self::Page),
+            "conf" => Some(Self::Confirm),
             _ => None,
         }
     }

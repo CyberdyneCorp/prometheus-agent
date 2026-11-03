@@ -147,6 +147,8 @@ pub struct FakeAgents {
     pub menu: Mutex<Vec<MenuCommand>>,
     /// The container every session's terminal runs in.
     pub container: Mutex<Option<pmt_gateway::messaging::attachments::ContainerMounts>>,
+    /// Every confirmed `/update`.
+    pub updates: Mutex<Vec<pmt_gateway::messaging::UpdateFromChat>>,
 }
 
 impl FakeAgents {
@@ -339,6 +341,10 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("commands", &[], BusyPolicy::Immediate),
     ("busy", &[], BusyPolicy::Immediate),
     ("discard", &[], BusyPolicy::Immediate),
+    ("platforms", &["gateway"], BusyPolicy::Immediate),
+    ("platform", &[], BusyPolicy::Immediate),
+    ("restart", &[], BusyPolicy::Immediate),
+    ("update", &[], BusyPolicy::Immediate),
 ];
 
 impl Agents for FakeAgents {
@@ -477,6 +483,14 @@ impl Agents for FakeAgents {
 
     fn speech(&self, _profile: &str) -> Option<Arc<dyn Speech>> {
         self.speech.lock().unwrap().clone()
+    }
+
+    fn update_from_chat<'a>(
+        &'a self,
+        request: &'a pmt_gateway::messaging::UpdateFromChat,
+    ) -> HostFuture<'a, String> {
+        self.updates.lock().unwrap().push(request.clone());
+        Box::pin(async { Ok("update started".to_owned()) })
     }
 
     fn end_conversation<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
@@ -905,6 +919,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         cwd: Mutex::default(),
         menu: Mutex::default(),
         container: Mutex::default(),
+        updates: Mutex::default(),
     })
 }
 

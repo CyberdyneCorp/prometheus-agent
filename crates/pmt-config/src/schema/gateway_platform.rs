@@ -108,9 +108,19 @@ pub struct PlatformConfig {
     /// elsewhere.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reactions: Option<bool>,
+    /// Post one notice to this platform's home channel after a graceful
+    /// restart or update that interrupted running turns (default true).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart_notification: Option<bool>,
 }
 
 impl PlatformConfig {
+    /// Whether restart notices go to this platform's home channel.
+    #[must_use]
+    pub fn restart_notification_on(&self) -> bool {
+        self.restart_notification.unwrap_or(true)
+    }
+
     /// Whether the typing indicator is shown (default `true`).
     #[must_use]
     pub fn typing(&self) -> bool {

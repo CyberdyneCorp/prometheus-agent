@@ -63,6 +63,22 @@ pub struct Conversation {
     pub policy: Option<pmt_config::schema::ChatPolicy>,
 }
 
+/// `/update [check]` from a chat, once confirmed (spec:
+/// distribution-and-update, Update from chat).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateFromChat {
+    /// The profile whose chat asked.
+    pub profile: String,
+    /// The chat's platform.
+    pub platform: String,
+    /// The chat.
+    pub chat_id: String,
+    /// Its thread.
+    pub thread_id: Option<String>,
+    /// Only look for a newer release.
+    pub check: bool,
+}
+
 /// The agent side of the messaging gateway.
 pub trait Agents: Host {
     /// The store of a served profile.
@@ -140,5 +156,15 @@ pub trait Agents: Host {
     /// are then transcribed and replies may be spoken).
     fn speech(&self, _profile: &str) -> Option<Arc<dyn crate::messaging::voice::Speech>> {
         None
+    }
+    /// Runs the updater for a confirmed `/update` (or `/update check`):
+    /// the text answers the chat.
+    fn update_from_chat<'a>(&'a self, _request: &'a UpdateFromChat) -> HostFuture<'a, String> {
+        Box::pin(async {
+            Err(pmt_core::error::Error::new(
+                &pmt_core::error::codes::GATEWAY_DAEMON_REQUIRED,
+                "updates from chat need the daemon's updater",
+            ))
+        })
     }
 }

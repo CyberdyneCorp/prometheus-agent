@@ -321,6 +321,7 @@ fn default_nofile_soft_limit() -> u64 {
 
 /// The `[update]` section (spec: distribution-and-update). The release
 /// channel is not here: it belongs to the install receipt.
+#[allow(clippy::struct_excessive_bools)] // independent update switches
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UpdateConfig {
@@ -346,6 +347,8 @@ pub struct UpdateConfig {
     pub mirror_fallback: bool,
     /// What to save before the binary is swapped.
     pub pre_update_backup: PreUpdateBackup,
+    /// Let gateway admins run `/update` from a chat.
+    pub allow_from_chat: bool,
 }
 
 impl Default for UpdateConfig {
@@ -358,6 +361,7 @@ impl Default for UpdateConfig {
             mirror_url: None,
             mirror_fallback: false,
             pre_update_backup: PreUpdateBackup::State,
+            allow_from_chat: false,
         }
     }
 }

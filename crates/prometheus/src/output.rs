@@ -243,6 +243,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         schema: "prometheus.pause.v1",
         command: "pause status",
     },
+    JsonShape {
+        schema: "prometheus.gateway_pause.v1",
+        command: "gateway pause",
+    },
 ];
 
 /// Writes `value` as one compact JSON document and a newline.

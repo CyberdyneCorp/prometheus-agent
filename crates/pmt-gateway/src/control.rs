@@ -146,10 +146,12 @@ pub(crate) fn answer(
             ControlResponse::default()
         }
         // Answered by `handle`, which can wait for the adapter.
-        ControlRequest::GatewaySend { .. } => failure(&Error::new(
-            &codes::RPC_INVALID_REQUEST,
-            "gateway_send is answered asynchronously",
-        )),
+        ControlRequest::GatewaySend { .. } | ControlRequest::GatewayPlatform { .. } => {
+            failure(&Error::new(
+                &codes::RPC_INVALID_REQUEST,
+                "this request is answered asynchronously",
+            ))
+        }
     }
 }
 
@@ -199,6 +201,33 @@ async fn send(
     }
 }
 
+/// `gateway pause|resume <platform>` through the running daemon.
+async fn platform_op(
+    server: &Server,
+    profile: &str,
+    platform: &str,
+    pause: bool,
+) -> ControlResponse {
+    let Some(messaging) = server.messaging() else {
+        return failure(&Error::new(
+            &codes::GATEWAY_DAEMON_REQUIRED,
+            "the daemon runs no messaging gateway",
+        ));
+    };
+    let done = if pause {
+        messaging.pause_platform(profile, platform, "cli").map(drop)
+    } else {
+        messaging.resume_platform(profile, platform).await.map(drop)
+    };
+    match done {
+        Ok(()) => ControlResponse {
+            status: Some(server.status()),
+            ..ControlResponse::default()
+        },
+        Err(err) => failure(&err),
+    }
+}
+
 fn failure(err: &Error) -> ControlResponse {
     ControlResponse {
         error: Some(ControlError {
@@ -228,6 +257,11 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
             text,
             attachments,
         }) => send(&server, &profile, target, text, attachments).await,
+        Ok(ControlRequest::GatewayPlatform {
+            profile,
+            platform,
+            pause,
+        }) => platform_op(&server, &profile, &platform, pause).await,
         Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,

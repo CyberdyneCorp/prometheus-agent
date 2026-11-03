@@ -2777,6 +2777,13 @@
           ],
           "description": "Which parts of a reply quote the message they answer: none, the\nfirst part, or every part. Unset: `first`."
         },
+        "restart_notification": {
+          "description": "Post one notice to this platform's home channel after a graceful\nrestart or update that interrupted running turns (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "routes": {
           "additionalProperties": {
             "$ref": "#/$defs/WebhookRoute"

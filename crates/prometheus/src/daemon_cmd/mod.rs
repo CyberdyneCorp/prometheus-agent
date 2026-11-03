@@ -11,6 +11,7 @@ mod gateway_cmd;
 mod host;
 mod inventory;
 mod messaging;
+mod platform_cmd;
 mod send_cmd;
 mod serve;
 pub mod service;
@@ -19,6 +20,7 @@ pub(crate) mod standalone;
 #[cfg(debug_assertions)]
 mod test_adapter;
 mod turn;
+mod update_chat;
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -238,6 +240,22 @@ fn last_stderr_line(home: &Path) -> Option<String> {
         .map(|line| line.trim_start_matches("error: ").to_owned())
 }
 
+/// Runs `command` outside this process group and terminal, so it
+/// outlives the daemon (a stop, a restart) that started it.
+pub(super) fn detach(command: &mut Command) {
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(command, 0);
+    #[cfg(windows)]
+    {
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        std::os::windows::process::CommandExt::creation_flags(
+            command,
+            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+        );
+    }
+}
+
 /// `<this binary> --home <home> [-p <profile>] daemon run`, detached from
 /// this process group and terminal.
 fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Child, Error> {
@@ -259,17 +277,7 @@ fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Ch
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(stderr);
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    #[cfg(windows)]
-    {
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        std::os::windows::process::CommandExt::creation_flags(
-            &mut command,
-            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-        );
-    }
+    detach(&mut command);
     command
         .spawn()
         .map_err(|e| start_failed(&format!("cannot launch it: {e}")))

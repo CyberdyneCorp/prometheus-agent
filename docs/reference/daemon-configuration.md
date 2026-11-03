@@ -29,6 +29,7 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `runtimes.mirrors.npm` | string | unset | any | `restart` | Node package registry (used by Node-based plugins, milestone M2). |
 | `runtimes.mirrors.pypi` | string | unset | any | `restart` | Python package index for the Python bridge's packages (used by the bridge, milestone M2). |
 | `runtimes.mirrors.runtimes` | string | unset | any | `restart` | Runtime archives: `<url>/<name>/<version>/<archive file name>`. |
+| `update.allow_from_chat` | boolean | `false` | any | `restart` | Let gateway admins run `/update` from a chat. |
 | `update.auto_apply` | boolean | `false` | any | `restart` | Install a release found by the background check without asking. |
 | `update.check_interval_secs` | integer | `86400` | ≥ 0 | `restart` | Seconds between background checks for a newer release; `0` disables them. A check sends only the version and target (in the user agent). |
 | `update.mirror_fallback` | boolean | `false` | any | `restart` | When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`) still fails after the retry budget, download from the default origin instead of failing. |

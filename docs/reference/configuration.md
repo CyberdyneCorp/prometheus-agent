@@ -185,6 +185,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.rate_limit.turns_per_hour` | integer | unset | 1 to 100000 | `next_session` | Overrides `turns_per_hour`. |
 | `gateway.platforms.<name>.reactions` | boolean | unset | any | `next_session` | Mark the triggering message with processing reactions (eyes, then a check mark or a cross). Unset: on for Discord and Slack, off elsewhere. |
 | `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
+| `gateway.platforms.<name>.restart_notification` | boolean | unset | any | `next_session` | Post one notice to this platform's home channel after a graceful restart or update that interrupted running turns (default true). |
 | `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `origin`, `github_comment` or a send target `platform[:chat_id[:thread_id]]`. Unset: `log`. |
 | `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
 | `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |

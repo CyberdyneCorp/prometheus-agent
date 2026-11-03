@@ -69,6 +69,9 @@ pub(crate) struct Slot {
     lock: Mutex<Option<CredentialLock>>,
     /// The adapter reported a lost connection.
     lost: Notify,
+    /// `/platform resume`: the reconnect backoff restarts and the next
+    /// attempt is now.
+    pub(crate) kick: Notify,
     stop: CancellationToken,
     /// Where state changes are announced (`adapter.state`).
     shared: Weak<Shared>,
@@ -331,6 +334,35 @@ pub(crate) fn start_profile(shared: &Arc<Shared>, profile: &str) {
     }
 }
 
+/// Stops `platform` of `profile` for good if it still runs and forgets
+/// it, so the next [`start_profile`] builds it again (a fatal adapter
+/// resumed by an admin).
+pub(crate) async fn forget(shared: &Shared, profile: &str, platform: &str) {
+    let key = (profile.to_owned(), platform.to_owned());
+    shared
+        .adapters
+        .failed
+        .write()
+        .expect("adapters poisoned")
+        .remove(&key);
+    let slot = shared
+        .adapters
+        .slots
+        .write()
+        .expect("adapters poisoned")
+        .remove(&key);
+    if let Some(slot) = slot {
+        slot.stop.cancel();
+        slot.adapter.disconnect().await;
+        release(&slot);
+    }
+}
+
+/// The running slot of `platform`, if any.
+pub(crate) fn slot_of(shared: &Shared, profile: &str, platform: &str) -> Option<Arc<Slot>> {
+    shared.adapters.slot(profile, platform)
+}
+
 fn record_failure(shared: &Shared, key: (String, String), error: &AdapterError) {
     tracing::error!(
         profile = key.0,
@@ -398,6 +430,7 @@ fn launch_slot(
         unsupported: Mutex::default(),
         lock: Mutex::default(),
         lost: Notify::new(),
+        kick: Notify::new(),
         stop: shared.stop.child_token(),
         shared: Arc::downgrade(shared),
         outside_since: Mutex::new(Some(tokio::time::Instant::now())),
@@ -439,9 +472,9 @@ async fn supervise(shared: Weak<Shared>, key: (String, String), slot: Arc<Slot>)
         }
         tokio::select! {
             () = slot.stop.cancelled() => return,
-            () = tokio::time::sleep(wait) => {}
+            () = tokio::time::sleep(wait) => wait = (wait * 2).min(RECONNECT_MAX),
+            () = slot.kick.notified() => wait = RECONNECT_START,
         }
-        wait = (wait * 2).min(RECONNECT_MAX);
     }
 }
 

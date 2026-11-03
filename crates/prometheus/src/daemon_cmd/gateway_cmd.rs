@@ -53,6 +53,18 @@ pub enum GatewayCommand {
     /// Print (or write) a Slack app manifest for Socket Mode with one
     /// slash command per gateway command.
     SlackManifest(super::slack_manifest_cmd::SlackManifestArgs),
+    /// Stop dispatching one adapter's inbound messages (they are
+    /// acknowledged and dropped) without disconnecting it; kept across
+    /// restarts.
+    Pause {
+        /// The platform (`telegram`, `discord`, ...).
+        platform: String,
+    },
+    /// Clear an adapter's pause and reconnect backoff and reconnect it now.
+    Resume {
+        /// The platform.
+        platform: String,
+    },
 }
 
 /// `prometheus gateway outbox` subcommands.
@@ -136,6 +148,8 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::List => super::inventory::list(ctx),
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
         GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),
+        GatewayCommand::Pause { platform } => super::platform_cmd::run(platform, true, ctx),
+        GatewayCommand::Resume { platform } => super::platform_cmd::run(platform, false, ctx),
     }
 }
 
@@ -233,28 +247,10 @@ fn adapters_text(profiles: &[String], adapters: &[AdapterReport]) -> String {
             text.push_str("  no messaging adapters enabled\n");
         }
         for adapter in mine {
-            let _ = writeln!(text, "  {}", adapter_line(adapter));
+            let _ = writeln!(text, "  {}", adapter.line());
         }
     }
     text
-}
-
-/// `platform: state (code): message [paused] [needs attention]`.
-fn adapter_line(adapter: &AdapterReport) -> String {
-    let mut line = format!("{}: {}", adapter.platform, adapter.state);
-    if let Some(code) = &adapter.code {
-        let _ = write!(line, " ({code})");
-    }
-    if let Some(message) = &adapter.message {
-        let _ = write!(line, ": {message}");
-    }
-    if adapter.paused {
-        line.push_str(" [paused]");
-    }
-    if adapter.attention {
-        line.push_str(" [needs attention]");
-    }
-    line
 }
 
 fn store(ctx: &Context<'_>) -> Result<Store, Error> {
