@@ -1,7 +1,7 @@
 /// Provider objects: image and video generation, web search and extract,
 /// text-to-speech, transcription and secret sources (spec: plugin-system,
 /// Provider-object plugins fail closed when unregistered).
-package prometheus:provider@1.0.0;
+package prometheus:provider@1.1.0;
 
 interface plugin {
     enum category {
@@ -27,7 +27,27 @@ interface plugin {
     invoke: func(provider: string, request: string) -> result<string, string>;
 }
 
+/// Added in 1.1: model providers (spec: plugin-system, Model-provider
+/// plugins). A component built against 1.0 does not export it.
+interface models {
+    /// Model-provider descriptors (the `model-providers` descriptor
+    /// contract), one JSON object each: `id`, `wire_format`
+    /// (`chat_completions`, `anthropic_messages`, `responses`), `base_url`,
+    /// `secret_names`, `key_hosts` and optionally `aliases`,
+    /// `default_model`, `models_url`, `supports_model_listing`. Each id
+    /// needs the `providers` grant; an id of a built-in provider also
+    /// needs `providers_override`.
+    descriptors: func() -> list<string>;
+    /// Header building: headers added to every request to `provider`.
+    headers: func(provider: string) -> result<list<tuple<string, string>>, string>;
+    /// Request preparation: the JSON body about to be sent, rewritten.
+    prepare-request: func(provider: string, body: string) -> result<string, string>;
+    /// Model listing: the model ids `provider` serves.
+    list-models: func(provider: string) -> result<list<string>, string>;
+}
+
 world provider {
     include prometheus:host/imports@1.0.0;
     export plugin;
+    export models;
 }

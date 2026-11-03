@@ -207,8 +207,12 @@ impl Factory {
         pmt_agent::compress::engine::select(&config.context, &[])?;
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
-        let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?.with_plugins(
+            &scope,
+            &plugins,
+            &options.cwd,
+        )?;
         let tools = Mutex::new(plugins::PluginTools::build(
             &scope,
             &plugins,
@@ -423,7 +427,7 @@ impl Factory {
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
         let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
-        let gate = self.gate()?;
+        let gate = self.gate(id)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let built = (&*registry, &selection, &capabilities);
         let tool_port = self.tool_port(id, built, &gate.gate, &agent_tools).await?;
@@ -504,7 +508,13 @@ impl Factory {
     }
 
     /// The session's command approval gate.
-    fn gate(&self) -> Result<tools::Gate, Error> {
+    fn gate(&self, id: SessionId) -> Result<tools::Gate, Error> {
+        let hooks = crate::plugins_host::approvals::PluginApprovals::new(
+            self.plugins.clone(),
+            self.plugin_call(id),
+            self.redactor.clone(),
+            &self.scope.config().plugins,
+        );
         tools::gate(&GateInputs {
             scope: &self.scope,
             grants: &self.grants,
@@ -512,6 +522,7 @@ impl Factory {
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
             yolo: self.options.yolo,
+            hooks: Some(Arc::new(hooks)),
         })
     }
 
@@ -586,6 +597,10 @@ impl Factory {
         } else {
             (Clarifier::unattended(), None)
         };
+        let clarifier = clarifier.with_observer(crate::plugins_host::approvals::input_observer(
+            self.plugins.clone(),
+            self.plugin_call(id),
+        ));
         let tools = AgentTools::new(
             Arc::clone(&self.store),
             id,
@@ -640,6 +655,14 @@ impl Factory {
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
         setup.plugins = self.plugins.current().skill_dirs();
+        let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
+        setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
+            plugins.observe(
+                call.clone(),
+                "on_skill_lifecycle",
+                crate::plugins_host::skill_fields(skill, action),
+            );
+        }));
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))

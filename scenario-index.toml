@@ -2101,3 +2101,26 @@ capabilities = [
 
 [security-boundaries."Grants pinned to plugin identity"]
 "Update adds network access" = ["crates/prometheus/tests/plugins_catalog.rs::an_update_adding_network_access_waits_while_the_installed_version_runs"]
+
+# Group 29 (plugin hooks, shell hooks and extension surfaces)
+[plugin-system."Transform hooks rewrite results and replies"]
+"Held reply never leaks" = ["crates/prometheus/tests/plugins_transforms.rs::a_held_reply_never_leaks_on_a_messaging_platform", "crates/prometheus/tests/plugins_transforms.rs::a_held_reply_whose_hook_times_out_is_withheld", "crates/pmt-agent/tests/turn/hooks.rs::a_held_turn_streams_nothing_before_the_hook_rewrote_it"]
+"Tool result redaction" = ["crates/prometheus/tests/plugins_transforms.rs::a_tool_result_is_redacted_before_the_model_sees_it_and_stored_as_seen"]
+
+[plugin-system."Streaming and lifecycle observer hooks"]
+"Stream observer cannot change output" = ["crates/prometheus/tests/plugins_transforms.rs::a_stream_observer_cannot_change_the_reply", "crates/pmt-agent/tests/turn/hooks.rs::stream_observers_see_every_delta_and_cannot_change_them"]
+
+[plugin-system."pre_verify continuation hook"]
+"Endless continue is bounded" = ["crates/prometheus/tests/plugins_transforms.rs::an_endless_pre_verify_continue_is_bounded"]
+
+[plugin-system."transform_api_error_classification hook"]
+"Provider plugin claims its quirk" = ["crates/prometheus/tests/plugins_providers.rs::a_provider_plugin_claims_its_404_and_the_turn_falls_back"]
+
+[plugin-system."Approval and human-input observer hooks"]
+"Notifier observes approvals" = ["crates/prometheus/tests/plugins_transforms.rs::a_notifier_observes_approvals_in_a_messaging_session"]
+
+[plugin-system."Install-time threat scan"]
+"Reverse shell blocked even with force" = ["crates/prometheus/tests/plugins_threat.rs::a_reverse_shell_is_blocked_even_with_force", "crates/prometheus/src/plugins_cmd/threat.rs::a_reverse_shell_in_a_script_is_dangerous_with_its_file_and_line"]
+
+[plugin-system."Model-provider plugins"]
+"Plugin cannot silently replace a built-in" = ["crates/pmt-plugins/tests/surfaces.rs::a_plugin_cannot_silently_replace_a_builtin_provider"]

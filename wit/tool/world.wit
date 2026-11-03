@@ -1,7 +1,9 @@
 /// Tools the model can call (spec: plugin-system, Plugin tool registration).
 /// The host reads `tools` once per instance; the tools join a session's
 /// tool list only when the session starts.
-package prometheus:tool@1.0.0;
+/// 1.1 adds the messaging imports (live messages, injection, platform
+/// actions).
+package prometheus:tool@1.1.0;
 
 interface plugin {
     record tool-spec {
@@ -21,5 +23,6 @@ interface plugin {
 
 world tool {
     include prometheus:host/imports@1.0.0;
+    include prometheus:messaging/imports@1.0.0;
     export plugin;
 }

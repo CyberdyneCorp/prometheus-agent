@@ -19,6 +19,7 @@ use crate::host::extensions_world::Command;
 use crate::host::ports::Ports;
 use crate::host::provider_world::ProviderSpec;
 use crate::host::state::StateDir;
+use crate::host::surfaces_world::CliCommand;
 use crate::host::{CallInfo, Context, Instance, Limits, Runtime};
 use crate::manifest::Manifest;
 
@@ -29,6 +30,14 @@ pub(super) struct Registration {
     pub sections: Vec<String>,
     pub commands: Vec<Command>,
     pub providers: Vec<ProviderSpec>,
+    /// Hooks registered with `hold_stream = true` (hook world 1.2).
+    pub held: Vec<String>,
+    /// `prometheus plugins run` commands (hook world 1.2).
+    pub cli: Vec<CliCommand>,
+    /// Approval transports (hook world 1.2).
+    pub transports: Vec<String>,
+    /// Model-provider descriptors (provider world 1.1).
+    pub models: Vec<String>,
 }
 
 /// One plugin to instantiate, owned so it can move to the load thread.
@@ -126,8 +135,14 @@ fn read_registration(instance: &Instance) -> Result<Registration, Error> {
         registration.sections = instance.sections(&call)?;
         registration.commands = instance.commands(&call)?;
     }
+    if instance.has_surfaces() {
+        registration.held = instance.hold_stream(&call)?;
+        registration.cli = instance.cli_commands(&call)?;
+        registration.transports = instance.transports(&call)?;
+    }
     if instance.implements("provider") {
         registration.providers = instance.providers(&call)?;
+        registration.models = instance.model_descriptors(&call)?;
     }
     Ok(registration)
 }

@@ -17,6 +17,7 @@ pub mod manifest;
 pub mod package;
 pub mod providers;
 pub mod record;
+pub mod surfaces;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod tools;

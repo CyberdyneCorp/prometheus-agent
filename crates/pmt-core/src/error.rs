@@ -963,6 +963,9 @@ error_codes! {
     /// A plugin on the catalog's kill list.
     PLUGINS_REMOVED = ("plugins.removed", PermissionDenied,
         "The plugin (or its repository) was removed from the catalog and is blocked; only `prometheus plugins install --allow-removed` installs it anyway, recorded on its install record.");
+    /// A plugin the install-time threat scan refused.
+    PLUGINS_THREAT = ("plugins.threat", PermissionDenied,
+        "The install-time threat scan graded the plugin `dangerous` (refused; `--force` does not override it), graded it `caution` without confirmation or `--force`, or could not finish (it fails closed); the message names each finding, file and line.");
     /// A plugin catalog or package that could not be fetched.
     PLUGINS_CATALOG = ("plugins.catalog", Unavailable,
         "The plugin catalog entry, package or repository could not be fetched or read; the message names it.");

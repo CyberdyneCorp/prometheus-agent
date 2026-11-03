@@ -42,6 +42,44 @@ pub trait CredentialHooks: Send + Sync {
     ) -> BoxFuture<'a, Recovery>;
 }
 
+/// A failed provider call, as `transform_api_error_classification`
+/// hooks see it (spec: plugin-system).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FailureInfo {
+    /// The provider id.
+    pub provider: String,
+    /// The model.
+    pub model: String,
+    /// The HTTP status, when there was a response.
+    pub status_code: Option<u16>,
+    /// The built-in class (`rate_limit`, `config`...).
+    pub error_type: String,
+    /// The provider's error code (`error.code`/`error.type` of the body).
+    pub error_code: Option<String>,
+    /// The provider's message.
+    pub error_message: String,
+    /// The raw response body.
+    pub error_body: Option<String>,
+    /// Estimated request tokens.
+    pub approx_tokens: u64,
+    /// The route's context window, when known.
+    pub context_length: Option<u64>,
+    /// Messages in the request.
+    pub message_count: usize,
+}
+
+/// Classification hooks (spec: plugin-system,
+/// `transform_api_error_classification`): consulted once per failed call
+/// before the retry and fallback policy applies; the first valid decision
+/// wins and `None` keeps the built-in class.
+pub trait ErrorClassifier: Send + Sync {
+    /// The decision about `failure`, with the class of its reason.
+    fn classify<'a>(
+        &'a self,
+        failure: &'a FailureInfo,
+    ) -> BoxFuture<'a, Option<(crate::classify::Reclassified, crate::classify::ErrorClass)>>;
+}
+
 /// What a failed request's credential work decided.
 #[derive(Debug)]
 pub enum Recovery {
@@ -91,6 +129,7 @@ pub struct ModelCaller {
     attempt_cap: Option<u32>,
     recorder: Option<Arc<UsageRecorder>>,
     hooks: Option<Arc<dyn CredentialHooks>>,
+    classifier: Option<Arc<dyn ErrorClassifier>>,
 }
 
 impl std::fmt::Debug for ModelCaller {
@@ -168,6 +207,52 @@ impl ModelCaller {
             attempt_cap: None,
             recorder: None,
             hooks: None,
+            classifier: None,
+        }
+    }
+
+    /// Consults `classifier` about every failed call before the retry and
+    /// fallback policy.
+    #[must_use]
+    pub fn with_classifier(mut self, classifier: Arc<dyn ErrorClassifier>) -> Self {
+        self.classifier = Some(classifier);
+        self
+    }
+
+    /// Runs `hooks` around requests to the plugin model providers they
+    /// handle.
+    #[must_use]
+    pub fn with_request_hooks(mut self, hooks: Arc<dyn crate::transport::RequestHooks>) -> Self {
+        self.sender = self.sender.with_request_hooks(hooks);
+        self
+    }
+
+    /// `error` after the classification hooks.
+    async fn reclassify(
+        &self,
+        route: &Route,
+        request: &Request,
+        context_length: Option<u64>,
+        error: ProviderError,
+    ) -> ProviderError {
+        let Some(classifier) = &self.classifier else {
+            return error;
+        };
+        let info = FailureInfo {
+            provider: route.provider.clone(),
+            model: route.model.clone(),
+            status_code: error.status,
+            error_type: error.class.as_str().to_owned(),
+            error_code: error.body.as_deref().and_then(error_code),
+            error_message: error.message.clone(),
+            error_body: error.body.clone(),
+            approx_tokens: request.estimated_tokens(),
+            context_length,
+            message_count: request.messages.len(),
+        };
+        match classifier.classify(&info).await {
+            Some((verdict, class)) => error.reclassified(verdict, class),
+            None => error,
         }
     }
 
@@ -216,6 +301,18 @@ impl ModelCaller {
         request: &Request,
         ctx: Option<&CallContext>,
     ) -> Result<ModelStream, ProviderError> {
+        self.send_sized(route, request, ctx, None).await
+    }
+
+    /// [`Self::send`], telling classification hooks the route's context
+    /// window.
+    async fn send_sized(
+        &self,
+        route: &Route,
+        request: &Request,
+        ctx: Option<&CallContext>,
+        context_length: Option<u64>,
+    ) -> Result<ModelStream, ProviderError> {
         let capped = ctx
             .and_then(|c| c.stale_cap.as_ref())
             .map(|cap| cap.apply(route));
@@ -234,7 +331,7 @@ impl ModelCaller {
                     return Ok(stream);
                 }
                 Err(error) if error.refusal.is_some() => return Err(error),
-                Err(error) => error,
+                Err(error) => self.reclassify(route, request, context_length, error).await,
             };
             let Some(delay) = retries.delay(retry, &error) else {
                 return Err(error);
@@ -272,8 +369,16 @@ impl ModelCaller {
         loop {
             let route = state.current().clone();
             let fitted = fit_reasoning(request, &route, walk.catalog);
+            let (meta, _) =
+                walk.catalog
+                    .metadata_at(&route.provider, &route.model, Some(&route.base_url));
             match self
-                .send(&route, fitted.as_ref().unwrap_or(request), ctx)
+                .send_sized(
+                    &route,
+                    fitted.as_ref().unwrap_or(request),
+                    ctx,
+                    Some(meta.context_window),
+                )
                 .await
             {
                 Ok(stream) => {
@@ -304,6 +409,18 @@ impl ModelCaller {
             }
         }
     }
+}
+
+/// The provider's error code in a JSON error body (`error.code`, else
+/// `error.type`).
+fn error_code(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let error = value.get("error")?;
+    let code = error.get("code").or_else(|| error.get("type"))?;
+    Some(match code {
+        serde_json::Value::String(text) => text.clone(),
+        other => other.to_string(),
+    })
 }
 
 /// `request` with its reasoning level clamped to what `route`'s model

@@ -104,6 +104,7 @@ fn cron_gate(fx: &Fixture) -> Arc<CommandGate> {
         protected: ProtectedFiles::from_config(&SecurityConfig::default()).unwrap(),
         channel: Channel::unattended(),
         yolo: true,
+        hooks: None,
     }))
 }
 

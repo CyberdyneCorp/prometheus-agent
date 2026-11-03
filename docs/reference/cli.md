@@ -9882,6 +9882,9 @@ Options:
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
+      --force
+          Install although the threat scan graded it `caution` (recorded); a `dangerous` verdict is refused anyway
+
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
@@ -10150,6 +10153,9 @@ Options:
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
+
+      --force
+          Update although the threat scan graded the new version `caution`; a `dangerous` one is refused and the installed version stays active
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved

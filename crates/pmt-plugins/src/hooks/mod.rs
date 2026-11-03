@@ -12,10 +12,17 @@
 //! hook and error, DEBUG after) and the next callback still runs; a
 //! callback that overruns counts as no result and is skipped for 60
 //! seconds.
+//!
+//! Embedders add external callbacks after the plugins' ([`ExternalHook`]:
+//! shell hooks, gateway hook directories, outbound webhooks), so plugin
+//! hooks always run first. An external callback bounds itself.
 
+mod classify;
 mod context;
 mod directives;
+mod external;
 pub mod payload;
+mod turn;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -25,9 +32,12 @@ use std::time::{Duration, Instant};
 use pmt_core::capability::{Capability, CapabilitySet, PluginRight};
 use pmt_core::error::{Error, codes};
 
+pub use classify::{PluginErrorClassifier, decide as decide_classification};
 pub use context::{SPILL_EDGE_CHARS, spill_dir};
 pub use directives::{HookSource, PluginToolHooks, PreTool, combine};
+pub use external::{ExternalHook, HookFuture};
 pub use payload::{Payload, SCHEMA_VERSION};
+pub use turn::{Observers, Rewrite, continuation};
 
 use crate::host::hook_world::{HookEvent, Reply};
 use crate::host::{CallInfo, Instance};
@@ -60,10 +70,18 @@ pub struct Answer {
 }
 
 struct Callback {
+    /// The plugin id, or the external callback's label.
     plugin: String,
-    instance: Arc<Instance>,
-    /// The hook world minor version the plugin was built against.
-    minor: u64,
+    target: Target,
+}
+
+enum Target {
+    Wasm {
+        instance: Arc<Instance>,
+        /// The hook world minor version the plugin was built against.
+        minor: u64,
+    },
+    External(Arc<dyn ExternalHook>),
 }
 
 /// A profile's hook callbacks.
@@ -72,6 +90,8 @@ pub struct Hooks {
     callbacks: HashMap<String, Vec<Callback>>,
     suspended: Mutex<HashMap<(String, String), Instant>>,
     warned: Mutex<HashSet<(String, String, String)>>,
+    /// Plugins whose `transform_llm_output` holds the stream.
+    held: HashSet<String>,
 }
 
 impl std::fmt::Debug for Hooks {
@@ -93,7 +113,55 @@ impl Hooks {
             callbacks: HashMap::new(),
             suspended: Mutex::new(HashMap::new()),
             warned: Mutex::new(HashSet::new()),
+            held: HashSet::new(),
         }
+    }
+
+    /// Adds an external callback for `hook`, after every plugin callback
+    /// registered so far.
+    ///
+    /// # Errors
+    ///
+    /// `plugins.manifest`: `unknown hook '<name>'`.
+    pub fn add_external(
+        &mut self,
+        hook: &str,
+        callback: Arc<dyn ExternalHook>,
+    ) -> Result<(), Error> {
+        pmt_core::hooks::check(hook)
+            .map_err(|_| Error::new(&codes::PLUGINS_MANIFEST, format!("unknown hook '{hook}'")))?;
+        self.callbacks
+            .entry(hook.to_owned())
+            .or_default()
+            .push(Callback {
+                plugin: callback.label().to_owned(),
+                target: Target::External(callback),
+            });
+        Ok(())
+    }
+
+    /// Marks `plugin`'s `transform_llm_output` as holding the stream
+    /// (`hold_stream = true`); returns warnings for the other hooks
+    /// listed, which ignore it.
+    pub fn hold(&mut self, plugin: &str, hooks: &[String]) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for hook in hooks {
+            if hook == "transform_llm_output" {
+                self.held.insert(plugin.to_owned());
+            } else {
+                warnings.push(format!("hold_stream on '{hook}' is ignored (only transform_llm_output holds the stream)"));
+            }
+        }
+        warnings
+    }
+
+    /// Whether replies must not stream: some plugin registered
+    /// `transform_llm_output` with `hold_stream = true`.
+    #[must_use]
+    pub fn holds_stream(&self) -> bool {
+        self.callbacks
+            .get("transform_llm_output")
+            .is_some_and(|callbacks| callbacks.iter().any(|c| self.held.contains(&c.plugin)))
     }
 
     /// The settings.
@@ -160,8 +228,10 @@ impl Hooks {
                 .or_default()
                 .push(Callback {
                     plugin: instance.id().to_owned(),
-                    instance: Arc::clone(instance),
-                    minor,
+                    target: Target::Wasm {
+                        instance: Arc::clone(instance),
+                        minor,
+                    },
                 });
             registered.push(name);
         }
@@ -185,12 +255,22 @@ impl Hooks {
             if self.is_suspended(&callback.plugin, hook) {
                 continue;
             }
-            let event = HookEvent {
-                hook: hook.to_owned(),
-                schema_version: SCHEMA_VERSION.to_owned(),
-                payload: payload.for_minor(hook, callback.minor),
+            let reply = match &callback.target {
+                Target::Wasm { instance, minor } => {
+                    let event = HookEvent {
+                        hook: hook.to_owned(),
+                        schema_version: SCHEMA_VERSION.to_owned(),
+                        payload: payload.for_minor(hook, *minor),
+                    };
+                    self.run(&callback.plugin, instance, hook, event, call)
+                        .await
+                }
+                Target::External(external) => {
+                    self.run_external(&callback.plugin, external.as_ref(), hook, payload, call)
+                        .await
+                }
             };
-            if let Some(reply) = self.run(callback, hook, event, call).await {
+            if let Some(reply) = reply {
                 answers.push(Answer {
                     plugin: callback.plugin.clone(),
                     reply,
@@ -200,33 +280,54 @@ impl Hooks {
         answers
     }
 
+    async fn run_external(
+        &self,
+        label: &str,
+        external: &dyn ExternalHook,
+        hook: &str,
+        payload: &Payload,
+        call: &CallInfo,
+    ) -> Option<Reply> {
+        if !external.applies(hook, payload, call) {
+            return None;
+        }
+        match external.call(hook, payload, call).await {
+            Ok(reply) => reply,
+            Err(message) => {
+                self.report(label, hook, &message);
+                None
+            }
+        }
+    }
+
     async fn run(
         &self,
-        callback: &Callback,
+        plugin: &str,
+        instance: &Arc<Instance>,
         hook: &str,
         event: HookEvent,
         call: &CallInfo,
     ) -> Option<Reply> {
-        let instance = Arc::clone(&callback.instance);
+        let instance = Arc::clone(instance);
         let bound = self.settings.timeout;
         let call = call.clone();
         let task = tokio::task::spawn_blocking(move || instance.on_hook(&call, &event, bound));
         let outcome = match tokio::time::timeout(bound + WAIT_SLACK, task).await {
-            Err(_) => Err(timed_out(&callback.plugin)),
+            Err(_) => Err(timed_out(plugin)),
             Ok(Err(join)) => Err(Error::new(&codes::PLUGINS_CALL, join.to_string())),
             Ok(Ok(result)) => result,
         };
         match outcome {
             Ok(Ok(reply)) => Some(reply),
             Ok(Err(message)) => {
-                self.report(&callback.plugin, hook, &message);
+                self.report(plugin, hook, &message);
                 None
             }
             Err(err) => {
                 if err.message().ends_with("exceeded call timeout") {
-                    self.suspend(&callback.plugin, hook);
+                    self.suspend(plugin, hook);
                 }
-                self.report(&callback.plugin, hook, err.message());
+                self.report(plugin, hook, err.message());
                 None
             }
         }

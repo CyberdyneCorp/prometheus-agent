@@ -47,11 +47,16 @@ impl Origin {
 /// The flags an install was made with.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent flags, as the record stores them
 pub struct Flags {
     /// `--allow-unsigned`: installed without a verified signature.
     pub allow_unsigned: bool,
     /// `--allow-removed`: installed although on the catalog's kill list.
     pub allow_removed: bool,
+    /// Installed with `plugins.scan_on_install = false`: no threat scan ran.
+    pub scan_skipped: bool,
+    /// `--force`: installed although the threat scan graded it `caution`.
+    pub forced: bool,
 }
 
 /// One install record.
@@ -151,7 +156,7 @@ mod tests {
             installed_at: "2026-11-03T00:00:00Z".to_owned(),
             flags: Flags {
                 allow_unsigned: true,
-                allow_removed: false,
+                ..Flags::default()
             },
         };
         record.write(dir.path()).unwrap();

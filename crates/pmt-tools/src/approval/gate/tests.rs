@@ -151,6 +151,7 @@ async fn session(
         protected: ProtectedFiles::from_config(&options.security).unwrap(),
         channel,
         yolo: options.yolo,
+        hooks: None,
     }));
     let registry = ToolRegistry::new(
         "default",

@@ -45,6 +45,18 @@ pub struct PluginsConfig {
     /// with `--allow-unsigned`), `warn` or `off`. Catalog installs always
     /// need a valid signature unless `--allow-unsigned` is given.
     pub signature_policy: SignaturePolicy,
+    /// Statically scan every plugin install and update for threats
+    /// (reverse shells, credential exfiltration, destructive commands,
+    /// persistence, obfuscated execution, prompt injection); `false` skips
+    /// the scan and the install record says so.
+    pub scan_on_install: bool,
+    /// The plugin approval transport that presents approval requests,
+    /// `<plugin_id>:<name>`; empty asks on the session's own surface.
+    pub approval_transport: String,
+    /// What a failing, timed-out, unbound or missing approval transport
+    /// leads to: `deny` the request, or ask on the session's own surface
+    /// (`builtin`).
+    pub approval_transport_fallback: TransportFallback,
     /// WASM plugin limits.
     pub wasm: PluginsWasmConfig,
     /// Each plugin's own settings, `plugins.entries.<id>.<key>`, read and
@@ -64,6 +76,9 @@ impl Default for PluginsConfig {
             safe_mode: false,
             catalog_url: DEFAULT_CATALOG_URL.to_owned(),
             signature_policy: SignaturePolicy::Require,
+            scan_on_install: true,
+            approval_transport: String::new(),
+            approval_transport_fallback: TransportFallback::Deny,
             wasm: PluginsWasmConfig::default(),
             entries: BTreeMap::new(),
         }
@@ -73,6 +88,16 @@ impl Default for PluginsConfig {
 /// The live catalog of the project's repository; its signature is
 /// `<url>.minisig`.
 pub const DEFAULT_CATALOG_URL: &str = "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json";
+
+/// `plugins.approval_transport_fallback`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TransportFallback {
+    /// Deny the request.
+    Deny,
+    /// Ask on the session's own surface.
+    Builtin,
+}
 
 /// `plugins.signature_policy`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

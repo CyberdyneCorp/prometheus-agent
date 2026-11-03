@@ -3017,6 +3017,7 @@ dependencies = [
  "pmt-config",
  "pmt-core",
  "pmt-plugins",
+ "pmt-providers",
  "pmt-tools",
  "semver",
  "serde",

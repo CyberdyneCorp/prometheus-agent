@@ -14,6 +14,10 @@ pub struct AgentConfig {
     /// Maximum model calls per turn; `0` means unlimited.
     #[schemars(range(min = 0, max = 100_000))]
     pub max_iterations: u32,
+    /// Most consecutive verification nudges (`pre_verify` hook
+    /// continuations) in one turn; after that the turn finishes.
+    #[schemars(range(min = 0, max = 100))]
+    pub max_verify_nudges: u32,
     /// Tool calls of one batch that may run at once.
     #[schemars(range(min = 1, max = 64))]
     pub tool_concurrency: u32,
@@ -54,6 +58,7 @@ impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             max_iterations: 500,
+            max_verify_nudges: 3,
             tool_concurrency: 8,
             api_max_retries: 3,
             auto_recovery_cycles: 5,

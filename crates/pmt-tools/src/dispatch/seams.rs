@@ -77,13 +77,15 @@ pub trait ToolHooks: Send + Sync {
         Box::pin(async {})
     }
 
-    /// Rewrites a result before the result budget.
+    /// Rewrites a result before the result budget (what the model sees
+    /// and the transcript stores).
     fn transform_tool_result<'a>(
         &'a self,
         call: HookCall<'a>,
         result: ToolResult,
+        duration_ms: u64,
     ) -> SeamFuture<'a, ToolResult> {
-        let _ = call;
+        let _ = (call, duration_ms);
         Box::pin(async move { result })
     }
 }

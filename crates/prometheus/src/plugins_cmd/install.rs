@@ -8,7 +8,8 @@
 //! checked (catalog installs always need one unless `--allow-unsigned`;
 //! local packages follow `plugins.signature_policy`; an invalid signature
 //! is always refused), the kill list applied, and an unsigned install
-//! shows its id, digest and requested capabilities first. It lands in
+//! shows its id, digest and requested capabilities first, and the tree is
+//! threat-scanned ([`super::threat`]). It lands in
 //! `<profile_home>/plugins/<id>/` with its install record, disabled unless
 //! `--enable` (or a yes on the terminal's `Enable '<id>' now? [y/N]`).
 
@@ -71,6 +72,7 @@ fn record(source: Origin, location: &str, staged: &Staged, args: &InstallArgs) -
         flags: Flags {
             allow_unsigned: args.allow_unsigned,
             allow_removed: args.allow_removed,
+            ..Flags::default()
         },
     }
 }
@@ -290,8 +292,14 @@ fn git_checkout(url: &str, commit: &str, dir: &Path) -> Result<(), Error> {
 
 /// Applies the kill list, shows the unsigned screen, then moves the plugin
 /// into the profile with its record.
-fn commit(scope: &ProfileScope, fetched: Fetched, args: &InstallArgs) -> Result<(), Error> {
+fn commit(scope: &ProfileScope, mut fetched: Fetched, args: &InstallArgs) -> Result<(), Error> {
     check_kill_list(scope, &fetched, args)?;
+    super::threat::check(
+        scope.config().plugins.scan_on_install,
+        &fetched.staged,
+        args.force,
+        &mut fetched.record.flags,
+    )?;
     if let Some(why) = &fetched.unsigned {
         unsigned_screen(scope, &fetched.staged, why)?;
     }

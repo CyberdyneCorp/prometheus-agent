@@ -32,6 +32,7 @@ pub mod dangerous;
 pub mod detectors;
 mod gate;
 pub mod hardline;
+pub mod hooks;
 pub mod paths;
 mod printable;
 pub mod rules;

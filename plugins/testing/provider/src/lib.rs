@@ -2,14 +2,22 @@
 //! provider `plugsearch` and image generation provider `pics`; search
 //! answers one hit naming the query, extract a page naming the URL, and
 //! `pics` echoes its request.
+//!
+//! Its `models` (provider world 1.1) register one chat-completions model
+//! provider per id in the `model_ids` setting (comma list), served at the
+//! `base_url` setting (default `https://llm.example.com/v1`) with secret
+//! `PLUGIN_LLM_KEY`; every request to them carries header
+//! `x-plugin: <id>`.
 
 wit_bindgen::generate!({
-    path: ["../../../wit/host", "../../../wit/provider"],
+    path: ["../../../wit/host", "../../../wit/messaging", "../../../wit/provider"],
     world: "prometheus:provider/provider",
     generate_all,
 });
 
+use exports::prometheus::provider::models;
 use exports::prometheus::provider::plugin::{Category, Guest, ProviderSpec};
+use prometheus::host::config;
 
 struct Provider;
 
@@ -51,6 +59,51 @@ impl Guest for Provider {
             "pics" => Ok(request),
             other => Err(format!("unknown provider {other}")),
         }
+    }
+}
+
+/// A string setting (stored as a JSON string).
+fn setting(key: &str) -> String {
+    config::get(key)
+        .ok()
+        .flatten()
+        .map(|v| v.trim_matches('"').to_owned())
+        .unwrap_or_default()
+}
+
+impl models::Guest for Provider {
+    fn descriptors() -> Vec<String> {
+        let mut base = setting("base_url");
+        if base.is_empty() {
+            base = "https://llm.example.com/v1".to_owned();
+        }
+        let host = base
+            .split("://")
+            .nth(1)
+            .and_then(|rest| rest.split(['/', ':']).next())
+            .unwrap_or_default()
+            .to_owned();
+        setting("model_ids")
+            .split(',')
+            .filter(|id| !id.is_empty())
+            .map(|id| {
+                format!(
+                    r#"{{"id":"{id}","wire_format":"chat_completions","base_url":"{base}","secret_names":["PLUGIN_LLM_KEY"],"key_hosts":["{host}"],"default_model":"plugin-model"}}"#
+                )
+            })
+            .collect()
+    }
+
+    fn headers(provider: String) -> Result<Vec<(String, String)>, String> {
+        Ok(vec![("x-plugin".to_owned(), provider)])
+    }
+
+    fn prepare_request(_provider: String, body: String) -> Result<String, String> {
+        Ok(body)
+    }
+
+    fn list_models(_provider: String) -> Result<Vec<String>, String> {
+        Ok(vec!["plugin-model".to_owned()])
     }
 }
 

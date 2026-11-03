@@ -36,7 +36,7 @@ pub mod wire;
 
 pub use caller::{CallError, Called, Failed, ModelCaller};
 pub use event::{StopReason, StreamEvent, Usage};
-pub use registry::{Provider, ProviderRegistry};
+pub use registry::{PluginProvider, Provider, ProviderRegistry};
 pub use request::Request;
 pub use resolve::{Resolver, Route};
 pub use transport::ModelStream;

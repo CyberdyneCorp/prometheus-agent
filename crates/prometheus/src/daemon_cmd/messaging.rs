@@ -33,6 +33,12 @@ pub(super) fn options(
 ) -> Result<Options, Error> {
     let mut options = Options::new(home);
     options.factories = factories(ctx);
+    let scopes = Arc::clone(host);
+    options
+        .hooks
+        .set_bridge(Arc::new(crate::plugins_host::gateway::Bridge::new(
+            Arc::new(move |profile: &str| scopes.scope(profile)),
+        )));
     options.on_all_adapters_down = config.gateway.on_all_adapters_down;
     // `DaemonConfig::load` already refused a bad address.
     if let Ok(listen) = config.gateway.http.listen_addr() {

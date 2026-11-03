@@ -1,8 +1,10 @@
-//! Sample `provider` plugin: a web-search provider with canned results.
+//! Sample `provider` plugin: a web-search provider with canned results,
+//! and a model provider (`sample-llm`, an OpenAI-compatible endpoint).
 
 #[allow(warnings)]
 mod bindings;
 
+use bindings::exports::prometheus::provider::models;
 use bindings::exports::prometheus::provider::plugin::{Category, Guest, ProviderSpec};
 
 struct Sample;
@@ -21,6 +23,27 @@ impl Guest for Sample {
             "sample-search" => Ok(r#"{"results":[]}"#.to_owned()),
             other => Err(format!("unknown provider {other}")),
         }
+    }
+}
+
+impl models::Guest for Sample {
+    fn descriptors() -> Vec<String> {
+        vec![
+            r#"{"id":"sample-llm","wire_format":"chat_completions","base_url":"https://llm.example.com/v1","secret_names":["SAMPLE_LLM_KEY"],"key_hosts":["llm.example.com"]}"#
+                .to_owned(),
+        ]
+    }
+
+    fn headers(_provider: String) -> Result<Vec<(String, String)>, String> {
+        Ok(vec![("x-sample".to_owned(), "1".to_owned())])
+    }
+
+    fn prepare_request(_provider: String, body: String) -> Result<String, String> {
+        Ok(body)
+    }
+
+    fn list_models(_provider: String) -> Result<Vec<String>, String> {
+        Ok(vec!["sample-1".to_owned()])
     }
 }
 

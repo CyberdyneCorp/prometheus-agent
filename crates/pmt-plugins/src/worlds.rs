@@ -31,12 +31,18 @@ pub struct World {
 /// Every world, in the spec's order, with no previous major yet. `hook`
 /// is at 1.1 (the `extensions` interface); the others are at 1.0.
 pub const WORLDS: &[World] = &[
-    world("tool"),
     World {
         minor: 1,
+        ..world("tool")
+    },
+    World {
+        minor: 2,
         ..world("hook")
     },
-    world("provider"),
+    World {
+        minor: 1,
+        ..world("provider")
+    },
     world("platform-adapter"),
     world("memory-provider"),
     world("context-engine"),

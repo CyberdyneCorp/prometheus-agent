@@ -94,6 +94,105 @@ pub struct ProviderError {
     /// be used (a dead sign-in, every credential benched): the typed
     /// error users see instead of a provider error.
     pub refusal: Option<Box<Refusal>>,
+    /// The raw response body of an HTTP failure (for classification hooks).
+    pub body: Option<String>,
+    /// A `transform_api_error_classification` hook's decision, which
+    /// overrides the class's retry and fallback policy.
+    pub verdict: Option<Box<Reclassified>>,
+}
+
+/// A `transform_api_error_classification` decision (spec: plugin-system):
+/// the failover reason and the policy flags the hook set.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Reclassified {
+    /// The failover reason the hook named.
+    pub reason: String,
+    /// Retry on the same route (default: the class's policy).
+    pub retryable: Option<bool>,
+    /// Treat it as a context overflow (compaction).
+    pub should_compress: bool,
+    /// Bench the credential and rotate to the next one.
+    pub should_rotate_credential: bool,
+    /// Move to the next fallback route (default: the class's policy).
+    pub should_fallback: Option<bool>,
+    /// The message users see instead of the provider's.
+    pub message: Option<String>,
+}
+
+/// The class of a known failover reason: every [`ErrorClass`] name, plus
+/// the Hermes reasons `model_not_found`, `auth_permanent`,
+/// `payload_too_large` and `format_error`. `None` for an unknown reason.
+#[must_use]
+pub fn reason_class(reason: &str) -> Option<ErrorClass> {
+    let all = [
+        ErrorClass::Auth,
+        ErrorClass::Entitlement,
+        ErrorClass::Billing,
+        ErrorClass::RateLimit,
+        ErrorClass::Overloaded,
+        ErrorClass::ServerError,
+        ErrorClass::Timeout,
+        ErrorClass::Network,
+        ErrorClass::ContextOverflow,
+        ErrorClass::ContentFilter,
+        ErrorClass::InvalidRequest,
+        ErrorClass::Config,
+    ];
+    if let Some(class) = all.into_iter().find(|c| c.as_str() == reason) {
+        return Some(class);
+    }
+    match reason {
+        "model_not_found" => Some(ErrorClass::Config),
+        "auth_permanent" => Some(ErrorClass::Auth),
+        "payload_too_large" => Some(ErrorClass::ContextOverflow),
+        "format_error" => Some(ErrorClass::InvalidRequest),
+        _ => None,
+    }
+}
+
+impl ProviderError {
+    /// Applies a hook's decision: the class becomes the reason's (context
+    /// overflow when it asks to compress, auth when it asks to rotate the
+    /// credential), the message its message, and its flags override the
+    /// retry and fallback policy.
+    #[must_use]
+    pub fn reclassified(mut self, verdict: Reclassified, class: ErrorClass) -> Self {
+        self.class = if verdict.should_compress {
+            ErrorClass::ContextOverflow
+        } else if verdict.should_rotate_credential
+            && !matches!(
+                class,
+                ErrorClass::Auth | ErrorClass::RateLimit | ErrorClass::Billing
+            )
+        {
+            ErrorClass::Auth
+        } else {
+            class
+        };
+        if let Some(message) = &verdict.message {
+            self.message.clone_from(message);
+        }
+        self.verdict = Some(Box::new(verdict));
+        self
+    }
+
+    /// Whether it is retried on the same route.
+    #[must_use]
+    pub fn retryable(&self) -> bool {
+        self.verdict
+            .as_ref()
+            .and_then(|v| v.retryable)
+            .unwrap_or_else(|| self.class.is_retryable())
+    }
+
+    /// Whether it may activate the fallback chain.
+    #[must_use]
+    pub fn fallback_eligible(&self) -> bool {
+        self.verdict
+            .as_ref()
+            .and_then(|v| v.should_fallback)
+            .unwrap_or_else(|| self.class.is_fallback_eligible())
+    }
 }
 
 /// A credential refusal carried by a [`ProviderError`].
@@ -140,6 +239,8 @@ impl ProviderError {
             retry_after: None,
             reset_at: None,
             refusal: None,
+            body: None,
+            verdict: None,
         }
     }
 
@@ -149,6 +250,8 @@ impl ProviderError {
     pub fn refused(class: ErrorClass, error: &Error) -> Self {
         Self {
             refusal: Some(Box::new(Refusal::of(error))),
+            body: None,
+            verdict: None,
             ..Self::new(class, error.message())
         }
     }
@@ -331,6 +434,8 @@ pub fn from_response(
         retry_after,
         reset_at,
         refusal: None,
+        body: Some(body.chars().take(8_000).collect()),
+        verdict: None,
     }
 }
 
@@ -412,7 +517,7 @@ impl RetryPolicy {
     /// `None` when the error must not be retried on this route.
     #[must_use]
     pub fn delay(&self, retry: u32, error: &ProviderError) -> Option<Duration> {
-        if retry >= self.max_retries || !error.class.is_retryable() {
+        if retry >= self.max_retries || !error.retryable() {
             return None;
         }
         if let Some(after) = error.retry_after {

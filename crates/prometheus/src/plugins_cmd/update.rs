@@ -107,11 +107,20 @@ pub(super) fn check(ctx: &Context<'_>) -> Result<u8, Error> {
 }
 
 /// `update [<id>]`.
+/// The flags of `plugins update`.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Flags {
+    /// `--allow-unsigned`.
+    pub allow_unsigned: bool,
+    /// `--force` (a `caution` threat verdict).
+    pub force: bool,
+}
+
 pub(super) fn update(
     ctx: &Context<'_>,
     id: Option<&str>,
     grant: Option<&str>,
-    allow_unsigned: bool,
+    flags: Flags,
 ) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let mut found = available(&scope);
@@ -132,7 +141,7 @@ pub(super) fn update(
     }
     let mut code = 0;
     for update in found {
-        let args = update_args(&update.record, allow_unsigned);
+        let args = update_args(&update.record, flags);
         code = code.max(update_one(ctx, &scope, &update, &args, grant)?);
     }
     Ok(code)
@@ -143,11 +152,12 @@ pub(super) fn update(
 /// the new record carries it on. `--allow-unsigned` is not: it admitted
 /// the code installed then, and a new version is new code, so an unsigned
 /// update needs the flag again (the new record says whether it was used).
-fn update_args(record: &InstallRecord, allow_unsigned: bool) -> InstallArgs {
+fn update_args(record: &InstallRecord, flags: Flags) -> InstallArgs {
     InstallArgs {
         identifier: String::new(),
         git_ref: None,
-        allow_unsigned,
+        allow_unsigned: flags.allow_unsigned,
+        force: flags.force,
         allow_removed: record.flags.allow_removed,
         enable: false,
         no_enable: true,
@@ -171,6 +181,14 @@ fn update_one(
         fetched.record.location.clone_from(&update.record.location);
     }
     super::install::check_kill_list(scope, &fetched, args)?;
+    // A dangerous new version is refused here, before anything replaces
+    // the installed one, which stays active.
+    super::threat::check(
+        scope.config().plugins.scan_on_install,
+        &fetched.staged,
+        args.force,
+        &mut fetched.record.flags,
+    )?;
     let diff = difference(scope, &update.id, &fetched.staged.manifest)?;
     let signer_changed = fetched.record.signer != update.record.signer;
     let file = GrantsFile::of(scope.profile());

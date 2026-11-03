@@ -12,8 +12,9 @@ use pmt_config::schema::PluginsConfig;
 use pmt_core::capability::CapabilitySet;
 use pmt_plugins::grants::{Identity, approve};
 use pmt_plugins::host::ports::{
-    ConfigPort, EventsPort, HttpPort, HttpRequest, HttpResponse, LlmCall, LlmPort, PortFuture,
-    Ports, SecretsPort, ToolsPort,
+    ActionError, ConfigPort, EventsPort, HttpPort, HttpRequest, HttpResponse, InjectTarget,
+    LlmCall, LlmPort, MessagingPort, PlatformAction, PortFuture, Ports, PostFailure, Posted,
+    SecretsPort, ToolsPort,
 };
 use pmt_plugins::host::{CallInfo, Instance, Runtime};
 use pmt_plugins::load::{LoadInputs, Loaded, load};
@@ -27,6 +28,8 @@ pub(crate) struct Seen {
     pub http: Mutex<Vec<String>>,
     pub llm: Mutex<Vec<LlmCall>>,
     pub events: Mutex<Vec<String>>,
+    /// `post <session> <text>`, `edit ...`, `inject ...`, `action <verb> ...`.
+    pub messaging: Mutex<Vec<String>>,
 }
 
 /// Ports backed by memory.
@@ -63,7 +66,62 @@ impl Fake {
             tools: self.clone(),
             events: self.clone(),
             config: self.clone(),
+            messaging: self.clone(),
         }
+    }
+}
+
+impl MessagingPort for Fake {
+    fn post(&self, session_id: &str, text: &str) -> PortFuture<'_, Result<Posted, PostFailure>> {
+        self.seen
+            .messaging
+            .lock()
+            .unwrap()
+            .push(format!("post {session_id} {text}"));
+        Box::pin(async {
+            Ok(Posted {
+                handle: "m1".to_owned(),
+                fallback: false,
+            })
+        })
+    }
+
+    fn edit(
+        &self,
+        session_id: &str,
+        handle: &str,
+        text: &str,
+    ) -> PortFuture<'_, Result<Posted, PostFailure>> {
+        self.seen
+            .messaging
+            .lock()
+            .unwrap()
+            .push(format!("edit {session_id} {handle} {text}"));
+        let handle = handle.to_owned();
+        Box::pin(async move {
+            Ok(Posted {
+                handle,
+                fallback: false,
+            })
+        })
+    }
+
+    fn inject(&self, target: &InjectTarget, content: &str) -> PortFuture<'_, Result<(), String>> {
+        self.seen
+            .messaging
+            .lock()
+            .unwrap()
+            .push(format!("inject {target:?} {content}"));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn platform_action(&self, action: &PlatformAction) -> PortFuture<'_, Result<(), ActionError>> {
+        self.seen
+            .messaging
+            .lock()
+            .unwrap()
+            .push(format!("action {} {}", action.verb, action.platform));
+        Box::pin(async { Ok(()) })
     }
 }
 

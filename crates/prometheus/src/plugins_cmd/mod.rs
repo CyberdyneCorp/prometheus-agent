@@ -14,6 +14,7 @@ mod install;
 mod manage;
 mod package_cmd;
 mod reload;
+mod threat;
 mod update;
 
 use std::path::PathBuf;
@@ -74,6 +75,11 @@ pub enum PluginsCommand {
         /// Accept a package without a verified signature (recorded).
         #[arg(long)]
         allow_unsigned: bool,
+        /// Update although the threat scan graded the new version
+        /// `caution`; a `dangerous` one is refused and the installed
+        /// version stays active.
+        #[arg(long)]
+        force: bool,
     },
     /// List the plugins whose catalog ref or package moved.
     CheckUpdates,
@@ -179,6 +185,10 @@ pub struct InstallArgs {
     /// With `--enable`: approve `all` requested capabilities, or a list.
     #[arg(long, value_name = "all|CAPABILITIES", requires = "enable")]
     pub grant: Option<String>,
+    /// Install although the threat scan graded it `caution` (recorded); a
+    /// `dangerous` verdict is refused anyway.
+    #[arg(long)]
+    pub force: bool,
 }
 
 /// `prometheus plugins grants` actions.
@@ -263,7 +273,16 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             id,
             grant,
             allow_unsigned,
-        } => update::update(ctx, id.as_deref(), grant.as_deref(), *allow_unsigned),
+            force,
+        } => update::update(
+            ctx,
+            id.as_deref(),
+            grant.as_deref(),
+            update::Flags {
+                allow_unsigned: *allow_unsigned,
+                force: *force,
+            },
+        ),
         PluginsCommand::CheckUpdates => update::check(ctx),
         PluginsCommand::DiffGrants { id } => update::diff_grants(ctx, id),
         PluginsCommand::Remove { id } => inspect::remove(ctx, id),

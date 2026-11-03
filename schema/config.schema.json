@@ -75,6 +75,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "max_verify_nudges": {
+          "default": 3,
+          "description": "Most consecutive verification nudges (`pre_verify` hook\ncontinuations) in one turn; after that the turn finishes.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
         "personalities": {
           "additionalProperties": {
             "type": "string"
@@ -3548,6 +3556,16 @@
       "additionalProperties": false,
       "description": "The `[plugins]` section.",
       "properties": {
+        "approval_transport": {
+          "default": "",
+          "description": "The plugin approval transport that presents approval requests,\n`<plugin_id>:<name>`; empty asks on the session's own surface.",
+          "type": "string"
+        },
+        "approval_transport_fallback": {
+          "$ref": "#/$defs/TransportFallback",
+          "default": "deny",
+          "description": "What a failing, timed-out, unbound or missing approval transport\nleads to: `deny` the request, or ask on the session's own surface\n(`builtin`)."
+        },
         "catalog_url": {
           "default": "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json",
           "description": "Where the signed live plugin catalog is fetched from (cached 6 hours\nunder the profile's `cache/`); empty uses only the catalog embedded\nin the binary.",
@@ -3604,6 +3622,11 @@
         "safe_mode": {
           "default": false,
           "description": "Skip every non-embedded plugin, MCP server and python-bridge\nsidecar (as `prometheus --safe-mode` does, without its other effects).",
+          "type": "boolean"
+        },
+        "scan_on_install": {
+          "default": true,
+          "description": "Statically scan every plugin install and update for threats\n(reverse shells, credential exfiltration, destructive commands,\npersistence, obfuscated execution, prompt injection); `false` skips\nthe scan and the install record says so.",
           "type": "boolean"
         },
         "signature_policy": {
@@ -5152,6 +5175,21 @@
       },
       "type": "object"
     },
+    "TransportFallback": {
+      "description": "`plugins.approval_transport_fallback`.",
+      "oneOf": [
+        {
+          "const": "deny",
+          "description": "Deny the request.",
+          "type": "string"
+        },
+        {
+          "const": "builtin",
+          "description": "Ask on the session's own surface.",
+          "type": "string"
+        }
+      ]
+    },
     "TuiConfig": {
       "additionalProperties": false,
       "description": "The `[ui.tui]` section (spec: tui, Status line and accessibility;\nConfigurable key bindings; Busy indicator styles; Auto-resume of the\nlast TUI session).",
@@ -6033,6 +6071,7 @@
         },
         "intent_continuation": "auto",
         "max_iterations": 500,
+        "max_verify_nudges": 3,
         "personalities": {},
         "personality": "none",
         "reasoning_overrides": {},
@@ -6347,6 +6386,8 @@
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",
       "default": {
+        "approval_transport": "",
+        "approval_transport_fallback": "deny",
         "catalog_url": "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json",
         "disabled": [],
         "enabled": [],
@@ -6355,6 +6396,7 @@
         "hook_timeout_ms": 30000,
         "load_timeout_ms": 10000,
         "safe_mode": false,
+        "scan_on_install": true,
         "signature_policy": "require",
         "trusted_project_dirs": [],
         "wasm": {

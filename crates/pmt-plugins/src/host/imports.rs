@@ -15,7 +15,10 @@ use wasmtime::StoreLimits;
 use super::bindings::prometheus::host::{
     config, events, http, llm, log, secrets, session, state, tools, types,
 };
-use super::ports::{HttpRequest, LlmCall, Ports};
+use super::bindings::prometheus::messaging::{conversation, inject, platform};
+use super::ports::{
+    HttpRequest, InjectTarget, LlmCall, PlatformAction, Ports, PostFailure, Posted,
+};
 use super::state::{StateDir, StateError};
 use crate::grants::PluginGrants;
 use crate::manifest::label;
@@ -332,6 +335,186 @@ impl session::Host for HostState {
             surface: self.call.surface.clone(),
             cwd: self.call.cwd.clone(),
         }
+    }
+}
+
+/// How long a live message may take before the plugin hears `timeout`.
+const POST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+impl HostState {
+    fn posted(
+        send: impl Future<Output = Result<Posted, PostFailure>> + Send,
+    ) -> Result<conversation::Posted, conversation::Failure> {
+        let bounded = async move {
+            tokio::time::timeout(POST_TIMEOUT, send)
+                .await
+                .unwrap_or(Err(PostFailure::Timeout))
+        };
+        match block_on(bounded) {
+            Ok(Ok(posted)) => Ok(conversation::Posted {
+                handle: posted.handle,
+                fallback: posted.fallback,
+            }),
+            Ok(Err(failure)) => Err(wit_failure(failure)),
+            Err(_) => Err(conversation::Failure::SendFailed),
+        }
+    }
+}
+
+fn wit_failure(failure: PostFailure) -> conversation::Failure {
+    match failure {
+        PostFailure::NoConversation => conversation::Failure::NoConversation,
+        PostFailure::GatewayUnavailable => conversation::Failure::GatewayUnavailable,
+        PostFailure::AdapterUnavailable => conversation::Failure::AdapterUnavailable,
+        PostFailure::SendFailed => conversation::Failure::SendFailed,
+        PostFailure::EditFailed => conversation::Failure::EditFailed,
+        PostFailure::Timeout => conversation::Failure::Timeout,
+    }
+}
+
+impl conversation::Host for HostState {
+    fn post(&mut self, text: String) -> Result<conversation::Posted, conversation::Failure> {
+        let Some(session) = self.call.session_id.clone() else {
+            return Err(conversation::Failure::NoConversation);
+        };
+        let port = std::sync::Arc::clone(&self.ports().messaging);
+        Self::posted(async move { port.post(&session, &text).await })
+    }
+
+    fn edit(
+        &mut self,
+        handle: String,
+        text: String,
+    ) -> Result<conversation::Posted, conversation::Failure> {
+        let Some(session) = self.call.session_id.clone() else {
+            return Err(conversation::Failure::NoConversation);
+        };
+        let port = std::sync::Arc::clone(&self.ports().messaging);
+        Self::posted(async move { port.edit(&session, &handle, &text).await })
+    }
+}
+
+impl inject::Host for HostState {
+    fn inject(&mut self, content: String, role: String, target: inject::Target) -> bool {
+        let refused = |why: &str| {
+            tracing::warn!(plugin = %self.ctx.plugin, profile = %self.ctx.profile, "message injection refused: {why}");
+            false
+        };
+        let right = Capability::Plugin {
+            right: PluginRight::InjectMessages,
+            target: None,
+        };
+        if self.require(&right).is_err() {
+            return refused("capability_denied: inject_messages");
+        }
+        if role != "user" {
+            return refused(&format!("role '{role}' is not `user`"));
+        }
+        if content.trim().is_empty() {
+            return refused("empty content");
+        }
+        let target = match target {
+            inject::Target::SessionKey(key) => InjectTarget::SessionKey(key),
+            inject::Target::Origin(origin) => InjectTarget::Origin(origin),
+        };
+        let port = std::sync::Arc::clone(&self.ports().messaging);
+        match block_on(async move { port.inject(&target, &content).await }) {
+            Ok(Ok(())) => true,
+            Ok(Err(why)) => refused(&why),
+            Err(_) => refused("the host call failed"),
+        }
+    }
+}
+
+impl HostState {
+    fn platform_action(&self, action: &PlatformAction) -> platform::Outcome {
+        let verb = action.verb;
+        let outcome = self.run_action(action.clone());
+        tracing::info!(
+            plugin = %self.ctx.plugin,
+            verb,
+            platform = %action.platform,
+            outcome = outcome.error.as_deref().unwrap_or("ok"),
+            "plugin platform action"
+        );
+        outcome
+    }
+
+    fn run_action(&self, action: PlatformAction) -> platform::Outcome {
+        let verb = action.verb;
+        let failed = |code: &str, detail: String| platform::Outcome {
+            ok: false,
+            action: verb.to_owned(),
+            error: Some(code.to_owned()),
+            detail: Some(detail),
+        };
+        let right = Capability::Plugin {
+            right: PluginRight::PlatformAction,
+            target: Some(verb.to_owned()),
+        };
+        if !self.ctx.grants.current().allows(&right) {
+            return failed(
+                "capability_not_granted",
+                format!("platform_actions does not grant '{verb}'"),
+            );
+        }
+        let fields = [
+            &action.platform,
+            &action.chat_id,
+            &action.target_id,
+            &action.value,
+        ];
+        if fields.iter().any(|f| f.trim().is_empty()) {
+            return failed(
+                "invalid_argument",
+                "every argument must be non-empty".to_owned(),
+            );
+        }
+        let port = std::sync::Arc::clone(&self.ports().messaging);
+        match block_on(async move { port.platform_action(&action).await }) {
+            Ok(Ok(())) => platform::Outcome {
+                ok: true,
+                action: verb.to_owned(),
+                error: None,
+                detail: None,
+            },
+            Ok(Err(err)) => failed(err.code, err.detail),
+            Err(err) => failed("action_failed", format!("{err:?}")),
+        }
+    }
+}
+
+impl platform::Host for HostState {
+    fn add_reaction(
+        &mut self,
+        platform: String,
+        chat_id: String,
+        message_id: String,
+        emoji: String,
+    ) -> platform::Outcome {
+        self.platform_action(&PlatformAction {
+            verb: "add_reaction",
+            platform,
+            chat_id,
+            target_id: message_id,
+            value: emoji,
+        })
+    }
+
+    fn set_thread_title(
+        &mut self,
+        platform: String,
+        chat_id: String,
+        thread_id: String,
+        title: String,
+    ) -> platform::Outcome {
+        self.platform_action(&PlatformAction {
+            verb: "set_thread_title",
+            platform,
+            chat_id,
+            target_id: thread_id,
+            value: title,
+        })
     }
 }
 

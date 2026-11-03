@@ -14,6 +14,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.empty_response_guard.cost_threshold_usd` | number | `0.25` | ≥ 0.0 | `next_session` | Estimated input cost (USD) of one empty attempt at which the retry budget drops to one. |
 | `agent.intent_continuation` | one of "auto" or boolean or array of string | `"auto"` | any | `next_session` | Nudge a model that announces an action without calling a tool: `"auto"` (Responses-wire models only), `true`, `false` or a list of model-name substrings. |
 | `agent.max_iterations` | integer | `500` | 0 to 100000 | `next_session` | Maximum model calls per turn; `0` means unlimited. |
+| `agent.max_verify_nudges` | integer | `3` | 0 to 100 | `next_session` | Most consecutive verification nudges (`pre_verify` hook continuations) in one turn; after that the turn finishes. |
 | `agent.personalities` | table | `{}` | any | `next_session` | Custom or overriding personalities: name to prompt text. |
 | `agent.personality` | string | `"none"` | any | `next_session` | Selected personality overlay (`none`, a built-in name or a key of `[agent.personalities]`). |
 | `agent.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort; unset means `medium`. |
@@ -314,6 +315,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
+| `plugins.approval_transport` | string | `""` | any | `next_session` | The plugin approval transport that presents approval requests, `<plugin_id>:<name>`; empty asks on the session's own surface. |
+| `plugins.approval_transport_fallback` | one of "deny", "builtin" | `"deny"` | `"deny"`, `"builtin"` | `next_session` | What a failing, timed-out, unbound or missing approval transport leads to: `deny` the request, or ask on the session's own surface (`builtin`). |
 | `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |
 | `plugins.disabled` | array of string | `[]` | any | `next_session` | Ids never instantiated; wins over `enabled`. |
 | `plugins.enabled` | array of string | `[]` | any | `next_session` | Ids of the non-embedded plugins to instantiate; a discovered plugin stays disabled until listed here (`prometheus plugins enable <id>`). |
@@ -322,6 +325,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `plugins.hook_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | Bound on one hook callback; a callback that overruns counts as no result and is suspended for 60 seconds. |
 | `plugins.load_timeout_ms` | integer | `10000` | 1 to 600000 | `next_session` | Bound on instantiating and registering one plugin; a plugin that overruns is skipped with `load timed out` while the others load. |
 | `plugins.safe_mode` | boolean | `false` | any | `next_session` | Skip every non-embedded plugin, MCP server and python-bridge sidecar (as `prometheus --safe-mode` does, without its other effects). |
+| `plugins.scan_on_install` | boolean | `true` | any | `next_session` | Statically scan every plugin install and update for threats (reverse shells, credential exfiltration, destructive commands, persistence, obfuscated execution, prompt injection); `false` skips the scan and the install record says so. |
 | `plugins.signature_policy` | one of "require", "warn", "off" | `"require"` | `"require"`, `"warn"`, `"off"` | `next_session` | What installing an unsigned local `.pmtpkg` needs: `require` (only with `--allow-unsigned`), `warn` or `off`. Catalog installs always need a valid signature unless `--allow-unsigned` is given. |
 | `plugins.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Project roots whose `.prometheus/plugins/` directory is scanned; any other project's plugins are never read. |
 | `plugins.wasm.call_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | CPU bound of one call into a plugin (fuel and epoch interruption); an overrun fails the call with `plugin '<id>' exceeded call timeout`. |

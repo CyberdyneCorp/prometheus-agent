@@ -158,6 +158,53 @@ impl Models {
         })
     }
 
+    /// Adds the model providers the profile's plugins registered (spec:
+    /// plugin-system, Model-provider plugins; they join at the session
+    /// boundary) with their request hooks, and the plugins'
+    /// `transform_api_error_classification` hooks.
+    ///
+    /// # Errors
+    ///
+    /// The registry refuses a plugin descriptor (a name clash).
+    pub fn with_plugins(
+        mut self,
+        scope: &ProfileScope,
+        plugins: &crate::plugins_host::ProfilePlugins,
+        cwd: &Path,
+    ) -> Result<Self, Error> {
+        let loaded = plugins.current();
+        let models = loaded.surfaces.models.clone();
+        if !models.is_empty() {
+            let registered = models
+                .iter()
+                .map(|m| pmt_providers::PluginProvider {
+                    descriptor: m.descriptor.clone(),
+                    replaces_builtin: m.replaces_builtin,
+                })
+                .collect();
+            let registry = ProviderRegistry::for_profile(scope.config(), registered)?;
+            let parts = &self.setup;
+            self.setup = Arc::new(ProviderSetupParts {
+                config: Arc::clone(&parts.config),
+                registry: Arc::new(registry),
+                secrets: parts.secrets.clone(),
+                accounts: Arc::clone(&parts.accounts),
+                catalog: Arc::clone(&parts.catalog),
+                ad_hoc: parts.ad_hoc.clone(),
+            });
+            self.caller = self.caller.with_request_hooks(Arc::new(
+                pmt_plugins::surfaces::ModelRequestHooks::new(models),
+            ));
+        }
+        let call = pmt_plugins::host::CallInfo {
+            session_id: None,
+            surface: "cli".to_owned(),
+            cwd: Some(cwd.display().to_string()),
+        };
+        self.caller = self.caller.with_classifier(plugins.error_classifier(call));
+        Ok(self)
+    }
+
     /// The session's first route: flags over the profile config. A profile
     /// with no model, no provider and no launch endpoint exits 78 with
     /// [`NO_MODEL`].

@@ -1,0 +1,80 @@
+/// Live messages, message injection and platform actions (spec:
+/// plugin-system, Plugin live messages and message injection; Platform
+/// actions). Imported by the `tool` (1.1) and `hook` (1.2) worlds. None of
+/// these calls fails the plugin: each answers what happened.
+package prometheus:messaging@1.0.0;
+
+/// Messages in the conversation of the calling turn, hook or command
+/// (never a chat the plugin names). Text is clamped to the platform's
+/// message limit.
+interface conversation {
+    /// A posted or edited message.
+    record posted {
+        /// Pass it to `edit`.
+        handle: string,
+        /// The surface cannot edit: the text went out as a new message.
+        fallback: bool,
+    }
+
+    /// Why a post or edit did not happen.
+    enum failure {
+        /// The call is not bound to a session.
+        no-conversation,
+        /// The session's messaging gateway is not running.
+        gateway-unavailable,
+        /// The session's platform adapter is not connected.
+        adapter-unavailable,
+        /// The platform refused the message.
+        send-failed,
+        /// The platform refused the edit.
+        edit-failed,
+        /// No answer within 30 seconds.
+        timeout,
+    }
+
+    post: func(text: string) -> result<posted, failure>;
+    edit: func(handle: string, text: string) -> result<posted, failure>;
+}
+
+/// New conversational input for a session of the plugin's own profile
+/// (`inject_messages` capability).
+interface inject {
+    /// Which session receives it.
+    variant target {
+        /// A stored session's key (its id).
+        session-key(string),
+        /// The session of a gateway chat, `<platform>:<chat_id>`.
+        origin(string),
+    }
+
+    /// Queues `content` as a new `role` (`user`) message through the
+    /// session's busy-input queue: never history edits, slash commands,
+    /// approvals or clarify answers. False (with a logged reason) when
+    /// refused.
+    inject: func(content: string, role: string, target: target) -> bool;
+}
+
+/// Actions on connected platform adapters of the plugin's own profile
+/// (`platform_actions` capability, per verb).
+interface platform {
+    /// `ok` with the action, or an error code (`capability_not_granted`,
+    /// `invalid_argument`, `gateway_unavailable`, `unknown_platform`,
+    /// `adapter_not_registered`, `adapter_disconnected`,
+    /// `unsupported_platform_action`, `action_failed`) and detail.
+    record outcome {
+        ok: bool,
+        action: string,
+        error: option<string>,
+        detail: option<string>,
+    }
+
+    add-reaction: func(platform: string, chat-id: string, message-id: string, emoji: string) -> outcome;
+    set-thread-title: func(platform: string, chat-id: string, thread-id: string, title: string) -> outcome;
+}
+
+/// Every messaging import.
+world imports {
+    import conversation;
+    import inject;
+    import platform;
+}

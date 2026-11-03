@@ -104,6 +104,92 @@ pub trait ConfigPort: Send + Sync {
     fn set(&self, plugin: &str, key: &str, value: serde_json::Value) -> Result<(), String>;
 }
 
+/// A live message the conversation port posted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Posted {
+    /// What `edit` takes.
+    pub handle: String,
+    /// The surface cannot edit, so the text went out as a new message.
+    pub fallback: bool,
+}
+
+/// Why a live message did not go out (the WIT `conversation.failure`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PostFailure {
+    /// The call is not bound to a session.
+    NoConversation,
+    /// The session's gateway is not running.
+    GatewayUnavailable,
+    /// The session's adapter is not connected.
+    AdapterUnavailable,
+    /// The platform refused the message.
+    SendFailed,
+    /// The platform refused the edit.
+    EditFailed,
+    /// No answer within 30 seconds.
+    Timeout,
+}
+
+/// Where an injected message goes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InjectTarget {
+    /// A stored session id.
+    SessionKey(String),
+    /// A gateway chat, `<platform>:<chat_id>`.
+    Origin(String),
+}
+
+/// One platform action (`platform.add_reaction` / `set_thread_title`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformAction {
+    /// `add_reaction` or `set_thread_title`.
+    pub verb: &'static str,
+    /// The platform (`discord`, `slack`...).
+    pub platform: String,
+    /// The chat.
+    pub chat_id: String,
+    /// The message (`add_reaction`) or thread (`set_thread_title`).
+    pub target_id: String,
+    /// The emoji or the title.
+    pub value: String,
+}
+
+/// A refused or failed platform action: one of the codes the WIT
+/// `platform.outcome` documents, and detail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionError {
+    /// `gateway_unavailable`, `unknown_platform`, `adapter_not_registered`,
+    /// `adapter_disconnected`, `unsupported_platform_action`,
+    /// `action_failed`.
+    pub code: &'static str,
+    /// What happened.
+    pub detail: String,
+}
+
+/// Messaging services of the instance's own profile: the conversation of
+/// a session, the busy-input queue and the connected adapters. The host
+/// has checked the grant before every call that needs one.
+pub trait MessagingPort: Send + Sync {
+    /// Posts `text` to the conversation of `session_id`.
+    fn post(&self, session_id: &str, text: &str) -> PortFuture<'_, Result<Posted, PostFailure>>;
+    /// Edits a message `post` returned.
+    fn edit(
+        &self,
+        session_id: &str,
+        handle: &str,
+        text: &str,
+    ) -> PortFuture<'_, Result<Posted, PostFailure>>;
+    /// Queues `content` as new user input for `target`, a session of this
+    /// profile only.
+    ///
+    /// # Errors
+    ///
+    /// Why it was refused (logged by the host).
+    fn inject(&self, target: &InjectTarget, content: &str) -> PortFuture<'_, Result<(), String>>;
+    /// Runs `action` on a connected adapter of this profile.
+    fn platform_action(&self, action: &PlatformAction) -> PortFuture<'_, Result<(), ActionError>>;
+}
+
 /// Every port an instance uses.
 #[derive(Clone)]
 pub struct Ports {
@@ -119,6 +205,8 @@ pub struct Ports {
     pub events: Arc<dyn EventsPort>,
     /// Plugin settings.
     pub config: Arc<dyn ConfigPort>,
+    /// Live messages, injection and platform actions.
+    pub messaging: Arc<dyn MessagingPort>,
 }
 
 impl Default for Ports {
@@ -131,7 +219,8 @@ impl Default for Ports {
             llm: none.clone(),
             tools: none.clone(),
             events: none.clone(),
-            config: none,
+            config: none.clone(),
+            messaging: none,
         }
     }
 }
@@ -192,5 +281,28 @@ impl ConfigPort for Unavailable {
 
     fn set(&self, _: &str, _: &str, _: serde_json::Value) -> Result<(), String> {
         Err(format!("plugin settings are {UNAVAILABLE}"))
+    }
+}
+
+impl MessagingPort for Unavailable {
+    fn post(&self, _: &str, _: &str) -> PortFuture<'_, Result<Posted, PostFailure>> {
+        Box::pin(async { Err(PostFailure::GatewayUnavailable) })
+    }
+
+    fn edit(&self, _: &str, _: &str, _: &str) -> PortFuture<'_, Result<Posted, PostFailure>> {
+        Box::pin(async { Err(PostFailure::GatewayUnavailable) })
+    }
+
+    fn inject(&self, _: &InjectTarget, _: &str) -> PortFuture<'_, Result<(), String>> {
+        Box::pin(async { Err(format!("message injection is {UNAVAILABLE}")) })
+    }
+
+    fn platform_action(&self, _: &PlatformAction) -> PortFuture<'_, Result<(), ActionError>> {
+        Box::pin(async {
+            Err(ActionError {
+                code: "gateway_unavailable",
+                detail: format!("platform actions are {UNAVAILABLE}"),
+            })
+        })
     }
 }

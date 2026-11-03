@@ -1,7 +1,7 @@
 //! Test plugin: tools that loop forever, exhaust memory or trap.
 
 wit_bindgen::generate!({
-    path: ["../../../wit/host", "../../../wit/tool"],
+    path: ["../../../wit/host", "../../../wit/messaging", "../../../wit/tool"],
     world: "prometheus:tool/tool",
     generate_all,
 });

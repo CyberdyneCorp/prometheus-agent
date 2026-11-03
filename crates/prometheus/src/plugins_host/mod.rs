@@ -12,7 +12,9 @@
 //! once in running sessions; tools, system-prompt sections and skills are
 //! read when a session starts and stay as they were for its lifetime.
 
+pub mod approvals;
 pub mod catalog;
+pub mod gateway;
 pub mod llm;
 mod ports;
 pub mod reload;
@@ -22,14 +24,16 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-use pmt_agent::turn::TurnHooks;
 use pmt_agent::turn::model::BoxFuture;
+use pmt_agent::turn::{FinalReply, Transformed, TurnHooks, Verify};
 use pmt_config::ProfileScope;
 use pmt_plugins::hooks::{HookSettings, HookSource, Hooks, PluginToolHooks};
+use pmt_plugins::hooks::{Observers, Payload, Rewrite};
 use pmt_plugins::host::{CallInfo, Runtime};
 use pmt_plugins::load::{LoadInputs, Loaded, State, Status, load, survey};
 use pmt_tools::dispatch::ToolHooks;
 use semver::Version;
+use serde_json::{Map, Value, json};
 
 /// The running Prometheus version, as plugin manifests compare it.
 #[must_use]
@@ -90,22 +94,112 @@ impl ProfilePlugins {
         ))
     }
 
+    /// The provider caller's `transform_api_error_classification` seam.
+    #[must_use]
+    pub fn error_classifier(
+        &self,
+        call: CallInfo,
+    ) -> Arc<dyn pmt_providers::caller::ErrorClassifier> {
+        Arc::new(pmt_plugins::hooks::PluginErrorClassifier::new(
+            Arc::clone(&self.handle) as Arc<dyn HookSource>,
+            call,
+        ))
+    }
+
     /// The turn loop's hook seam for one session.
     #[must_use]
     pub fn turn_hooks(&self, call: CallInfo) -> Arc<dyn TurnHooks> {
+        let observers = Observers::start(
+            Arc::clone(&self.handle) as Arc<dyn HookSource>,
+            call.clone(),
+        );
         Arc::new(SessionTurnHooks {
             handle: Arc::clone(&self.handle),
             call,
+            observers,
         })
+    }
+
+    /// Fires an observer hook of this profile and waits for its callbacks
+    /// (whatever they answer is discarded).
+    pub async fn fire_observer(&self, call: &CallInfo, hook: &str, fields: Map<String, Value>) {
+        let hooks = self.handle.hooks();
+        if hooks.handles(hook) {
+            hooks.fire(hook, &Payload::new(fields), call).await;
+        }
+    }
+
+    /// Queues an observer hook of this profile (fired off the caller's
+    /// path; answers discarded).
+    pub fn observe(&self, call: CallInfo, hook: &'static str, fields: Map<String, Value>) {
+        let hooks = self.handle.hooks();
+        if !hooks.handles(hook) {
+            return;
+        }
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        runtime.spawn(async move {
+            hooks.fire(hook, &Payload::new(fields), &call).await;
+        });
     }
 }
 
 struct SessionTurnHooks {
     handle: Arc<Handle>,
     call: CallInfo,
+    observers: Observers,
 }
 
 impl TurnHooks for SessionTurnHooks {
+    fn holds_stream(&self) -> bool {
+        self.handle.hooks().holds_stream()
+    }
+
+    fn transform_llm_output<'a>(
+        &'a self,
+        reply: FinalReply<'a>,
+        held: bool,
+    ) -> BoxFuture<'a, Transformed> {
+        let hooks = self.handle.hooks();
+        Box::pin(async move {
+            let fields = object(json!({
+                "session_id": reply.session_id,
+                "response": reply.text,
+                "model": reply.model,
+                "platform": reply.platform,
+            }));
+            match hooks.transform_llm_output(fields, &self.call, held).await {
+                Rewrite::Unchanged => Transformed::Unchanged,
+                Rewrite::Replaced(text) => Transformed::Replaced(text),
+                Rewrite::Withheld => Transformed::Withheld,
+            }
+        })
+    }
+
+    fn pre_verify<'a>(&'a self, verify: Verify<'a>) -> BoxFuture<'a, Option<String>> {
+        let hooks = self.handle.hooks();
+        Box::pin(async move {
+            let fields = object(json!({
+                "session_id": verify.session_id,
+                "platform": verify.platform,
+                "model": verify.model,
+                "coding": verify.coding,
+                "attempt": verify.attempt,
+                "final_response": verify.final_response,
+                "changed_paths": verify.changed_paths,
+            }));
+            hooks.pre_verify(fields, &self.call).await
+        })
+    }
+
+    fn observe(&self, hook: &'static str, payload: Map<String, Value>) {
+        // Checked here so a stream nobody watches queues nothing per token.
+        if self.handle.hooks().handles(hook) {
+            self.observers.fire(hook, payload);
+        }
+    }
+
     fn pre_llm_call<'a>(
         &'a self,
         session_id: &'a str,
@@ -123,10 +217,88 @@ impl TurnHooks for SessionTurnHooks {
     }
 }
 
+/// The `on_skill_lifecycle` payload.
+#[must_use]
+pub fn skill_fields(skill: &str, action: &str) -> Map<String, Value> {
+    object(json!({ "skill": skill, "action": action }))
+}
+
+/// Fires `on_skill_lifecycle` from a command outside any session (`skills
+/// install|enable|disable`) and waits for the callbacks, so they run
+/// before the process exits.
+pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    let plugins = for_session(scope, &cwd);
+    let hooks = plugins.handle.hooks();
+    if !hooks.handles("on_skill_lifecycle") {
+        return;
+    }
+    let call = CallInfo {
+        session_id: None,
+        surface: "cli".to_owned(),
+        cwd: Some(cwd.display().to_string()),
+    };
+    let fields = skill_fields(skill, action);
+    let fire = async move {
+        hooks
+            .fire("on_skill_lifecycle", &Payload::new(fields), &call)
+            .await;
+    };
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => runtime.block_on(fire),
+                Err(err) => tracing::warn!("on_skill_lifecycle not fired: {err}"),
+            }
+        });
+    });
+}
+
+fn object(value: Value) -> Map<String, Value> {
+    match value {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    }
+}
+
 /// Every profile's live set in this process, by profile directory.
 fn handles() -> &'static Mutex<HashMap<PathBuf, Arc<Handle>>> {
     static HANDLES: OnceLock<Mutex<HashMap<PathBuf, Arc<Handle>>>> = OnceLock::new();
     HANDLES.get_or_init(Mutex::default)
+}
+
+/// The profile's live set for work outside a session (gateway events):
+/// re-checked against the disk at most every `every`.
+#[must_use]
+pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugins {
+    static CHECKED: OnceLock<Mutex<HashMap<PathBuf, std::time::Instant>>> = OnceLock::new();
+    let key = scope.dir().to_path_buf();
+    let mut last = CHECKED
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&key)
+        .copied();
+    let existing = handles()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&key)
+        .cloned();
+    let due = gateway::due(&mut last, every);
+    if let Some(at) = last {
+        CHECKED
+            .get_or_init(Mutex::default)
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(key, at);
+    }
+    match existing {
+        Some(handle) if !due => ProfilePlugins { handle },
+        _ => refresh(scope, scope.dir(), false),
+    }
 }
 
 /// The profile's plugins for a session in `cwd`: the live set, replaced

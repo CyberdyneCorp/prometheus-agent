@@ -120,6 +120,10 @@ impl Turn<'_> {
     ) -> Result<(), Error> {
         let mut steps = Vec::with_capacity(calls.len());
         for (call, outcome) in calls.iter().zip(outcomes) {
+            if matches!(outcome.result.status, Status::Ok | Status::Degraded) {
+                self.edited
+                    .extend(super::observe::edited_paths(&call.name, &call.arguments));
+            }
             self.append(&transcript::tool_row(call, &outcome.result))?;
             self.emit(Event::ToolResult(result_event(call, outcome)))
                 .await;

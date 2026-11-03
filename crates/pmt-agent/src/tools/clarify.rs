@@ -71,11 +71,24 @@ pub struct ClarifyAnswer {
     pub answers: Vec<Answer>,
 }
 
+/// Tells plugins about a human-input prompt (spec: plugin-system,
+/// Approval and human-input observer hooks): the hook name and payload;
+/// observers only, whatever they answer is discarded.
+pub type InputObserver = std::sync::Arc<dyn Fn(&'static str, Value) + Send + Sync>;
+
 /// The session's end of `clarify`.
-#[derive(Debug)]
 pub struct Clarifier {
     channel: Channel<ClarifyRequest, ClarifyAnswer>,
     timeout: Option<Duration>,
+    observer: Option<InputObserver>,
+}
+
+impl std::fmt::Debug for Clarifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Clarifier")
+            .field("timeout", &self.timeout)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Deserialize)]
@@ -91,7 +104,28 @@ impl Clarifier {
     pub fn attached(timeout_secs: u64) -> (Self, Surface<ClarifyRequest, ClarifyAnswer>) {
         let timeout = (timeout_secs > 0).then(|| Duration::from_secs(timeout_secs));
         let (channel, surface) = Channel::attached(timeout.unwrap_or(Duration::MAX));
-        (Self { channel, timeout }, surface)
+        (
+            Self {
+                channel,
+                timeout,
+                observer: None,
+            },
+            surface,
+        )
+    }
+
+    /// Fires `on_human_input_request` and `on_human_input_resolved`
+    /// through `observer` around every prompt.
+    #[must_use]
+    pub fn with_observer(mut self, observer: InputObserver) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    fn observe(&self, hook: &'static str, payload: Value) {
+        if let Some(observer) = &self.observer {
+            observer(hook, payload);
+        }
     }
 
     /// A clarifier of a session no human attends (cron, API, `-z`).
@@ -100,6 +134,7 @@ impl Clarifier {
         Self {
             channel: Channel::unattended(),
             timeout: None,
+            observer: None,
         }
     }
 
@@ -113,7 +148,22 @@ impl Clarifier {
             questions: questions.clone(),
             allow_other: true,
         };
-        match self.channel.ask(request).await {
+        self.observe(
+            "on_human_input_request",
+            serde_json::json!({ "kind": "clarify", "questions": questions }),
+        );
+        let outcome = self.channel.ask(request).await;
+        let resolution = match &outcome {
+            Ok(_) => "answered",
+            Err(Unanswered::TimedOut(_)) => "timed_out",
+            Err(Unanswered::Dismissed) => "dismissed",
+            Err(Unanswered::Unattended | Unanswered::Detached) => "unreachable",
+        };
+        self.observe(
+            "on_human_input_resolved",
+            serde_json::json!({ "kind": "clarify", "outcome": resolution }),
+        );
+        match outcome {
             Ok(reply) => ToolResult::ok(answered(&questions, reply).to_string()),
             Err(Unanswered::TimedOut(_)) => {
                 let minutes = self.timeout.map_or(0, |t| t.as_secs().div_ceil(60));

@@ -157,7 +157,10 @@ impl Dispatcher {
             .hooks
             .post_tool_call(hook_call, result.status, duration_ms)
             .await;
-        result = setup.hooks.transform_tool_result(hook_call, result).await;
+        result = setup
+            .hooks
+            .transform_tool_result(hook_call, result, duration_ms)
+            .await;
         setup
             .budget
             .apply(&call.call_id, tool.as_deref(), &mut result);

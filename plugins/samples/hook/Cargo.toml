@@ -19,3 +19,4 @@ world = "hook"
 
 [package.metadata.component.target.dependencies]
 "prometheus:host" = { path = "../../../wit/host" }
+"prometheus:messaging" = { path = "../../../wit/messaging" }

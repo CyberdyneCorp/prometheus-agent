@@ -51,6 +51,8 @@ pub struct GateInputs<'a> {
     pub interactive: bool,
     /// `--yolo`.
     pub yolo: bool,
+    /// Plugin approval observers and transport.
+    pub hooks: Option<Arc<dyn pmt_tools::approval::hooks::ApprovalHooks>>,
 }
 
 /// The approval gate: prompts go to the person on an interactive
@@ -81,6 +83,7 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         protected: ProtectedFiles::from_config(&config.security)?,
         channel,
         yolo: inputs.yolo,
+        hooks: inputs.hooks.clone(),
     });
     Ok(Gate {
         gate: Arc::new(gate),

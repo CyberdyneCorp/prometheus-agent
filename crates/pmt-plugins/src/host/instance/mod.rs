@@ -15,6 +15,8 @@ use pmt_core::error::{Error, codes};
 use wasmtime::component::{Component, HasSelf, InstancePre, Linker};
 use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
+mod surfaces;
+
 use super::bindings::PluginHost;
 use super::bindings::exports::prometheus::{hook, provider, tool};
 use super::imports::{CallInfo, Context, HostState};
@@ -36,6 +38,8 @@ pub struct Instance {
     hook: Option<hook::plugin::GuestIndices>,
     extensions: Option<hook::extensions::GuestIndices>,
     provider: Option<provider::plugin::GuestIndices>,
+    surfaces: Option<hook::surfaces::GuestIndices>,
+    models: Option<provider::models::GuestIndices>,
     live: Mutex<Option<Live>>,
     traps: Mutex<Traps>,
 }
@@ -88,6 +92,8 @@ impl Instance {
             hook: hook::plugin::GuestIndices::new(&pre).ok(),
             extensions: hook::extensions::GuestIndices::new(&pre).ok(),
             provider: provider::plugin::GuestIndices::new(&pre).ok(),
+            surfaces: hook::surfaces::GuestIndices::new(&pre).ok(),
+            models: provider::models::GuestIndices::new(&pre).ok(),
             id,
             pre,
             ctx,

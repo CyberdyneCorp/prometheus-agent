@@ -38,6 +38,21 @@ impl Turn<'_> {
         if self.options.interrupt.is_hard() {
             self.agent.steers.discard();
         }
+        if matches!(
+            ending.reason,
+            ExitReason::InterruptedByUser | ExitReason::InterruptedBySystem
+        ) {
+            let platform = self.agent.setup.prompt.platform.clone();
+            let reason = ending.issuer.clone().unwrap_or_default();
+            self.observe_hook(
+                "agent_loop_stopped",
+                [
+                    ("session_key", self.agent.setup.session.to_string().into()),
+                    ("platform", platform.into()),
+                    ("reason", reason.into()),
+                ],
+            );
+        }
         let setup = &self.agent.setup;
         let cache_hit_rate = setup
             .store
@@ -78,6 +93,7 @@ impl Turn<'_> {
             if !reply.text.trim().is_empty() {
                 let mut kept = reply;
                 kept.tool_calls.clear(); // a toolless request has no calls to answer
+                kept.text = self.transform_final(kept.text, &route).await;
                 self.keep_reply(&kept).await?;
                 return Ok(Some(kept.text));
             }

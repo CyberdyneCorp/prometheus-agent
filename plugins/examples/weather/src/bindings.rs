@@ -2595,6 +2595,695 @@ pub mod prometheus {
             }
         }
     }
+    pub mod messaging {
+        /// Messages in the conversation of the calling turn, hook or command
+        /// (never a chat the plugin names). Text is clamped to the platform's
+        /// message limit.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod conversation {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            /// A posted or edited message.
+            #[derive(Clone)]
+            pub struct Posted {
+                /// Pass it to `edit`.
+                pub handle: _rt::String,
+                /// The surface cannot edit: the text went out as a new message.
+                pub fallback: bool,
+            }
+            impl ::core::fmt::Debug for Posted {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Posted")
+                        .field("handle", &self.handle)
+                        .field("fallback", &self.fallback)
+                        .finish()
+                }
+            }
+            /// Why a post or edit did not happen.
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum Failure {
+                /// The call is not bound to a session.
+                NoConversation,
+                /// The session's messaging gateway is not running.
+                GatewayUnavailable,
+                /// The session's platform adapter is not connected.
+                AdapterUnavailable,
+                /// The platform refused the message.
+                SendFailed,
+                /// The platform refused the edit.
+                EditFailed,
+                /// No answer within 30 seconds.
+                Timeout,
+            }
+            impl Failure {
+                pub fn name(&self) -> &'static str {
+                    match self {
+                        Failure::NoConversation => "no-conversation",
+                        Failure::GatewayUnavailable => "gateway-unavailable",
+                        Failure::AdapterUnavailable => "adapter-unavailable",
+                        Failure::SendFailed => "send-failed",
+                        Failure::EditFailed => "edit-failed",
+                        Failure::Timeout => "timeout",
+                    }
+                }
+                pub fn message(&self) -> &'static str {
+                    match self {
+                        Failure::NoConversation => "The call is not bound to a session.",
+                        Failure::GatewayUnavailable => {
+                            "The session's messaging gateway is not running."
+                        }
+                        Failure::AdapterUnavailable => {
+                            "The session's platform adapter is not connected."
+                        }
+                        Failure::SendFailed => "The platform refused the message.",
+                        Failure::EditFailed => "The platform refused the edit.",
+                        Failure::Timeout => "No answer within 30 seconds.",
+                    }
+                }
+            }
+            impl ::core::fmt::Debug for Failure {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Failure")
+                        .field("code", &(*self as i32))
+                        .field("name", &self.name())
+                        .field("message", &self.message())
+                        .finish()
+                }
+            }
+            impl ::core::fmt::Display for Failure {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    write!(f, "{} (error {})", self.name(), * self as i32)
+                }
+            }
+            impl std::error::Error for Failure {}
+            impl Failure {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> Failure {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => Failure::NoConversation,
+                        1 => Failure::GatewayUnavailable,
+                        2 => Failure::AdapterUnavailable,
+                        3 => Failure::SendFailed,
+                        4 => Failure::EditFailed,
+                        5 => Failure::Timeout,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn post(text: &str) -> Result<Posted, Failure> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = text;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(
+                        wasm_import_module = "prometheus:messaging/conversation@1.0.0"
+                    )]
+                    unsafe extern "C" {
+                        #[link_name = "post"]
+                        fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import2(_: *mut u8, _: usize, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import2(ptr0.cast_mut(), len0, ptr1) };
+                    let l3 = i32::from(*ptr1.add(0).cast::<u8>());
+                    let result9 = match l3 {
+                        0 => {
+                            let e = {
+                                let l4 = *ptr1
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l5 = *ptr1
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len6 = l5;
+                                let bytes6 = _rt::Vec::from_raw_parts(
+                                    l4.cast(),
+                                    len6,
+                                    len6,
+                                );
+                                let l7 = i32::from(
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                Posted {
+                                    handle: _rt::string_lift(bytes6),
+                                    fallback: _rt::bool_lift(l7 as u8),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l8 = i32::from(
+                                    *ptr1.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                Failure::_lift(l8 as u8)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result9
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn edit(handle: &str, text: &str) -> Result<Posted, Failure> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = handle;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = text;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(
+                        wasm_import_module = "prometheus:messaging/conversation@1.0.0"
+                    )]
+                    unsafe extern "C" {
+                        #[link_name = "edit"]
+                        fn wit_import3(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(ptr0.cast_mut(), len0, ptr1.cast_mut(), len1, ptr2)
+                    };
+                    let l4 = i32::from(*ptr2.add(0).cast::<u8>());
+                    let result10 = match l4 {
+                        0 => {
+                            let e = {
+                                let l5 = *ptr2
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l6 = *ptr2
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len7 = l6;
+                                let bytes7 = _rt::Vec::from_raw_parts(
+                                    l5.cast(),
+                                    len7,
+                                    len7,
+                                );
+                                let l8 = i32::from(
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                Posted {
+                                    handle: _rt::string_lift(bytes7),
+                                    fallback: _rt::bool_lift(l8 as u8),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l9 = i32::from(
+                                    *ptr2.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                Failure::_lift(l9 as u8)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result10
+                }
+            }
+        }
+        /// New conversational input for a session of the plugin's own profile
+        /// (`inject_messages` capability).
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod inject {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            /// Which session receives it.
+            #[derive(Clone)]
+            pub enum Target {
+                /// A stored session's key (its id).
+                SessionKey(_rt::String),
+                /// The session of a gateway chat, `<platform>:<chat_id>`.
+                Origin(_rt::String),
+            }
+            impl ::core::fmt::Debug for Target {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        Target::SessionKey(e) => {
+                            f.debug_tuple("Target::SessionKey").field(e).finish()
+                        }
+                        Target::Origin(e) => {
+                            f.debug_tuple("Target::Origin").field(e).finish()
+                        }
+                    }
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Queues `content` as a new `role` (`user`) message through the
+            /// session's busy-input queue: never history edits, slash commands,
+            /// approvals or clarify answers. False (with a logged reason) when
+            /// refused.
+            pub fn inject(content: &str, role: &str, target: &Target) -> bool {
+                unsafe {
+                    let vec0 = content;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = role;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let (result4_0, result4_1, result4_2) = match target {
+                        Target::SessionKey(e) => {
+                            let vec2 = e;
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            (0i32, ptr2.cast_mut(), len2)
+                        }
+                        Target::Origin(e) => {
+                            let vec3 = e;
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            (1i32, ptr3.cast_mut(), len3)
+                        }
+                    };
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "prometheus:messaging/inject@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "inject"]
+                        fn wit_import5(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                        ) -> i32;
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import5(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                    ) -> i32 {
+                        unreachable!()
+                    }
+                    let ret = unsafe {
+                        wit_import5(
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            result4_0,
+                            result4_1,
+                            result4_2,
+                        )
+                    };
+                    _rt::bool_lift(ret as u8)
+                }
+            }
+        }
+        /// Actions on connected platform adapters of the plugin's own profile
+        /// (`platform_actions` capability, per verb).
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod platform {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            /// `ok` with the action, or an error code (`capability_not_granted`,
+            /// `invalid_argument`, `gateway_unavailable`, `unknown_platform`,
+            /// `adapter_not_registered`, `adapter_disconnected`,
+            /// `unsupported_platform_action`, `action_failed`) and detail.
+            #[derive(Clone)]
+            pub struct Outcome {
+                pub ok: bool,
+                pub action: _rt::String,
+                pub error: Option<_rt::String>,
+                pub detail: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for Outcome {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Outcome")
+                        .field("ok", &self.ok)
+                        .field("action", &self.action)
+                        .field("error", &self.error)
+                        .field("detail", &self.detail)
+                        .finish()
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn add_reaction(
+                platform: &str,
+                chat_id: &str,
+                message_id: &str,
+                emoji: &str,
+            ) -> Outcome {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 9 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 9
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = platform;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = chat_id;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec2 = message_id;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let vec3 = emoji;
+                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                    let len3 = vec3.len();
+                    let ptr4 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "prometheus:messaging/platform@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "add-reaction"]
+                        fn wit_import5(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import5(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import5(
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            ptr2.cast_mut(),
+                            len2,
+                            ptr3.cast_mut(),
+                            len3,
+                            ptr4,
+                        )
+                    };
+                    let l6 = i32::from(*ptr4.add(0).cast::<u8>());
+                    let l7 = *ptr4
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>();
+                    let l8 = *ptr4
+                        .add(2 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let len9 = l8;
+                    let bytes9 = _rt::Vec::from_raw_parts(l7.cast(), len9, len9);
+                    let l10 = i32::from(
+                        *ptr4.add(3 * ::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                    );
+                    let l14 = i32::from(
+                        *ptr4.add(6 * ::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                    );
+                    let result18 = Outcome {
+                        ok: _rt::bool_lift(l6 as u8),
+                        action: _rt::string_lift(bytes9),
+                        error: match l10 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let l11 = *ptr4
+                                        .add(4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l12 = *ptr4
+                                        .add(5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let len13 = l12;
+                                    let bytes13 = _rt::Vec::from_raw_parts(
+                                        l11.cast(),
+                                        len13,
+                                        len13,
+                                    );
+                                    _rt::string_lift(bytes13)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        detail: match l14 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let l15 = *ptr4
+                                        .add(7 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l16 = *ptr4
+                                        .add(8 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let len17 = l16;
+                                    let bytes17 = _rt::Vec::from_raw_parts(
+                                        l15.cast(),
+                                        len17,
+                                        len17,
+                                    );
+                                    _rt::string_lift(bytes17)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                    };
+                    result18
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn set_thread_title(
+                platform: &str,
+                chat_id: &str,
+                thread_id: &str,
+                title: &str,
+            ) -> Outcome {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 9 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 9
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = platform;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = chat_id;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec2 = thread_id;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let vec3 = title;
+                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                    let len3 = vec3.len();
+                    let ptr4 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "prometheus:messaging/platform@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "set-thread-title"]
+                        fn wit_import5(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import5(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import5(
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            ptr2.cast_mut(),
+                            len2,
+                            ptr3.cast_mut(),
+                            len3,
+                            ptr4,
+                        )
+                    };
+                    let l6 = i32::from(*ptr4.add(0).cast::<u8>());
+                    let l7 = *ptr4
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>();
+                    let l8 = *ptr4
+                        .add(2 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let len9 = l8;
+                    let bytes9 = _rt::Vec::from_raw_parts(l7.cast(), len9, len9);
+                    let l10 = i32::from(
+                        *ptr4.add(3 * ::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                    );
+                    let l14 = i32::from(
+                        *ptr4.add(6 * ::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                    );
+                    let result18 = Outcome {
+                        ok: _rt::bool_lift(l6 as u8),
+                        action: _rt::string_lift(bytes9),
+                        error: match l10 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let l11 = *ptr4
+                                        .add(4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l12 = *ptr4
+                                        .add(5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let len13 = l12;
+                                    let bytes13 = _rt::Vec::from_raw_parts(
+                                        l11.cast(),
+                                        len13,
+                                        len13,
+                                    );
+                                    _rt::string_lift(bytes13)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        detail: match l14 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let l15 = *ptr4
+                                        .add(7 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l16 = *ptr4
+                                        .add(8 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let len17 = l16;
+                                    let bytes17 = _rt::Vec::from_raw_parts(
+                                        l15.cast(),
+                                        len17,
+                                        len17,
+                                    );
+                                    _rt::string_lift(bytes17)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                    };
+                    result18
+                }
+            }
+        }
+    }
 }
 #[rustfmt::skip]
 #[allow(dead_code, clippy::all)]
@@ -2815,27 +3504,27 @@ pub mod exports {
                     ) -> Result<_rt::String, _rt::String>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_prometheus_tool_plugin_1_0_0_cabi {
+                macro_rules! __export_prometheus_tool_plugin_1_1_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "prometheus:tool/plugin@1.0.0#tools")] unsafe extern "C" fn
+                        "prometheus:tool/plugin@1.1.0#tools")] unsafe extern "C" fn
                         export_tools() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_tools_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_prometheus:tool/plugin@1.0.0#tools")] unsafe extern
+                        "cabi_post_prometheus:tool/plugin@1.1.0#tools")] unsafe extern
                         "C" fn _post_return_tools(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_tools::<$ty > (arg0) } }
-                        #[unsafe (export_name = "prometheus:tool/plugin@1.0.0#call")]
+                        #[unsafe (export_name = "prometheus:tool/plugin@1.1.0#call")]
                         unsafe extern "C" fn export_call(arg0 : * mut u8, arg1 : usize,
                         arg2 : * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_call_cabi::<$ty > (arg0, arg1, arg2,
                         arg3) } } #[unsafe (export_name =
-                        "cabi_post_prometheus:tool/plugin@1.0.0#call")] unsafe extern "C"
+                        "cabi_post_prometheus:tool/plugin@1.1.0#call")] unsafe extern "C"
                         fn _post_return_call(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_call::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_prometheus_tool_plugin_1_0_0_cabi;
+                pub(crate) use __export_prometheus_tool_plugin_1_1_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -2937,6 +3626,17 @@ mod _rt {
             self as i32
         }
     }
+    pub unsafe fn bool_lift(val: u8) -> bool {
+        if cfg!(debug_assertions) {
+            match val {
+                0 => false,
+                1 => true,
+                _ => panic!("invalid bool discriminant"),
+            }
+        } else {
+            val != 0
+        }
+    }
     #[cfg(target_arch = "wasm32")]
     pub fn run_ctors_once() {
         wit_bindgen_rt::run_ctors_once();
@@ -2967,7 +3667,7 @@ macro_rules! __export_tool_impl {
     };
     ($ty:ident with_types_in $($path_to_types_root:tt)*) => {
         $($path_to_types_root)*::
-        exports::prometheus::tool::plugin::__export_prometheus_tool_plugin_1_0_0_cabi!($ty
+        exports::prometheus::tool::plugin::__export_prometheus_tool_plugin_1_1_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::prometheus::tool::plugin);
     };
 }
@@ -2975,13 +3675,13 @@ macro_rules! __export_tool_impl {
 pub(crate) use __export_tool_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:prometheus:tool@1.0.0:tool:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:prometheus:tool@1.1.0:tool:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1659] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x80\x0c\x01A\x02\x01\
-A\x17\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 2229] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xba\x10\x01A\x02\x01\
+A\x1d\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
 l\x03\0\0\x01@\x02\x05level\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19\
 prometheus:host/log@1.0.0\x05\0\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01\
 s\0\x06failed\x01s\0\x04\0\x0ahost-error\x03\0\0\x03\0\x1bprometheus:host/types@\
@@ -3014,12 +3714,23 @@ keys\0\x03\x04\0\x03get\x01\x04\x01j\0\x01\x01\x01@\x02\x03keys\x05values\0\x05\
 \0\x03set\x01\x06\x03\0\x1cprometheus:host/config@1.0.0\x05\x09\x01B\x05\x01ks\x01\
 r\x04\x0asession-id\0\x07profiles\x07surfaces\x03cwd\0\x04\0\x04info\x03\0\x01\x01\
 @\0\0\x02\x04\0\x07current\x01\x03\x03\0\x1dprometheus:host/session@1.0.0\x05\x0a\
-\x01B\x08\x01r\x03\x04names\x0bdescriptions\x0aparameterss\x04\0\x09tool-spec\x03\
-\0\0\x01p\x01\x01@\0\0\x02\x04\0\x05tools\x01\x03\x01j\x01s\x01s\x01@\x02\x04nam\
-es\x09argumentss\0\x04\x04\0\x04call\x01\x05\x04\0\x1cprometheus:tool/plugin@1.0\
-.0\x05\x0b\x04\0\x1aprometheus:tool/tool@1.0.0\x04\0\x0b\x0a\x01\0\x04tool\x03\0\
-\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bi\
-ndgen-rust\x060.41.0";
+\x01B\x09\x01r\x02\x06handles\x08fallback\x7f\x04\0\x06posted\x03\0\0\x01m\x06\x0f\
+no-conversation\x13gateway-unavailable\x13adapter-unavailable\x0bsend-failed\x0b\
+edit-failed\x07timeout\x04\0\x07failure\x03\0\x02\x01j\x01\x01\x01\x03\x01@\x01\x04\
+texts\0\x04\x04\0\x04post\x01\x05\x01@\x02\x06handles\x04texts\0\x04\x04\0\x04ed\
+it\x01\x06\x03\0'prometheus:messaging/conversation@1.0.0\x05\x0b\x01B\x04\x01q\x02\
+\x0bsession-key\x01s\0\x06origin\x01s\0\x04\0\x06target\x03\0\0\x01@\x03\x07cont\
+ents\x04roles\x06target\x01\0\x7f\x04\0\x06inject\x01\x02\x03\0!prometheus:messa\
+ging/inject@1.0.0\x05\x0c\x01B\x07\x01ks\x01r\x04\x02ok\x7f\x06actions\x05error\0\
+\x06detail\0\x04\0\x07outcome\x03\0\x01\x01@\x04\x08platforms\x07chat-ids\x0ames\
+sage-ids\x05emojis\0\x02\x04\0\x0cadd-reaction\x01\x03\x01@\x04\x08platforms\x07\
+chat-ids\x09thread-ids\x05titles\0\x02\x04\0\x10set-thread-title\x01\x04\x03\0#p\
+rometheus:messaging/platform@1.0.0\x05\x0d\x01B\x08\x01r\x03\x04names\x0bdescrip\
+tions\x0aparameterss\x04\0\x09tool-spec\x03\0\0\x01p\x01\x01@\0\0\x02\x04\0\x05t\
+ools\x01\x03\x01j\x01s\x01s\x01@\x02\x04names\x09argumentss\0\x04\x04\0\x04call\x01\
+\x05\x04\0\x1cprometheus:tool/plugin@1.1.0\x05\x0e\x04\0\x1aprometheus:tool/tool\
+@1.1.0\x04\0\x0b\x0a\x01\0\x04tool\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\
+\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

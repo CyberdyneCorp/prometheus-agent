@@ -100,7 +100,7 @@ pub use adapter::{
     SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateFromChat};
-pub use hooks::{Hook, Hooks, PreCommand};
+pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};

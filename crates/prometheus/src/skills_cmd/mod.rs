@@ -148,6 +148,8 @@ fn trust(env: &Env, root: &Path) -> Result<u8, Error> {
 
 fn enable(env: &Env, name: &str, platform: Option<&str>, disabled: bool) -> Result<u8, Error> {
     let message = activation::set_disabled(env.scope.profile(), name, platform, disabled)?;
+    let action = if disabled { "disable" } else { "enable" };
+    crate::plugins_host::skill_changed(&env.scope, name, action);
     if env.json {
         return json(&json!({"name": name, "platform": platform, "enabled": !disabled}));
     }

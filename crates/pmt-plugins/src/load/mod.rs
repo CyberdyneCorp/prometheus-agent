@@ -39,6 +39,7 @@ use crate::host::state::StateDir;
 use crate::host::{CallInfo, Instance, Limits, Runtime};
 use crate::manifest::{COMPONENT_FILE, Kind, Manifest};
 use crate::providers::ProviderRegistry;
+use crate::surfaces::{Surfaces, builtin_names};
 use crate::tools;
 
 use self::order::Step;
@@ -144,6 +145,9 @@ pub struct Loaded {
     pub contributions: Contributions,
     /// Their provider objects.
     pub providers: ProviderRegistry,
+    /// Their `plugins run` commands, approval transports and model
+    /// providers.
+    pub surfaces: Surfaces,
     /// Their event bus (`None` when nothing was loaded).
     pub bus: Option<Arc<Bus>>,
 }
@@ -158,6 +162,7 @@ impl Loaded {
             hooks: Arc::new(Hooks::new(settings)),
             contributions: Contributions::default(),
             providers: ProviderRegistry::default(),
+            surfaces: Surfaces::default(),
             bus: None,
         }
     }
@@ -342,7 +347,19 @@ impl Loader {
         warnings.extend(contributions.add_commands(instance, registration.commands, &granted)?);
         self.hooks()
             .register_names(instance, registration.hooks, &granted)?;
+        warnings.extend(self.hooks().hold(instance.id(), &registration.held));
         warnings.extend(self.loaded.providers.add(instance, registration.providers));
+        let surfaces = &mut self.loaded.surfaces;
+        warnings.extend(surfaces.add_cli(instance, registration.cli, &granted));
+        warnings.extend(surfaces.add_transports(instance, registration.transports, &granted));
+        if !registration.models.is_empty() {
+            warnings.extend(surfaces.add_models(
+                instance,
+                &registration.models,
+                &granted,
+                &builtin_names(),
+            ));
+        }
         self.loaded.contributions = contributions;
         Ok(warnings)
     }

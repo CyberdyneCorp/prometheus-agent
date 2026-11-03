@@ -209,14 +209,18 @@ pub fn run(session: &SkillsSession, request: &Request, approved: bool) -> Result
         outcome.pending_id = Some(id);
         return Ok(outcome);
     }
-    match request.action {
-        Action::Create => create(&ctx, request),
-        Action::Edit => edit(&ctx, request),
-        Action::Patch => patch(&ctx, request),
-        Action::WriteFile => write_file(&ctx, request),
-        Action::RemoveFile => remove_file(&ctx, request),
-        Action::Delete => delete::delete(&ctx, &request.name),
+    let (outcome, lifecycle) = match request.action {
+        Action::Create => (create(&ctx, request), "create"),
+        Action::Edit => (edit(&ctx, request), "edit"),
+        Action::Patch => (patch(&ctx, request), "edit"),
+        Action::WriteFile => (write_file(&ctx, request), "edit"),
+        Action::RemoveFile => (remove_file(&ctx, request), "edit"),
+        Action::Delete => (delete::delete(&ctx, &request.name), "delete"),
+    };
+    if let (Ok(_), Some(observe)) = (&outcome, &session.setup().lifecycle) {
+        observe(&request.name, lifecycle);
     }
+    outcome
 }
 
 fn create(ctx: &Ctx<'_>, request: &Request) -> Result<Outcome, String> {

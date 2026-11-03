@@ -68,7 +68,13 @@ pub struct SessionSetup {
     /// The surface's longest message (messaging adapters); long command
     /// output such as a pending diff is cut to it.
     pub message_limit: Option<usize>,
+    /// Told `(skill, action)` after each successful `skill_manage` create,
+    /// edit or delete (plugin `on_skill_lifecycle`).
+    pub lifecycle: Option<Lifecycle>,
 }
+
+/// The `on_skill_lifecycle` seam: skill name and action.
+pub type Lifecycle = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
 impl SessionSetup {
     /// A setup with the built-in bundled tree and scanner, no cwd, no
@@ -90,6 +96,7 @@ impl SessionSetup {
             secret_prompt: None,
             review: false,
             message_limit: None,
+            lifecycle: None,
         }
     }
 }

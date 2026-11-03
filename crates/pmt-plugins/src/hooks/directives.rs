@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use pmt_tools::dispatch::{Escalation, HookCall, PreDecision, SeamFuture, ToolHooks};
-use pmt_tools::result::Status;
+use pmt_tools::result::{Content, Status, ToolResult};
 use serde_json::{Map, Value, json};
 
 use super::{Answer, Hooks, Payload};
@@ -167,6 +167,60 @@ impl ToolHooks for PluginToolHooks {
             let payload = Self::payload(&call, &extra);
             // Observers: answers are ignored and cannot change the result.
             hooks.fire("post_tool_call", &payload, &self.call).await;
+        })
+    }
+
+    /// `transform_tool_result` (spec: plugin-system, Transform hooks
+    /// rewrite results and replies): the first answer that is text (even
+    /// empty) replaces the result's text; media parts stay.
+    fn transform_tool_result<'a>(
+        &'a self,
+        call: HookCall<'a>,
+        mut result: ToolResult,
+        duration_ms: u64,
+    ) -> SeamFuture<'a, ToolResult> {
+        Box::pin(async move {
+            let hooks = self.source.hooks();
+            if !hooks.handles("transform_tool_result") {
+                return result;
+            }
+            let text: String = result
+                .content
+                .iter()
+                .filter_map(|part| match part {
+                    Content::Text { text } => Some(text.as_str()),
+                    Content::Media { .. } => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let extra = [
+                ("result", json!(text)),
+                ("status", json!(result.status.to_string())),
+                (
+                    "error_type",
+                    result
+                        .metadata
+                        .get("error_type")
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                ),
+                ("duration_ms", json!(duration_ms)),
+            ];
+            let payload = Self::payload(&call, &extra);
+            let answers = hooks
+                .fire("transform_tool_result", &payload, &self.call)
+                .await;
+            let rewrite = answers.into_iter().find_map(|a| match a.reply {
+                Reply::Context(text) => Some(text),
+                _ => None,
+            });
+            if let Some(text) = rewrite {
+                result
+                    .content
+                    .retain(|part| !matches!(part, Content::Text { .. }));
+                result.content.insert(0, Content::Text { text });
+            }
+            result
         })
     }
 }

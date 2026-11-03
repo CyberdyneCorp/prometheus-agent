@@ -2,7 +2,7 @@
 //! import does with and without a grant. Arguments are `{"v": "<text>"}`.
 
 wit_bindgen::generate!({
-    path: ["../../../wit/host", "../../../wit/tool"],
+    path: ["../../../wit/host", "../../../wit/messaging", "../../../wit/tool"],
     world: "prometheus:tool/tool",
     generate_all,
 });

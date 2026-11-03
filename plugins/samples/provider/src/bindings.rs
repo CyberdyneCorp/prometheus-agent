@@ -2854,28 +2854,485 @@ pub mod exports {
                     ) -> Result<_rt::String, _rt::String>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_prometheus_provider_plugin_1_0_0_cabi {
+                macro_rules! __export_prometheus_provider_plugin_1_1_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "prometheus:provider/plugin@1.0.0#providers")] unsafe extern "C"
+                        "prometheus:provider/plugin@1.1.0#providers")] unsafe extern "C"
                         fn export_providers() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_providers_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_prometheus:provider/plugin@1.0.0#providers")] unsafe
+                        "cabi_post_prometheus:provider/plugin@1.1.0#providers")] unsafe
                         extern "C" fn _post_return_providers(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_providers::<$ty > (arg0) } }
                         #[unsafe (export_name =
-                        "prometheus:provider/plugin@1.0.0#invoke")] unsafe extern "C" fn
+                        "prometheus:provider/plugin@1.1.0#invoke")] unsafe extern "C" fn
                         export_invoke(arg0 : * mut u8, arg1 : usize, arg2 : * mut u8,
                         arg3 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_invoke_cabi::<$ty > (arg0, arg1, arg2, arg3) } } #[unsafe
                         (export_name =
-                        "cabi_post_prometheus:provider/plugin@1.0.0#invoke")] unsafe
+                        "cabi_post_prometheus:provider/plugin@1.1.0#invoke")] unsafe
                         extern "C" fn _post_return_invoke(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_invoke::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_prometheus_provider_plugin_1_0_0_cabi;
+                pub(crate) use __export_prometheus_provider_plugin_1_1_0_cabi;
+                #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                struct _RetArea(
+                    [::core::mem::MaybeUninit<
+                        u8,
+                    >; 3 * ::core::mem::size_of::<*const u8>()],
+                );
+                static mut _RET_AREA: _RetArea = _RetArea(
+                    [::core::mem::MaybeUninit::uninit(); 3
+                        * ::core::mem::size_of::<*const u8>()],
+                );
+            }
+            /// Added in 1.1: model providers (spec: plugin-system, Model-provider
+            /// plugins). A component built against 1.0 does not export it.
+            #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+            pub mod models {
+                #[used]
+                #[doc(hidden)]
+                static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
+                use super::super::super::super::_rt;
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_descriptors_cabi<T: Guest>() -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::descriptors();
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    let vec3 = result0;
+                    let len3 = vec3.len();
+                    let layout3 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec3.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result3 = if layout3.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout3).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout3);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec3.into_iter().enumerate() {
+                        let base = result3
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let vec2 = (e.into_bytes()).into_boxed_slice();
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            ::core::mem::forget(vec2);
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len2;
+                            *base.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                        }
+                    }
+                    *ptr1.add(::core::mem::size_of::<*const u8>()).cast::<usize>() = len3;
+                    *ptr1.add(0).cast::<*mut u8>() = result3;
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_descriptors<T: Guest>(arg0: *mut u8) {
+                    let l0 = *arg0.add(0).cast::<*mut u8>();
+                    let l1 = *arg0
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let base4 = l0;
+                    let len4 = l1;
+                    for i in 0..len4 {
+                        let base = base4
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let l2 = *base.add(0).cast::<*mut u8>();
+                            let l3 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l2, l3, 1);
+                        }
+                    }
+                    _rt::cabi_dealloc(
+                        base4,
+                        len4 * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_headers_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::headers(_rt::string_lift(bytes0));
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec6 = e;
+                            let len6 = vec6.len();
+                            let layout6 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec6.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let result6 = if layout6.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout6).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout6);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec6.into_iter().enumerate() {
+                                let base = result6
+                                    .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let (t3_0, t3_1) = e;
+                                    let vec4 = (t3_0.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *base.add(0).cast::<*mut u8>() = ptr4.cast_mut();
+                                    let vec5 = (t3_1.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *base
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *base
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                            }
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len6;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result6;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec7 = (e.into_bytes()).into_boxed_slice();
+                            let ptr7 = vec7.as_ptr().cast::<u8>();
+                            let len7 = vec7.len();
+                            ::core::mem::forget(vec7);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len7;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr7.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_headers<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base7 = l1;
+                            let len7 = l2;
+                            for i in 0..len7 {
+                                let base = base7
+                                    .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let l3 = *base.add(0).cast::<*mut u8>();
+                                    let l4 = *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l3, l4, 1);
+                                    let l5 = *base
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l6 = *base
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l5, l6, 1);
+                                }
+                            }
+                            _rt::cabi_dealloc(
+                                base7,
+                                len7 * (4 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                        }
+                        _ => {
+                            let l8 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l9 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l8, l9, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_prepare_request_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: *mut u8,
+                    arg3: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg3;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg2.cast(), len1, len1);
+                    let result2 = T::prepare_request(
+                        _rt::string_lift(bytes0),
+                        _rt::string_lift(bytes1),
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(e) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_prepare_request<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                        _ => {
+                            let l3 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l4 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l3, l4, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_list_models_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::list_models(_rt::string_lift(bytes0));
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec4 = e;
+                            let len4 = vec4.len();
+                            let layout4 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec4.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let result4 = if layout4.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout4).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout4);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec4.into_iter().enumerate() {
+                                let base = result4
+                                    .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *base.add(0).cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                            }
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result4;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_list_models<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base5 = l1;
+                            let len5 = l2;
+                            for i in 0..len5 {
+                                let base = base5
+                                    .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let l3 = *base.add(0).cast::<*mut u8>();
+                                    let l4 = *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l3, l4, 1);
+                                }
+                            }
+                            _rt::cabi_dealloc(
+                                base5,
+                                len5 * (2 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                        }
+                        _ => {
+                            let l6 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l7 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l6, l7, 1);
+                        }
+                    }
+                }
+                pub trait Guest {
+                    /// Model-provider descriptors (the `model-providers` descriptor
+                    /// contract), one JSON object each: `id`, `wire_format`
+                    /// (`chat_completions`, `anthropic_messages`, `responses`), `base_url`,
+                    /// `secret_names`, `key_hosts` and optionally `aliases`,
+                    /// `default_model`, `models_url`, `supports_model_listing`. Each id
+                    /// needs the `providers` grant; an id of a built-in provider also
+                    /// needs `providers_override`.
+                    fn descriptors() -> _rt::Vec<_rt::String>;
+                    /// Header building: headers added to every request to `provider`.
+                    fn headers(
+                        provider: _rt::String,
+                    ) -> Result<_rt::Vec<(_rt::String, _rt::String)>, _rt::String>;
+                    /// Request preparation: the JSON body about to be sent, rewritten.
+                    fn prepare_request(
+                        provider: _rt::String,
+                        body: _rt::String,
+                    ) -> Result<_rt::String, _rt::String>;
+                    /// Model listing: the model ids `provider` serves.
+                    fn list_models(
+                        provider: _rt::String,
+                    ) -> Result<_rt::Vec<_rt::String>, _rt::String>;
+                }
+                #[doc(hidden)]
+                macro_rules! __export_prometheus_provider_models_1_1_0_cabi {
+                    ($ty:ident with_types_in $($path_to_types:tt)*) => {
+                        const _ : () = { #[unsafe (export_name =
+                        "prometheus:provider/models@1.1.0#descriptors")] unsafe extern
+                        "C" fn export_descriptors() -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_descriptors_cabi::<$ty > () } }
+                        #[unsafe (export_name =
+                        "cabi_post_prometheus:provider/models@1.1.0#descriptors")] unsafe
+                        extern "C" fn _post_return_descriptors(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_descriptors::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "prometheus:provider/models@1.1.0#headers")] unsafe extern "C" fn
+                        export_headers(arg0 : * mut u8, arg1 : usize,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_headers_cabi::<$ty > (arg0,
+                        arg1) } } #[unsafe (export_name =
+                        "cabi_post_prometheus:provider/models@1.1.0#headers")] unsafe
+                        extern "C" fn _post_return_headers(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_headers::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "prometheus:provider/models@1.1.0#prepare-request")] unsafe
+                        extern "C" fn export_prepare_request(arg0 : * mut u8, arg1 :
+                        usize, arg2 : * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_prepare_request_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_prometheus:provider/models@1.1.0#prepare-request")]
+                        unsafe extern "C" fn _post_return_prepare_request(arg0 : * mut
+                        u8,) { unsafe { $($path_to_types)*::
+                        __post_return_prepare_request::<$ty > (arg0) } } #[unsafe
+                        (export_name = "prometheus:provider/models@1.1.0#list-models")]
+                        unsafe extern "C" fn export_list_models(arg0 : * mut u8, arg1 :
+                        usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_list_models_cabi::<$ty > (arg0, arg1) } } #[unsafe
+                        (export_name =
+                        "cabi_post_prometheus:provider/models@1.1.0#list-models")] unsafe
+                        extern "C" fn _post_return_list_models(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_list_models::<$ty > (arg0) }
+                        } };
+                    };
+                }
+                #[doc(hidden)]
+                pub(crate) use __export_prometheus_provider_models_1_1_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -3007,21 +3464,24 @@ macro_rules! __export_provider_impl {
     };
     ($ty:ident with_types_in $($path_to_types_root:tt)*) => {
         $($path_to_types_root)*::
-        exports::prometheus::provider::plugin::__export_prometheus_provider_plugin_1_0_0_cabi!($ty
+        exports::prometheus::provider::plugin::__export_prometheus_provider_plugin_1_1_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::prometheus::provider::plugin);
+        $($path_to_types_root)*::
+        exports::prometheus::provider::models::__export_prometheus_provider_models_1_1_0_cabi!($ty
+        with_types_in $($path_to_types_root)*:: exports::prometheus::provider::models);
     };
 }
 #[doc(inline)]
 pub(crate) use __export_provider_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:prometheus:provider@1.0.0:provider:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:prometheus:provider@1.1.0:provider:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1765] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xe6\x0c\x01A\x02\x01\
-A\x17\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1954] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xa3\x0e\x01A\x02\x01\
+A\x19\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05leve\
 l\x03\0\0\x01@\x02\x05level\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19\
 prometheus:host/log@1.0.0\x05\0\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01\
 s\0\x06failed\x01s\0\x04\0\x0ahost-error\x03\0\0\x03\0\x1bprometheus:host/types@\
@@ -3058,10 +3518,14 @@ r\x04\x0asession-id\0\x07profiles\x07surfaces\x03cwd\0\x04\0\x04info\x03\0\x01\x
 \x03stt\x0dsecret-source\x04\0\x08category\x03\0\0\x01r\x03\x02ids\x08category\x01\
 \x0bdescriptions\x04\0\x0dprovider-spec\x03\0\x02\x01p\x03\x01@\0\0\x04\x04\0\x09\
 providers\x01\x05\x01j\x01s\x01s\x01@\x02\x08providers\x07requests\0\x06\x04\0\x06\
-invoke\x01\x07\x04\0\x20prometheus:provider/plugin@1.0.0\x05\x0b\x04\0\"promethe\
-us:provider/provider@1.0.0\x04\0\x0b\x0e\x01\0\x08provider\x03\0\0\0G\x09produce\
-rs\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.\
-41.0";
+invoke\x01\x07\x04\0\x20prometheus:provider/plugin@1.1.0\x05\x0b\x01B\x0e\x01ps\x01\
+@\0\0\0\x04\0\x0bdescriptors\x01\x01\x01o\x02ss\x01p\x02\x01j\x01\x03\x01s\x01@\x01\
+\x08providers\0\x04\x04\0\x07headers\x01\x05\x01j\x01s\x01s\x01@\x02\x08provider\
+s\x04bodys\0\x06\x04\0\x0fprepare-request\x01\x07\x01j\x01\0\x01s\x01@\x01\x08pr\
+oviders\0\x08\x04\0\x0blist-models\x01\x09\x04\0\x20prometheus:provider/models@1\
+.1.0\x05\x0c\x04\0\"prometheus:provider/provider@1.1.0\x04\0\x0b\x0e\x01\0\x08pr\
+ovider\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227\
+.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {
