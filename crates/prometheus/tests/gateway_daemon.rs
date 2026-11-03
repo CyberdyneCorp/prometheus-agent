@@ -73,6 +73,9 @@ fn a_daemon_killed_mid_turn_recovers_the_conversation() {
     let state = routed(home);
     assert_eq!(state.len(), 1);
     assert_eq!((state[0].1, state[0].2, state[0].3), (0, 1, 1), "{state:?}");
+    // The interrupted turn holds the conversation until it is dropped.
+    send(home, "default", "u1", "/discard");
+    wait_said(home, "default", "Dropped the interrupted turn.");
     send(home, "default", "u1", "are you there?");
     wait_said(home, "default", "fast done");
     let after = routed(home);

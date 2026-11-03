@@ -77,6 +77,10 @@ fn event(shared: &Shared, method: &str, envelope: &Value) {
             id: data["id"].as_str().unwrap_or_default().to_owned(),
             reason: data["reason"].as_str().unwrap_or_default().to_owned(),
         },
+        "session.event" => Msg::Event {
+            kind: data["type"].as_str().unwrap_or_default().to_owned(),
+            payload: data["payload"].clone(),
+        },
         _ => return,
     };
     lane.send(msg);

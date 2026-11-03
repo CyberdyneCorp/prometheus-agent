@@ -104,6 +104,8 @@ pub struct RoutedSession {
     pub restart_count: u32,
     /// Its last turn was interrupted by a restart (`/retry` runs it again).
     pub resume_pending: bool,
+    /// When the restart left that turn pending.
+    pub resume_at: Option<Timestamp>,
 }
 
 /// A session whose turn was running when the daemon last stopped without
@@ -239,7 +241,7 @@ impl Store {
         self.read(|conn| {
             conn.query_row(
                 "SELECT session_id, route_key, reset_reason, state, turn_active, restart_count, \
-                 resume_pending FROM gateway_sessions WHERE session_id = ?1",
+                 resume_pending, resume_at FROM gateway_sessions WHERE session_id = ?1",
                 [session.to_string()],
                 |row| Ok(routed_from_row(row)),
             )
@@ -285,11 +287,33 @@ impl Store {
             "UPDATE gateway_sessions SET turn_active = 1 WHERE session_id = ?1"
         } else {
             "UPDATE gateway_sessions SET turn_active = 0, restart_count = 0, resume_pending = 0, \
-             resume_reason = NULL WHERE session_id = ?1"
+             resume_reason = NULL, resume_at = NULL WHERE session_id = ?1"
         };
         self.write(|tx| {
             tx.execute(sql_text, [session.to_string()]).map_err(sql)?;
             Ok(())
+        })
+    }
+
+    /// `/discard` (or its expiry): the turn a restart left pending is
+    /// given up; its partial transcript stays and no retry is offered.
+    /// The restart counter stays: only a completed turn resets it.
+    /// `false` when no turn of `session` was pending.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn discard_resume(&self, session: SessionId) -> Result<bool, Error> {
+        self.write(|tx| {
+            let changed = tx
+                .execute(
+                    "UPDATE gateway_sessions SET resume_pending = 0, resume_reason = NULL, \
+                     resume_at = NULL \
+                     WHERE session_id = ?1 AND resume_pending = 1",
+                    [session.to_string()],
+                )
+                .map_err(sql)?;
+            Ok(changed > 0)
         })
     }
 
@@ -317,10 +341,10 @@ impl Store {
             drop(stmt);
             tx.execute(
                 "UPDATE gateway_sessions SET turn_active = 0, restart_count = restart_count + 1, \
-                 resume_pending = 1, resume_reason = 'restart_interrupted', \
+                 resume_pending = 1, resume_reason = 'restart_interrupted', resume_at = ?2, \
                  state = CASE WHEN restart_count + 1 >= ?1 THEN 'suspended' ELSE state END \
                  WHERE turn_active = 1",
-                [threshold],
+                params![threshold, millis(Timestamp::now())],
             )
             .map_err(sql)?;
             let mut found = Vec::new();
@@ -367,5 +391,6 @@ fn routed_from_row(row: &Row<'_>) -> Result<RoutedSession, Error> {
         restart_count: u32::try_from(row.get::<_, i64>(5).map_err(sql)?)
             .map_err(|e| corrupt("gateway_sessions.restart_count", e))?,
         resume_pending: row.get::<_, i64>(6).map_err(sql)? != 0,
+        resume_at: row.get::<_, Option<i64>>(7).map_err(sql)?.map(timestamp),
     })
 }

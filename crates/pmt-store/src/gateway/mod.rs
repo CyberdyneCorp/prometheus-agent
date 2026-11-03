@@ -7,6 +7,7 @@
 pub mod chats;
 pub mod outbox;
 pub mod pairing;
+pub mod prefs;
 pub mod routes;
 
 use jiff::Timestamp;

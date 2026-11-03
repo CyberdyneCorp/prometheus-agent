@@ -109,7 +109,10 @@ pub fn authorize(facts: &Facts<'_>) -> Option<Rule> {
 }
 
 /// Commands every authorized user may run where an admin list is set.
-pub const USER_TIER: &[&str] = &["help", "whoami", "stop", "new", "queue", "link"];
+/// `/commands` is the paged form of `/help` and lists only what the
+/// sender may run (spec: Platform start pings and paginated command
+/// browser), so it belongs with it.
+pub const USER_TIER: &[&str] = &["help", "commands", "whoami", "stop", "new", "queue", "link"];
 
 /// Whether `sender` is an admin of the chat's scope (`admins` for DMs,
 /// `group_admins` elsewhere); `None` when that scope has no admin list.

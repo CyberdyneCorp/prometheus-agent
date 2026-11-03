@@ -24,6 +24,10 @@ pub enum OutboundKind {
     Approval,
     /// A gateway message (pairing codes, busy acknowledgements, notices).
     System,
+    /// A producer-classified automatic warning or error notice (retry and
+    /// fallback diagnostics, watchdog notices, failed scheduled jobs,
+    /// adapter errors): muted where warning notifications are suppressed.
+    Warning,
 }
 
 impl OutboundKind {
@@ -35,6 +39,7 @@ impl OutboundKind {
             Self::Notification => "notification",
             Self::Approval => "approval",
             Self::System => "system",
+            Self::Warning => "warning",
         }
     }
 
@@ -44,6 +49,7 @@ impl OutboundKind {
             "notification" => Self::Notification,
             "approval" => Self::Approval,
             "system" => Self::System,
+            "warning" => Self::Warning,
             _ => return None,
         })
     }
@@ -66,6 +72,10 @@ pub enum OutboundState {
     Failed,
     /// An attempt's outcome is unknown; never resent automatically.
     Unknown,
+    /// A warning muted on its destination (never sent).
+    Suppressed,
+    /// An intentionally silent reply (nothing sent).
+    Silent,
 }
 
 impl OutboundState {
@@ -80,6 +90,8 @@ impl OutboundState {
             Self::Read => "read",
             Self::Failed => "failed",
             Self::Unknown => "unknown",
+            Self::Suppressed => "suppressed",
+            Self::Silent => "silent",
         }
     }
 
@@ -94,6 +106,8 @@ impl OutboundState {
             "read" => Self::Read,
             "failed" => Self::Failed,
             "unknown" => Self::Unknown,
+            "suppressed" => Self::Suppressed,
+            "silent" => Self::Silent,
             _ => return None,
         })
     }

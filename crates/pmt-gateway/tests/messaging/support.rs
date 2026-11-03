@@ -336,6 +336,9 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("model", &[], BusyPolicy::Reject),
     ("usage", &[], BusyPolicy::Immediate),
     ("retry", &[], BusyPolicy::InterruptThenDispatch),
+    ("commands", &[], BusyPolicy::Immediate),
+    ("busy", &[], BusyPolicy::Immediate),
+    ("discard", &[], BusyPolicy::Immediate),
 ];
 
 impl Agents for FakeAgents {

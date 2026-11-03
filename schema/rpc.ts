@@ -44,6 +44,8 @@ export interface Ack {
 
 /** `adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect). */
 export interface AdapterStatePayload {
+  /** Outside `connected` longer than `gateway.reconnect_attention_secs` (set once per outage, cleared on reconnect). */
+  attention?: boolean;
   /** Error code of a `degraded`, `retrying` or `fatal` adapter. */
   code?: string | null;
   /** What happened. */

@@ -525,6 +525,8 @@ impl Server {
                                 .unwrap_or_default(),
                             code: a.code,
                             message: a.message,
+                            attention: a.attention,
+                            paused: a.paused,
                             descriptor: a.descriptor.and_then(|d| serde_json::to_value(d).ok()),
                         })
                         .collect()

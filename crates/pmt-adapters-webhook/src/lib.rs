@@ -341,6 +341,8 @@ impl Webhook {
                 (status(403, &json!({"status": "unauthorized"})), false)
             }
             Admission::Dropped => (status(503, &json!({"status": "dropped"})), false),
+            Admission::Paused => (status(503, &json!({"status": "paused"})), false),
+            Admission::Handled => (status(200, &json!({"status": "handled"})), true),
         }
     }
 

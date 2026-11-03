@@ -137,6 +137,13 @@ impl Lane {
             "pause" => self.pause_command(&call.routing, &call.args),
             "sethome" => self.set_home(&call.routing),
             "policy" => self.policy_command(&call.routing, &call.args).await,
+            "commands" => self.commands_command(&call.routing, &call.args),
+            "busy" => self.busy_command(&call.routing, &call.args),
+            "discard" => self.discard_command().await,
+            "retry" => {
+                self.retry_releases();
+                self.registry(call).await;
+            }
             _ => self.registry(call).await,
         }
         None

@@ -176,6 +176,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `attention` | boolean | no | Outside `connected` longer than `gateway.reconnect_attention_secs` (set once per outage, cleared on reconnect). |
 | `code` | string or null | no | Error code of a `degraded`, `retrying` or `fatal` adapter. |
 | `message` | string or null | no | What happened. |
 | `platform` | string | yes | Platform name. |

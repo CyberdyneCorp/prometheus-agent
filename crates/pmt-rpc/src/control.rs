@@ -164,6 +164,12 @@ pub struct AdapterReport {
     pub code: Option<String>,
     /// What happened.
     pub message: Option<String>,
+    /// Outside `connected` longer than `gateway.reconnect_attention_secs`.
+    #[serde(default)]
+    pub attention: bool,
+    /// Paused by an admin (`/platform pause`, `gateway pause`).
+    #[serde(default)]
+    pub paused: bool,
     /// The capability descriptor the adapter loaded with (`gateway
     /// platforms`).
     #[serde(default, skip_serializing_if = "Option::is_none")]

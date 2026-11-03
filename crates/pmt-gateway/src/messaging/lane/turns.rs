@@ -190,6 +190,9 @@ impl Lane {
                 return;
             }
         };
+        if self.hold(&session, &pending) {
+            return;
+        }
         let store = self.shared.store(&self.profile);
         if let Some(store) = &store
             && let Ok(id) = session.parse()
@@ -254,6 +257,7 @@ impl Lane {
                     voice: pending.voice,
                     _typing: typing,
                     speech,
+                    watch: super::watchdog::Watch::new(Instant::now()),
                 });
             }
             Err(err) => {
@@ -308,6 +312,14 @@ impl Lane {
         let Some(mut running) = self.running.take() else {
             return;
         };
+        let finished = if running.watch.stalled {
+            TurnFinished {
+                exit_reason: super::watchdog::STALLED.to_owned(),
+                ..finished
+            }
+        } else {
+            finished
+        };
         let session = self.session.clone().unwrap_or_default();
         self.turn_over(&session);
         self.mark(
@@ -349,7 +361,7 @@ impl Lane {
 
     /// Runs what waits for the turn, in order, until one starts a turn.
     pub(super) async fn next(&mut self) {
-        while self.running.is_none() {
+        while self.running.is_none() && !self.waiting_for_resume() {
             let Some(pending) = self.pending.pop_front() else {
                 return;
             };

@@ -233,17 +233,28 @@ fn adapters_text(profiles: &[String], adapters: &[AdapterReport]) -> String {
             text.push_str("  no messaging adapters enabled\n");
         }
         for adapter in mine {
-            let _ = write!(text, "  {}: {}", adapter.platform, adapter.state);
-            if let Some(code) = &adapter.code {
-                let _ = write!(text, " ({code})");
-            }
-            if let Some(message) = &adapter.message {
-                let _ = write!(text, ": {message}");
-            }
-            text.push('\n');
+            let _ = writeln!(text, "  {}", adapter_line(adapter));
         }
     }
     text
+}
+
+/// `platform: state (code): message [paused] [needs attention]`.
+fn adapter_line(adapter: &AdapterReport) -> String {
+    let mut line = format!("{}: {}", adapter.platform, adapter.state);
+    if let Some(code) = &adapter.code {
+        let _ = write!(line, " ({code})");
+    }
+    if let Some(message) = &adapter.message {
+        let _ = write!(line, ": {message}");
+    }
+    if adapter.paused {
+        line.push_str(" [paused]");
+    }
+    if adapter.attention {
+        line.push_str(" [needs attention]");
+    }
+    line
 }
 
 fn store(ctx: &Context<'_>) -> Result<Store, Error> {

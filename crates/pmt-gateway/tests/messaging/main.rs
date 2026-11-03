@@ -5,6 +5,7 @@ mod access;
 mod busy;
 mod cards;
 mod commands;
+mod controls;
 mod delivery;
 mod features;
 mod health;

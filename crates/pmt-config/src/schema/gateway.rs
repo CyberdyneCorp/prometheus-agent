@@ -92,6 +92,36 @@ pub struct GatewayConfig {
     /// and the OS proxy settings when no proxy is configured; off, adapters
     /// connect directly.
     pub trust_env: bool,
+    /// A running turn with no model output, tool progress or tool result
+    /// for this long gets one no-progress notice in its chat; after twice
+    /// as long it is interrupted as stalled. `0` disables the watchdog.
+    #[schemars(extend("x-apply" = "live"))]
+    pub session_stall_timeout_secs: Seconds<900>,
+    /// An adapter outside `connected` for longer than this is flagged for
+    /// attention (`adapter.state`, `/platforms`, `gateway status`) and the
+    /// profile's other home channels are told once per outage.
+    #[schemars(extend("x-apply" = "live"))]
+    pub reconnect_attention_secs: Seconds<600>,
+}
+
+/// A number of seconds whose default is `DEFAULT` (a top-level key of a
+/// section that otherwise derives its defaults).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct Seconds<const DEFAULT: u64>(pub u64);
+
+impl<const DEFAULT: u64> Default for Seconds<DEFAULT> {
+    fn default() -> Self {
+        Self(DEFAULT)
+    }
+}
+
+impl<const DEFAULT: u64> Seconds<DEFAULT> {
+    /// The value.
+    #[must_use]
+    pub fn get(self) -> u64 {
+        self.0
+    }
 }
 
 /// `[gateway.sessions]`.
@@ -110,6 +140,11 @@ pub struct GatewaySessions {
     /// daemon restarts is suspended; its next message starts a new one.
     #[schemars(range(min = 1, max = 100))]
     pub stuck_loop_threshold: u32,
+    /// A turn left `resume_pending` by a restart holds its chat's queue
+    /// until `/retry` or `/discard`, at most this long; then it is
+    /// discarded automatically.
+    #[schemars(range(min = 1))]
+    pub resume_pending_ttl_secs: u64,
 }
 
 impl Default for GatewaySessions {
@@ -119,6 +154,7 @@ impl Default for GatewaySessions {
             thread_per_user: false,
             route_max_age_secs: 7_776_000,
             stuck_loop_threshold: 3,
+            resume_pending_ttl_secs: 86_400,
         }
     }
 }

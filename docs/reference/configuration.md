@@ -212,7 +212,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `live` | USD a sender's turns may cost per local day (from the usage ledger); unset is no cap. |
 | `gateway.rate_limit.messages_per_minute` | integer | `20` | 1 to 10000 | `live` | Messages a sender may send per minute (sustained rate). |
 | `gateway.rate_limit.turns_per_hour` | integer | `120` | 1 to 100000 | `live` | Turns a sender may start per hour. |
+| `gateway.reconnect_attention_secs` | integer | `600` | ≥ 0 | `live` | An adapter outside `connected` for longer than this is flagged for attention (`adapter.state`, `/platforms`, `gateway status`) and the profile's other home channels are told once per outage. |
+| `gateway.session_stall_timeout_secs` | integer | `900` | ≥ 0 | `live` | A running turn with no model output, tool progress or tool result for this long gets one no-progress notice in its chat; after twice as long it is interrupted as stalled. `0` disables the watchdog. |
 | `gateway.sessions.group_per_user` | boolean | `true` | any | `restart` | Each member of a non-thread group or channel gets a session of their own. |
+| `gateway.sessions.resume_pending_ttl_secs` | integer | `86400` | ≥ 1 | `restart` | A turn left `resume_pending` by a restart holds its chat's queue until `/retry` or `/discard`, at most this long; then it is discarded automatically. |
 | `gateway.sessions.route_max_age_secs` | integer | `7776000` | ≥ 0 | `restart` | Routes (conversation to session, never transcripts) unused this long are pruned; `0` keeps them forever. |
 | `gateway.sessions.stuck_loop_threshold` | integer | `3` | 1 to 100 | `restart` | A session whose turn was running during this many consecutive daemon restarts is suspended; its next message starts a new one. |
 | `gateway.sessions.thread_per_user` | boolean | `false` | any | `restart` | Each participant of a thread gets a session of their own. |

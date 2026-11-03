@@ -391,7 +391,43 @@ the edited policy at once, and `/policy` shows both.
 
 Input that arrives while a turn runs is queued (default), steers the
 running turn or interrupts it, per `busy.input_mode`, overridable per
-platform (`gateway.platforms.<name>.busy`) and per chat policy.
+platform (`gateway.platforms.<name>.busy`) and per chat policy. An admin
+sets the platform's mode from a chat with `/busy queue|steer|interrupt`
+(written to `gateway.platforms.<name>.busy.input_mode` in `config.toml`,
+effective from the next message); `/busy status` names the effective mode
+and its source, for example "steer (platform override)".
+
+## Chat controls
+
+- **Start pings.** Telegram's `/start` (and an app-home open an adapter
+  reports the same way) gets a short greeting naming `/help`; it creates
+  no session, starts no turn and does not count against rate limits.
+- **`/commands [page]`** lists every command and skill command the sender
+  may run here (their tier applies), 15 per page on Telegram and 20
+  elsewhere. Platforms with buttons page with Previous/Next buttons that
+  edit the list in place; others show `page <n>/<total>`. A page past the
+  end answers "page 3 does not exist (2 pages)". Native command menus keep
+  built-ins first, then skills by most recent use, up to the platform's
+  menu cap.
+- **`/approve [session|always]`, `/deny [all] [reason]`** answer the
+  oldest pending approval of the chat's session by text, with the same
+  authorization as card buttons ("No pending approval" when there is
+  none).
+- **`/retry`, `/discard` after a restart.** A turn a crash interrupted is
+  `resume_pending`: new messages wait behind it, in order, until `/retry`
+  runs it again (then the waiting messages) or `/discard` drops it (its
+  partial transcript stays) and runs them now. After
+  `gateway.sessions.resume_pending_ttl_secs` (default 86400) it is dropped
+  automatically.
+- **Stall watchdog.** A turn with no model output, tool progress or tool
+  result for `gateway.session_stall_timeout_secs` (default 900; `0` turns
+  it off) gets one `No progress for <n> min; send /stop to cancel` notice;
+  after twice that time it is interrupted and reported as stalled.
+- **Reconnect attention.** An adapter outside `connected` for longer than
+  `gateway.reconnect_attention_secs` (default 600) is flagged
+  (`adapter.state` with `attention = true`, `[needs attention]` in
+  `prometheus gateway status`), and each other connected platform's home
+  channel hears about it once per outage.
 
 ## Home channels and one-shot sends
 

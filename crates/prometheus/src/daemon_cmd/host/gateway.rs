@@ -24,7 +24,11 @@ use crate::slash::{self, Resolution, Surface};
 
 /// The gateway-surface commands of `scope` (built-ins and quick
 /// commands) and its user-invocable skills, for native command menus.
-fn menu_commands(scope: &ProfileScope, user_home: Option<&Path>) -> Vec<MenuCommand> {
+fn menu_commands(
+    scope: &ProfileScope,
+    store: &Store,
+    user_home: Option<&Path>,
+) -> Vec<MenuCommand> {
     let registry = commands::profile_registry(scope);
     let builtins = registry
         .builtins()
@@ -56,16 +60,36 @@ fn menu_commands(scope: &ProfileScope, user_home: Option<&Path>) -> Vec<MenuComm
         .filter(|s| !disabled.contains(&s.name));
     let table =
         pmt_skills::slash::SlashTable::new(enabled.map(AsRef::as_ref), &registry.builtin_names());
-    let skills = table.commands.iter().map(|(slug, name)| MenuCommand {
-        name: slug.clone(),
-        description: catalog
-            .skills
-            .iter()
-            .find(|s| &s.name == name)
-            .map_or_else(|| format!("skill {name}"), |s| s.description.clone()),
-        takes_args: true,
-    });
-    builtins.chain(externals).chain(skills).collect()
+    // Built-ins first, then skills by recent use: a capped menu keeps
+    // the ones people reach for.
+    let last_used = |name: &str| {
+        store
+            .skill_usage(name)
+            .ok()
+            .flatten()
+            .and_then(|u| u.last_activity_at)
+    };
+    let mut skills: Vec<(Option<jiff::Timestamp>, MenuCommand)> = table
+        .commands
+        .iter()
+        .map(|(slug, name)| {
+            let command = MenuCommand {
+                name: slug.clone(),
+                description: catalog
+                    .skills
+                    .iter()
+                    .find(|s| &s.name == name)
+                    .map_or_else(|| format!("skill {name}"), |s| s.description.clone()),
+                takes_args: true,
+            };
+            (last_used(name), command)
+        })
+        .collect();
+    skills.sort_by_key(|(used, _)| std::cmp::Reverse(*used));
+    builtins
+        .chain(externals)
+        .chain(skills.into_iter().map(|(_, c)| c))
+        .collect()
 }
 
 fn busy_policy(policy: slash::BusyPolicy) -> BusyPolicy {
@@ -222,6 +246,7 @@ impl Agents for DaemonHost {
         };
         menu_commands(
             &profile.scope(),
+            &profile.store,
             self.launch.user_home().map(PathBuf::as_path),
         )
     }

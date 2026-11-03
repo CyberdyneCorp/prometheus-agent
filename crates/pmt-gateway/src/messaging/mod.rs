@@ -28,6 +28,7 @@ mod admit;
 pub mod agents;
 mod artifacts;
 pub mod attachments;
+mod attention;
 pub mod auth;
 mod cache;
 mod cards;
@@ -351,6 +352,7 @@ impl Gateway {
         }
         cache::spawn(&shared);
         menus::spawn(&shared);
+        attention::spawn(&shared);
         if let Some(health) = shared.options.health.clone() {
             health::spawn(&shared, health);
         }

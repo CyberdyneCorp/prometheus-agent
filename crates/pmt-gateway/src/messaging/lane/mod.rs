@@ -13,11 +13,15 @@
 mod admin;
 mod clarify;
 mod commands;
+mod controls;
 mod input;
 mod lifecycle;
+mod pages;
 mod reply;
 mod requests;
+mod resume;
 mod turns;
+mod watchdog;
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -51,6 +55,9 @@ pub(crate) enum Msg {
     Finished(TurnFinished),
     /// Streamed answer text.
     Delta(String),
+    /// A trajectory event of the session (`session.event`: model output,
+    /// tool calls and results, ...).
+    Event { kind: String, payload: Value },
     /// A server request of the session (approval, clarify, ...).
     Asked {
         id: String,
@@ -174,6 +181,8 @@ struct Running {
     _typing: Option<tokio_util::sync::DropGuard>,
     /// The reply's audio streamed to the platform, sentence by sentence.
     speech: Option<reply::Spoken>,
+    /// The stall watchdog's view of the turn.
+    watch: watchdog::Watch,
 }
 
 /// A transition run once the stopped turn has ended.
@@ -214,6 +223,9 @@ struct Lane {
     /// platform answering commands privately, such as Slack's slash
     /// commands, recognises its reply by it).
     answering: Option<String>,
+    /// A turn a restart left `resume_pending` holds the queue until this
+    /// deadline (`/retry`, `/discard`, or the expiry release it).
+    held: Option<resume::Held>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -271,6 +283,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         policy: None,
         mirrors: Vec::new(),
         voice_input: false,
+        held: None,
     };
     let span = tracing::info_span!(
         "conversation",
@@ -353,11 +366,12 @@ pub(crate) async fn drain(shared: &Shared, deadline: Duration) -> bool {
 impl Lane {
     async fn run(mut self, mut rx: mpsc::UnboundedReceiver<Msg>) {
         loop {
-            let msg = match self.buffer.as_ref().map(input::Buffer::due) {
+            let msg = match self.wake_at() {
                 Some(due) => tokio::select! {
                     msg = rx.recv() => msg,
                     () = tokio::time::sleep_until(due) => {
-                        self.flush().await;
+                        self.tick(Instant::now()).await;
+                        self.publish_status();
                         continue;
                     }
                 },
@@ -367,6 +381,28 @@ impl Lane {
             self.handle(msg).await;
             self.publish_status();
         }
+    }
+
+    /// The earliest timer of the lane: gathered input, the stall
+    /// watchdog, a held turn's expiry.
+    fn wake_at(&self) -> Option<Instant> {
+        [
+            self.buffer.as_ref().map(input::Buffer::due),
+            self.stall_due(),
+            self.held.as_ref().map(resume::Held::deadline),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
+    }
+
+    /// Runs every timer that is due at `now`.
+    async fn tick(&mut self, now: Instant) {
+        if self.buffer.as_ref().is_some_and(|b| b.due() <= now) {
+            self.flush().await;
+        }
+        self.check_stall(now).await;
+        self.check_held(now).await;
     }
 
     async fn handle(&mut self, msg: Msg) {
@@ -384,7 +420,11 @@ impl Lane {
                 self.answering = None;
             }
             Msg::Finished(finished) => self.finished(finished).await,
-            Msg::Delta(text) => self.delta(&text).await,
+            Msg::Delta(text) => {
+                self.progressed();
+                self.delta(&text).await;
+            }
+            Msg::Event { kind, payload } => self.session_event(&kind, &payload),
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),
             Msg::Resolved { id, by_client } => self.resolved(&id, &by_client),
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),

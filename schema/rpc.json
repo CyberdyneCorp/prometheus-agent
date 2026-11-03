@@ -18,6 +18,11 @@
       "additionalProperties": false,
       "description": "`adapter.state` payload: one messaging adapter changed state (spec:\nplatform-adapters, Adapter state reporting and reconnect).",
       "properties": {
+        "attention": {
+          "default": false,
+          "description": "Outside `connected` longer than `gateway.reconnect_attention_secs`\n(set once per outage, cleared on reconnect).",
+          "type": "boolean"
+        },
         "code": {
           "default": null,
           "description": "Error code of a `degraded`, `retrying` or `fatal` adapter.",

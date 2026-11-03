@@ -1905,3 +1905,20 @@ capabilities = [
 
 [platform-adapters."WhatsApp interactive and rich features"]
 "Clarify as poll" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::a_clarify_question_is_a_poll_whose_vote_is_the_answer", "crates/pmt-adapters-whatsapp/src/session.rs::a_clarify_question_is_a_poll_and_a_vote_answers_it"]
+
+# Group 27: gateway chat controls, display and routing (tasks 27.1-27.6).
+
+[messaging-gateway."Platform start pings and paginated command browser"]
+"Start ping is free" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_start_ping_greets_without_a_session_or_a_rate_limit_count"]
+"Page out of range" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_page_past_the_last_names_the_page_count", "crates/pmt-gateway/src/messaging/lane/pages.rs::thirty_seven_commands_make_two_pages_of_twenty"]
+
+[messaging-gateway."Text approval and busy-mode commands"]
+"Approve by text" = ["crates/pmt-gateway/tests/messaging/controls.rs::approve_session_by_text_resolves_the_oldest_pending_approval"]
+"Busy mode persisted" = ["crates/pmt-gateway/tests/messaging/controls.rs::busy_mode_is_persisted_for_the_platform_and_reported_with_its_source"]
+
+[messaging-gateway."Discarding a restart-interrupted turn"]
+"Discard unblocks the queue" = ["crates/pmt-gateway/tests/messaging/controls.rs::discard_marks_the_pending_turn_and_runs_the_queue_in_order"]
+
+[messaging-gateway."Session stall watchdog and reconnect attention"]
+"Stalled turn interrupted" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_stalled_turn_is_noticed_once_then_interrupted", "crates/pmt-gateway/src/messaging/lane/watchdog.rs::five_minutes_without_progress"]
+"Long outage escalated once" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_long_outage_is_escalated_once_to_the_other_home_channel", "crates/pmt-gateway/src/messaging/attention.rs::an_eleven_minute_outage_is_named_in_minutes"]

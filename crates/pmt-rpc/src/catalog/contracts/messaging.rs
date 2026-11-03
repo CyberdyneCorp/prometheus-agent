@@ -53,6 +53,10 @@ pub struct AdapterStatePayload {
     /// What happened.
     #[serde(default)]
     pub message: Option<String>,
+    /// Outside `connected` longer than `gateway.reconnect_attention_secs`
+    /// (set once per outage, cleared on reconnect).
+    #[serde(default)]
+    pub attention: bool,
 }
 
 event!(/// `adapter.state`: a messaging adapter of a profile the client is

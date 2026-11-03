@@ -72,6 +72,9 @@ pub(crate) struct Slot {
     stop: CancellationToken,
     /// Where state changes are announced (`adapter.state`).
     shared: Weak<Shared>,
+    /// Since when the adapter is outside `connected` (an unconfirmed
+    /// fresh connection counts as connected).
+    pub(crate) outside_since: Mutex<Option<tokio::time::Instant>>,
 }
 
 impl Slot {
@@ -106,17 +109,50 @@ impl Slot {
         }
     }
 
-    fn state(&self) -> AdapterState {
+    pub(crate) fn state(&self) -> AdapterState {
         self.status.lock().expect("status poisoned").state
     }
 
-    fn set(&self, state: AdapterState, error: Option<&AdapterError>) {
+    /// The adapter's status now.
+    pub(crate) fn status(&self) -> AdapterStatus {
+        self.status.lock().expect("status poisoned").clone()
+    }
+
+    /// Changes the status with `change` and announces it when it changed.
+    pub(crate) fn update(&self, change: impl FnOnce(&mut AdapterStatus)) {
         let announced = {
             let mut status = self.status.lock().expect("status poisoned");
-            let changed = status.state != state || status.code.as_ref() != error.map(|e| &e.code);
+            let before = status.clone();
+            change(&mut status);
+            (*status != before).then(|| status.clone())
+        };
+        if let (Some(status), Some(shared)) = (announced, self.shared.upgrade()) {
+            announce(&shared, &status);
+        }
+    }
+
+    fn set(&self, state: AdapterState, error: Option<&AdapterError>) {
+        let connected = state == AdapterState::Connected
+            || (state == AdapterState::Degraded && error.is_some_and(|e| e.code == "unconfirmed"));
+        {
+            let mut since = self.outside_since.lock().expect("slot poisoned");
+            match (connected, *since) {
+                (true, _) => *since = None,
+                (false, None) => *since = Some(tokio::time::Instant::now()),
+                (false, Some(_)) => {}
+            }
+        }
+        let announced = {
+            let mut status = self.status.lock().expect("status poisoned");
+            let changed = status.state != state
+                || status.code.as_ref() != error.map(|e| &e.code)
+                || (connected && status.attention);
             status.state = state;
             status.code = error.map(|e| e.code.clone());
             status.message = error.map(|e| e.message.clone());
+            if connected {
+                status.attention = false;
+            }
             changed.then(|| status.clone())
         };
         if let (Some(status), Some(shared)) = (announced, self.shared.upgrade()) {
@@ -308,6 +344,8 @@ fn record_failure(shared: &Shared, key: (String, String), error: &AdapterError) 
         state: AdapterState::Fatal,
         code: Some(error.code.clone()),
         message: Some(error.message.clone()),
+        attention: false,
+        paused: false,
         descriptor: None,
     };
     shared
@@ -351,6 +389,8 @@ fn launch_slot(
             state: AdapterState::Connecting,
             code: None,
             message: None,
+            attention: false,
+            paused: false,
             descriptor: Some(descriptor.clone()),
         }),
         descriptor,
@@ -360,6 +400,7 @@ fn launch_slot(
         lost: Notify::new(),
         stop: shared.stop.child_token(),
         shared: Arc::downgrade(shared),
+        outside_since: Mutex::new(Some(tokio::time::Instant::now())),
     });
     shared
         .adapters
@@ -565,6 +606,7 @@ fn announce(shared: &Shared, status: &AdapterStatus) {
         "state": status.state,
         "code": status.code,
         "message": status.message,
+        "attention": status.attention,
     });
     shared
         .server
@@ -751,6 +793,18 @@ impl AdapterLink for Link {
             }
         })
     }
+}
+
+/// Every running adapter, by `(profile, platform)`.
+pub(crate) fn all(shared: &Shared) -> Vec<((String, String), Arc<Slot>)> {
+    shared
+        .adapters
+        .slots
+        .read()
+        .expect("adapters poisoned")
+        .iter()
+        .map(|(key, slot)| (key.clone(), Arc::clone(slot)))
+        .collect()
 }
 
 /// The adapters that are connected (or degraded) right now, by

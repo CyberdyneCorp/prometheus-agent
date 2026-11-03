@@ -149,6 +149,10 @@ async fn decide(
         tracing::debug!(profile = owner, platform, "dropped a redelivered event");
         return Admission::Duplicate;
     }
+    if is_start_ping(&inbound) {
+        reply(shared, owner, platform, &inbound, GREETING).await;
+        return Admission::Handled;
+    }
     if let Some(limited) = limit(shared, owner, platform, &inbound, gateway).await {
         return limited;
     }
@@ -174,6 +178,25 @@ async fn decide(
         thread_per_user,
     });
     lane::input(shared, &key, routing, inbound, voice)
+}
+
+/// What a start ping answers.
+pub(crate) const GREETING: &str = "Hi! Send me a message to start, or /help to see what I can do.";
+
+/// A platform's start ping (spec: messaging-gateway, Platform start pings
+/// and paginated command browser): Telegram's `/start` (with an optional
+/// deep-link payload or `@bot` suffix), or an adapter's app-home open
+/// submitted the same way. It is answered without a session or a turn and
+/// is not counted against rate limits.
+pub(crate) fn is_start_ping(inbound: &Inbound) -> bool {
+    if inbound.callback.is_some() || !inbound.attachments.is_empty() {
+        return false;
+    }
+    let first = inbound.text.split_whitespace().next().unwrap_or_default();
+    first == "/start"
+        || first
+            .strip_prefix("/start@")
+            .is_some_and(|bot| !bot.is_empty())
 }
 
 /// The policy matching an event, if any.

@@ -233,9 +233,10 @@ impl Lane {
             );
             return;
         };
-        if kind == CardKind::Clarify {
-            self.clarify_pressed(routing, id, choice, picked);
-            return;
+        match kind {
+            CardKind::Clarify => return self.clarify_pressed(routing, id, choice, picked),
+            CardKind::Page => return self.page_pressed(routing, id, choice),
+            CardKind::Approval => {}
         }
         let Some(decision) = decision_of(choice) else {
             return;

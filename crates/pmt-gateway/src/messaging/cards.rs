@@ -33,6 +33,9 @@ pub(crate) enum CardKind {
     Approval,
     /// A clarify question (`clar`): the choice is `<question>.<number>`.
     Clarify,
+    /// A paged listing's previous/next button (`page`): the id names the
+    /// listing, the choice is the page to show.
+    Page,
 }
 
 impl CardKind {
@@ -40,6 +43,7 @@ impl CardKind {
         match self {
             Self::Approval => "appr",
             Self::Clarify => "clar",
+            Self::Page => "page",
         }
     }
 
@@ -47,6 +51,7 @@ impl CardKind {
         match prefix {
             "appr" => Some(Self::Approval),
             "clar" => Some(Self::Clarify),
+            "page" => Some(Self::Page),
             _ => None,
         }
     }

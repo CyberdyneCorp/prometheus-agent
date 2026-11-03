@@ -269,6 +269,13 @@ pub struct AdapterStatus {
     pub code: Option<String>,
     /// Error message.
     pub message: Option<String>,
+    /// Outside `connected` for longer than `gateway.reconnect_attention_secs`.
+    #[serde(default)]
+    pub attention: bool,
+    /// An admin paused it (`/platform pause`): inbound messages are
+    /// acknowledged and dropped, outbound delivery continues.
+    #[serde(default)]
+    pub paused: bool,
     /// What the adapter declared (as loaded: the limit lowered by the
     /// platform table); `None` when it could not be built.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -293,6 +300,11 @@ pub enum Admission {
     Queued,
     /// Not routed (unserved profile, refused bot message).
     Dropped,
+    /// The adapter is paused by an admin: acknowledged and dropped.
+    Paused,
+    /// Taken without starting a turn (a start ping, an observed group
+    /// message).
+    Handled,
 }
 
 /// An adapter's verdict on a sender (spec: platform-adapters, Adapter

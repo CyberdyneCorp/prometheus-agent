@@ -1673,10 +1673,23 @@
           "description": "Per-sender rate limits (overridable per platform and chat policy).",
           "x-apply": "live"
         },
+        "reconnect_attention_secs": {
+          "$ref": "#/$defs/Seconds2",
+          "default": 600,
+          "description": "An adapter outside `connected` for longer than this is flagged for\nattention (`adapter.state`, `/platforms`, `gateway status`) and the\nprofile's other home channels are told once per outage.",
+          "x-apply": "live"
+        },
+        "session_stall_timeout_secs": {
+          "$ref": "#/$defs/Seconds",
+          "default": 900,
+          "description": "A running turn with no model output, tool progress or tool result\nfor this long gets one no-progress notice in its chat; after twice\nas long it is interrupted as stalled. `0` disables the watchdog.",
+          "x-apply": "live"
+        },
         "sessions": {
           "$ref": "#/$defs/GatewaySessions",
           "default": {
             "group_per_user": true,
+            "resume_pending_ttl_secs": 86400,
             "route_max_age_secs": 7776000,
             "stuck_loop_threshold": 3,
             "thread_per_user": false
@@ -1776,6 +1789,13 @@
           "default": true,
           "description": "Each member of a non-thread group or channel gets a session of\ntheir own.",
           "type": "boolean"
+        },
+        "resume_pending_ttl_secs": {
+          "default": 86400,
+          "description": "A turn left `resume_pending` by a restart holds its chat's queue\nuntil `/retry` or `/discard`, at most this long; then it is\ndiscarded automatically.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
         },
         "route_max_age_secs": {
           "default": 7776000,
@@ -3548,6 +3568,18 @@
       },
       "type": "object"
     },
+    "Seconds": {
+      "description": "A number of seconds whose default is `DEFAULT` (a top-level key of a\nsection that otherwise derives its defaults).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "Seconds2": {
+      "description": "A number of seconds whose default is `DEFAULT` (a top-level key of a\nsection that otherwise derives its defaults).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
     "SecretName": {
       "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
       "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
@@ -5314,8 +5346,11 @@
           "messages_per_minute": 20,
           "turns_per_hour": 120
         },
+        "reconnect_attention_secs": 600,
+        "session_stall_timeout_secs": 900,
         "sessions": {
           "group_per_user": true,
+          "resume_pending_ttl_secs": 86400,
           "route_max_age_secs": 7776000,
           "stuck_loop_threshold": 3,
           "thread_per_user": false

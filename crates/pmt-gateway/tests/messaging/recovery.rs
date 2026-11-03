@@ -129,6 +129,8 @@ fn the_third_restart_during_a_turn_suspends_the_session() {
     for _ in 0..2 {
         home = phase(async {
             let h = Harness::start_in(home, Setup::new(&open("telegram"))).await;
+            // The interrupted turn holds the queue until it is dropped.
+            h.dm("telegram", "1", "/discard").await;
             h.dm("telegram", "1", "slow:60000").await;
             eventually("the turn runs again", || h.agents.running() == 1).await;
             h.home

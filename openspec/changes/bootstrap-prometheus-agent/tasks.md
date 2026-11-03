@@ -292,7 +292,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 27. M2 Gateway chat controls, display and routing
 
-- [ ] 27.1 Implement platform start pings and the paginated command browser, text approval and busy-mode commands (busy mode persisted), discarding a restart-interrupted turn and the session stall watchdog with reconnect attention escalated once; verify with the fake adapter (spec: messaging-gateway)
+- [x] 27.1 Implement platform start pings and the paginated command browser, text approval and busy-mode commands (busy mode persisted), discarding a restart-interrupted turn and the session stall watchdog with reconnect attention escalated once; verify with the fake adapter (spec: messaging-gateway)
 - [ ] 27.2 Implement adapter operations from chat (e.g. clearing a breaker) and restart and update from chat with confirmation in the same thread; verify with admin-tier tests that a denied confirmation does nothing (spec: messaging-gateway)
 - [ ] 27.3 Implement display policy with per-platform overrides, the runtime metadata footer kept out of model context, per-platform warning notification suppression, message timestamps in model context (new sessions only) and intentional silence tokens; verify with the fake adapter (spec: messaging-gateway)
 - [ ] 27.4 Implement group mention gating with observe mode, bot-authored message admission (ignored by default, multipart collection), channel history backfill up to the bot's last reply, role-based access grants that deny on lookup failure, and per-chat policy thread matching with skill preload; verify with table tests (spec: messaging-gateway)
