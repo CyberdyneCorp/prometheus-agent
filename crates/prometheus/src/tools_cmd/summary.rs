@@ -108,7 +108,8 @@ pub fn surfaces(config: &Config) -> Vec<SessionSurface> {
 }
 
 /// Whether sessions of `surface` have someone to answer prompts.
-fn attended(surface: &SessionSurface) -> bool {
+#[must_use]
+pub fn attended(surface: &SessionSurface) -> bool {
     !matches!(
         surface,
         SessionSurface::Cron | SessionSurface::Api | SessionSurface::AcpUnattended

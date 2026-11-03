@@ -565,10 +565,12 @@ pub enum PromptCommand {
 /// `prometheus prompt size` options.
 #[derive(Debug, clap::Args)]
 pub struct PromptSizeArgs {
-    /// Surface whose platform hint the prompt carries.
+    /// Surface a new session starts on (`cli`, `cron`, `api`, a messaging
+    /// platform such as `telegram` or `webhook`...): its platform hint and
+    /// starting toolsets.
     #[arg(long, value_name = "SURFACE", default_value = "cli")]
     pub platform: String,
-    /// Comma-separated toolsets (default: `tools.enabled_toolsets`).
+    /// Comma-separated toolsets (default: the surface's starting toolsets).
     #[arg(long, value_name = "A,B", value_delimiter = ',')]
     pub toolsets: Vec<String>,
     /// `<provider>/<model>` or a model of the configured provider (default:

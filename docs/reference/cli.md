@@ -6420,7 +6420,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --platform <SURFACE>
-          Surface whose platform hint the prompt carries
+          Surface a new session starts on (`cli`, `cron`, `api`, a messaging platform such as `telegram` or `webhook`...): its platform hint and starting toolsets
 
           [default: cli]
 
@@ -6428,7 +6428,7 @@ Options:
           Profile to use (default: the home's active_profile, else default)
 
       --toolsets <A,B>
-          Comma-separated toolsets (default: `tools.enabled_toolsets`)
+          Comma-separated toolsets (default: the surface's starting toolsets)
 
       --model <ID>
           `<provider>/<model>` or a model of the configured provider (default: `model.default`)

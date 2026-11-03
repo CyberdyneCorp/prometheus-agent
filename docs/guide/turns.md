@@ -254,11 +254,16 @@ bytes and estimated tokens per layer and per toolset:
 prometheus prompt size --platform telegram --toolsets core --json
 ```
 
-`--platform` takes a surface with a built-in hint:
+`--platform` takes a surface with a built-in hint or a known messaging
+platform (`webhook` included). Without `--toolsets`, the tools are the
+surface's starting toolsets (`toolsets.surfaces.<surface>`, else the
+surface default: `api_server`, `platform-<p>`, `webhook-safe`...), and the
+model-dependent schema variants are those of `--model`'s route (the V4A
+[`patch`](../reference/tools.md#patch) for OpenAI models, for example):
 
 ```console
 $ prometheus prompt size --platform fax # exits 2
-error: unknown platform 'fax' (valid: cli, tui, desktop, acp, api, cron, telegram, discord, slack, whatsapp, signal, matrix, email, sms)
+error: unknown platform 'fax' (valid: cli, tui, desktop, acp, api, cron, telegram, discord, slack, whatsapp, signal, matrix, email, sms, webhook)
 ```
 
 ## Context references

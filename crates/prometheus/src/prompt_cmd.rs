@@ -13,17 +13,17 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_providers::ProviderRegistry;
 use pmt_providers::metadata::Catalog;
-use pmt_tools::{Selection, SurfaceInputs, ToolSurface};
+use pmt_providers::resolve::Target;
+use pmt_tools::variants::RouteTraits;
+use pmt_tools::{Selection, SessionSurface, SurfaceInputs, ToolSurface};
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::cli::{PromptCommand, PromptSizeArgs};
 use crate::context::Context;
 use crate::output::{document, print_raw};
+use crate::tools_cmd::summary::attended;
 use crate::tools_cmd::{Inventory, with_inventory};
-
-/// Surfaces whose sessions run without a person to ask.
-const UNATTENDED_PLATFORMS: &[&str] = &["cron", "api"];
 
 /// Runs one `prompt` subcommand.
 ///
@@ -49,8 +49,14 @@ struct Body<'a> {
 }
 
 fn size(args: &PromptSizeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
-    if platform::builtin(&args.platform).is_none() {
-        let names: Vec<&str> = platform::names().collect();
+    let Some(surface) = surface_of(&args.platform) else {
+        let mut names: Vec<&str> = platform::names().collect();
+        names.extend(
+            pmt_config::platforms::FIRST_PARTY
+                .iter()
+                .map(|p| p.name)
+                .filter(|p| platform::builtin(p).is_none()),
+        );
         return Err(Error::new(
             &codes::PROMPT_UNKNOWN_PLATFORM,
             format!(
@@ -59,10 +65,10 @@ fn size(args: &PromptSizeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
                 names.join(", ")
             ),
         ));
-    }
+    };
     let scope = ctx.scope()?;
     with_inventory(ctx, async |inventory| {
-        let body = measure(args, &scope, &inventory).await?;
+        let body = measure(args, &surface, &scope, &inventory).await?;
         if ctx.json {
             return document("prompt size", &body);
         }
@@ -72,24 +78,24 @@ fn size(args: &PromptSizeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
 
 async fn measure<'a>(
     args: &'a PromptSizeArgs,
+    surface: &SessionSurface,
     scope: &pmt_config::ProfileScope,
     inventory: &Inventory<'_>,
 ) -> Result<Body<'a>, Error> {
     let config = scope.config();
-    let (provider, model) = route(args, config)?;
+    let (provider, model, route) = route(args, config)?;
     let (meta, _) = Catalog::new(config, None).metadata(&provider, &model);
-    let enabled = if args.toolsets.is_empty() {
-        config.tools.enabled_toolsets.clone()
+    let mut selection = if args.toolsets.is_empty() {
+        Selection::for_surface(inventory.registry, surface, &config.tools, &config.toolsets)?
     } else {
-        args.toolsets.clone()
+        Selection::resolve(
+            inventory.registry,
+            &args.toolsets,
+            &config.tools.disabled_toolsets,
+        )?
     };
-    let mut selection = Selection::resolve(
-        inventory.registry,
-        &enabled,
-        &config.tools.disabled_toolsets,
-    )?;
     // Cron jobs and API callers have nobody to answer `clarify`.
-    if UNATTENDED_PLATFORMS.contains(&args.platform.as_str()) {
+    if !attended(surface) {
         selection = selection.without_interactive(inventory.registry);
     }
     let surface = ToolSurface::build(SurfaceInputs {
@@ -98,7 +104,7 @@ async fn measure<'a>(
         capabilities: inventory.capabilities,
         config: inventory.config,
         probes: inventory.probes,
-        route: &pmt_tools::variants::RouteTraits::default(),
+        route: &route,
     })
     .await;
     let built = prompt::build(&PromptInputs {
@@ -131,17 +137,49 @@ async fn measure<'a>(
     })
 }
 
-/// The provider and model a new session would use.
-fn route(args: &PromptSizeArgs, config: &pmt_config::Config) -> Result<(String, String), Error> {
+/// The surface `platform` names: a terminal or service surface, else a
+/// messaging platform (a built-in hint's or a known adapter's, `webhook`
+/// included).
+fn surface_of(platform: &str) -> Option<SessionSurface> {
+    if let Some(surface) = SessionSurface::parse(platform) {
+        return Some(surface);
+    }
+    let known = platform::builtin(platform).is_some() || pmt_config::platforms::is_known(platform);
+    known.then(|| SessionSurface::Gateway(platform.to_owned()))
+}
+
+/// The provider, model and schema-variant traits a new session would use.
+/// The wire format is chosen as route resolution chooses it, from the
+/// configured endpoint, without probing or a credential.
+fn route(
+    args: &PromptSizeArgs,
+    config: &pmt_config::Config,
+) -> Result<(String, String, RouteTraits), Error> {
     let registry = ProviderRegistry::for_profile(config, Vec::new())?;
     let current = config.model.provider.as_deref();
     let reference = args.model.as_deref().or(config.model.default.as_deref());
     let Some(reference) = reference else {
-        return Ok((current.unwrap_or("auto").to_owned(), "unknown".to_owned()));
+        let provider = current.unwrap_or("auto").to_owned();
+        return Ok((provider, "unknown".to_owned(), RouteTraits::default()));
     };
     let target = pmt_providers::target::parse(reference, &config.model, &registry, current)?;
+    let traits = traits(&registry, &target, reference);
     let model = target.model.unwrap_or_else(|| reference.to_owned());
-    Ok((target.provider, model))
+    Ok((target.provider, model, traits))
+}
+
+fn traits(registry: &ProviderRegistry, target: &Target, reference: &str) -> RouteTraits {
+    let model = target.model.as_deref().unwrap_or(reference);
+    let Ok(provider) = registry.lookup(&target.provider) else {
+        return RouteTraits::default();
+    };
+    let base_url = target
+        .base_url
+        .as_deref()
+        .or(provider.base_url())
+        .unwrap_or_default();
+    let (wire, _) = pmt_providers::wire::select(provider, base_url);
+    RouteTraits::of(provider.id(), model, wire)
 }
 
 /// Each exposed tool's schema text, with its toolset.
