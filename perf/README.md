@@ -110,6 +110,16 @@ compared with a thin-LTO base, so its gate saw the gateway's growth net of
 that saving (about +7%); every branch after it builds base and head alike
 with fat LTO, so their growth is measured in full again.
 
+The WASM plugin host (m2-extensions) re-baselined `perf/reference.json`
+deliberately: wasmtime with the Cranelift compiler (design D7; plugins are
+compiled at load, so the compiler ships in the binary) took the stripped
+binary from 42.97 to 54.07 MiB (+26%) on the reference runner, while
+startup (2.67 -> 2.73 ms median), peak RSS (9.10 -> 9.49 MiB) and the chat
+prompt (34.69 -> 33.59 ms) stayed put: nothing of the engine runs unless a
+plugin is enabled. Measured by CI run 41610015894. Cranelift's host ISA
+and the Pulley interpreter come with the engine's `cranelift` feature;
+there is no smaller configuration that still compiles components at load.
+
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.
 
