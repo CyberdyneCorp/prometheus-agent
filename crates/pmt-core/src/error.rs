@@ -954,6 +954,18 @@ error_codes! {
     /// A call into a plugin trapped, timed out or returned an error.
     PLUGINS_CALL = ("plugins.call", Tool,
         "A call into a plugin failed: it trapped, exceeded `plugins.wasm.call_timeout_ms`, is suspended after repeated traps, or returned an error; the message names the plugin.");
+    /// A plugin package without a signature the policy accepts.
+    PLUGINS_UNSIGNED = ("plugins.unsigned", PermissionDenied,
+        "The plugin package carries no signature a trusted key verifies; under `plugins.signature_policy = \"require\"` (and for every catalog install) it installs only with `--allow-unsigned`, which the install record keeps.");
+    /// A plugin package or catalog whose signature does not verify.
+    PLUGINS_SIGNATURE = ("plugins.signature", PermissionDenied,
+        "The plugin package's signature does not verify against its publisher key (or the package does not match its catalog digest); nothing was installed, and no flag overrides it.");
+    /// A plugin on the catalog's kill list.
+    PLUGINS_REMOVED = ("plugins.removed", PermissionDenied,
+        "The plugin (or its repository) was removed from the catalog and is blocked; only `prometheus plugins install --allow-removed` installs it anyway, recorded on its install record.");
+    /// A plugin catalog or package that could not be fetched.
+    PLUGINS_CATALOG = ("plugins.catalog", Unavailable,
+        "The plugin catalog entry, package or repository could not be fetched or read; the message names it.");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

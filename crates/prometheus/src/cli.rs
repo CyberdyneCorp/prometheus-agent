@@ -59,6 +59,12 @@ pub struct Cli {
     /// Only the answer: no banner, spinner or tool previews.
     #[arg(short, long, global = true)]
     pub quiet: bool,
+    /// Recovery start (spec: plugin-system, Safe mode).
+    #[arg(long, global = true)]
+    #[arg(
+        help = "Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider"
+    )]
+    pub safe_mode: bool,
     /// `-V/--version`: the identity line (`--verbose`: as `version --verbose`).
     #[arg(short = 'V', long = "version", help = "Print version")]
     pub print_version: bool,

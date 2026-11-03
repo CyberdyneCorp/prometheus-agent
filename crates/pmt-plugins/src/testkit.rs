@@ -53,7 +53,14 @@ pub fn component(name: &str) -> Vec<u8> {
     let module = out
         .join("wasm32-unknown-unknown/release")
         .join(format!("{}.wasm", name.replace('-', "_")));
-    let bytes = std::fs::read(&module).unwrap_or_else(|e| panic!("{}: {e}", module.display()));
+    // Another test process building the same workspace may be replacing
+    // the file right now: building again waits for its build lock.
+    let bytes = std::fs::read(&module)
+        .or_else(|_| {
+            build(&out);
+            std::fs::read(&module)
+        })
+        .unwrap_or_else(|e| panic!("{}: {e}", module.display()));
     encode(&bytes)
 }
 

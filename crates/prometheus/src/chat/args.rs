@@ -112,6 +112,9 @@ pub struct ChatArgs {
     /// file, the memory snapshot and preloaded skills.
     #[arg(long)]
     pub ignore_rules: bool,
+    /// The global `--safe-mode` (set from the top-level flag).
+    #[arg(skip)]
+    pub safe_mode: bool,
     /// Write this run's usage as JSON to PATH when it ends, whatever the
     /// outcome.
     #[arg(long, value_name = "PATH")]
@@ -177,17 +180,56 @@ impl ChatArgs {
         )
     }
 
+    /// `--ignore-user-config`, or `--safe-mode`, which implies it.
+    #[must_use]
+    pub fn ignores_user_config(&self) -> bool {
+        self.ignore_user_config || self.safe_mode
+    }
+
+    /// `--ignore-rules`, or `--safe-mode`, which implies it.
+    #[must_use]
+    pub fn ignores_rules(&self) -> bool {
+        self.ignore_rules || self.safe_mode
+    }
+
+    /// Runs in this process: `--in-process`, or `--safe-mode`, which never
+    /// hands a turn to a daemon that read the profile's configuration.
+    #[must_use]
+    pub fn runs_in_process(&self) -> bool {
+        self.in_process || self.safe_mode
+    }
+
+    /// `--safe-mode` without `--model` and `--provider`: no route can be
+    /// read from a profile it does not read (spec: plugin-system, Safe
+    /// mode).
+    ///
+    /// # Errors
+    ///
+    /// `model.not_configured` (exit 78).
+    pub fn check_safe_mode(&self) -> Result<(), Error> {
+        if self.safe_mode && (self.model.is_none() || self.provider.is_none()) {
+            return Err(Error::new(
+                &codes::MODEL_NOT_CONFIGURED,
+                "--safe-mode reads no profile default model: launch with --model <m> --provider <p>",
+            ));
+        }
+        Ok(())
+    }
+
     /// The configuration overrides these flags stand for, as `key=value`.
     #[must_use]
     pub fn overrides(&self) -> Vec<String> {
         let mut set = Vec::new();
+        if self.safe_mode {
+            set.push("plugins.safe_mode=true".to_owned());
+        }
         if let Some(mode) = self.approvals {
             set.push(format!("approvals.mode={}", mode.as_str()));
         }
         if let Some(n) = self.max_iterations {
             set.push(format!("agent.max_iterations={n}"));
         }
-        if self.ignore_rules {
+        if self.ignores_rules() {
             set.push("prompt.load_identity=false".to_owned());
         }
         if !self.toolsets.is_empty() {

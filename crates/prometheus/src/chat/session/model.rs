@@ -85,6 +85,25 @@ impl ProviderSetupParts {
     }
 }
 
+/// Builds model ports of a profile's routes.
+#[derive(Clone)]
+pub(crate) struct PortMaker {
+    setup: Arc<ProviderSetupParts>,
+    caller: ModelCaller,
+}
+
+impl PortMaker {
+    /// The port serving `target`.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors of the target or the chain.
+    pub(crate) async fn port(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
+        let model = ProviderModel::start(self.setup.setup(), self.caller.clone(), target).await?;
+        Ok(Arc::new(model))
+    }
+}
+
 /// The chat flags that pick the route.
 #[derive(Debug, Clone, Default)]
 pub struct RouteFlags<'a> {
@@ -211,8 +230,16 @@ impl Models {
     ///
     /// Resolution errors of the target or the chain.
     pub async fn port(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
-        let model = ProviderModel::start(self.setup.setup(), self.caller.clone(), target).await?;
-        Ok(Arc::new(model))
+        self.maker().port(target).await
+    }
+
+    /// What builds ports of this profile's routes, owned (a plugin's
+    /// model override is resolved at call time).
+    pub(crate) fn maker(&self) -> PortMaker {
+        PortMaker {
+            setup: Arc::clone(&self.setup),
+            caller: self.caller.clone(),
+        }
     }
 
     /// A resolver over the profile (for `/model`).

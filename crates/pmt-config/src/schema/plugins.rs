@@ -1,6 +1,7 @@
 //! The `[plugins]` section (spec: plugin-system): opt-in enablement, trusted
-//! project plugin directories, hook bounds, WASM resource limits and each
-//! plugin's own settings.
+//! project plugin directories, hook and load bounds, WASM resource limits,
+//! safe mode, the catalog and package signature policy, and each plugin's
+//! own settings.
 
 use std::collections::BTreeMap;
 
@@ -29,6 +30,21 @@ pub struct PluginsConfig {
     /// tail and the spill path.
     #[schemars(range(min = 1))]
     pub hook_context_max_chars: u64,
+    /// Bound on instantiating and registering one plugin; a plugin that
+    /// overruns is skipped with `load timed out` while the others load.
+    #[schemars(range(min = 1, max = 600_000))]
+    pub load_timeout_ms: u64,
+    /// Skip every non-embedded plugin, MCP server and python-bridge
+    /// sidecar (as `prometheus --safe-mode` does, without its other effects).
+    pub safe_mode: bool,
+    /// Where the signed live plugin catalog is fetched from (cached 6 hours
+    /// under the profile's `cache/`); empty uses only the catalog embedded
+    /// in the binary.
+    pub catalog_url: String,
+    /// What installing an unsigned local `.pmtpkg` needs: `require` (only
+    /// with `--allow-unsigned`), `warn` or `off`. Catalog installs always
+    /// need a valid signature unless `--allow-unsigned` is given.
+    pub signature_policy: SignaturePolicy,
     /// WASM plugin limits.
     pub wasm: PluginsWasmConfig,
     /// Each plugin's own settings, `plugins.entries.<id>.<key>`, read and
@@ -44,10 +60,30 @@ impl Default for PluginsConfig {
             trusted_project_dirs: Vec::new(),
             hook_timeout_ms: 30_000,
             hook_context_max_chars: 10_000,
+            load_timeout_ms: 10_000,
+            safe_mode: false,
+            catalog_url: DEFAULT_CATALOG_URL.to_owned(),
+            signature_policy: SignaturePolicy::Require,
             wasm: PluginsWasmConfig::default(),
             entries: BTreeMap::new(),
         }
     }
+}
+
+/// The live catalog of the project's repository; its signature is
+/// `<url>.minisig`.
+pub const DEFAULT_CATALOG_URL: &str = "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json";
+
+/// `plugins.signature_policy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SignaturePolicy {
+    /// An unsigned local package installs only with `--allow-unsigned`.
+    Require,
+    /// An unsigned local package installs with a warning.
+    Warn,
+    /// Local packages are not checked for a signature.
+    Off,
 }
 
 /// The `[plugins.wasm]` section.

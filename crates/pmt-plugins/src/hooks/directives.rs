@@ -72,18 +72,47 @@ pub fn combine(answers: &[Answer]) -> PreTool {
     }
 }
 
+/// Where a session's hook seam finds the profile's current hooks: a fixed
+/// registry, or the live one of an embedder that hot-reloads plugins
+/// (spec: plugin-system, Hot reload respects the prompt-cache invariant:
+/// hooks activate at once for running sessions).
+pub trait HookSource: Send + Sync {
+    /// The hooks to fire now.
+    fn hooks(&self) -> Arc<Hooks>;
+}
+
+impl HookSource for Arc<Hooks> {
+    fn hooks(&self) -> Arc<Hooks> {
+        Arc::clone(self)
+    }
+}
+
 /// The dispatcher's hook seam over a profile's plugin hooks.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PluginToolHooks {
-    hooks: Arc<Hooks>,
+    source: Arc<dyn HookSource>,
     call: CallInfo,
+}
+
+impl std::fmt::Debug for PluginToolHooks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginToolHooks")
+            .field("call", &self.call)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PluginToolHooks {
     /// Hooks of one session (`call` carries its id, surface and cwd).
     #[must_use]
     pub fn new(hooks: Arc<Hooks>, call: CallInfo) -> Self {
-        Self { hooks, call }
+        Self::live(Arc::new(hooks), call)
+    }
+
+    /// Hooks of one session read from `source` at every call.
+    #[must_use]
+    pub fn live(source: Arc<dyn HookSource>, call: CallInfo) -> Self {
+        Self { source, call }
     }
 
     fn payload(call: &HookCall<'_>, extra: &[(&str, Value)]) -> Payload {
@@ -102,11 +131,12 @@ impl PluginToolHooks {
 impl ToolHooks for PluginToolHooks {
     fn pre_tool_call<'a>(&'a self, call: HookCall<'a>) -> SeamFuture<'a, PreDecision> {
         Box::pin(async move {
-            if !self.hooks.handles("pre_tool_call") {
+            let hooks = self.source.hooks();
+            if !hooks.handles("pre_tool_call") {
                 return PreDecision::Continue;
             }
             let payload = Self::payload(&call, &[]);
-            let answers = self.hooks.fire("pre_tool_call", &payload, &self.call).await;
+            let answers = hooks.fire("pre_tool_call", &payload, &self.call).await;
             match combine(&answers) {
                 PreTool::Continue => PreDecision::Continue,
                 PreTool::Modify(fields) => PreDecision::Modify(fields),
@@ -126,7 +156,8 @@ impl ToolHooks for PluginToolHooks {
         duration_ms: u64,
     ) -> SeamFuture<'a, ()> {
         Box::pin(async move {
-            if !self.hooks.handles("post_tool_call") {
+            let hooks = self.source.hooks();
+            if !hooks.handles("post_tool_call") {
                 return;
             }
             let extra = [
@@ -135,9 +166,7 @@ impl ToolHooks for PluginToolHooks {
             ];
             let payload = Self::payload(&call, &extra);
             // Observers: answers are ignored and cannot change the result.
-            self.hooks
-                .fire("post_tool_call", &payload, &self.call)
-                .await;
+            hooks.fire("post_tool_call", &payload, &self.call).await;
         })
     }
 }

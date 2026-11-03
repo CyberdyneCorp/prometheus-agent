@@ -116,7 +116,13 @@ impl Run<'_> {
             Resolution::Builtin { command, args } => self.builtin(command, &args).await,
             Resolution::External { command, args } => match command.source {
                 Source::Quick => Box::pin(self.quick(&command.name, &args, depth)).await,
-                Source::Skill | Source::Plugin => {
+                Source::Plugin => {
+                    match commands::plugins::run_line(&self.session.live, &line).await {
+                        Ok(notice) => Dispatched::Done { notice },
+                        Err(reason) => refused(reason),
+                    }
+                }
+                Source::Skill => {
                     match commands::skill_line(&self.session.live, self.registry, &line).await {
                         Ok((notices, message)) => {
                             for notice in notices {

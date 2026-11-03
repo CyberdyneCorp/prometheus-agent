@@ -26,7 +26,7 @@ use pmt_core::capability::{Capability, CapabilitySet, PluginRight};
 use pmt_core::error::{Error, codes};
 
 pub use context::{SPILL_EDGE_CHARS, spill_dir};
-pub use directives::{PluginToolHooks, PreTool, combine};
+pub use directives::{HookSource, PluginToolHooks, PreTool, combine};
 pub use payload::{Payload, SCHEMA_VERSION};
 
 use crate::host::hook_world::{HookEvent, Reply};
@@ -117,6 +117,20 @@ impl Hooks {
         call: &CallInfo,
     ) -> Result<Vec<String>, Error> {
         let names = instance.hooks(call)?;
+        self.register_names(instance, names, granted)
+    }
+
+    /// Registers `names`, what `instance`'s `hooks()` answered.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::register`], without the call.
+    pub fn register_names(
+        &mut self,
+        instance: &Arc<Instance>,
+        names: Vec<String>,
+        granted: &CapabilitySet,
+    ) -> Result<Vec<String>, Error> {
         if let Some(unknown) = names.iter().find(|n| pmt_core::hooks::check(n).is_err()) {
             return Err(Error::new(
                 &codes::PLUGINS_MANIFEST,

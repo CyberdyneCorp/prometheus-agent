@@ -18,6 +18,7 @@ use pmt_plugins::grants::{Approval, Identity, approve, revoke, select};
 use pmt_plugins::host::state::StateDir;
 use pmt_plugins::load::{Status, survey};
 use pmt_plugins::manifest::{Manifest, describe, label};
+use pmt_plugins::record::{InstallRecord, Origin};
 use serde::Serialize;
 
 use super::GrantsAction;
@@ -28,7 +29,7 @@ use crate::plugins_host;
 /// `prometheus plugins list`.
 pub(super) fn list(ctx: &Context<'_>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
-    let loaded = plugins_host::for_session(&scope, &cwd()).loaded;
+    let loaded = plugins_host::for_session(&scope, &cwd()).current();
     if ctx.json {
         #[derive(Serialize)]
         struct Row<'a> {
@@ -93,16 +94,19 @@ fn render(statuses: &[Status]) -> String {
 }
 
 /// A discovered plugin with a valid manifest, ready for grant decisions.
-struct Target {
-    manifest: Manifest,
-    identity: Identity,
-    requested: CapabilitySet,
+pub(super) struct Target {
+    pub manifest: Manifest,
+    pub identity: Identity,
+    pub requested: CapabilitySet,
+    pub dir: Option<PathBuf>,
 }
 
-fn target(scope: &ProfileScope, id: &str) -> Result<Target, Error> {
+/// The discovered plugin `id`.
+pub(super) fn target(scope: &ProfileScope, id: &str) -> Result<Target, Error> {
     let version = plugins_host::running_version();
     let cwd = cwd();
-    let inputs = plugins_host::inputs(scope, &cwd, &version);
+    let blocked = plugins_host::catalog::kill_list(scope);
+    let inputs = plugins_host::inputs(scope, &cwd, &version, &blocked);
     let found: Option<Discovered> = survey(&inputs)
         .into_iter()
         .map(|(d, _)| d)
@@ -131,16 +135,52 @@ fn target(scope: &ProfileScope, id: &str) -> Result<Target, Error> {
         },
         manifest,
         requested,
+        dir: plugin.dir,
     })
 }
 
-/// `prometheus plugins enable <id> [--grant ...]`.
-pub(super) fn enable(ctx: &Context<'_>, id: &str, grant: Option<&str>) -> Result<u8, Error> {
-    let scope = ctx.scope()?;
-    let target = target(&scope, id)?;
+/// The kill-list refusal of an installed plugin, unless its install
+/// record allows it.
+pub(super) fn check_blocked(scope: &ProfileScope, target: &Target) -> Result<(), Error> {
+    let record = target
+        .dir
+        .as_deref()
+        .and_then(|dir| InstallRecord::read(dir).ok().flatten());
+    if record.as_ref().is_some_and(|r| r.flags.allow_removed) {
+        return Ok(());
+    }
+    let repo = record
+        .as_ref()
+        .filter(|r| matches!(r.source, Origin::Git | Origin::Catalog))
+        .map(|r| r.location.as_str());
+    let catalog = pmt_plugins::catalog::Catalog {
+        entries: Vec::new(),
+        removed: plugins_host::catalog::kill_list(scope),
+    };
+    match catalog.blocked(&target.manifest.id, repo) {
+        Some(removed) => Err(removed.refusal(&target.manifest.id)),
+        None => Ok(()),
+    }
+}
+
+/// What the person decided about a plugin's capabilities.
+pub(super) enum Decision {
+    /// Approved (now or before).
+    Approved,
+    /// Declined on the terminal.
+    Declined,
+    /// Nobody could answer and `--grant` was not given.
+    Unanswered,
+}
+
+/// Approves `target`'s capabilities: `--grant`, an approval already on
+/// file, or the plain-language screen on a terminal.
+pub(super) fn decide(
+    scope: &ProfileScope,
+    target: &Target,
+    grant: Option<&str>,
+) -> Result<Decision, Error> {
     let file = GrantsFile::of(scope.profile());
-    let approval = Approval::of(&file.load()?, &target.identity, &target.requested);
-    let approved = matches!(&approval, Approval::Approved { pending, .. } if pending.is_empty());
     if let Some(list) = grant {
         approve(
             &file,
@@ -148,27 +188,47 @@ pub(super) fn enable(ctx: &Context<'_>, id: &str, grant: Option<&str>) -> Result
             &select(&target.requested, list)?,
             "cli",
         )?;
-    } else if !approved {
-        match ask(&target)? {
-            Some(true) => {
-                approve(&file, &target.identity, &target.requested, "cli")?;
-            }
-            Some(false) => {
-                eprintln!("'{id}' was not enabled");
-                return Ok(pmt_core::exit::FAILURE);
-            }
-            None => {
-                let err = Error::new(
-                    &codes::PLUGINS_APPROVAL_REQUIRED,
-                    "capability approval required",
-                )
-                .with_hint(format!(
-                    "run `prometheus plugins enable {id}` on a terminal, or pass --grant all"
-                ));
-                crate::output::print_error(&err, ctx.json);
-                return Ok(pmt_core::exit::APPROVAL_REQUIRED);
-            }
+        return Ok(Decision::Approved);
+    }
+    let approval = Approval::of(&file.load()?, &target.identity, &target.requested);
+    if matches!(&approval, Approval::Approved { pending, .. } if pending.is_empty()) {
+        return Ok(Decision::Approved);
+    }
+    Ok(match ask(target)? {
+        Some(true) => {
+            approve(&file, &target.identity, &target.requested, "cli")?;
+            Decision::Approved
         }
+        Some(false) => Decision::Declined,
+        None => Decision::Unanswered,
+    })
+}
+
+/// Prints `capability approval required` (exit 4) for `id`.
+pub(super) fn approval_required(json: bool, id: &str, command: &str) -> u8 {
+    let err = Error::new(
+        &codes::PLUGINS_APPROVAL_REQUIRED,
+        "capability approval required",
+    )
+    .with_hint(format!(
+        "run `prometheus plugins {command} {id}` on a terminal, or pass --grant all"
+    ));
+    crate::output::print_error(&err, json);
+    pmt_core::exit::APPROVAL_REQUIRED
+}
+
+/// `prometheus plugins enable <id> [--grant ...]`.
+pub(super) fn enable(ctx: &Context<'_>, id: &str, grant: Option<&str>) -> Result<u8, Error> {
+    let scope = ctx.scope()?;
+    let target = target(&scope, id)?;
+    check_blocked(&scope, &target)?;
+    match decide(&scope, &target, grant)? {
+        Decision::Approved => {}
+        Decision::Declined => {
+            eprintln!("'{id}' was not enabled");
+            return Ok(pmt_core::exit::FAILURE);
+        }
+        Decision::Unanswered => return Ok(approval_required(ctx.json, id, "enable")),
     }
     set_lists(&scope, id, true)?;
     eprintln!(
@@ -215,7 +275,7 @@ pub(super) fn disable(ctx: &Context<'_>, id: &str) -> Result<u8, Error> {
 
 /// Adds `id` to `plugins.enabled` and removes it from `plugins.disabled`
 /// (`enable`), or the reverse.
-fn set_lists(scope: &ProfileScope, id: &str, enable: bool) -> Result<(), Error> {
+pub(super) fn set_lists(scope: &ProfileScope, id: &str, enable: bool) -> Result<(), Error> {
     let plugins = &scope.config().plugins;
     let (mut add_to, mut remove_from) = if enable {
         (plugins.enabled.clone(), plugins.disabled.clone())
@@ -234,6 +294,17 @@ fn set_lists(scope: &ProfileScope, id: &str, enable: bool) -> Result<(), Error> 
     scope.profile().config_file().set_all(&[
         ("plugins.enabled", &toml_list(&enabled)),
         ("plugins.disabled", &toml_list(&disabled)),
+    ])
+}
+
+/// Removes `id` from `plugins.enabled` and `plugins.disabled` (`remove`).
+pub(super) fn forget_lists(scope: &ProfileScope, id: &str) -> Result<(), Error> {
+    let plugins = &scope.config().plugins;
+    let keep =
+        |list: &[String]| -> Vec<String> { list.iter().filter(|x| *x != id).cloned().collect() };
+    scope.profile().config_file().set_all(&[
+        ("plugins.enabled", &toml_list(&keep(&plugins.enabled))),
+        ("plugins.disabled", &toml_list(&keep(&plugins.disabled))),
     ])
 }
 
@@ -319,6 +390,6 @@ fn show(target: &Target, approval: &Approval) -> String {
     text
 }
 
-fn cwd() -> PathBuf {
+pub(super) fn cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_default()
 }

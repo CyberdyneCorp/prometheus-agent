@@ -22,7 +22,11 @@ use pmt_net::fetch::Fetcher;
 
 pub use backend::{Firecrawl, Hit, Page, Searxng, SecretLookup, WebBackend};
 pub use full_text::FullTextStore;
-pub use select::{AUTO_ORDER, BACKENDS, HasSecret, NOTHING_CONFIGURED, resolve};
+pub use select::{AUTO_ORDER, BACKENDS, HasSecret, NOTHING_CONFIGURED, not_installed, resolve};
+
+/// Backends enabled plugins provide, by capability and configured id
+/// (`None`: no plugin provides it).
+pub type PluginBackends<'a> = &'a dyn Fn(Capability, &str) -> Option<Arc<dyn WebBackend>>;
 pub use tools::tools;
 
 /// Which web capability a backend serves.
@@ -55,8 +59,32 @@ impl WebSession {
         secrets: &SecretLookup,
         full_text: FullTextStore,
     ) -> Self {
+        Self::from_config_with(config, client, fetcher, secrets, full_text, &|_, _| None)
+    }
+
+    /// [`Self::from_config`] where a configured id this build does not
+    /// implement may name a backend an enabled plugin provides (spec:
+    /// plugin-system, Provider-object plugins fail closed when
+    /// unregistered); an id nothing provides leaves the tool unavailable
+    /// with `<category> provider '<id>' is not installed or not enabled`.
+    #[must_use]
+    pub fn from_config_with(
+        config: &WebConfig,
+        client: &reqwest::Client,
+        fetcher: Arc<Fetcher>,
+        secrets: &SecretLookup,
+        full_text: FullTextStore,
+        plugins: PluginBackends<'_>,
+    ) -> Self {
         let has_secret = |name: &str| secrets(name).is_some();
         let build = |capability| {
+            let id = select::configured(config, capability);
+            if id != "auto"
+                && !BACKENDS.contains(&id)
+                && let Some(plugin) = plugins(capability, id)
+            {
+                return Ok(plugin);
+            }
             resolve(config, capability, &has_secret).map(|id| backend(id, config, client, secrets))
         };
         Self {

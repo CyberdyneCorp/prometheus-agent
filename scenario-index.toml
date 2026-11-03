@@ -2010,7 +2010,7 @@ capabilities = [
 "Untrusted project plugin is not scanned" = ["crates/pmt-plugins/src/discovery/tests.rs::untrusted_project_plugin_is_not_scanned"]
 
 [plugin-system."Opt-in enablement"]
-"Installed is not enabled" = { tests = ["crates/pmt-plugins/src/discovery/tests.rs::a_discovered_plugin_stays_disabled_until_enabled", "crates/prometheus/tests/plugins_manage.rs::a_discovered_plugin_stays_disabled_until_enabled_with_approval"], note = "the plugin directory is placed in the profile; `plugins install --no-enable` arrives with the catalog commands (28.8)" }
+"Installed is not enabled" = ["crates/pmt-plugins/src/discovery/tests.rs::a_discovered_plugin_stays_disabled_until_enabled", "crates/prometheus/tests/plugins_manage.rs::a_discovered_plugin_stays_disabled_until_enabled_with_approval", "crates/prometheus/tests/plugins_catalog.rs::an_unsigned_local_package_needs_an_explicit_flag"]
 
 [plugin-system."Capability declarations"]
 "Undeclared host is blocked" = ["crates/pmt-plugins/tests/runtime.rs::an_undeclared_host_is_blocked_before_any_connection"]
@@ -2043,13 +2043,58 @@ capabilities = [
 "Large hook context is spilled" = ["crates/pmt-plugins/tests/hooks.rs::large_hook_context_is_spilled", "crates/pmt-agent/tests/turn/hooks.rs::hook_context_rides_on_the_current_user_message_only", "crates/prometheus/tests/plugins_manage.rs::an_enabled_plugin_tool_and_hook_serve_a_session"]
 
 [plugin-system."Plugin LLM access gate"]
-"Model override without grant" = ["crates/pmt-plugins/tests/runtime.rs::model_calls_need_the_llm_grant_and_overrides_need_their_own"]
+"Model override without grant" = ["crates/pmt-plugins/tests/runtime.rs::model_calls_need_the_llm_grant_and_overrides_need_their_own", "crates/prometheus/tests/plugins_session.rs::a_plugin_model_call_is_charged_to_the_session_under_the_plugin"]
 
 [plugin-system."Plugin event bus"]
-"Reserved namespace rejected" = ["crates/pmt-plugins/tests/runtime.rs::ungranted_imports_are_denied_and_always_on_ones_work"]
+"Reserved namespace rejected" = ["crates/pmt-plugins/tests/runtime.rs::ungranted_imports_are_denied_and_always_on_ones_work", "crates/pmt-plugins/tests/extensions.rs::events_reach_subscribers_in_order_and_a_failing_one_does_not_affect_the_emitter"]
 
 [plugin-system."WIT world versioning and compatibility"]
-"Previous major still loads" = { tests = ["crates/pmt-plugins/src/worlds.rs::previous_major_still_loads_and_others_are_refused"], note = "every world is at 1.0 with no previous major yet; the policy is checked against a host at tool@3.x. `plugins show` (28.8) prints the note" }
+"Previous major still loads" = { tests = ["crates/pmt-plugins/src/worlds.rs::previous_major_still_loads_and_others_are_refused", "crates/pmt-plugins/tests/extensions.rs::a_plugin_built_against_an_older_hook_minor_still_loads"], note = "no world has a previous major yet; the policy is checked against a host at tool@3.x, and a component built against hook@1.0 loads on the hook@1.1 host. `plugins show` prints `<world>@<major> (previous major)` for such a world" }
 
 [security-boundaries."Plugin and sidecar isolation"]
 "Runaway plugin" = ["crates/pmt-plugins/tests/hooks.rs::a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while", "crates/pmt-plugins/tests/runtime.rs::an_infinite_loop_is_interrupted_within_the_bound"]
+
+# Group 28.6-28.9 (WASM plugin host: sections, commands, event bus,
+# bundled skills, LLM gate, provider objects; load order, hot reload, safe
+# mode; catalog, kill list, signed packages, plugins CLI; authoring guide).
+
+[plugin-system."Capability grants are user-approved and digest-bound"]
+"Capability escalation on update waits for approval" = { tests = ["crates/prometheus/tests/plugins_catalog.rs::capability_escalation_on_update_waits_for_approval"], note = "a package install; the update is a new package at the recorded path (a catalog update takes the same path), reported with the full version 1.1.0" }
+
+[plugin-system."Plugin system-prompt sections are bounded and frozen"]
+"Duplicate section id refused" = ["crates/pmt-plugins/tests/extensions.rs::duplicate_section_id_is_refused_naming_the_first_plugin", "crates/pmt-plugins/tests/extensions.rs::sections_need_the_grant_and_stay_within_their_bounds", "crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
+
+[plugin-system."Plugin slash commands"]
+"Core command cannot be taken" = ["crates/prometheus/src/slash/tests.rs::a_plugin_redeclaring_a_built_in_fails_and_the_built_in_stays", "crates/pmt-plugins/tests/extensions.rs::commands_register_only_when_granted_and_run_in_the_plugin", "crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now"]
+
+[plugin-system."Plugin-bundled skills"]
+"Disabling a plugin hides its skills next session" = ["crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
+
+[plugin-system."Provider-object plugins fail closed when unregistered"]
+"Missing image provider does not fall back" = { tests = ["crates/pmt-plugins/tests/extensions.rs::missing_provider_does_not_fall_back_and_a_registered_one_answers", "crates/pmt-tools/src/web/select.rs::an_unknown_backend_is_not_installed_and_never_replaced"], note = "the image generation tool is task 49.2; until it lands the scenario is checked on the provider registry every category resolves through, and on the web tools, whose backend selection uses it" }
+
+[plugin-system."Load order, dependencies and deadline"]
+"Cycle refuses only its members" = ["crates/pmt-plugins/src/load/order.rs::cycle_refuses_only_its_members", "crates/pmt-plugins/tests/loading.rs::a_cycle_refuses_only_its_members_and_dependencies_load_first", "crates/pmt-plugins/tests/loading.rs::a_plugin_overrunning_the_load_deadline_is_skipped_and_others_load"]
+
+[plugin-system."Hot reload respects the prompt-cache invariant"]
+"New tool waits for the next session" = ["crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now"]
+
+[plugin-system."Safe mode"]
+"Broken config does not block safe mode" = ["crates/prometheus/tests/plugins_session.rs::safe_mode_starts_with_a_broken_config_and_without_plugins"]
+"Broken plugin bypassed" = ["crates/prometheus/tests/plugins_session.rs::safe_mode_starts_with_a_broken_config_and_without_plugins", "crates/pmt-plugins/tests/loading.rs::safe_mode_instantiates_no_plugin_and_changes_no_setting"]
+
+[plugin-system."Plugin catalog"]
+"Tampered catalog is ignored" = ["crates/prometheus/tests/plugins_catalog.rs::a_tampered_catalog_is_ignored_for_the_embedded_one", "crates/pmt-plugins/src/catalog/tests.rs::a_live_catalog_needs_a_verifying_signature_and_a_bounded_size"]
+
+[plugin-system."Catalog kill list"]
+"Removed plugin stops loading" = ["crates/prometheus/tests/plugins_catalog.rs::a_removed_plugin_stops_loading_and_is_not_installed", "crates/pmt-plugins/tests/loading.rs::a_plugin_on_the_kill_list_stops_loading_unless_installed_with_allow_removed"]
+
+[plugin-system."Signed plugin packages and provenance"]
+"Unsigned local package needs an explicit flag" = ["crates/prometheus/tests/plugins_catalog.rs::an_unsigned_local_package_needs_an_explicit_flag", "crates/prometheus/tests/plugins_catalog.rs::an_unsigned_catalog_install_is_refused_by_default"]
+
+[plugin-system."plugins CLI"]
+"Hand-placed plugin needs adoption" = { tests = ["crates/prometheus/tests/plugins_catalog.rs::a_hand_placed_plugin_needs_adoption", "crates/pmt-plugins/tests/loading.rs::a_hand_placed_plugin_is_unadopted_and_never_loads"], note = "the loader every process uses (daemon or CLI) is checked through `plugins list`" }
+"Symbolic ref refused" = ["crates/prometheus/tests/plugins_catalog.rs::a_symbolic_ref_is_refused"]
+
+[security-boundaries."Signed plugins"]
+"Tampered plugin" = ["crates/prometheus/tests/plugins_catalog.rs::a_tampered_plugin_does_not_load_and_doctor_reports_it"]

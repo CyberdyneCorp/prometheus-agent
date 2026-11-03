@@ -28,10 +28,14 @@ pub struct World {
     pub previous_major: Option<u64>,
 }
 
-/// Every world, in the spec's order. All are at 1.0 with no previous major.
+/// Every world, in the spec's order, with no previous major yet. `hook`
+/// is at 1.1 (the `extensions` interface); the others are at 1.0.
 pub const WORLDS: &[World] = &[
     world("tool"),
-    world("hook"),
+    World {
+        minor: 1,
+        ..world("hook")
+    },
     world("provider"),
     world("platform-adapter"),
     world("memory-provider"),
@@ -67,7 +71,9 @@ impl WorldRef {
     pub fn from_export(name: &str) -> Option<Self> {
         let rest = name.strip_prefix("prometheus:")?;
         let (world, rest) = rest.split_once('/')?;
-        let (_, version) = rest.split_once('@')?;
+        // Only the world's `plugin` interface names it; other exported
+        // interfaces of the package (`hook`'s `extensions`) are additions.
+        let version = rest.strip_prefix("plugin@")?;
         Some(Self {
             name: world.to_owned(),
             version: Version::parse(version).ok()?,
@@ -229,5 +235,6 @@ mod tests {
         let w = WorldRef::from_export("prometheus:hook/plugin@1.3.0").unwrap();
         assert_eq!(w.to_string(), "hook@1.3.0");
         assert!(WorldRef::from_export("wasi:cli/run@0.2.0").is_none());
+        assert!(WorldRef::from_export("prometheus:hook/extensions@1.1.0").is_none());
     }
 }

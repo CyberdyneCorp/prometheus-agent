@@ -3,13 +3,20 @@
 //! grants, the WIT worlds and the wasmtime component runtime that runs
 //! `wasm` plugins with only the capabilities the user approved.
 
+pub mod catalog;
 pub mod digest;
 pub mod discovery;
+pub mod events;
+pub mod extensions;
 pub mod grants;
 pub mod hooks;
 pub mod host;
+pub mod install;
 pub mod load;
 pub mod manifest;
+pub mod package;
+pub mod providers;
+pub mod record;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod tools;

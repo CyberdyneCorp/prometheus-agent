@@ -279,6 +279,20 @@ pub static BUILTINS: &[Command] = &[
         Effect::NextSession,
     ),
     command(
+        "plugins",
+        &[],
+        Tools,
+        "List plugins, or reload them (tools and prompt sections next session unless --now)",
+        &[
+            arg("action", ArgKind::Choice(&["list", "reload"]), false),
+            arg("id", ArgKind::Word, false),
+            NOW,
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "toolsets",
         &[],
         Tools,

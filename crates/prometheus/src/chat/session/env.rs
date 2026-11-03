@@ -5,6 +5,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use pmt_plugins::providers::Category;
 use std::time::Duration;
 
 use pmt_config::{ProfileScope, SharedScope};
@@ -49,6 +51,8 @@ pub struct EnvInputs<'a> {
     pub image_input: bool,
     /// Where finished `notify_on_complete` background processes go.
     pub completions: Option<tokio::sync::mpsc::UnboundedSender<Completion>>,
+    /// Provider objects of the profile's plugins (web backends by name).
+    pub providers: pmt_plugins::providers::ProviderRegistry,
 }
 
 /// An attached environment.
@@ -144,7 +148,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let env = SessionEnv {
         files: Some(Arc::new(files(inputs, places, user_home, policy))),
         terminal: terminal.clone(),
-        web: web(scope).map(Arc::new),
+        web: web(scope, &inputs.providers, inputs.session_id).map(Arc::new),
         vision: None,
         browser: browser.clone(),
     };
@@ -234,8 +238,13 @@ fn terminal(
     })
 }
 
-/// The web tools, when the profile can build an outbound client.
-fn web(scope: &ProfileScope) -> Option<WebSession> {
+/// The web tools, when the profile can build an outbound client; a
+/// backend id this build does not implement may name a plugin's provider.
+fn web(
+    scope: &ProfileScope,
+    providers: &pmt_plugins::providers::ProviderRegistry,
+    session_id: &str,
+) -> Option<WebSession> {
     let config = scope.config();
     let policy = OutboundPolicy {
         force_ipv4: config.network.force_ipv4,
@@ -251,12 +260,25 @@ fn web(scope: &ProfileScope) -> Option<WebSession> {
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());
-    Some(WebSession::from_config(
+    let call = pmt_plugins::host::CallInfo {
+        session_id: Some(session_id.to_owned()),
+        surface: "cli".to_owned(),
+        cwd: None,
+    };
+    let plugins = |capability, id: &str| {
+        let category = match capability {
+            pmt_tools::web::Capability::Search => Category::WebSearch,
+            pmt_tools::web::Capability::Extract => Category::WebExtract,
+        };
+        providers.web_backend(category, id, &call).ok()
+    };
+    Some(WebSession::from_config_with(
         &config.web,
         &client,
         fetcher,
         &lookup,
         FullTextStore::for_profile(scope.dir()),
+        &plugins,
     ))
 }
 

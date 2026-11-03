@@ -8,6 +8,7 @@
 pub mod browser;
 pub mod env;
 pub mod model;
+mod plugins;
 pub mod progress;
 pub mod skills;
 pub mod summarize;
@@ -94,8 +95,9 @@ pub struct Factory {
     pub store: Arc<Store>,
     /// The model side.
     pub models: Models,
-    /// The tool registry.
-    pub registry: Arc<ToolRegistry>,
+    /// The core tools plus those of the plugin set they were built for;
+    /// read through [`Factory::session_registry`].
+    tools: Mutex<plugins::PluginTools>,
     grants: Arc<SessionGrants>,
     launch: LaunchEnv,
     redactor: Redactor,
@@ -115,10 +117,8 @@ pub struct Factory {
     /// The profile's configuration as it is now: `scope` until a daemon
     /// reload replaces it (shared tools read their `live` keys from it).
     current: SharedScope,
-    /// The profile's loaded plugins (their tools are in `registry`).
+    /// The profile's live plugin set.
     plugins: crate::plugins_host::ProfilePlugins,
-    /// The toolsets of the plugin tools in `registry`.
-    plugin_toolsets: Vec<String>,
 }
 
 /// One running session.
@@ -148,6 +148,14 @@ pub struct Live {
     /// The toolset selection the session's tools are built from (`/tools
     /// --now` replaces it).
     selection: Mutex<Selection>,
+    /// The tool registry the session's tools come from (`/plugins reload
+    /// --now` replaces it).
+    registry: Mutex<Arc<ToolRegistry>>,
+    /// The profile's live plugin set (slash commands, reload).
+    pub plugins: crate::plugins_host::ProfilePlugins,
+    /// The plugin system-prompt sections the session's prompt carries.
+    plugin_sections: Arc<Mutex<Vec<String>>>,
+    _plugin_llm: crate::plugins_host::llm::Registration,
     /// Notices to show once at start.
     pub notices: Vec<String>,
     /// What this run did (`--usage-file`).
@@ -189,17 +197,8 @@ impl Factory {
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
-        let mut registry = crate::tools_cmd::registry(&scope)?;
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
-        let plugin_toolsets = plugins.loaded.register_tools(
-            &mut registry,
-            &pmt_plugins::host::CallInfo {
-                session_id: None,
-                surface: "cli".to_owned(),
-                cwd: Some(options.cwd.to_string_lossy().into_owned()),
-            },
-        );
-        let registry = Arc::new(registry);
+        let tools = Mutex::new(plugins::PluginTools::build(&scope, &plugins, &options.cwd)?);
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),
             GrantsFile::of(scope.profile()),
@@ -210,7 +209,7 @@ impl Factory {
             scope,
             store,
             models,
-            registry,
+            tools,
             grants,
             launch: launch.clone(),
             redactor,
@@ -223,7 +222,6 @@ impl Factory {
             browser: OnceLock::new(),
             messaging: None,
             plugins,
-            plugin_toolsets,
         })
     }
 
@@ -385,8 +383,8 @@ impl Factory {
         let session = self.store.session(id)?;
         self.record.session(id, session.root_session_id, target);
         self.record_launch_flags(id)?;
-        let selection =
-            tools::selection(&self.registry, config, interactive, &self.plugin_toolsets)?;
+        let (registry, plugin_toolsets) = self.session_registry()?;
+        let selection = tools::selection(&registry, config, interactive, &plugin_toolsets)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
         let skills = Arc::new(SkillsSession::new(self.skills_setup(
             id,
@@ -410,24 +408,13 @@ impl Factory {
         let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
         let gate = self.gate()?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
-        let session_tools = tools::session_tools(&SurfaceInputsOwned {
-            scope,
-            store: &self.store,
-            session: id,
-            registry: &self.registry,
-            selection: &selection,
-            capabilities: &capabilities,
-            gate: &gate.gate,
-            agent: Some(&agent_tools),
-            redactor: &self.redactor,
-            context_window: None,
-            hooks: self.plugins.tool_hooks(self.plugin_call(id)),
-        })
-        .await?;
-        let tool_port = Arc::new(SwappableTools::new(session_tools));
+        let built = (&*registry, &selection, &capabilities);
+        let tool_port = self.tool_port(id, built, &gate.gate, &agent_tools).await?;
         let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
-        let prompt = self.prompt_setup(&skills, &memory, &mut notices).await;
+        let (prompt, plugin_sections) = self
+            .session_prompt(id, &skills, &memory, &mut notices)
+            .await;
         let mut setup = AgentSetup::new(
             scope.clone(),
             Arc::clone(&self.store),
@@ -442,13 +429,14 @@ impl Factory {
         setup.events = Arc::new(tee);
         setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(&memory) as _);
-        setup.refresh_prompt = Some(refresher(&skills, &memory, self.options.ignore_rules));
+        setup.refresh_prompt = Some(self.refresher(&skills, &memory, &plugin_sections));
         self.surface_setup(&mut setup, id);
         let agent = Agent::new(setup)?;
         let live = Live {
             scope: scope.clone(),
             id,
             agent,
+            _plugin_llm: self.plugin_llm(id, &model),
             model,
             tools: tool_port,
             gate: gate.gate,
@@ -458,6 +446,9 @@ impl Factory {
             memory,
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
             selection: Mutex::new(selection),
+            registry: Mutex::new(registry),
+            plugins: self.plugins.clone(),
+            plugin_sections,
             notices,
             progress,
             config: current,
@@ -479,7 +470,7 @@ impl Factory {
         setup.redactor = self.redactor.clone();
         setup.interactive = self.options.interactive;
         setup.unattended = !self.options.interactive;
-        setup.turn_hooks = self.plugins.turn_hooks(self.plugin_call(id));
+        setup.turn_hooks = Some(self.plugins.turn_hooks(self.plugin_call(id)));
     }
 
     /// What plugin host calls of session `id` report as their session.
@@ -538,6 +529,7 @@ impl Factory {
             browser: self.browser(),
             image_input: self.image_input(target),
             completions: clients.and_then(|c| c.completions.clone()),
+            providers: self.plugins.current().providers.clone(),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -625,6 +617,7 @@ impl Factory {
         setup.cwd = Some(self.options.cwd.clone());
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
+        setup.plugins = self.plugins.current().skill_dirs();
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))
@@ -649,6 +642,56 @@ impl Factory {
             .count();
         setup.prior_user_turns = u32::try_from(prior).unwrap_or(u32::MAX);
         Ok(setup)
+    }
+
+    /// The session's tool port over `registry` and `selection`.
+    async fn tool_port(
+        &self,
+        id: SessionId,
+        (registry, selection, capabilities): (&ToolRegistry, &Selection, &CapabilitySet),
+        gate: &Arc<CommandGate>,
+        agent: &Arc<AgentTools>,
+    ) -> Result<Arc<SwappableTools>, Error> {
+        let session_tools = tools::session_tools(&SurfaceInputsOwned {
+            scope: &self.scope,
+            store: &self.store,
+            session: id,
+            registry,
+            selection,
+            capabilities,
+            gate,
+            agent: Some(agent),
+            redactor: &self.redactor,
+            context_window: None,
+            hooks: self.plugins.tool_hooks(self.plugin_call(id)),
+        })
+        .await?;
+        Ok(Arc::new(SwappableTools::new(session_tools)))
+    }
+
+    /// The session's prompt inputs and its plugin sections (kept for
+    /// rebuilds; `/plugins reload --now` replaces them).
+    async fn session_prompt(
+        &self,
+        id: SessionId,
+        skills: &Arc<SkillsSession>,
+        memory: &Arc<MemorySession>,
+        notices: &mut Vec<String>,
+    ) -> (PromptSetup, Arc<Mutex<Vec<String>>>) {
+        let mut prompt = self.prompt_setup(skills, memory, notices).await;
+        prompt.plugin_sections = self.plugin_sections(id).await;
+        let sections = Arc::new(Mutex::new(prompt.plugin_sections.clone()));
+        (prompt, sections)
+    }
+
+    /// The session's prompt refresher.
+    fn refresher(
+        &self,
+        skills: &Arc<SkillsSession>,
+        memory: &Arc<MemorySession>,
+        sections: &Arc<Mutex<Vec<String>>>,
+    ) -> RefreshPrompt {
+        refresher(skills, memory, sections, self.options.ignore_rules)
     }
 
     async fn prompt_setup(
@@ -703,11 +746,12 @@ impl Factory {
         live: &Live,
         selection: &Selection,
     ) -> Result<(), Error> {
+        let registry = live.registry();
         let tools = tools::session_tools(&SurfaceInputsOwned {
             scope: &self.scope,
             store: &self.store,
             session: live.id,
-            registry: &self.registry,
+            registry: &registry,
             selection,
             capabilities: &live.capabilities,
             gate: &live.gate,
@@ -736,16 +780,14 @@ impl Factory {
         live: &Live,
         child: SessionId,
     ) -> Result<Arc<SessionTools>, Error> {
-        let selection = Selection::resolve(
-            &self.registry,
-            &[pmt_skills::tools::TOOLSET.to_owned()],
-            &[],
-        )?;
+        let registry = live.registry();
+        let selection =
+            Selection::resolve(&registry, &[pmt_skills::tools::TOOLSET.to_owned()], &[])?;
         tools::session_tools(&SurfaceInputsOwned {
             scope: &self.scope,
             store: &self.store,
             session: child,
-            registry: &self.registry,
+            registry: &registry,
             selection: &selection,
             capabilities: &live.capabilities,
             gate: &live.gate,
@@ -787,16 +829,21 @@ fn borrowed_watch(notices: progress::Notices) -> pmt_agent::turn::model::Credent
 }
 
 /// Re-reads the skills index and the memory snapshot before every prompt
-/// rebuild (a `--now` change or a compaction), never in between.
+/// rebuild (a `--now` change or a compaction), never in between; the
+/// plugin sections are the session's own (changed only by `/plugins
+/// reload --now`).
 fn refresher(
     skills: &Arc<SkillsSession>,
     memory: &Arc<MemorySession>,
+    plugin_sections: &Arc<Mutex<Vec<String>>>,
     ignore_rules: bool,
 ) -> RefreshPrompt {
     let skills = Arc::clone(skills);
     let memory = Arc::clone(memory);
+    let sections = Arc::clone(plugin_sections);
     Arc::new(move |prompt: &mut PromptSetup| {
         prompt.skills_index = skills.index_text();
+        prompt.plugin_sections.clone_from(&plugins::lock(&sections));
         if !ignore_rules {
             memory.refresh(prompt);
         }
@@ -804,6 +851,12 @@ fn refresher(
 }
 
 impl Live {
+    /// The tool registry the session's tools come from.
+    #[must_use]
+    pub fn registry(&self) -> Arc<ToolRegistry> {
+        Arc::clone(&plugins::lock(&self.registry))
+    }
+
     /// The toolset selection the session's tools are built from.
     #[must_use]
     pub fn selection(&self) -> Selection {

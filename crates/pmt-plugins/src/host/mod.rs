@@ -23,7 +23,9 @@ use pmt_config::schema::PluginsWasmConfig;
 use pmt_core::error::{Error, codes};
 use wasmtime::component::Component;
 
+pub use bindings::exports::prometheus::hook::extensions as extensions_world;
 pub use bindings::exports::prometheus::hook::plugin as hook_world;
+pub use bindings::exports::prometheus::provider::plugin as provider_world;
 pub use bindings::exports::prometheus::tool::plugin as tool_world;
 pub use imports::{CallInfo, Context};
 pub use instance::Instance;

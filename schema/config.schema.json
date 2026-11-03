@@ -3548,6 +3548,11 @@
       "additionalProperties": false,
       "description": "The `[plugins]` section.",
       "properties": {
+        "catalog_url": {
+          "default": "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json",
+          "description": "Where the signed live plugin catalog is fetched from (cached 6 hours\nunder the profile's `cache/`); empty uses only the catalog embedded\nin the binary.",
+          "type": "string"
+        },
         "disabled": {
           "default": [],
           "description": "Ids never instantiated; wins over `enabled`.",
@@ -3587,6 +3592,24 @@
           "maximum": 600000,
           "minimum": 1,
           "type": "integer"
+        },
+        "load_timeout_ms": {
+          "default": 10000,
+          "description": "Bound on instantiating and registering one plugin; a plugin that\noverruns is skipped with `load timed out` while the others load.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "safe_mode": {
+          "default": false,
+          "description": "Skip every non-embedded plugin, MCP server and python-bridge\nsidecar (as `prometheus --safe-mode` does, without its other effects).",
+          "type": "boolean"
+        },
+        "signature_policy": {
+          "$ref": "#/$defs/SignaturePolicy",
+          "default": "require",
+          "description": "What installing an unsigned local `.pmtpkg` needs: `require` (only\nwith `--allow-unsigned`), `warn` or `off`. Catalog installs always\nneed a valid signature unless `--allow-unsigned` is given."
         },
         "trusted_project_dirs": {
           "default": [],
@@ -4514,6 +4537,26 @@
         }
       },
       "type": "object"
+    },
+    "SignaturePolicy": {
+      "description": "`plugins.signature_policy`.",
+      "oneOf": [
+        {
+          "const": "require",
+          "description": "An unsigned local package installs only with `--allow-unsigned`.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "An unsigned local package installs with a warning.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Local packages are not checked for a signature.",
+          "type": "string"
+        }
+      ]
     },
     "SkillsConfig": {
       "additionalProperties": false,
@@ -6304,11 +6347,15 @@
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",
       "default": {
+        "catalog_url": "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json",
         "disabled": [],
         "enabled": [],
         "entries": {},
         "hook_context_max_chars": 10000,
         "hook_timeout_ms": 30000,
+        "load_timeout_ms": 10000,
+        "safe_mode": false,
+        "signature_policy": "require",
         "trusted_project_dirs": [],
         "wasm": {
           "call_timeout_ms": 30000,

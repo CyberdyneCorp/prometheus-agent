@@ -51,11 +51,7 @@ pub fn resolve(
     capability: Capability,
     has_secret: HasSecret<'_>,
 ) -> Result<&'static str, String> {
-    let specific = match capability {
-        Capability::Search => config.search_backend.as_deref(),
-        Capability::Extract => config.extract_backend.as_deref(),
-    };
-    let id = specific.unwrap_or(&config.backend);
+    let id = configured(config, capability);
     if id == "auto" {
         return auto(config, capability, has_secret).ok_or_else(|| NOTHING_CONFIGURED.to_owned());
     }
@@ -65,12 +61,35 @@ pub fn resolve(
         ));
     }
     let Some(known) = BACKENDS.iter().copied().find(|known| *known == id) else {
-        return Err(format!("web backend '{id}' is not available in this build"));
+        // Spec: plugin-system, Provider-object plugins fail closed when
+        // unregistered: never another backend in its place.
+        return Err(not_installed(capability, id));
     };
     if known == "searxng" && config.searxng.url.is_none() {
         return Err("backend 'searxng' needs web.searxng.url".to_owned());
     }
     Ok(known)
+}
+
+/// The error of a backend name nothing provides (neither this build nor
+/// an enabled plugin).
+#[must_use]
+pub fn not_installed(capability: Capability, id: &str) -> String {
+    let category = match capability {
+        Capability::Search => "web_search",
+        Capability::Extract => "web_extract",
+    };
+    format!("{category} provider '{id}' is not installed or not enabled")
+}
+
+/// The id configured for `capability` (`auto` included).
+#[must_use]
+pub fn configured(config: &WebConfig, capability: Capability) -> &str {
+    let specific = match capability {
+        Capability::Search => config.search_backend.as_deref(),
+        Capability::Extract => config.extract_backend.as_deref(),
+    };
+    specific.unwrap_or(&config.backend)
 }
 
 /// The first backend of [`AUTO_ORDER`] this build implements, that serves
@@ -100,7 +119,7 @@ fn credentials_present(id: &str, config: &WebConfig, has_secret: HasSecret<'_>) 
 mod tests {
     use pmt_config::schema::WebConfig;
 
-    use super::{Capability, NOTHING_CONFIGURED, resolve};
+    use super::{Capability, FIRECRAWL_SECRET, NOTHING_CONFIGURED, resolve};
 
     fn none(_: &str) -> bool {
         false
@@ -129,6 +148,25 @@ mod tests {
             resolve(&config, Capability::Search, &none)
                 .unwrap_err()
                 .contains("tavily")
+        );
+    }
+
+    #[test]
+    fn an_unknown_backend_is_not_installed_and_never_replaced() {
+        // Spec: plugin-system, Provider-object plugins fail closed when
+        // unregistered: firecrawl has credentials, but `fal` was named.
+        let config = WebConfig {
+            backend: "fal".into(),
+            ..WebConfig::default()
+        };
+        let firecrawl = |name: &str| name == FIRECRAWL_SECRET;
+        assert_eq!(
+            resolve(&config, Capability::Search, &firecrawl),
+            Err("web_search provider 'fal' is not installed or not enabled".into())
+        );
+        assert_eq!(
+            resolve(&config, Capability::Extract, &firecrawl),
+            Err("web_extract provider 'fal' is not installed or not enabled".into())
         );
     }
 

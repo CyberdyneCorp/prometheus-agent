@@ -67,7 +67,7 @@ pub use operations::{
     LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend,
     SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
 };
-pub use plugins::{PluginsConfig, PluginsWasmConfig};
+pub use plugins::{DEFAULT_CATALOG_URL, PluginsConfig, PluginsWasmConfig, SignaturePolicy};
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
     SnapshotsConfig, StorageConfig,

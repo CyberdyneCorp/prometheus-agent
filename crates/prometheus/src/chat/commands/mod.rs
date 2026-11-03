@@ -7,6 +7,7 @@
 
 mod background;
 pub mod info;
+pub(crate) mod plugins;
 pub(crate) mod quick;
 mod refine;
 pub(crate) mod session;
@@ -78,9 +79,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "status" => info::status(ctx),
         "platforms" => info::platforms(ctx).await,
         "version" => Ok(format!("prometheus {}", crate::build_info::identity())),
-        "toolsets" => {
-            crate::tools_cmd::slash_toolsets(&ctx.factory.registry, &ctx.live.selection())
-        }
+        "toolsets" => crate::tools_cmd::slash_toolsets(&ctx.live.registry(), &ctx.live.selection()),
         "bundles" => Ok(pmt_skills::bundles::listing(&pmt_skills::bundles::load(
             ctx.scope.dir(),
         ))),
@@ -100,6 +99,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "model" => session::model(ctx, args).await,
         "reasoning" => session::reasoning(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
+        "plugins" => plugins::plugins(ctx, args).await,
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))
@@ -149,11 +149,13 @@ pub fn profile_registry(scope: &ProfileScope) -> Registry {
     registry
 }
 
-/// The commands of `live`: the built-ins, the profile's quick commands
-/// and the session's skill commands; load warnings are logged.
+/// The commands of `live`: the built-ins, the profile's quick commands,
+/// the commands of the profile's current plugins and the session's skill
+/// commands; load warnings are logged.
 #[must_use]
 pub fn registry(scope: &ProfileScope, live: &Live) -> Registry {
     let mut registry = profile_registry(scope);
+    plugins::register(&mut registry, live);
     let core = registry.builtin_names();
     let table = pmt_skills::slash::table(&live.skills, &core);
     for (slug, skill) in &table.commands {

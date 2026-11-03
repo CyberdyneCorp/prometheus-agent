@@ -36,7 +36,13 @@ impl Repl {
             Resolution::Builtin { command, args } => self.builtin(command, &args, &line).await,
             Resolution::External { command, args } => match command.source {
                 Source::Quick => self.quick(&command.name, &args, 0).await,
-                Source::Skill | Source::Plugin => {
+                Source::Plugin => {
+                    match commands::plugins::run_line(self.live(), &line).await {
+                        Ok(text) | Err(text) => self.notice(&text),
+                    }
+                    Flow::Continue
+                }
+                Source::Skill => {
                     self.skill_line(&line).await;
                     Flow::Continue
                 }

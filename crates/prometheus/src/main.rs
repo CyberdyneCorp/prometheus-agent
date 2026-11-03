@@ -96,11 +96,15 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
+    let mut set = cli.set.clone();
+    if cli.safe_mode {
+        set.push("plugins.safe_mode=true".to_owned());
+    }
     let ctx = Context {
         home_flag: cli.home.as_deref(),
         launch,
         profile: cli.profile.as_deref(),
-        set: &cli.set,
+        set: &set,
         json: cli.json,
     };
     let result = match &cli.command {
@@ -144,7 +148,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
         Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
-        Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
+        Some(Command::Chat(args)) => chat::run(&safe(args, cli), &ctx, ui(cli)),
         #[cfg(feature = "tui")]
         Some(Command::Tui(args)) => prometheus::tui_cmd::run(args, &ctx, ui(cli)),
         #[cfg(not(feature = "tui"))]
@@ -161,12 +165,20 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Evolve(_)) => prometheus::surface::require("evolve").map(|()| 0),
         #[cfg(not(feature = "eval"))]
         Some(Command::Eval(_)) => prometheus::surface::require("eval").map(|()| 0),
-        None => chat::run(&cli.chat, &ctx, ui(cli)),
+        None => chat::run(&safe(&cli.chat, cli), &ctx, ui(cli)),
     };
     result.unwrap_or_else(|err| {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+/// The chat flags with the global `--safe-mode`.
+fn safe(args: &prometheus::cli::ChatArgs, cli: &Cli) -> prometheus::cli::ChatArgs {
+    prometheus::cli::ChatArgs {
+        safe_mode: cli.safe_mode,
+        ..args.clone()
+    }
 }
 
 fn ui(cli: &Cli) -> chat::Ui {

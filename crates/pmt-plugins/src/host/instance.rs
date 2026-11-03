@@ -16,7 +16,7 @@ use wasmtime::component::{Component, HasSelf, InstancePre, Linker};
 use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
 use super::bindings::PluginHost;
-use super::bindings::exports::prometheus::{hook, tool};
+use super::bindings::exports::prometheus::{hook, provider, tool};
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
 use crate::worlds::WorldRef;
@@ -34,6 +34,8 @@ pub struct Instance {
     exported: Vec<WorldRef>,
     tool: Option<tool::plugin::GuestIndices>,
     hook: Option<hook::plugin::GuestIndices>,
+    extensions: Option<hook::extensions::GuestIndices>,
+    provider: Option<provider::plugin::GuestIndices>,
     live: Mutex<Option<Live>>,
     traps: Mutex<Traps>,
 }
@@ -84,6 +86,8 @@ impl Instance {
         let instance = Self {
             tool: tool::plugin::GuestIndices::new(&pre).ok(),
             hook: hook::plugin::GuestIndices::new(&pre).ok(),
+            extensions: hook::extensions::GuestIndices::new(&pre).ok(),
+            provider: provider::plugin::GuestIndices::new(&pre).ok(),
             id,
             pre,
             ctx,
@@ -195,15 +199,160 @@ impl Instance {
         match world {
             "tool" => self.tool.is_some(),
             "hook" => self.hook.is_some(),
+            "provider" => self.provider.is_some(),
             other => self.exported.iter().any(|w| w.name == other),
         }
     }
 
+    /// Whether the component exports the hook world's `extensions` (1.1).
+    #[must_use]
+    pub fn extends(&self) -> bool {
+        self.extensions.is_some()
+    }
+
+    /// `extensions.sections()`; empty for a component without
+    /// `extensions`.
+    ///
+    /// # Errors
+    ///
+    /// `plugins.call` when the call traps or times out.
+    pub fn sections(&self, call: &CallInfo) -> Result<Vec<String>, Error> {
+        let Some(indices) = &self.extensions else {
+            return Ok(Vec::new());
+        };
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_sections(&mut *store)
+        })
+    }
+
+    /// `extensions.render-section(id)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::tools`], for `extensions`.
+    pub fn render_section(
+        &self,
+        call: &CallInfo,
+        id: &str,
+    ) -> Result<Result<String, String>, Error> {
+        let indices = self
+            .extensions
+            .as_ref()
+            .ok_or_else(|| self.missing("hook@1.1"))?;
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_render_section(&mut *store, id)
+        })
+    }
+
+    /// `extensions.commands()`; empty for a component without `extensions`.
+    ///
+    /// # Errors
+    ///
+    /// `plugins.call` when the call traps or times out.
+    pub fn commands(&self, call: &CallInfo) -> Result<Vec<hook::extensions::Command>, Error> {
+        let Some(indices) = &self.extensions else {
+            return Ok(Vec::new());
+        };
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_commands(&mut *store)
+        })
+    }
+
+    /// `extensions.run-command(name, args)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::tools`], for `extensions`.
+    pub fn run_command(
+        &self,
+        call: &CallInfo,
+        name: &str,
+        args: &str,
+    ) -> Result<Result<String, String>, Error> {
+        let indices = self
+            .extensions
+            .as_ref()
+            .ok_or_else(|| self.missing("hook@1.1"))?;
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_run_command(&mut *store, name, args)
+        })
+    }
+
+    /// `extensions.on-event(name, payload)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::tools`], for `extensions`.
+    pub fn on_event(
+        &self,
+        call: &CallInfo,
+        name: &str,
+        payload: &str,
+    ) -> Result<Result<(), String>, Error> {
+        let indices = self
+            .extensions
+            .as_ref()
+            .ok_or_else(|| self.missing("hook@1.1"))?;
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_on_event(&mut *store, name, payload)
+        })
+    }
+
+    /// `provider.providers()`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::tools`], for the provider world.
+    pub fn providers(&self, call: &CallInfo) -> Result<Vec<provider::plugin::ProviderSpec>, Error> {
+        let indices = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| self.missing("provider"))?;
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_providers(&mut *store)
+        })
+    }
+
+    /// `provider.invoke(provider, request)`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::tools`], for the provider world.
+    pub fn invoke_provider(
+        &self,
+        call: &CallInfo,
+        id: &str,
+        request: &str,
+    ) -> Result<Result<String, String>, Error> {
+        let indices = self
+            .provider
+            .as_ref()
+            .ok_or_else(|| self.missing("provider"))?;
+        self.with_live(call, None, |store, instance| {
+            indices
+                .load(&mut *store, instance)?
+                .call_invoke(&mut *store, id, request)
+        })
+    }
+
     fn missing(&self, world: &str) -> Error {
+        let package = world.split('@').next().unwrap_or(world);
         Error::new(
             &codes::PLUGINS_LOAD,
             format!(
-                "plugin '{}' does not export the {world} world (prometheus:{world}/plugin)",
+                "plugin '{}' does not export the {world} world (prometheus:{package}/plugin)",
                 self.id
             ),
         )

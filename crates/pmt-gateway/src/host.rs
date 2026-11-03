@@ -156,6 +156,23 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Ok(false) })
     }
 
+    /// Replaces `profile`'s live plugin set (`prometheus plugins reload
+    /// [<id>]`, spec: plugin-system, Hot reload respects the prompt-cache
+    /// invariant); answers what is active now and what waits for the next
+    /// session.
+    fn reload_plugins<'a>(
+        &'a self,
+        _profile: &'a str,
+        _plugin: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_INVALID_REQUEST,
+                "this daemon hosts no plugins",
+            ))
+        })
+    }
+
     /// Each served profile's configuration state, for `daemon status`.
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         Vec::new()

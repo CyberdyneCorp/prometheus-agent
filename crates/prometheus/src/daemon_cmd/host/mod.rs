@@ -619,6 +619,20 @@ impl Host for DaemonHost {
         Box::pin(async move { Self::banner_of(&*self.profile(profile)?, session_id).await })
     }
 
+    fn reload_plugins<'a>(
+        &'a self,
+        profile: &'a str,
+        plugin: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+            let loaded = crate::plugins_host::reload(&scope, &cwd).current();
+            crate::plugins_host::reload::check_target(&loaded, plugin)?;
+            Ok(crate::plugins_host::reload::report(&loaded, plugin, false))
+        })
+    }
+
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {
         Box::pin(async move { Self::config_value(&*self.profile(profile)?, key) })
     }

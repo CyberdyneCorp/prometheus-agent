@@ -232,9 +232,22 @@ async fn a_changed_plugin_does_not_load_until_approved_again() {
         TOOL,
         "secrets = [\"NOTION_API_KEY\"]",
     );
-    // Editing any file of the plugin changes its identity.
-    std::fs::write(profile.plugin_dir("probe").join("README.md"), "changed").unwrap();
+    // Editing any file of the plugin changes its identity: it no longer
+    // matches its install record.
+    let dir = profile.plugin_dir("probe");
+    std::fs::write(dir.join("README.md"), "changed").unwrap();
     let runtime = Runtime::new().unwrap();
+    let loaded = profile.load(&runtime, &Fake::new().ports());
+    assert!(loaded.plugins.is_empty());
+    let status = &loaded.statuses[0];
+    assert_eq!(status.state, State::Error);
+    assert_eq!(
+        status.problem.as_deref(),
+        Some("plugin 'probe' was modified after install")
+    );
+    // Recorded anew (an update or adoption), its grant still names the old
+    // digest, so it waits for approval.
+    common::adopted(&dir, &pmt_plugins::digest::of_dir(&dir).unwrap());
     let loaded = profile.load(&runtime, &Fake::new().ports());
     assert!(loaded.plugins.is_empty());
     let status = &loaded.statuses[0];
@@ -280,9 +293,10 @@ async fn every_sample_plugin_compiles_and_imports_only_the_host_interfaces() {
         let bytes = pmt_plugins::testkit::component(&format!("sample-{world}"));
         let component = runtime.compile(world, &bytes).unwrap();
         let exported = runtime.exported_worlds(&component);
+        let minor = pmt_plugins::worlds::host_minor(world).unwrap();
         assert_eq!(
             exported.iter().map(ToString::to_string).collect::<Vec<_>>(),
-            vec![format!("{world}@1.0.0")]
+            vec![format!("{world}@1.{minor}.0")]
         );
         for import in runtime.imports(&component) {
             assert!(

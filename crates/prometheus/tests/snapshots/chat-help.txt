@@ -48,6 +48,9 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
 

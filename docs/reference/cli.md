@@ -69,6 +69,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -V, --version
           Print version
 
@@ -215,6 +218,9 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
 
@@ -310,6 +316,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -361,6 +370,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -410,6 +422,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -447,6 +462,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -482,6 +500,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -557,6 +578,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -589,6 +613,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -626,6 +653,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -662,6 +692,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -703,6 +736,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -740,6 +776,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -773,6 +812,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -805,6 +847,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -846,6 +891,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -879,6 +927,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -911,6 +962,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1062,6 +1116,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1099,6 +1156,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1131,6 +1191,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1172,6 +1235,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1208,6 +1274,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1248,6 +1317,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -1366,6 +1438,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1401,6 +1476,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1438,6 +1516,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1479,6 +1560,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1518,6 +1602,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1559,6 +1646,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1595,6 +1685,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1633,6 +1726,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1669,6 +1765,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1707,6 +1806,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1740,6 +1842,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1772,6 +1877,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1815,6 +1923,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1847,6 +1958,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1884,6 +1998,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -1934,6 +2051,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -1971,6 +2091,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2003,6 +2126,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2040,6 +2166,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2154,6 +2283,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2186,6 +2318,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2224,6 +2359,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2261,6 +2399,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2297,6 +2438,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2392,6 +2536,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2425,6 +2572,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2457,6 +2607,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2500,6 +2653,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2817,6 +2973,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -2849,6 +3008,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -2911,6 +3073,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -2947,6 +3112,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3016,6 +3184,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3052,6 +3223,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3090,6 +3264,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -3126,6 +3303,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3166,6 +3346,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3218,6 +3401,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3272,6 +3458,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3304,6 +3493,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3342,6 +3534,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -3378,6 +3573,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3424,6 +3622,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3608,6 +3809,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -3643,6 +3847,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3680,6 +3887,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3756,6 +3966,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -3803,6 +4016,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -3842,6 +4058,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3920,6 +4139,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -3952,6 +4174,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -3988,6 +4213,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4026,6 +4254,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4061,6 +4292,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4162,6 +4396,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4194,6 +4431,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4256,6 +4496,9 @@ Options:
       --no-alias
           Do not write the alias launcher `<name>` (see `profile alias`)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4295,6 +4538,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4342,6 +4588,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4382,6 +4631,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4419,6 +4671,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4455,6 +4710,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4496,6 +4754,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4535,6 +4796,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4689,6 +4953,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4727,6 +4994,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4773,6 +5043,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4809,6 +5082,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -4882,6 +5158,9 @@ Options:
       --before <TIME>
           Only messages before this time (RFC 3339 or YYYY-MM-DD)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
       --session <SESSION>
           Only this session (id, id prefix or title)
 
@@ -4934,6 +5213,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -4970,6 +5252,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5008,6 +5293,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5044,6 +5332,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5082,6 +5373,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5119,6 +5413,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5155,6 +5452,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5217,6 +5517,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5260,6 +5563,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5301,6 +5607,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5345,6 +5654,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5381,6 +5693,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5413,6 +5728,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5652,6 +5970,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5713,6 +6034,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5749,6 +6073,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5793,6 +6120,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5861,6 +6191,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -5897,6 +6230,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -5956,6 +6292,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -6025,6 +6364,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6069,6 +6411,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6118,6 +6463,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6160,6 +6508,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6192,6 +6543,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6288,6 +6642,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6320,6 +6677,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6358,6 +6718,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6395,6 +6758,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6427,6 +6793,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6524,6 +6893,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6577,6 +6949,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6609,6 +6984,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6646,6 +7024,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6686,6 +7067,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6732,6 +7116,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -6840,6 +7227,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6875,6 +7265,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6916,6 +7309,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -6955,6 +7351,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -6996,6 +7395,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7031,6 +7433,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7069,6 +7474,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7104,6 +7512,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7225,6 +7636,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7260,6 +7674,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7297,6 +7714,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7372,6 +7792,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7430,6 +7853,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help (see a summary with '-h')
@@ -7513,6 +7939,9 @@ Options:
       --restore-snapshots
           With `--rollback`: also restore the pre-update snapshots, losing the sessions created since the update (asks first)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -y, --yes
           Confirm `--restore-snapshots` without asking
 
@@ -7564,6 +7993,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7597,6 +8029,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7629,6 +8064,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7711,6 +8149,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7747,6 +8188,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7779,6 +8223,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7813,6 +8260,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7845,6 +8295,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7879,6 +8332,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7911,6 +8367,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -7954,6 +8413,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -7989,6 +8451,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8129,6 +8594,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8161,6 +8629,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8195,6 +8666,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8228,6 +8702,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8260,6 +8737,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8299,6 +8779,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8341,6 +8824,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8378,6 +8864,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8414,6 +8903,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8510,6 +9002,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8542,6 +9037,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8587,6 +9085,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8644,6 +9145,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
       --write [<PATH>]
           Write the manifest to PATH (default `<profile>/slack-manifest.json`)
 
@@ -8684,6 +9188,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8719,6 +9226,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -8785,6 +9295,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -8821,6 +9334,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9029,6 +9545,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9064,6 +9583,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9105,6 +9627,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9145,6 +9670,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9184,6 +9712,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9252,12 +9783,27 @@ Plugins: list, enable and disable them, manage their capability grants, and run 
 Usage: prometheus plugins [OPTIONS] <COMMAND>
 
 Commands:
-  list          Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
-  enable        Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
-  disable       Disable a plugin (it keeps its grants)
-  grants        Show, approve or revoke a plugin's capability grants
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
-  help          Print this message or the help of the given subcommand(s)
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  search         Catalog entries matching a word
+  browse         Every catalog entry, by tier and category
+  show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+  list           Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+  enable         Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable        Disable a plugin (it keeps its grants)
+  update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+  check-updates  List the plugins whose catalog ref or package moved
+  diff-grants    The capabilities a staged update asks for beyond the current grant
+  remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+  grants         Show, approve or revoke a plugin's capability grants
+  capabilities   Declared versus granted capabilities, per plugin
+  adopt          Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+  validate       Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+  pack           Pack a plugin directory into a `.pmtpkg` package
+  sign           Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+  doctor         Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+  reload         Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+  test-adapter   Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  help           Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -9281,6 +9827,183 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins install`
+
+```text
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+
+Usage: prometheus plugins install [OPTIONS] <IDENTIFIER>
+
+Arguments:
+  <IDENTIFIER>
+          A catalog id, a `.pmtpkg` path or a Git URL
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --ref <SHA>
+          The full commit SHA of a Git install
+
+      --allow-unsigned
+          Install without a verified signature (recorded on the install record)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --allow-removed
+          Install although the catalog removed the plugin (recorded)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --enable
+          Enable it now (asks to approve its capabilities)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --no-enable
+          Leave it disabled
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --grant <all|CAPABILITIES>
+          With `--enable`: approve `all` requested capabilities, or a list
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins search`
+
+```text
+Catalog entries matching a word
+
+Usage: prometheus plugins search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          Matched against id, category, description and capabilities
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins browse`
+
+```text
+Every catalog entry, by tier and category
+
+Usage: prometheus plugins browse [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins show`
+
+```text
+A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+
+Usage: prometheus plugins show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9288,7 +10011,7 @@ Options:
 ## `prometheus plugins list`
 
 ```text
-Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
 
 Usage: prometheus plugins list [OPTIONS]
 
@@ -9313,6 +10036,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9354,6 +10080,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9390,6 +10119,171 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins update`
+
+```text
+Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+
+Usage: prometheus plugins update [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The plugin id (every plugin when omitted)
+
+Options:
+      --grant <all|CAPABILITIES>
+          Approve the new capabilities (`all` or a comma list)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --allow-unsigned
+          Accept a package without a verified signature (recorded)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins check-updates`
+
+```text
+List the plugins whose catalog ref or package moved
+
+Usage: prometheus plugins check-updates [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins diff-grants`
+
+```text
+The capabilities a staged update asks for beyond the current grant
+
+Usage: prometheus plugins diff-grants [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins remove`
+
+```text
+Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+
+Usage: prometheus plugins remove [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9430,6 +10324,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9466,6 +10363,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9507,6 +10407,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9546,6 +10449,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9597,6 +10503,291 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins grants help help
 ```
 
+## `prometheus plugins capabilities`
+
+```text
+Declared versus granted capabilities, per plugin
+
+Usage: prometheus plugins capabilities [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          One plugin (every plugin when omitted)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins adopt`
+
+```text
+Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+
+Usage: prometheus plugins adopt [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>
+          The directory (or the plugin id)
+
+Options:
+      --grant <all|CAPABILITIES>
+          Approve `all` requested capabilities, or a comma list
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins validate`
+
+```text
+Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+
+Usage: prometheus plugins validate [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins pack`
+
+```text
+Pack a plugin directory into a `.pmtpkg` package
+
+Usage: prometheus plugins pack [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>
+          The plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --out <FILE>
+          Where to write it (default: `<id>-<version>.pmtpkg` here)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins sign`
+
+```text
+Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+
+Usage: prometheus plugins sign [OPTIONS] --key <FILE> <PACKAGE>
+
+Arguments:
+  <PACKAGE>
+          The `.pmtpkg` file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --key <FILE>
+          An unencrypted minisign secret key file
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins doctor`
+
+```text
+Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+
+Usage: prometheus plugins doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins reload`
+
+```text
+Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+
+Usage: prometheus plugins reload [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The plugin to report on (every plugin reloads)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins test-adapter`
 
 ```text
@@ -9630,6 +10821,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9642,18 +10836,65 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins help [COMMAND]
 
 Commands:
-  list          Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
-  enable        Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
-  disable       Disable a plugin (it keeps its grants)
-  grants        Show, approve or revoke a plugin's capability grants
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
-  help          Print this message or the help of the given subcommand(s)
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  search         Catalog entries matching a word
+  browse         Every catalog entry, by tier and category
+  show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+  list           Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+  enable         Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable        Disable a plugin (it keeps its grants)
+  update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+  check-updates  List the plugins whose catalog ref or package moved
+  diff-grants    The capabilities a staged update asks for beyond the current grant
+  remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+  grants         Show, approve or revoke a plugin's capability grants
+  capabilities   Declared versus granted capabilities, per plugin
+  adopt          Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+  validate       Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+  pack           Pack a plugin directory into a `.pmtpkg` package
+  sign           Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+  doctor         Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+  reload         Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+  test-adapter   Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins help install`
+
+```text
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+
+Usage: prometheus plugins help install
+```
+
+## `prometheus plugins help search`
+
+```text
+Catalog entries matching a word
+
+Usage: prometheus plugins help search
+```
+
+## `prometheus plugins help browse`
+
+```text
+Every catalog entry, by tier and category
+
+Usage: prometheus plugins help browse
+```
+
+## `prometheus plugins help show`
+
+```text
+A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+
+Usage: prometheus plugins help show
 ```
 
 ## `prometheus plugins help list`
 
 ```text
-Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
 
 Usage: prometheus plugins help list
 ```
@@ -9672,6 +10913,38 @@ Usage: prometheus plugins help enable
 Disable a plugin (it keeps its grants)
 
 Usage: prometheus plugins help disable
+```
+
+## `prometheus plugins help update`
+
+```text
+Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+
+Usage: prometheus plugins help update
+```
+
+## `prometheus plugins help check-updates`
+
+```text
+List the plugins whose catalog ref or package moved
+
+Usage: prometheus plugins help check-updates
+```
+
+## `prometheus plugins help diff-grants`
+
+```text
+The capabilities a staged update asks for beyond the current grant
+
+Usage: prometheus plugins help diff-grants
+```
+
+## `prometheus plugins help remove`
+
+```text
+Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+
+Usage: prometheus plugins help remove
 ```
 
 ## `prometheus plugins help grants`
@@ -9709,6 +10982,62 @@ Usage: prometheus plugins help grants approve
 Revoke the plugin's grants, or one; a running plugin is refused it from its next call
 
 Usage: prometheus plugins help grants revoke
+```
+
+## `prometheus plugins help capabilities`
+
+```text
+Declared versus granted capabilities, per plugin
+
+Usage: prometheus plugins help capabilities
+```
+
+## `prometheus plugins help adopt`
+
+```text
+Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+
+Usage: prometheus plugins help adopt
+```
+
+## `prometheus plugins help validate`
+
+```text
+Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+
+Usage: prometheus plugins help validate
+```
+
+## `prometheus plugins help pack`
+
+```text
+Pack a plugin directory into a `.pmtpkg` package
+
+Usage: prometheus plugins help pack
+```
+
+## `prometheus plugins help sign`
+
+```text
+Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+
+Usage: prometheus plugins help sign
+```
+
+## `prometheus plugins help doctor`
+
+```text
+Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+
+Usage: prometheus plugins help doctor
+```
+
+## `prometheus plugins help reload`
+
+```text
+Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+
+Usage: prometheus plugins help reload
 ```
 
 ## `prometheus plugins help test-adapter`
@@ -9771,6 +11100,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9810,6 +11142,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9842,6 +11177,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -9883,6 +11221,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -9921,6 +11262,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10012,6 +11356,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -10062,6 +11409,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -10094,6 +11444,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10138,6 +11491,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -10170,6 +11526,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10208,6 +11567,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -10245,6 +11607,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -10277,6 +11642,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10311,6 +11679,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -10343,6 +11714,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10383,6 +11757,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -10415,6 +11792,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10453,6 +11833,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -h, --help
           Print help
 ```
@@ -10489,6 +11872,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -10568,6 +11954,9 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
   -h, --help
           Print help
@@ -12352,17 +13741,64 @@ Plugins: list, enable and disable them, manage their capability grants, and run 
 Usage: prometheus help plugins [COMMAND]
 
 Commands:
-  list          Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
-  enable        Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
-  disable       Disable a plugin (it keeps its grants)
-  grants        Show, approve or revoke a plugin's capability grants
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  search         Catalog entries matching a word
+  browse         Every catalog entry, by tier and category
+  show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+  list           Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+  enable         Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable        Disable a plugin (it keeps its grants)
+  update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+  check-updates  List the plugins whose catalog ref or package moved
+  diff-grants    The capabilities a staged update asks for beyond the current grant
+  remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+  grants         Show, approve or revoke a plugin's capability grants
+  capabilities   Declared versus granted capabilities, per plugin
+  adopt          Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+  validate       Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+  pack           Pack a plugin directory into a `.pmtpkg` package
+  sign           Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+  doctor         Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+  reload         Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+  test-adapter   Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+```
+
+## `prometheus help plugins install`
+
+```text
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+
+Usage: prometheus help plugins install
+```
+
+## `prometheus help plugins search`
+
+```text
+Catalog entries matching a word
+
+Usage: prometheus help plugins search
+```
+
+## `prometheus help plugins browse`
+
+```text
+Every catalog entry, by tier and category
+
+Usage: prometheus help plugins browse
+```
+
+## `prometheus help plugins show`
+
+```text
+A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+
+Usage: prometheus help plugins show
 ```
 
 ## `prometheus help plugins list`
 
 ```text
-Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
 
 Usage: prometheus help plugins list
 ```
@@ -12381,6 +13817,38 @@ Usage: prometheus help plugins enable
 Disable a plugin (it keeps its grants)
 
 Usage: prometheus help plugins disable
+```
+
+## `prometheus help plugins update`
+
+```text
+Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+
+Usage: prometheus help plugins update
+```
+
+## `prometheus help plugins check-updates`
+
+```text
+List the plugins whose catalog ref or package moved
+
+Usage: prometheus help plugins check-updates
+```
+
+## `prometheus help plugins diff-grants`
+
+```text
+The capabilities a staged update asks for beyond the current grant
+
+Usage: prometheus help plugins diff-grants
+```
+
+## `prometheus help plugins remove`
+
+```text
+Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+
+Usage: prometheus help plugins remove
 ```
 
 ## `prometheus help plugins grants`
@@ -12418,6 +13886,62 @@ Usage: prometheus help plugins grants approve
 Revoke the plugin's grants, or one; a running plugin is refused it from its next call
 
 Usage: prometheus help plugins grants revoke
+```
+
+## `prometheus help plugins capabilities`
+
+```text
+Declared versus granted capabilities, per plugin
+
+Usage: prometheus help plugins capabilities
+```
+
+## `prometheus help plugins adopt`
+
+```text
+Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+
+Usage: prometheus help plugins adopt
+```
+
+## `prometheus help plugins validate`
+
+```text
+Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+
+Usage: prometheus help plugins validate
+```
+
+## `prometheus help plugins pack`
+
+```text
+Pack a plugin directory into a `.pmtpkg` package
+
+Usage: prometheus help plugins pack
+```
+
+## `prometheus help plugins sign`
+
+```text
+Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+
+Usage: prometheus help plugins sign
+```
+
+## `prometheus help plugins doctor`
+
+```text
+Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+
+Usage: prometheus help plugins doctor
+```
+
+## `prometheus help plugins reload`
+
+```text
+Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+
+Usage: prometheus help plugins reload
 ```
 
 ## `prometheus help plugins test-adapter`

@@ -1,6 +1,6 @@
 /// Callbacks on the closed hook list (spec: plugin-system, Typed hook
 /// registry; Hook payloads are versioned and additive).
-package prometheus:hook@1.0.0;
+package prometheus:hook@1.1.0;
 
 interface plugin {
     /// One hook firing. `payload` is a JSON object carrying
@@ -41,7 +41,40 @@ interface plugin {
     on-hook: func(event: hook-event) -> result<reply, string>;
 }
 
+/// Added in 1.1: what a plugin contributes besides callbacks (spec:
+/// plugin-system, Plugin system-prompt sections are bounded and frozen;
+/// Plugin slash commands; Plugin event bus). A component built against
+/// 1.0 does not export it and contributes none of these.
+interface extensions {
+    /// One slash command; its name must be in the `commands` grant.
+    record command {
+        /// Without the `/`.
+        name: string,
+        /// One line for `/help`.
+        description: string,
+        /// Surfaces it runs on (`cli`, `tui`, `gateway`, `desktop`,
+        /// `dashboard`, `acp`); empty means every surface.
+        surfaces: list<string>,
+    }
+
+    /// The ids of the system-prompt sections this plugin contributes,
+    /// read once at load (`^[a-z0-9][a-z0-9._-]{0,127}$`, unique across
+    /// plugins); needs the `prompt_section` grant.
+    sections: func() -> list<string>;
+    /// A section's text, asked once when a session's prompt is built; it
+    /// stays as answered for the whole session.
+    render-section: func(id: string) -> result<string, string>;
+    /// The slash commands this plugin registers, read once at load.
+    commands: func() -> list<command>;
+    /// Runs `/<name> <args>`; the answer is shown to the person.
+    run-command: func(name: string, args: string) -> result<string, string>;
+    /// An event matching one of this plugin's `events.subscribe`
+    /// patterns, delivered asynchronously in emit order.
+    on-event: func(name: string, payload: string) -> result<_, string>;
+}
+
 world hook {
     include prometheus:host/imports@1.0.0;
     export plugin;
+    export extensions;
 }

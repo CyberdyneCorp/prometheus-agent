@@ -314,11 +314,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
+| `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |
 | `plugins.disabled` | array of string | `[]` | any | `next_session` | Ids never instantiated; wins over `enabled`. |
 | `plugins.enabled` | array of string | `[]` | any | `next_session` | Ids of the non-embedded plugins to instantiate; a discovered plugin stays disabled until listed here (`prometheus plugins enable <id>`). |
 | `plugins.entries` | table | `{}` | any | `next_session` | Each plugin's own settings, `plugins.entries.<id>.<key>`, read and written by the plugin through its `config` host interface. |
 | `plugins.hook_context_max_chars` | integer | `10000` | ≥ 1 | `next_session` | `pre_llm_call` context of one callback above this many characters is spilled to `hook_outputs/<session>/` and replaced by its head, tail and the spill path. |
 | `plugins.hook_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | Bound on one hook callback; a callback that overruns counts as no result and is suspended for 60 seconds. |
+| `plugins.load_timeout_ms` | integer | `10000` | 1 to 600000 | `next_session` | Bound on instantiating and registering one plugin; a plugin that overruns is skipped with `load timed out` while the others load. |
+| `plugins.safe_mode` | boolean | `false` | any | `next_session` | Skip every non-embedded plugin, MCP server and python-bridge sidecar (as `prometheus --safe-mode` does, without its other effects). |
+| `plugins.signature_policy` | one of "require", "warn", "off" | `"require"` | `"require"`, `"warn"`, `"off"` | `next_session` | What installing an unsigned local `.pmtpkg` needs: `require` (only with `--allow-unsigned`), `warn` or `off`. Catalog installs always need a valid signature unless `--allow-unsigned` is given. |
 | `plugins.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Project roots whose `.prometheus/plugins/` directory is scanned; any other project's plugins are never read. |
 | `plugins.wasm.call_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | CPU bound of one call into a plugin (fuel and epoch interruption); an overrun fails the call with `plugin '<id>' exceeded call timeout`. |
 | `plugins.wasm.max_memory_bytes` | integer | `268435456` | ≥ 65536 | `next_session` | Linear memory cap of one plugin instance. |

@@ -62,6 +62,9 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -V, --version
           Print version
 

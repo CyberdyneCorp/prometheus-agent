@@ -8,7 +8,11 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 jiff.workspace = true
+# Package signatures: verification, and `prometheus plugins sign`.
+minisign.workspace = true
+minisign-verify.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-tools.workspace = true
@@ -16,10 +20,15 @@ semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+# `.pmtpkg` packages are zstd-compressed tars.
+tar.workspace = true
+# Install staging directories.
+tempfile.workspace = true
 tokio.workspace = true
 toml.workspace = true
 tracing.workspace = true
 wasmtime.workspace = true
+zstd.workspace = true
 wit-component = { workspace = true, optional = true }
 
 [features]
@@ -29,7 +38,6 @@ testkit = ["dep:wit-component"]
 
 [dev-dependencies]
 pmt-plugins = { path = ".", features = ["testkit"] }
-tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]

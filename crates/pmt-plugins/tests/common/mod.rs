@@ -135,6 +135,7 @@ pub(crate) struct Profile {
     pub dir: tempfile::TempDir,
     pub name: String,
     pub config: PluginsConfig,
+    pub blocked: Vec<pmt_plugins::catalog::Removed>,
 }
 
 pub(crate) fn version() -> Version {
@@ -149,6 +150,7 @@ impl Profile {
             dir: tempfile::tempdir_in(base).unwrap(),
             name: name.to_owned(),
             config: PluginsConfig::default(),
+            blocked: Vec::new(),
         }
     }
 
@@ -169,7 +171,20 @@ impl Profile {
         worlds: &str,
         capabilities: &str,
     ) -> Identity {
-        let identity = self.place(id, component, worlds, capabilities);
+        self.install_with(id, component, worlds, capabilities, "")
+    }
+
+    /// [`Self::install`] with `top` added to the manifest's top-level keys
+    /// (`requires_plugins = [...]`).
+    pub(crate) fn install_with(
+        &mut self,
+        id: &str,
+        component: &str,
+        worlds: &str,
+        capabilities: &str,
+        top: &str,
+    ) -> Identity {
+        let identity = self.place_with(id, component, worlds, capabilities, top);
         self.config.enabled.push(id.to_owned());
         let manifest = Manifest::read(&self.plugin_dir(id), &version()).unwrap();
         let requested: CapabilitySet = manifest
@@ -188,17 +203,31 @@ impl Profile {
         worlds: &str,
         capabilities: &str,
     ) -> Identity {
+        self.place_with(id, component, worlds, capabilities, "")
+    }
+
+    /// [`Self::place`] with `top` added to the manifest's top-level keys.
+    pub(crate) fn place_with(
+        &self,
+        id: &str,
+        component: &str,
+        worlds: &str,
+        capabilities: &str,
+        top: &str,
+    ) -> Identity {
         let dir = self.plugin_dir(id);
         testkit::install(component, &dir);
         let manifest = format!(
             "manifest_version = 1\nid = \"{id}\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
              description = \"test\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
-             worlds = [{worlds}]\n\n[capabilities]\n{capabilities}\n"
+             worlds = [{worlds}]\n{top}\n\n[capabilities]\n{capabilities}\n"
         );
         std::fs::write(dir.join("plugin.toml"), manifest).unwrap();
+        let digest = pmt_plugins::digest::of_dir(&dir).unwrap();
+        adopted(&dir, &digest);
         Identity {
             id: id.to_owned(),
-            digest: pmt_plugins::digest::of_dir(&dir).unwrap(),
+            digest,
         }
     }
 
@@ -217,9 +246,27 @@ impl Profile {
                 config: &self.config,
                 embedded: &[],
                 running: &version(),
+                blocked: &self.blocked,
             },
         )
     }
+}
+
+/// Writes the install record of an adopted directory.
+pub(crate) fn adopted(dir: &Path, digest: &str) {
+    pmt_plugins::record::InstallRecord {
+        source: pmt_plugins::record::Origin::Adopted,
+        location: dir.to_string_lossy().into_owned(),
+        r#ref: None,
+        package_digest: None,
+        digest: digest.to_owned(),
+        signer: None,
+        tier: None,
+        installed_at: "2026-11-03T00:00:00Z".to_owned(),
+        flags: pmt_plugins::record::Flags::default(),
+    }
+    .write(dir)
+    .unwrap();
 }
 
 /// The loaded instance of `id`, failing the test with its status otherwise.
@@ -256,4 +303,5 @@ pub(crate) async fn call(
 }
 
 pub(crate) const TOOL: &str = "\"tool@1.0\"";
-pub(crate) const HOOK: &str = "\"hook@1.0\"";
+pub(crate) const HOOK: &str = "\"hook@1.1\"";
+pub(crate) const PROVIDER: &str = "\"provider@1.0\"";

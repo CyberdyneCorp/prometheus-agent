@@ -14,8 +14,32 @@ fn plugin_dir(home: &Path, id: &str) -> PathBuf {
     home.join("profiles/default/plugins").join(id)
 }
 
-/// Places plugin `id` (crate `component`) with `[capabilities]` text.
+/// Places plugin `id` (crate `component`) with `[capabilities]` text and
+/// adopts it (its install record).
 fn place(home: &Path, id: &str, component: &str, world: &str, capabilities: &str) {
+    place_by_hand(home, id, component, world, capabilities);
+    adopt(&plugin_dir(home, id));
+}
+
+/// Writes the install record `prometheus plugins adopt` writes.
+fn adopt(dir: &Path) {
+    pmt_plugins::record::InstallRecord {
+        source: pmt_plugins::record::Origin::Adopted,
+        location: dir.to_string_lossy().into_owned(),
+        r#ref: None,
+        package_digest: None,
+        digest: pmt_plugins::digest::of_dir(dir).unwrap(),
+        signer: None,
+        tier: None,
+        installed_at: "2026-11-03T00:00:00Z".to_owned(),
+        flags: pmt_plugins::record::Flags::default(),
+    }
+    .write(dir)
+    .unwrap();
+}
+
+/// Places plugin `id` without an install record.
+fn place_by_hand(home: &Path, id: &str, component: &str, world: &str, capabilities: &str) {
     let dir = plugin_dir(home, id);
     pmt_plugins::testkit::install(component, &dir);
     std::fs::write(
@@ -103,6 +127,15 @@ fn a_changed_plugin_needs_approval_again() {
         &["plugins", "enable", "echo", "--grant", "all"],
     ));
     std::fs::write(plugin_dir(home.path(), "echo").join("notes.md"), "edited").unwrap();
+    let listing = ok(&run(home.path(), &["plugins", "list"]));
+    assert!(
+        line_of(&listing, "echo").contains("plugin 'echo' was modified after install"),
+        "{listing}"
+    );
+    // Adopting the edited copy records it; its grant still names the old
+    // digest.
+    let out = run(home.path(), &["plugins", "adopt", "echo"]);
+    assert_eq!(out.status.code(), Some(4), "{}", stderr(&out));
     let listing = ok(&run(home.path(), &["plugins", "list"]));
     assert!(
         line_of(&listing, "echo").contains("changed since its capabilities were approved"),
