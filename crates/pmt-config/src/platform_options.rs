@@ -43,8 +43,9 @@ pub struct TelegramOptions {
     /// Ignore ordinary messages in the root of a private chat (slash
     /// commands are still accepted).
     pub ignore_root_dm: bool,
-    /// Send replies as Telegram rich (HTML) messages, falling back to
-    /// `MarkdownV2` when Telegram refuses one.
+    /// Send replies as Telegram rich messages (Bot API 10.1
+    /// `sendRichMessage`: the raw Markdown, up to 32768 characters), falling
+    /// back to `MarkdownV2` when Telegram refuses one.
     pub rich_messages: bool,
 }
 

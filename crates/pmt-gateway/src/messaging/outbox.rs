@@ -102,7 +102,6 @@ fn outgoing(entry: &Outbound) -> Outgoing {
         select,
         attachments: entry.attachments.clone(),
         plain: false,
-        markup: None,
     }
 }
 

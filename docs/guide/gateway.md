@@ -90,8 +90,12 @@ options = { require_mention = true } # checked against the adapter's schema
 
 Settings an enabled adapter cannot start without fail validation and name
 the key (for example `gateway.platforms.email.options.imap_host`). Adapters
-connect directly: proxy variables in the daemon's environment are ignored
-unless `gateway.trust_env = true`. `gateway.platforms.<name>.proxy_url`
+connect directly: proxy variables in the daemon's environment and the OS
+proxy settings are ignored unless `gateway.trust_env = true`. With it, the
+variables (`HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`) come first
+and the OS settings fill what they leave unset (macOS network proxies and
+their exceptions, Windows Internet Settings; on Linux the variables are
+the system settings). `gateway.platforms.<name>.proxy_url`
 (else `gateway.proxy_url`) sends an adapter's HTTP and WebSocket traffic
 through an `http://`, `https://` or `socks5://` proxy; a proxy URL with a
 password goes in a secret named by `proxy_url_secret`.
@@ -113,8 +117,15 @@ ignores ordinary messages outside a topic. The bot's command menu lists
 the gateway commands and skills, cut to `options.command_menu.max_commands`
 (60) after placing `options.command_menu.priority` first (`priority_mode`
 `prepend`, `append` or `replace`); `@bot <term>` searches every command and
-skill. Replies are sent as `MarkdownV2` (small tables as bullet groups),
-or as HTML with `options.rich_messages = true`.
+skill. The menu is registered again within a few seconds whenever the
+commands change while the daemon runs (a skill installed, enabled or
+disabled, a quick command edited). Replies are sent as `MarkdownV2`
+(small tables as bullet groups). With `options.rich_messages = true` they
+are rich messages instead (`sendRichMessage`): the reply's Markdown as
+written, up to 32768 characters in one message, so tables render
+natively; a rich message Telegram refuses is sent as `MarkdownV2` in
+4096-character parts, and a Bot API without rich messages turns them off
+until the adapter restarts.
 
 Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
 resumes the session after a dropped connection, so missed messages are
@@ -126,9 +137,9 @@ conversation goes on without mentions and which takes the session's
 title after the first turn (`options.auto_thread`, default on; never in
 `options.no_thread_channels` or for replies). A send to a forum channel
 opens a post titled by its first line. The gateway's commands are
-registered as application commands (100 at most) unless
-`options.slash_commands = false`, which a follower daemon sharing the
-application sets. Both adapters send buttons for approvals, typing
+registered as application commands (100 at most), again whenever they
+change, unless `options.slash_commands = false`, which a follower daemon
+sharing the application sets. Both adapters send buttons for approvals, typing
 indicators, reactions and files, and both read the token from the owning
 profile's secrets only.
 

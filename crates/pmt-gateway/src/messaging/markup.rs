@@ -7,10 +7,11 @@
 //! path.
 //!
 //! - `plain`: `[t](u)` becomes `t (u)` (SMS, LINE, IRC, ntfy).
-//! - `markdown`: sent as written (Discord).
+//! - `markdown`: sent as written (Discord; Telegram rich messages, whose
+//!   adapter falls back to `MarkdownV2` itself when Telegram refuses one).
 //! - `html`: Matrix HTML.
 //! - `platform`: Telegram `MarkdownV2` (small tables as bullet groups,
-//!   larger ones as a fenced block; HTML for rich messages), Slack
+//!   larger ones as a fenced block), Slack
 //!   `mrkdwn`, `WhatsApp` style; Signal keeps Markdown here and the adapter
 //!   sends native style ranges ([`signal_styles`]).
 
@@ -446,11 +447,8 @@ impl Dialect for TelegramV2 {
     }
 }
 
-/// HTML: Matrix (`<br>` line breaks, real headings and tables) or
-/// Telegram rich messages (newlines, headings in bold, tables as `<pre>`).
-struct Html {
-    matrix: bool,
-}
+/// Matrix HTML (`<br>` line breaks, real headings and tables).
+struct Html;
 
 fn html_escape(text: &str) -> String {
     text.replace('&', "&amp;")
@@ -487,26 +485,15 @@ impl Dialect for Html {
         format!("<s>{inner}</s>")
     }
     fn spoiler(&self, inner: String) -> String {
-        if self.matrix {
-            format!("<span data-mx-spoiler>{inner}</span>")
-        } else {
-            format!("<tg-spoiler>{inner}</tg-spoiler>")
-        }
+        format!("<span data-mx-spoiler>{inner}</span>")
     }
     fn link(&self, label: String, url: &str) -> String {
         format!("<a href=\"{}\">{label}</a>", html_escape(url))
     }
     fn heading(&self, level: usize, inner: String) -> String {
-        if self.matrix {
-            format!("<h{level}>{inner}</h{level}>")
-        } else {
-            format!("<b>{inner}</b>")
-        }
+        format!("<h{level}>{inner}</h{level}>")
     }
     fn table(&self, rows: &[Vec<String>]) -> String {
-        if !self.matrix {
-            return format!("<pre>{}</pre>", html_escape(&raw_table(rows)));
-        }
         let rows: Vec<String> = rows
             .iter()
             .enumerate()
@@ -523,7 +510,7 @@ impl Dialect for Html {
         format!("<table>{}</table>", rows.concat())
     }
     fn line_break(&self) -> &'static str {
-        if self.matrix { "<br>" } else { "\n" }
+        "<br>"
     }
 }
 
@@ -536,8 +523,7 @@ pub fn render(descriptor: &Descriptor, text: &str, plain: bool) -> String {
     }
     match (descriptor.markup, descriptor.platform.as_str()) {
         (Markup::Plain, _) => Plain.render(text),
-        (Markup::Html, "telegram") => Html { matrix: false }.render(text),
-        (Markup::Html, _) => Html { matrix: true }.render(text),
+        (Markup::Html, _) => Html.render(text),
         (Markup::Platform, "telegram") => TelegramV2.render(text),
         (Markup::Platform, "slack") => Mrkdwn.render(text),
         (Markup::Platform, "whatsapp") => Whatsapp.render(text),
@@ -547,7 +533,8 @@ pub fn render(descriptor: &Descriptor, text: &str, plain: bool) -> String {
     }
 }
 
-/// `text` rendered in `markup` for `platform` (a downgraded resend).
+/// `text` rendered in `markup` for `platform` (an adapter's own fallback
+/// dialect, such as Telegram `MarkdownV2` after a refused rich message).
 #[must_use]
 pub fn render_in(markup: Markup, platform: &str, text: &str) -> String {
     let descriptor = Descriptor {
@@ -557,24 +544,12 @@ pub fn render_in(markup: Markup, platform: &str, text: &str) -> String {
     render(&descriptor, text, false)
 }
 
-/// The dialect a refused message is sent in before plain text: Telegram
-/// rich (HTML) messages fall back to `MarkdownV2`.
-#[must_use]
-pub fn downgrade(descriptor: &Descriptor) -> Option<Markup> {
-    (descriptor.markup == Markup::Html && descriptor.platform == "telegram")
-        .then_some(Markup::Platform)
-}
-
 /// `message` with its Markdown rendered for the platform `descriptor`
-/// describes (`message.markup`, when set, overrides the descriptor's).
+/// describes.
 #[must_use]
 pub fn rendered_with(descriptor: &Descriptor, message: &Outgoing) -> Outgoing {
-    let text = match message.markup {
-        Some(markup) if !message.plain => render_in(markup, &descriptor.platform, &message.text),
-        _ => render(descriptor, &message.text, message.plain),
-    };
     Outgoing {
-        text,
+        text: render(descriptor, &message.text, message.plain),
         ..message.clone()
     }
 }

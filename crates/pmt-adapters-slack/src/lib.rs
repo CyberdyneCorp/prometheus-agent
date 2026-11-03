@@ -161,7 +161,7 @@ impl Slack {
             bot_user: me["user_id"].as_str().unwrap_or_default().to_owned(),
             team: me["team_id"].as_str().map(str::to_owned),
             extra_ca: self.extra_ca.clone(),
-            proxy: self.proxy.for_websocket(true),
+            proxy: self.proxy.clone(),
             slash: Arc::clone(&self.slash),
             stop,
         })

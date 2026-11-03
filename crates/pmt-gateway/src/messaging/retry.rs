@@ -6,7 +6,8 @@
 //! at once (which schedules the entry after it). A timeout after the
 //! request was transmitted is never retried (the outbox marks it
 //! `unknown`), and a message whose markup the platform refused is resent
-//! once as plain text.
+//! once as plain text (an adapter with a dialect of its own to fall back
+//! to, such as Telegram rich messages to `MarkdownV2`, tries it first).
 
 use std::time::Duration;
 
@@ -44,8 +45,7 @@ fn inline_wait(err: &SendError, attempt: u32) -> Option<Duration> {
 
 /// Sends `message` (its text in the agent's Markdown) through `adapter`
 /// with the inline retries: rendered in the adapter's markup, then, when
-/// the platform refuses it, in the markup's fallback dialect if it has
-/// one, then as plain text.
+/// the platform refuses it, as plain text.
 pub(crate) async fn send(adapter: &dyn Adapter, message: &Outgoing) -> Result<Sent, SendError> {
     let descriptor = adapter.describe();
     let source = message.text.clone();
@@ -55,18 +55,9 @@ pub(crate) async fn send(adapter: &dyn Adapter, message: &Outgoing) -> Result<Se
         match adapter.send(&message).await {
             Ok(sent) => return Ok(sent),
             Err(SendError::Formatting(why)) if !message.plain => {
-                if let Some(dialect) =
-                    markup::downgrade(&descriptor).filter(|_| message.markup.is_none())
-                {
-                    tracing::info!("markup refused ({why}); resending in {dialect:?}");
-                    message.text = markup::render_in(dialect, &descriptor.platform, &source);
-                    message.markup = Some(dialect);
-                } else {
-                    tracing::info!("markup refused ({why}); resending as plain text");
-                    message.plain = true;
-                    message.markup = None;
-                    message.text = markup::render(&descriptor, &source, true);
-                }
+                tracing::info!("markup refused ({why}); resending as plain text");
+                message.plain = true;
+                message.text = markup::render(&descriptor, &source, true);
             }
             Err(err) => match inline_wait(&err, attempt).filter(|_| attempt < INLINE_RETRIES) {
                 Some(wait) => {

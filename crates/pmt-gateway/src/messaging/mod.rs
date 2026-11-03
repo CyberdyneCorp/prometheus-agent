@@ -12,6 +12,8 @@
 //!   turns, approvals, streaming);
 //! - `outbox`: the delivery worker;
 //! - `adapters`: adapter connection, reconnection and state;
+//! - `menus`: native command menus, registered again when the registry
+//!   changes;
 //! - `recovery`: the clean-shutdown marker and crash recovery;
 //! - `cache`: live agents kept in memory.
 //!
@@ -44,6 +46,7 @@ mod locks;
 pub mod markup;
 mod media;
 pub mod menu;
+mod menus;
 pub(crate) mod methods;
 pub mod mock_server;
 pub mod multipart;
@@ -51,6 +54,7 @@ mod outbox;
 mod peer;
 pub mod policy;
 pub mod proxy;
+pub mod proxy_env;
 mod recovery;
 mod relay;
 mod retry;
@@ -182,6 +186,7 @@ pub(crate) struct Shared {
     relay: std::sync::OnceLock<Arc<relay::Relay>>,
     last_inbound: send::LastInbound,
     limits: limits::Limits,
+    menus: menus::Menus,
     health: health::Counters,
     cache: cache::AgentCache,
     /// Unserved-profile warnings already logged, by adapter, with when.
@@ -321,6 +326,7 @@ impl Gateway {
             relay: std::sync::OnceLock::new(),
             last_inbound: send::LastInbound::default(),
             limits: limits::Limits::default(),
+            menus: menus::Menus::default(),
             health: health::Counters::default(),
             cache: cache::AgentCache::new(options.agent_cache.clone()),
             lanes: Mutex::default(),
@@ -344,6 +350,7 @@ impl Gateway {
             outbox::spawn(&shared, profile);
         }
         cache::spawn(&shared);
+        menus::spawn(&shared);
         if let Some(health) = shared.options.health.clone() {
             health::spawn(&shared, health);
         }
@@ -423,7 +430,7 @@ impl Gateway {
         for profile in &shared.server.profiles() {
             adapters::start_profile(shared, profile);
         }
-        adapters::refresh_menus(shared);
+        menus::refresh(shared);
     }
 
     /// Injects a background notification into a conversation (spec:

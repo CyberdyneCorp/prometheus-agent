@@ -159,10 +159,6 @@ pub struct Outgoing {
     pub attachments: Vec<OutboundAttachment>,
     /// Send without markup (the resend after a `formatting` refusal).
     pub plain: bool,
-    /// The markup `text` is in when it is not the descriptor's (a
-    /// downgraded resend, such as Telegram `MarkdownV2` after a refused
-    /// rich message).
-    pub markup: Option<Markup>,
 }
 
 impl Outgoing {
@@ -178,7 +174,6 @@ impl Outgoing {
             select: None,
             attachments: Vec::new(),
             plain: false,
-            markup: None,
         }
     }
 }

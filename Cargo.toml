@@ -181,7 +181,11 @@ opt-level = 3
 opt-level = 3
 
 [profile.release]
-lto = "thin"
+# Fat LTO: one optimization unit across every crate drops what thin LTO
+# keeps per crate (duplicate generic instantiations, unused paths); the
+# stripped binary is about 9% smaller for twice the release build time
+# (perf/README.md).
+lto = "fat"
 codegen-units = 1
 strip = "symbols"
 

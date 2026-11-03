@@ -20,11 +20,13 @@ mod commands;
 #[cfg(feature = "kit")]
 pub mod mock;
 mod normalize;
+mod rich;
+mod text;
 mod topics;
 mod updates;
 
 use std::path::Path;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use api::Api;
@@ -70,6 +72,8 @@ pub struct Telegram {
     /// In webhook mode: how updates are handled and the secret token
     /// each post must carry.
     hook: Mutex<Option<(updates::Ctx, String)>>,
+    /// The Bot API has no rich messages: `MarkdownV2` from then on.
+    rich_unavailable: AtomicBool,
 }
 
 impl std::fmt::Debug for Telegram {
@@ -117,6 +121,7 @@ impl Telegram {
                 &options,
             )),
             hook: Mutex::default(),
+            rich_unavailable: AtomicBool::new(false),
             options,
         })
     }
@@ -148,48 +153,6 @@ pub(crate) fn chat(id: &str) -> Value {
 fn number(id: &str) -> Result<i64, SendError> {
     id.parse()
         .map_err(|_| SendError::Permanent(format!("'{id}' is not a Telegram message id")))
-}
-
-fn keyboard(message: &Outgoing) -> Value {
-    let rows: Vec<Value> = message
-        .buttons
-        .iter()
-        .map(|b| json!([{"text": b.label, "callback_data": b.data}]))
-        .collect();
-    json!({"inline_keyboard": rows})
-}
-
-/// The Bot API `parse_mode` of a message the host rendered in `markup`
-/// (none for a plain resend).
-fn parse_mode(message: &Outgoing, markup: Markup) -> Option<&'static str> {
-    if message.plain {
-        return None;
-    }
-    match message.markup.unwrap_or(markup) {
-        Markup::Html => Some("HTML"),
-        Markup::Platform => Some("MarkdownV2"),
-        Markup::Plain | Markup::Markdown => None,
-    }
-}
-
-/// The `sendMessage` body of a message: its thread, the message it
-/// answers, its buttons and its parse mode.
-fn text_body(message: &Outgoing, markup: Markup) -> Value {
-    let mut body = json!({"chat_id": chat(&message.chat_id), "text": message.text});
-    if let Some(mode) = parse_mode(message, markup) {
-        body["parse_mode"] = json!(mode);
-    }
-    if let Some(thread) = &message.thread_id {
-        body["message_thread_id"] = chat(thread);
-    }
-    if let Some(reply) = &message.reply_to {
-        body["reply_parameters"] =
-            json!({"message_id": chat(reply), "allow_sending_without_reply": true});
-    }
-    if !message.buttons.is_empty() {
-        body["reply_markup"] = keyboard(message);
-    }
-    body
 }
 
 /// The upload method and field of an outbound file.
@@ -228,11 +191,16 @@ fn connect_error(err: &SendError) -> AdapterError {
 }
 
 impl Telegram {
-    /// What the host renders replies in: `MarkdownV2`, or HTML for rich
-    /// messages.
+    /// Whether replies go out as rich messages.
+    fn rich(&self) -> bool {
+        self.options.rich_messages && !self.rich_unavailable.load(Ordering::Relaxed)
+    }
+
+    /// What the host renders replies in: `MarkdownV2`, or the raw
+    /// Markdown of rich messages.
     fn markup(&self) -> Markup {
-        if self.options.rich_messages {
-            Markup::Html
+        if self.rich() {
+            Markup::Markdown
         } else {
             Markup::Platform
         }
@@ -302,8 +270,11 @@ impl Adapter for Telegram {
         ]
         .into_iter()
         .collect();
-        let limit = pmt_config::platforms::first_party(PLATFORM)
-            .map_or(4096, |p| p.max_message_length as usize);
+        let limit = if self.rich() {
+            rich::LIMIT
+        } else {
+            text::LIMIT
+        };
         Descriptor {
             length_unit: LengthUnit::Utf16,
             supports_edit: true,
@@ -358,10 +329,7 @@ impl Adapter for Telegram {
             let api = self.api()?;
             let mut first = None;
             if !message.text.is_empty() || message.attachments.is_empty() {
-                let sent = api
-                    .call("sendMessage", &text_body(&message, self.markup()))
-                    .await?;
-                first = normalize::id(&sent["message_id"]);
+                first = self.send_text(&api, &message).await?;
             }
             for file in &message.attachments {
                 let path = Path::new(&file.path);
@@ -383,16 +351,8 @@ impl Adapter for Telegram {
         message: &'a Outgoing,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
-            let mut body = json!({
-                "chat_id": chat(&message.chat_id),
-                "message_id": number(message_id)?,
-                "text": message.text,
-                "reply_markup": keyboard(message),
-            });
-            if let Some(mode) = parse_mode(message, self.markup()) {
-                body["parse_mode"] = json!(mode);
-            }
-            self.api()?.call("editMessageText", &body).await.map(drop)
+            let api = self.api()?;
+            self.edit_text(&api, number(message_id)?, message).await
         })
     }
 

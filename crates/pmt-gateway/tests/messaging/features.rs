@@ -1,7 +1,7 @@
 //! Adapter features the host drives (spec: platform-adapters, Native
 //! command menus and slash registration; Telegram topics and per-topic
 //! skills; Webhook routes): command menus registered at connect and after
-//! a reload, and session hints shaping the sessions of one thread.
+//! a reload or a registry change, and session hints shaping the sessions of one thread.
 
 use pmt_gateway::messaging::{
     ChatType, Descriptor, Inbound, Markup, MediaKind, MenuCommand, Outgoing, SendError,
@@ -33,6 +33,37 @@ async fn the_command_menu_is_registered_at_connect_and_after_a_reload() {
             .is_some_and(|m| m.iter().any(|c| c.name == "arxiv"))
     })
     .await;
+}
+
+#[tokio::test]
+async fn the_command_menu_is_registered_again_when_the_registry_changes() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    let adapter = h.adapter("telegram");
+    eventually("the menu is registered at connect", || {
+        !adapter.menus.lock().unwrap().is_empty()
+    })
+    .await;
+    let registrations = adapter.menus.lock().unwrap().len();
+    // A skill installed while the daemon runs; nobody reloads the gateway.
+    h.agents.menu.lock().unwrap().push(MenuCommand {
+        name: "arxiv".into(),
+        description: "search papers".into(),
+        takes_args: true,
+    });
+    eventually("the menu is registered again with the new skill", || {
+        adapter
+            .menus
+            .lock()
+            .unwrap()
+            .last()
+            .is_some_and(|m| m.iter().any(|c| c.name == "arxiv"))
+    })
+    .await;
+    // An unchanged registry is not registered again.
+    let after = adapter.menus.lock().unwrap().len();
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    assert_eq!(adapter.menus.lock().unwrap().len(), after);
+    assert!(after > registrations);
 }
 
 #[tokio::test]
@@ -113,22 +144,6 @@ async fn replies_are_rendered_in_the_platform_markup_and_resent_plain_when_refus
     said(&h.adapter("telegram"), "**Again** docs (https://x.y)").await;
     let last = sends(&h.adapter("telegram")).pop().unwrap();
     assert!(last.plain);
-}
-
-#[tokio::test]
-async fn a_refused_rich_message_falls_back_to_markdown_v2_before_plain_text() {
-    let h = Harness::start(telegram(Markup::Html)).await;
-    h.adapter("telegram")
-        .failures
-        .lock()
-        .unwrap()
-        .push_back(SendError::Formatting("rich message refused".into()));
-    h.dm("telegram", "1", "say:**Done**").await;
-    said(&h.adapter("telegram"), "*Done*").await;
-    let tries = sends(&h.adapter("telegram"));
-    let fallback = tries.last().unwrap();
-    assert_eq!(fallback.markup, Some(Markup::Platform));
-    assert!(!fallback.plain);
 }
 
 fn reacting(platform: &str, extra: &str) -> Setup {

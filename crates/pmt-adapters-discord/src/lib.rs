@@ -347,7 +347,7 @@ impl Adapter for Discord {
                 options: self.options.clone(),
                 channels: Arc::clone(&self.channels),
                 extra_ca: self.extra_ca.clone(),
-                proxy: self.proxy.for_websocket(true),
+                proxy: self.proxy.clone(),
                 stop,
             };
             gateway::open(run, &url).await

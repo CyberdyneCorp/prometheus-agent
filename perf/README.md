@@ -97,6 +97,19 @@ kind of machine:
    values times 1048576; the rounding (under 6 KiB) is far inside the 15%
    tolerance.
 
+Release builds use fat LTO (`[profile.release]` in `Cargo.toml`). The
+messaging gateway's adapters took the stripped binary 17% over its base on
+the reference runner (38.01 -> 44.30 MiB, CI run 41542594747), over the
+15% gate; first-party mocks had already left release builds and per-crate
+`opt-level = "s"` changed nothing under thin LTO. Fat LTO optimizes all
+crates as one unit and dropped the same binary by 9.1% (macOS: 36.74 ->
+33.39 MiB) with unchanged startup (`--version` median 8.1 ms thin, 7.9 ms
+fat, same machine), for a release build about twice as long (2.5 -> 5
+minutes locally). The pull request that switched (m2-gateway) is
+compared with a thin-LTO base, so its gate saw the gateway's growth net of
+that saving (about +7%); every branch after it builds base and head alike
+with fat LTO, so their growth is measured in full again.
+
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.
 

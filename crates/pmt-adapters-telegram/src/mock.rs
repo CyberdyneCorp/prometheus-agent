@@ -1,6 +1,7 @@
 //! A Bot API mock server: long polling over a server-side update queue
 //! confirmed by `offset` (as Telegram keeps unconfirmed updates), message
-//! sends limited to 4096 UTF-16 code units, edits, deletes, typing,
+//! sends limited to 4096 UTF-16 code units (rich messages, Bot API 10.1
+//! `sendRichMessage`, to 32768), edits, deletes, typing,
 //! reactions, button presses, topics (threads), files both ways and
 //! scripted failures.
 
@@ -33,6 +34,8 @@ pub const DM: i64 = 4242;
 pub const TOPIC: &str = "77";
 /// The longest message, in UTF-16 code units.
 const LIMIT: usize = 4096;
+/// The longest rich message.
+const RICH_LIMIT: usize = 32_768;
 
 #[derive(Default)]
 struct State {
@@ -56,6 +59,8 @@ struct State {
     /// Chats where `createForumTopic` fails ("the chat is not a forum").
     not_forums: Vec<String>,
     next_thread: i64,
+    /// How rich messages (sends and edits) are refused, when they are.
+    refuse_rich: Option<(u16, String)>,
 }
 
 /// The mock server.
@@ -166,8 +171,13 @@ impl BotApi {
         self.arrived.notify_waiters();
     }
 
-    /// The arguments of every call of `method` (methods the mock does not
-    /// otherwise model), in order.
+    /// Refuses every rich message from now on with `code` and
+    /// `description` (`404` as a Bot API without the method).
+    pub fn refuse_rich(&self, code: u16, description: &str) {
+        self.lock().refuse_rich = Some((code, description.to_owned()));
+    }
+
+    /// The arguments of every call of `method`, in order.
     pub fn calls(&self, method: &str) -> Vec<Value> {
         self.lock()
             .calls
@@ -275,9 +285,13 @@ impl BotApi {
                 Failure::Forbidden => refused(403, "Forbidden: bot was blocked by the user"),
             };
         }
+        let rich = method == "sendRichMessage";
+        if let Some((code, why)) = state.refuse_rich.clone().filter(|_| rich) {
+            return refused(code, &why);
+        }
         let id = state.next_message;
         state.next_message += 1;
-        if method != "sendMessage" {
+        if !rich && method != "sendMessage" {
             // A multipart upload: the chat and thread are form fields.
             state.uploads.push(method.to_owned());
             let field = |name: &str| form.iter().find(|p| p.name == name).map(FormPart::text);
@@ -301,8 +315,8 @@ impl BotApi {
             });
             return ok(&json!({"message_id": id}));
         }
-        let text = args["text"].as_str().unwrap_or_default();
-        if text.encode_utf16().count() > LIMIT {
+        let text = message_text(args);
+        if visible_len(text, args) > if rich { RICH_LIMIT } else { LIMIT } {
             return refused(400, "Bad Request: message is too long");
         }
         let buttons = buttons(&args["reply_markup"]);
@@ -321,14 +335,18 @@ impl BotApi {
         match method {
             "getMe" => ok(&json!({"id": 1, "is_bot": true, "username": "kit_bot"})),
             "editMessageText" => {
+                if let Some((code, why)) = state
+                    .refuse_rich
+                    .clone()
+                    .filter(|_| args.get("rich_message").is_some())
+                {
+                    return refused(code, &why);
+                }
                 let id = args["message_id"].to_string();
                 let Some(message) = state.sent.iter_mut().find(|m| m.message_id == id) else {
                     return refused(400, "Bad Request: message to edit not found");
                 };
-                args["text"]
-                    .as_str()
-                    .unwrap_or_default()
-                    .clone_into(&mut message.text);
+                message_text(args).clone_into(&mut message.text);
                 message.buttons = buttons(&args["reply_markup"]);
                 ok(&json!(true))
             }
@@ -411,6 +429,33 @@ impl BotApi {
 }
 
 /// What the chat shows an upload as, by its method.
+/// A message's text: `text`, or a rich message's Markdown.
+fn message_text(args: &Value) -> &str {
+    args["text"]
+        .as_str()
+        .or_else(|| args["rich_message"]["markdown"].as_str())
+        .unwrap_or_default()
+}
+
+/// A text's length as Telegram measures it, after entity parsing (a
+/// `MarkdownV2` escape is not counted).
+fn visible_len(text: &str, args: &Value) -> usize {
+    if args["parse_mode"] != "MarkdownV2" {
+        return text.encode_utf16().count();
+    }
+    let mut len = 0;
+    let mut escaped = false;
+    for c in text.chars() {
+        if c == '\\' && !escaped {
+            escaped = true;
+            continue;
+        }
+        escaped = false;
+        len += c.len_utf16();
+    }
+    len
+}
+
 fn upload_kind(method: &str) -> MediaKind {
     match method {
         "sendPhoto" => MediaKind::Image,
