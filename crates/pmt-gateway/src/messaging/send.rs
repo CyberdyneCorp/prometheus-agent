@@ -149,7 +149,7 @@ impl Shared {
             })
     }
 
-    fn profile_store(&self, profile: &str) -> Result<std::sync::Arc<Store>, Error> {
+    pub(crate) fn profile_store(&self, profile: &str) -> Result<std::sync::Arc<Store>, Error> {
         self.store(profile).ok_or_else(|| {
             Error::new(
                 &codes::PROFILE_NOT_FOUND,
@@ -252,7 +252,7 @@ impl Gateway {
         self.enqueue_as(profile, to, text, attachments, OutboundKind::Notification)
     }
 
-    fn enqueue_as(
+    pub(crate) fn enqueue_as(
         &self,
         profile: &str,
         to: &Resolved,

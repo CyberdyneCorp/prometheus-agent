@@ -545,6 +545,58 @@ also tells each platform's home channel once, unless
 chat are disabled (update.allow_from_chat = false)"); `/update check` only
 looks for a release.
 
+### Models, sessions, topics, background tasks, branches and handoffs
+
+- **`/model`** without arguments shows a picker where the platform has
+  buttons: the connected providers, then the chosen provider's models, 8
+  per page with Previous/Next, edited in place. Elsewhere it prints a
+  numbered list answered with `/model <n>`. A model chosen this way (or
+  typed, `/model <provider>/<model>`) switches the session like `/model`
+  does and becomes the chat's override in `state.db`: every new session in
+  the chat starts on it (it outlives `/new`) until `/model --clear`.
+  `/model status` shows the session's model and the override. A
+  `--once` switch is not remembered.
+- **`/sessions [page]`** lists the sessions started in this chat (and
+  thread), 10 per page; **`/resume <n>`** (or a session id of the chat)
+  routes the conversation back to one, reopening it if it had ended.
+- **DM topics** (Telegram, `options.dm_topics.enabled = true`, the bot in
+  threaded mode): each topic of the private chat is its own session and
+  the root DM is a lobby that answers anything but a command with `Open or
+  create a topic to chat (/topic new <name>)`. `/topic new [name]` opens a
+  topic (unnamed ones are called "New chat" and take the session's title
+  once it has one), `/topic list` lists the topics with sessions, `/topic
+  rename <name>` renames the topic it is sent in, and `/topic restore
+  <session-id>` opens a topic continuing an earlier session of the chat.
+  `/new` inside a topic starts a new session there. Without topic mode
+  (`getMe` says so, or the platform refuses to open a topic) the adapter
+  logs it once and the DM stays one session.
+- **`/background <prompt>`** (alias `/bg`; also in `prometheus chat` and
+  the TUI) runs the prompt in a separate session of the profile (the
+  chat's model and toolsets, none of its history) and answers at once with
+  "Background task started: ... (id bg_...)"; the chat keeps working. The
+  result arrives as "✅ Background task complete" or `❌ Background task
+  failed: <reason>` in the chat and thread that asked (a notification in
+  the CLI and TUI). A chat runs at most `gateway.background.max_per_chat`
+  (default 3) tasks at once ("Too many background tasks running (3)").
+  Approvals a task's tools ask for are not shown anywhere and time out
+  (denied), so a task runs what needs no approval.
+- **`/branch [--here] [name]`** (alias `/fork`) forks the session. Where
+  the adapter opens threads (Slack, Discord, Telegram topics, Matrix) the
+  fork gets a new thread in the same chat titled `name` (or the session's
+  title plus " (branch)") and the original thread keeps the original
+  session; with `--here`, or without threads, this chat switches to the
+  fork (`/resume` goes back). Refused while a turn runs.
+- **`/handoff <platform>[:<chat_id>[:<thread_id>]]`** in `prometheus
+  chat` or the TUI moves the session to a chat of the profile through the
+  running daemon: the platform's home channel when no chat is named, in a
+  new thread or topic where the adapter opens them. The chat must be a
+  home channel, an `allow_chats` entry or a chat the profile already talks
+  in. The chat gets a replay of the last 20 messages ("You: ..." /
+  "Assistant: ..."), the session a notice that it continues there, and the
+  next message written there continues the session. The client then exits
+  0 printing `continued on <platform>; resume locally with prometheus chat
+  --resume <session-id>`. Refused while a turn runs.
+
 ## Home channels and one-shot sends
 
 Each platform has at most one home channel: where scheduled output,

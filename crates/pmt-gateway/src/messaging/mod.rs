@@ -38,6 +38,7 @@ mod dedup;
 pub mod deliverable;
 pub mod descriptor;
 mod gating;
+pub mod handoff;
 pub mod health;
 pub mod hooks;
 mod http;
@@ -68,6 +69,8 @@ pub mod shape;
 pub mod sign;
 pub mod split;
 pub mod target;
+pub mod tasks;
+mod topics;
 mod typing;
 pub mod voice;
 pub mod ws;
@@ -93,7 +96,7 @@ pub use adapter::{
     MediaKind, MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict,
     Sent, SessionHints,
 };
-pub use agents::{Agents, BusyPolicy, Conversation, Lookup, UpdateFromChat};
+pub use agents::{Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateFromChat};
 pub use hooks::{Hook, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
@@ -199,6 +202,10 @@ pub(crate) struct Shared {
     /// Observed group lines waiting for the next turn in their chat.
     observed: gating::Observed,
     menus: menus::Menus,
+    /// `/background` tasks running.
+    tasks: tasks::Tasks,
+    /// DM topic lobbies and topic names.
+    topics: topics::TopicState,
     health: health::Counters,
     cache: cache::AgentCache,
     /// Unserved-profile warnings already logged, by adapter, with when.
@@ -342,6 +349,8 @@ impl Gateway {
             roles: gating::Roles::default(),
             observed: gating::Observed::default(),
             menus: menus::Menus::default(),
+            tasks: tasks::Tasks::default(),
+            topics: topics::TopicState::default(),
             health: health::Counters::default(),
             cache: cache::AgentCache::new(options.agent_cache.clone()),
             lanes: Mutex::default(),

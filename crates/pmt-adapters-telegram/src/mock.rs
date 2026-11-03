@@ -59,6 +59,10 @@ struct State {
     /// Chats where `createForumTopic` fails ("the chat is not a forum").
     not_forums: Vec<String>,
     next_thread: i64,
+    /// Topics created and renamed: (chat, thread, name), latest last.
+    topics: Vec<(String, i64, String)>,
+    /// `getMe` says the bot has no topic mode in private chats.
+    no_dm_topics: bool,
     /// How rich messages (sends and edits) are refused, when they are.
     refuse_rich: Option<(u16, String)>,
 }
@@ -190,6 +194,16 @@ impl BotApi {
     /// Every method called, in order (getUpdates included).
     pub fn methods(&self) -> Vec<String> {
         self.lock().calls.iter().map(|(m, _)| m.clone()).collect()
+    }
+
+    /// Topics created or renamed: (chat, thread, name), latest last.
+    pub fn topics(&self) -> Vec<(String, i64, String)> {
+        self.lock().topics.clone()
+    }
+
+    /// The bot has no topic mode in private chats (`getMe`).
+    pub fn without_dm_topics(&self) {
+        self.lock().no_dm_topics = true;
     }
 
     /// `createForumTopic` fails in `chat` from now on.
@@ -333,7 +347,8 @@ impl BotApi {
     fn other(&self, method: &str, args: &Value) -> (u16, Value) {
         let mut state = self.lock();
         match method {
-            "getMe" => ok(&json!({"id": 1, "is_bot": true, "username": "kit_bot"})),
+            "getMe" => ok(&json!({"id": 1, "is_bot": true, "username": "kit_bot",
+                        "has_topics_enabled": !state.no_dm_topics})),
             "editMessageText" => {
                 if let Some((code, why)) = state
                     .refuse_rich
@@ -389,7 +404,16 @@ impl BotApi {
                 }
                 state.next_thread += 1;
                 let thread = state.next_thread;
+                let name = args["name"].as_str().unwrap_or_default().to_owned();
+                state.topics.push((chat, thread, name));
                 ok(&json!({"message_thread_id": thread, "name": args["name"]}))
+            }
+            "editForumTopic" => {
+                let chat = args["chat_id"].to_string().trim_matches('"').to_owned();
+                let thread = args["message_thread_id"].as_i64().unwrap_or_default();
+                let name = args["name"].as_str().unwrap_or_default().to_owned();
+                state.topics.push((chat, thread, name));
+                ok(&json!(true))
             }
             "getFile" => {
                 let id = args["file_id"].as_str().unwrap_or_default();

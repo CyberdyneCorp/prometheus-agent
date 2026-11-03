@@ -94,6 +94,7 @@ impl Repl {
     async fn run_builtin(&mut self, name: &str, args: &str) -> Flow {
         let result = match name {
             "exit" => return Flow::Exit,
+            "handoff" => return self.handoff(args).await,
             "new" => self.new_session(None, None).await,
             "clear" => {
                 self.input.print("\x1b[2J\x1b[H");
@@ -116,6 +117,26 @@ impl Repl {
         };
         self.show(result);
         Flow::Continue
+    }
+
+    /// `/handoff`: the session moves to a chat; this client leaves.
+    async fn handoff(&mut self, args: &str) -> Flow {
+        let Some(session) = self.live.as_ref().map(|l| l.id.to_string()) else {
+            return Flow::Continue;
+        };
+        let scope = &self.factory.scope;
+        let home = scope.home().to_path_buf();
+        let profile = scope.name().to_string();
+        match crate::chat::handoff::handoff(&home, &profile, &session, args).await {
+            Ok(line) => {
+                self.notice(&line);
+                Flow::Exit
+            }
+            Err(err) => {
+                self.error(&err);
+                Flow::Continue
+            }
+        }
     }
 
     /// A shared command that may send a message or change the session's

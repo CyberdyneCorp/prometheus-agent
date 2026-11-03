@@ -360,3 +360,52 @@ async fn a_group_mention_of_the_bot_is_marked_addressed() {
     assert!(!events[0].addressing.mentioned);
     assert!(events[1].addressing.mentioned);
 }
+
+/// Spec: messaging-gateway, Branching into a sibling thread; Multi-session
+/// DM topics: topics are opened and renamed on request.
+#[tokio::test(flavor = "multi_thread")]
+async fn topics_are_opened_and_renamed_on_request() {
+    let f = bot("", Gateway::default()).await;
+    let dm = DM.to_string();
+    let thread = f.bot.open_thread(&dm, "Research").await.unwrap();
+    f.bot
+        .rename_thread(&dm, &thread, "Postgres plan")
+        .await
+        .unwrap();
+    let topics = f.api.topics();
+    let id: i64 = thread.parse().unwrap();
+    assert_eq!(
+        topics,
+        [
+            (dm.clone(), id, "Research".to_owned()),
+            (dm.clone(), id, "Postgres plan".to_owned())
+        ]
+    );
+    f.api.not_a_forum("-100777");
+    assert!(f.bot.open_thread("-100777", "x").await.is_err());
+    f.bot.disconnect().await;
+}
+
+/// Spec: messaging-gateway, Multi-session DM topics: declared only while
+/// enabled and the bot has topic mode in private chats; otherwise DMs
+/// fall back to one session each.
+#[tokio::test(flavor = "multi_thread")]
+async fn dm_topics_are_declared_only_where_the_bot_has_topic_mode() {
+    let on = bot(", dm_topics = { enabled = true }", Gateway::default()).await;
+    assert!(on.bot.describe().dm_topics);
+    on.bot.disconnect().await;
+    let off = bot("", Gateway::default()).await;
+    assert!(!off.bot.describe().dm_topics, "not enabled");
+    off.bot.disconnect().await;
+    let api = BotApi::start().await;
+    api.without_dm_topics();
+    let none = bot_with(
+        ", dm_topics = { enabled = true }",
+        Gateway::default(),
+        api,
+        &[],
+    )
+    .await;
+    assert!(!none.bot.describe().dm_topics, "the bot has no topic mode");
+    none.bot.disconnect().await;
+}

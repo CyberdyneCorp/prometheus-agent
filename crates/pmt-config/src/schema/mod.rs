@@ -41,11 +41,11 @@ pub use agent::{
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
-    GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay, GatewayGroups, GatewayQuickCommands,
-    GatewaySessions, HomeChannel, MediaConfig, MessageTimestamps, NotificationsConfig,
-    OutboxConfig, PhraseMode, PlatformBots, PlatformBusy, PlatformConfig, PlatformDisplay,
-    PlatformGroups, PlatformSessions, PlatformStreaming, PolicyChatType, PolicyFacts,
-    RateLimitConfig, RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases,
+    GatewayBackground, GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay, GatewayGroups,
+    GatewayQuickCommands, GatewaySessions, HomeChannel, MediaConfig, MessageTimestamps,
+    NotificationsConfig, OutboxConfig, PhraseMode, PlatformBots, PlatformBusy, PlatformConfig,
+    PlatformDisplay, PlatformGroups, PlatformSessions, PlatformStreaming, PolicyChatType,
+    PolicyFacts, RateLimitConfig, RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases,
     StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute,
     resolve_policy,
 };

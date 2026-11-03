@@ -48,7 +48,8 @@ impl Lane {
             .adapter(&self.profile, &routing.platform)
             .map(|a| a.session_hints(&routing.chat_id, routing.thread_id.as_deref()))
             .unwrap_or_default();
-        with_hints(self.current_policy(routing), hints, routing)
+        let policy = with_hints(self.current_policy(routing), hints, routing);
+        with_model(policy, self.chat_model(routing), routing)
     }
 
     /// Freezes `policy` for `session` (stored with the session).
@@ -211,6 +212,25 @@ fn describe(policy: Option<&ChatPolicy>) -> String {
     } else {
         parts.join("; ")
     }
+}
+
+/// `policy` with the chat's model override (`/model` in this chat), which
+/// wins over the policy's own model.
+fn with_model(
+    policy: Option<ChatPolicy>,
+    model: Option<String>,
+    routing: &Routing,
+) -> Option<ChatPolicy> {
+    let Some(model) = model else {
+        return policy;
+    };
+    let mut policy = policy.unwrap_or_else(|| ChatPolicy {
+        platform: routing.platform.clone(),
+        chat_id: Some(routing.chat_id.clone()),
+        ..ChatPolicy::default()
+    });
+    policy.model = Some(model);
+    Some(policy)
 }
 
 /// `policy` with the adapter's session hints added: hinted skills join the

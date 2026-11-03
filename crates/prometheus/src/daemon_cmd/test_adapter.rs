@@ -102,6 +102,7 @@ impl Adapter for FileAdapter {
     fn describe(&self) -> Descriptor {
         Descriptor {
             supports_edit: true,
+            supports_threads: true,
             interactive: Interactive::Native,
             stateless_send: true,
             ..Descriptor::new(PLATFORM, 4096)
@@ -141,6 +142,21 @@ impl Adapter for FileAdapter {
             })
         };
         Box::pin(async move { outcome })
+    }
+
+    /// Records `{"kind": "thread", "chat", "title", "thread"}`.
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        let thread = format!("t{}", self.next.fetch_add(1, Ordering::Relaxed));
+        append(
+            &self.root,
+            "sent.jsonl",
+            &json!({"kind": "thread", "chat": chat_id, "title": title, "thread": thread}),
+        );
+        Box::pin(async move { Ok(thread) })
     }
 
     /// Roles by name from `<dir>/<profile>/roles.json` (`{"name": "id"}`).

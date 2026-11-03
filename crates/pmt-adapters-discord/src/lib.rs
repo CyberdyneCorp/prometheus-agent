@@ -616,6 +616,30 @@ impl Adapter for Discord {
         })
     }
 
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        Box::pin(async move { self.channels.open_named(&self.api()?, chat_id, title).await })
+    }
+
+    fn rename_thread<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        thread_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let name: String = title.chars().take(100).collect();
+            let body = Body::Json(json!({"name": name}));
+            self.api()?
+                .call(Method::PATCH, &format!("/channels/{thread_id}"), body)
+                .await
+                .map(drop)
+        })
+    }
+
     fn thread_titled<'a>(
         &'a self,
         _chat_id: &'a str,

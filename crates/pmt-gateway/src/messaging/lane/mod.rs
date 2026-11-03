@@ -11,18 +11,22 @@
 //! - `requests`: approval and clarify prompts and their cards.
 
 mod admin;
+mod branch;
 mod clarify;
 mod commands;
 mod confirm;
 mod controls;
+mod history;
 mod input;
 mod lifecycle;
+mod models;
 mod observe;
 mod pages;
 mod progress;
 mod reply;
 mod requests;
 mod resume;
+mod topic;
 mod turns;
 mod watchdog;
 
@@ -83,6 +87,11 @@ pub(crate) enum Msg {
     Mirror {
         text: String,
         from_session: Option<String>,
+    },
+    /// A model was chosen on a picker card: switch to it.
+    ModelPicked {
+        reference: String,
+        routing: Box<Routing>,
     },
 }
 
@@ -250,6 +259,8 @@ struct Lane {
     /// Observed lines were added before the turn being started: it is told
     /// they are context.
     observed_since_turn: bool,
+    /// Model picker cards whose buttons still answer.
+    pickers: Vec<models::Picker>,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -311,6 +322,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         confirms: Vec::new(),
         progress_mode: None,
         observed_since_turn: false,
+        pickers: Vec::new(),
     };
     let span = tracing::info_span!(
         "conversation",
@@ -461,6 +473,9 @@ impl Lane {
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),
             Msg::Internal(event) => self.internal(event),
             Msg::Confirmed { action, routing } => self.confirmed(action, &routing).await,
+            Msg::ModelPicked { reference, routing } => {
+                self.switch_model(&routing, &reference).await;
+            }
             Msg::Mirror { text, from_session } => {
                 self.mirrors.push((text, from_session));
                 if self.running.is_none() {

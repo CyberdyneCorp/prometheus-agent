@@ -124,6 +124,25 @@ pub struct GatewayConfig {
     /// profile's other home channels are told once per outage.
     #[schemars(extend("x-apply" = "live"))]
     pub reconnect_attention_secs: Seconds<600>,
+    /// `/background` tasks started from chats.
+    #[schemars(extend("x-apply" = "live"))]
+    pub background: GatewayBackground,
+}
+
+/// `[gateway.background]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayBackground {
+    /// Background tasks one chat may have running at once; more are
+    /// refused.
+    #[schemars(range(min = 1, max = 100))]
+    pub max_per_chat: u32,
+}
+
+impl Default for GatewayBackground {
+    fn default() -> Self {
+        Self { max_per_chat: 3 }
+    }
 }
 
 /// A number of seconds whose default is `DEFAULT` (a top-level key of a

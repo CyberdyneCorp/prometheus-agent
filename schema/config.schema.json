@@ -1578,6 +1578,21 @@
       },
       "type": "object"
     },
+    "GatewayBackground": {
+      "additionalProperties": false,
+      "description": "`[gateway.background]`.",
+      "properties": {
+        "max_per_chat": {
+          "default": 3,
+          "description": "Background tasks one chat may have running at once; more are\nrefused.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "GatewayBots": {
       "additionalProperties": false,
       "description": "`[gateway.bots]`: messages other bots send.",
@@ -1678,6 +1693,14 @@
             "memory_high_bytes": 0
           },
           "description": "Live agents kept in memory (read from the launch profile)."
+        },
+        "background": {
+          "$ref": "#/$defs/GatewayBackground",
+          "default": {
+            "max_per_chat": 3
+          },
+          "description": "`/background` tasks started from chats.",
+          "x-apply": "live"
         },
         "bots": {
           "$ref": "#/$defs/GatewayBots",
@@ -5921,6 +5944,9 @@
           "idle_ttl_secs": 3600,
           "max_size": 128,
           "memory_high_bytes": 0
+        },
+        "background": {
+          "max_per_chat": 3
         },
         "bots": {},
         "busy": {

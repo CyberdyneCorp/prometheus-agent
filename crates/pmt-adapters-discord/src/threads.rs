@@ -96,6 +96,31 @@ impl Channels {
             .cloned()
     }
 
+    /// Opens a thread named `name` in `channel` (a forum gets a post
+    /// whose first message is the name); its id.
+    pub(crate) async fn open_named(
+        &self,
+        api: &Api,
+        channel: &str,
+        name: &str,
+    ) -> Result<String, SendError> {
+        let name: String = name.chars().take(100).collect();
+        let forum = self.get(api, channel).await.is_some_and(|c| c.is_forum());
+        let body = if forum {
+            json!({"name": name, "message": {"content": name}})
+        } else {
+            // A public thread without a starter message.
+            json!({"name": name, "type": 11, "auto_archive_duration": 1440})
+        };
+        let path = format!("/channels/{channel}/threads");
+        let created = api.call(Method::POST, &path, Body::Json(body)).await?;
+        self.learn(&created);
+        created["id"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| SendError::Server("the thread has no id".to_owned()))
+    }
+
     fn opened_by_bot(&self, thread: &str) -> bool {
         self.opened
             .lock()

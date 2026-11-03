@@ -189,6 +189,8 @@ pub struct FakeAgents {
     pub updates: Mutex<Vec<pmt_gateway::messaging::UpdateFromChat>>,
     /// The author of every turn started.
     pub authors: Mutex<Vec<Author>>,
+    /// What the chat model picker offers.
+    pub models: Mutex<Vec<pmt_gateway::messaging::ModelChoice>>,
 }
 
 impl FakeAgents {
@@ -325,8 +327,16 @@ impl Host for FakeAgents {
         not_here()
     }
 
-    fn fork<'a>(&'a self, _: &'a str, _: ForkParams) -> HostFuture<'a, SessionRef> {
-        not_here()
+    fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef> {
+        Box::pin(async move {
+            let store = self
+                .store(profile)
+                .ok_or_else(|| Error::new(&codes::PROFILE_NOT_FOUND, "no profile"))?;
+            let fork = store.fork_session(params.session_id.parse()?, None, None)?;
+            Ok(SessionRef {
+                session_id: fork.id.to_string(),
+            })
+        })
     }
 
     fn commands<'a>(
@@ -388,6 +398,11 @@ const REGISTRY: &[(&str, &[&str], BusyPolicy)] = &[
     ("update", &[], BusyPolicy::Immediate),
     ("verbose", &[], BusyPolicy::Immediate),
     ("footer", &[], BusyPolicy::Immediate),
+    ("sessions", &[], BusyPolicy::Immediate),
+    ("resume", &[], BusyPolicy::Reject),
+    ("background", &["bg"], BusyPolicy::Immediate),
+    ("fork", &["branch"], BusyPolicy::Reject),
+    ("topic", &[], BusyPolicy::Immediate),
 ];
 
 impl Agents for FakeAgents {
@@ -512,6 +527,10 @@ impl Agents for FakeAgents {
         Vec::new()
     }
 
+    fn model_choices(&self, _profile: &str) -> Vec<pmt_gateway::messaging::ModelChoice> {
+        self.models.lock().unwrap().clone()
+    }
+
     fn menu_commands(&self, _profile: &str) -> Vec<MenuCommand> {
         self.menu.lock().unwrap().clone()
     }
@@ -598,6 +617,9 @@ pub struct FakeAdapter {
     pub roles: Mutex<HashMap<String, Vec<String>>>,
     /// What `fetch_history` answers.
     pub history: Mutex<Vec<pmt_gateway::messaging::HistoryEntry>>,
+    /// Threads opened: (chat, title, thread id); renames: (thread, title).
+    pub threads: Mutex<Vec<(String, String, String)>>,
+    pub renamed: Mutex<Vec<(String, String)>>,
 }
 
 impl FakeAdapter {
@@ -629,6 +651,8 @@ impl FakeAdapter {
             deleted: Mutex::default(),
             roles: Mutex::default(),
             history: Mutex::default(),
+            threads: Mutex::default(),
+            renamed: Mutex::default(),
         })
     }
 
@@ -676,6 +700,39 @@ impl Adapter for FakeAdapter {
                 Err(SendError::Unsupported)
             }
         })
+    }
+
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        let supported = self.descriptor.lock().unwrap().supports_threads;
+        let mut threads = self.threads.lock().unwrap();
+        let id = format!("th-{}", threads.len() + 1);
+        if supported {
+            threads.push((chat_id.to_owned(), title.to_owned(), id.clone()));
+        }
+        Box::pin(async move {
+            if supported {
+                Ok(id)
+            } else {
+                Err(SendError::Unsupported)
+            }
+        })
+    }
+
+    fn rename_thread<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        thread_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.renamed
+            .lock()
+            .unwrap()
+            .push((thread_id.to_owned(), title.to_owned()));
+        Box::pin(async { Ok(()) })
     }
 
     fn session_hints(&self, _chat_id: &str, thread_id: Option<&str>) -> SessionHints {
@@ -1006,6 +1063,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         container: Mutex::default(),
         updates: Mutex::default(),
         authors: Mutex::default(),
+        models: Mutex::default(),
     })
 }
 

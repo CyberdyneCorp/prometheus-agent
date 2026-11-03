@@ -78,6 +78,19 @@ pub fn send(home: &Path, profile: &str, sender: &str, text: &str) {
     std::fs::rename(&tmp, inbox.join(format!("{n:06}.json"))).unwrap();
 }
 
+/// Drops a message of `sender` in chat `chat`, thread `thread`.
+pub fn send_in(home: &Path, profile: &str, sender: &str, chat: &str, thread: &str, text: &str) {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(500_000);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let inbox = adapter_dir(home).join(profile).join("inbox");
+    std::fs::create_dir_all(&inbox).unwrap();
+    let message = json!({"id": format!("m{n}"), "sender": sender, "chat": chat,
+        "chat_type": "dm", "thread": thread, "text": text});
+    let tmp = inbox.join(format!("{n:06}.tmp"));
+    std::fs::write(&tmp, message.to_string()).unwrap();
+    std::fs::rename(&tmp, inbox.join(format!("{n:06}.json"))).unwrap();
+}
+
 /// What the profile's adapter sent, in order.
 pub fn sent(home: &Path, profile: &str) -> Vec<Value> {
     std::fs::read_to_string(adapter_dir(home).join(profile).join("sent.jsonl"))

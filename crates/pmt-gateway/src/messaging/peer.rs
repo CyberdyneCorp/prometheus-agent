@@ -27,6 +27,16 @@ pub(crate) fn attach(shared: &Shared, profile: &str, session_id: &str, key: &str
     }
 }
 
+/// Attaches the gateway to `session_id` of `profile` without routing it to
+/// a conversation (a background task's session: only its end matters).
+pub(crate) fn watch(shared: &Shared, profile: &str, session_id: &str) {
+    let hub = shared.server.hub();
+    hub.register(session_id, profile);
+    if !hub.is_attached(shared.conn, session_id) {
+        hub.attach(shared.conn, session_id, shared.peer.clone(), None);
+    }
+}
+
 /// Reads the gateway's frames until the hub drops it.
 pub(crate) async fn read(shared: Arc<Shared>, mut rx: UnboundedReceiver<Message>) {
     while let Some(message) = rx.recv().await {
@@ -60,6 +70,12 @@ fn event(shared: &Shared, method: &str, envelope: &Value) {
     let Some(session) = envelope["session_id"].as_str() else {
         return;
     };
+    if method == "turn.finished" && shared.tasks.owns(session) {
+        if let Ok(finished) = serde_json::from_value(envelope["data"].clone()) {
+            super::tasks::finished(shared, session, &finished);
+        }
+        return;
+    }
     let Some(lane) = lane_of(shared, session) else {
         return;
     };

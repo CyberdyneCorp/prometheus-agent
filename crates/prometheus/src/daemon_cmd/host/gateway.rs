@@ -13,7 +13,7 @@ use std::sync::atomic::Ordering;
 use pmt_config::{Home, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
-    Agents, BusyPolicy, Conversation, Lookup, MenuCommand, UpdateFromChat,
+    Agents, BusyPolicy, Conversation, Lookup, MenuCommand, ModelChoice, UpdateFromChat,
 };
 use pmt_gateway::{HostFuture, Link};
 use pmt_rpc::contracts::{Dispatched, SessionSetup};
@@ -312,6 +312,36 @@ impl Agents for DaemonHost {
             &profile.store,
             self.launch.user_home().map(PathBuf::as_path),
         )
+    }
+
+    fn append_notice<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+        kind: &'a str,
+        text: &'a str,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let row = pmt_agent::turn::transcript::notice_row(text, kind);
+            profile.store.append_message(session_id(session)?, &row)?;
+            Ok(())
+        })
+    }
+
+    fn model_choices(&self, profile: &str) -> Vec<ModelChoice> {
+        let Ok(profile) = self.profile(profile) else {
+            return Vec::new();
+        };
+        let scope = profile.scope();
+        let home = self.launch.user_home().map(PathBuf::as_path);
+        match crate::model_cmd::Models::for_config(scope.clone(), scope.config(), home) {
+            Ok(models) => crate::model_cmd::picker::chat_choices(&models),
+            Err(err) => {
+                tracing::warn!("the model picker has no providers: {err}");
+                Vec::new()
+            }
+        }
     }
 
     fn update_from_chat<'a>(&'a self, request: &'a UpdateFromChat) -> HostFuture<'a, String> {

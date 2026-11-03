@@ -142,6 +142,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
 | `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
+| `gateway.background.max_per_chat` | integer | `3` | 1 to 100 | `live` | Background tasks one chat may have running at once; more are refused. |
 | `gateway.bots.allow_bots` | one of "none", "mentions", "all" | unset | `"none"`, `"mentions"`, `"all"` | `live` | `none` (default), `mentions` or `all`. |
 | `gateway.bots.burst_window_ms` | integer | unset | 0 to 60000 | `live` | Follow-up chunks of the same bot in the same chat within this many milliseconds join the same turn (default 1500). |
 | `gateway.bots.human_user_ids` | array | unset | any | `live` | Senders treated as people although their messages are marked as a bot's (posts made with the owner's own user token). |

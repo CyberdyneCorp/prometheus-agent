@@ -64,6 +64,22 @@ impl Lane {
             .shared
             .store(&self.profile)
             .ok_or_else(|| Error::new(&codes::PROFILE_NOT_FOUND, "the profile is not served"))?;
+        // A session handed off to this chat continues here (spec:
+        // messaging-gateway, Session handoff to a messaging platform).
+        let parked = store.take_handoff(
+            self.key.as_str(),
+            &routing.platform,
+            &routing.chat_id,
+            routing.thread_id.as_deref(),
+        )?;
+        if let Some(id) = parked {
+            if store.session(id)?.ended_at.is_some() {
+                store.reopen_session(id)?;
+            }
+            let session = id.to_string();
+            self.adopt(&session);
+            return Ok(session);
+        }
         let Some(route) = store.route(self.key.as_str())? else {
             let previous = store.latest_routed_session(self.key.as_str())?;
             let reason = previous.map(|_| ResetReason::StaleRoute);
@@ -91,7 +107,7 @@ impl Lane {
         Ok(session)
     }
 
-    fn adopt(&mut self, session: &str) {
+    pub(super) fn adopt(&mut self, session: &str) {
         if self.session.as_deref() != Some(session) {
             peer::attach(&self.shared, &self.profile, session, self.key.as_str());
             self.session = Some(session.to_owned());

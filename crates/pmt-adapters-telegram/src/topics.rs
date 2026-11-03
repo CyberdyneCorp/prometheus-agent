@@ -38,7 +38,7 @@ impl Topics {
             .unwrap_or_default();
         Self {
             file,
-            dm: options.dm_topics.clone(),
+            dm: options.dm_topics.chats.clone(),
             group: options.group_topics.clone(),
             recorded: Mutex::new(recorded),
             not_forum: Mutex::default(),
@@ -132,6 +132,33 @@ impl Topics {
             .find(|spec| self.thread_of(chat, spec) == Some(thread))
             .and_then(|spec| spec.skill.clone())
     }
+}
+
+/// Opens topic `name` in `chat` (a forum group, or a private chat with
+/// topics); its thread id.
+pub(crate) async fn open(api: &Api, chat: &str, name: &str) -> Result<String, SendError> {
+    let spec = TopicSpec {
+        name: name.chars().take(128).collect(),
+        thread_id: None,
+        icon_color: None,
+        skill: None,
+    };
+    create(api, chat, &spec).await.map(|t| t.to_string())
+}
+
+/// Renames topic `thread` of `chat`.
+pub(crate) async fn rename(
+    api: &Api,
+    chat: &str,
+    thread: &str,
+    name: &str,
+) -> Result<(), SendError> {
+    let thread: i64 = thread
+        .parse()
+        .map_err(|_| SendError::Permanent(format!("'{thread}' is not a topic id")))?;
+    let name: String = name.chars().take(128).collect();
+    let body = json!({"chat_id": crate::chat(chat), "message_thread_id": thread, "name": name});
+    api.call("editForumTopic", &body).await.map(drop)
 }
 
 async fn create(api: &Api, chat: &str, spec: &TopicSpec) -> Result<i64, SendError> {

@@ -447,6 +447,18 @@ impl Adapter for Matrix {
         credential(&self.scope, &self.secret).ok()
     }
 
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        // A Matrix thread hangs off a root event: the title is it.
+        Box::pin(async move {
+            let content = json!({"msgtype": "m.text", "body": title});
+            self.send_event(chat_id, "m.room.message", &content).await
+        })
+    }
+
     fn member_roles<'a>(
         &'a self,
         inbound: &'a Inbound,

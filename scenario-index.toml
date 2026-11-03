@@ -1956,11 +1956,27 @@ capabilities = [
 "Multipart bot message collected" = ["crates/pmt-gateway/tests/messaging/groups.rs::bots_are_ignored_unless_allowed_and_a_burst_is_one_turn"]
 
 [messaging-gateway."Channel history backfill"]
-"Backfill stops at the bot's last reply" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_backfill_brings_the_channel_since_the_bots_last_reply", "crates/pmt-gateway/src/messaging/gating.rs::backfill_stops_at_the_bots_last_reply", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform"]
+"Backfill stops at the bot's last reply" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_backfill_brings_the_channel_since_the_bots_last_reply", "crates/pmt-gateway/src/messaging/gating.rs::backfill_stops_at_the_bots_last_reply", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform", "crates/pmt-adapters-slack/tests/slack.rs::channel_and_thread_history_come_oldest_first"]
 
 [messaging-gateway."Role-based access grants"]
 "Role grant" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform", "crates/prometheus/tests/gateway_platforms.rs::a_role_name_is_refused_with_the_id_the_connected_adapter_knows", "crates/pmt-config/src/gateway_check_groups.rs::a_role_name_and_a_bad_pattern_are_refused"]
-"Lookup failure denies" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies"]
+"Lookup failure denies" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies", "crates/pmt-adapters-slack/tests/slack.rs::user_groups_are_the_senders_roles", "crates/pmt-adapters-matrix/tests/matrix.rs::power_levels_are_the_senders_roles"]
 
 [messaging-gateway."Per-chat policy thread matching and skill preload"]
 "Forum topic bound to a skill" = ["crates/prometheus/tests/gateway_groups.rs::a_topic_policy_preloads_its_skill_as_context_not_into_the_prompt", "crates/pmt-gateway/tests/messaging/groups.rs::a_thread_policy_preloads_its_skills_only_in_that_topic", "crates/pmt-config/src/schema/gateway_policy.rs::a_thread_policy_outranks_its_channels_and_the_channel_covers_other_threads"]
+
+[messaging-gateway."Interactive model picker and chat model override"]
+"Override survives /new" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_picked_model_survives_new", "crates/pmt-gateway/tests/messaging/chats.rs::without_buttons_the_models_are_numbered"]
+
+[messaging-gateway."Multi-session DM topics"]
+"Lobby redirects" = ["crates/pmt-gateway/tests/messaging/chats.rs::the_root_dm_is_a_lobby_and_each_topic_is_a_session", "crates/pmt-gateway/src/messaging/topics.rs::only_root_dm_text_lands_in_the_lobby"]
+"Restore into a new topic" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_restored_topic_continues_the_earlier_session", "crates/pmt-adapters-telegram/tests/features.rs::topics_are_opened_and_renamed_on_request"]
+
+[messaging-gateway."Background sessions from chat"]
+"Main chat stays responsive" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking", "crates/prometheus/tests/chat_background.rs::a_background_task_reports_while_the_chat_keeps_answering"]
+
+[messaging-gateway."Session handoff to a messaging platform"]
+"Handoff to Telegram home" = { tests = ["crates/prometheus/tests/gateway_handoff.rs::a_cli_session_continues_in_a_new_thread_of_the_home_channel"], note = "the daemon's file-backed test platform stands in for Telegram (threads opened like Telegram topics)" }
+
+[messaging-gateway."Branching into a sibling thread"]
+"Branch opens a thread" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_branch_opens_a_sibling_thread_bound_to_the_fork", "crates/pmt-adapters-slack/tests/slack.rs::a_thread_is_opened_by_posting_its_root"]

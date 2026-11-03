@@ -74,6 +74,9 @@ pub struct Telegram {
     hook: Mutex<Option<(updates::Ctx, String)>>,
     /// The Bot API has no rich messages: `MarkdownV2` from then on.
     rich_unavailable: AtomicBool,
+    /// The bot has no topic mode in private chats (`getMe`): multi-session
+    /// DM topics fall back to one session per DM.
+    dm_topics_unavailable: AtomicBool,
 }
 
 impl std::fmt::Debug for Telegram {
@@ -86,6 +89,26 @@ impl std::fmt::Debug for Telegram {
 }
 
 impl Telegram {
+    /// Multi-session DM topics need the bot's topic mode in private chats
+    /// (`getMe` `has_topics_enabled`); without it they fall back to one
+    /// session per DM, logged once.
+    fn check_dm_topics(&self, me: &Value) {
+        if !self.options.dm_topics.enabled {
+            return;
+        }
+        let unavailable = me["has_topics_enabled"].as_bool() == Some(false);
+        let before = self
+            .dm_topics_unavailable
+            .swap(unavailable, Ordering::AcqRel);
+        if unavailable && !before {
+            tracing::warn!(
+                platform = PLATFORM,
+                "options.dm_topics.enabled, but the bot has no topic mode in private chats \
+                 (BotFather > Bot Settings > Threaded Mode); DMs stay one session each"
+            );
+        }
+    }
+
     /// The adapter for `setup`, talking to `endpoints`.
     ///
     /// # Errors
@@ -122,6 +145,7 @@ impl Telegram {
             )),
             hook: Mutex::default(),
             rich_unavailable: AtomicBool::new(false),
+            dm_topics_unavailable: AtomicBool::new(false),
             options,
         })
     }
@@ -286,6 +310,8 @@ impl Adapter for Telegram {
             media_in: all.clone(),
             media_out: all,
             stateless_send: true,
+            dm_topics: self.options.dm_topics.enabled
+                && !self.dm_topics_unavailable.load(Ordering::Acquire),
             markup: self.markup(),
             binds_http: self.options.mode == TelegramMode::Webhook,
             ..Descriptor::new(PLATFORM, limit)
@@ -301,6 +327,7 @@ impl Adapter for Telegram {
                 .await
                 .map_err(|e| connect_error(&e))?;
             *self.api.lock().expect("api poisoned") = Some(api.clone());
+            self.check_dm_topics(&me);
             self.topics.create_missing(&api).await;
             let ctx = updates::Ctx {
                 api: api.clone(),
@@ -473,6 +500,29 @@ impl Adapter for Telegram {
             *self.commands.lock().expect("commands poisoned") = commands::sanitized(commands);
             commands::register(&self.api()?, &self.options, commands).await
         })
+    }
+
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        Box::pin(async move {
+            let thread = topics::open(&self.api()?, chat_id, title).await?;
+            if let Ok(id) = thread.parse() {
+                self.topics.record(chat_id, title, id);
+            }
+            Ok(thread)
+        })
+    }
+
+    fn rename_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move { topics::rename(&self.api()?, chat_id, thread_id, title).await })
     }
 
     fn session_hints(&self, chat_id: &str, thread_id: Option<&str>) -> SessionHints {

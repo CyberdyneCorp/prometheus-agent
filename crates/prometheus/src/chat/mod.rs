@@ -11,6 +11,7 @@ pub mod args;
 pub mod attach;
 pub mod commands;
 pub mod display;
+pub mod handoff;
 pub mod markdown;
 pub mod oneshot;
 pub mod recap;

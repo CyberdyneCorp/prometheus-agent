@@ -95,6 +95,17 @@ pub enum ControlRequest {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<SendAttachment>,
     },
+    /// Hands a session over to a chat of its profile (`/handoff` in the CLI
+    /// or TUI); answers where it went.
+    GatewayHandoff {
+        /// The owning profile.
+        profile: String,
+        /// The session.
+        session: String,
+        /// `platform[:chat_id[:thread_id]]` (a bare platform is its home
+        /// channel).
+        target: String,
+    },
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -120,6 +131,15 @@ pub struct Queued {
     /// The outbox entry id.
     pub entry: i64,
     /// Where it goes (`platform:chat_id[:thread_id]`).
+    pub destination: String,
+}
+
+/// Where `gateway_handoff` moved a session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandedOff {
+    /// The platform.
+    pub platform: String,
+    /// `platform:chat_id[:thread_id]`.
     pub destination: String,
 }
 
@@ -233,6 +253,9 @@ pub struct ControlResponse {
     /// For `gateway_send`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queued: Option<Queued>,
+    /// For `gateway_handoff`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandedOff>,
     /// Set when the request failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ControlError>,

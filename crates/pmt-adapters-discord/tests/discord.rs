@@ -576,3 +576,24 @@ async fn member_roles_and_channel_history_come_from_the_platform() {
         "oldest first, the bot's own marked"
     );
 }
+
+/// Spec: messaging-gateway, Branching into a sibling thread: a named
+/// thread opens in the channel and can be renamed.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_named_thread_opens_in_the_channel_and_can_be_renamed() {
+    let (_home, mock, adapter, _link) = connected("").await;
+    let thread = adapter
+        .open_thread(mock::CHANNEL, "try-postgres")
+        .await
+        .unwrap();
+    assert!(
+        mock.threads_of(mock::CHANNEL)
+            .contains(&(thread.clone(), "try-postgres".to_owned()))
+    );
+    adapter
+        .rename_thread(mock::CHANNEL, &thread, "postgres plan")
+        .await
+        .unwrap();
+    assert_eq!(mock.channel_name(&thread).as_deref(), Some("postgres plan"));
+    adapter.disconnect().await;
+}

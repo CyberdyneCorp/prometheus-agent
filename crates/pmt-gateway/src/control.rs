@@ -147,6 +147,7 @@ pub(crate) fn answer(
         }
         // Answered by `handle`, which can wait for the adapter.
         ControlRequest::GatewaySend { .. }
+        | ControlRequest::GatewayHandoff { .. }
         | ControlRequest::GatewayPlatform { .. }
         | ControlRequest::ResolveRole { .. } => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,
@@ -198,6 +199,26 @@ async fn send(
                 ..ControlResponse::default()
             }
         }
+        Err(err) => failure(&err),
+    }
+}
+
+/// `/handoff` through the running daemon's gateway.
+async fn handoff(server: &Server, profile: &str, session: &str, target: &str) -> ControlResponse {
+    let Some(messaging) = server.messaging() else {
+        return failure(&Error::new(
+            &codes::GATEWAY_DAEMON_REQUIRED,
+            "the daemon runs no messaging gateway",
+        ));
+    };
+    match messaging.handoff(profile, session, target).await {
+        Ok(done) => ControlResponse {
+            handoff: Some(pmt_rpc::control::HandedOff {
+                platform: done.platform,
+                destination: done.destination,
+            }),
+            ..ControlResponse::default()
+        },
         Err(err) => failure(&err),
     }
 }
@@ -263,6 +284,11 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
             platform,
             pause,
         }) => platform_op(&server, &profile, &platform, pause).await,
+        Ok(ControlRequest::GatewayHandoff {
+            profile,
+            session,
+            target,
+        }) => handoff(&server, &profile, &session, &target).await,
         Ok(ControlRequest::ResolveRole {
             profile,
             platform,

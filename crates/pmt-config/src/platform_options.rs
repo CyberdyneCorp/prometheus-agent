@@ -34,9 +34,10 @@ pub struct TelegramOptions {
     pub slash_commands: bool,
     /// How the command menu is cut to the platform's cap.
     pub command_menu: CommandMenu,
-    /// Topics of private chats in threaded mode, by chat id.
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    pub dm_topics: BTreeMap<String, Vec<TopicSpec>>,
+    /// Private chats in threaded mode: multi-session topics (`enabled`)
+    /// and the topics declared per chat id.
+    #[serde(skip_serializing_if = "DmTopics::is_unset")]
+    pub dm_topics: DmTopics,
     /// Topics of forum groups, by chat id.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub group_topics: BTreeMap<String, Vec<TopicSpec>>,
@@ -58,7 +59,7 @@ impl Default for TelegramOptions {
             webhook_secret_secret: None,
             slash_commands: true,
             command_menu: CommandMenu::default(),
-            dm_topics: BTreeMap::new(),
+            dm_topics: DmTopics::default(),
             group_topics: BTreeMap::new(),
             ignore_root_dm: false,
             rich_messages: false,
@@ -111,6 +112,28 @@ pub enum PriorityMode {
     Append,
     /// Only the priority entries.
     Replace,
+}
+
+/// `options.dm_topics`: `enabled` turns the private chat into a lobby of
+/// topics, each its own session (spec: messaging-gateway, Multi-session DM
+/// topics); every other key is a chat id with its declared topics.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DmTopics {
+    /// Each DM topic is its own session and the root DM is a lobby that
+    /// accepts only commands (`/topic new|list|rename|restore`).
+    #[serde(default)]
+    pub enabled: bool,
+    /// Declared topics by chat id.
+    #[serde(flatten)]
+    pub chats: BTreeMap<String, Vec<TopicSpec>>,
+}
+
+impl DmTopics {
+    /// Nothing set (left out of a written config).
+    #[must_use]
+    pub fn is_unset(&self) -> bool {
+        !self.enabled && self.chats.is_empty()
+    }
 }
 
 /// One declared topic.

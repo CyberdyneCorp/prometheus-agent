@@ -148,6 +148,18 @@ impl Lane {
             "restart" => self.restart_command(&call.routing),
             "verbose" => self.verbose_command(),
             "footer" => self.footer_command(&call.routing, &call.args),
+            "model" => self.model_command(&call.routing, &call.args).await,
+            "sessions" => self.sessions_command(&call.routing, &call.args),
+            "resume" => self.resume_command(&call.routing, &call.args),
+            "fork" => self.branch_command(&call.routing, &call.args).await,
+            "topic" => self.topic_command(&call.routing, &call.args).await,
+            "background" => {
+                let policy = self.session_policy(&call.routing);
+                let text =
+                    crate::messaging::tasks::start(&self.shared, &call.routing, policy, &call.args)
+                        .await;
+                self.say(&text);
+            }
             "update" => self.update_command(&call.routing, &call.args).await,
             "retry" => {
                 self.retry_releases();

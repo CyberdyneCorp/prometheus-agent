@@ -91,6 +91,26 @@ impl Chat<'_, '_> {
     async fn local(&mut self, name: &str, args: &str) -> Result<Option<Flow>, Error> {
         let text = match name {
             "exit" => return Ok(Some(Flow::Exit)),
+            "handoff" => {
+                let scope = self.start.scope;
+                let handed = crate::chat::handoff::handoff(
+                    scope.home(),
+                    scope.name().as_str(),
+                    &self.attached.session,
+                    args,
+                )
+                .await;
+                return Ok(Some(match handed {
+                    Ok(line) => {
+                        self.screen.notice(&line);
+                        Flow::Exit
+                    }
+                    Err(err) => {
+                        self.screen.error(&err);
+                        Flow::Continue
+                    }
+                }));
+            }
             "clear" => {
                 self.screen.raw("\x1b[2J\x1b[H");
                 let created = open::claim(&self.attached.client, None, self.start).await;

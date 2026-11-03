@@ -150,6 +150,12 @@ prefixed_id!(
     "snap"
 );
 
+prefixed_id!(
+    /// A `/background` task, `bg_<ULID>`.
+    BackgroundId,
+    "bg"
+);
+
 #[cfg(test)]
 mod tests {
     use super::{MessageId, SessionId};

@@ -153,6 +153,13 @@ async fn decide(
         reply(shared, owner, platform, &inbound, GREETING).await;
         return Admission::Handled;
     }
+    let topics = shared
+        .topics
+        .enabled(&descriptor, owner, platform, &inbound.chat_id);
+    if super::topics::in_lobby(topics, &inbound) {
+        reply(shared, owner, platform, &inbound, super::topics::LOBBY).await;
+        return Admission::Handled;
+    }
     let inbound = match super::admit_groups::gate(shared, owner, platform, inbound, gateway).await {
         Ok(inbound) => inbound,
         Err(admission) => return admission,

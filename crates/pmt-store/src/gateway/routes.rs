@@ -122,6 +122,15 @@ pub struct Interrupted {
     pub suspended: bool,
 }
 
+/// The key a parked handoff waits under (never a conversation key: those
+/// start with the profile name).
+fn handoff_key(platform: &str, chat_id: &str, thread_id: Option<&str>) -> String {
+    format!(
+        "\u{1f}handoff\u{1f}{platform}\u{1f}{chat_id}\u{1f}{}",
+        thread_id.unwrap_or_default()
+    )
+}
+
 const ROUTE_COLUMNS: &str =
     "key, session_id, platform, chat_id, thread_id, created_at, last_activity_at";
 
@@ -197,6 +206,97 @@ impl Store {
             )
             .map_err(sql)?;
             Ok(())
+        })
+    }
+
+    /// Parks `session` for the next conversation of `platform` chat
+    /// `chat_id` (and thread): a handoff whose conversation key is known
+    /// only once someone writes there.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn park_handoff(
+        &self,
+        platform: &str,
+        chat_id: &str,
+        thread_id: Option<&str>,
+        session: SessionId,
+    ) -> Result<(), Error> {
+        let route = NewRoute {
+            key: handoff_key(platform, chat_id, thread_id),
+            session_id: session,
+            platform: platform.to_owned(),
+            chat_id: chat_id.to_owned(),
+            thread_id: thread_id.map(str::to_owned),
+        };
+        self.bind_route(&route, None)
+    }
+
+    /// Takes the session parked for `platform` chat `chat_id` (and
+    /// thread), if any, and routes conversation `key` to it (the parked
+    /// session then belongs to that conversation).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn take_handoff(
+        &self,
+        key: &str,
+        platform: &str,
+        chat_id: &str,
+        thread_id: Option<&str>,
+    ) -> Result<Option<SessionId>, Error> {
+        let parked = handoff_key(platform, chat_id, thread_id);
+        let Some(waiting) = self.route(&parked)? else {
+            return Ok(None);
+        };
+        let session = waiting.session_id;
+        self.bind_route(
+            &NewRoute {
+                key: key.to_owned(),
+                session_id: session,
+                platform: platform.to_owned(),
+                chat_id: chat_id.to_owned(),
+                thread_id: thread_id.map(str::to_owned),
+            },
+            None,
+        )?;
+        self.write(|tx| {
+            tx.execute("DELETE FROM gateway_routes WHERE key = ?1", [&parked])
+                .map_err(sql)?;
+            tx.execute(
+                "UPDATE gateway_sessions SET route_key = ?2 WHERE session_id = ?1",
+                params![session.to_string(), key],
+            )
+            .map_err(sql)
+        })?;
+        Ok(Some(session))
+    }
+
+    /// The routes of `platform` chat `chat_id` that are threads (topics),
+    /// most recently active first.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn thread_routes(&self, platform: &str, chat_id: &str) -> Result<Vec<Route>, Error> {
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT {ROUTE_COLUMNS} FROM gateway_routes WHERE platform = ?1 \
+                     AND chat_id = ?2 AND thread_id IS NOT NULL \
+                     ORDER BY last_activity_at DESC, key"
+                ))
+                .map_err(sql)?;
+            let rows = stmt
+                .query_map([platform, chat_id], |row| Ok(route_from_row(row)))
+                .map_err(sql)?;
+            let mut found = Vec::new();
+            for row in rows {
+                found.push(row.map_err(sql)??);
+            }
+            Ok(found)
         })
     }
 

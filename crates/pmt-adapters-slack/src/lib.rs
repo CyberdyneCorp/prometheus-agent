@@ -453,6 +453,27 @@ impl Adapter for Slack {
         credential(&self.scope, &self.bot_secret).ok()
     }
 
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        // A Slack thread is the replies to a root message: the title is it.
+        Box::pin(async move {
+            let posted = self
+                .api()?
+                .call(
+                    "chat.postMessage",
+                    &json!({"channel": chat_id, "text": title}),
+                )
+                .await?;
+            posted["ts"]
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| SendError::Server("Slack gave the thread root no ts".to_owned()))
+        })
+    }
+
     fn member_roles<'a>(
         &'a self,
         inbound: &'a Inbound,

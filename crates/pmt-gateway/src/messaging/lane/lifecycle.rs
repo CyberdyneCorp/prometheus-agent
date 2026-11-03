@@ -86,6 +86,7 @@ impl Lane {
         ) else {
             return;
         };
+        self.name_default_topic(&title).await;
         adapter
             .thread_titled(&self.routing.chat_id, &thread, &title)
             .await;

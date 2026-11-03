@@ -40,6 +40,8 @@ pub enum Local {
     Paste,
     /// Make `Ctrl+V` reach the TUI in VS Code, Cursor or Windsurf.
     TerminalSetup,
+    /// Continue the session in a chat and leave (`/handoff <platform>`).
+    Handoff,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -158,6 +160,12 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "terminal-setup",
         aliases: &[],
         description: "make Ctrl+V reach the TUI in VS Code, Cursor or Windsurf",
+    },
+    LocalCommand {
+        command: Local::Handoff,
+        name: "handoff",
+        aliases: &[],
+        description: "continue this session in a chat: /handoff <platform>[:<chat>[:<thread>]]",
     },
 ];
 

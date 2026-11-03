@@ -173,3 +173,19 @@ async fn power_levels_are_the_senders_roles() {
     mock.refuse_power_levels();
     assert!(matrix.member_roles(&sender).await.is_err());
 }
+
+/// Spec: messaging-gateway, Branching into a sibling thread: a Matrix
+/// thread hangs off a root event.
+#[tokio::test]
+async fn a_thread_is_opened_by_sending_its_root() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = MatrixMock::start().await;
+    let matrix = adapter(home.path(), &mock, "");
+    let thread = matrix.open_thread(mock::DM, "try-postgres").await.unwrap();
+    let root = mock
+        .sent()
+        .into_iter()
+        .find(|m| m.message_id == thread)
+        .unwrap();
+    assert_eq!(root.text, "try-postgres");
+}

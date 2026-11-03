@@ -151,6 +151,10 @@ impl Lane {
 
     /// A paging button was pressed (its signature verified).
     pub(super) fn page_pressed(&mut self, routing: &Routing, id: &str, choice: &str) {
+        if id.starts_with(super::models::PICKER) {
+            self.picker_pressed(routing, id, choice);
+            return;
+        }
         let Ok(page) = choice.parse::<usize>() else {
             return;
         };

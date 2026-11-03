@@ -4,6 +4,7 @@
 mod access;
 mod busy;
 mod cards;
+mod chats;
 mod commands;
 mod controls;
 mod delivery;

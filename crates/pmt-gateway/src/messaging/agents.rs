@@ -63,6 +63,15 @@ pub struct Conversation {
     pub policy: Option<pmt_config::schema::ChatPolicy>,
 }
 
+/// A configured provider and the models a chat's picker offers of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelChoice {
+    /// Provider id.
+    pub provider: String,
+    /// Its models, as `/model <provider>/<model>` names them.
+    pub models: Vec<String>,
+}
+
 /// `/update [check]` from a chat, once confirmed (spec:
 /// distribution-and-update, Update from chat).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,6 +159,33 @@ pub trait Agents: Host {
     /// The gateway-surface commands and user-invocable skills of
     /// `profile`, for native command menus.
     fn menu_commands(&self, _profile: &str) -> Vec<crate::messaging::adapter::MenuCommand> {
+        Vec::new()
+    }
+    /// Appends a notice row `text` of `kind` to `session`'s transcript
+    /// (the model reads it as context; the user did not type it).
+    fn append_notice<'a>(
+        &'a self,
+        profile: &'a str,
+        session: &'a str,
+        kind: &'a str,
+        text: &'a str,
+    ) -> HostFuture<'a, ()> {
+        Box::pin(async move {
+            let store = self.store(profile).ok_or_else(|| {
+                pmt_core::error::Error::new(
+                    &pmt_core::error::codes::PROFILE_NOT_FOUND,
+                    format!("profile '{profile}' is not served"),
+                )
+            })?;
+            let mut row = pmt_store::NewMessage::new(pmt_store::Role::User, text);
+            row.metadata = Some(serde_json::json!({ "kind": kind }));
+            store.append_message(session.parse()?, &row)?;
+            Ok(())
+        })
+    }
+    /// The providers configured for `profile` and their models, for the
+    /// chat model picker (`/model` without arguments).
+    fn model_choices(&self, _profile: &str) -> Vec<ModelChoice> {
         Vec::new()
     }
     /// The profile's speech providers, when it has any (voice messages

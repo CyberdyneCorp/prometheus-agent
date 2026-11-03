@@ -282,3 +282,30 @@ async fn channel_and_thread_history_come_oldest_first() {
     assert_eq!(texts, ["root", "in thread"]);
     slack.disconnect().await;
 }
+
+/// Spec: messaging-gateway, Branching into a sibling thread: a Slack
+/// thread is opened by posting its root.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_thread_is_opened_by_posting_its_root() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let slack = adapter(home.path(), &mock);
+    slack
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    let thread = slack
+        .open_thread(mock::CHANNEL, "try-postgres")
+        .await
+        .unwrap();
+    let root = mock
+        .sent()
+        .into_iter()
+        .find(|m| m.message_id == thread)
+        .unwrap();
+    assert_eq!(
+        (root.chat_id.as_str(), root.text.as_str()),
+        (mock::CHANNEL, "try-postgres")
+    );
+    slack.disconnect().await;
+}

@@ -552,6 +552,24 @@ pub trait Adapter: Send + Sync + 'static {
     fn session_hints(&self, _chat_id: &str, _thread_id: Option<&str>) -> SessionHints {
         SessionHints::default()
     }
+    /// Opens a new thread (or topic) titled `title` in `chat_id`; its id.
+    /// `Unsupported` where the platform (or this chat) has no threads.
+    fn open_thread<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Renames thread (or topic) `thread_id` of `chat_id` to `title`.
+    fn rename_thread<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: &'a str,
+        _title: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
 }
 
 /// The body limit of the shared listener when the adapter sets none.

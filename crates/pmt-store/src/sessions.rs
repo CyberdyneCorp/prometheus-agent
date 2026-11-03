@@ -363,6 +363,31 @@ impl Store {
         })
     }
 
+    /// Replaces the origin of session `id` (a branch or handoff that now
+    /// lives in another chat or thread).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`; `session.not_found` when the session does not exist.
+    ///
+    /// # Panics
+    ///
+    /// Never: origins always serialize.
+    pub fn set_origin(&self, id: SessionId, origin: &Origin) -> Result<(), Error> {
+        let text = serde_json::to_string(origin).expect("origins serialize");
+        let changed = self.write(|tx| {
+            tx.execute(
+                "UPDATE sessions SET origin = ?2 WHERE id = ?1",
+                params![id.to_string(), text],
+            )
+            .map_err(sql)
+        })?;
+        if changed == 0 {
+            return Err(not_found(id));
+        }
+        Ok(())
+    }
+
     /// Reopens (resumes) a session: clears the end and an automatic
     /// archive flag, keeping a user archive flag.
     ///
