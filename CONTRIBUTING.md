@@ -15,8 +15,16 @@ and prints the install command):
 cargo install --locked cargo-deny@0.20.2
 cargo install --locked cargo-nextest@0.9.148
 cargo install --locked mdbook@0.5.4
+cargo install --locked cargo-component@0.21.1
 npm install -g @fission-ai/openspec@1.13.2
 ```
+
+The WASM plugins under `plugins/` (the sample of every WIT world and the
+plugins the plugin host's tests run) build for `wasm32-unknown-unknown`,
+which `rust-toolchain.toml` installs. Tests build them with plain cargo
+from the checked-in bindings; `cargo xtask plugin-samples` builds the
+samples with `cargo component`, which also regenerates each sample's
+`src/bindings.rs` from `wit/` (commit the result when the WIT changes).
 
 `just tools` installs the same pinned versions, and `just` (with no
 arguments) lists shortcuts for building, testing and running the gates; the
@@ -38,9 +46,10 @@ naming it:
 5. `cargo deny check` (license allowlist and known advisories, `deny.toml`)
 6. `openspec validate --all --strict --no-interactive`
 7. `cargo xtask gen --check` (generated contracts and reference docs are fresh)
-8. `mdbook build docs` (any warning fails)
-9. `cargo xtask health` (the code-health rules below)
-10. `cargo xtask perf` (startup, memory and size budgets, below)
+8. `cargo xtask plugin-samples --check` (every WIT world's sample builds with `cargo component`)
+9. `mdbook build docs` (any warning fails)
+10. `cargo xtask health` (the code-health rules below)
+11. `cargo xtask perf` (startup, memory and size budgets, below)
 
 CI (`.github/workflows/ci.yml`) runs `scripts/check --no-perf` on every Tier 1
 target, so a green local run predicts a green check job. The budgets are

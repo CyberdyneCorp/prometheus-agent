@@ -1,11 +1,36 @@
 [package]
 name = "pmt-plugins"
-description = "Prometheus plugin host (placeholder)"
+description = "Prometheus plugin host: manifests, discovery, grants and the WASM component runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 repository.workspace = true
+
+[dependencies]
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-tools.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+wasmtime.workspace = true
+wit-component = { workspace = true, optional = true }
+
+[features]
+# `testkit`: builds the repository's WASM plugins (plugins/) into
+# components for tests of this crate and of the binary.
+testkit = ["dep:wit-component"]
+
+[dev-dependencies]
+pmt-plugins = { path = ".", features = ["testkit"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]
 workspace = true

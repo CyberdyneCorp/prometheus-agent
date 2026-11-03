@@ -3544,6 +3544,93 @@
       },
       "type": "object"
     },
+    "PluginsConfig": {
+      "additionalProperties": false,
+      "description": "The `[plugins]` section.",
+      "properties": {
+        "disabled": {
+          "default": [],
+          "description": "Ids never instantiated; wins over `enabled`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": [],
+          "description": "Ids of the non-embedded plugins to instantiate; a discovered plugin\nstays disabled until listed here (`prometheus plugins enable <id>`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entries": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "default": {},
+          "description": "Each plugin's own settings, `plugins.entries.<id>.<key>`, read and\nwritten by the plugin through its `config` host interface.",
+          "type": "object"
+        },
+        "hook_context_max_chars": {
+          "default": 10000,
+          "description": "`pre_llm_call` context of one callback above this many characters\nis spilled to `hook_outputs/<session>/` and replaced by its head,\ntail and the spill path.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hook_timeout_ms": {
+          "default": 30000,
+          "description": "Bound on one hook callback; a callback that overruns counts as no\nresult and is suspended for 60 seconds.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "trusted_project_dirs": {
+          "default": [],
+          "description": "Project roots whose `.prometheus/plugins/` directory is scanned;\nany other project's plugins are never read.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wasm": {
+          "$ref": "#/$defs/PluginsWasmConfig",
+          "default": {
+            "call_timeout_ms": 30000,
+            "max_memory_bytes": 268435456
+          },
+          "description": "WASM plugin limits."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "PluginsWasmConfig": {
+      "additionalProperties": false,
+      "description": "The `[plugins.wasm]` section.",
+      "properties": {
+        "call_timeout_ms": {
+          "default": 30000,
+          "description": "CPU bound of one call into a plugin (fuel and epoch interruption);\nan overrun fails the call with `plugin '<id>' exceeded call timeout`.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_memory_bytes": {
+          "default": 268435456,
+          "description": "Linear memory cap of one plugin instance.",
+          "format": "uint64",
+          "minimum": 65536,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "PolicyChatType": {
       "description": "The chat kinds a policy can match.",
       "oneOf": [
@@ -6213,6 +6300,22 @@
         }
       },
       "description": "Trajectories."
+    },
+    "plugins": {
+      "$ref": "#/$defs/PluginsConfig",
+      "default": {
+        "disabled": [],
+        "enabled": [],
+        "entries": {},
+        "hook_context_max_chars": 10000,
+        "hook_timeout_ms": 30000,
+        "trusted_project_dirs": [],
+        "wasm": {
+          "call_timeout_ms": 30000,
+          "max_memory_bytes": 268435456
+        }
+      },
+      "description": "Plugin enablement, hook bounds and WASM limits."
     },
     "prompt": {
       "$ref": "#/$defs/PromptConfig",

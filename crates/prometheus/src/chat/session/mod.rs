@@ -115,6 +115,10 @@ pub struct Factory {
     /// The profile's configuration as it is now: `scope` until a daemon
     /// reload replaces it (shared tools read their `live` keys from it).
     current: SharedScope,
+    /// The profile's loaded plugins (their tools are in `registry`).
+    plugins: crate::plugins_host::ProfilePlugins,
+    /// The toolsets of the plugin tools in `registry`.
+    plugin_toolsets: Vec<String>,
 }
 
 /// One running session.
@@ -185,7 +189,10 @@ impl Factory {
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
-        let registry = Arc::new(crate::tools_cmd::registry(&scope)?);
+        let mut registry = crate::tools_cmd::registry(&scope)?;
+        let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        let plugin_toolsets = plugins.loaded.register_tools(&mut registry, "cli");
+        let registry = Arc::new(registry);
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),
             GrantsFile::of(scope.profile()),
@@ -208,6 +215,8 @@ impl Factory {
             install_asks: None,
             browser: OnceLock::new(),
             messaging: None,
+            plugins,
+            plugin_toolsets,
         })
     }
 
@@ -369,7 +378,8 @@ impl Factory {
         let session = self.store.session(id)?;
         self.record.session(id, session.root_session_id, target);
         self.record_launch_flags(id)?;
-        let selection = tools::selection(&self.registry, config, interactive)?;
+        let selection =
+            tools::selection(&self.registry, config, interactive, &self.plugin_toolsets)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
         let skills = Arc::new(SkillsSession::new(self.skills_setup(
             id,
@@ -404,6 +414,7 @@ impl Factory {
             agent: Some(&agent_tools),
             redactor: &self.redactor,
             context_window: None,
+            hooks: self.plugins.tool_hooks(self.plugin_call(id)),
         })
         .await?;
         let tool_port = Arc::new(SwappableTools::new(session_tools));
@@ -422,12 +433,10 @@ impl Factory {
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
         setup.events = Arc::new(tee);
-        setup.redactor = self.redactor.clone();
         setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(&memory) as _);
-        setup.interactive = interactive;
-        setup.unattended = !interactive;
         setup.refresh_prompt = Some(refresher(&skills, &memory, self.options.ignore_rules));
+        self.surface_setup(&mut setup, id);
         let agent = Agent::new(setup)?;
         let live = Live {
             scope: scope.clone(),
@@ -455,6 +464,24 @@ impl Factory {
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// The parts of a session's agent setup that come from this factory's
+    /// surface: redaction, interactivity and plugin turn hooks.
+    fn surface_setup(&self, setup: &mut AgentSetup, id: SessionId) {
+        setup.redactor = self.redactor.clone();
+        setup.interactive = self.options.interactive;
+        setup.unattended = !self.options.interactive;
+        setup.turn_hooks = self.plugins.turn_hooks(self.plugin_call(id));
+    }
+
+    /// What plugin host calls of session `id` report as their session.
+    fn plugin_call(&self, id: SessionId) -> pmt_plugins::host::CallInfo {
+        pmt_plugins::host::CallInfo {
+            session_id: Some(id.to_string()),
+            surface: "cli".to_owned(),
+            cwd: Some(self.options.cwd.to_string_lossy().into_owned()),
+        }
     }
 
     /// The session's command approval gate.
@@ -680,6 +707,7 @@ impl Factory {
             agent: Some(&live.agent_tools),
             redactor: &self.redactor,
             context_window: None,
+            hooks: self.plugins.tool_hooks(self.plugin_call(live.id)),
         })
         .await?;
         live.tools.swap(tools);
@@ -717,6 +745,7 @@ impl Factory {
             agent: None,
             redactor: &self.redactor,
             context_window: None,
+            hooks: self.plugins.tool_hooks(self.plugin_call(child)),
         })
         .await
     }

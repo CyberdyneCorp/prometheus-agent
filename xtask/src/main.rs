@@ -38,6 +38,9 @@
 //! each complete milestone's requirements, and every indexed scenario of a
 //! milestone still in progress, maps to existing test functions.
 //!
+//! `cargo xtask plugin-samples [--check]` builds the sample plugin of every
+//! WIT world with `cargo component`.
+//!
 //! `cargo xtask release <step>` runs the release steps around cargo-dist:
 //! SBOMs, the signed manifest and channel index, rendered installers,
 //! minisign signatures and the end-to-end check of a release directory.
@@ -46,6 +49,7 @@ mod artifacts;
 mod deps_age;
 mod health;
 mod perf;
+mod plugin_samples;
 mod release;
 mod scenarios;
 mod tool_refs;
@@ -107,6 +111,12 @@ enum Command {
     /// Check that the indexed milestones' scenarios map to tests
     /// (`scenario-index.toml`).
     Scenarios,
+    /// Build the sample plugin of every WIT world with `cargo component`.
+    PluginSamples {
+        /// Fail when a sample's generated bindings were stale.
+        #[arg(long)]
+        check: bool,
+    },
     /// Release steps run by the Release workflow around cargo-dist.
     Release {
         #[command(subcommand)]
@@ -131,6 +141,7 @@ fn main() -> ExitCode {
         }
         Command::DepsAge { base } => deps_age::run(&repo_root(), &base),
         Command::Scenarios => scenarios::run(&repo_root()),
+        Command::PluginSamples { check } => plugin_samples::run(&repo_root(), check),
         Command::Release { step } => release::run(step),
     };
     match result {

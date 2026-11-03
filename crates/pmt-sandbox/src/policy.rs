@@ -138,7 +138,8 @@ impl Policy {
             | Capability::ToolsCall(_)
             | Capability::ToolsOverride(_)
             | Capability::Ui(_)
-            | Capability::BrowserRealProfile => {}
+            | Capability::BrowserRealProfile
+            | Capability::Plugin { .. } => {}
         }
     }
 

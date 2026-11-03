@@ -1,0 +1,33 @@
+/// Provider objects: image and video generation, web search and extract,
+/// text-to-speech, transcription and secret sources (spec: plugin-system,
+/// Provider-object plugins fail closed when unregistered).
+package prometheus:provider@1.0.0;
+
+interface plugin {
+    enum category {
+        image-gen,
+        video-gen,
+        web-search,
+        web-extract,
+        tts,
+        stt,
+        secret-source,
+    }
+
+    record provider-spec {
+        /// The name config keys select (`image_gen.provider = "<id>"`).
+        id: string,
+        category: category,
+        description: string,
+    }
+
+    providers: func() -> list<provider-spec>;
+    /// `request` and the answer are the category's JSON request and
+    /// response documents.
+    invoke: func(provider: string, request: string) -> result<string, string>;
+}
+
+world provider {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

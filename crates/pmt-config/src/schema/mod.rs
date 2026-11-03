@@ -26,6 +26,7 @@ mod gateway_routes;
 mod interface;
 mod models;
 mod operations;
+mod plugins;
 mod state;
 mod tools;
 mod webhook;
@@ -66,6 +67,7 @@ pub use operations::{
     LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend,
     SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
 };
+pub use plugins::{PluginsConfig, PluginsWasmConfig};
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
     SnapshotsConfig, StorageConfig,
@@ -136,6 +138,8 @@ pub struct Config {
     pub network: NetworkConfig,
     /// Trajectories.
     pub observability: ObservabilityConfig,
+    /// Plugin enablement, hook bounds and WASM limits.
+    pub plugins: PluginsConfig,
     /// System prompt assembly.
     pub prompt: PromptConfig,
     /// Provider prompt caching.
@@ -203,6 +207,7 @@ impl Default for Config {
             models: std::collections::BTreeMap::new(),
             network: NetworkConfig::default(),
             observability: ObservabilityConfig::default(),
+            plugins: PluginsConfig::default(),
             prompt: PromptConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             providers: std::collections::BTreeMap::new(),

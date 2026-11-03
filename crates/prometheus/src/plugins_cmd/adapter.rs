@@ -7,45 +7,17 @@
 //! tooling, left out of release binaries to keep them within the size
 //! budget); a plugin directory needs the WASM plugin host.
 
-use clap::Subcommand;
 use pmt_core::error::Error;
 #[cfg(feature = "gateway")]
 use pmt_core::error::codes;
 
-/// `prometheus plugins` subcommands.
-#[derive(Debug, Subcommand)]
-pub enum PluginsCommand {
-    /// Run the adapter conformance kit against a mock of the platform:
-    /// a first-party platform name (`telegram`, `discord`, `slack`,
-    /// `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the
-    /// `adapter-kits` feature) or a `platform-adapter` plugin directory.
-    TestAdapter {
-        /// The platform name or plugin directory.
-        path: String,
-    },
-}
-
-/// Runs one `plugins` subcommand.
-///
-/// # Errors
-///
-/// `cli.usage` for a name that is neither a first-party adapter nor a
-/// directory; `plugins.host_unavailable` for a plugin directory;
-/// `surface.not_included` without the gateway surface, or for a
-/// first-party name in a build without the `adapter-kits` feature.
-pub fn run(command: &PluginsCommand) -> Result<u8, Error> {
-    match command {
-        PluginsCommand::TestAdapter { path } => test_adapter(path),
-    }
-}
-
 #[cfg(not(feature = "gateway"))]
-fn test_adapter(_path: &str) -> Result<u8, Error> {
+pub(super) fn test_adapter(_path: &str) -> Result<u8, Error> {
     crate::surface::require("gateway").map(|()| 0)
 }
 
 #[cfg(all(feature = "gateway", not(feature = "adapter-kits")))]
-fn test_adapter(path: &str) -> Result<u8, Error> {
+pub(super) fn test_adapter(path: &str) -> Result<u8, Error> {
     if pmt_config::platforms::first_party(&path.to_lowercase()).is_some() {
         return Err(Error::new(
             &codes::SURFACE_NOT_INCLUDED,
@@ -59,7 +31,7 @@ fn test_adapter(path: &str) -> Result<u8, Error> {
 }
 
 #[cfg(feature = "adapter-kits")]
-fn test_adapter(path: &str) -> Result<u8, Error> {
+pub(super) fn test_adapter(path: &str) -> Result<u8, Error> {
     let Some(kit) = kits::find(path) else {
         return Err(not_an_adapter(path));
     };
@@ -92,7 +64,7 @@ fn not_an_adapter(path: &str) -> Error {
         return Error::new(
             &codes::PLUGINS_HOST_UNAVAILABLE,
             format!(
-                "'{path}' is a plugin; testing a plugin adapter needs the WASM plugin host, which this build does not have"
+                "'{path}' is a plugin; testing a plugin adapter needs the platform-adapter world host, which is not available yet"
             ),
         );
     }

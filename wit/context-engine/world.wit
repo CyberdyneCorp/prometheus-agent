@@ -1,0 +1,14 @@
+/// A context engine replacing built-in compression (spec:
+/// context-compression). Messages are the JSON transcript form.
+package prometheus:context-engine@1.0.0;
+
+interface plugin {
+    should-compress: func(prompt-tokens: u64, context-window: u64) -> bool;
+    /// Returns the compressed transcript (JSON list of messages).
+    compress: func(messages: string, budget-tokens: u64) -> result<string, string>;
+}
+
+world context-engine {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

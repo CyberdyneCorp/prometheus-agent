@@ -1,0 +1,47 @@
+/// Callbacks on the closed hook list (spec: plugin-system, Typed hook
+/// registry; Hook payloads are versioned and additive).
+package prometheus:hook@1.0.0;
+
+interface plugin {
+    /// One hook firing. `payload` is a JSON object carrying
+    /// `schema_version` (`prometheus.hooks.v1`); the host removes the
+    /// fields added after the hook world minor version the plugin was
+    /// built against, so a plugin only ever sees fields it knows.
+    record hook-event {
+        hook: string,
+        schema-version: string,
+        payload: string,
+    }
+
+    /// Escalation to the human approval gate (`pre_tool_call`).
+    record approval {
+        message: string,
+        rule-key: option<string>,
+    }
+
+    /// What a callback answers. Directives are read only from the hooks
+    /// that take them; any other hook ignores everything but `none`.
+    variant reply {
+        none,
+        /// `pre_llm_call`: text appended to the current turn's user
+        /// message only.
+        context(string),
+        /// `pre_tool_call`: a JSON object shallow-merged into the tool
+        /// arguments, then re-validated against the tool schema.
+        modify(string),
+        /// `pre_tool_call`: the tool does not run; the message is its result.
+        block(string),
+        /// `pre_tool_call`: ask a human first.
+        approve(approval),
+    }
+
+    /// The hook names this plugin handles; each must also be listed in
+    /// the manifest's `hooks` capability.
+    hooks: func() -> list<string>;
+    on-hook: func(event: hook-event) -> result<reply, string>;
+}
+
+world hook {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

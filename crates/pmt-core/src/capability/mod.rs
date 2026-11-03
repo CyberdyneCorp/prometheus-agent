@@ -13,6 +13,7 @@
 //! answers `false`, so resolution errs towards a narrower set.
 
 mod path;
+mod plugin;
 mod set;
 
 use std::fmt;
@@ -20,6 +21,7 @@ use std::fmt;
 use crate::error::{Error, codes};
 
 pub use path::{Access, Places, canonical};
+pub use plugin::{MAX_PROMPT_SECTION_CHARS, PLATFORM_ACTIONS, PluginRight};
 pub use set::{CapabilitySet, not_granted};
 
 /// One permission.
@@ -55,6 +57,13 @@ pub enum Capability {
     Ui(String),
     /// `browser.real_profile`.
     BrowserRealProfile,
+    /// `plugin.<right>[:<target>]`: a right only plugins hold.
+    Plugin {
+        /// Which right.
+        right: PluginRight,
+        /// Its hook, command, provider, model, verb or size.
+        target: Option<String>,
+    },
 }
 
 /// The built-in profile baseline used when `security.capabilities` is unset:
@@ -91,7 +100,7 @@ impl Capability {
                 "capabilities are fs.read:<glob>, fs.write:<glob>, net.connect:<host>[:<port>], \
                  net.listen:loopback[:<port>], process.spawn:<program|*>, secrets.read:<NAME>, \
                  llm.call[:<role>], tools.call:<tool>, tools.override:<tool>, ui.<surface>, \
-                 browser.real_profile",
+                 browser.real_profile, plugin.<right>[:<target>]",
             )
         })
     }
@@ -119,6 +128,16 @@ impl Capability {
             | (C::ToolsCall(a), C::ToolsCall(b))
             | (C::ToolsOverride(a), C::ToolsOverride(b)) => a == ANY || a == b,
             (C::LlmCall(a), C::LlmCall(b)) => a.is_none() || a == b,
+            (
+                C::Plugin {
+                    right: a,
+                    target: ta,
+                },
+                C::Plugin {
+                    right: b,
+                    target: tb,
+                },
+            ) => a == b && plugin::covers(*a, ta.as_deref(), tb.as_deref()),
             _ => self == other,
         }
     }
@@ -165,6 +184,14 @@ impl fmt::Display for Capability {
             Self::ToolsOverride(tool) => write!(f, "tools.override:{tool}"),
             Self::Ui(surface) => write!(f, "ui.{surface}"),
             Self::BrowserRealProfile => f.write_str("browser.real_profile"),
+            Self::Plugin {
+                right,
+                target: None,
+            } => write!(f, "plugin.{right}"),
+            Self::Plugin {
+                right,
+                target: Some(target),
+            } => write!(f, "plugin.{right}:{target}"),
         }
     }
 }
@@ -183,6 +210,9 @@ impl<'de> serde::Deserialize<'de> for Capability {
 }
 
 fn parse(text: &str) -> Option<Capability> {
+    if let Some(rest) = text.strip_prefix("plugin.") {
+        return plugin::parse(rest).map(|(right, target)| Capability::Plugin { right, target });
+    }
     let Some((name, target)) = text.split_once(':') else {
         return match text {
             "llm.call" => Some(Capability::LlmCall(None)),

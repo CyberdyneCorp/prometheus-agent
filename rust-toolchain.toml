@@ -4,3 +4,5 @@
 channel = "1.95.0"
 components = ["rustfmt", "clippy"]
 profile = "minimal"
+# WASM plugins (plugins/): the samples and the plugins the host tests run.
+targets = ["wasm32-unknown-unknown"]

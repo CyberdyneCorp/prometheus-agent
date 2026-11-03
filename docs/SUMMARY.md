@@ -25,6 +25,7 @@
 - [Skills](guide/skills.md)
 - [Memory](guide/memory.md)
 - [Capabilities, grants and redaction](guide/security.md)
+- [Plugins](guide/plugins.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
 - [The messaging gateway](guide/gateway.md)
 

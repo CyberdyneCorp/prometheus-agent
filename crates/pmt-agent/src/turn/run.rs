@@ -274,6 +274,7 @@ impl<'a> Turn<'a> {
         }))
         .await;
         self.recall(&text, &wire).await;
+        self.hook_context(&text, &wire).await;
         let ending = self.iterate(&mut frozen).await?;
         self.finish(ending, Some(&frozen)).await
     }

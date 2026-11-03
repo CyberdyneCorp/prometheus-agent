@@ -23,7 +23,7 @@ use pmt_providers::request::Tool;
 use pmt_store::Store;
 use pmt_tools::approval::{ApprovalRequest, CommandGate, Context, Decision, Floors, GateSetup};
 use pmt_tools::budget::ResultBudget;
-use pmt_tools::dispatch::NoHooks;
+use pmt_tools::dispatch::ToolHooks;
 use pmt_tools::probe::ProbeCache;
 use pmt_tools::protected::ProtectedFiles;
 use pmt_tools::{DispatchSetup, Dispatcher, Selection, SurfaceInputs, ToolRegistry, ToolSurface};
@@ -95,19 +95,31 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
 /// # Errors
 ///
 /// An unknown toolset (`registry.unknown_name`, exit 78).
+///
+/// `plugins` are the toolsets of the profile's enabled plugins: enabling a
+/// plugin opts its tools in (`tools.disabled_toolsets` still removes them).
 pub fn selection(
     registry: &ToolRegistry,
     config: &Config,
     interactive: bool,
+    plugins: &[String],
 ) -> Result<Selection, Error> {
     // `toolsets.surfaces.cli` (the tool configurator's per-surface list)
     // wins over the profile-wide `tools.enabled_toolsets`.
-    let enabled = config
+    let mut enabled = config
         .toolsets
         .surfaces
         .get("cli")
-        .unwrap_or(&config.tools.enabled_toolsets);
-    let selection = Selection::resolve(registry, enabled, &config.tools.disabled_toolsets)?;
+        .unwrap_or(&config.tools.enabled_toolsets)
+        .clone();
+    enabled.extend(
+        plugins
+            .iter()
+            .filter(|p| !enabled.contains(p))
+            .cloned()
+            .collect::<Vec<_>>(),
+    );
+    let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
         selection
     } else {
@@ -137,6 +149,8 @@ pub struct SurfaceInputsOwned<'a> {
     pub redactor: &'a Redactor,
     /// The route's context window (result budget).
     pub context_window: Option<u64>,
+    /// Plugin tool hooks (`pre_tool_call`, `post_tool_call`).
+    pub hooks: Arc<dyn ToolHooks>,
 }
 
 /// Builds the surface and the dispatcher over it, and records the
@@ -167,7 +181,7 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
         session_id: session_id.clone(),
         surface: Arc::new(surface),
         capabilities: Arc::new(inputs.capabilities.clone()),
-        hooks: Arc::new(NoHooks),
+        hooks: Arc::clone(&inputs.hooks),
         gate: Arc::clone(inputs.gate) as _,
         observer: Arc::clone(&timings) as _,
         budget: ResultBudget::for_session(

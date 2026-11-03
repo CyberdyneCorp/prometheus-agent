@@ -82,7 +82,7 @@ jobs:
 
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
-          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }},cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }},mdbook@${{ env.MDBOOK_VERSION }}
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }},cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }},mdbook@${{ env.MDBOOK_VERSION }},cargo-component@${{ env.CARGO_COMPONENT_VERSION }}
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

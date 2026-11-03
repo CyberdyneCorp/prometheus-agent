@@ -933,6 +933,27 @@ error_codes! {
     /// plugin host, which this build does not have yet.
     PLUGINS_HOST_UNAVAILABLE = ("plugins.host_unavailable", Unavailable,
         "The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`) in a build with the `adapter-kits` feature.");
+    /// A `plugin.toml` (or a WIT world it names) is invalid.
+    PLUGINS_MANIFEST = ("plugins.manifest", InvalidInput,
+        "A plugin manifest is invalid: an unknown field, kind, world or capability, a newer manifest_version, a requires_prometheus range excluding this version, or a bad value; the message names it.");
+    /// No discovered plugin has this id.
+    PLUGINS_NOT_FOUND = ("plugins.not_found", NotFound,
+        "No plugin with this id was discovered in the profile's plugins directory, a trusted project directory or the built-in plugins; `prometheus plugins list` shows what was found.");
+    /// A plugin directory cannot be used (reserved id, unreadable files).
+    PLUGINS_DISCOVERY = ("plugins.discovery", Config,
+        "A plugin directory cannot be used: its id is reserved by a built-in plugin, it does not match its directory name, or its files cannot be read; the message names it.");
+    /// Enabling needs the user to approve the plugin's capabilities.
+    PLUGINS_APPROVAL_REQUIRED = ("plugins.approval_required", PermissionDenied,
+        "Enabling a plugin needs its capabilities approved; run the command on a terminal, or pass `--grant all` or `--grant <capability>,...` to approve non-interactively.");
+    /// A plugin used a capability its grant does not cover.
+    PLUGINS_CAPABILITY_DENIED = ("plugins.capability_denied", PermissionDenied,
+        "A plugin called a host interface its approved capabilities do not cover (`capability_denied: <capability> <detail>`); approve it with `prometheus plugins grants approve <id> <capability>` if intended.");
+    /// A plugin could not be compiled, linked or instantiated.
+    PLUGINS_LOAD = ("plugins.load", Unavailable,
+        "A plugin could not be loaded: its component is missing or invalid, imports something the host does not offer, lacks an export of a world it declares, or failed while registering; the message names the plugin.");
+    /// A call into a plugin trapped, timed out or returned an error.
+    PLUGINS_CALL = ("plugins.call", Tool,
+        "A call into a plugin failed: it trapped, exceeded `plugins.wasm.call_timeout_ms`, is suspended after repeated traps, or returned an error; the message names the plugin.");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

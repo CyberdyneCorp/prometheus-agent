@@ -314,6 +314,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
+| `plugins.disabled` | array of string | `[]` | any | `next_session` | Ids never instantiated; wins over `enabled`. |
+| `plugins.enabled` | array of string | `[]` | any | `next_session` | Ids of the non-embedded plugins to instantiate; a discovered plugin stays disabled until listed here (`prometheus plugins enable <id>`). |
+| `plugins.entries` | table | `{}` | any | `next_session` | Each plugin's own settings, `plugins.entries.<id>.<key>`, read and written by the plugin through its `config` host interface. |
+| `plugins.hook_context_max_chars` | integer | `10000` | ≥ 1 | `next_session` | `pre_llm_call` context of one callback above this many characters is spilled to `hook_outputs/<session>/` and replaced by its head, tail and the spill path. |
+| `plugins.hook_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | Bound on one hook callback; a callback that overruns counts as no result and is suspended for 60 seconds. |
+| `plugins.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Project roots whose `.prometheus/plugins/` directory is scanned; any other project's plugins are never read. |
+| `plugins.wasm.call_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | CPU bound of one call into a plugin (fuel and epoch interruption); an overrun fails the call with `plugin '<id>' exceeded call timeout`. |
+| `plugins.wasm.max_memory_bytes` | integer | `268435456` | ≥ 65536 | `next_session` | Linear memory cap of one plugin instance. |
 | `prompt.context_file_max_chars` | integer | `0` | ≥ 0 | `next_session` | Character cap per context file; `0` derives it from the model's context window. |
 | `prompt.context_file_read_timeout_secs` | integer | `5` | ≥ 0 | `next_session` | Time allowed to read each context file. |
 | `prompt.include_session_id` | boolean | `false` | any | `next_session` | Add `Session ID: ses_<ULID>` to the session tier. |

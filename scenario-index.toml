@@ -1691,6 +1691,7 @@ capabilities = [
 
 [messaging-gateway."Gateway lifecycle hooks are typed"]
 "Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs", "crates/pmt-gateway/tests/messaging/commands.rs::reset_ends_the_replaced_session_for_its_own_profile_hooks"]
+"Typo in hook name" = ["crates/pmt-plugins/src/manifest/tests.rs::hook_typos_and_bad_values_are_refused", "crates/pmt-plugins/tests/hooks.rs::an_unknown_hook_name_fails_at_load"]
 
 # Group 24.7-24.10 (relay, health export, rate limits, chat policies,
 # service installation, daemon inventory, enrollment, pause, home channel,
@@ -1996,3 +1997,59 @@ capabilities = [
 
 [messaging-gateway."Concurrency caps across surfaces"]
 "Cap queues a turn" = ["crates/prometheus/tests/gateway_limits.rs::a_third_turn_waits_for_a_free_slot_and_then_runs", "crates/pmt-gateway/src/slots.rs::a_turn_beyond_the_cap_waits_its_turn_in_order", "crates/pmt-gateway/tests/messaging/display.rs::a_turn_waiting_for_a_slot_is_announced"]
+
+# Group 28.1-28.5 (WASM plugin host: WIT worlds, manifests, discovery,
+# enablement, digest-bound grants, wasmtime limits, host interfaces, plugin
+# tools, typed hooks, pre_tool_call directives, pre_llm_call context).
+
+[plugin-system."Plugin kinds and manifest"]
+"Unknown capability key fails closed" = ["crates/pmt-plugins/src/manifest/tests.rs::unknown_capability_key_fails_closed", "crates/prometheus/tests/plugins_manage.rs::manifest_errors_are_listed_and_refused"]
+"Newer manifest is refused" = ["crates/pmt-plugins/src/manifest/tests.rs::newer_manifest_is_refused"]
+
+[plugin-system."Discovery sources and identity"]
+"Untrusted project plugin is not scanned" = ["crates/pmt-plugins/src/discovery/tests.rs::untrusted_project_plugin_is_not_scanned"]
+
+[plugin-system."Opt-in enablement"]
+"Installed is not enabled" = { tests = ["crates/pmt-plugins/src/discovery/tests.rs::a_discovered_plugin_stays_disabled_until_enabled", "crates/prometheus/tests/plugins_manage.rs::a_discovered_plugin_stays_disabled_until_enabled_with_approval"], note = "the plugin directory is placed in the profile; `plugins install --no-enable` arrives with the catalog commands (28.8)" }
+
+[plugin-system."Capability declarations"]
+"Undeclared host is blocked" = ["crates/pmt-plugins/tests/runtime.rs::an_undeclared_host_is_blocked_before_any_connection"]
+
+[plugin-system."WASM sandbox resource limits"]
+"Infinite loop is interrupted" = { tests = ["crates/pmt-plugins/tests/runtime.rs::an_infinite_loop_is_interrupted_within_the_bound", "crates/pmt-plugins/tests/tools.rs::plugin_tools_register_under_the_plugin_toolset_and_a_timeout_is_a_result"], note = "with a 300 ms call timeout instead of the 30 s default; the timed-out tool call is a timeout result, so the turn goes on" }
+
+[plugin-system."Host interfaces offered to plugins"]
+"Secret outside the grant is not readable" = ["crates/pmt-plugins/tests/runtime.rs::a_secret_outside_the_grant_is_not_readable_and_revocation_is_immediate"]
+
+[plugin-system."Plugin state and profile scope"]
+"Two profiles get two instances" = ["crates/pmt-plugins/tests/runtime.rs::two_profiles_get_two_instances"]
+
+[plugin-system."Plugin tool registration"]
+"Override needs a grant" = { tests = ["crates/pmt-plugins/tests/tools.rs::plugin_tools_register_under_the_plugin_toolset_and_a_timeout_is_a_result", "crates/pmt-plugins/tests/tools.rs::overriding_a_core_tool_needs_the_grant"], note = "a built-in tool `ok` stands in for `web_search`; the registry rule is the same for every core tool" }
+
+[plugin-system."Typed hook registry"]
+"Typo is a load error" = ["crates/pmt-plugins/tests/hooks.rs::an_unknown_hook_name_fails_at_load", "crates/pmt-plugins/src/manifest/tests.rs::hook_typos_and_bad_values_are_refused"]
+
+[plugin-system."Hook payloads are versioned and additive"]
+"Old plugin receives a new payload" = { tests = ["crates/pmt-plugins/src/hooks/payload.rs::an_old_plugin_receives_only_the_fields_of_its_version"], note = "hook world 1.0 has no later minor yet; the addition table of a host at 1.3 is supplied by the test" }
+
+[plugin-system."Hook isolation and time bounds"]
+"Failing hook does not block others" = ["crates/pmt-plugins/tests/hooks.rs::a_failing_hook_does_not_block_the_next_one", "crates/pmt-plugins/tests/hooks.rs::a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while"]
+
+[plugin-system."pre_tool_call directives"]
+"Block beats approve" = { tests = ["crates/pmt-plugins/tests/hooks.rs::block_beats_approve_and_modify_merges", "crates/pmt-tools/src/dispatch/tests.rs::hook_block_skips_the_handler_and_post_sees_blocked", "crates/pmt-tools/src/dispatch/tests.rs::hook_modify_merges_arguments_and_revalidates_them"], note = "the combined decision is a block, and a blocked call never reaches the approval gate" }
+
+[plugin-system."pre_llm_call context preserves the prompt cache"]
+"Large hook context is spilled" = ["crates/pmt-plugins/tests/hooks.rs::large_hook_context_is_spilled", "crates/pmt-agent/tests/turn/hooks.rs::hook_context_rides_on_the_current_user_message_only", "crates/prometheus/tests/plugins_manage.rs::an_enabled_plugin_tool_and_hook_serve_a_session"]
+
+[plugin-system."Plugin LLM access gate"]
+"Model override without grant" = ["crates/pmt-plugins/tests/runtime.rs::model_calls_need_the_llm_grant_and_overrides_need_their_own"]
+
+[plugin-system."Plugin event bus"]
+"Reserved namespace rejected" = ["crates/pmt-plugins/tests/runtime.rs::ungranted_imports_are_denied_and_always_on_ones_work"]
+
+[plugin-system."WIT world versioning and compatibility"]
+"Previous major still loads" = { tests = ["crates/pmt-plugins/src/worlds.rs::previous_major_still_loads_and_others_are_refused"], note = "every world is at 1.0 with no previous major yet; the policy is checked against a host at tool@3.x. `plugins show` (28.8) prints the note" }
+
+[security-boundaries."Plugin and sidecar isolation"]
+"Runaway plugin" = ["crates/pmt-plugins/tests/hooks.rs::a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while", "crates/pmt-plugins/tests/runtime.rs::an_infinite_loop_is_interrupted_within_the_bound"]

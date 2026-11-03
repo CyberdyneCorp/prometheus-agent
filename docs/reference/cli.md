@@ -40,7 +40,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -9247,11 +9247,15 @@ Usage: prometheus pairing help help
 ## `prometheus plugins`
 
 ```text
-Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
 
 Usage: prometheus plugins [OPTIONS] <COMMAND>
 
 Commands:
+  list          Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+  enable        Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable       Disable a plugin (it keeps its grants)
+  grants        Show, approve or revoke a plugin's capability grants
   test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
   help          Print this message or the help of the given subcommand(s)
 
@@ -9279,6 +9283,318 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus plugins list`
+
+```text
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+
+Usage: prometheus plugins list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins enable`
+
+```text
+Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+
+Usage: prometheus plugins enable [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --grant <all|CAPABILITIES>
+          Approve `all` requested capabilities, or a comma list (`network api.example.com`, `secrets.read:TOKEN`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins disable`
+
+```text
+Disable a plugin (it keeps its grants)
+
+Usage: prometheus plugins disable [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants`
+
+```text
+Show, approve or revoke a plugin's capability grants
+
+Usage: prometheus plugins grants [OPTIONS] <COMMAND>
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus plugins grants show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus plugins grants approve [OPTIONS] <ID> [CAPABILITY]
+
+Arguments:
+  <ID>
+          The plugin id
+
+  [CAPABILITY]
+          One capability (`secrets GITHUB_TOKEN` or `secrets.read:GITHUB_TOKEN`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus plugins grants revoke [OPTIONS] <ID> [CAPABILITY]
+
+Arguments:
+  <ID>
+          The plugin id
+
+  [CAPABILITY]
+          One capability
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins grants help [COMMAND]
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins grants help show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus plugins grants help show
+```
+
+## `prometheus plugins grants help approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus plugins grants help approve
+```
+
+## `prometheus plugins grants help revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus plugins grants help revoke
+```
+
+## `prometheus plugins grants help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins grants help help
 ```
 
 ## `prometheus plugins test-adapter`
@@ -9326,8 +9642,73 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins help [COMMAND]
 
 Commands:
+  list          Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+  enable        Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable       Disable a plugin (it keeps its grants)
+  grants        Show, approve or revoke a plugin's capability grants
   test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
   help          Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins help list`
+
+```text
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+
+Usage: prometheus plugins help list
+```
+
+## `prometheus plugins help enable`
+
+```text
+Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+
+Usage: prometheus plugins help enable
+```
+
+## `prometheus plugins help disable`
+
+```text
+Disable a plugin (it keeps its grants)
+
+Usage: prometheus plugins help disable
+```
+
+## `prometheus plugins help grants`
+
+```text
+Show, approve or revoke a plugin's capability grants
+
+Usage: prometheus plugins help grants [COMMAND]
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+```
+
+## `prometheus plugins help grants show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus plugins help grants show
+```
+
+## `prometheus plugins help grants approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus plugins help grants approve
+```
+
+## `prometheus plugins help grants revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus plugins help grants revoke
 ```
 
 ## `prometheus plugins help test-adapter`
@@ -10349,7 +10730,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -11966,12 +12347,77 @@ Usage: prometheus help pairing revoke
 ## `prometheus help plugins`
 
 ```text
-Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
 
 Usage: prometheus help plugins [COMMAND]
 
 Commands:
+  list          Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+  enable        Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable       Disable a plugin (it keeps its grants)
+  grants        Show, approve or revoke a plugin's capability grants
   test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+```
+
+## `prometheus help plugins list`
+
+```text
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled` or `error`) and why it does not load
+
+Usage: prometheus help plugins list
+```
+
+## `prometheus help plugins enable`
+
+```text
+Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+
+Usage: prometheus help plugins enable
+```
+
+## `prometheus help plugins disable`
+
+```text
+Disable a plugin (it keeps its grants)
+
+Usage: prometheus help plugins disable
+```
+
+## `prometheus help plugins grants`
+
+```text
+Show, approve or revoke a plugin's capability grants
+
+Usage: prometheus help plugins grants [COMMAND]
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+```
+
+## `prometheus help plugins grants show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus help plugins grants show
+```
+
+## `prometheus help plugins grants approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus help plugins grants approve
+```
+
+## `prometheus help plugins grants revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus help plugins grants revoke
 ```
 
 ## `prometheus help plugins test-adapter`
@@ -12184,6 +12630,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.runtimes_doctor.v1` | `prometheus runtimes doctor` |
 | `prometheus.runtimes_exclude.v1` | `prometheus runtimes exclude list` |
 | `prometheus.grants.v1` | `prometheus grants list` |
+| `prometheus.plugins.v1` | `prometheus plugins list` |
 | `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.prompt_size.v1` | `prometheus prompt size` |
 | `prometheus.config.v1` | `prometheus config show` |

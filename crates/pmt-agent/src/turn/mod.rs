@@ -165,6 +165,21 @@ pub struct AgentSetup {
     /// The session's memory: per-turn recall and the `memory` tool's turn
     /// state (pass the same port to `AgentTools::with_memory`).
     pub memory: Option<Arc<dyn crate::tools::MemoryPort>>,
+    /// Plugin turn hooks (`pre_llm_call`).
+    pub turn_hooks: Option<Arc<dyn TurnHooks>>,
+}
+
+/// Plugin hooks the turn loop fires (spec: plugin-system, `pre_llm_call`
+/// context preserves the prompt cache).
+pub trait TurnHooks: Send + Sync {
+    /// Fired once per turn before the first model call; the returned text
+    /// rides on this turn's user message on the wire only, never in the
+    /// system prompt or stored history.
+    fn pre_llm_call<'a>(
+        &'a self,
+        session_id: &'a str,
+        user_message: &'a str,
+    ) -> model::BoxFuture<'a, Option<String>>;
 }
 
 /// Updates a [`PromptSetup`] from the current disk state.
@@ -199,6 +214,7 @@ impl AgentSetup {
             summarizer: None,
             refresh_prompt: None,
             memory: None,
+            turn_hooks: None,
         }
     }
 }

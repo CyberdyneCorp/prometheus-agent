@@ -98,6 +98,7 @@ tools:
     cargo install --locked "cargo-deny@$(pin CARGO_DENY_VERSION)"
     cargo install --locked "cargo-nextest@$(pin CARGO_NEXTEST_VERSION)"
     cargo install --locked "mdbook@$(pin MDBOOK_VERSION)"
+    cargo install --locked "cargo-component@$(pin CARGO_COMPONENT_VERSION)"
     npm install -g "@fission-ai/openspec@$(pin OPENSPEC_VERSION)"
 
 # Remove build output.

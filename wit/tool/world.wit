@@ -1,0 +1,25 @@
+/// Tools the model can call (spec: plugin-system, Plugin tool registration).
+/// The host reads `tools` once per instance; the tools join a session's
+/// tool list only when the session starts.
+package prometheus:tool@1.0.0;
+
+interface plugin {
+    record tool-spec {
+        /// Unique across core tools and other plugins (an override of a
+        /// core tool needs the `tools_override` grant).
+        name: string,
+        description: string,
+        /// JSON Schema of the arguments object.
+        parameters: string,
+    }
+
+    tools: func() -> list<tool-spec>;
+    /// `arguments` is the validated JSON object; `ok` is the result text,
+    /// `err` an error the model sees.
+    call: func(name: string, arguments: string) -> result<string, string>;
+}
+
+world tool {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

@@ -98,7 +98,7 @@ fn unknown_names_and_plugin_directories_are_refused() {
     );
     assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
     assert!(
-        stderr(&out).contains("WASM plugin host"),
+        stderr(&out).contains("platform-adapter world host"),
         "{}",
         stderr(&out)
     );

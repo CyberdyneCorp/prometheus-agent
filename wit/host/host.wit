@@ -1,0 +1,150 @@
+/// The host interfaces Prometheus offers to WASM plugins (spec:
+/// plugin-system, Host interfaces offered to plugins). Every import except
+/// `log`, `events` and `session` is gated by a granted capability; a call
+/// the grant does not cover returns `host-error.denied` with the text
+/// `capability_denied: <capability> <detail>`.
+///
+/// Versioning (spec: WIT world versioning and compatibility): within a
+/// major version only additions are allowed, and every added record field
+/// is an `option`. A deprecated function stays for two minor releases.
+package prometheus:host@1.0.0;
+
+interface types {
+    /// Why a host call failed.
+    variant host-error {
+        /// The grant does not cover the call:
+        /// `capability_denied: <capability> <detail>`.
+        denied(string),
+        /// The arguments are invalid (a bad key, path or event name).
+        invalid(string),
+        /// The operation was allowed but failed.
+        failed(string),
+    }
+}
+
+/// Always available; lines go to the profile log tagged with the plugin id.
+interface log {
+    enum level {
+        trace,
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    log: func(level: level, message: string);
+}
+
+/// Key-value pairs and files under `<profile_home>/plugin-data/<id>/` of the
+/// instance's own profile.
+interface state {
+    use types.{host-error};
+
+    get: func(key: string) -> result<option<list<u8>>, host-error>;
+    set: func(key: string, value: list<u8>) -> result<_, host-error>;
+    delete: func(key: string) -> result<_, host-error>;
+    keys: func() -> result<list<string>, host-error>;
+    /// `path` is relative to the plugin's files directory; `..` and
+    /// absolute paths are invalid.
+    read-file: func(path: string) -> result<list<u8>, host-error>;
+    write-file: func(path: string, contents: list<u8>) -> result<_, host-error>;
+}
+
+/// Outbound HTTP to the hosts in the `network` capability.
+interface http {
+    use types.{host-error};
+
+    record request {
+        method: string,
+        url: string,
+        headers: list<tuple<string, string>>,
+        body: option<list<u8>>,
+    }
+
+    record response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    send: func(request: request) -> result<response, host-error>;
+}
+
+/// The secrets named in the `secrets` capability, and no others.
+interface secrets {
+    use types.{host-error};
+
+    get: func(name: string) -> result<string, host-error>;
+}
+
+/// Model calls on the profile's active provider (`llm` capability).
+interface llm {
+    use types.{host-error};
+
+    record message {
+        role: string,
+        content: string,
+    }
+
+    record request {
+        messages: list<message>,
+        /// Needs `allow_model_override` and the model in `allowed_models`.
+        model: option<string>,
+        /// Needs `allow_provider_override`.
+        provider: option<string>,
+        max-tokens: option<u32>,
+    }
+
+    complete: func(request: request) -> result<string, host-error>;
+    /// `schema` is a JSON Schema; the answer is JSON matching it.
+    complete-structured: func(request: request, schema: string) -> result<string, host-error>;
+}
+
+/// Calls the tools in the `tools_call` capability; arguments and results
+/// are JSON text.
+interface tools {
+    use types.{host-error};
+
+    dispatch: func(name: string, arguments: string) -> result<string, host-error>;
+}
+
+/// The plugin event bus; names are published as `<plugin_id>:<name>`.
+interface events {
+    use types.{host-error};
+
+    emit: func(name: string, payload: string) -> result<_, host-error>;
+    subscribe: func(pattern: string) -> result<_, host-error>;
+}
+
+/// The plugin's own settings, `plugins.entries.<id>.*` (values are JSON).
+interface config {
+    use types.{host-error};
+
+    get: func(key: string) -> result<option<string>, host-error>;
+    set: func(key: string, value: string) -> result<_, host-error>;
+}
+
+/// Read-only facts about where the call runs.
+interface session {
+    record info {
+        session-id: option<string>,
+        profile: string,
+        surface: string,
+        cwd: option<string>,
+    }
+
+    current: func() -> info;
+}
+
+/// Every host import; each plugin world includes it.
+world imports {
+    import log;
+    import state;
+    import http;
+    import secrets;
+    import llm;
+    import tools;
+    import events;
+    import config;
+    import session;
+}

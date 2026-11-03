@@ -24,7 +24,7 @@ The project SHALL publish a `SECURITY.md` that classifies as security boundaries
 - **THEN** it SHALL be treated as an in-scope private finding
 
 ### Requirement: Typed capability vocabulary
-The system SHALL express every permission as a capability from a closed vocabulary: `fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host-pattern>[:<port>]`, `net.listen:loopback[:<port>]`, `process.spawn:<program|*>`, `secrets.read:<NAME>`, `llm.call[:<model-role>]`, `tools.call:<tool>`, `tools.override:<tool>`, `ui.<surface>`, `browser.real_profile`; an unrecognized capability string in config, a plugin manifest or a grants file SHALL be a load-time error naming the string, and globs SHALL be resolved against canonical paths with symlinks resolved.
+The system SHALL express every permission as a capability from a closed vocabulary: `fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host-pattern>[:<port>]`, `net.listen:loopback[:<port>]`, `process.spawn:<program|*>`, `secrets.read:<NAME>`, `llm.call[:<model-role>]`, `tools.call:<tool>`, `tools.override:<tool>`, `ui.<surface>`, `browser.real_profile`, and the plugin rights `plugin.<right>[:<target>]` that `plugin-system` capability declarations map to (`hook`, `command`, `cli_command`, `prompt_section`, `provider`, `provider_override`, `approval_transport`, `inject_messages`, `platform_action`, `llm_model`, `llm_provider_override`); an unrecognized capability string in config, a plugin manifest or a grants file SHALL be a load-time error naming the string, and globs SHALL be resolved against canonical paths with symlinks resolved.
 **Milestone:** M1
 
 #### Scenario: Unknown capability

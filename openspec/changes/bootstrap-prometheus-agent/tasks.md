@@ -301,11 +301,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 28. M2 WASM plugin host
 
-- [ ] 28.1 Define the WIT worlds (`tool`, `hook`, `provider`, `platform-adapter`, `memory-provider`, `context-engine`, `terminal-backend`, `ui-panel`, `delegation-router`) with versioning rules; verify that a sample component per world builds with `cargo component` (spec: plugin-system)
-- [ ] 28.2 Implement `plugin.toml` manifest parsing (kinds `wasm`/`mcp`/`python`), discovery sources and identity, and opt-in enablement; verify that a discovered plugin stays disabled until enabled (spec: plugin-system)
-- [ ] 28.3 Implement capability declarations and user-approved, digest-bound grants pinned to plugin identity; verify that a changed digest invalidates the grant (spec: plugin-system, spec: security-boundaries)
-- [ ] 28.4 Implement the wasmtime host with fuel, epoch interruption and memory caps, host interfaces, profile-scoped plugin state and isolation; verify that an infinite loop is interrupted within the bound (spec: plugin-system)
-- [ ] 28.5 Implement plugin tool registration, the typed hook registry (closed list), versioned payloads, hook isolation and time bounds, `pre_tool_call` directives and `pre_llm_call` context that preserves the prompt cache; verify that an unknown hook name fails at load (spec: plugin-system)
+- [x] 28.1 Define the WIT worlds (`tool`, `hook`, `provider`, `platform-adapter`, `memory-provider`, `context-engine`, `terminal-backend`, `ui-panel`, `delegation-router`) with versioning rules; verify that a sample component per world builds with `cargo component` (spec: plugin-system)
+- [x] 28.2 Implement `plugin.toml` manifest parsing (kinds `wasm`/`mcp`/`python`), discovery sources and identity, and opt-in enablement; verify that a discovered plugin stays disabled until enabled (spec: plugin-system)
+- [x] 28.3 Implement capability declarations and user-approved, digest-bound grants pinned to plugin identity; verify that a changed digest invalidates the grant (spec: plugin-system, spec: security-boundaries)
+- [x] 28.4 Implement the wasmtime host with fuel, epoch interruption and memory caps, host interfaces, profile-scoped plugin state and isolation; verify that an infinite loop is interrupted within the bound (spec: plugin-system)
+- [x] 28.5 Implement plugin tool registration, the typed hook registry (closed list), versioned payloads, hook isolation and time bounds, `pre_tool_call` directives and `pre_llm_call` context that preserves the prompt cache; verify that an unknown hook name fails at load (spec: plugin-system)
 - [ ] 28.6 Implement bounded frozen system-prompt sections, plugin slash commands, the event bus, plugin-bundled skills, the LLM access gate and fail-closed provider plugins; verify with sample plugins (spec: plugin-system)
 - [ ] 28.7 Implement load order, dependencies and deadlines, hot reload that respects the prompt-cache invariant, and safe mode (`--safe-mode`); verify that reload defers tools to the next session unless `--now` (spec: plugin-system)
 - [ ] 28.8 Implement the plugin catalog, kill list, signed packages with provenance and `--allow-unsigned` recorded, and the `plugins` CLI; verify that an unsigned catalog install is refused by default (spec: plugin-system, spec: security-boundaries)

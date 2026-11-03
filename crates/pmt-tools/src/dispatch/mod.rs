@@ -183,11 +183,11 @@ impl Dispatcher {
                 ToolResult::error(format!("unknown tool: {}", call.name)),
             );
         };
-        let arguments = match checked_arguments(call, tool) {
+        let mut arguments = match checked_arguments(call, tool) {
             Ok(arguments) => arguments,
             Err(result) => return (raw(call), result),
         };
-        let result = match self.admit(call, tool, &arguments).await {
+        let result = match self.admit(call, tool, &mut arguments).await {
             Ok(()) => match (&tool.executor, agent) {
                 (Executor::AgentLoop, Some(agent)) => {
                     // The loop owns their timing (clarify waits for a human).
@@ -200,12 +200,13 @@ impl Dispatcher {
         (arguments, result)
     }
 
-    /// `pre_tool_call` hooks, capability re-check and approval gate.
+    /// `pre_tool_call` hooks (which may rewrite `arguments`), capability
+    /// re-check and approval gate.
     async fn admit(
         &self,
         call: &ToolCall,
         tool: &RegisteredTool,
-        arguments: &Value,
+        arguments: &mut Value,
     ) -> Result<(), ToolResult> {
         let setup = &self.setup;
         let hook_call = HookCall {
@@ -218,7 +219,12 @@ impl Dispatcher {
             PreDecision::Continue => None,
             PreDecision::Block(message) => return Err(ToolResult::text(Status::Blocked, message)),
             PreDecision::Escalate(escalation) => Some(escalation),
+            PreDecision::Modify(fields) => {
+                *arguments = modified(call, tool, arguments, fields)?;
+                None
+            }
         };
+        let arguments = &*arguments;
         let held = setup
             .capabilities
             .current()
@@ -310,6 +316,35 @@ fn checked_arguments(call: &ToolCall, tool: &RegisteredTool) -> Result<Value, To
         call.name,
         lines.join("\n")
     )))
+}
+
+/// `arguments` with a hook's `fields` shallow-merged in, re-validated
+/// against the tool schema; a violation blocks the call.
+fn modified(
+    call: &ToolCall,
+    tool: &RegisteredTool,
+    arguments: &Value,
+    fields: serde_json::Map<String, Value>,
+) -> Result<Value, ToolResult> {
+    let mut merged = arguments.clone();
+    if let Value::Object(map) = &mut merged {
+        map.extend(fields);
+    }
+    let schema = &tool.descriptor.parameters;
+    args::coerce(schema, &mut merged);
+    let violations = args::validate(schema, &merged);
+    if violations.is_empty() {
+        return Ok(merged);
+    }
+    let lines: Vec<String> = violations.iter().map(ToString::to_string).collect();
+    Err(ToolResult::text(
+        Status::Blocked,
+        format!(
+            "pre_tool_call modified the arguments of {} into invalid ones:\n{}",
+            call.name,
+            lines.join("\n")
+        ),
+    ))
 }
 
 /// The raw argument text, for hooks of calls whose arguments did not

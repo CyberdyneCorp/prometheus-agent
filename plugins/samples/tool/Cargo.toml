@@ -1,0 +1,21 @@
+[package]
+name = "sample-tool"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen-rt.workspace = true
+
+[package.metadata.component]
+package = "prometheus-samples:tool"
+
+[package.metadata.component.target]
+path = "../../../wit/tool"
+world = "tool"
+
+[package.metadata.component.target.dependencies]
+"prometheus:host" = { path = "../../../wit/host" }

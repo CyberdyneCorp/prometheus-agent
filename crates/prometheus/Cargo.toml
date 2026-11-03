@@ -77,6 +77,7 @@ pmt-adapters-webhook = { workspace = true, optional = true }
 pmt-adapters-whatsapp = { workspace = true, optional = true }
 pmt-memory.workspace = true
 pmt-net.workspace = true
+pmt-plugins.workspace = true
 pmt-obs.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
@@ -93,6 +94,7 @@ crossterm.workspace = true
 # `/copy` in the TUI: the OSC 52 clipboard sequence carries base64.
 base64.workspace = true
 reqwest.workspace = true
+semver.workspace = true
 rpassword.workspace = true
 rustyline.workspace = true
 serde.workspace = true
@@ -119,6 +121,7 @@ sha2.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+pmt-plugins = { workspace = true, features = ["testkit"] }
 minisign.workspace = true
 tar.workspace = true
 rusqlite.workspace = true

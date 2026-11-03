@@ -1,0 +1,25 @@
+# WASM plugins built from this repository: the sample plugin of every WIT
+# world (`samples/`, built with `cargo component`, spec: plugin-system) and
+# the plugins the host's tests run (`testing/`). A workspace of its own:
+# everything here targets wasm32-unknown-unknown and is never part of the
+# main workspace build. `cargo xtask plugin-samples` builds the samples.
+[workspace]
+resolver = "3"
+members = ["samples/*", "testing/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+wit-bindgen-rt = { version = "0.41", features = ["bitflags"] }
+wit-bindgen = { version = "0.41", default-features = false, features = ["macros", "realloc"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false

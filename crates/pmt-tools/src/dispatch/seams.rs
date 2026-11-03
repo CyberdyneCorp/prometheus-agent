@@ -42,6 +42,10 @@ pub enum PreDecision {
     /// Run it only after a human approval (the approval gate asks; with no
     /// channel the call is denied naming the rule).
     Escalate(Escalation),
+    /// Run it with these fields shallow-merged into the arguments; merged
+    /// arguments that break the tool schema block the call with the
+    /// validation error.
+    Modify(serde_json::Map<String, Value>),
 }
 
 /// A plugin rule asking for human approval of one call.

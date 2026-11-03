@@ -235,8 +235,8 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::PairingCommand,
     },
-    /// Plugin tools: `plugins test-adapter <platform|path>` runs the adapter
-    /// conformance kit against a built-in mock of the platform.
+    /// Plugins: list, enable and disable them, manage their capability
+    /// grants, and run the adapter conformance kit (`plugins test-adapter`).
     Plugins {
         /// The plugins subcommand.
         #[command(subcommand)]

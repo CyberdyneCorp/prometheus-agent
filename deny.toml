@@ -44,6 +44,117 @@ allow = ["BSL-1.0"]
 crate = "error-code"
 allow = ["BSL-1.0"]
 
+# The WASM plugin host (design D7): wasmtime, Cranelift and their internal
+# crates are Apache-2.0 with the LLVM exception, which only adds a
+# permission to Apache-2.0; allowed for these crates only.
+[[licenses.exceptions]]
+crate = "cranelift-assembler-x64"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-assembler-x64-meta"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-bforest"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-bitset"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-codegen"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-codegen-meta"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-codegen-shared"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-control"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-entity"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-frontend"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-isle"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-native"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "cranelift-srcgen"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "pulley-interpreter"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "pulley-macros"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "regalloc2"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "target-lexicon"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-environ"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-component-macro"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-component-util"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-core"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-cranelift"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-jit-icache-coherence"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-unwinder"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-versioned-export-macros"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
+[[licenses.exceptions]]
+crate = "wasmtime-internal-wit-bindgen"
+allow = ["Apache-2.0 WITH LLVM-exception"]
+
 [licenses.private]
 # Workspace crates are `publish = false` and carry no license until one is chosen.
 ignore = true
