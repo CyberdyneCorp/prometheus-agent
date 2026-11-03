@@ -109,11 +109,11 @@ async fn an_ungranted_platform_verb_returns_a_structured_error_without_an_adapte
         "acts",
         "testing-hooks",
         HOOK,
-        "commands = [\"react\", \"title\"]\nplatform_actions = [\"add_reaction\"]",
+        "commands = [\"react\", \"retitle\"]\nplatform_actions = [\"add_reaction\"]",
     );
-    fake.set("acts", "commands", "\"react,title\"");
+    fake.set("acts", "commands", "\"react,retitle\"");
     let loaded = profile.load(&Runtime::new().unwrap(), &fake.ports());
-    let command = loaded.contributions.command("title").unwrap().clone();
+    let command = loaded.contributions.command("retitle").unwrap().clone();
     let answer = tokio::task::spawn_blocking(move || command.run(&session(), "discord c1 t1"))
         .await
         .unwrap()

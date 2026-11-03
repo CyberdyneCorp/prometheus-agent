@@ -289,6 +289,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
 | `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
 | `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |
+| `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
+| `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |

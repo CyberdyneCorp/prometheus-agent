@@ -2124,3 +2124,30 @@ capabilities = [
 
 [plugin-system."Model-provider plugins"]
 "Plugin cannot silently replace a built-in" = ["crates/pmt-plugins/tests/surfaces.rs::a_plugin_cannot_silently_replace_a_builtin_provider"]
+
+[plugin-system."Shell hooks with first-use consent"]
+"Exit 2 blocks a tool call" = ["crates/prometheus/tests/plugins_hooks.rs::exit_2_blocks_a_tool_call_once_the_hook_is_approved", "crates/prometheus/src/hooks_host/shell.rs::exit_two_blocks_with_stdout_then_stderr_then_the_default"]
+"Edited script needs re-approval" = ["crates/prometheus/tests/plugins_hooks.rs::an_edited_script_needs_approval_again"]
+
+[plugin-system."Hooks CLI"]
+"Test shows fail-closed outcome" = ["crates/prometheus/tests/plugins_hooks.rs::hooks_test_shows_the_fail_closed_outcome"]
+
+[plugin-system."Gateway hook directories"]
+"Unapproved hook directory is inert" = ["crates/prometheus/tests/plugins_hooks.rs::an_unapproved_hook_directory_is_inert"]
+
+[plugin-system."Outbound webhooks"]
+"Signed delivery verifiable by receiver" = ["crates/prometheus/tests/plugins_webhooks.rs::a_signed_delivery_is_verifiable_by_the_receiver"]
+"Dead endpoint never stalls a turn" = ["crates/prometheus/tests/plugins_webhooks.rs::a_dead_endpoint_never_stalls_a_turn"]
+
+[plugin-system."Plugin CLI subcommands"]
+"Honcho management command" = { tests = ["crates/prometheus/tests/plugins_surfaces.rs::a_plugin_command_runs_with_its_exit_code_and_shows_in_help"], note = "checked with a WASM plugin's command; hosting the bridged honcho memory provider's commands is the python bridge's (task 33.x)" }
+
+[plugin-system."Approval transports"]
+"Transport cannot widen scope" = ["crates/prometheus/tests/plugins_surfaces.rs::a_transport_cannot_widen_a_once_only_request", "crates/pmt-tools/src/approval/hooks.rs::a_transport_cannot_widen_a_once_only_request"]
+
+[plugin-system."Plugin live messages and message injection"]
+"Progress message edits in place" = ["crates/prometheus/tests/plugins_messaging.rs::a_progress_message_is_edited_in_place", "crates/pmt-plugins/tests/surfaces.rs::injection_needs_its_grant_and_live_messages_bind_to_the_calling_session"]
+"Injection into another profile refused" = ["crates/prometheus/tests/plugins_messaging.rs::injection_reaches_the_plugins_own_profile_only"]
+
+[plugin-system."Platform actions"]
+"Ungranted verb returns structured error" = ["crates/pmt-plugins/tests/surfaces.rs::an_ungranted_platform_verb_returns_a_structured_error_without_an_adapter_call"]

@@ -193,6 +193,8 @@ impl DaemonHost {
     /// Hands sessions the started messaging gateway (`send_message`).
     pub(super) fn set_gateway(&self, gateway: pmt_gateway::messaging::Gateway) {
         let _ = self.gateway.set(gateway);
+        // Plugins post, inject and act through the same gateway.
+        crate::plugins_host::messaging::set_gateway(Arc::clone(&self.gateway));
     }
 
     /// The served profile names.

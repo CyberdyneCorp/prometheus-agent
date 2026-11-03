@@ -9,7 +9,7 @@
 //! as the gateway's own JSON answer.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use pmt_config::ProfileScope;
 use pmt_core::error::Error;
@@ -96,17 +96,5 @@ fn pre_command(reply: Reply) -> Option<Value> {
         Reply::Context(text) => Some(json!({"action": "rewrite", "text": text})),
         Reply::Modify(text) => serde_json::from_str(&text).ok(),
         Reply::None | Reply::Approve(_) => None,
-    }
-}
-
-/// When a profile's set was last checked (for [`super::current`]).
-pub(super) fn due(last: &mut Option<Instant>, every: Duration) -> bool {
-    let now = Instant::now();
-    match last {
-        Some(at) if now.duration_since(*at) < every => false,
-        _ => {
-            *last = Some(now);
-            true
-        }
     }
 }

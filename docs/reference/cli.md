@@ -72,6 +72,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -V, --version
           Print version
 
@@ -221,6 +224,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
 
@@ -319,6 +325,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -373,6 +382,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -425,6 +437,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -465,6 +480,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -503,6 +521,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -581,6 +602,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -616,6 +640,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -656,6 +683,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -695,6 +725,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -739,6 +772,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -779,6 +815,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -815,6 +854,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -850,6 +892,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -894,6 +939,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -930,6 +978,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -965,6 +1016,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1119,6 +1173,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1159,6 +1216,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1194,6 +1254,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1238,6 +1301,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1277,6 +1343,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1320,6 +1389,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -1441,6 +1513,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1479,6 +1554,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1519,6 +1597,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1563,6 +1644,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1605,6 +1689,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1649,6 +1736,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1688,6 +1778,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1729,6 +1822,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1768,6 +1864,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1809,6 +1908,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1845,6 +1947,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1880,6 +1985,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1926,6 +2034,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1961,6 +2072,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2001,6 +2115,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2054,6 +2171,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2094,6 +2214,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2129,6 +2252,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2169,6 +2295,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2286,6 +2415,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2321,6 +2453,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2362,6 +2497,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2402,6 +2540,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2441,6 +2582,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2539,6 +2683,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2575,6 +2722,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2610,6 +2760,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2656,6 +2809,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2976,6 +3132,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3011,6 +3170,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3076,6 +3238,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3115,6 +3280,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3187,6 +3355,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3226,6 +3397,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3267,6 +3441,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3306,6 +3483,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3349,6 +3529,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3404,6 +3587,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3461,6 +3647,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3496,6 +3685,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3537,6 +3729,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3576,6 +3771,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3625,6 +3823,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3812,6 +4013,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3850,6 +4054,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3890,6 +4097,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3969,6 +4179,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4019,6 +4232,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4061,6 +4277,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4142,6 +4361,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4177,6 +4399,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4216,6 +4441,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4257,6 +4485,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4295,6 +4526,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4399,6 +4633,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4434,6 +4671,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4499,6 +4739,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4541,6 +4784,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4591,6 +4837,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4634,6 +4883,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4674,6 +4926,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4713,6 +4968,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4757,6 +5015,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4799,6 +5060,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4956,6 +5220,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4997,6 +5264,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5046,6 +5316,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5085,6 +5358,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5161,6 +5437,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --session <SESSION>
           Only this session (id, id prefix or title)
 
@@ -5216,6 +5495,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5255,6 +5537,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5296,6 +5581,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5335,6 +5623,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5376,6 +5667,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5416,6 +5710,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5455,6 +5752,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5520,6 +5820,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5566,6 +5869,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5610,6 +5916,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5657,6 +5966,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5696,6 +6008,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5731,6 +6046,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5973,6 +6291,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6037,6 +6358,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6076,6 +6400,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6123,6 +6450,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6194,6 +6524,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6233,6 +6566,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6295,6 +6631,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -6367,6 +6706,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6414,6 +6756,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6466,6 +6811,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6511,6 +6859,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6546,6 +6897,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6645,6 +6999,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6680,6 +7037,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6721,6 +7081,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6761,6 +7124,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6796,6 +7162,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6896,6 +7265,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6952,6 +7324,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6987,6 +7362,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7027,6 +7405,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7070,6 +7451,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7119,6 +7503,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -7230,6 +7617,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7268,6 +7658,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7312,6 +7705,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7354,6 +7750,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7398,6 +7797,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7436,6 +7838,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7477,6 +7882,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7515,6 +7923,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7639,6 +8050,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7677,6 +8091,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7717,6 +8134,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7795,6 +8215,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7856,6 +8279,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -7945,6 +8371,9 @@ Options:
   -y, --yes
           Confirm `--restore-snapshots` without asking
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --backup
           Also write a full home archive before the swap (`update.pre_update_backup = "full"` for this run)
 
@@ -7996,6 +8425,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8032,6 +8464,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8067,6 +8502,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8152,6 +8590,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8191,6 +8632,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8226,6 +8670,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8263,6 +8710,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8298,6 +8748,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8335,6 +8788,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8370,6 +8826,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8416,6 +8875,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8454,6 +8916,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8597,6 +9062,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8632,6 +9100,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8669,6 +9140,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8705,6 +9179,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8740,6 +9217,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8782,6 +9262,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8827,6 +9310,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8867,6 +9353,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8906,6 +9395,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9005,6 +9497,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9040,6 +9535,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9088,6 +9586,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9151,6 +9652,9 @@ Options:
       --write [<PATH>]
           Write the manifest to PATH (default `<profile>/slack-manifest.json`)
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9191,6 +9695,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9229,6 +9736,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9298,6 +9808,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9337,6 +9850,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9548,6 +10064,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9586,6 +10105,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9630,6 +10152,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9673,6 +10198,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9715,6 +10243,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9792,6 +10323,8 @@ Commands:
   disable        Disable a plugin (it keeps its grants)
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
+  run            Runs a command a plugin registered (`cli_commands`), or lists them
+  hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
@@ -9829,6 +10362,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9891,6 +10427,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9931,6 +10470,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9966,6 +10508,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10007,6 +10552,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10042,6 +10590,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10086,6 +10637,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10125,6 +10679,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10175,6 +10732,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10211,8 +10771,390 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
+```
+
+## `prometheus plugins run`
+
+```text
+Runs a command a plugin registered (`cli_commands`), or lists them
+
+Usage: prometheus plugins run [OPTIONS] <ID> [COMMAND] [ARGS]...
+
+Arguments:
+  <ID>
+          The plugin id
+
+  [COMMAND]
+          The command (its list when omitted)
+
+  [ARGS]...
+          Its arguments
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks`
+
+```text
+Shell hooks, gateway hook directories and outbound webhooks
+
+Usage: prometheus plugins hooks [OPTIONS] <COMMAND>
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus plugins hooks list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus plugins hooks test [OPTIONS] <EVENT>
+
+Arguments:
+  <EVENT>
+          The hook event (`pre_tool_call`...)
+
+Options:
+      --for-tool <TOOL>
+          The tool name of a tool event (matchers apply to it)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --payload-file <PATH>
+          A JSON object merged into the synthetic payload
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus plugins hooks allow [OPTIONS] [EVENT] [COMMAND]
+
+Arguments:
+  [EVENT]
+          The event
+
+  [COMMAND]
+          The command
+
+Options:
+      --dir <NAME>
+          A hook directory under `<profile_home>/hooks/`
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus plugins hooks revoke [OPTIONS] <COMMAND>
+
+Arguments:
+  <COMMAND>
+          The command, or the directory name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus plugins hooks doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins hooks help [COMMAND]
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins hooks help list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus plugins hooks help list
+```
+
+## `prometheus plugins hooks help test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus plugins hooks help test
+```
+
+## `prometheus plugins hooks help allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus plugins hooks help allow
+```
+
+## `prometheus plugins hooks help revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus plugins hooks help revoke
+```
+
+## `prometheus plugins hooks help doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus plugins hooks help doctor
+```
+
+## `prometheus plugins hooks help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins hooks help help
 ```
 
 ## `prometheus plugins diff-grants`
@@ -10250,6 +11192,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10290,6 +11235,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10333,6 +11281,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10372,6 +11323,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10416,6 +11370,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10458,6 +11415,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10545,6 +11505,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10588,6 +11551,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10627,6 +11593,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10671,6 +11640,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10714,6 +11686,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10749,6 +11724,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10790,6 +11768,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10830,6 +11811,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10851,6 +11835,8 @@ Commands:
   disable        Disable a plugin (it keeps its grants)
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
+  run            Runs a command a plugin registered (`cli_commands`), or lists them
+  hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
@@ -10935,6 +11921,69 @@ Usage: prometheus plugins help update
 List the plugins whose catalog ref or package moved
 
 Usage: prometheus plugins help check-updates
+```
+
+## `prometheus plugins help run`
+
+```text
+Runs a command a plugin registered (`cli_commands`), or lists them
+
+Usage: prometheus plugins help run
+```
+
+## `prometheus plugins help hooks`
+
+```text
+Shell hooks, gateway hook directories and outbound webhooks
+
+Usage: prometheus plugins help hooks [COMMAND]
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+```
+
+## `prometheus plugins help hooks list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus plugins help hooks list
+```
+
+## `prometheus plugins help hooks test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus plugins help hooks test
+```
+
+## `prometheus plugins help hooks allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus plugins help hooks allow
+```
+
+## `prometheus plugins help hooks revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus plugins help hooks revoke
+```
+
+## `prometheus plugins help hooks doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus plugins help hooks doctor
 ```
 
 ## `prometheus plugins help diff-grants`
@@ -11109,6 +12158,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11151,6 +12203,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11186,6 +12241,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11230,6 +12288,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11271,6 +12332,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11365,6 +12429,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -11418,6 +12485,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -11453,6 +12523,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11500,6 +12573,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11535,6 +12611,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11576,6 +12655,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11616,6 +12698,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11651,6 +12736,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11688,6 +12776,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11723,6 +12814,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11766,6 +12860,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11801,6 +12898,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11842,6 +12942,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -11881,6 +12984,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -11963,6 +13069,9 @@ Options:
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -13756,6 +14865,8 @@ Commands:
   disable        Disable a plugin (it keeps its grants)
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
+  run            Runs a command a plugin registered (`cli_commands`), or lists them
+  hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
@@ -13839,6 +14950,69 @@ Usage: prometheus help plugins update
 List the plugins whose catalog ref or package moved
 
 Usage: prometheus help plugins check-updates
+```
+
+## `prometheus help plugins run`
+
+```text
+Runs a command a plugin registered (`cli_commands`), or lists them
+
+Usage: prometheus help plugins run
+```
+
+## `prometheus help plugins hooks`
+
+```text
+Shell hooks, gateway hook directories and outbound webhooks
+
+Usage: prometheus help plugins hooks [COMMAND]
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+```
+
+## `prometheus help plugins hooks list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus help plugins hooks list
+```
+
+## `prometheus help plugins hooks test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus help plugins hooks test
+```
+
+## `prometheus help plugins hooks allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus help plugins hooks allow
+```
+
+## `prometheus help plugins hooks revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus help plugins hooks revoke
+```
+
+## `prometheus help plugins hooks doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus help plugins hooks doctor
 ```
 
 ## `prometheus help plugins diff-grants`

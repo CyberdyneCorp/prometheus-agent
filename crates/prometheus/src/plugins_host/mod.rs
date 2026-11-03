@@ -14,8 +14,11 @@
 
 pub mod approvals;
 pub mod catalog;
+#[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;
+#[cfg(feature = "gateway")]
+pub mod messaging;
 mod ports;
 pub mod reload;
 
@@ -287,7 +290,7 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
         .unwrap_or_else(PoisonError::into_inner)
         .get(&key)
         .cloned();
-    let due = gateway::due(&mut last, every);
+    let due = due(&mut last, every);
     if let Some(at) = last {
         CHECKED
             .get_or_init(Mutex::default)
@@ -298,6 +301,18 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
     match existing {
         Some(handle) if !due => ProfilePlugins { handle },
         _ => refresh(scope, scope.dir(), false),
+    }
+}
+
+/// Whether a check is due (`last` is updated when it is).
+fn due(last: &mut Option<std::time::Instant>, every: std::time::Duration) -> bool {
+    let now = std::time::Instant::now();
+    match last {
+        Some(at) if now.duration_since(*at) < every => false,
+        _ => {
+            *last = Some(now);
+            true
+        }
     }
 }
 
@@ -373,13 +388,22 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
 /// survey without starting the WASM engine.
 fn load_now(scope: &ProfileScope, inputs: &LoadInputs<'_>, statuses: Vec<Status>) -> Loaded {
     let settings = hook_settings(scope);
-    if !statuses.iter().any(|s| s.state == State::Loaded) {
-        return Loaded::empty(statuses, settings);
+    let mut loaded = if statuses.iter().any(|s| s.state == State::Loaded) {
+        match runtime() {
+            Some(runtime) => load(runtime, &ports::ports(scope), inputs),
+            None => Loaded::empty(engine_unavailable(statuses), settings),
+        }
+    } else {
+        Loaded::empty(statuses, settings)
+    };
+    // Shell hooks, hook directories and webhooks run after the plugins'
+    // callbacks; the set was just built, so nothing else holds it yet.
+    if let Some(hooks) = Arc::get_mut(&mut loaded.hooks) {
+        crate::hooks_host::extend(scope, hooks);
+    } else {
+        tracing::warn!("shell hooks not registered: the hook set is already shared");
     }
-    match runtime() {
-        Some(runtime) => load(runtime, &ports::ports(scope), inputs),
-        None => Loaded::empty(engine_unavailable(statuses), settings),
-    }
+    loaded
 }
 
 /// The statuses of a load the WASM engine could not run: every plugin
@@ -426,7 +450,11 @@ fn fingerprint(scope: &ProfileScope, statuses: &[Status]) -> String {
         .map(|m| (m.len(), m.modified().ok()));
     // The whole section: limits, hook bounds and the settings the config
     // port serves.
-    let mut text = format!("{grants:?}|{:?}|", scope.config().plugins);
+    let mut text = format!(
+        "{grants:?}|{:?}|{}|",
+        scope.config().plugins,
+        crate::hooks_host::fingerprint(scope)
+    );
     for status in statuses {
         let _ = write!(
             text,

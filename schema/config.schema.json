@@ -2266,6 +2266,32 @@
       },
       "type": "object"
     },
+    "HooksConfig": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/ShellHook"
+        },
+        "type": "array"
+      },
+      "description": "The `[hooks]` section.",
+      "properties": {
+        "auto_accept": {
+          "default": false,
+          "description": "Run shell hooks nobody approved yet without asking (as\n`--accept-hooks` does for one run); every hook still runs in the\nsession's sandbox.",
+          "type": "boolean"
+        },
+        "outbound": {
+          "default": [],
+          "description": "Outbound webhooks: hook events sent as HTTPS `POST` requests.",
+          "items": {
+            "$ref": "#/$defs/OutboundHook"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ImageInputMode": {
       "description": "Image input routing modes.",
       "oneOf": [
@@ -2961,6 +2987,57 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "OutboundHook": {
+      "additionalProperties": false,
+      "description": "One `[[hooks.outbound]]` webhook.",
+      "properties": {
+        "events": {
+          "description": "The hook events delivered (names of the closed hook registry).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "matcher": {
+          "default": null,
+          "description": "A regular expression the tool name must match (tool events only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Unique name (logs and `prometheus plugins hooks list`).",
+          "type": "string"
+        },
+        "secret_name": {
+          "default": null,
+          "description": "The secrets-store entry whose value signs each delivery\n(`X-Prometheus-Signature-256`); unsigned without one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 10,
+          "description": "How long one delivery attempt may take.",
+          "format": "uint64",
+          "maximum": 60,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "description": "Where events are sent (`POST`): `https://`, or `http://` to a loopback\naddress.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "events"
+      ],
+      "type": "object"
     },
     "OutboxConfig": {
       "additionalProperties": false,
@@ -4545,6 +4622,40 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "ShellHook": {
+      "additionalProperties": false,
+      "description": "One `[[hooks.<event>]]` shell hook.",
+      "properties": {
+        "command": {
+          "description": "The program and its arguments, split like a shell would but run\nwithout one; the event's JSON arrives on stdin.",
+          "type": "string"
+        },
+        "fail_closed": {
+          "default": false,
+          "description": "`pre_tool_call` only: a hook that fails (cannot start, times out,\nanswers garbage) blocks the call instead of letting it run.",
+          "type": "boolean"
+        },
+        "matcher": {
+          "default": null,
+          "description": "A regular expression the tool name must match (tool events only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 60,
+          "description": "How long one run may take (clamped to 300).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
     },
     "ShutdownConfig": {
       "additionalProperties": false,
@@ -6311,6 +6422,14 @@
         }
       },
       "description": "The profile's part in the home's gateway daemon."
+    },
+    "hooks": {
+      "$ref": "#/$defs/HooksConfig",
+      "default": {
+        "auto_accept": false,
+        "outbound": []
+      },
+      "description": "Shell hooks and outbound webhooks."
     },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",

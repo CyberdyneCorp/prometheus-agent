@@ -164,6 +164,11 @@ fn run_recorded(
         scope.config().ui.interface,
         ui.quiet,
     );
+    // Only a foreground interactive chat asks about unapproved shell hooks
+    // (spec: plugin-system, Shell hooks with first-use consent).
+    if mode != Mode::OneShot && terminal::interactive() {
+        crate::hooks_host::consent::ask_pending(&scope)?;
+    }
     // The prompt is read before anything starts, so a missing file or an
     // empty pipe fails fast.
     let first = match (mode, &source) {

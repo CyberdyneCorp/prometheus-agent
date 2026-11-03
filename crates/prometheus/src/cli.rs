@@ -65,6 +65,9 @@ pub struct Cli {
         help = "Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider"
     )]
     pub safe_mode: bool,
+    /// Run shell hooks nobody approved yet (as `hooks.auto_accept`).
+    #[arg(long, global = true)]
+    pub accept_hooks: bool,
     /// `-V/--version`: the identity line (`--verbose`: as `version --verbose`).
     #[arg(short = 'V', long = "version", help = "Print version")]
     pub print_version: bool,

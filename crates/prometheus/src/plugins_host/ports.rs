@@ -26,6 +26,12 @@ pub(super) fn ports(scope: &ProfileScope) -> Ports {
         file: scope.profile().config_file(),
         entries: scope.config().plugins.entries.clone(),
     });
+    #[cfg(feature = "gateway")]
+    {
+        ports.messaging = Arc::new(super::messaging::GatewayMessaging {
+            profile: scope.name().to_string(),
+        });
+    }
     ports
 }
 

@@ -23,6 +23,7 @@ pub mod demo_cmd;
 pub mod doctor_cmd;
 pub mod fallback_cmd;
 pub mod grants_cmd;
+pub mod hooks_host;
 pub mod logs_cmd;
 pub mod memory_cmd;
 pub mod model_cmd;

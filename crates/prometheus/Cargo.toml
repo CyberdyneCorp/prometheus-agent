@@ -94,6 +94,10 @@ crossterm.workspace = true
 # `/copy` in the TUI: the OSC 52 clipboard sequence carries base64.
 base64.workspace = true
 reqwest.workspace = true
+# Shell hook and webhook matchers.
+regex.workspace = true
+# Webhook signatures (HMAC-SHA256).
+sha2.workspace = true
 semver.workspace = true
 rpassword.workspace = true
 rustyline.workspace = true

@@ -978,6 +978,9 @@ impl Live {
     /// closes the trajectory.
     pub async fn close(self, store: &Store, reason: EndReason) {
         self.end(store, reason).await;
+        // Webhooks of the session's last events go out before the process
+        // that ran it may exit.
+        crate::hooks_host::outbound::flush(crate::hooks_host::outbound::FLUSH).await;
         let trajectory = self.trajectory;
         drop(self.agent);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
@@ -1015,6 +1018,19 @@ impl Live {
         .await;
         if let Err(err) = store.end_session(self.id, reason) {
             tracing::warn!(error = %err, session = %self.id, "could not end the session");
+        }
+        // The gateway fires its own sessions' end through its hooks.
+        if self.surface() != "gateway" {
+            let fields = serde_json::json!({
+                "session_id": self.id.to_string(),
+                "reason": reason.as_str(),
+                "platform": self.surface(),
+            });
+            if let serde_json::Value::Object(fields) = fields {
+                self.plugins
+                    .fire_observer(&self.plugin_call(self.surface()), "on_session_end", fields)
+                    .await;
+            }
         }
         if let Some(browser) = &self.browser {
             browser.close_session(&self.id.to_string()).await;

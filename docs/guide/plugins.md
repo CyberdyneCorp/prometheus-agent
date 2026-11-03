@@ -36,6 +36,17 @@ $ prometheus plugins install https://github.com/x/y --ref main # exits 2
 error: --ref must be a full commit SHA
 ```
 
+Every install and update scans the plugin's files with the skills guard's
+threat patterns (reverse shells, credential exfiltration, destructive
+commands, persistence, obfuscated execution, prompt injection). A finding
+in documentation, a comment line, a changelog or a test fixture counts one
+step lower; bundled skills keep full weight. `dangerous` is refused (exit
+77, naming each finding, file and line) even with `--force`; `caution`
+installs after a yes on the terminal or with `--force` (recorded on the
+install record); a scan that fails refuses the install. A dangerous update
+leaves the installed version running. `plugins.scan_on_install = false`
+skips the scan, and the install record says so.
+
 A package is checked before anything lands in the profile. Catalog installs
 always need a signature that verifies against the catalog's publisher key;
 a local package follows `plugins.signature_policy` (`require`, the default:
@@ -160,7 +171,9 @@ The plugin interface is a set of WIT packages in `wit/`, one per world
 `context-engine`, `terminal-backend`, `ui-panel`, `delegation-router`) plus
 `wit/host`, the host interfaces every world imports: `log`, `state` (data
 under `<profile>/plugin-data/<id>/`), `http`, `secrets`, `llm`, `tools`,
-`events`, `config` (`plugins.entries.<id>.*`) and `session`. Each world
+`events`, `config` (`plugins.entries.<id>.*`) and `session`; `tool` (1.1)
+and `hook` (1.2) worlds also import `wit/messaging` (live messages,
+injection, platform actions). Each world
 versions on its own; a component built against the current or the previous
 major version of a world loads. `plugins/samples/` holds a sample plugin for
 every world, built with `cargo component` (`cargo xtask plugin-samples`).
@@ -194,6 +207,89 @@ history; a callback's context above `plugins.hook_context_max_chars` is
 written to `<profile>/hook_outputs/<session>/` and replaced by its head,
 tail and the file path.
 
+The transform hooks rewrite: `transform_tool_result`'s first answer (even
+empty) replaces a tool result before the model sees it and before it is
+stored, and `transform_llm_output`'s first non-empty answer replaces the
+turn's reply before it is delivered and stored. A plugin that registers
+`transform_llm_output` with `hold_stream` (hook world 1.2) stops replies of
+every session of the profile from streaming: surfaces show only that the
+agent is busy, commentary between tool calls is stored hidden, and when the
+hook fails or times out without a rewrite the person gets `reply withheld
+by a plugin` instead of the original. `pre_verify` fires when a turn that
+edited files is about to finish; `{action = "continue", message}` sends the
+message back as a user message, at most `agent.max_verify_nudges` (3)
+times in a row. `transform_api_error_classification` sees every failed
+provider call first; its `{reason, retryable?, should_fallback?, ...}`
+answer (a known failover reason such as `model_not_found`) decides the
+retry and fallback. Observers (`on_stream_start|delta|end`,
+`on_interim_message`, `agent_loop_stopped`, `on_skill_lifecycle`,
+`pre_approval_request`, `post_approval_response`,
+`on_human_input_request|resolved`, `post_gateway_admission` and the other
+gateway events) cannot change anything: their answers are discarded.
+
+## Shell hooks
+
+`[[hooks.<event>]]` tables in `config.toml` run programs on hook events:
+
+```toml
+[[hooks.pre_tool_call]]
+command = "~/bin/guard.sh --strict"   # split like a shell, run without one
+matcher = "terminal"                  # tool events only: a regex on the tool name
+timeout_secs = 60                     # clamped to 300
+fail_closed = false                   # pre_tool_call only
+```
+
+The event's JSON (`hook_event_name`, `tool_name`, `tool_input`,
+`session_id`, `cwd`, `profile`, `extra`) arrives on stdin; stdout may
+answer `{action = "block", message}`, `{action = "modify", args}`,
+`{action = "approve"}`, `{context}` (`pre_llm_call`) or `{action =
+"continue", message}` (`pre_verify`). Exit code 2 from a `pre_tool_call`
+hook blocks the call with its stdout, else its stderr, else `Blocked by
+shell hook.`. Any other failure lets the call go on (logged) unless the
+hook is `fail_closed`. Hooks run sandboxed, after every plugin hook, and
+only once approved: a foreground `prometheus chat` asks the first time,
+everything else skips an unapproved hook with a warning unless
+`--accept-hooks` or `hooks.auto_accept = true`. The approval is bound to the
+program's content: editing the script needs a new approval.
+`transform_api_error_classification` is for plugins only.
+
+```sh
+prometheus plugins hooks list                       # matcher, timeout, consent; webhooks signed/UNSIGNED
+prometheus plugins hooks test pre_tool_call --for-tool terminal
+prometheus plugins hooks allow pre_tool_call '~/bin/guard.sh --strict'
+prometheus plugins hooks allow --dir alert          # a gateway hook directory
+prometheus plugins hooks revoke '~/bin/guard.sh --strict'
+prometheus plugins hooks doctor                     # exit 1 on any problem
+```
+
+The messaging gateway also runs `<profile>/hooks/<name>/` directories
+(`HOOK.toml` with `name`, `description` and `events`, and an executable
+`handler` speaking the same protocol; a Hermes `HOOK.yaml` is translated).
+A directory does nothing until `plugins hooks allow --dir <name>` approves
+its handler; handlers run sandboxed and fire and forget, for gateway
+events only.
+
+## Outbound webhooks
+
+```toml
+[[hooks.outbound]]
+name = "ci"
+url = "https://ci.example.com/prometheus"   # http:// only to loopback
+events = ["on_session_end", "post_tool_call"]
+matcher = "terminal"                         # optional, tool events
+secret_name = "CI_HOOK_SECRET"               # signs X-Prometheus-Signature-256
+timeout_secs = 10
+```
+
+Each event is POSTed as `{hook_event_name, profile, tool_name, tool_input,
+session_id, cwd, extra, delivery_id, timestamp}` with `X-Prometheus-Event`,
+`X-Prometheus-Delivery` and, with a secret, `X-Prometheus-Signature-256:
+sha256=<HMAC-SHA256 of the body>`. Deliveries queue (1000 per target, the
+rest dropped with a warning) so a slow endpoint never slows a turn; a
+connection error or 5xx is retried once, redirects are not followed, the
+egress policy applies, and safe mode sends nothing. A one-shot chat waits
+up to 5 seconds at exit for its queued deliveries.
+
 ## What else plugins contribute
 
 - **System-prompt sections.** A plugin granted `prompt_section` registers
@@ -220,6 +316,29 @@ tail and the file path.
   of that name or by an enabled plugin registering it; otherwise the
   feature is unavailable with `<category> provider '<name>' is not
   installed or not enabled`, never silently another provider.
+
+- **Commands for the command line** in its `cli_commands` grant:
+  `prometheus plugins run <id> <command> [args...]` runs one (its output,
+  then its exit code; 70 when the plugin crashes) and `prometheus plugins
+  run <id>` lists them; `prometheus help` lists them under `plugin
+  commands`.
+- **An approval transport** (`approval_transport`): with
+  `plugins.approval_transport = "<plugin>:<name>"` approval requests go to
+  the plugin instead of the session's surface. It sees the redacted request
+  and the choices it may answer; an answer for another request, or a choice
+  the request does not offer (`always` on a once-only request), is denied;
+  so are errors, timeouts and a missing transport, unless
+  `plugins.approval_transport_fallback = "builtin"` asks on the surface.
+- **Live messages, injection and platform actions** (daemon sessions): a
+  plugin posts and edits a message in the calling session's chat, a
+  plugin granted `inject_messages` queues text into a conversation of its
+  own profile (never another profile's), and one granted
+  `platform_actions` adds reactions or sets thread titles; every call
+  answers what happened instead of failing.
+- **Model providers** (`providers`): a provider plugin's descriptors join
+  the session's provider registry, with its header and request hooks; an
+  id of a built-in provider is refused (the built-in stays) unless the
+  plugin holds `providers_override` for it.
 
 Plugins load in `requires_plugins` order: a plugin whose dependency is
 missing, disabled or failed is refused with `missing dependency '<id>'`,

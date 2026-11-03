@@ -30,7 +30,7 @@
 //! request), `stale` (a wrong digest), `error`, or `spin`. Commands
 //! `post <text>` (posts, then edits three times to `<text> 1..3`),
 //! `inject <session>`, `react <platform> <chat> <message>` and
-//! `title <platform> <chat> <thread>` exercise the messaging imports.
+//! `retitle <platform> <chat> <thread>` exercise the messaging imports.
 
 wit_bindgen::generate!({
     path: ["../../../wit/host", "../../../wit/messaging", "../../../wit/hook"],
@@ -275,7 +275,7 @@ fn messaging(name: &str, args: &str) -> Option<String> {
             inject::inject("from a plugin", "user", &inject::Target::SessionKey(word(0)))
         ),
         "react" => outcome(&platform::add_reaction(&word(0), &word(1), &word(2), "eyes")),
-        "title" => outcome(&platform::set_thread_title(&word(0), &word(1), &word(2), "renamed")),
+        "retitle" => outcome(&platform::set_thread_title(&word(0), &word(1), &word(2), "renamed")),
         _ => return None,
     })
 }

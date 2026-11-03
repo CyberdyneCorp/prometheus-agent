@@ -97,6 +97,9 @@ fn main() -> ExitCode {
 
 fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
     let mut set = cli.set.clone();
+    if cli.accept_hooks {
+        set.push("hooks.auto_accept=true".to_owned());
+    }
     if cli.safe_mode {
         set.push("plugins.safe_mode=true".to_owned());
     }
@@ -207,6 +210,13 @@ fn usage_failure(err: &clap::Error) -> ExitCode {
     if let Some(unknown) = unknown_command(err) {
         return failure(&unknown, json_requested());
     }
+    if err.kind() == ClapErrorKind::DisplayHelp && top_level_help() {
+        let _ = err.print();
+        if let Some(section) = plugin_commands_help() {
+            print!("{section}");
+        }
+        return ExitCode::SUCCESS;
+    }
     if display_only || !json_requested() {
         err.exit();
     }
@@ -215,6 +225,46 @@ fn usage_failure(err: &clap::Error) -> ExitCode {
     let message = first_line.strip_prefix("error: ").unwrap_or(first_line);
     let usage = Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help");
     failure(&usage, true)
+}
+
+/// Whether the command line asks for the top-level help (`prometheus
+/// help`, `prometheus --help`).
+fn top_level_help() -> bool {
+    let (_, words) = help_words();
+    matches!(words.as_slice(), [one] if one == "help" || one == "-h" || one == "--help")
+}
+
+/// The `--home` value and the other words of the command line.
+fn help_words() -> (Option<PathBuf>, Vec<String>) {
+    let mut home = None;
+    let mut words = Vec::new();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--home" {
+            home = args.next().map(PathBuf::from);
+        } else if let Some(value) = arg.strip_prefix("--home=") {
+            home = Some(PathBuf::from(value));
+        } else if !arg.starts_with('-') || arg == "-h" || arg == "--help" {
+            words.push(arg);
+        }
+    }
+    (home, words)
+}
+
+/// The enabled plugins' commands of the selected profile (spec:
+/// plugin-system, Plugin CLI subcommands).
+fn plugin_commands_help() -> Option<String> {
+    let launch = startup::launch_env().ok()?;
+    let (home, _) = help_words();
+    let ctx = prometheus::context::Context {
+        home_flag: home.as_deref(),
+        launch: &launch,
+        profile: None,
+        set: &[],
+        json: false,
+    };
+    let scope = ctx.scope().ok()?;
+    prometheus::plugins_cmd::run_cmd::help_section(&scope)
 }
 
 /// `unknown command 'sesions' (did you mean 'sessions'?)` for a mistyped

@@ -51,6 +51,9 @@ Options:
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
 

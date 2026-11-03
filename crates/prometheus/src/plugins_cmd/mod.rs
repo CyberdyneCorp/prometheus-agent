@@ -9,11 +9,13 @@
 
 mod adapter;
 mod catalog_cmd;
+pub mod hooks_cmd;
 mod inspect;
 mod install;
 mod manage;
 mod package_cmd;
 mod reload;
+pub mod run_cmd;
 mod threat;
 mod update;
 
@@ -83,6 +85,22 @@ pub enum PluginsCommand {
     },
     /// List the plugins whose catalog ref or package moved.
     CheckUpdates,
+    /// Runs a command a plugin registered (`cli_commands`), or lists them.
+    Run {
+        /// The plugin id.
+        id: String,
+        /// The command (its list when omitted).
+        command: Option<String>,
+        /// Its arguments.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Shell hooks, gateway hook directories and outbound webhooks.
+    Hooks {
+        /// What to do.
+        #[command(subcommand)]
+        action: hooks_cmd::HooksAction,
+    },
     /// The capabilities a staged update asks for beyond the current grant.
     DiffGrants {
         /// The plugin id.
@@ -255,7 +273,10 @@ fn changed(command: &PluginsCommand) -> Change<'_> {
         PluginsCommand::Install(_)
         | PluginsCommand::Update { id: None, .. }
         | PluginsCommand::Remove { .. }
-        | PluginsCommand::Adopt { .. } => Change::Plugins,
+        | PluginsCommand::Adopt { .. }
+        | PluginsCommand::Hooks {
+            action: hooks_cmd::HooksAction::Allow { .. } | hooks_cmd::HooksAction::Revoke { .. },
+        } => Change::Plugins,
         _ => Change::None,
     }
 }
@@ -284,6 +305,10 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             },
         ),
         PluginsCommand::CheckUpdates => update::check(ctx),
+        PluginsCommand::Hooks { action } => hooks_cmd::run(ctx, action),
+        PluginsCommand::Run { id, command, args } => {
+            run_cmd::run(ctx, id, command.as_deref(), args)
+        }
         PluginsCommand::DiffGrants { id } => update::diff_grants(ctx, id),
         PluginsCommand::Remove { id } => inspect::remove(ctx, id),
         PluginsCommand::Grants { command } => manage::grants(ctx, command),

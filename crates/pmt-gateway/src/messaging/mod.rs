@@ -59,6 +59,7 @@ pub mod multipart;
 pub mod operate;
 mod outbox;
 mod peer;
+pub mod plugin_ops;
 pub mod policy;
 mod profile_routes;
 pub mod proxy;

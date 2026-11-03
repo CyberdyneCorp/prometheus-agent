@@ -23,6 +23,7 @@ mod gateway_groups;
 mod gateway_platform;
 mod gateway_policy;
 mod gateway_routes;
+mod hooks;
 mod interface;
 mod models;
 mod operations;
@@ -52,6 +53,7 @@ pub use gateway::{
     resolve_policy,
 };
 pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
+pub use hooks::{HooksConfig, OutboundHook, ShellHook};
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
@@ -126,6 +128,8 @@ pub struct Config {
     pub files: FilesConfig,
     /// The profile's part in the home's gateway daemon.
     pub gateway: GatewayConfig,
+    /// Shell hooks and outbound webhooks.
+    pub hooks: HooksConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
     /// Built-in memory.
@@ -203,6 +207,7 @@ impl Default for Config {
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),
+            hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
             memory: MemoryConfig::default(),
             model: ModelConfig::default(),

@@ -224,9 +224,28 @@ skills always wait for a new session.
   `on-event`; `events.emit("updated", payload)` publishes
   `weather:updated`.
 
+- Its `surfaces` interface (hook world 1.2) holds the stream for
+  `transform_llm_output` (`hold-stream`), registers `prometheus plugins
+  run` commands (`cli-commands`, `run-cli` with argv and the terminal's
+  size; each name in the `cli_commands` capability) and approval
+  transports (`transports`, `present-approval`, which must answer with the
+  request's `id`, `digest` and one of its `choices`).
+- Transform hooks answer with `context`: the new tool result
+  (`transform_tool_result`) or reply (`transform_llm_output`).
+  `transform_api_error_classification` and `pre_verify` answer `modify`
+  with their JSON object.
+
+Tool and hook plugins also import `prometheus:messaging`:
+`conversation.post`/`edit` (a message in the calling session's chat),
+`inject.inject` (with `inject_messages`) and `platform.add-reaction` /
+`set-thread-title` (with `platform_actions`).
+
 A `provider` plugin registers named providers (image generation, web
 search, text-to-speech...) that config selects by name, such as
-`web.search_backend = "<name>"`.
+`web.search_backend = "<name>"`. Its `models` interface (provider world
+1.1) registers model providers: `descriptors()` answers JSON descriptors
+(`id`, `wire_format`, `base_url`, `secret_names`, `key_hosts`, ...), and
+`headers`/`prepare-request` shape each request the host sends.
 
 A plugin that needs another declares `requires_plugins = ["other"]`; it
 loads after it, and not at all when `other` is missing, disabled or failed.

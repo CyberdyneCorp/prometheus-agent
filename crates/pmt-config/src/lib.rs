@@ -26,6 +26,7 @@ mod gateway_check_platforms;
 mod gateway_check_routes;
 pub mod grants;
 pub mod home;
+pub mod hooks_check;
 pub mod keys;
 pub mod layers;
 pub mod layout;

@@ -3356,6 +3356,7 @@ dependencies = [
  "pulldown-cmark",
  "qrcode",
  "ratatui",
+ "regex",
  "reqwest",
  "rpassword",
  "rusqlite",
