@@ -31,8 +31,8 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::multipart::Form;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, MenuCommand,
-    Outgoing, Reaction, Select, SendError, Sent,
+    ChatInfo, ChatType, Descriptor, HistoryEntry, Inbound, Interactive, Markup, MediaKind,
+    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, Sent,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -314,6 +314,8 @@ impl Adapter for Discord {
             media_out: all,
             markup: Markup::Markdown,
             stateless_send: true,
+            can_fetch_history: true,
+            exposes_roles: true,
             ..Descriptor::new(PLATFORM, limit)
         }
     }
@@ -469,6 +471,67 @@ impl Adapter for Discord {
                 .unwrap_or(chat_id)
                 .to_owned();
             Ok(ChatInfo { name, chat_type })
+        })
+    }
+
+    fn member_roles<'a>(
+        &'a self,
+        inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
+        Box::pin(async move {
+            let guild = inbound
+                .scope_id
+                .as_deref()
+                .ok_or_else(|| SendError::Permanent("roles exist only in a server".to_owned()))?;
+            let path = format!("/guilds/{guild}/members/{}", inbound.sender_id);
+            let member = self.api()?.call(Method::GET, &path, Body::Empty).await?;
+            Ok(member["roles"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|r| r.as_str().map(str::to_owned))
+                .collect())
+        })
+    }
+
+    fn fetch_history<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        limit: usize,
+    ) -> AdapterFuture<'a, Result<Vec<HistoryEntry>, SendError>> {
+        Box::pin(async move {
+            let channel = thread_id.unwrap_or(chat_id);
+            let path = format!("/channels/{channel}/messages?limit={}", limit.clamp(1, 100));
+            let found = self.api()?.call(Method::GET, &path, Body::Empty).await?;
+            let bot = self
+                .session
+                .lock()
+                .expect("session poisoned")
+                .bot_id
+                .clone();
+            // Discord lists the newest first.
+            let mut history: Vec<HistoryEntry> = found
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|m| {
+                    let author = m["author"]["id"].as_str()?.to_owned();
+                    Some(HistoryEntry {
+                        message_id: m["id"].as_str()?.to_owned(),
+                        author_name: m["author"]["global_name"]
+                            .as_str()
+                            .or_else(|| m["author"]["username"].as_str())
+                            .unwrap_or(&author)
+                            .to_owned(),
+                        from_self: author == bot,
+                        author_id: author,
+                        text: m["content"].as_str().unwrap_or_default().to_owned(),
+                    })
+                })
+                .collect();
+            history.reverse();
+            Ok(history)
         })
     }
 

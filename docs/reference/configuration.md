@@ -142,6 +142,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
 | `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
+| `gateway.bots.allow_bots` | one of "none", "mentions", "all" | unset | `"none"`, `"mentions"`, `"all"` | `live` | `none` (default), `mentions` or `all`. |
+| `gateway.bots.burst_window_ms` | integer | unset | 0 to 60000 | `live` | Follow-up chunks of the same bot in the same chat within this many milliseconds join the same turn (default 1500). |
+| `gateway.bots.human_user_ids` | array | unset | any | `live` | Senders treated as people although their messages are marked as a bot's (posts made with the owner's own user token). |
+| `gateway.bots.platforms.<name>.allow_bots` | one of "none", "mentions", "all" | unset | `"none"`, `"mentions"`, `"all"` | `live` | `none` (default), `mentions` or `all`. |
+| `gateway.bots.platforms.<name>.burst_window_ms` | integer | unset | 0 to 60000 | `live` | Follow-up chunks of the same bot in the same chat within this many milliseconds join the same turn (default 1500). |
+| `gateway.bots.platforms.<name>.human_user_ids` | array | unset | any | `live` | Senders treated as people although their messages are marked as a bot's (posts made with the owner's own user token). |
+| `gateway.bots.platforms.<name>.require_inline_mention` | boolean | unset | any | `live` | An admitted bot message starts a turn only with a literal inline mention of this bot; a reply ping alone does not (default true). |
+| `gateway.bots.require_inline_mention` | boolean | unset | any | `live` | An admitted bot message starts a turn only with a literal inline mention of this bot; a reply ping alone does not (default true). |
 | `gateway.busy.ack` | boolean | `true` | any | `live` | Send one busy acknowledgement per conversation per 30 seconds. |
 | `gateway.busy.debounce_cap_ms` | integer | `1000` | 0 to 60000 | `live` | An input is never held longer than this for more text. |
 | `gateway.busy.debounce_ms` | integer | `350` | 0 to 10000 | `live` | Text arriving within this many milliseconds of the previous text joins it into one input. |
@@ -175,6 +183,22 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.display.tool_progress` | one of "off", "new", "all", "verbose", "log" | unset | `"off"`, `"new"`, `"all"`, `"verbose"`, `"log"` | `live` | `off`, `new`, `all` (default; `off` on Telegram), `verbose` or `log`. |
 | `gateway.display.tool_progress_command` | boolean | unset | any | `live` | `/verbose` cycles the chat's tool progress mode (default false). |
 | `gateway.display.tool_progress_grouping` | one of "accumulate", "separate" | unset | `"accumulate"`, `"separate"` | `live` | `accumulate` (default: one edited bubble) or `separate`. |
+| `gateway.groups.free_response_chats` | array | unset | any | `live` | Chats answered without a mention. |
+| `gateway.groups.history_backfill` | boolean | unset | any | `live` | Give a mention-triggered turn the channel's messages since the bot's last reply (default true on Discord and Slack). |
+| `gateway.groups.history_backfill_limit` | integer | unset | 1 to 200 | `live` | The most channel messages backfilled (default 50). |
+| `gateway.groups.ignored_chats` | array | unset | any | `live` | Chats and threads that never start a turn. |
+| `gateway.groups.mention_patterns` | array | unset | any | `live` | Case-insensitive regular expressions that count as a mention (at most 32). |
+| `gateway.groups.observe_unmentioned` | boolean | unset | any | `live` | Keep unmentioned messages of authorized group chats in the chat's session as attributed context, without a turn (default false). |
+| `gateway.groups.platforms.<name>.free_response_chats` | array | unset | any | `live` | Chats answered without a mention. |
+| `gateway.groups.platforms.<name>.history_backfill` | boolean | unset | any | `live` | Give a mention-triggered turn the channel's messages since the bot's last reply (default true on Discord and Slack). |
+| `gateway.groups.platforms.<name>.history_backfill_limit` | integer | unset | 1 to 200 | `live` | The most channel messages backfilled (default 50). |
+| `gateway.groups.platforms.<name>.ignored_chats` | array | unset | any | `live` | Chats and threads that never start a turn. |
+| `gateway.groups.platforms.<name>.mention_patterns` | array | unset | any | `live` | Case-insensitive regular expressions that count as a mention (at most 32). |
+| `gateway.groups.platforms.<name>.observe_unmentioned` | boolean | unset | any | `live` | Keep unmentioned messages of authorized group chats in the chat's session as attributed context, without a turn (default false). |
+| `gateway.groups.platforms.<name>.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
+| `gateway.groups.platforms.<name>.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
+| `gateway.groups.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
+| `gateway.groups.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
 | `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
 | `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
 | `gateway.message_timestamps.enabled` | boolean | `false` | any | `next_session` | Prefix each user message the model sees with its send time in the profile's time zone (`[Tue 2026-04-28 13:40:53 CEST]`). Frozen per session when it is created: a change applies to new sessions. |
@@ -185,6 +209,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | User ids with every command in direct messages. |
 | `gateway.platforms.<name>.allow_all` | boolean | `false` | any | `next_session` | Admit everyone (logged at WARN on every start). |
 | `gateway.platforms.<name>.allow_chats` | array of string | `[]` | any | `next_session` | Chats every member of which is admitted. |
+| `gateway.platforms.<name>.allow_roles` | array of string | unset | any | `next_session` | Role ids whose holders are authorized (Discord roles, Slack user groups, Matrix power levels), checked right after `allow_users` on adapters that expose roles; a failed role lookup denies. |
 | `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing (no wildcards: use `allow_all`). |
 | `gateway.platforms.<name>.batching.delay_ms` | integer | `300` | 0 to 2000 | `next_session` | Text from the same sender within this many milliseconds joins the pending input. |
 | `gateway.platforms.<name>.batching.split_delay_ms` | integer | `1000` | 0 to 4000 | `next_session` | The wait after a part that filled the platform's limit (the client probably split a longer message); at least `delay_ms`. |

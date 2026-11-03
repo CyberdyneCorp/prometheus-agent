@@ -19,6 +19,7 @@
 mod agent;
 mod gateway;
 mod gateway_display;
+mod gateway_groups;
 mod gateway_platform;
 mod gateway_policy;
 mod interface;
@@ -38,13 +39,15 @@ pub use agent::{
     VisionConfig,
 };
 pub use gateway::{
-    AgentCacheConfig, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress, DedupConfig,
-    DeliveryConfig, EffectiveBusy, EffectiveDisplay, GatewayBusy, GatewayConfig, GatewayDisplay,
-    GatewayQuickCommands, GatewaySessions, HomeChannel, MediaConfig, MessageTimestamps,
-    NotificationsConfig, OutboxConfig, PhraseMode, PlatformBusy, PlatformConfig, PlatformDisplay,
-    PlatformSessions, PlatformStreaming, PolicyChatType, PolicyFacts, RateLimitConfig,
-    RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases, StreamTransport,
-    StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute, resolve_policy,
+    AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
+    DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
+    GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay, GatewayGroups, GatewayQuickCommands,
+    GatewaySessions, HomeChannel, MediaConfig, MessageTimestamps, NotificationsConfig,
+    OutboxConfig, PhraseMode, PlatformBots, PlatformBusy, PlatformConfig, PlatformDisplay,
+    PlatformGroups, PlatformSessions, PlatformStreaming, PolicyChatType, PolicyFacts,
+    RateLimitConfig, RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases,
+    StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute,
+    resolve_policy,
 };
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,

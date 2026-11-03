@@ -74,6 +74,12 @@ pub(crate) fn message(message: &Value, bot_id: &str) -> Option<(Inbound, bool)> 
         .and_then(|t| t.parse::<Timestamp>().ok())
         .unwrap_or_else(Timestamp::now);
     inbound.attachments = attachments(message);
+    // A reply ping lists the bot in `mentions` too: only `<@id>` in the
+    // text is a literal mention.
+    inbound.addressing.mentioned =
+        content.contains(&format!("<@{bot_id}>")) || content.contains(&format!("<@!{bot_id}>"));
+    inbound.addressing.replies_to_bot =
+        message["referenced_message"]["author"]["id"].as_str() == Some(bot_id);
     Some((inbound, mentioned))
 }
 

@@ -296,7 +296,8 @@ impl Adapter for Telegram {
         Box::pin(async move {
             let token = credential(&self.scope, &self.secret)?;
             let api = self.api_with(token);
-            api.call("getMe", &json!({}))
+            let me = api
+                .call("getMe", &json!({}))
                 .await
                 .map_err(|e| connect_error(&e))?;
             *self.api.lock().expect("api poisoned") = Some(api.clone());
@@ -307,6 +308,7 @@ impl Adapter for Telegram {
                 commands: Arc::clone(&self.commands),
                 topics: Arc::clone(&self.topics),
                 ignore_root_dm: self.options.ignore_root_dm,
+                me: normalize::Me::of(&me),
             };
             match self.options.mode {
                 TelegramMode::Webhook => self.start_webhook(ctx).await,

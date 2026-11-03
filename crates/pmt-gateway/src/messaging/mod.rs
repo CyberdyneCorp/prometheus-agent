@@ -25,6 +25,7 @@
 pub mod adapter;
 mod adapters;
 mod admit;
+mod admit_groups;
 pub mod agents;
 mod artifacts;
 pub mod attachments;
@@ -36,6 +37,7 @@ pub mod conformance;
 mod dedup;
 pub mod deliverable;
 pub mod descriptor;
+mod gating;
 pub mod health;
 pub mod hooks;
 mod http;
@@ -87,9 +89,9 @@ use tracing::Instrument as _;
 pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
-    Descriptor, HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup, MediaKind,
-    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict, Sent,
-    SessionHints,
+    Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup,
+    MediaKind, MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict,
+    Sent, SessionHints,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup, UpdateFromChat};
 pub use hooks::{Hook, Hooks, PreCommand};
@@ -190,6 +192,12 @@ pub(crate) struct Shared {
     relay: std::sync::OnceLock<Arc<relay::Relay>>,
     last_inbound: send::LastInbound,
     limits: limits::Limits,
+    /// Bot message bursts being collected.
+    bursts: gating::Bursts,
+    /// Role lookups of `allow_roles` grants.
+    roles: gating::Roles,
+    /// Observed group lines waiting for the next turn in their chat.
+    observed: gating::Observed,
     menus: menus::Menus,
     health: health::Counters,
     cache: cache::AgentCache,
@@ -330,6 +338,9 @@ impl Gateway {
             relay: std::sync::OnceLock::new(),
             last_inbound: send::LastInbound::default(),
             limits: limits::Limits::default(),
+            bursts: gating::Bursts::default(),
+            roles: gating::Roles::default(),
+            observed: gating::Observed::default(),
             menus: menus::Menus::default(),
             health: health::Counters::default(),
             cache: cache::AgentCache::new(options.agent_cache.clone()),

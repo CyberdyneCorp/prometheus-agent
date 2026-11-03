@@ -33,6 +33,7 @@ impl Lane {
             chat_id: &routing.chat_id,
             chat_type: routing.chat_type.as_str(),
             user_id: &routing.sender_id,
+            thread_id: routing.thread_id.as_deref(),
         };
         resolve_policy(&scope.config().gateway.chat_policies, &facts).map(|(_, p)| p.clone())
     }

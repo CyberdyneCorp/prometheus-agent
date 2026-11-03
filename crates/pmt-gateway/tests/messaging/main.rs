@@ -9,6 +9,7 @@ mod controls;
 mod delivery;
 mod display;
 mod features;
+mod groups;
 mod health;
 mod limits;
 mod media;

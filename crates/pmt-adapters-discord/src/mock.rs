@@ -78,6 +78,10 @@ struct State {
     resumes: usize,
     /// Every `PUT /applications/{id}/commands` body.
     command_puts: Vec<Value>,
+    /// Member roles by user (an unknown member fails the lookup).
+    roles: std::collections::HashMap<String, Vec<String>>,
+    /// Channel histories, oldest first.
+    history: std::collections::HashMap<String, Vec<Value>>,
     /// Every interaction callback body.
     callbacks: Vec<Value>,
     /// Server channels and threads by id (anything else is a DM).
@@ -374,6 +378,24 @@ impl DiscordMock {
                 (200, body)
             }
             ("GET", ["oauth2", "applications", "@me"]) => (200, json!({"id": APPLICATION})),
+            ("GET", ["guilds", _, "members", user]) => match self.lock().roles.get(*user) {
+                Some(roles) => (200, json!({"user": {"id": user}, "roles": roles})),
+                None => (
+                    500,
+                    json!({"message": "500: Internal Server Error", "code": 0}),
+                ),
+            },
+            ("GET", ["channels", channel, "messages"]) => {
+                let history = self
+                    .lock()
+                    .history
+                    .get(*channel)
+                    .cloned()
+                    .unwrap_or_default();
+                // Newest first, as Discord lists them (the limit is the
+                // adapter's to send; the mock answers everything).
+                (200, Value::Array(history.into_iter().rev().collect()))
+            }
             _ => (404, json!({"message": "404: Not Found", "code": 0})),
         }
     }
@@ -426,6 +448,27 @@ impl DiscordMock {
         });
         thread["message"] = json!({"id": id});
         (201, thread)
+    }
+
+    /// Gives `user` the server roles `roles` (a member never given roles
+    /// fails the lookup with a server error).
+    pub fn set_roles(&self, user: &str, roles: &[&str]) {
+        self.lock().roles.insert(
+            user.to_owned(),
+            roles.iter().map(|r| (*r).to_owned()).collect(),
+        );
+    }
+
+    /// Appends a message by `author` (`BOT` for the bot) to a channel's
+    /// history.
+    pub fn post_history(&self, channel: &str, id: &str, author: &str, text: &str) {
+        let message =
+            json!({"id": id, "author": {"id": author, "username": author}, "content": text});
+        self.lock()
+            .history
+            .entry(channel.to_owned())
+            .or_default()
+            .push(message);
     }
 
     /// Renames a channel, as a user would.

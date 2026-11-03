@@ -17,6 +17,7 @@ mod confirm;
 mod controls;
 mod input;
 mod lifecycle;
+mod observe;
 mod pages;
 mod progress;
 mod reply;
@@ -246,6 +247,9 @@ struct Lane {
     confirms: Vec<confirm::Confirm>,
     /// The chat's `/verbose` tool progress mode.
     progress_mode: Option<pmt_config::schema::ChatToolProgress>,
+    /// Observed lines were added before the turn being started: it is told
+    /// they are context.
+    observed_since_turn: bool,
 }
 
 /// Hands an authorized event to its conversation's lane, starting it.
@@ -306,6 +310,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         held: None,
         confirms: Vec::new(),
         progress_mode: None,
+        observed_since_turn: false,
     };
     let span = tracing::info_span!(
         "conversation",

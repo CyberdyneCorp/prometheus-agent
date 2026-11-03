@@ -489,6 +489,25 @@ pub trait Adapter: Send + Sync + 'static {
     ) -> AdapterFuture<'a, Result<SenderVerdict, AdapterError>> {
         Box::pin(async { Ok(SenderVerdict::Unknown) })
     }
+    /// The role ids the event's sender holds in its chat's workspace
+    /// (adapters declaring `exposes_roles`: Discord roles, Slack user
+    /// groups, Matrix power levels); an error denies a role grant.
+    fn member_roles<'a>(
+        &'a self,
+        _inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// The chat's (or thread's) latest messages, oldest first, at most
+    /// `limit` (adapters declaring `can_fetch_history`).
+    fn fetch_history<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        _limit: usize,
+    ) -> AdapterFuture<'a, Result<Vec<HistoryEntry>, SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
     /// Whether an HTTP request on the shared listener carries the
     /// platform's valid signature or shared secret (adapters with
     /// `binds_http`); nothing unverified is handled.
@@ -560,6 +579,21 @@ pub fn credential(scope: &ProfileScope, name: &str) -> Result<String, AdapterErr
             ),
         }),
     }
+}
+
+/// One message of a chat's history (`fetch_history`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryEntry {
+    /// The platform's message id.
+    pub message_id: String,
+    /// Its author's id.
+    pub author_id: String,
+    /// Its author's display name.
+    pub author_name: String,
+    /// The text.
+    pub text: String,
+    /// The bot itself wrote it.
+    pub from_self: bool,
 }
 
 /// A chat's name and kind (`chat-info`).

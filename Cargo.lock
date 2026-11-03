@@ -2620,6 +2620,7 @@ dependencies = [
  "pmt-net",
  "pmt-rpc",
  "pmt-store",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
@@ -2630,6 +2631,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "tokio-util",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

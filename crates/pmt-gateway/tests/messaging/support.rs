@@ -187,6 +187,8 @@ pub struct FakeAgents {
     pub container: Mutex<Option<pmt_gateway::messaging::attachments::ContainerMounts>>,
     /// Every confirmed `/update`.
     pub updates: Mutex<Vec<pmt_gateway::messaging::UpdateFromChat>>,
+    /// The author of every turn started.
+    pub authors: Mutex<Vec<Author>>,
 }
 
 impl FakeAgents {
@@ -259,9 +261,10 @@ impl Host for FakeAgents {
         &'a self,
         _: &'a str,
         params: SubmitParams,
-        _: Author,
+        author: Author,
         link: Link,
     ) -> HostFuture<'a, Submitted> {
+        self.authors.lock().unwrap().push(author);
         Box::pin(async move {
             let turn = format!("turn-{}", self.next.fetch_add(1, Ordering::Relaxed));
             let session = params.session_id.clone();
@@ -591,6 +594,10 @@ pub struct FakeAdapter {
     pub hints: Mutex<HashMap<String, SessionHints>>,
     /// Messages deleted, by id.
     pub deleted: Mutex<Vec<String>>,
+    /// What `member_roles` answers, by sender (an error otherwise).
+    pub roles: Mutex<HashMap<String, Vec<String>>>,
+    /// What `fetch_history` answers.
+    pub history: Mutex<Vec<pmt_gateway::messaging::HistoryEntry>>,
 }
 
 impl FakeAdapter {
@@ -620,6 +627,8 @@ impl FakeAdapter {
             hints: Mutex::default(),
             reactions: Mutex::default(),
             deleted: Mutex::default(),
+            roles: Mutex::default(),
+            history: Mutex::default(),
         })
     }
 
@@ -724,6 +733,27 @@ impl Adapter for FakeAdapter {
             .unwrap()
             .push(Did::Edit(message_id.to_owned(), message.clone()));
         Box::pin(async { Ok(()) })
+    }
+
+    fn member_roles<'a>(
+        &'a self,
+        inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
+        let roles = self.roles.lock().unwrap().get(&inbound.sender_id).cloned();
+        Box::pin(
+            async move { roles.ok_or_else(|| SendError::Server("member lookup failed".into())) },
+        )
+    }
+
+    fn fetch_history<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        limit: usize,
+    ) -> AdapterFuture<'a, Result<Vec<pmt_gateway::messaging::HistoryEntry>, SendError>> {
+        let all = self.history.lock().unwrap().clone();
+        let skip = all.len().saturating_sub(limit);
+        Box::pin(async move { Ok(all.into_iter().skip(skip).collect()) })
     }
 
     fn delete<'a>(
@@ -911,10 +941,12 @@ impl Setup {
 }
 
 /// A `config.toml` enabling `platform` with `table` keys (allowing every
-/// sender unless `table` says otherwise) and no debounce.
+/// sender unless `table` says otherwise), no debounce, and group messages
+/// answered without a mention (the gating tests set their own).
 pub fn config(platform: &str, table: &str) -> String {
     format!(
-        "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.platforms.{platform}]\nenabled = true\n{}{table}\n",
+        "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.groups]\nrequire_mention = false\n\n\
+         [gateway.platforms.{platform}]\nenabled = true\n{}{table}\n",
         required_options(platform)
     )
 }
@@ -973,6 +1005,7 @@ fn agents_for(home: &std::path::Path, setup: &Setup) -> Arc<FakeAgents> {
         menu: Mutex::default(),
         container: Mutex::default(),
         updates: Mutex::default(),
+        authors: Mutex::default(),
     })
 }
 

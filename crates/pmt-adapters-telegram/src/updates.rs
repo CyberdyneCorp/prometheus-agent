@@ -28,6 +28,8 @@ pub(crate) struct Ctx {
     pub(crate) commands: Arc<Mutex<Vec<MenuCommand>>>,
     pub(crate) topics: Arc<Topics>,
     pub(crate) ignore_root_dm: bool,
+    /// The bot (`getMe`), to recognise mentions of it.
+    pub(crate) me: normalize::Me,
 }
 
 /// Handles one raw update.
@@ -50,7 +52,7 @@ pub(crate) async fn handle(ctx: &Ctx, raw: &Value) {
     ) {
         ctx.topics.record(&chat, name, thread);
     }
-    let Some(update) = normalize::update(raw) else {
+    let Some(update) = normalize::update(raw, &ctx.me) else {
         return;
     };
     let event = &update.inbound;

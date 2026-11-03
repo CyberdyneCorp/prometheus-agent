@@ -197,6 +197,7 @@ impl Lane {
         if self.hold(&session, &pending) {
             return;
         }
+        self.add_observed(&session, &pending.routing);
         let store = self.shared.store(&self.profile);
         if let Some(store) = &store
             && let Ok(id) = session.parse()
@@ -210,7 +211,7 @@ impl Lane {
             client_id: format!("{}:{}", pending.routing.platform, pending.routing.sender_id),
             principal: self.profile.clone(),
             sent_at: Some(pending.sent_at.to_string()),
-            prefix: self.timestamp_prefix(&session, pending.sent_at),
+            prefix: self.model_prefix(&session, pending.sent_at),
         };
         let params = SubmitParams {
             session_id: session.clone(),
@@ -277,7 +278,7 @@ impl Lane {
 
     /// `[Tue 2026-04-28 13:40:53 CEST]` for a session created with message
     /// timestamps (in the profile's `cron.timezone`, else the host's).
-    fn timestamp_prefix(&self, session: &str, sent_at: Timestamp) -> Option<String> {
+    pub(super) fn timestamp_prefix(&self, session: &str, sent_at: Timestamp) -> Option<String> {
         let store = self.shared.store(&self.profile)?;
         let on = session
             .parse()

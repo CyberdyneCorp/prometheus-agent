@@ -94,6 +94,58 @@ fn menu_commands(
         .collect()
 }
 
+/// A chat policy's `preload_skills` as the session's first user-side
+/// context (spec: messaging-gateway, Per-chat policy thread matching and
+/// skill preload): one authored user row holding each skill's content,
+/// which the first request merges with the first message. Never in the
+/// system prompt, so every chat of the profile shares its cached prefix.
+fn preload_context(
+    scope: &ProfileScope,
+    store: &Store,
+    user_home: Option<&Path>,
+    session: pmt_core::id::SessionId,
+    names: &[String],
+) -> Result<(), Error> {
+    let catalog = pmt_skills::eject::profile_catalog(
+        scope,
+        None,
+        user_home,
+        pmt_skills::bundled::Bundled::builtin(),
+    );
+    let mut text = String::new();
+    for name in names {
+        let Ok(skill) = catalog.lookup(name) else {
+            tracing::warn!(skill = %name, "preloaded skill not found; skipped");
+            continue;
+        };
+        let body =
+            pmt_skills::load::substitute(&skill.body, &skill.dir.display(), &session.to_string());
+        let _ = std::fmt::Write::write_fmt(
+            &mut text,
+            format_args!("\n\n## Skill: {}\n\n{}", skill.name, body.trim()),
+        );
+        let used = store.record_skill_activity(
+            &skill.name,
+            pmt_store::SkillActivity::Used,
+            pmt_store::CreatedBy::User,
+        );
+        if let Err(err) = used {
+            tracing::warn!(skill = %skill.name, "skill usage not recorded: {err}");
+        }
+    }
+    if text.is_empty() {
+        return Ok(());
+    }
+    let row = pmt_agent::turn::transcript::notice_row(
+        &format!(
+            "# Preloaded skills\n\nThis conversation's skills; follow them where they apply.{text}"
+        ),
+        "preloaded_skills",
+    );
+    store.append_message(session, &row)?;
+    Ok(())
+}
+
 fn busy_policy(policy: slash::BusyPolicy) -> BusyPolicy {
     match policy {
         slash::BusyPolicy::Reject => BusyPolicy::Reject,
@@ -165,6 +217,15 @@ impl Agents for DaemonHost {
             let id = profile.store.create_session(&new)?.id;
             if setup != SessionSetup::default() {
                 Self::set_up(profile, id, setup).await?;
+            }
+            let preload = conversation
+                .policy
+                .as_ref()
+                .and_then(|p| p.preload_skills.clone())
+                .unwrap_or_default();
+            if !preload.is_empty() {
+                let home = self.launch.user_home().map(PathBuf::as_path);
+                preload_context(&profile.scope(), &profile.store, home, id, &preload)?;
             }
             Ok(id.to_string())
         })

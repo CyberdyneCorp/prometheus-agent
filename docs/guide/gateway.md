@@ -467,6 +467,40 @@ bot, and "(nothing to add)" to a person who asked. With
 show the model each message's send time (`[Tue 2026-04-28 13:40:53 CEST]`,
 in `cron.timezone`); the stored text stays clean.
 
+### Groups, bots and roles
+
+In groups, channels and threads a message starts a turn only when it
+mentions the bot, replies to it, matches one of `mention_patterns` or is in
+a thread the bot takes part in (`[gateway.groups]`, overridable under
+`[gateway.groups.platforms.<name>]`); DMs are never gated:
+
+```toml
+[gateway.groups]
+require_mention = true
+mention_patterns = ["^hey prom"]     # case-insensitive, at most 32
+free_response_chats = ["C0123"]      # answered without a mention
+ignored_chats = ["C0999"]            # never answered
+observe_unmentioned = false          # keep the rest as context
+history_backfill = true              # Discord and Slack by default
+history_backfill_limit = 50
+
+[gateway.bots]
+allow_bots = "none"                  # or "mentions" / "all"
+require_inline_mention = true
+burst_window_ms = 1500
+human_user_ids = []
+```
+
+With `observe_unmentioned`, unaddressed messages are kept and added to the
+session of the chat's next turn as `[name|user_id]` lines, which the model
+is told are context, not instructions. A mention-triggered turn on Discord
+or Slack gets the channel's messages since the bot's last reply as one
+untrusted block. `gateway.platforms.<name>.allow_roles` admits holders of a
+role id (Discord roles, Slack user groups, Matrix power levels), checked
+right after `allow_users`; a failed role lookup denies. A chat policy with
+`thread_id` binds one thread or forum topic, and its `preload_skills` open
+each new session there as context, outside the system prompt.
+
 ### Adapter operations, restart and update
 
 `/platforms` (alias `/gateway`, also in `prometheus chat` and the TUI) lists

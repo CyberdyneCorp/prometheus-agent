@@ -25,6 +25,8 @@ pmt-net.workspace = true
 pmt-rpc.workspace = true
 # Conversation routes, pairing and the outbox live in each profile's state.db.
 pmt-store.workspace = true
+# Group mention patterns (`gateway.groups.mention_patterns`).
+regex.workspace = true
 # Adapters build their HTTP clients through the gateway's proxy rules.
 reqwest.workspace = true
 serde.workspace = true
@@ -45,6 +47,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
+toml.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]

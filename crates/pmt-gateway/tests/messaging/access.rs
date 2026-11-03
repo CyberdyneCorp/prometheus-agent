@@ -69,7 +69,12 @@ async fn decline_and_ignore_policies_issue_no_code() {
 
 #[tokio::test]
 async fn a_sixth_bot_message_in_a_minute_is_refused() {
-    let h = Harness::start(Setup::new(&config("discord", "allow_all = true"))).await;
+    // Bots admitted at all, so the loop guard is what refuses the sixth.
+    let config = format!(
+        "[gateway.bots]\nallow_bots = \"all\"\nrequire_inline_mention = false\n\n{}",
+        config("discord", "allow_all = true")
+    );
+    let h = Harness::start(Setup::new(&config)).await;
     for n in 0..5 {
         let mut message = Inbound::text(ChatType::Channel, "555", "otherbot", "ping");
         message.is_bot = true;

@@ -150,13 +150,31 @@ impl Reader {
             synthetic["sourceNumber"] = json!(self.account);
             return message(&synthetic);
         }
-        let inbound = message(envelope)?;
+        let mut inbound = message(envelope)?;
         if inbound.chat_type == ChatType::Group
             && !self.group_admitted(inbound.chat_id.trim_start_matches(GROUP))
         {
             return None;
         }
+        inbound.addressing = addressing(&envelope["dataMessage"], &self.account);
         Some(inbound)
+    }
+}
+
+/// How a data message addresses `account`: one of its mentions names the
+/// account, or it quotes one of the account's messages.
+fn addressing(message: &Value, account: &str) -> pmt_gateway::messaging::Addressing {
+    let names_account = |v: &Value| {
+        text(&v["number"]).as_deref() == Some(account)
+            || text(&v["authorNumber"]).as_deref() == Some(account)
+            || text(&v["author"]).as_deref() == Some(account)
+    };
+    pmt_gateway::messaging::Addressing {
+        mentioned: message["mentions"]
+            .as_array()
+            .is_some_and(|m| m.iter().any(names_account)),
+        replies_to_bot: names_account(&message["quote"]),
+        ..pmt_gateway::messaging::Addressing::default()
     }
 }
 

@@ -149,6 +149,10 @@ pub struct ChatPolicy {
     /// Matches this chat.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_id: Option<String>,
+    /// Matches this thread or forum topic of the chat (more specific than
+    /// the chat alone; a chat policy also applies to its threads).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
     /// Matches this kind of chat.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chat_type: Option<PolicyChatType>,
@@ -165,6 +169,11 @@ pub struct ChatPolicy {
     /// Skills preloaded into matched sessions; only enabled skills.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub skills: Option<Vec<String>>,
+    /// Skills whose content opens each matched session as its first
+    /// user-side context (never in the system prompt); enabled skills
+    /// only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preload_skills: Option<Vec<String>>,
     /// Text appended to the platform hint of matched sessions' system
     /// prompt.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -192,6 +201,8 @@ pub struct PolicyFacts<'a> {
     pub chat_type: &'a str,
     /// Canonical sender id.
     pub user_id: &'a str,
+    /// Thread or forum topic id.
+    pub thread_id: Option<&'a str>,
 }
 
 impl ChatPolicy {
@@ -200,7 +211,8 @@ impl ChatPolicy {
     /// matchers are a tie (refused by validation).
     #[must_use]
     pub fn specificity(&self) -> u8 {
-        u8::from(self.chat_id.is_some()) * 4
+        u8::from(self.thread_id.is_some()) * 8
+            + u8::from(self.chat_id.is_some()) * 4
             + u8::from(self.user_id.is_some()) * 2
             + u8::from(self.chat_type.is_some())
     }
@@ -210,15 +222,28 @@ impl ChatPolicy {
     pub fn matches(&self, facts: &PolicyFacts<'_>) -> bool {
         self.platform == facts.platform
             && self.chat_id.as_deref().is_none_or(|c| c == facts.chat_id)
+            && self
+                .thread_id
+                .as_deref()
+                .is_none_or(|t| Some(t) == facts.thread_id)
             && self.user_id.as_deref().is_none_or(|u| u == facts.user_id)
             && self.chat_type.is_none_or(|t| t.as_str() == facts.chat_type)
     }
 
     /// The matchers, for comparing two policies.
-    fn matchers(&self) -> (&str, Option<&str>, Option<&str>, Option<PolicyChatType>) {
+    fn matchers(
+        &self,
+    ) -> (
+        &str,
+        Option<&str>,
+        Option<&str>,
+        Option<&str>,
+        Option<PolicyChatType>,
+    ) {
         (
             &self.platform,
             self.chat_id.as_deref(),
+            self.thread_id.as_deref(),
             self.user_id.as_deref(),
             self.chat_type,
         )
@@ -271,6 +296,7 @@ mod tests {
             chat_id: chat,
             chat_type: "group",
             user_id: user,
+            thread_id: None,
         };
         assert_eq!(resolve_policy(&policies, &facts("555", "u1")).unwrap().0, 1);
         assert_eq!(resolve_policy(&policies, &facts("9", "u1")).unwrap().0, 2);
@@ -280,6 +306,23 @@ mod tests {
             ..facts("9", "u2")
         };
         assert!(resolve_policy(&policies, &dm).is_none());
+    }
+
+    #[test]
+    fn a_thread_policy_outranks_its_channels_and_the_channel_covers_other_threads() {
+        let mut topic = policy(Some("-100555"), None, None);
+        topic.thread_id = Some("42".into());
+        let policies = vec![policy(Some("-100555"), None, None), topic];
+        let facts = |thread| PolicyFacts {
+            platform: "discord",
+            chat_id: "-100555",
+            chat_type: "thread",
+            user_id: "u1",
+            thread_id: thread,
+        };
+        assert_eq!(resolve_policy(&policies, &facts(Some("42"))).unwrap().0, 1);
+        assert_eq!(resolve_policy(&policies, &facts(Some("7"))).unwrap().0, 0);
+        assert_eq!(resolve_policy(&policies, &facts(None)).unwrap().0, 0);
     }
 
     #[test]

@@ -512,3 +512,41 @@ async fn agent_initiated_sends_to_a_forum_open_posts_titled_by_their_first_line(
     assert_eq!(last.thread_id.as_deref(), Some(posts[0].0.as_str()));
     adapter.disconnect().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn member_roles_and_channel_history_come_from_the_platform() {
+    let (_home, mock, adapter, link) = connected("").await;
+    let text = format!("<@{}> hi", mock::BOT);
+    mock.dispatch(
+        "MESSAGE_CREATE",
+        &server_message("6001", mock::CHANNEL, &text, true),
+    );
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    let event = link.events.lock().unwrap()[0].clone();
+    assert!(event.addressing.mentioned, "a literal mention");
+    assert!(adapter.describe().exposes_roles && adapter.describe().can_fetch_history);
+    assert!(
+        adapter.member_roles(&event).await.is_err(),
+        "unknown member: the lookup fails"
+    );
+    mock.set_roles(&event.sender_id, &["111222333"]);
+    assert_eq!(adapter.member_roles(&event).await.unwrap(), ["111222333"]);
+    mock.post_history(mock::CHANNEL, "1", mock::BOT, "earlier answer");
+    mock.post_history(mock::CHANNEL, "2", mock::USER, "a new question");
+    let history = adapter
+        .fetch_history(mock::CHANNEL, None, 50)
+        .await
+        .unwrap();
+    let seen: Vec<(String, bool)> = history
+        .iter()
+        .map(|h| (h.text.clone(), h.from_self))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("earlier answer".to_owned(), true),
+            ("a new question".to_owned(), false)
+        ],
+        "oldest first, the bot's own marked"
+    );
+}

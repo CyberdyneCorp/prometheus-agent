@@ -177,7 +177,7 @@ fn a_group_policy_gives_its_sessions_only_the_policy_toolsets() {
     let inbox = adapter_dir(home).join("default/inbox");
     std::fs::create_dir_all(&inbox).unwrap();
     let message = serde_json::json!({"id": "g1", "sender": "u1", "chat": "555",
-        "chat_type": "group", "text": "hello group"});
+        "chat_type": "group", "text": "hello group", "mentioned": true});
     std::fs::write(inbox.join("000900.json"), message.to_string()).unwrap();
     wait_said(home, "default", "fast done");
     // The surface the session froze: every tool with its exposure.

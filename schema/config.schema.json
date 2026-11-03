@@ -173,6 +173,26 @@
       ],
       "type": "object"
     },
+    "AllowBots": {
+      "description": "Which bot-authored messages are admitted.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "None (default).",
+          "type": "string"
+        },
+        {
+          "const": "mentions",
+          "description": "Those that mention this bot.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "All of them.",
+          "type": "string"
+        }
+      ]
+    },
     "ApprovalMode": {
       "description": "Interactive approval modes. In TOML they are strings: `mode = \"off\"`;\nthe YAML habit `mode = off` does not parse and `mode = false` is not a\nmode.",
       "oneOf": [
@@ -746,6 +766,16 @@
           "description": "The platform it applies to.",
           "type": "string"
         },
+        "preload_skills": {
+          "description": "Skills whose content opens each matched session as its first\nuser-side context (never in the system prompt); enabled skills\nonly.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "rate_limit": {
           "anyOf": [
             {
@@ -769,6 +799,13 @@
         },
         "system_prompt_append": {
           "description": "Text appended to the platform hint of matched sessions' system\nprompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thread_id": {
+          "description": "Matches this thread or forum topic of the chat (more specific than\nthe chat alone; a chat policy also applies to its threads).",
           "type": [
             "string",
             "null"
@@ -1541,6 +1578,58 @@
       },
       "type": "object"
     },
+    "GatewayBots": {
+      "additionalProperties": false,
+      "description": "`[gateway.bots]`: messages other bots send.",
+      "properties": {
+        "allow_bots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AllowBots"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`none` (default), `mentions` or `all`."
+        },
+        "burst_window_ms": {
+          "description": "Follow-up chunks of the same bot in the same chat within this many\nmilliseconds join the same turn (default 1500).",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "human_user_ids": {
+          "description": "Senders treated as people although their messages are marked as a\nbot's (posts made with the owner's own user token).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformBots"
+          },
+          "description": "Per-platform overrides, by platform name.",
+          "type": "object"
+        },
+        "require_inline_mention": {
+          "description": "An admitted bot message starts a turn only with a literal inline\nmention of this bot; a reply ping alone does not (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "GatewayBusy": {
       "additionalProperties": false,
       "description": "`[gateway.busy]`.",
@@ -1590,6 +1679,12 @@
           },
           "description": "Live agents kept in memory (read from the launch profile)."
         },
+        "bots": {
+          "$ref": "#/$defs/GatewayBots",
+          "default": {},
+          "description": "Messages other bots send, overridable per platform.",
+          "x-apply": "live"
+        },
         "busy": {
           "$ref": "#/$defs/GatewayBusy",
           "default": {
@@ -1632,6 +1727,12 @@
           "$ref": "#/$defs/GatewayDisplay",
           "default": {},
           "description": "How turns look in a chat (tool progress, footers, notices),\noverridable per platform.",
+          "x-apply": "live"
+        },
+        "groups": {
+          "$ref": "#/$defs/GatewayGroups",
+          "default": {},
+          "description": "When group, channel and thread messages start a turn, overridable\nper platform.",
           "x-apply": "live"
         },
         "media": {
@@ -1885,6 +1986,88 @@
             }
           ],
           "description": "`accumulate` (default: one edited bubble) or `separate`."
+        }
+      },
+      "type": "object"
+    },
+    "GatewayGroups": {
+      "additionalProperties": false,
+      "description": "`[gateway.groups]`: when group, channel and thread messages start a turn.",
+      "properties": {
+        "free_response_chats": {
+          "description": "Chats answered without a mention.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "history_backfill": {
+          "description": "Give a mention-triggered turn the channel's messages since the\nbot's last reply (default true on Discord and Slack).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "history_backfill_limit": {
+          "description": "The most channel messages backfilled (default 50).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ignored_chats": {
+          "description": "Chats and threads that never start a turn.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "mention_patterns": {
+          "description": "Case-insensitive regular expressions that count as a mention (at\nmost 32).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "observe_unmentioned": {
+          "description": "Keep unmentioned messages of authorized group chats in the chat's\nsession as attributed context, without a turn (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformGroups"
+          },
+          "description": "Per-platform overrides, by platform name.",
+          "type": "object"
+        },
+        "require_mention": {
+          "description": "Only messages that mention the bot, reply to it, match a\n`mention_patterns` entry or are in a thread it takes part in start a\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thread_require_mention": {
+          "description": "A thread the bot takes part in still needs a mention (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -2747,6 +2930,51 @@
         }
       ]
     },
+    "PlatformBots": {
+      "additionalProperties": false,
+      "description": "One platform's overrides; each unset key inherits.",
+      "properties": {
+        "allow_bots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AllowBots"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`none` (default), `mentions` or `all`."
+        },
+        "burst_window_ms": {
+          "description": "Follow-up chunks of the same bot in the same chat within this many\nmilliseconds join the same turn (default 1500).",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "human_user_ids": {
+          "description": "Senders treated as people although their messages are marked as a\nbot's (posts made with the owner's own user token).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "require_inline_mention": {
+          "description": "An admitted bot message starts a turn only with a literal inline\nmention of this bot; a reply ping alone does not (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "PlatformBusy": {
       "additionalProperties": false,
       "description": "`[gateway.platforms.<name>.busy]`: unset keys follow `busy.input_mode`\nand `gateway.busy`.",
@@ -2822,6 +3050,13 @@
         "allow_chats": {
           "default": [],
           "description": "Chats every member of which is admitted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "allow_roles": {
+          "description": "Role ids whose holders are authorized (Discord roles, Slack user\ngroups, Matrix power levels), checked right after `allow_users` on\nadapters that expose roles; a failed role lookup denies.",
           "items": {
             "type": "string"
           },
@@ -3113,6 +3348,81 @@
             }
           ],
           "description": "`accumulate` (default: one edited bubble) or `separate`."
+        }
+      },
+      "type": "object"
+    },
+    "PlatformGroups": {
+      "additionalProperties": false,
+      "description": "One platform's overrides; each unset key inherits.",
+      "properties": {
+        "free_response_chats": {
+          "description": "Chats answered without a mention.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "history_backfill": {
+          "description": "Give a mention-triggered turn the channel's messages since the\nbot's last reply (default true on Discord and Slack).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "history_backfill_limit": {
+          "description": "The most channel messages backfilled (default 50).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ignored_chats": {
+          "description": "Chats and threads that never start a turn.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "mention_patterns": {
+          "description": "Case-insensitive regular expressions that count as a mention (at\nmost 32).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "observe_unmentioned": {
+          "description": "Keep unmentioned messages of authorized group chats in the chat's\nsession as attributed context, without a turn (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "require_mention": {
+          "description": "Only messages that mention the bot, reply to it, match a\n`mention_patterns` entry or are in a thread it takes part in start a\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thread_require_mention": {
+          "description": "A thread the bot takes part in still needs a mention (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -5612,6 +5922,7 @@
           "max_size": 128,
           "memory_high_bytes": 0
         },
+        "bots": {},
         "busy": {
           "ack": true,
           "debounce_cap_ms": 1000,
@@ -5628,6 +5939,7 @@
           "max_parts": 10
         },
         "display": {},
+        "groups": {},
         "media": {
           "cache_max_age_secs": 86400,
           "max_inbound_bytes": 134217728

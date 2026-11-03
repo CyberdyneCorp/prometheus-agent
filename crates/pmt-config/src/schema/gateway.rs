@@ -15,6 +15,10 @@ pub use super::gateway_display::{
     ChatToolProgress, EffectiveDisplay, GatewayDisplay, MessageTimestamps, PhraseMode,
     PlatformDisplay, StatusPhrases,
 };
+pub use super::gateway_groups::{
+    AllowBots, EffectiveBots, EffectiveGroups, GatewayBots, GatewayGroups, PlatformBots,
+    PlatformGroups,
+};
 pub use super::gateway_platform::{
     Batching, DedupConfig, DeliveryConfig, MediaConfig, PlatformBusy, PlatformConfig,
     PlatformSessions, PlatformStreaming, ReplyToMode, UnauthorizedDm, VoiceConfig, VoiceReplyMode,
@@ -105,6 +109,13 @@ pub struct GatewayConfig {
     /// overridable per platform.
     #[schemars(extend("x-apply" = "live"))]
     pub display: GatewayDisplay,
+    /// When group, channel and thread messages start a turn, overridable
+    /// per platform.
+    #[schemars(extend("x-apply" = "live"))]
+    pub groups: GatewayGroups,
+    /// Messages other bots send, overridable per platform.
+    #[schemars(extend("x-apply" = "live"))]
+    pub bots: GatewayBots,
     /// The send time in front of each user message the model sees.
     #[schemars(extend("x-apply" = "next_session"))]
     pub message_timestamps: MessageTimestamps,

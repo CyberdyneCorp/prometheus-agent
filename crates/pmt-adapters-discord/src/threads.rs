@@ -172,6 +172,7 @@ impl Routed<'_> {
             if !mentioned && !ours && self.options.require_mention {
                 return None;
             }
+            event.addressing.in_bot_thread = ours;
             event.thread_id = Some(std::mem::replace(&mut event.chat_id, parent));
             return Some(event);
         }

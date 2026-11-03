@@ -344,3 +344,19 @@ async fn ignore_root_dm_still_accepts_slash_commands() {
     assert_eq!(b.gateway.texts(), vec!["/new"]);
     b.bot.disconnect().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_group_mention_of_the_bot_is_marked_addressed() {
+    let b = bot("", Gateway::default()).await;
+    for (id, text) in [(1, "lunch?"), (2, "@kit_bot when is lunch?")] {
+        b.api.push(serde_json::json!({"message": {
+            "message_id": id, "date": 1_700_000_000,
+            "chat": {"id": -1001, "type": "supergroup"},
+            "from": {"id": 7, "first_name": "Ann"},
+            "text": text}}));
+    }
+    eventually(|| b.gateway.events.lock().unwrap().len() == 2).await;
+    let events = b.gateway.events.lock().unwrap().clone();
+    assert!(!events[0].addressing.mentioned);
+    assert!(events[1].addressing.mentioned);
+}

@@ -60,6 +60,24 @@ fn media(content: &Value) -> Option<Attachment> {
     Some(attachment)
 }
 
+/// How a message's content addresses user `me`: listed in its intentional
+/// mentions (`m.mentions`), or named in its body or a link to it in the
+/// formatted body (clients without intentional mentions).
+fn addressing(content: &Value, me: &str) -> pmt_gateway::messaging::Addressing {
+    let listed = content["m.mentions"]["user_ids"]
+        .as_array()
+        .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(me)));
+    let named = !me.is_empty()
+        && (content["body"].as_str().is_some_and(|b| b.contains(me))
+            || content["formatted_body"]
+                .as_str()
+                .is_some_and(|b| b.contains(&format!("matrix.to/#/{me}"))));
+    pmt_gateway::messaging::Addressing {
+        mentioned: listed || named,
+        ..pmt_gateway::messaging::Addressing::default()
+    }
+}
+
 /// A timeline event as an inbound event; `None` for the adapter's own
 /// events, edits and anything but messages.
 pub(crate) fn message(event: &Value, room: &str, me: &str, members: usize) -> Option<Inbound> {
@@ -107,7 +125,7 @@ pub(crate) fn message(event: &Value, room: &str, me: &str, members: usize) -> Op
         is_bot: false,
         callback: None,
         profile: None,
-        addressing: pmt_gateway::messaging::Addressing::default(),
+        addressing: addressing(content, me),
     })
 }
 

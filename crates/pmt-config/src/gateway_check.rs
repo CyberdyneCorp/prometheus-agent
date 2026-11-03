@@ -86,6 +86,7 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     crate::gateway_check_platforms::check(config)?;
     check_policies(config, profile_dir)?;
     crate::gateway_check_display::check(config, profile_dir)?;
+    crate::gateway_check_groups::check(config)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
     for name in config.quick_commands.keys() {
@@ -137,7 +138,7 @@ fn check_policies(config: &Config, profile_dir: &Path) -> Result<(), Error> {
         }
         if policy.specificity() == 0 {
             return Err(invalid(format!(
-                "{key}: match on chat_id, chat_type or user_id besides the platform"
+                "{key}: match on chat_id, thread_id, chat_type or user_id besides the platform"
             )));
         }
         if let Some(earlier) = policies[..index].iter().position(|p| p.ties_with(policy)) {
@@ -146,7 +147,18 @@ fn check_policies(config: &Config, profile_dir: &Path) -> Result<(), Error> {
             )));
         }
         check_policy_toolsets(config, policy, &key)?;
-        check_policy_skills(config, profile_dir, policy, &key)?;
+        check_policy_skills(
+            config,
+            profile_dir,
+            policy.skills.as_deref(),
+            &format!("{key}.skills"),
+        )?;
+        check_policy_skills(
+            config,
+            profile_dir,
+            policy.preload_skills.as_deref(),
+            &format!("{key}.preload_skills"),
+        )?;
     }
     Ok(())
 }
@@ -195,18 +207,20 @@ fn check_policy_toolsets(config: &Config, policy: &ChatPolicy, key: &str) -> Res
     Ok(())
 }
 
+/// A policy's skill list (`key`) names only enabled skills of the
+/// profile.
 fn check_policy_skills(
     config: &Config,
     profile_dir: &Path,
-    policy: &ChatPolicy,
+    skills: Option<&[String]>,
     key: &str,
 ) -> Result<(), Error> {
-    let Some(skills) = policy.skills.as_deref().filter(|s| !s.is_empty()) else {
+    let Some(skills) = skills.filter(|s| !s.is_empty()) else {
         return Ok(());
     };
     if let Some(name) = skills.iter().find(|s| config.skills.disabled.contains(s)) {
         return Err(invalid(format!(
-            "{key}.skills: '{name}' is disabled in this profile (skills.disabled); a policy can only narrow the enabled skills"
+            "{key}: '{name}' is disabled in this profile (skills.disabled); a policy can only narrow the enabled skills"
         )));
     }
     let unknown = SKILLS
@@ -214,7 +228,7 @@ fn check_policy_skills(
         .and_then(|resolve| resolve(config, profile_dir, skills));
     match unknown {
         Some(name) => Err(invalid(format!(
-            "{key}.skills: unknown skill '{name}'; `prometheus skills list` shows the profile's skills"
+            "{key}: unknown skill '{name}'; `prometheus skills list` shows the profile's skills"
         ))),
         None => Ok(()),
     }
@@ -346,7 +360,10 @@ mod tests {
             err.message()
         );
         let err = with_policy("[[gateway.chat_policies]]\nplatform = \"discord\"\n").unwrap_err();
-        assert!(err.message().contains("chat_id, chat_type or user_id"));
+        assert!(
+            err.message()
+                .contains("chat_id, thread_id, chat_type or user_id")
+        );
     }
 
     #[test]

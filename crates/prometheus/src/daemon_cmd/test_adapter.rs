@@ -56,6 +56,7 @@ fn inbound(value: &Value) -> Inbound {
     inbound.thread_id = text("thread");
     inbound.callback = text("callback");
     inbound.is_bot = value["is_bot"].as_bool().unwrap_or(false);
+    inbound.addressing.mentioned = value["mentioned"].as_bool().unwrap_or(false);
     inbound
 }
 

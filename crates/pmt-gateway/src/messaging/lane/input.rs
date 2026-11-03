@@ -98,7 +98,11 @@ impl Lane {
             self.queue_human(pending);
             return;
         }
-        let (window, cap) = self.gather_window(&inbound.text);
+        let (window, cap) = if inbound.is_bot {
+            self.burst_window()
+        } else {
+            self.gather_window(&inbound.text)
+        };
         let now = Instant::now();
         match &mut self.buffer {
             Some(buffer) => {
@@ -155,6 +159,21 @@ impl Lane {
         };
         let cap = busy.debounce_cap_ms.max(batching.split_delay_ms);
         (Duration::from_millis(window), Duration::from_millis(cap))
+    }
+
+    /// How long a bot's message waits for its follow-up chunks
+    /// (`gateway.bots.burst_window_ms`), so a multipart message is one
+    /// turn.
+    fn burst_window(&self) -> (Duration, Duration) {
+        let window = self.config().map_or(1500, |s| {
+            s.config()
+                .gateway
+                .bots
+                .for_platform(&self.routing.platform)
+                .burst_window_ms
+        });
+        let window = Duration::from_millis(window);
+        (window, window * 4)
     }
 
     /// The gathered text becomes one input.

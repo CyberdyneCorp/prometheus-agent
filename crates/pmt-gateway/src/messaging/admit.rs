@@ -103,29 +103,17 @@ async fn decide(
     let Some(store) = shared.store(owner) else {
         return Admission::Dropped;
     };
-    let table = gateway.platform(platform);
-    let paired = store
-        .is_paired(platform, &inbound.sender_id)
-        .unwrap_or_else(|err| {
-            tracing::warn!("pairing lookup failed: {err}");
-            false
-        });
-    let mut facts = Facts {
-        descriptor: &descriptor,
-        config: &table,
-        inbound: &inbound,
-        paired,
-        adapter: SenderVerdict::Unknown,
-    };
-    let mut rule = auth::authorize(&facts);
-    if rule.is_none()
-        && auth::asks_adapter(&descriptor)
-        && let Some(adapter) = shared.adapters.adapter(owner, platform)
+    if !super::admit_groups::authorized(
+        shared,
+        owner,
+        platform,
+        &store,
+        &descriptor,
+        &inbound,
+        gateway,
+    )
+    .await
     {
-        facts.adapter = auth::adapter_verdict(adapter.as_ref(), &inbound).await;
-        rule = auth::authorize(&facts);
-    }
-    if rule.is_none() {
         return unauthorized(shared, owner, platform, &inbound, gateway).await;
     }
     shared
@@ -139,6 +127,14 @@ async fn decide(
             "bot message refused: bot-loop cool-down"
         );
         return Admission::Dropped;
+    }
+    if !super::admit_groups::bot_admitted(shared, owner, platform, &inbound, gateway) {
+        return Admission::Dropped;
+    }
+    if inbound.is_bot {
+        // An admitted bot message (or a chunk of its burst) is a handoff:
+        // `gateway.bots` already decided, group gating does not again.
+        inbound.addressing.mentioned = true;
     }
     let dedup = &gateway.dedup;
     let duplicate = shared.dedup.seen(
@@ -157,6 +153,10 @@ async fn decide(
         reply(shared, owner, platform, &inbound, GREETING).await;
         return Admission::Handled;
     }
+    let inbound = match super::admit_groups::gate(shared, owner, platform, inbound, gateway).await {
+        Ok(inbound) => inbound,
+        Err(admission) => return admission,
+    };
     if let Some(limited) = limit(shared, owner, platform, &inbound, gateway).await {
         return limited;
     }
@@ -165,6 +165,17 @@ async fn decide(
         Some(scope) => inbound::prepare(shared, owner, platform, &scope, &mut inbound).await,
         None => false,
     };
+    let (routing, key) = routing_of(owner, platform, &inbound, gateway);
+    lane::input(shared, &key, routing, inbound, voice)
+}
+
+/// The routing of an admitted event and its conversation key.
+pub(crate) fn routing_of(
+    owner: &str,
+    platform: &str,
+    inbound: &Inbound,
+    gateway: &GatewayConfig,
+) -> (Routing, super::key::SessionKey) {
     let (group_per_user, thread_per_user) = gateway.sessions_for(platform);
     let routing = Routing {
         adapter: format!("{owner}/{platform}"),
@@ -181,7 +192,7 @@ async fn decide(
         group_per_user,
         thread_per_user,
     });
-    lane::input(shared, &key, routing, inbound, voice)
+    (routing, key)
 }
 
 /// What a start ping answers.
@@ -214,6 +225,7 @@ pub(crate) fn policy_for<'a>(
         chat_id: &inbound.chat_id,
         chat_type: inbound.chat_type.as_str(),
         user_id: &inbound.sender_id,
+        thread_id: inbound.thread_id.as_deref(),
     };
     resolve_policy(&gateway.chat_policies, &facts)
 }

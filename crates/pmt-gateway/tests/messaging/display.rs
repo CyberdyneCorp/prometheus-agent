@@ -11,7 +11,7 @@ use crate::support::{Did, Harness, Setup, eventually, open, said};
 
 fn both(extra: &str) -> String {
     format!(
-        "[gateway.busy]\ndebounce_ms = 0\n\n{extra}\n\
+        "[gateway.busy]\ndebounce_ms = 0\n\n[gateway.groups]\nrequire_mention = false\n\n{extra}\n\
          [gateway.platforms.telegram]\nenabled = true\nallow_all = true\n\
          home_channel = {{ chat_id = \"tg-home\" }}\n\n\
          [gateway.platforms.discord]\nenabled = true\nallow_all = true\n\n\

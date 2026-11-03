@@ -5,7 +5,7 @@
 //! button is a callback carrying its data.
 
 use jiff::Timestamp;
-use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind};
+use pmt_gateway::messaging::{Addressing, Attachment, ChatType, Inbound, MediaKind};
 use serde_json::Value;
 
 /// One update's event, and the callback query to answer (a button press).
@@ -98,6 +98,56 @@ fn message_event(message: &Value) -> Option<Inbound> {
     Some(inbound)
 }
 
+/// The bot as Telegram names it (`getMe`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Me {
+    pub(crate) id: String,
+    pub(crate) username: String,
+}
+
+impl Me {
+    pub(crate) fn of(get_me: &Value) -> Self {
+        Self {
+            id: id(&get_me["id"]).unwrap_or_default(),
+            username: get_me["username"].as_str().unwrap_or_default().to_owned(),
+        }
+    }
+}
+
+/// How `message` addresses the bot: an `@username` or a text mention of
+/// it, or a reply to one of its messages (not the topic's opening
+/// message, which every topic message replies to).
+pub(crate) fn addressing(message: &Value, me: &Me) -> Addressing {
+    let text = message["text"]
+        .as_str()
+        .or_else(|| message["caption"].as_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    let handle = format!("@{}", me.username.to_lowercase());
+    let named = !me.username.is_empty()
+        && text.match_indices(&handle).any(|(at, _)| {
+            text[at + handle.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_alphanumeric() && c != '_')
+        });
+    let entities = message["entities"]
+        .as_array()
+        .or_else(|| message["caption_entities"].as_array());
+    let text_mention = entities.into_iter().flatten().any(|e| {
+        e["type"] == "text_mention" && id(&e["user"]["id"]).as_deref() == Some(me.id.as_str())
+    });
+    let reply = &message["reply_to_message"];
+    let replies_to_bot = !reply["forum_topic_created"].is_object()
+        && !me.id.is_empty()
+        && id(&reply["from"]["id"]).as_deref() == Some(me.id.as_str());
+    Addressing {
+        mentioned: named || text_mention,
+        replies_to_bot,
+        ..Addressing::default()
+    }
+}
+
 fn callback_event(query: &Value) -> Option<Update> {
     let message = &query["message"];
     let chat = &message["chat"];
@@ -123,11 +173,12 @@ fn callback_event(query: &Value) -> Option<Update> {
 }
 
 /// The event of one update; `None` for updates the gateway ignores.
-pub(crate) fn update(update: &Value) -> Option<Update> {
+pub(crate) fn update(update: &Value, me: &Me) -> Option<Update> {
     if update["callback_query"].is_object() {
         return callback_event(&update["callback_query"]);
     }
-    let inbound = message_event(&update["message"])?;
+    let mut inbound = message_event(&update["message"])?;
+    inbound.addressing = addressing(&update["message"], me);
     Some(Update {
         inbound,
         callback_query: None,
@@ -140,6 +191,23 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn mentions_and_replies_to_the_bot_are_recognised() {
+        let me = Me {
+            id: "99".into(),
+            username: "PromBot".into(),
+        };
+        let at = json!({"text": "hey @prombot, look", "from": {"id": 1}});
+        assert!(addressing(&at, &me).mentioned);
+        let other = json!({"text": "hey @prombotter"});
+        assert!(!addressing(&other, &me).mentioned);
+        let reply = json!({"text": "yes", "reply_to_message": {"from": {"id": 99}}});
+        assert!(addressing(&reply, &me).replies_to_bot);
+        let topic = json!({"text": "yes", "reply_to_message":
+            {"from": {"id": 99}, "forum_topic_created": {"name": "t"}}});
+        assert!(!addressing(&topic, &me).replies_to_bot);
+    }
+
+    #[test]
     fn a_topic_photo_message_is_normalized() {
         let raw = json!({"update_id": 9, "message": {
             "message_id": 77, "date": 1_700_000_000,
@@ -150,7 +218,7 @@ mod tests {
             "photo": [{"file_id": "small"}, {"file_id": "large"}],
             "reply_to_message": {"message_id": 70}
         }});
-        let event = update(&raw).unwrap().inbound;
+        let event = update(&raw, &Me::default()).unwrap().inbound;
         assert_eq!(event.message_id, "77");
         assert_eq!(event.chat_id, "-1001");
         assert_eq!(event.chat_type, ChatType::Group);
@@ -170,7 +238,7 @@ mod tests {
             "from": {"id": 42, "first_name": "Ada"},
             "message": {"message_id": 80, "chat": {"id": 42, "type": "private"}}
         }});
-        let event = update(&raw).unwrap();
+        let event = update(&raw, &Me::default()).unwrap();
         assert_eq!(event.callback_query.as_deref(), Some("q1"));
         assert_eq!(event.inbound.callback.as_deref(), Some("appr:x:once:y"));
         assert_eq!(event.inbound.chat_type, ChatType::Dm);

@@ -30,6 +30,8 @@ pub enum Rule {
     Paired,
     /// `allow_users` lists the sender.
     User,
+    /// The sender holds an `allow_roles` role.
+    Role,
     /// The adapter's own allowlist.
     AdapterAllowlist,
 }

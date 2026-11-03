@@ -108,6 +108,11 @@ pub struct PlatformConfig {
     /// elsewhere.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reactions: Option<bool>,
+    /// Role ids whose holders are authorized (Discord roles, Slack user
+    /// groups, Matrix power levels), checked right after `allow_users` on
+    /// adapters that expose roles; a failed role lookup denies.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub allow_roles: Vec<String>,
     /// Post one notice to this platform's home channel after a graceful
     /// restart or update that interrupted running turns (default true).
     #[serde(skip_serializing_if = "Option::is_none")]

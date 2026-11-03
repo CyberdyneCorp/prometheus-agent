@@ -179,6 +179,7 @@ impl Session {
     /// polls or a number answering its approval card becomes the
     /// card's callback, and a quote of its own send carries that text.
     pub(crate) fn enrich(&self, mut inbound: Inbound, raw: &Value) -> Inbound {
+        inbound.addressing = self.addressing(&inbound, raw);
         if let Some(callback) = self.vote(raw).or_else(|| self.number(&inbound)) {
             inbound.callback = Some(callback);
             inbound.text.clear();
@@ -192,6 +193,35 @@ impl Session {
             inbound.text = format!("[Replying to: {}]\n{}", quoted.trim(), inbound.text);
         }
         inbound
+    }
+
+    /// How a message addresses this device: the bridge lists it among the
+    /// mentioned ids (`mentionedIds`, with `botIds` naming the device's own
+    /// ids, as the Hermes bridge sends them), or it quotes one of the
+    /// device's sends (`quotedParticipant`, or a remembered own send).
+    fn addressing(&self, inbound: &Inbound, raw: &Value) -> pmt_gateway::messaging::Addressing {
+        let own: Vec<&str> = raw["botIds"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let mentioned = raw["mentionedIds"].as_array().is_some_and(|ids| {
+            ids.iter()
+                .filter_map(Value::as_str)
+                .any(|id| own.contains(&id))
+        });
+        let quoted = raw["quotedParticipant"].as_str().unwrap_or_default();
+        let replies_to_bot = (!quoted.is_empty() && own.contains(&quoted))
+            || inbound
+                .reply_to
+                .as_deref()
+                .is_some_and(|id| self.own_text(id).is_some());
+        pmt_gateway::messaging::Addressing {
+            mentioned,
+            replies_to_bot,
+            ..pmt_gateway::messaging::Addressing::default()
+        }
     }
 
     fn vote(&self, raw: &Value) -> Option<String> {
