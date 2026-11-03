@@ -124,6 +124,7 @@ pub(crate) fn message(event: &Value, room: &str, me: &str, members: usize) -> Op
         reply_to: text(&relation["m.in_reply_to"]["event_id"]),
         is_bot: false,
         callback: None,
+        interaction: None,
         profile: None,
         addressing: addressing(content, me),
     })

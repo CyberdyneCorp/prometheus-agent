@@ -33,6 +33,7 @@ use super::turn::{SecretsToClients, ToClients, approvals, clarify};
 mod commands;
 mod discovery;
 mod gateway;
+mod notify;
 mod reload;
 mod send_tool;
 mod setup;
@@ -258,12 +259,21 @@ impl DaemonHost {
             .unwrap_or_default();
         let factory = self.factory(profile, cwd, &setup)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
+        // A chat's session tells the chat when its background processes end.
+        let completions = matches!(row.origin, pmt_store::Origin::Gateway { .. }).then(|| {
+            notify::completions(
+                Arc::clone(&self.gateway),
+                profile.scope().name().to_string(),
+                id.to_string(),
+            )
+        });
         let clients = Clients {
             events: Arc::new(ToClients { link: link.clone() }),
             secrets: Arc::new(SecretsToClients {
                 link: link.clone(),
                 runtime: tokio::runtime::Handle::current(),
             }),
+            completions,
         };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {

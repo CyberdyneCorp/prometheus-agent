@@ -80,6 +80,10 @@ pub struct Clients {
     pub events: Arc<dyn EventSink>,
     /// Asks the session's clients for a skill's missing secret.
     pub secrets: Arc<dyn SecretPrompt>,
+    /// Where the terminal reports finished `notify_on_complete` background
+    /// processes (a gateway session's chat).
+    pub completions:
+        Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Completion>>,
 }
 
 /// What every session of this process shares.
@@ -375,11 +379,15 @@ impl Factory {
         )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
-        let live_config = SharedScope::new(scope.clone());
-        let environment = self.environment(id, target, &capabilities, &live_config)?;
-        if let Some(terminal) = &environment.terminal {
-            terminal.set_secret_source(skills.secret_source());
-        }
+        let current = SharedScope::new(scope.clone());
+        let environment = self.environment(
+            id,
+            target,
+            &capabilities,
+            &current,
+            &skills,
+            clients.as_ref(),
+        )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
         let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
@@ -410,12 +418,7 @@ impl Factory {
             Arc::clone(&tool_port) as _,
             prompt,
         );
-        let mut events = trajectory
-            .clone()
-            .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
-        if let Some(clients) = clients {
-            events = Arc::new(progress::Both(events, clients.events));
-        }
+        let events = events_to(trajectory.clone(), clients.map(|c| c.events));
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
         setup.events = Arc::new(tee);
@@ -441,7 +444,7 @@ impl Factory {
             selection: Mutex::new(selection),
             notices,
             progress,
-            config: live_config,
+            config: current,
             record: Arc::clone(&self.record),
             agent_tools,
             capabilities,
@@ -479,15 +482,18 @@ impl Factory {
         .map(Arc::new))
     }
 
-    /// Attaches the session's execution environment.
+    /// Attaches the session's execution environment (its terminal reports
+    /// finished background processes to the `clients`' sender).
     fn environment(
         &self,
         id: SessionId,
         target: &pmt_providers::resolve::Target,
         capabilities: &CapabilitySet,
         config: &SharedScope,
+        skills: &Arc<SkillsSession>,
+        clients: Option<&Clients>,
     ) -> Result<env::Attached, Error> {
-        env::attach(&env::EnvInputs {
+        let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
             session_id: &id.to_string(),
@@ -497,7 +503,13 @@ impl Factory {
             redactor: self.redactor.clone(),
             browser: self.browser(),
             image_input: self.image_input(target),
-        })
+            completions: clients.and_then(|c| c.completions.clone()),
+        })?;
+        // Skills pass their declared secrets to the terminal.
+        if let Some(terminal) = &environment.terminal {
+            terminal.set_secret_source(skills.secret_source());
+        }
+        Ok(environment)
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -712,6 +724,19 @@ impl Factory {
 
 /// Announces each borrowed login's first use in the session (spec:
 /// model-providers, Borrowed CLI logins).
+/// Where a session's events go: its trajectory (when on) and its daemon
+/// clients (when attached).
+fn events_to(
+    trajectory: Option<Arc<TrajectoryWriter>>,
+    clients: Option<Arc<dyn EventSink>>,
+) -> Arc<dyn EventSink> {
+    let events = trajectory.map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
+    match clients {
+        Some(clients) => Arc::new(progress::Both(events, clients)),
+        None => events,
+    }
+}
+
 fn borrowed_watch(notices: progress::Notices) -> pmt_agent::turn::model::CredentialWatch {
     let announced = Mutex::new(pmt_providers::auth::borrowed::Announcements::default());
     Arc::new(move |credential| {

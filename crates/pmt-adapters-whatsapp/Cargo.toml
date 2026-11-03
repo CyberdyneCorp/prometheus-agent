@@ -14,6 +14,8 @@ kit = []
 
 [dependencies]
 futures-util.workspace = true
+# The managed bridge's per-launch bearer token.
+getrandom.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true

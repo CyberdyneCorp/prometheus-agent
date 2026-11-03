@@ -71,6 +71,8 @@ struct State {
     appends_left: Option<usize>,
     /// Bodies posted to slash commands' response URLs.
     responses: Vec<Value>,
+    /// Ephemeral messages: `(user, text)`.
+    ephemeral: Vec<(String, String)>,
 }
 
 /// The mock.
@@ -425,6 +427,14 @@ impl SlackMock {
             "auth.test" => ok(&json!({"user_id": BOT, "team_id": TEAM, "user": "kit-bot"})),
             "apps.connections.open" => ok(&json!({"url": format!("ws://{}/link", self.socket)})),
             "chat.postMessage" => self.post(args),
+            "chat.postEphemeral" => {
+                let entry = (
+                    args["user"].as_str().unwrap_or_default().to_owned(),
+                    args["text"].as_str().unwrap_or_default().to_owned(),
+                );
+                self.lock().ephemeral.push(entry);
+                ok(&json!({"message_ts": self.ts()}))
+            }
             "chat.update" => self.update(args),
             "reactions.add" => {
                 let entry = (
@@ -626,6 +636,10 @@ impl MockPlatform for SlackMock {
 
     fn thread(&self) -> Option<(String, String)> {
         Some((CHANNEL.to_owned(), THREAD.to_owned()))
+    }
+
+    fn private_replies(&self) -> Vec<(String, String)> {
+        self.lock().ephemeral.clone()
     }
 
     fn inject_media(

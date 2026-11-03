@@ -30,6 +30,8 @@ pub(crate) struct Ctx {
     pub(crate) ignore_root_dm: bool,
     /// The bot (`getMe`), to recognise mentions of it.
     pub(crate) me: normalize::Me,
+    /// Pressed buttons whose answer waits for a private reply.
+    pub(crate) callbacks: Arc<crate::private::Callbacks>,
 }
 
 /// Handles one raw update.
@@ -64,10 +66,7 @@ pub(crate) async fn handle(ctx: &Ctx, raw: &Value) {
         return;
     }
     if let Some(query) = &update.callback_query {
-        let _ = ctx
-            .api
-            .call("answerCallbackQuery", &json!({"callback_query_id": query}))
-            .await;
+        ctx.callbacks.hold(&ctx.api, query);
     }
     ctx.link.submit(update.inbound).await;
 }

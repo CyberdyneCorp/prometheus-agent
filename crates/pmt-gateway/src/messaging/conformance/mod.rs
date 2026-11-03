@@ -172,6 +172,11 @@ pub trait MockPlatform: Send + Sync {
     fn locations(&self) -> Vec<(String, f64, f64, Option<String>)> {
         Vec::new()
     }
+    /// Replies only one member saw (ephemeral messages): `(member, text)`.
+    /// A private reply sent as a direct message shows in [`Self::sent`].
+    fn private_replies(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
     /// Every file the platform accepted, in order.
     fn files(&self) -> Vec<MockFile> {
         Vec::new()

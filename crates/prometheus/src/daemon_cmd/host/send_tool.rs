@@ -104,7 +104,14 @@ impl GatewayPort {
                 let (text, attachments) = target::media(required(arguments, "message", action)?);
                 for file in &attachments {
                     let path = Path::new(&file.path);
-                    if !path.is_absolute() || !path.is_file() || !(self.may_read)(path) {
+                    // The file tools' read refusals (dotenv, /proc secrets)
+                    // hold here too: sending a file is reading it out.
+                    let refused = pmt_tools::files::guards::read_refusal(path, &file.path);
+                    if !path.is_absolute()
+                        || !path.is_file()
+                        || refused.is_some()
+                        || !(self.may_read)(path)
+                    {
                         return Err(Error::new(
                             &codes::GATEWAY_TARGET_REFUSED,
                             format!("MEDIA:{} is not a file this session may read", file.path),

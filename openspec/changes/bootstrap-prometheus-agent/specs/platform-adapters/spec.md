@@ -19,7 +19,7 @@ Every adapter, first-party or plugin, SHALL implement the required operations `c
 - **THEN** the system SHALL receive all 3 messages exactly once
 
 ### Requirement: Capability descriptor is the single source of truth
-The capability descriptor SHALL declare `platform`, `max_message_length` (positive integer, required), `length_unit` in `chars`, `utf16`, `utf8_bytes`, `splits_long_messages`, `supports_edit`, `supports_delete`, `supports_typing`, `supports_reactions`, `supports_threads`, `interactive` in `native`, `numbered`, `none`, `media_in` and `media_out` (sets of `image`, `audio`, `voice`, `video`, `document`), `delivery_receipts`, `read_receipts`, `streaming_tts`, `markup` in `plain`, `markdown`, `html`, `platform`, and `binds_http`, plus the optional boolean flags (default false) whose behaviour other capabilities define: `can_fetch_history`, `exposes_roles`, `dm_topics`, `native_stream`, `task_cards`, `status_line` (`messaging-gateway`), `stateless_send` (`agent-interop`), and the per-message marker `not_addressed_to_bot`, and the optional `continuable_surface` in `thread` (default) or `in_channel` (`scheduled-jobs`); the gateway SHALL read limits and capabilities only from the descriptor, a descriptor missing a required field or with a non-positive `max_message_length` SHALL fail adapter load, and `prometheus gateway platforms` SHALL print each loaded adapter's descriptor.
+The capability descriptor SHALL declare `platform`, `max_message_length` (positive integer, required), `length_unit` in `chars`, `utf16`, `utf8_bytes`, `splits_long_messages`, `supports_edit`, `supports_delete`, `supports_typing`, `supports_reactions`, `supports_threads`, `interactive` in `native`, `numbered`, `none`, `media_in` and `media_out` (sets of `image`, `audio`, `voice`, `video`, `document`), `delivery_receipts`, `read_receipts`, `streaming_tts`, `markup` in `plain`, `markdown`, `html`, `platform`, and `binds_http`, plus the optional boolean flags (default false) whose behaviour other capabilities define: `can_fetch_history`, `exposes_roles`, `dm_topics`, `native_stream`, `task_cards`, `status_line`, `private_replies` (a reply only one member sees: ephemeral where the platform has it, else a direct message; `messaging-gateway`), `stateless_send` (`agent-interop`), and the per-message marker `not_addressed_to_bot`, and the optional `continuable_surface` in `thread` (default) or `in_channel` (`scheduled-jobs`); the gateway SHALL read limits and capabilities only from the descriptor, a descriptor missing a required field or with a non-positive `max_message_length` SHALL fail adapter load, and `prometheus gateway platforms` SHALL print each loaded adapter's descriptor.
 **Milestone:** M2
 
 #### Scenario: Missing limit fails load
@@ -157,7 +157,7 @@ Inbound media SHALL be capped at `gateway.media.max_inbound_bytes` (default 1342
 - **THEN** the system SHALL abort it, write nothing to the cache and notify the user
 
 ### Requirement: Outbound attachments and path safety
-The agent SHALL attach outbound media through structured reply attachments or `MEDIA:<path>` directives (deduplicated, ignored inside code blocks, inline code, blockquotes and quoted JSON, with `[[as_voice]]` and `[[as_document]]` modifiers), and the host SHALL deliver a local path only when its fully resolved real path lies inside the session's workspace, the profile's `cache/media/` or the blob store, refusing symlink escapes, the secrets store, `config.toml`, `state.db` and any path outside those roots with a visible note "attachment <name> withheld: path not allowed".
+The agent SHALL attach outbound media through structured reply attachments or `MEDIA:<path>` directives (deduplicated, ignored inside code blocks, inline code, blockquotes and quoted JSON, with `[[as_voice]]` and `[[as_document]]` modifiers), and the host SHALL deliver a local path only when its fully resolved real path lies inside the session's workspace, the profile's `cache/media/` or the blob store, refusing symlink escapes, the secrets store, `config.toml`, `state.db`, the files `read_file` refuses by path (project dotenv files `.env`, `.env.*` and `.envrc` except templates, and `/proc` memory and environment entries, checked on the path as written and on its resolved path) and any path outside those roots with a visible note "attachment <name> withheld: path not allowed"; the `send_message` tool SHALL refuse the same files as attachments.
 **Milestone:** M2
 
 #### Scenario: Secrets file refused
@@ -168,6 +168,11 @@ The agent SHALL attach outbound media through structured reply attachments or `M
 - **GIVEN** `workspace/out.png` is a symlink to `/etc/passwd`
 - **WHEN** it is attached
 - **THEN** the system SHALL refuse it
+
+#### Scenario: Dotenv file refused
+- **GIVEN** the session workspace holds `.env`
+- **WHEN** a reply contains `MEDIA:<workspace>/.env`, or `send_message` attaches it
+- **THEN** the reply SHALL carry the withheld note instead of the file and `send_message` SHALL refuse the attachment
 
 ### Requirement: Voice input transcription
 When `gateway.voice.stt_enabled` is true (default) the gateway SHALL transcribe inbound voice and audio clips with the profile's configured speech-to-text provider and prepend the transcript to the user's text, echoing the transcript back once when `gateway.voice.echo_transcripts` is true (default `true`); when disabled or when transcription fails it SHALL instead give the agent the note "[The user sent a voice message: <path> (duration: <s>s)]".

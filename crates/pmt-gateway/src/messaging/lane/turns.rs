@@ -214,13 +214,7 @@ impl Lane {
             return;
         }
         self.add_observed(&session, &pending.routing);
-        let store = self.shared.store(&self.profile);
-        if let Some(store) = &store
-            && let Ok(id) = session.parse()
-            && let Err(err) = store.set_turn_active(id, true)
-        {
-            tracing::warn!("turn not recorded as running: {err}");
-        }
+        self.record_start(&session, &pending.routing);
         self.shared.cache.touch(&self.profile, &session);
         let author = Author {
             client_kind: "gateway".to_owned(),
@@ -291,6 +285,21 @@ impl Lane {
                 self.turn_over(&session);
                 self.say(err.message());
             }
+        }
+    }
+
+    /// Marks the session's turn running (restart recovery) and records who
+    /// sent it (who pays for its calls under the daily cost cap).
+    fn record_start(&self, session: &str, routing: &Routing) {
+        let (Some(store), Ok(id)) = (self.shared.store(&self.profile), session.parse()) else {
+            return;
+        };
+        if let Err(err) = store.set_turn_active(id, true) {
+            tracing::warn!("turn not recorded as running: {err}");
+        }
+        let at = Timestamp::now();
+        if let Err(err) = store.record_gateway_turn(id, &routing.platform, &routing.sender_id, at) {
+            tracing::warn!("turn sender not recorded: {err}");
         }
     }
 

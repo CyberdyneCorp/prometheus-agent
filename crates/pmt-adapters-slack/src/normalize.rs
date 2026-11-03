@@ -96,6 +96,7 @@ pub(crate) fn message(event: &Value, team: Option<&str>, bot_user: &str) -> Opti
         reply_to: None,
         is_bot: event["bot_id"].is_string() || subtype == "bot_message",
         callback: None,
+        interaction: None,
         profile: None,
         addressing: pmt_gateway::messaging::Addressing {
             mentioned: !bot_user.is_empty()
@@ -135,6 +136,7 @@ pub(crate) fn app_home(event: &Value, team: Option<&str>) -> Option<Inbound> {
         reply_to: None,
         is_bot: false,
         callback: None,
+        interaction: None,
         profile: None,
         addressing: pmt_gateway::messaging::Addressing::default(),
     })

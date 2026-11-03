@@ -228,6 +228,43 @@ async fn an_attachment_outside_the_allowed_roots_is_withheld_with_a_note() {
     assert!(paths[0].ends_with("chart.png"));
 }
 
+/// A workspace dotenv file holds project credentials `read_file` refuses
+/// to show; a `MEDIA:` line cannot send it either.
+#[tokio::test]
+async fn a_workspace_dotenv_file_is_withheld() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    let workspace = h.home.path().join("workspace");
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::write(workspace.join(".env"), "API_KEY=sk-live").unwrap();
+    std::fs::write(workspace.join(".env.local"), "API_KEY=sk-live").unwrap();
+    std::fs::write(workspace.join("chart.png"), "png").unwrap();
+    *h.agents.cwd.lock().unwrap() = Some(workspace.to_string_lossy().into_owned());
+    let reply = format!(
+        "say:Here\nMEDIA:{}\nMEDIA:{}\nMEDIA:{}",
+        workspace.join(".env").display(),
+        workspace.join(".env.local").display(),
+        workspace.join("chart.png").display()
+    );
+    h.dm("telegram", "1", &reply).await;
+    said(
+        &h.adapter("telegram"),
+        "attachment .env withheld: path not allowed",
+    )
+    .await;
+    let did = h.adapter("telegram").all();
+    let Did::Send(sent) = &did[0] else {
+        panic!("{did:?}")
+    };
+    assert!(
+        sent.text.contains("attachment .env.local withheld"),
+        "{}",
+        sent.text
+    );
+    let paths: Vec<&str> = sent.attachments.iter().map(|a| a.path.as_str()).collect();
+    assert_eq!(paths.len(), 1, "{paths:?}");
+    assert!(paths[0].ends_with("chart.png"));
+}
+
 /// Spec: platform-adapters, `WhatsApp` interactive and rich features:
 /// locations travel as structured attachments both ways.
 #[tokio::test]

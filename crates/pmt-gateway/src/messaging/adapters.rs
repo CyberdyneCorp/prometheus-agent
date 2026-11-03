@@ -859,6 +859,11 @@ impl AdapterLink for Link {
             }
         })
     }
+
+    fn http_listen(&self) -> Option<std::net::SocketAddr> {
+        let shared = self.shared.upgrade()?;
+        Some(shared.http.addr().unwrap_or(shared.options.http.listen))
+    }
 }
 
 /// Every running adapter, by `(profile, platform)`.

@@ -85,8 +85,8 @@ pub(super) fn run(args: &WhatsappArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     };
     let mut command = bridge.command();
     command
-        .args(["--pair-only", "--pair-json", "--session"])
-        .arg(&session)
+        .args(["--pair-only", "--pair-json"])
+        .args(pmt_adapters_whatsapp::profile_args(scope.dir()))
         .args(["--mode", mode]);
     if let Some(phone) = pairing_code {
         command.args(["--pairing-code", phone]);
@@ -137,6 +137,7 @@ impl Bridge {
         match self {
             Self::Managed { node, script } => {
                 let mut command = tokio::process::Command::new(node);
+                pmt_adapters_whatsapp::isolate(&mut command);
                 command.arg(script);
                 command
             }

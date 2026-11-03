@@ -45,6 +45,11 @@ impl Kit {
         } else {
             report.skip("streaming tts", "not declared");
         }
+        if self.descriptor.private_replies {
+            report.add("private replies", self.private_reply().await);
+        } else {
+            report.skip("private replies", "not declared");
+        }
         if self.platform.menu().is_some() {
             report.add("command menu", self.menu().await);
         } else {
@@ -154,6 +159,46 @@ impl Kit {
                 "a send to thread {thread} of {chat} landed in thread {:?} of {}",
                 landed.thread_id, landed.chat_id
             ))
+        }
+    }
+
+    /// A reply to the kit user alone (from a group thread where the mock
+    /// has one): ephemeral, or a direct message.
+    async fn private_reply(&self) -> Result<(), String> {
+        let (dm, user) = self.platform.dm();
+        let (chat, thread) = self
+            .platform
+            .thread()
+            .map_or((dm.clone(), None), |(c, t)| (c, Some(t)));
+        let text = "conformance private reply";
+        let private = crate::messaging::adapter::Private {
+            chat_id: chat,
+            thread_id: thread,
+            sender_id: user.clone(),
+            interaction: None,
+            text: text.to_owned(),
+        };
+        self.adapter
+            .reply_privately(&private)
+            .await
+            .map_err(|e| e.describe())?;
+        let ephemeral = self
+            .platform
+            .private_replies()
+            .iter()
+            .any(|(to, t)| *to == user && t == text);
+        let direct = self
+            .platform
+            .sent()
+            .iter()
+            .any(|m| m.chat_id == dm && m.text == text);
+        if ephemeral || direct {
+            Ok(())
+        } else {
+            Err(
+                "the private reply reached neither the member alone nor their direct messages"
+                    .to_owned(),
+            )
         }
     }
 

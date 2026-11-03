@@ -409,3 +409,43 @@ async fn dm_topics_are_declared_only_where_the_bot_has_topic_mode() {
     assert!(!none.bot.describe().dm_topics, "the bot has no topic mode");
     none.bot.disconnect().await;
 }
+
+/// A pressed button's answer waits for a refusal and carries it as an
+/// alert only the presser sees; unanswered, it is answered empty; without
+/// a button the member gets a direct message.
+#[tokio::test]
+async fn a_private_reply_is_an_alert_on_the_pressed_button_or_a_dm() {
+    use pmt_gateway::messaging::conformance::MockPlatform as _;
+    let fixture = bot("", Gateway::default()).await;
+    fixture.api.press("5", "appr:x:once:mac");
+    eventually(|| !fixture.gateway.events.lock().unwrap().is_empty()).await;
+    let pressed = fixture.gateway.events.lock().unwrap()[0].clone();
+    assert_eq!(pressed.interaction.as_deref(), Some("q5"));
+    assert!(fixture.api.calls("answerCallbackQuery").is_empty(), "held");
+    let refusal = pmt_gateway::messaging::Private {
+        chat_id: "-100".into(),
+        thread_id: None,
+        sender_id: DM.to_string(),
+        interaction: pressed.interaction.clone(),
+        text: "Only the person who asked or an admin may decide this.".into(),
+    };
+    fixture.bot.reply_privately(&refusal).await.unwrap();
+    let answers = fixture.api.calls("answerCallbackQuery");
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0]["show_alert"], true);
+    assert_eq!(answers[0]["text"], refusal.text);
+    // Another press nobody refuses is answered empty after the hold.
+    fixture.api.press("6", "appr:x:once:mac");
+    eventually(|| fixture.api.calls("answerCallbackQuery").len() == 2).await;
+    assert!(fixture.api.calls("answerCallbackQuery")[1]["text"].is_null());
+    // The same answer cannot be given twice: a late reply becomes a DM.
+    fixture.bot.reply_privately(&refusal).await.unwrap();
+    let dms = fixture.api.calls("sendMessage");
+    assert!(
+        dms.iter().any(
+            |m| m["chat_id"].to_string().trim_matches('"') == DM.to_string()
+                && m["text"] == refusal.text
+        ),
+        "{dms:?}"
+    );
+}

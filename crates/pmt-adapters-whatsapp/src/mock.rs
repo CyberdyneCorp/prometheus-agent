@@ -19,6 +19,10 @@ use pmt_gateway::messaging::mock_server;
 use pmt_gateway::messaging::{HttpRequest, HttpResponse, MediaKind};
 use serde_json::{Value, json};
 
+/// The bearer token the mock bridge requires (store it as
+/// [`crate::TOKEN_SECRET`]).
+pub const TOKEN: &str = "kit-bridge-token";
+
 /// The person the kit talks as (and their direct chat).
 pub const USER: &str = "15550004242@s.whatsapp.net";
 const LIMIT: usize = 4096;
@@ -134,6 +138,14 @@ impl BridgeMock {
     }
 
     fn serve(&self, request: &HttpRequest) -> HttpResponse {
+        let bearer = format!("Bearer {TOKEN}");
+        let authorized = request
+            .headers
+            .iter()
+            .any(|(name, value)| name == "authorization" && *value == bearer);
+        if !authorized {
+            return mock_server::json(401, &json!({"error": "unauthorized"}));
+        }
         let body: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
         let mut state = self.lock();
         match (request.method.as_str(), request.path.as_str()) {
@@ -380,8 +392,12 @@ pub async fn kit(
 > {
     let mock = BridgeMock::start().await;
     mock.cache_media_in(home.join("cache").join("whatsapp-bridge"));
-    let setup =
-        pmt_gateway::messaging::conformance::kit_setup(home, crate::PLATFORM, &mock.table(), &[])?;
+    let setup = pmt_gateway::messaging::conformance::kit_setup(
+        home,
+        crate::PLATFORM,
+        &mock.table(),
+        &[(crate::TOKEN_SECRET, TOKEN)],
+    )?;
     let adapter = crate::Whatsapp::new(&setup)?;
     Ok((Arc::new(adapter), mock))
 }

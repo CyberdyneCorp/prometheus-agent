@@ -23,6 +23,7 @@ mod models;
 mod native;
 mod observe;
 mod pages;
+mod private;
 mod progress;
 mod reply;
 mod requests;
@@ -252,6 +253,9 @@ struct Lane {
     /// platform answering commands privately, such as Slack's slash
     /// commands, recognises its reply by it).
     answering: Option<String>,
+    /// The event being handled's private-answer handle
+    /// ([`Inbound::interaction`]).
+    interaction: Option<String>,
     /// A turn a restart left `resume_pending` holds the queue until this
     /// deadline (`/retry`, `/discard`, or the expiry release it).
     held: Option<resume::Held>,
@@ -318,6 +322,7 @@ fn lane(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) -> Handle {
         horizon: 0,
         titled: None,
         answering: None,
+        interaction: None,
         policy: None,
         mirrors: Vec::new(),
         voice_input: false,
@@ -462,8 +467,10 @@ impl Lane {
                 self.voice_input = voice;
                 self.answering = Some(inbound.message_id.clone())
                     .filter(|id| !id.is_empty() && inbound.text.trim_start().starts_with('/'));
+                self.interaction.clone_from(&inbound.interaction);
                 self.inbound(seq, *routing, *inbound).await;
                 self.answering = None;
+                self.interaction = None;
             }
             Msg::Finished(finished) => self.finished(finished).await,
             Msg::Delta(text) => {
@@ -511,7 +518,19 @@ impl Lane {
     }
 
     fn deliver(&self, key: String, kind: OutboundKind, body: String, edit_of: Option<String>) {
-        let new = NewOutbound {
+        let new = self.outbound(key, kind, body, edit_of);
+        self.shared.deliver(&self.profile, &new);
+    }
+
+    /// An outbound message to the conversation's chat.
+    fn outbound(
+        &self,
+        key: String,
+        kind: OutboundKind,
+        body: String,
+        edit_of: Option<String>,
+    ) -> NewOutbound {
+        NewOutbound {
             idempotency_key: key,
             session_id: self.session.clone(),
             platform: self.routing.platform.clone(),
@@ -522,8 +541,7 @@ impl Lane {
             kind,
             body,
             attachments: Vec::new(),
-        };
-        self.shared.deliver(&self.profile, &new);
+        }
     }
 
     /// The profile's gateway configuration now.

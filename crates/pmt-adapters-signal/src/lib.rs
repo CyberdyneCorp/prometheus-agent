@@ -23,8 +23,8 @@ use pmt_config::platforms::SignalOptions;
 use pmt_core::error::Error;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, Markup, MediaKind, MediaStream, Outgoing, Reaction, SendError,
-    Sent, markup,
+    ChatInfo, ChatType, Descriptor, Markup, MediaKind, MediaStream, Outgoing, Private, Reaction,
+    SendError, Sent, markup,
 };
 use rpc::Rpc;
 use serde_json::{Value, json};
@@ -248,8 +248,18 @@ impl Adapter for Signal {
             media_in: all.clone(),
             media_out: all,
             stateless_send: true,
+            private_replies: true,
             ..Descriptor::new(PLATFORM, limit)
         }
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        // A direct message: a person's own chat is their number.
+        Box::pin(async move {
+            self.send(&Outgoing::text(&to.sender_id, None, &to.text))
+                .await
+                .map(drop)
+        })
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {

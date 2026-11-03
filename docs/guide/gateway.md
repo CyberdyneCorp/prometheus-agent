@@ -190,8 +190,13 @@ The other first-party adapters:
   Markdown is sent as Signal text styles.
 - **WhatsApp** runs the managed WhatsApp Web bridge runtime for each
   profile (its linked-device session under
-  `<profile>/platforms/whatsapp/session/`), or uses a bridge already
-  running at `options.bridge_url`. One person is one sender whether
+  `<profile>/platforms/whatsapp/session/`, inbound media cached under
+  `<profile>/cache/media/whatsapp/`), or uses a bridge already running at
+  `options.bridge_url`. Every request to the bridge carries a bearer token:
+  the managed bridge gets a fresh one per start (and none of the daemon's
+  other environment); an external bridge must be started with
+  `PMT_BRIDGE_TOKEN` set to the secret `WHATSAPP_BRIDGE_TOKEN` (or the one
+  `token_secret` names). One person is one sender whether
   WhatsApp names them by phone number or LID. A device logged out from the
   phone stops the adapter with `whatsapp_logged_out`. `options.mode` is
   `bot` (a number of its own) or `self_chat` (your number: only your chat
@@ -222,7 +227,9 @@ The other first-party adapters:
   secret its senders sign with (GitHub `X-Hub-Signature-256`, GitLab
   `X-Gitlab-Token`, Standard Webhooks `webhook-signature`, or
   `X-Webhook-Signature-V2` with `X-Webhook-Timestamp`), unless it sets
-  `insecure_no_auth = true`, which only a loopback listener allows.
+  `insecure_no_auth = true`, which only a loopback listener allows (the
+  address the daemon bound at start: editing `gateway.http.listen` takes a
+  daemon restart).
   `events` limits the accepted event types and `prompt` renders the turn's
   input from the payload (`{pull_request.title}`, `{__raw__}`). Each
   delivery runs as its own conversation, with the read-only
@@ -339,7 +346,13 @@ What the gateway does for every adapter:
   it is denied). They use buttons where the platform has them (signed
   per daemon start, so a forged button press decides nothing), a
   numbered list answered with `1`..`4` on `numbered` platforms, and
-  `/approve <id> <choice>` elsewhere. Clarify questions list their
+  `/approve <id> <choice>` elsewhere. Only the person whose message
+  started the turn, or an admin, may decide; an approval from a turn the
+  chat did not start (another client's) takes an admin, or the one person
+  of a direct message. Anyone else is told so privately: an alert on the
+  pressed Telegram button, a Slack ephemeral message, a Discord ephemeral
+  reply, otherwise a direct message (in the chat only when the platform
+  can do neither). Clarify questions list their
   choices by number everywhere and, on platforms with buttons, as
   buttons too; the asker answers with a button, the numbers or text. A
   question taking several answers says "Multiple selections allowed" and
@@ -389,12 +402,25 @@ platform, only those users run every command; others keep `/help`,
 
 ## Policies
 
+### Background notifications
+
+A background process a chat's turn started with `notify_on_complete`
+reports its end in that chat ("Background process `<id>` finished:
+`<command>`", or "failed (exit `<n>`)"), after the running turn when one
+runs.
+`gateway.notifications.background` picks what is shown: `concise` (default:
+results and errors), `all`, `result`, `error` or `off`. While a follow-up
+from a person waits, the notification is held and retried; it is not a
+delivery attempt.
+
 ### Rate limits
 
 Each sender has a token bucket: `gateway.rate_limit.messages_per_minute`
 (default 20) with a `burst` of 10, `turns_per_hour` (120), and an optional
-`daily_cost_usd` measured from the usage ledger since local midnight. A
-message over a limit is dropped and the sender hears "Slow down: rate
+`daily_cost_usd` measured from the usage ledger since local midnight: each
+turn's calls (its subagents' included) count against the person who sent
+that turn, so in a shared thread everyone pays for their own turns; a spend
+that cannot be read refuses the turn. A message over a limit is dropped and the sender hears "Slow down: rate
 limit reached, try again in `<n>`s." once per window. Admins are exempt;
 every key can be overridden under `gateway.platforms.<name>.rate_limit`.
 

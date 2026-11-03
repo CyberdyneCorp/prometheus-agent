@@ -29,7 +29,7 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, ChatType, Descriptor, Inbound, LengthUnit, Markup, MediaKind, MediaStream, Outgoing,
-    Reaction, SendError, Sent, markup,
+    Private, Reaction, SendError, Sent, markup,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -61,6 +61,8 @@ pub struct Matrix {
     reactions: Mutex<HashMap<(String, String), String>>,
     api: Mutex<Option<Api>>,
     poller: Mutex<Option<CancellationToken>>,
+    /// Direct-message rooms the adapter opened, by user.
+    dms: Mutex<HashMap<String, String>>,
 }
 
 impl std::fmt::Debug for Matrix {
@@ -117,13 +119,27 @@ impl Matrix {
             reactions: Mutex::default(),
             api: Mutex::default(),
             poller: Mutex::default(),
+            dms: Mutex::default(),
         })
     }
 
     fn api_with(&self, token: String) -> Result<Api, AdapterError> {
+        let homeserver = self.homeserver.clone().ok_or_else(missing_homeserver)?;
+        // The access token goes with every request: never over cleartext
+        // to a remote host (validation refuses it too; this catches a
+        // hand-edited file).
+        if !pmt_config::daemon_relay::secure_url(&homeserver, "https", "http") {
+            return Err(AdapterError {
+                retryable: false,
+                code: "insecure_url".to_owned(),
+                message: format!(
+                    "gateway.platforms.matrix.options.homeserver: '{homeserver}' would send the access token in cleartext; use https://"
+                ),
+            });
+        }
         Ok(Api {
             client: self.client.clone(),
-            homeserver: self.homeserver.clone().ok_or_else(missing_homeserver)?,
+            homeserver,
             token,
         })
     }
@@ -159,6 +175,25 @@ impl Matrix {
             .as_str()
             .map(str::to_owned)
             .ok_or_else(|| SendError::Server("the send returned no event id".to_owned()))
+    }
+
+    /// The direct-message room with `user`, opened (and remembered) on
+    /// first use.
+    async fn dm_room(&self, user: &str) -> Result<String, SendError> {
+        if let Some(room) = self.dms.lock().expect("dms poisoned").get(user) {
+            return Ok(room.clone());
+        }
+        let body = json!({"is_direct": true, "invite": [user], "preset": "trusted_private_chat"});
+        let created = self.api()?.post("/createRoom", &body).await?;
+        let room = created["room_id"]
+            .as_str()
+            .ok_or_else(|| SendError::Server("the homeserver created no room".to_owned()))?
+            .to_owned();
+        self.dms
+            .lock()
+            .expect("dms poisoned")
+            .insert(user.to_owned(), room.clone());
+        Ok(room)
     }
 
     async fn connect_with(&self, link: Arc<dyn AdapterLink>) -> Result<(), AdapterError> {
@@ -292,8 +327,20 @@ impl Adapter for Matrix {
             exposes_roles: true,
             media_in: all.clone(),
             media_out: all,
+            private_replies: true,
             ..Descriptor::new(PLATFORM, limit)
         }
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        // A direct message, in a room with just that member and the bot.
+        Box::pin(async move {
+            let room = self.dm_room(&to.sender_id).await?;
+            let content = json!({"msgtype": "m.notice", "body": to.text});
+            self.send_event(&room, "m.room.message", &content)
+                .await
+                .map(drop)
+        })
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {

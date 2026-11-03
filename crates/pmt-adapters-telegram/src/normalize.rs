@@ -162,6 +162,7 @@ fn callback_event(query: &Value) -> Option<Update> {
     inbound.message_id = format!("cb:{query_id}");
     inbound.sender_name = sender_name(from);
     inbound.callback = query["data"].as_str().map(str::to_owned);
+    inbound.interaction = Some(query_id.clone());
     inbound.reply_to = id(&message["message_id"]);
     if message["is_topic_message"].as_bool() == Some(true) {
         inbound.thread_id = id(&message["message_thread_id"]);

@@ -185,6 +185,10 @@ pub struct Descriptor {
     /// It marks messages not addressed to the bot.
     #[serde(default)]
     pub not_addressed_to_bot: bool,
+    /// It can tell one member of a group something only they see
+    /// (`Adapter::reply_privately`: ephemeral or a direct message).
+    #[serde(default)]
+    pub private_replies: bool,
     /// Where a job's continuation lands.
     #[serde(default)]
     pub continuable_surface: ContinuableSurface,
@@ -256,6 +260,7 @@ impl Descriptor {
             status_line: false,
             stateless_send: false,
             not_addressed_to_bot: false,
+            private_replies: false,
             continuable_surface: ContinuableSurface::Thread,
             authorization_is_upstream: false,
             access_policy: None,

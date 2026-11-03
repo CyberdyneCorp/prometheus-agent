@@ -127,6 +127,9 @@ pub(crate) fn interaction(interaction: &Value) -> Option<Inbound> {
         "",
     );
     inbound.message_id = format!("ix:{}", text(&interaction["id"])?);
+    inbound.interaction = text(&interaction["application_id"])
+        .zip(text(&interaction["token"]))
+        .map(|(application, token)| format!("{application}/{token}"));
     inbound.scope_id = text(&interaction["guild_id"]);
     inbound.sender_name = text(&user["global_name"]).or_else(|| text(&user["username"]));
     if kind == Some(2) {

@@ -81,6 +81,10 @@ pub struct Inbound {
     pub is_bot: bool,
     /// A pressed button's data (an interactive card's choice).
     pub callback: Option<String>,
+    /// The platform's handle for answering this event privately (a
+    /// Telegram callback query id, a Discord interaction), handed back in
+    /// [`Private::interaction`].
+    pub interaction: Option<String>,
     /// The profile a multiplexing connector (the relay) addresses; `None`
     /// is the adapter's own profile.
     pub profile: Option<String>,
@@ -123,10 +127,26 @@ impl Inbound {
             reply_to: None,
             is_bot: false,
             callback: None,
+            interaction: None,
             profile: None,
             addressing: Addressing::default(),
         }
     }
+}
+
+/// A reply only one member of a chat may see (a refusal to a bystander).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Private {
+    /// The chat the member wrote in.
+    pub chat_id: String,
+    /// Its thread, when inside one.
+    pub thread_id: Option<String>,
+    /// Who sees it.
+    pub sender_id: String,
+    /// The event's [`Inbound::interaction`], when it had one.
+    pub interaction: Option<String>,
+    /// What they are told.
+    pub text: String,
 }
 
 /// A button on an outgoing message.
@@ -389,6 +409,13 @@ pub trait AdapterLink: Send + Sync {
     fn authorized<'a>(&'a self, _sender_id: &'a str) -> AdapterFuture<'a, bool> {
         Box::pin(async { false })
     }
+    /// The address the shared HTTP listener is (or will be) bound to.
+    /// Fixed for the daemon's lifetime: a later edit of `daemon.toml` does
+    /// not move the listener, so security checks read this, not the file.
+    /// `None`: no listener (unsigned routes are then refused).
+    fn http_listen(&self) -> Option<std::net::SocketAddr> {
+        None
+    }
 }
 
 /// One entry of a native command menu: a gateway command or a skill.
@@ -611,6 +638,13 @@ pub trait Adapter: Send + Sync + 'static {
         _thread_id: Option<&'a str>,
         _status: Option<&'a str>,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Tells `to.sender_id` alone `to.text`: ephemerally in the chat where
+    /// the platform can, else in a direct message (adapters declaring
+    /// `private_replies`). The gateway posts in the chat only when this
+    /// fails.
+    fn reply_privately<'a>(&'a self, _to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
     }
     /// Renames thread (or topic) `thread_id` of `chat_id` to `title`.

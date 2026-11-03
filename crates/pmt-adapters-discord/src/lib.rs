@@ -32,7 +32,7 @@ use pmt_gateway::messaging::multipart::Form;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, ChatType, Descriptor, HistoryEntry, Inbound, Interactive, Markup, MediaKind,
-    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, Sent,
+    MediaStream, MenuCommand, Outgoing, Private, Reaction, Select, SendError, Sent,
 };
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -316,6 +316,7 @@ impl Adapter for Discord {
             stateless_send: true,
             can_fetch_history: true,
             exposes_roles: true,
+            private_replies: true,
             ..Descriptor::new(PLATFORM, limit)
         }
     }
@@ -622,6 +623,31 @@ impl Adapter for Discord {
         title: &'a str,
     ) -> AdapterFuture<'a, Result<String, SendError>> {
         Box::pin(async move { self.channels.open_named(&self.api()?, chat_id, title).await })
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let api = self.api()?;
+            // A pressed button or command: an ephemeral follow-up of its
+            // interaction (`<application>/<token>`), seen by the presser
+            // alone. Otherwise a direct message.
+            if let Some(interaction) = &to.interaction {
+                let body = Body::Json(json!({"content": to.text, "flags": 64}));
+                return api
+                    .call(Method::POST, &format!("/webhooks/{interaction}"), body)
+                    .await
+                    .map(drop);
+            }
+            let body = Body::Json(json!({"recipient_id": to.sender_id}));
+            let channel = api.call(Method::POST, "/users/@me/channels", body).await?;
+            let channel = channel["id"]
+                .as_str()
+                .ok_or_else(|| SendError::Server("Discord opened no DM channel".to_owned()))?;
+            let body = Body::Json(json!({"content": to.text}));
+            api.call(Method::POST, &format!("/channels/{channel}/messages"), body)
+                .await
+                .map(drop)
+        })
     }
 
     fn rename_thread<'a>(

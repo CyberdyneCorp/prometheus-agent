@@ -3,7 +3,8 @@
 //! (spec: messaging-gateway, Crash recovery and clean shutdown marker;
 //! Conversations never rotate on time; Agent cache and eviction;
 //! Documented pairing flow; Gateway slash commands, quick commands and
-//! hooks; Profiles served by one daemon).
+//! hooks; Profiles served by one daemon; Background and internal
+//! notifications).
 
 #![cfg(feature = "gateway")]
 
@@ -14,7 +15,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use self::common::gateway::{Daemon, gateway_home, send, texts, wait, wait_said};
+use self::common::gateway::{
+    Daemon, gateway_home, gateway_home_with, send, texts, wait, wait_said,
+};
 use self::common::{ok, run, stderr};
 
 const RESTARTED: &str =
@@ -296,5 +299,72 @@ fn a_profile_created_while_running_is_served_after_gateway_reload() {
         before[0].0,
         "the default session goes on"
     );
+    daemon.stop(home);
+}
+
+/// A turn that starts background processes with `notify_on_complete`.
+const BACKGROUND_RULES: &str = r#"
+[[rule]]
+user_regex = '^bg$'
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "sleep 1; exit 0", background = true, notify_on_complete = true }
+
+[[rule]]
+user_regex = '^bgfail$'
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "sleep 1; exit 3", background = true, notify_on_complete = true }
+
+[[rule]]
+tool_result_regex = 'process_id'
+text = "started bg"
+
+[[rule]]
+repeat = true
+text = "fast done"
+"#;
+
+/// Spec: messaging-gateway, Background and internal notifications. The
+/// completion of a background process reaches the chat whose turn started
+/// it, filtered by `gateway.notifications.background`.
+#[test]
+fn a_background_process_completion_reaches_the_chat() {
+    let home = gateway_home_with(
+        BACKGROUND_RULES,
+        "\n[gateway.notifications]\nbackground = \"all\"\n",
+    );
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    send(home, "default", "u1", "bg");
+    wait_said(home, "default", "started bg");
+    wait_said(home, "default", "Background process");
+    let note = texts(home, "default")
+        .into_iter()
+        .find(|t| t.starts_with("Background process"))
+        .unwrap();
+    assert!(note.contains("finished: sleep 1; exit 0"), "{note}");
+    daemon.stop(home);
+}
+
+/// Spec: messaging-gateway, Background and internal notifications, Errors
+/// only: a process that exits 0 is not announced; one that fails is.
+#[test]
+fn errors_only_announces_the_failed_background_process_alone() {
+    let home = gateway_home_with(
+        BACKGROUND_RULES,
+        "\n[gateway.notifications]\nbackground = \"error\"\n",
+    );
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    send(home, "default", "u1", "bg");
+    wait_said(home, "default", "started bg");
+    send(home, "default", "u1", "bgfail");
+    wait_said(home, "default", "failed (exit 3)");
+    let notes: Vec<String> = texts(home, "default")
+        .into_iter()
+        .filter(|t| t.starts_with("Background process"))
+        .collect();
+    assert_eq!(notes.len(), 1, "only the failure: {notes:?}");
     daemon.stop(home);
 }

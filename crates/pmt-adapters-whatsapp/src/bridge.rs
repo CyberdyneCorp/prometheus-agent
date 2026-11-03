@@ -6,7 +6,16 @@
 //! watches `GET /health`. Without `options.bridge_url` the adapter starts
 //! the managed bridge runtime (`<home>/runtimes/whatsapp-bridge/`, run by
 //! the managed Node runtime) on a free loopback port.
+//!
+//! Loopback is reachable by every local user and process, so each request
+//! carries a bearer token (`Authorization: Bearer`): a fresh random one per
+//! managed launch, handed to the child in `PMT_BRIDGE_TOKEN`; for a bridge
+//! at `options.bridge_url`, the secret named by `token_secret`
+//! ([`TOKEN_SECRET`] by default). The managed bridge is third-party npm
+//! code: it starts with a cleared environment, so the daemon's provider
+//! keys never reach it.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -21,6 +30,8 @@ pub(crate) struct Bridge {
     pub(crate) client: reqwest::Client,
     /// `http://127.0.0.1:<port>`, no trailing slash.
     pub(crate) url: String,
+    /// The bearer token every request carries.
+    pub(crate) token: String,
 }
 
 impl std::fmt::Debug for Bridge {
@@ -47,6 +58,7 @@ impl Bridge {
         let sent = self
             .client
             .get(format!("{}{path}", self.url))
+            .bearer_auth(&self.token)
             .timeout(CALL_TIMEOUT)
             .send()
             .await;
@@ -58,6 +70,7 @@ impl Bridge {
         let sent = self
             .client
             .post(format!("{}{path}", self.url))
+            .bearer_auth(&self.token)
             .header("content-type", "application/json")
             .body(body.to_string())
             .timeout(CALL_TIMEOUT)
@@ -120,24 +133,102 @@ pub(crate) fn script(home: &Path) -> PathBuf {
     crate::install::dir(home).join("bridge.js")
 }
 
-/// Starts the managed bridge for a profile: its session under
-/// `<profile>/platforms/whatsapp/session/`, on a free loopback port. The
-/// child dies with the returned handle.
+/// The secret holding the token of a bridge at `options.bridge_url`.
+pub const TOKEN_SECRET: &str = "WHATSAPP_BRIDGE_TOKEN";
+/// The environment variable the bridge reads its token from.
+pub const TOKEN_ENV: &str = "PMT_BRIDGE_TOKEN";
+/// The only variables of the daemon's environment the managed bridge
+/// inherits: what Node needs to run and find a temporary directory.
+const KEPT_ENV: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USERPROFILE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "LANG",
+];
+
+/// The bridge's per-profile places: the linked-device session under
+/// `<profile>/platforms/whatsapp/session/` and the caches inbound media
+/// land in under `<profile>/cache/media/whatsapp/`, so each profile's media
+/// stay inside its own directory (and its media retention).
+#[must_use]
+pub fn profile_args(profile_dir: &Path) -> Vec<OsString> {
+    let session = profile_dir.join("platforms").join(PLATFORM).join("session");
+    let cache = profile_dir.join("cache").join("media").join(PLATFORM);
+    let mut args = vec![OsString::from("--session"), session.into_os_string()];
+    for kind in ["image", "document", "audio"] {
+        args.push(format!("--{kind}-cache").into());
+        args.push(cache.join(kind).into_os_string());
+    }
+    args
+}
+
+/// Clears `command`'s environment down to [`KEPT_ENV`]: the bridge is
+/// third-party npm code and must not see the daemon's secrets.
+pub fn isolate(command: &mut tokio::process::Command) {
+    command.env_clear().envs(
+        KEPT_ENV
+            .iter()
+            .filter_map(|k| Some((k, std::env::var_os(k)?))),
+    );
+}
+
+/// A fresh random bearer token (256 bits, hex).
+pub(crate) fn new_token() -> String {
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).expect("the OS random source works");
+    pmt_gateway::messaging::sign::hex(&bytes)
+}
+
+/// The command that runs `script` with `node` for a profile: cleared
+/// environment plus [`KEPT_ENV`] and the token.
+pub(crate) fn command(
+    node: &Path,
+    script: &Path,
+    profile_dir: &Path,
+    port: u16,
+    mode: &str,
+    token: &str,
+) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(node);
+    isolate(&mut command);
+    command
+        .env(TOKEN_ENV, token)
+        .arg(script)
+        .arg("--port")
+        .arg(port.to_string())
+        .args(profile_args(profile_dir))
+        .arg("--mode")
+        .arg(mode);
+    command
+}
+
+/// Starts the managed bridge for a profile on a free loopback port: the
+/// child (it dies with the handle), its URL and its token.
 pub(crate) fn launch(
     home: &Path,
     profile_dir: &Path,
     profile: &str,
     mode: &str,
-) -> Result<(tokio::process::Child, String), AdapterError> {
+) -> Result<(tokio::process::Child, String, String), AdapterError> {
     let missing = || AdapterError {
         retryable: false,
         code: "whatsapp_bridge_missing".to_owned(),
         message: format!(
-            "the WhatsApp bridge runtime is not installed; run `prometheus -p {profile} gateway whatsapp pair`"
+            "the WhatsApp bridge runtime is not installed or is outdated; run `prometheus -p {profile} gateway whatsapp pair`"
         ),
     };
     let script = script(home);
-    if !script.is_file() {
+    // An older installed bridge would ignore the token and the caches.
+    let current = crate::install::refresh(home).map_err(|e| AdapterError {
+        retryable: true,
+        code: "whatsapp_bridge_failed".to_owned(),
+        message: e.message().to_owned(),
+    })?;
+    if !current || !script.is_file() {
         return Err(missing());
     }
     let node = pmt_update::runtimes::Store::open(home)
@@ -152,15 +243,8 @@ pub(crate) fn launch(
             message: format!("no loopback port for the bridge: {e}"),
         })?
         .port();
-    let session = profile_dir.join("platforms").join(PLATFORM).join("session");
-    let child = tokio::process::Command::new(node)
-        .arg(&script)
-        .arg("--port")
-        .arg(port.to_string())
-        .arg("--session")
-        .arg(&session)
-        .arg("--mode")
-        .arg(mode)
+    let token = new_token();
+    let child = command(&node, &script, profile_dir, port, mode, &token)
         .kill_on_drop(true)
         .stdin(std::process::Stdio::null())
         .spawn()
@@ -169,7 +253,7 @@ pub(crate) fn launch(
             code: "whatsapp_bridge_failed".to_owned(),
             message: format!("cannot start the WhatsApp bridge: {e}"),
         })?;
-    Ok((child, format!("http://127.0.0.1:{port}")))
+    Ok((child, format!("http://127.0.0.1:{port}"), token))
 }
 
 #[cfg(test)]
@@ -177,6 +261,56 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    /// The managed bridge gets profile-scoped cache directories, a token,
+    /// and none of the daemon's other environment (provider keys).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_managed_bridge_gets_profile_caches_a_token_and_a_clean_environment() {
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path().join("profiles").join("work");
+        let out = dir.path().join("seen");
+        let script = dir.path().join("bridge.sh");
+        std::fs::write(
+            &script,
+            format!("echo \"$@\" > '{0}.args'\nenv > '{0}.env'\n", out.display()),
+        )
+        .unwrap();
+        let status = command(Path::new("/bin/sh"), &script, &profile, 4242, "bot", "t0k")
+            .status()
+            .await
+            .unwrap();
+        assert!(status.success());
+        let args = std::fs::read_to_string(out.with_extension("args")).unwrap();
+        let cache = profile.join("cache/media/whatsapp");
+        for kind in ["image", "document", "audio"] {
+            let expected = format!("--{kind}-cache {}", cache.join(kind).display());
+            assert!(args.contains(&expected), "{args}");
+        }
+        assert!(
+            args.contains("--port 4242") && args.contains("--mode bot"),
+            "{args}"
+        );
+        assert!(!args.contains(".hermes"), "{args}");
+        let env = std::fs::read_to_string(out.with_extension("env")).unwrap();
+        assert!(env.lines().any(|l| l == "PMT_BRIDGE_TOKEN=t0k"), "{env}");
+        for line in env.lines() {
+            let name = line.split('=').next().unwrap_or_default();
+            // sh itself sets a few (PWD, SHLVL, _).
+            let shell = matches!(name, "PWD" | "SHLVL" | "_" | "OLDPWD");
+            assert!(
+                shell || name == TOKEN_ENV || KEPT_ENV.contains(&name),
+                "inherited {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn tokens_are_fresh_and_long() {
+        let (a, b) = (new_token(), new_token());
+        assert_ne!(a, b);
+        assert_eq!(a.len(), 64);
+    }
 
     #[test]
     fn refusals_and_health_map_onto_errors() {

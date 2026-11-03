@@ -15,8 +15,12 @@
  *   GET  /chat/:id       - Get chat info
  *   GET  /health         - Health check
  *
- * Usage:
- *   node bridge.js --port 3000 --session ~/.hermes/whatsapp/session
+ * Usage (Prometheus passes every path; there are no defaults outside the
+ * profile directory):
+ *   PMT_BRIDGE_TOKEN=<token> node bridge.js --port 3000 --session <dir> \
+ *     --image-cache <dir> --document-cache <dir> --audio-cache <dir>
+ *
+ * Every HTTP request must carry `Authorization: Bearer <PMT_BRIDGE_TOKEN>`.
  */
 
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, downloadMediaMessage, getAggregateVotesInPollMessage, decryptPollVote, getKeyAuthor, jidNormalizedUser } from '@whiskeysockets/baileys';
@@ -26,7 +30,7 @@ import pino from 'pino';
 import path from 'path';
 import { mkdirSync, readFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import qrcode from 'qrcode-terminal';
@@ -95,16 +99,26 @@ const SEND_READ_RECEIPTS =
   ['1', 'true', 'yes', 'on'].includes(process.env.WHATSAPP_SEND_READ_RECEIPTS.toLowerCase());
 
 const PORT = parseInt(getArg('port', '3000'), 10);
-const SESSION_DIR = getArg('session', path.join(process.env.HOME || '~', '.hermes', 'whatsapp', 'session'));
-// Cache directories: the Python gateway passes the profile-aware paths via
-// env (HERMES_HOME-aware, new cache/ layout).  Fall back to the legacy
-// hardcoded locations for bridges launched outside the gateway.
-const IMAGE_CACHE_DIR = process.env.HERMES_IMAGE_CACHE_DIR
-  || path.join(process.env.HOME || '~', '.hermes', 'image_cache');
-const DOCUMENT_CACHE_DIR = process.env.HERMES_DOCUMENT_CACHE_DIR
-  || path.join(process.env.HOME || '~', '.hermes', 'document_cache');
-const AUDIO_CACHE_DIR = process.env.HERMES_AUDIO_CACHE_DIR
-  || path.join(process.env.HOME || '~', '.hermes', 'audio_cache');
+const PAIR_ONLY_MODE = args.includes('--pair-only');
+// Paths and the token come from Prometheus, scoped to one profile; a
+// missing one is an error, never a fallback outside the profile.
+function requiredArg(name) {
+  const value = getArg(name, '');
+  if (!value) {
+    console.error(`bridge: --${name} is required`);
+    process.exit(2);
+  }
+  return value;
+}
+const SESSION_DIR = requiredArg('session');
+const IMAGE_CACHE_DIR = PAIR_ONLY_MODE ? '' : requiredArg('image-cache');
+const DOCUMENT_CACHE_DIR = PAIR_ONLY_MODE ? '' : requiredArg('document-cache');
+const AUDIO_CACHE_DIR = PAIR_ONLY_MODE ? '' : requiredArg('audio-cache');
+const BRIDGE_TOKEN = process.env.PMT_BRIDGE_TOKEN || '';
+if (!PAIR_ONLY_MODE && !BRIDGE_TOKEN) {
+  console.error('bridge: PMT_BRIDGE_TOKEN is required');
+  process.exit(2);
+}
 
 // Self-hash of this script file.  Reported in /health so the Python gateway
 // can detect a running bridge that predates the current bridge.js and
@@ -827,7 +841,6 @@ async function startSocket() {
 
 // HTTP server
 const app = express();
-app.use(express.json());
 
 // Host-header validation — defends against DNS rebinding.
 // The bridge binds loopback-only (127.0.0.1) but a victim browser on
@@ -859,6 +872,20 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Bearer token on every route: loopback is reachable by every local user
+// and process, and the routes read messages, send as the user and upload
+// files.
+const _EXPECTED_AUTH = createHash('sha256').update(`Bearer ${BRIDGE_TOKEN}`).digest();
+app.use((req, res, next) => {
+  const given = createHash('sha256').update(String(req.headers.authorization || '')).digest();
+  if (!timingSafeEqual(given, _EXPECTED_AUTH)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+});
+// Bodies are parsed only for authenticated requests.
+app.use(express.json());
 
 // Poll for new messages (long-poll style)
 app.get('/messages', (req, res) => {

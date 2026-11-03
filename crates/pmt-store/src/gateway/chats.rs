@@ -175,9 +175,36 @@ impl Store {
             .transpose()
     }
 
-    /// USD spent since `since` by the turns of gateway sessions that
-    /// `sender` started on `platform` (their whole lineage, subagents
-    /// included, through the ledger's root session).
+    /// Records that `sender` on `platform` started a turn of `session` at
+    /// `at` (the per-sender spend attribution).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn record_gateway_turn(
+        &self,
+        session: SessionId,
+        platform: &str,
+        sender: &str,
+        at: Timestamp,
+    ) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "INSERT OR REPLACE INTO gateway_turns (session_id, started_at, platform, sender_id) \
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![session.to_string(), millis(at), platform, sender],
+            )
+            .map_err(sql)?;
+            Ok(())
+        })
+    }
+
+    /// USD spent since `since` by the gateway turns `sender` sent on
+    /// `platform`. Each metered call belongs to the latest turn started at
+    /// or before it in its own session or, for a subagent (`delegate`) or
+    /// compression child, in the nearest such ancestor with a gateway turn
+    /// (a fork or `/new` successor is a conversation of its own); so in a
+    /// thread shared by several people each pays for their own turns.
     ///
     /// # Errors
     ///
@@ -190,11 +217,22 @@ impl Store {
     ) -> Result<f64, Error> {
         self.read(|conn| {
             conn.query_row(
-                "SELECT COALESCE(SUM(u.cost_usd), 0.0) FROM usage_ledger u \
-                 JOIN sessions s ON s.id = u.root_session_id \
-                 WHERE u.ts >= ?1 AND json_extract(s.origin, '$.kind') = 'gateway' \
-                 AND json_extract(s.origin, '$.platform') = ?2 \
-                 AND json_extract(s.origin, '$.user') = ?3",
+                "WITH RECURSIVE chain(call_id, ts, cost, sid, depth) AS ( \
+                   SELECT call_id, ts, cost_usd, session_id, 0 FROM usage_ledger \
+                   WHERE ts >= ?1 AND cost_usd IS NOT NULL \
+                   UNION ALL \
+                   SELECT c.call_id, c.ts, c.cost, s.parent_session_id, c.depth + 1 \
+                   FROM chain c JOIN sessions s ON s.id = c.sid \
+                   WHERE s.lineage_kind IN ('delegate', 'compression') AND c.depth < 64 \
+                 ), owners AS ( \
+                   SELECT c.call_id, c.cost, t.platform, t.sender_id, \
+                     ROW_NUMBER() OVER (PARTITION BY c.call_id \
+                       ORDER BY c.depth ASC, t.started_at DESC) AS pick \
+                   FROM chain c JOIN gateway_turns t \
+                     ON t.session_id = c.sid AND t.started_at <= c.ts \
+                 ) \
+                 SELECT COALESCE(SUM(cost), 0.0) FROM owners \
+                 WHERE pick = 1 AND platform = ?2 AND sender_id = ?3",
                 params![millis(since), platform, sender],
                 |row| row.get(0),
             )

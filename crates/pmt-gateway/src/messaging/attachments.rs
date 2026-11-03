@@ -176,7 +176,9 @@ impl Roots {
         }
     }
 
-    /// The real path of `path` when it may be delivered.
+    /// The real path of `path` when it may be delivered. Dotenv files and
+    /// `/proc` secrets are withheld wherever they are, as `read_file`
+    /// refuses them (checked on the path as written and where it leads).
     #[must_use]
     pub fn admit(&self, path: &str) -> Option<PathBuf> {
         let expanded = match (&self.container, path.strip_prefix("~/"), &self.user_home) {
@@ -185,6 +187,12 @@ impl Roots {
             _ => PathBuf::from(path),
         };
         let real = std::fs::canonicalize(&expanded).ok()?;
+        if [Path::new(path), &expanded, &real]
+            .into_iter()
+            .any(pmt_core::secret_paths::is_protected)
+        {
+            return None;
+        }
         let canonical = |p: &PathBuf| std::fs::canonicalize(p).ok();
         let refused =
             self.refused.iter().filter_map(canonical).any(|r| {

@@ -84,6 +84,9 @@ struct State {
     history: std::collections::HashMap<String, Vec<Value>>,
     /// Every interaction callback body.
     callbacks: Vec<Value>,
+    /// Ephemeral interaction follow-ups: `(user, text)` (the kit user
+    /// pressed every button).
+    ephemeral: Vec<(String, String)>,
     /// Server channels and threads by id (anything else is a DM).
     channels: std::collections::HashMap<String, Value>,
 }
@@ -317,6 +320,27 @@ impl DiscordMock {
         respond(status, &answer)
     }
 
+    /// An interaction follow-up (`webhooks`), recorded when ephemeral, or
+    /// opening a DM channel (`users`): the kit user's is the DM.
+    fn private_reply(&self, kind: &str, body: &[u8]) -> (u16, Value) {
+        let body: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+        if kind == "webhooks" {
+            if body["flags"].as_u64() == Some(64) {
+                let text = body["content"].as_str().unwrap_or_default().to_owned();
+                self.lock().ephemeral.push((USER.to_owned(), text));
+            }
+            return (200, json!({"id": "followup"}));
+        }
+        if body["recipient_id"] == USER {
+            (200, json!({"id": DM, "type": 1}))
+        } else {
+            (
+                400,
+                json!({"message": "Cannot send messages to this user", "code": 50007}),
+            )
+        }
+    }
+
     fn route(&self, method: &str, path: &str, kind: &str, body: &[u8]) -> (u16, Value) {
         let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         match (method, parts.as_slice()) {
@@ -371,6 +395,9 @@ impl DiscordMock {
                 let body = serde_json::from_slice(body).unwrap_or(Value::Null);
                 self.lock().callbacks.push(body);
                 (204, Value::Null)
+            }
+            ("POST", ["webhooks", APPLICATION, _] | ["users", "@me", "channels"]) => {
+                self.private_reply(parts[0], body)
             }
             ("PUT", ["applications", APPLICATION, "commands"]) => {
                 let body: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
@@ -674,6 +701,7 @@ impl MockPlatform for DiscordMock {
             "INTERACTION_CREATE",
             &json!({
                 "id": id, "token": "itoken", "type": 3, "channel_id": DM,
+                "application_id": APPLICATION,
                 "user": {"id": USER, "username": "kit-user"},
                 "data": {"custom_id": data, "component_type": 2},
                 "message": {"id": message_id}
@@ -703,6 +731,10 @@ impl MockPlatform for DiscordMock {
 
     fn thread(&self) -> Option<(String, String)> {
         Some((CHANNEL.to_owned(), THREAD.to_owned()))
+    }
+
+    fn private_replies(&self) -> Vec<(String, String)> {
+        self.lock().ephemeral.clone()
     }
 
     fn inject_media(

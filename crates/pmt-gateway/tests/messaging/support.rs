@@ -634,6 +634,10 @@ pub struct FakeAdapter {
     pub streamed: Mutex<Vec<String>>,
     /// Stream appends that succeed before the next ones fail.
     pub appends_before_failure: Mutex<Option<usize>>,
+    /// Replies only one member saw.
+    pub privately: Mutex<Vec<pmt_gateway::messaging::Private>>,
+    /// `reply_privately` fails (the platform could not reach the member).
+    pub private_fails: std::sync::atomic::AtomicBool,
 }
 
 impl FakeAdapter {
@@ -669,6 +673,8 @@ impl FakeAdapter {
             renamed: Mutex::default(),
             streamed: Mutex::default(),
             appends_before_failure: Mutex::default(),
+            privately: Mutex::default(),
+            private_fails: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -736,6 +742,17 @@ impl Adapter for FakeAdapter {
                 Err(SendError::Unsupported)
             }
         })
+    }
+
+    fn reply_privately<'a>(
+        &'a self,
+        to: &'a pmt_gateway::messaging::Private,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        if self.private_fails.load(Ordering::Relaxed) {
+            return Box::pin(async { Err(SendError::Permanent("403 blocked".into())) });
+        }
+        self.privately.lock().unwrap().push(to.clone());
+        Box::pin(async { Ok(()) })
     }
 
     fn rename_thread<'a>(

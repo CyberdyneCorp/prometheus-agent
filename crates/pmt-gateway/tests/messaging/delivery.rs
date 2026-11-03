@@ -94,10 +94,73 @@ async fn an_unanswered_approval_expires_as_a_denial() {
     .await;
 }
 
+fn with_private_replies(table: &str) -> Setup {
+    let mut setup = Setup::new(&config("telegram", table));
+    setup.descriptors.push(pmt_gateway::messaging::Descriptor {
+        supports_edit: true,
+        interactive: pmt_gateway::messaging::Interactive::Native,
+        private_replies: true,
+        ..pmt_gateway::messaging::Descriptor::new("telegram", 4096)
+    });
+    setup
+}
+
+/// Spec: a bystander's refusal is private: it reaches the bystander alone
+/// (with the pressed button's handle) and nothing new is posted in the
+/// group.
 #[tokio::test]
 async fn a_bystander_cannot_approve() {
     let shared = "allow_all = true\n[gateway.platforms.telegram.sessions]\ngroup_per_user = false";
-    let h = Harness::start(Setup::new(&config("telegram", shared))).await;
+    let h = Harness::start(with_private_replies(shared)).await;
+    h.send(
+        "telegram",
+        Inbound::text(ChatType::Group, "g1", "A", "approval"),
+    )
+    .await;
+    said(&h.adapter("telegram"), "Approval needed: terminal").await;
+    let posted = h.adapter("telegram").all().len();
+    let mut press = Inbound::text(ChatType::Group, "g1", "B", "");
+    press.callback = Some(button(&h, "once"));
+    press.interaction = Some("cbq-7".into());
+    h.send("telegram", press).await;
+    h.send(
+        "telegram",
+        Inbound::text(ChatType::Group, "g1", "B", "/approve"),
+    )
+    .await;
+    eventually("both refusals reach B privately", || {
+        h.adapter("telegram").privately.lock().unwrap().len() == 2
+    })
+    .await;
+    let private = h.adapter("telegram").privately.lock().unwrap().clone();
+    assert!(private.iter().all(|p| p.sender_id == "B"
+        && p.chat_id == "g1"
+        && p.text == "Only the person who asked or an admin may decide this."));
+    assert_eq!(private[0].interaction.as_deref(), Some("cbq-7"));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        h.adapter("telegram").all().len(),
+        posted,
+        "nothing new in the group: {:?}",
+        h.adapter("telegram").texts()
+    );
+    h.send(
+        "telegram",
+        Inbound::text(ChatType::Group, "g1", "A", "/approve"),
+    )
+    .await;
+    said(&h.adapter("telegram"), "approved").await;
+}
+
+/// Where the platform cannot reach the bystander privately, the refusal
+/// is posted in the chat rather than lost.
+#[tokio::test]
+async fn a_refusal_the_platform_cannot_deliver_privately_is_posted() {
+    let shared = "allow_all = true\n[gateway.platforms.telegram.sessions]\ngroup_per_user = false";
+    let h = Harness::start(with_private_replies(shared)).await;
+    h.adapter("telegram")
+        .private_fails
+        .store(true, std::sync::atomic::Ordering::Relaxed);
     h.send(
         "telegram",
         Inbound::text(ChatType::Group, "g1", "A", "approval"),
@@ -114,18 +177,57 @@ async fn a_bystander_cannot_approve() {
         "Only the person who asked or an admin may decide this.",
     )
     .await;
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert!(
-        !h.adapter("telegram")
-            .texts()
-            .contains(&"approved".to_owned())
-    );
+}
+
+/// An approval raised by a turn the lane did not start (another client on
+/// the same session) has no requester: a group member who is not an admin
+/// cannot decide it.
+#[tokio::test]
+async fn an_approval_without_a_requester_needs_an_admin_in_a_group() {
+    let table = "allow_all = true\ngroup_admins = [\"boss\"]\nuser_commands = [\"approve\", \"deny\"]\n[gateway.platforms.telegram.sessions]\ngroup_per_user = false";
+    let h = Harness::start(Setup::new(&config("telegram", table))).await;
+    h.send("telegram", Inbound::text(ChatType::Group, "g1", "A", "hi"))
+        .await;
+    said(&h.adapter("telegram"), "echo: hi").await;
+    let session = h.sessions()[0].to_string();
+    let params = json!({"session_id": session, "tool": "terminal", "call_id": "c9",
+        "subject": "rm -rf /srv", "findings": []});
+    let hub = Arc::clone(h.server.hub());
+    let asked = tokio::spawn(async move {
+        hub.ask(
+            &session,
+            "approval.request",
+            params,
+            Duration::from_secs(30),
+        )
+        .await
+    });
+    said(&h.adapter("telegram"), "Approval needed: terminal").await;
     h.send(
         "telegram",
         Inbound::text(ChatType::Group, "g1", "A", "/approve"),
     )
     .await;
-    said(&h.adapter("telegram"), "approved").await;
+    said(
+        &h.adapter("telegram"),
+        "Only the person who asked or an admin may decide this.",
+    )
+    .await;
+    assert!(
+        !asked.is_finished(),
+        "a non-admin decided an unowned approval"
+    );
+    h.send(
+        "telegram",
+        Inbound::text(ChatType::Group, "g1", "boss", "/approve"),
+    )
+    .await;
+    let answer = tokio::time::timeout(Duration::from_secs(10), asked)
+        .await
+        .unwrap()
+        .unwrap()
+        .expect("the admin's answer");
+    assert_eq!(answer["decision"], "once");
 }
 
 #[tokio::test]

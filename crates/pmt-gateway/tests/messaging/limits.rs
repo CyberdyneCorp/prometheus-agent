@@ -102,6 +102,54 @@ async fn a_spent_daily_budget_starts_no_turn() {
     );
 }
 
+/// Spec: the daily cap is keyed by profile and canonical sender. In a
+/// group session shared by everyone, the turn that spent is charged to its
+/// sender, not to whoever started the session.
+#[tokio::test]
+async fn in_a_shared_session_each_sender_pays_for_their_own_turns() {
+    let h = Harness::start(Setup::new(&config(
+        "telegram",
+        "allow_all = true\n[gateway.platforms.telegram.sessions]\ngroup_per_user = false\n[gateway.platforms.telegram.rate_limit]\ndaily_cost_usd = 2.0",
+    )))
+    .await;
+    let group = |sender: &str, text: &str| Inbound::text(ChatType::Group, "g1", sender, text);
+    h.send("telegram", group("A", "hello")).await;
+    said(&h.adapter("telegram"), "echo: hello").await;
+    h.send("telegram", group("B", "expensive")).await;
+    said(&h.adapter("telegram"), "echo: expensive").await;
+    assert_eq!(h.sessions().len(), 1, "one shared session");
+    h.store()
+        .record_usage(&UsageEvent {
+            call_id: "b-call".into(),
+            ts: Timestamp::now(),
+            session_id: h.sessions()[0],
+            turn_id: None,
+            parent_call_id: None,
+            purpose: "main".into(),
+            purpose_detail: None,
+            provider: "openai".into(),
+            model: "gpt".into(),
+            service_tier: None,
+            tokens: Tokens::default(),
+            cost_usd: Some(2.05),
+            cost_status: CostStatus::Exact,
+            billing_source: "api_key:openai".into(),
+            request_hash: None,
+            cache_hit: false,
+        })
+        .unwrap();
+    assert_ne!(
+        h.send("telegram", group("A", "still mine")).await,
+        Admission::RateLimited,
+        "B's spend is not A's"
+    );
+    said(&h.adapter("telegram"), "echo: still mine").await;
+    assert_eq!(
+        h.send("telegram", group("B", "more")).await,
+        Admission::RateLimited
+    );
+}
+
 fn policy_config(model: &str) -> String {
     format!(
         "[tools]\nenabled_toolsets = [\"web\", \"file\"]\n\n{}\n[[gateway.chat_policies]]\nplatform = \"discord\"\nchat_id = \"555\"\nmodel = \"{model}\"\ntoolsets = [\"web\"]\n",

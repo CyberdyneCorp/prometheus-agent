@@ -145,7 +145,10 @@ impl Lane {
             return;
         };
         if !self.may_confirm(routing, &self.confirms[at]) {
-            self.say("Only the person who asked, or an admin, may answer this.");
+            self.say_privately(
+                routing,
+                "Only the person who asked, or an admin, may answer this.",
+            );
             return;
         }
         let confirm = self.confirms.remove(at);

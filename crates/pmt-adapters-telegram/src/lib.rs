@@ -20,6 +20,7 @@ mod commands;
 #[cfg(feature = "kit")]
 pub mod mock;
 mod normalize;
+mod private;
 mod rich;
 mod text;
 mod topics;
@@ -39,7 +40,7 @@ use pmt_gateway::messaging::sign::constant_time_eq;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, Descriptor, HttpRequest, HttpResponse, Interactive, LengthUnit, Markup, MediaKind,
-    MediaStream, MenuCommand, Outgoing, Reaction, SendError, Sent, SessionHints,
+    MediaStream, MenuCommand, Outgoing, Private, Reaction, SendError, Sent, SessionHints,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -77,6 +78,8 @@ pub struct Telegram {
     /// The bot has no topic mode in private chats (`getMe`): multi-session
     /// DM topics fall back to one session per DM.
     dm_topics_unavailable: AtomicBool,
+    /// Pressed buttons whose answer waits for a private reply.
+    callbacks: Arc<private::Callbacks>,
 }
 
 impl std::fmt::Debug for Telegram {
@@ -144,6 +147,7 @@ impl Telegram {
                 &options,
             )),
             hook: Mutex::default(),
+            callbacks: Arc::default(),
             rich_unavailable: AtomicBool::new(false),
             dm_topics_unavailable: AtomicBool::new(false),
             options,
@@ -310,6 +314,7 @@ impl Adapter for Telegram {
             media_in: all.clone(),
             media_out: all,
             stateless_send: true,
+            private_replies: true,
             dm_topics: self.options.dm_topics.enabled
                 && !self.dm_topics_unavailable.load(Ordering::Acquire),
             markup: self.markup(),
@@ -336,6 +341,7 @@ impl Adapter for Telegram {
                 topics: Arc::clone(&self.topics),
                 ignore_root_dm: self.options.ignore_root_dm,
                 me: normalize::Me::of(&me),
+                callbacks: Arc::clone(&self.callbacks),
             };
             match self.options.mode {
                 TelegramMode::Webhook => self.start_webhook(ctx).await,
@@ -523,6 +529,10 @@ impl Adapter for Telegram {
         title: &'a str,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move { topics::rename(&self.api()?, chat_id, thread_id, title).await })
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move { private::reply(&self.api()?, &self.callbacks, to).await })
     }
 
     fn session_hints(&self, chat_id: &str, thread_id: Option<&str>) -> SessionHints {

@@ -217,6 +217,7 @@ fn message(envelope: &Value) -> Option<Inbound> {
         reply_to,
         is_bot: false,
         callback: None,
+        interaction: None,
         profile: None,
         addressing: pmt_gateway::messaging::Addressing::default(),
     })

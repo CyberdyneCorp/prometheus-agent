@@ -259,6 +259,50 @@ fn the_send_tool_refuses_unknown_chats_and_reaches_known_ones() {
     daemon.stop(home);
 }
 
+/// Sending a file is reading it out: the file tools' dotenv refusal holds
+/// for `send_message` attachments too.
+#[test]
+fn the_send_tool_refuses_to_attach_a_dotenv_file() {
+    let project = tempfile::Builder::new()
+        .prefix("pmt-send-env")
+        .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
+        .unwrap();
+    let dotenv = project.path().join(".env");
+    std::fs::write(&dotenv, "API_KEY=sk-live").unwrap();
+    let rules = format!(
+        r#"
+[[rule]]
+user_regex = '^leak$'
+[[rule.tool_calls]]
+name = "send_message"
+arguments = {{ target = "test:u1", message = "keys\nMEDIA:{}" }}
+
+[[rule]]
+tool_result_regex = 'is not a file this session may read'
+text = "env refused"
+
+[[rule]]
+repeat = true
+text = "fast done"
+"#,
+        dotenv.display().to_string().replace('\\', "/")
+    );
+    let home = gateway_home_with(
+        &rules,
+        "\n[tools]\nenabled_toolsets = [\"core\", \"messaging\"]\n",
+    );
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    send(home, "default", "u1", "leak");
+    wait_said(home, "default", "env refused");
+    assert!(
+        sent_to(home, "u1").iter().all(|m| m["text"] != "keys"),
+        "{:?}",
+        sent(home, "default")
+    );
+    daemon.stop(home);
+}
+
 #[test]
 fn a_policy_naming_an_unknown_skill_fails_validation_by_name() {
     let home = gateway_home(

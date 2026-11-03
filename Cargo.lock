@@ -2480,6 +2480,7 @@ name = "pmt-adapters-whatsapp"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "getrandom 0.4.3",
  "jiff",
  "percent-encoding",
  "pmt-adapters-whatsapp",

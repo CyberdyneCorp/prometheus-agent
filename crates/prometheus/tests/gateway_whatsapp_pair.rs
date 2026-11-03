@@ -81,6 +81,11 @@ fn the_qr_code_is_drawn_until_the_phone_links_and_replaces_the_old_session() {
     assert!(stdout.contains("linked Ana"), "{stdout}");
     let args = std::fs::read_to_string(home.join("bridge-args")).unwrap();
     assert!(args.contains("--pair-only --pair-json --session"), "{args}");
+    let cache = home.join("profiles/default/cache/media/whatsapp");
+    for kind in ["image", "document", "audio"] {
+        let expected = format!("--{kind}-cache {}", cache.join(kind).display());
+        assert!(args.contains(&expected), "profile-scoped caches: {args}");
+    }
     assert!(args.contains("--mode bot"), "{args}");
     assert!(
         !session(home).join("creds.json").exists(),

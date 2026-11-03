@@ -597,3 +597,37 @@ async fn a_named_thread_opens_in_the_channel_and_can_be_renamed() {
     assert_eq!(mock.channel_name(&thread).as_deref(), Some("postgres plan"));
     adapter.disconnect().await;
 }
+
+/// A refusal to someone who pressed a button is an ephemeral follow-up of
+/// their interaction; without one it is a direct message.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_private_reply_is_an_ephemeral_follow_up_or_a_dm() {
+    let (_home, mock, adapter, link) = connected("").await;
+    mock.press("42", "appr:x:once:mac");
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    let pressed = link.events.lock().unwrap()[0].clone();
+    assert_eq!(
+        pressed.interaction.as_deref(),
+        Some(format!("{}/itoken", mock::APPLICATION).as_str())
+    );
+    let mut refusal = pmt_gateway::messaging::Private {
+        chat_id: mock::CHANNEL.into(),
+        thread_id: None,
+        sender_id: mock::USER.into(),
+        interaction: pressed.interaction.clone(),
+        text: "Only the person who asked or an admin may decide this.".into(),
+    };
+    adapter.reply_privately(&refusal).await.unwrap();
+    assert_eq!(
+        mock.private_replies(),
+        [(mock::USER.to_owned(), refusal.text.clone())]
+    );
+    refusal.interaction = None;
+    adapter.reply_privately(&refusal).await.unwrap();
+    assert!(
+        mock.sent()
+            .iter()
+            .any(|m| m.chat_id == mock::DM && m.text == refusal.text),
+        "a direct message"
+    );
+}

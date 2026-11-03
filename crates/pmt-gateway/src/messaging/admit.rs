@@ -267,16 +267,24 @@ async fn limit(
         return Some(Admission::RateLimited);
     }
     let cap = config.daily_cost_usd.filter(|_| turn)?;
-    let store = shared.store(owner)?;
     let midnight = Zoned::now()
         .start_of_day()
         .map_or_else(|_| Timestamp::now(), |z| z.timestamp());
-    let spent = store
-        .sender_cost_since(platform, &inbound.sender_id, midnight)
-        .unwrap_or_else(|err| {
-            tracing::warn!("daily spend not readable: {err}");
-            0.0
-        });
+    // An unreadable spend fails closed: the cap is a spending guard.
+    let spent = match shared
+        .store(owner)
+        .map(|store| store.sender_cost_since(platform, &inbound.sender_id, midnight))
+    {
+        Some(Ok(spent)) => spent,
+        Some(Err(err)) => {
+            tracing::warn!("daily spend not readable, refusing the turn: {err}");
+            cap
+        }
+        None => {
+            tracing::warn!("daily spend not readable (no store), refusing the turn");
+            cap
+        }
+    };
     if spent < cap {
         return None;
     }

@@ -62,6 +62,35 @@ pub fn installed(home: &Path) -> bool {
         && dir.join("node_modules").is_dir()
 }
 
+/// Brings an installed bridge whose packages are current up to the shipped
+/// scripts (an update changed only the JavaScript): rewrites the files and
+/// the marker without npm. `false` when packages must be installed (or
+/// nothing is installed): run [`install`] then.
+///
+/// # Errors
+///
+/// `runtime.io` when the files cannot be written.
+pub fn refresh(home: &Path) -> Result<bool, Error> {
+    if installed(home) {
+        return Ok(true);
+    }
+    let dir = dir(home);
+    let packages_current = ["package.json", "package-lock.json"].iter().all(|name| {
+        let shipped = FILES.iter().find(|(n, _)| n == name).map(|(_, t)| *t);
+        std::fs::read_to_string(dir.join(name)).ok().as_deref() == shipped
+    });
+    if !packages_current || !dir.join("node_modules").is_dir() {
+        return Ok(false);
+    }
+    for (name, text) in FILES {
+        let path = dir.join(name);
+        std::fs::write(&path, text).map_err(|e| io(&path, &e))?;
+    }
+    let marker = dir.join(MARKER);
+    std::fs::write(&marker, digest()).map_err(|e| io(&marker, &e))?;
+    Ok(true)
+}
+
 /// npm's command-line script inside the Node runtime whose executable is
 /// `node` (`bin/node` with `lib/node_modules` on Unix, `node.exe` with
 /// `node_modules` on Windows).
@@ -131,6 +160,32 @@ pub fn install(home: &Path, node: &Path, progress: &dyn Fn(&str)) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_outdated_script_is_refreshed_when_its_packages_are_current() {
+        let home = tempfile::tempdir().unwrap();
+        assert!(!refresh(home.path()).unwrap(), "nothing installed");
+        let dir = dir(home.path());
+        std::fs::create_dir_all(dir.join("node_modules")).unwrap();
+        for (name, text) in FILES {
+            std::fs::write(dir.join(name), text).unwrap();
+        }
+        std::fs::write(dir.join("bridge.js"), "// an older bridge").unwrap();
+        std::fs::write(dir.join(MARKER), "old").unwrap();
+        assert!(refresh(home.path()).unwrap());
+        assert!(installed(home.path()));
+        assert!(
+            std::fs::read_to_string(dir.join("bridge.js"))
+                .unwrap()
+                .contains("PMT_BRIDGE_TOKEN")
+        );
+        std::fs::write(dir.join("package-lock.json"), "{}").unwrap();
+        std::fs::write(dir.join(MARKER), "old").unwrap();
+        assert!(
+            !refresh(home.path()).unwrap(),
+            "packages changed: npm needed"
+        );
+    }
 
     #[test]
     fn the_shipped_bridge_has_its_lockfile_and_pairing_code_support() {

@@ -1668,14 +1668,14 @@ capabilities = [
 [messaging-gateway."Approval requests routed to every surface"]
 "Resolved in the desktop app" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_answered_in_the_desktop_app_updates_the_card"]
 "Timeout denies" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_unanswered_approval_expires_as_a_denial"]
-"Bystander cannot approve" = { tests = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_bystander_cannot_approve"], note = "the refusal is posted in the chat; private or ephemeral replies arrive with the platform adapters' card model (platform-adapters 25.4)" }
+"Bystander cannot approve" = { tests = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_bystander_cannot_approve", "crates/pmt-gateway/tests/messaging/delivery.rs::a_refusal_the_platform_cannot_deliver_privately_is_posted", "crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_without_a_requester_needs_an_admin_in_a_group", "crates/pmt-adapters-telegram/tests/features.rs::a_private_reply_is_an_alert_on_the_pressed_button_or_a_dm", "crates/pmt-adapters-discord/tests/discord.rs::a_private_reply_is_an_ephemeral_follow_up_or_a_dm"], note = "Adapter::reply_privately (descriptor private_replies): Telegram alert on the pressed button else a DM, Slack chat.postEphemeral, Discord ephemeral interaction follow-up else a DM, Signal/WhatsApp/Matrix a DM; the conformance kit checks every adapter declaring it; posted in the chat only when the platform can do neither (email chats are always direct)" }
 
 [messaging-gateway."Streaming to platforms"]
 "Per-platform cannot enable" = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_platform_cannot_turn_streaming_on_by_itself", "crates/pmt-config/src/schema/gateway.rs::a_platform_cannot_enable_streaming_that_is_off_globally"]
 "Final edits the draft" = ["crates/pmt-gateway/tests/messaging/delivery.rs::the_final_answer_edits_the_streamed_draft"]
 
 [messaging-gateway."Background and internal notifications"]
-"Errors only" = ["crates/pmt-gateway/tests/messaging/delivery.rs::errors_only_skips_a_successful_background_exit", "crates/pmt-gateway/src/messaging/lane/mod.rs::errors_only_hides_a_successful_exit"]
+"Errors only" = ["crates/prometheus/tests/gateway_daemon.rs::errors_only_announces_the_failed_background_process_alone", "crates/prometheus/tests/gateway_daemon.rs::a_background_process_completion_reaches_the_chat", "crates/pmt-gateway/tests/messaging/delivery.rs::errors_only_skips_a_successful_background_exit", "crates/pmt-gateway/src/messaging/lane/mod.rs::errors_only_hides_a_successful_exit"]
 
 [messaging-gateway."Crash recovery and clean shutdown marker"]
 "Timed-out drain" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_clean_stop_skips_recovery_and_a_timed_out_drain_does_not", "crates/prometheus/tests/gateway_daemon.rs::a_daemon_killed_mid_turn_recovers_the_conversation"]
@@ -1698,7 +1698,8 @@ capabilities = [
 
 [messaging-gateway."Per-user rate limiting (upgrade)"]
 "Burst exceeded" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_burst_beyond_the_limit_is_dropped_with_one_slow_down_reply", "crates/pmt-gateway/src/messaging/limits.rs::a_burst_is_admitted_then_refilled_at_the_rate"]
-"Daily cost cap" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_spent_daily_budget_starts_no_turn", "crates/pmt-store/tests/store/gateway_chats.rs::a_senders_spend_counts_only_their_sessions_since_the_cutoff"]
+"Daily cost cap" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_spent_daily_budget_starts_no_turn", "crates/pmt-store/tests/store/gateway_chats.rs::a_senders_spend_counts_only_their_turns_since_the_cutoff"]
+"Shared thread spend is per sender" = ["crates/pmt-gateway/tests/messaging/limits.rs::in_a_shared_session_each_sender_pays_for_their_own_turns", "crates/pmt-store/tests/store/gateway_chats.rs::in_a_shared_thread_each_sender_pays_for_their_own_turns"]
 
 [messaging-gateway."Per-chat policies (upgrade)"]
 "Group gets a restricted toolset" = ["crates/prometheus/tests/gateway_send.rs::a_group_policy_gives_its_sessions_only_the_policy_toolsets", "crates/pmt-gateway/tests/messaging/limits.rs::a_matched_chat_gets_the_policy_frozen_with_its_session"]
@@ -1789,6 +1790,7 @@ capabilities = [
 [platform-adapters."Outbound attachments and path safety"]
 "Secrets file refused" = ["crates/pmt-gateway/tests/messaging/media.rs::an_attachment_outside_the_allowed_roots_is_withheld_with_a_note", "crates/pmt-gateway/src/messaging/attachments.rs::secrets_and_symlink_escapes_are_withheld"]
 "Symlink escape refused" = { tests = ["crates/pmt-gateway/src/messaging/attachments.rs::secrets_and_symlink_escapes_are_withheld"], note = "the symlink half runs on Unix hosts (creating symlinks on Windows needs a privilege CI lacks); real paths are compared after canonicalization on every OS" }
+"Dotenv file refused" = ["crates/pmt-gateway/tests/messaging/media.rs::a_workspace_dotenv_file_is_withheld", "crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_to_attach_a_dotenv_file"]
 
 [platform-adapters."Voice input transcription"]
 "Transcription failure is explicit" = { tests = ["crates/pmt-gateway/tests/messaging/media.rs::a_failed_transcription_hands_the_agent_the_voice_note"], note = "the profile's speech providers reach the gateway through messaging::Speech (Agents::speech); the built-in STT/TTS providers are web-and-media-tools 49.3" }

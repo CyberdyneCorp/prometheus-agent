@@ -16,6 +16,8 @@ use pmt_gateway::messaging::{
 #[derive(Default)]
 struct Recorder {
     events: Mutex<Vec<Inbound>>,
+    /// Where the gateway's listener is bound (loopback by default).
+    listen: Option<std::net::SocketAddr>,
 }
 
 impl AdapterLink for Recorder {
@@ -35,6 +37,13 @@ impl AdapterLink for Recorder {
     }
 
     fn report(&self, _: AdapterState, _: Option<AdapterError>) {}
+
+    fn http_listen(&self) -> Option<std::net::SocketAddr> {
+        Some(
+            self.listen
+                .unwrap_or_else(|| std::net::SocketAddr::from(([127, 0, 0, 1], 8644))),
+        )
+    }
 }
 
 fn post(route: &str, headers: &[(&str, &str)], body: &str) -> HttpRequest {
@@ -146,9 +155,42 @@ async fn unknown_routes_and_bad_json_are_refused() {
 #[tokio::test]
 async fn an_unsigned_route_needs_a_loopback_listener() {
     let home = tempfile::tempdir().unwrap();
+    let setup = kit_setup(
+        home.path(),
+        "webhook",
+        "routes.open = { insecure_no_auth = true }",
+        &[],
+    )
+    .unwrap();
+    let public = Recorder {
+        listen: Some("0.0.0.0:8644".parse().unwrap()),
+        ..Recorder::default()
+    };
+    let err = Webhook::new(&setup)
+        .connect(Arc::new(public))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, "webhook_unsigned_public");
+    assert!(
+        err.message.contains("routes.open.insecure_no_auth"),
+        "{}",
+        err.message
+    );
+    Webhook::new(&setup)
+        .connect(Arc::new(Recorder::default()))
+        .await
+        .unwrap();
+}
+
+/// The listener binds once at daemon start: editing daemon.toml to a
+/// loopback address afterwards (then `gateway reload`) must not admit an
+/// unsigned route on the still-public listener.
+#[tokio::test]
+async fn an_edited_daemon_toml_does_not_move_the_bound_listener() {
+    let home = tempfile::tempdir().unwrap();
     std::fs::write(
         home.path().join("daemon.toml"),
-        "[gateway.http]\nlisten = \"0.0.0.0:8644\"\npublic = true\n",
+        "[gateway.http]\nlisten = \"127.0.0.1:8644\"\n",
     )
     .unwrap();
     let setup = kit_setup(
@@ -158,14 +200,13 @@ async fn an_unsigned_route_needs_a_loopback_listener() {
         &[],
     )
     .unwrap();
+    let still_public = Recorder {
+        listen: Some("0.0.0.0:8644".parse().unwrap()),
+        ..Recorder::default()
+    };
     let err = Webhook::new(&setup)
-        .connect(Arc::new(Recorder::default()))
+        .connect(Arc::new(still_public))
         .await
         .unwrap_err();
     assert_eq!(err.code, "webhook_unsigned_public");
-    assert!(
-        err.message.contains("routes.open.insecure_no_auth"),
-        "{}",
-        err.message
-    );
 }

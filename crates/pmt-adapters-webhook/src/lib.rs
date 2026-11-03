@@ -166,29 +166,22 @@ impl Webhook {
             .join(format!("{route}.jsonl"))
     }
 
-    /// Unsigned routes need a listener nobody else can reach.
-    fn check_unsigned(&self) -> Result<(), AdapterError> {
-        let Some(route) = self
-            .routes
+    /// Unsigned routes need a listener nobody else can reach: the address
+    /// the daemon actually bound, not `daemon.toml` as it reads now.
+    fn check_unsigned(
+        link: &dyn AdapterLink,
+        routes: &BTreeMap<String, WebhookRoute>,
+    ) -> Result<(), AdapterError> {
+        let Some(route) = routes
             .iter()
             .find(|(_, r)| r.insecure_no_auth)
             .map(|(n, _)| n)
         else {
             return Ok(());
         };
-        let daemon = pmt_config::daemon::DaemonConfig::load(self.scope.home()).map_err(|e| {
-            AdapterError {
-                retryable: false,
-                code: "config_invalid".to_owned(),
-                message: e.message().to_owned(),
-            }
-        })?;
-        let loopback = daemon
-            .gateway
-            .http
-            .listen
-            .parse::<std::net::SocketAddr>()
-            .is_ok_and(|a| pmt_net::listen::is_loopback(a.ip()));
+        let loopback = link
+            .http_listen()
+            .is_some_and(|a| pmt_net::listen::is_loopback(a.ip()));
         if loopback {
             Ok(())
         } else {
@@ -196,14 +189,14 @@ impl Webhook {
                 retryable: false,
                 code: "webhook_unsigned_public".to_owned(),
                 message: format!(
-                    "gateway.platforms.webhook.routes.{route}.insecure_no_auth is allowed only while gateway.http.listen is a loopback address"
+                    "gateway.platforms.webhook.routes.{route}.insecure_no_auth is allowed only while the gateway HTTP listener is bound to a loopback address (restart the daemon after changing gateway.http.listen)"
                 ),
             })
         }
     }
 
     fn connect_with(&self, link: Arc<dyn AdapterLink>) -> Result<(), AdapterError> {
-        self.check_unsigned()?;
+        Self::check_unsigned(link.as_ref(), &self.routes)?;
         let mut secrets = BTreeMap::new();
         for (name, route) in &self.routes {
             let secret = match (&route.secret_secret, route.insecure_no_auth) {
@@ -489,13 +482,19 @@ impl Webhook {
             .github_token_secret
             .as_ref()
             .ok_or_else(|| SendError::Permanent("no github_token_secret".to_owned()))?;
+        let api = &self.options.github_api_url;
+        if !pmt_config::daemon_relay::secure_url(api, "https", "http") {
+            return Err(SendError::Permanent(format!(
+                "gateway.platforms.webhook.options.github_api_url: '{api}' would send the GitHub token in cleartext; use https://"
+            )));
+        }
         let token =
             credential(&self.scope, &secret.0).map_err(|e| SendError::Permanent(e.message))?;
         let client = self
             .client
             .as_ref()
             .ok_or_else(|| SendError::Permanent("no HTTP client".to_owned()))?;
-        delivery::comment(client, &self.options.github_api_url, &token, &thread, text).await?;
+        delivery::comment(client, api, &token, &thread, text).await?;
         Ok(Sent {
             message_id: Some(format!("{}#{}", thread.repo, thread.number)),
         })

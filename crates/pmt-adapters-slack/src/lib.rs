@@ -32,7 +32,7 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, ChatType, Descriptor, HistoryEntry, Inbound, Interactive, Markup, MediaKind,
-    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, Sent, TaskCard,
+    MediaStream, MenuCommand, Outgoing, Private, Reaction, Select, SendError, Sent, TaskCard,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -290,6 +290,7 @@ impl Adapter for Slack {
             native_stream: true,
             task_cards: true,
             status_line: true,
+            private_replies: true,
             ..Descriptor::new(PLATFORM, limit)
         }
     }
@@ -497,6 +498,21 @@ impl Adapter for Slack {
         status: Option<&'a str>,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move { stream::status(&self.api()?, chat_id, thread_id, status).await })
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        // An ephemeral message: shown to that member alone, in the channel
+        // (and thread) they wrote in, for this session of their client.
+        Box::pin(async move {
+            let mut body = json!({"channel": to.chat_id, "user": to.sender_id, "text": to.text});
+            if let Some(thread) = &to.thread_id {
+                body["thread_ts"] = json!(thread);
+            }
+            self.api()?
+                .call("chat.postEphemeral", &body)
+                .await
+                .map(|_| ())
+        })
     }
 
     fn open_thread<'a>(

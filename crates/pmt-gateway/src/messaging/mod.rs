@@ -96,8 +96,8 @@ pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
     Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup,
-    MediaKind, MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict,
-    Sent, SessionHints, TaskCard, TaskStatus,
+    MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Select, SendError,
+    SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateFromChat};
 pub use hooks::{Hook, Hooks, PreCommand};

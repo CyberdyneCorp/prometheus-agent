@@ -18,7 +18,7 @@ use crate::hub::Answered;
 use crate::messaging::adapter::{Button, Interactive};
 use crate::messaging::auth;
 use crate::messaging::cards::{self, Card, CardKind};
-use crate::messaging::key::Routing;
+use crate::messaging::key::{ChatType, Routing};
 
 /// Told to a bystander who tries to decide.
 pub(crate) const NOT_YOURS: &str = "Only the person who asked or an admin may decide this.";
@@ -149,14 +149,22 @@ impl Lane {
     }
 
     /// Whether `sender` may decide `approval`: its requester or an admin.
+    /// An approval with no recorded requester (a turn this lane did not
+    /// start: another client's, a resumed or handed-off session's) fails
+    /// closed: admins only, or, where the scope has no admin list, the
+    /// single sender of a direct message.
     fn may_decide(&self, routing: &Routing, approval: &Approval) -> bool {
-        if approval.requester.is_empty() || approval.requester == routing.sender_id {
+        if !approval.requester.is_empty() && approval.requester == routing.sender_id {
             return true;
         }
-        self.config().is_some_and(|scope| {
+        let admin = self.config().and_then(|scope| {
             let table = scope.config().gateway.platform(&routing.platform);
-            auth::is_admin(&table, routing.chat_type, &routing.sender_id) == Some(true)
-        })
+            auth::is_admin(&table, routing.chat_type, &routing.sender_id)
+        });
+        match admin {
+            Some(admin) => admin,
+            None => approval.requester.is_empty() && routing.chat_type == ChatType::Dm,
+        }
     }
 
     /// The working directory recorded on session `session`.
@@ -280,7 +288,7 @@ impl Lane {
 
     fn decide(&mut self, routing: &Routing, approval: &Approval, decision: Decision) {
         if !self.may_decide(routing, approval) {
-            self.say(NOT_YOURS);
+            self.say_privately(routing, NOT_YOURS);
             return;
         }
         let answer = json!({"decision": decision});

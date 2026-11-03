@@ -5,8 +5,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_adapters_whatsapp::Whatsapp;
 use pmt_adapters_whatsapp::mock::{self, BridgeMock};
+use pmt_adapters_whatsapp::{TOKEN_SECRET, Whatsapp};
 use pmt_gateway::messaging::conformance::{self, kit_setup};
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterState, Admission, Inbound, MediaKind,
@@ -42,7 +42,13 @@ async fn eventually(mut done: impl FnMut() -> bool) {
 
 async fn connected(home: &std::path::Path) -> (Arc<BridgeMock>, Whatsapp, Arc<Recorder>) {
     let mock = BridgeMock::start().await;
-    let setup = kit_setup(home, "whatsapp", &mock.table(), &[]).unwrap();
+    let setup = kit_setup(
+        home,
+        "whatsapp",
+        &mock.table(),
+        &[(TOKEN_SECRET, mock::TOKEN)],
+    )
+    .unwrap();
     let adapter = Whatsapp::new(&setup).unwrap();
     let link = Arc::new(Recorder::default());
     adapter.connect(Arc::clone(&link) as _).await.unwrap();
@@ -189,7 +195,13 @@ async fn self_chat_mode_ignores_contacts() {
     let home = tempfile::tempdir().unwrap();
     let mock = BridgeMock::start().await;
     let table = mock.table().replace(" }", ", mode = \"self_chat\" }");
-    let setup = kit_setup(home.path(), "whatsapp", &table, &[]).unwrap();
+    let setup = kit_setup(
+        home.path(),
+        "whatsapp",
+        &table,
+        &[(TOKEN_SECRET, mock::TOKEN)],
+    )
+    .unwrap();
     let adapter = Whatsapp::new(&setup).unwrap();
     let link = Arc::new(Recorder::default());
     adapter.connect(Arc::clone(&link) as _).await.unwrap();

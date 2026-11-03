@@ -223,6 +223,15 @@ impl MatrixMock {
             }
             ("GET", ["rooms", _, "state", "m.room.name"]) => error(404, "M_NOT_FOUND"),
             ("GET", ["rooms", _, "state", "m.room.power_levels", ..]) => self.power_levels(),
+            ("POST", ["createRoom"]) => {
+                // The kit user's direct room is the DM room.
+                let invited = body["invite"][0].as_str().unwrap_or_default();
+                if invited == USER && body["is_direct"] == true {
+                    mock_server::json(200, &json!({"room_id": DM}))
+                } else {
+                    error(403, "M_FORBIDDEN")
+                }
+            }
             ("POST", ["join", room]) => {
                 self.lock().joined.push((*room).to_owned());
                 mock_server::json(200, &json!({"room_id": room}))

@@ -9,6 +9,8 @@
 
 mod bridge;
 pub mod install;
+
+pub use bridge::{TOKEN_ENV, TOKEN_SECRET, isolate, profile_args};
 /// The mock platform the conformance kit runs this adapter against; only
 /// in builds with the `kit` feature (tests, `prometheus` with
 /// `adapter-kits`), so release binaries do not carry it.
@@ -28,10 +30,11 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use pmt_config::ProfileScope;
 use pmt_config::platforms::WhatsappOptions;
 use pmt_core::error::Error;
+use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
     Attachment, ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream,
-    Outgoing, SendError, Sent,
+    Outgoing, Private, SendError, Sent,
 };
 use serde_json::json;
 use tokio_util::sync::CancellationToken;
@@ -53,6 +56,8 @@ pub fn factory() -> AdapterFactory {
 pub struct Whatsapp {
     scope: ProfileScope,
     bridge_url: Option<String>,
+    /// The secret holding an external bridge's token.
+    token_secret: String,
     client: reqwest::Client,
     aliases: Arc<Aliases>,
     bridge: Mutex<Option<Bridge>>,
@@ -104,6 +109,11 @@ impl Whatsapp {
             bridge_url: options
                 .bridge_url
                 .map(|u| u.trim_end_matches('/').to_owned()),
+            token_secret: setup
+                .config
+                .token_secret
+                .as_ref()
+                .map_or_else(|| bridge::TOKEN_SECRET.to_owned(), |s| s.0.clone()),
             client,
             aliases: Arc::new(aliases),
             bridge: Mutex::default(),
@@ -126,24 +136,31 @@ impl Whatsapp {
             return Ok(bridge);
         }
         match &self.bridge_url {
-            Some(url) => Ok(Bridge {
-                client: self.client.clone(),
-                url: url.clone(),
-            }),
+            Some(_) => self
+                .external_bridge()
+                .map_err(|e| SendError::Permanent(e.message)),
             None => Err(SendError::Network(
                 "the WhatsApp bridge runs only while the daemon is connected".to_owned(),
             )),
         }
     }
 
+    /// The bridge at `options.bridge_url`, with the token from the secret
+    /// `token_secret` names (it must match the bridge's `PMT_BRIDGE_TOKEN`).
+    fn external_bridge(&self) -> Result<Bridge, AdapterError> {
+        let url = self.bridge_url.clone().unwrap_or_default();
+        Ok(Bridge {
+            client: self.client.clone(),
+            url,
+            token: credential(&self.scope, &self.token_secret)?,
+        })
+    }
+
     /// The bridge to talk to: the configured one, the running managed
     /// one, or a newly started managed one.
     fn start_bridge(&self) -> Result<Bridge, AdapterError> {
-        if let Some(url) = &self.bridge_url {
-            return Ok(Bridge {
-                client: self.client.clone(),
-                url: url.clone(),
-            });
+        if self.bridge_url.is_some() {
+            return self.external_bridge();
         }
         let mut child = self.child.lock().expect("child poisoned");
         let running = child
@@ -156,12 +173,13 @@ impl Whatsapp {
             pmt_config::platforms::WhatsappMode::Bot => "bot",
             pmt_config::platforms::WhatsappMode::SelfChat => "self-chat",
         };
-        let (process, url) =
+        let (process, url, token) =
             bridge::launch(self.scope.home(), self.scope.dir(), self.profile(), mode)?;
         *child = Some(process);
         Ok(Bridge {
             client: self.client.clone(),
             url,
+            token,
         })
     }
 
@@ -395,8 +413,18 @@ impl Adapter for Whatsapp {
             supports_typing: true,
             media_in: all,
             media_out: out,
+            private_replies: true,
             ..Descriptor::new(PLATFORM, limit)
         }
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        // A direct message: a person's own chat is their (canonical) id.
+        Box::pin(async move {
+            self.send(&Outgoing::text(&to.sender_id, None, &to.text))
+                .await
+                .map(drop)
+        })
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {

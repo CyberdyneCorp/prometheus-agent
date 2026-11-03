@@ -189,7 +189,7 @@ impl Lane {
             return;
         };
         if !clarify.theirs(&routing.sender_id) {
-            self.say(NOT_THE_ASKER);
+            self.say_privately(routing, NOT_THE_ASKER);
             return;
         }
         let chosen = choice.split_once('.').and_then(|(q, n)| {

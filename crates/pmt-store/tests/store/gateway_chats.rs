@@ -57,21 +57,23 @@ fn spend(session: SessionId, call: &str, usd: f64, at: Timestamp) -> UsageEvent 
 }
 
 #[test]
-fn a_senders_spend_counts_only_their_sessions_since_the_cutoff() {
+fn a_senders_spend_counts_only_their_turns_since_the_cutoff() {
     let home = TestHome::new();
     let store = home.store("default");
+    let now = Timestamp::now();
     let mine = gateway_session(&store, "telegram", "1", "alice");
     let other = gateway_session(&store, "telegram", "2", "bob");
-    let now = Timestamp::now();
+    let day_ago = now - SignedDuration::from_hours(48);
+    store
+        .record_gateway_turn(mine, "telegram", "alice", day_ago)
+        .unwrap();
+    store
+        .record_gateway_turn(other, "telegram", "bob", day_ago)
+        .unwrap();
     store.record_usage(&spend(mine, "a", 1.5, now)).unwrap();
     store.record_usage(&spend(mine, "b", 0.55, now)).unwrap();
     store
-        .record_usage(&spend(
-            mine,
-            "old",
-            9.0,
-            now - SignedDuration::from_hours(48),
-        ))
+        .record_usage(&spend(mine, "old", 9.0, day_ago))
         .unwrap();
     store.record_usage(&spend(other, "c", 4.0, now)).unwrap();
     let since = now - SignedDuration::from_hours(1);
@@ -84,6 +86,46 @@ fn a_senders_spend_counts_only_their_sessions_since_the_cutoff() {
             .abs()
             < 1e-9
     );
+}
+
+/// A thread shared by several people: each turn's calls (and its
+/// subagents') count against whoever sent that turn, not against the
+/// person who started the thread's session.
+#[test]
+fn in_a_shared_thread_each_sender_pays_for_their_own_turns() {
+    let home = TestHome::new();
+    let store = home.store("default");
+    let shared = gateway_session(&store, "slack", "C1", "alice");
+    let t0 = Timestamp::now() - SignedDuration::from_mins(30);
+    let at = |mins: i64| t0 + SignedDuration::from_mins(mins);
+    store
+        .record_gateway_turn(shared, "slack", "alice", at(0))
+        .unwrap();
+    store
+        .record_usage(&spend(shared, "a1", 1.0, at(1)))
+        .unwrap();
+    store
+        .record_gateway_turn(shared, "slack", "bob", at(5))
+        .unwrap();
+    store
+        .record_usage(&spend(shared, "b1", 3.0, at(6)))
+        .unwrap();
+    // Bob's turn delegated to a subagent: its calls are Bob's too.
+    let mut child = NewSession::new(Source::Gateway);
+    child.parent = Some((shared, pmt_store::LineageKind::Delegate));
+    let child = store.create_session(&child).unwrap().id;
+    store.record_usage(&spend(child, "b2", 2.0, at(7))).unwrap();
+    store
+        .record_gateway_turn(shared, "slack", "alice", at(10))
+        .unwrap();
+    store
+        .record_usage(&spend(shared, "a2", 0.5, at(11)))
+        .unwrap();
+    let since = t0 - SignedDuration::from_mins(1);
+    let alice = store.sender_cost_since("slack", "alice", since).unwrap();
+    let bob = store.sender_cost_since("slack", "bob", since).unwrap();
+    assert!((alice - 1.5).abs() < 1e-9, "alice {alice}");
+    assert!((bob - 5.0).abs() < 1e-9, "bob {bob}");
 }
 
 #[test]

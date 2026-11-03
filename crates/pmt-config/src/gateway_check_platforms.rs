@@ -11,7 +11,7 @@ use std::path::{Component, Path};
 use pmt_core::error::{Error, codes};
 
 use crate::platforms::{
-    self, EmailOptions, MatrixOptions, SignalOptions, TelegramMode, TelegramOptions,
+    self, EmailOptions, MatrixOptions, SignalOptions, TelegramMode, TelegramOptions, WebhookOptions,
 };
 use crate::schema::{Config, PlatformConfig, WebhookFilter, WebhookFilters, WebhookRoute};
 
@@ -96,6 +96,7 @@ fn check_mode_rules(platform: &str, key: &str, table: &PlatformConfig) -> Result
             }
         }
     }
+    check_credential_urls(platform, key, table)?;
     if platform == "email"
         && let Some(entry) = table.allow_users.iter().find(|u| !whole_address(u))
     {
@@ -104,6 +105,31 @@ fn check_mode_rules(platform: &str, key: &str, table: &PlatformConfig) -> Result
         )));
     }
     Ok(())
+}
+
+/// URLs the adapter sends a bearer token to must use TLS; plain http is
+/// accepted only for loopback (local mocks and bridges), like the relay.
+/// The adapters check again at connect (a hand-edited file, a reload).
+fn check_credential_urls(platform: &str, key: &str, table: &PlatformConfig) -> Result<(), Error> {
+    let (option, url) = match platform {
+        "matrix" => (
+            "homeserver",
+            options::<MatrixOptions>(platform, table).homeserver,
+        ),
+        "webhook" => (
+            "github_api_url",
+            Some(options::<WebhookOptions>(platform, table).github_api_url),
+        ),
+        _ => return Ok(()),
+    };
+    match url {
+        Some(url) if !crate::daemon_relay::secure_url(&url, "https", "http") => {
+            Err(invalid(format!(
+                "{key}.options.{option}: '{url}' would send the access token in cleartext; use https:// (http:// only to a loopback host)"
+            )))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn whole_address(entry: &str) -> bool {
@@ -346,6 +372,31 @@ mod tests {
                 .contains("E.164")
         );
         check_toml("[gateway.platforms.signal]\nenabled = true\noptions = { http_url = \"http://127.0.0.1:8080\", account = \"+15551234567\" }\n").unwrap();
+    }
+
+    #[test]
+    fn token_bearing_urls_need_tls_except_on_loopback() {
+        let matrix = message(
+            "[gateway.platforms.matrix]\noptions = { homeserver = \"http://matrix.example.org\" }\n",
+        );
+        assert!(
+            matrix.starts_with("gateway.platforms.matrix.options.homeserver")
+                && matrix.contains("cleartext"),
+            "{matrix}"
+        );
+        let github = message(
+            "[gateway.platforms.webhook]\noptions = { github_api_url = \"http://ghe.example/api/v3\" }\n",
+        );
+        assert!(
+            github.starts_with("gateway.platforms.webhook.options.github_api_url"),
+            "{github}"
+        );
+        check_toml("[gateway.platforms.matrix]\nenabled = true\noptions = { homeserver = \"https://matrix.example.org\" }\n").unwrap();
+        check_toml(
+            "[gateway.platforms.matrix]\noptions = { homeserver = \"http://127.0.0.1:8008\" }\n",
+        )
+        .unwrap();
+        check_toml("[gateway.platforms.webhook]\noptions = { github_api_url = \"http://localhost:9000\" }\n").unwrap();
     }
 
     #[test]

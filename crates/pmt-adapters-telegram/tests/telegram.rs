@@ -264,6 +264,7 @@ async fn the_kit_fails_each_declared_capability_the_adapter_does_not_deliver() {
             "threads",
             "delete",
             "media in",
+            "private replies",
             "command menu"
         ],
         "{}",

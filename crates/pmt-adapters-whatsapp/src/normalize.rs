@@ -154,6 +154,7 @@ pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<(Inbound, bool)>
         reply_to: text(&event["quotedMessageId"]),
         is_bot: false,
         callback: None,
+        interaction: None,
         profile: None,
         addressing: pmt_gateway::messaging::Addressing::default(),
     };
