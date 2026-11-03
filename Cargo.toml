@@ -190,6 +190,34 @@ opt-level = 3
 [profile.dev.package.blake2]
 opt-level = 3
 
+# Plugin tests compile WASM components inside the `plugins.load_timeout_ms`
+# deadline; an unoptimized Cranelift needs several seconds per component and
+# overran the deadline on loaded CI runners.
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+[profile.dev.package.cranelift-assembler-x64]
+opt-level = 3
+[profile.dev.package.cranelift-frontend]
+opt-level = 3
+[profile.dev.package.cranelift-bforest]
+opt-level = 3
+[profile.dev.package.cranelift-bitset]
+opt-level = 3
+[profile.dev.package.cranelift-entity]
+opt-level = 3
+[profile.dev.package.cranelift-control]
+opt-level = 3
+[profile.dev.package.regalloc2]
+opt-level = 3
+[profile.dev.package.wasmtime]
+opt-level = 3
+[profile.dev.package.wasmtime-environ]
+opt-level = 3
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 3
+[profile.dev.package.wasmparser]
+opt-level = 3
+
 [profile.release]
 # Fat LTO: one optimization unit across every crate drops what thin LTO
 # keeps per crate (duplicate generic instantiations, unused paths); the
