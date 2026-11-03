@@ -21,6 +21,8 @@ pub struct ToolsConfig {
     pub kill_grace_secs: u64,
     /// Tool result size budgets.
     pub result_budget: ResultBudget,
+    /// Progressive disclosure of large tool surfaces.
+    pub tool_search: ToolSearchConfig,
 }
 
 impl Default for ToolsConfig {
@@ -31,8 +33,78 @@ impl Default for ToolsConfig {
             default_timeout_secs: 300,
             kill_grace_secs: 5,
             result_budget: ResultBudget::default(),
+            tool_search: ToolSearchConfig::default(),
         }
     }
+}
+
+/// The `[tools.tool_search]` section (spec: tool-system, Tool search
+/// progressive disclosure; Tool search listing, ranking and limits).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ToolSearchConfig {
+    /// `auto` defers MCP and plugin tools behind `tool_search`,
+    /// `tool_describe` and `tool_call` when their schemas outgrow the
+    /// thresholds below; `on` always does, `off` never.
+    pub mode: ToolSearchMode,
+    /// Percent of the main model's context window the deferrable tools'
+    /// schemas may take before `auto` defers them.
+    #[schemars(range(min = 0, max = 100))]
+    pub threshold_pct: u32,
+    /// Token budget (4 characters each) of the deferrable schemas, and of
+    /// the deferred-tool manifest in the `tool_search` description.
+    #[schemars(range(min = 200, max = 60_000))]
+    pub listing_max_tokens: u32,
+    /// Tools deferred besides MCP and plugin tools while tool search is
+    /// active; unset defers `computer_use`, `session_search`,
+    /// `image_generate`, `todo`, `process`, `cronjob` and `browser_vault`.
+    pub defer: Option<Vec<String>>,
+    /// Matches per query when `tool_search` names no `limit`.
+    #[schemars(range(min = 1, max = 50))]
+    pub search_default_limit: u32,
+    /// The most matches per query `tool_search` returns.
+    #[schemars(range(min = 1, max = 50))]
+    pub max_search_limit: u32,
+    /// Whether the `tool_search` description lists the deferred tools.
+    pub listing: ToolListing,
+}
+
+impl Default for ToolSearchConfig {
+    fn default() -> Self {
+        Self {
+            mode: ToolSearchMode::Auto,
+            threshold_pct: 5,
+            listing_max_tokens: 4_000,
+            defer: None,
+            search_default_limit: 5,
+            max_search_limit: 25,
+            listing: ToolListing::Auto,
+        }
+    }
+}
+
+/// `tools.tool_search.mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolSearchMode {
+    /// Defer when the deferrable schemas outgrow the thresholds.
+    Auto,
+    /// Always defer.
+    On,
+    /// Never defer.
+    Off,
+}
+
+/// `tools.tool_search.listing`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolListing {
+    /// List the deferred tools within the listing budget.
+    Auto,
+    /// The same as `auto`.
+    On,
+    /// No listing.
+    Off,
 }
 
 /// The `[tools.result_budget]` section.

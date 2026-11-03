@@ -27,6 +27,7 @@
 - [Capabilities, grants and redaction](guide/security.md)
 - [Plugins](guide/plugins.md)
 - [Writing a plugin](guide/plugin-authoring.md)
+- [MCP servers](guide/mcp.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
 - [The messaging gateway](guide/gateway.md)
 

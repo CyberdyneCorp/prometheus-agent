@@ -293,6 +293,19 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "mcp",
+        &[],
+        Tools,
+        "Show MCP servers, or reload them (tools next session unless --now)",
+        &[
+            arg("action", ArgKind::Choice(&["status", "reload"]), false),
+            NOW,
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "toolsets",
         &[],
         Tools,

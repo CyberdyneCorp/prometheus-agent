@@ -40,6 +40,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  mcp          MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
@@ -10411,6 +10412,404 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus pairing help help
 ```
 
+## `prometheus mcp`
+
+```text
+MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
+
+Usage: prometheus mcp [OPTIONS] <COMMAND>
+
+Commands:
+  add     Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+  list    Every configured server: transport, command or URL, trust and whether it is enabled
+  remove  Remove a server [alias: rm]
+  test    Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  status  Start every enabled server and show its state, tool count and why it is unavailable
+  serve   Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp add`
+
+```text
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+
+Usage: prometheus mcp add [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name (letters, digits, `_` and `-`); its tools are named `mcp__<name>__<tool>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --url <URL>
+          The streamable HTTP endpoint
+
+      --command <COMMAND>
+          The program of a local (stdio) server
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --args <ARGS>...
+          The program's arguments
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --env <KEY=VALUE>
+          An environment variable of a stdio server (`KEY=value`; repeat)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --env-secret <NAME>
+          A secrets-store name passed to a stdio server as a variable of the same name (repeat)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --auth-secret <NAME>
+          The secrets-store name of an HTTP server's bearer token
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --trust <TRUST>
+          `untrusted` (default): tools that are not read-only need approval
+
+          Possible values:
+          - full:      Trusted like built-in tools
+          - untrusted: Tools that are not read-only need approval
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus mcp list`
+
+```text
+Every configured server: transport, command or URL, trust and whether it is enabled
+
+Usage: prometheus mcp list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp remove`
+
+```text
+Remove a server
+
+Usage: prometheus mcp remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp test`
+
+```text
+Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+
+Usage: prometheus mcp test [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp status`
+
+```text
+Start every enabled server and show its state, tool count and why it is unavailable
+
+Usage: prometheus mcp status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp serve`
+
+```text
+Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+
+Usage: prometheus mcp serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --stdio
+          Serve on stdin and stdout (the default)
+
+      --http <ADDR>
+          Serve streamable HTTP on this address (`127.0.0.1:8765`); a non-loopback address needs `mcp_server.allow_remote = true`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus mcp help [COMMAND]
+
+Commands:
+  add     Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+  list    Every configured server: transport, command or URL, trust and whether it is enabled
+  remove  Remove a server
+  test    Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  status  Start every enabled server and show its state, tool count and why it is unavailable
+  serve   Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus mcp help add`
+
+```text
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+
+Usage: prometheus mcp help add
+```
+
+## `prometheus mcp help list`
+
+```text
+Every configured server: transport, command or URL, trust and whether it is enabled
+
+Usage: prometheus mcp help list
+```
+
+## `prometheus mcp help remove`
+
+```text
+Remove a server
+
+Usage: prometheus mcp help remove
+```
+
+## `prometheus mcp help test`
+
+```text
+Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+
+Usage: prometheus mcp help test
+```
+
+## `prometheus mcp help status`
+
+```text
+Start every enabled server and show its state, tool count and why it is unavailable
+
+Usage: prometheus mcp help status
+```
+
+## `prometheus mcp help serve`
+
+```text
+Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+
+Usage: prometheus mcp help serve
+```
+
+## `prometheus mcp help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus mcp help help
+```
+
 ## `prometheus plugins`
 
 ```text
@@ -13339,6 +13738,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  mcp          MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
@@ -14969,6 +15369,70 @@ Usage: prometheus help pairing deny
 Remove an approved sender
 
 Usage: prometheus help pairing revoke
+```
+
+## `prometheus help mcp`
+
+```text
+MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
+
+Usage: prometheus help mcp [COMMAND]
+
+Commands:
+  add     Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+  list    Every configured server: transport, command or URL, trust and whether it is enabled
+  remove  Remove a server
+  test    Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  status  Start every enabled server and show its state, tool count and why it is unavailable
+  serve   Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+```
+
+## `prometheus help mcp add`
+
+```text
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+
+Usage: prometheus help mcp add
+```
+
+## `prometheus help mcp list`
+
+```text
+Every configured server: transport, command or URL, trust and whether it is enabled
+
+Usage: prometheus help mcp list
+```
+
+## `prometheus help mcp remove`
+
+```text
+Remove a server
+
+Usage: prometheus help mcp remove
+```
+
+## `prometheus help mcp test`
+
+```text
+Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+
+Usage: prometheus help mcp test
+```
+
+## `prometheus help mcp status`
+
+```text
+Start every enabled server and show its state, tool count and why it is unavailable
+
+Usage: prometheus help mcp status
+```
+
+## `prometheus help mcp serve`
+
+```text
+Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+
+Usage: prometheus help mcp serve
 ```
 
 ## `prometheus help plugins`

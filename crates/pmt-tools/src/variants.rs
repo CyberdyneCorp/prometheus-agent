@@ -83,6 +83,9 @@ pub struct RouteTraits {
     pub family: ModelFamily,
     /// Auxiliary capabilities the session can reach ([`OCR`]).
     pub auxiliary: BTreeSet<String>,
+    /// The model's context window in tokens, when known (tool search
+    /// sizes its threshold by it).
+    pub context_window: Option<u64>,
 }
 
 impl RouteTraits {
@@ -93,7 +96,15 @@ impl RouteTraits {
             wire_format: Some(wire_format),
             family: ModelFamily::of(provider, model),
             auxiliary: BTreeSet::new(),
+            context_window: None,
         }
+    }
+
+    /// The same traits for a model whose window is `tokens`.
+    #[must_use]
+    pub fn with_context_window(mut self, tokens: Option<u64>) -> Self {
+        self.context_window = tokens;
+        self
     }
 }
 

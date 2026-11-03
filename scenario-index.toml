@@ -2171,3 +2171,25 @@ capabilities = [
 [tool-system."Model-dependent schema variants"]
 "Variant frozen for the session" = ["crates/prometheus/tests/chat_model_switch.rs::a_model_switch_keeps_the_frozen_patch_variant", "crates/pmt-tools/tests/file_tools/variants.rs::patch_advertises_v4a_only_to_openai_family_routes"]
 "Handler accepts any variant" = ["crates/pmt-tools/tests/file_tools/variants.rs::handler_accepts_any_variant"]
+
+# Group 31: MCP client and server (tasks 31.1-31.4).
+
+[plugin-system."MCP client servers"]
+"Crashed MCP server does not break the session" = ["crates/prometheus/tests/mcp_client.rs::crashed_mcp_server_does_not_break_the_session", "crates/pmt-mcp/tests/client.rs::a_crashed_server_answers_unavailable_and_restarts_after_its_backoff"]
+
+[plugin-system."MCP server mode"]
+"Terminal not exposed by default" = ["crates/prometheus/tests/mcp_serve.rs::terminal_not_exposed_by_default"]
+
+[tool-system."MCP tool naming and filtering"]
+"Include beats exclude" = ["crates/pmt-mcp/tests/client.rs::include_beats_exclude_and_full_trust_asks_for_nothing", "crates/pmt-mcp/src/naming.rs::include_beats_exclude"]
+
+[tool-system."MCP runtime safety"]
+"Provider key not forwarded" = ["crates/prometheus/tests/mcp_client.rs::provider_key_not_forwarded"]
+"Open circuit" = ["crates/pmt-mcp/tests/client.rs::three_timeouts_open_the_circuit_and_the_fourth_call_never_reaches_the_server"]
+
+[tool-system."Tool search progressive disclosure"]
+"Out-of-scope bridge call" = ["crates/pmt-tools/tests/tool_search.rs::out_of_scope_bridge_call_is_an_unknown_tool"]
+
+[tool-system."Tool search listing, ranking and limits"]
+"Oversized server collapses alone" = ["crates/pmt-tools/src/search/manifest.rs::an_oversized_server_collapses_alone"]
+"Limit clamp" = ["crates/pmt-tools/tests/tool_search.rs::limit_clamp"]

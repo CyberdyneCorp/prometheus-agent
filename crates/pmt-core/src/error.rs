@@ -972,6 +972,18 @@ error_codes! {
     /// A plugin catalog or package that could not be fetched.
     PLUGINS_CATALOG = ("plugins.catalog", Unavailable,
         "The plugin catalog entry, package or repository could not be fetched or read; the message names it.");
+    /// No MCP server with this name is configured.
+    MCP_NOT_FOUND = ("mcp.not_found", NotFound,
+        "No `[mcp.servers.<name>]` entry has this name in the profile's config.toml; `prometheus mcp list` shows the configured servers.");
+    /// `mcp add` of a name that is already configured.
+    MCP_EXISTS = ("mcp.exists", InvalidInput,
+        "An MCP server with this name is already configured; remove it first with `prometheus mcp remove <name>` or pick another name.");
+    /// An MCP server could not be started or reached.
+    MCP_UNREACHABLE = ("mcp.unreachable", Unavailable,
+        "The MCP server did not start, did not complete the initialize handshake or the tool listing within its connect timeout, or refused the connection; the message says why.");
+    /// `mcp serve --http` on an address that is not loopback.
+    MCP_REMOTE_REFUSED = ("mcp.remote_refused", PermissionDenied,
+        "`prometheus mcp serve --http` binds only loopback addresses unless `mcp_server.allow_remote = true` is set in the profile's config.toml.");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

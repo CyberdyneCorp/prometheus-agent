@@ -455,7 +455,11 @@ impl ApprovalGate for CommandGate {
                     return verdict;
                 }
             }
-            if let Some(escalation) = request.escalation {
+            let rules = request
+                .escalation
+                .into_iter()
+                .chain(request.tool.descriptor.approval.as_ref());
+            for escalation in rules {
                 let verdict = self.check_escalation(&request, escalation).await;
                 if verdict != GateVerdict::Allow {
                     return verdict;

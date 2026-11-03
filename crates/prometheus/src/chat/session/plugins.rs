@@ -36,28 +36,32 @@ pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The tool registry of one plugin set: the core tools plus the plugins'
-/// tools, and the plugin toolsets holding them.
+/// The tool registry of one plugin set and one MCP server set: the core
+/// tools plus the plugins' and the MCP servers' tools, and the toolsets
+/// holding those.
 pub(super) struct PluginTools {
-    generation: u64,
+    generation: (u64, u64),
     registry: Arc<ToolRegistry>,
     toolsets: Vec<String>,
 }
 
 impl PluginTools {
-    /// The registry of `plugins`' current set.
-    /// `calls` resolves what each tool call reports as its session.
+    /// The registry of `plugins`' current set and of the tools `mcp`'s
+    /// servers listed at their last start. `calls` resolves what each
+    /// plugin tool call reports as its session.
     pub(super) fn build(
         scope: &ProfileScope,
         plugins: &ProfilePlugins,
+        mcp: &pmt_mcp::Manager,
         calls: &SessionCalls,
     ) -> Result<Self, Error> {
-        let generation = plugins.generation();
+        let generation = (plugins.generation(), mcp.generation());
         let mut registry = crate::tools_cmd::registry(scope)?;
         // Listing the tools runs for no session.
-        let toolsets = plugins
+        let mut toolsets = plugins
             .current()
             .register_tools(&mut registry, &calls(""), calls);
+        toolsets.extend(mcp.register(&mut registry));
         Ok(Self {
             generation,
             registry: Arc::new(registry),
@@ -92,18 +96,32 @@ pub(super) fn session_calls(store: &Arc<Store>, cwd: &Path) -> SessionCalls {
 }
 
 impl Factory {
-    /// The tool registry and plugin toolsets for a session starting now:
-    /// the profile's plugin set is refreshed first (a change since the
-    /// last session loads anew) and the registry rebuilt when the set
-    /// changed.
+    /// The tool registry and plugin and MCP toolsets for a session
+    /// starting now: the profile's plugin set is refreshed first (a change
+    /// since the last session loads anew) and the registry rebuilt when
+    /// the set or an MCP server's tool list changed.
     pub(super) fn session_registry(&self) -> Result<(Arc<ToolRegistry>, Vec<String>), Error> {
-        let plugins = crate::plugins_host::for_session(&self.plugin_scope.get(), &self.options.cwd);
+        let scope = self.plugin_scope.get();
+        let plugins = crate::plugins_host::for_session(&scope, &self.options.cwd);
+        let mcp = crate::mcp_host::manager(&scope);
         let mut tools = lock(&self.tools);
-        if tools.generation != plugins.generation() {
+        if tools.generation != (plugins.generation(), mcp.generation()) {
             let calls = session_calls(&self.store, &self.options.cwd);
-            *tools = PluginTools::build(&self.scope, &plugins, &calls)?;
+            *tools = PluginTools::build(&self.scope, &plugins, &mcp, &calls)?;
         }
         Ok((Arc::clone(&tools.registry), tools.toolsets.clone()))
+    }
+
+    /// Starts the profile's MCP servers a session starting now needs (each
+    /// at most once per restart backoff); a server that does not start is
+    /// left out of the session with a WARN and shows in `mcp status`.
+    pub(super) async fn discover_mcp(&self) {
+        let mcp = crate::mcp_host::manager(&self.plugin_scope.get());
+        for (server, outcome) in mcp.discover().await {
+            if let Err(reason) = outcome {
+                tracing::warn!(server = %server, "MCP server unavailable: {reason}");
+            }
+        }
     }
 
     /// Makes `/plugins reload` re-read the profile's `config.toml` (with
@@ -144,6 +162,17 @@ impl Factory {
         Ok(fresh)
     }
 
+    /// The configuration the profile's plugins and MCP servers are loaded
+    /// from now: `current` (the daemon's), or in a one-process session the
+    /// one the last `/plugins reload` or `/mcp reload` read.
+    pub(crate) fn extensions_scope(&self, current: &ProfileScope) -> ProfileScope {
+        if self.reread.is_some() {
+            self.plugin_scope.get()
+        } else {
+            current.clone()
+        }
+    }
+
     /// The plugin system-prompt sections of a session starting now.
     pub(super) async fn plugin_sections(&self, id: SessionId) -> Vec<String> {
         let loaded = self.plugins.current();
@@ -175,6 +204,18 @@ impl Factory {
     ///
     /// Registry and selection errors; store errors recording the surface.
     pub(crate) async fn apply_plugins_now(&self, live: &Live) -> Result<(), Error> {
+        self.apply_tools_now(live, "plugins").await
+    }
+
+    /// `/mcp reload --now` (`reason` `mcp`) and `/plugins reload --now`
+    /// (`plugins`): the session's tools (and plugin system-prompt
+    /// sections) come from the current plugin and MCP server sets from the
+    /// next request; the prompt rebuild is recorded with `reason --now`.
+    ///
+    /// # Errors
+    ///
+    /// Registry and selection errors; store errors recording the surface.
+    pub(crate) async fn apply_tools_now(&self, live: &Live, reason: &str) -> Result<(), Error> {
         let (registry, toolsets) = self.session_registry()?;
         let config = self.scope.config();
         let selection = tools::selection(
@@ -188,8 +229,7 @@ impl Factory {
         self.rebuild_tools(live, &selection).await?;
         live.set_selection(selection);
         *lock(&live.plugin_sections) = self.plugin_sections(live.id).await;
-        live.agent
-            .rebuild_prompt(Rebuild::Now("plugins".to_owned()));
+        live.agent.rebuild_prompt(Rebuild::Now(reason.to_owned()));
         Ok(())
     }
 }

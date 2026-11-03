@@ -25,6 +25,7 @@ use serde_json::Value;
 use crate::descriptor::{ExposedNames, RegisteredTool};
 use crate::probe::{ProbeCache, ProbeContext};
 use crate::registry::ToolRegistry;
+use crate::search;
 use crate::selection::Selection;
 use crate::variants::RouteTraits;
 
@@ -93,6 +94,10 @@ pub struct ToolSurface {
     excluded: BTreeMap<String, Exclusion>,
     posture: bool,
     variants: BTreeMap<String, &'static str>,
+    /// Tools left out of the array behind the tool-search bridge, still
+    /// part of the session's resolved tool set.
+    deferred: Vec<Arc<RegisteredTool>>,
+    catalog: Option<Arc<search::Catalog>>,
 }
 
 impl ToolSurface {
@@ -144,7 +149,7 @@ impl ToolSurface {
         let exposed: ExposedNames = tools.iter().map(|t| t.name().to_owned()).collect();
         let absent: BTreeSet<&str> = excluded.keys().map(String::as_str).collect();
         let mut variants = BTreeMap::new();
-        let definitions: Vec<ToolDefinition> = tools
+        let mut definitions: Vec<ToolDefinition> = tools
             .iter()
             .map(|tool| {
                 let advertised = tool.advertised(inputs.config, inputs.route);
@@ -163,6 +168,14 @@ impl ToolSurface {
                 }
             })
             .collect();
+        let mut tools = tools;
+        let (deferred, catalog) = defer(
+            registry,
+            &mut tools,
+            &mut definitions,
+            &inputs.config.tools.tool_search,
+            inputs.route,
+        );
         let serialized = serde_json::to_string(&definitions)
             .unwrap_or_else(|_| "[]".to_owned())
             .into();
@@ -174,6 +187,8 @@ impl ToolSurface {
             excluded,
             posture,
             variants,
+            deferred,
+            catalog,
         }
     }
 
@@ -194,6 +209,26 @@ impl ToolSurface {
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&Arc<RegisteredTool>> {
         self.tools.iter().find(|t| t.name() == name)
+    }
+
+    /// The tool named `name` in the session's resolved tool set: exposed,
+    /// or deferred behind the tool-search bridge.
+    #[must_use]
+    pub fn resolve(&self, name: &str) -> Option<&Arc<RegisteredTool>> {
+        self.get(name)
+            .or_else(|| self.deferred.iter().find(|t| t.name() == name))
+    }
+
+    /// The tools deferred behind the tool-search bridge, in model order.
+    #[must_use]
+    pub fn deferred(&self) -> &[Arc<RegisteredTool>] {
+        &self.deferred
+    }
+
+    /// The deferred tools' catalog, when the session uses tool search.
+    #[must_use]
+    pub fn catalog(&self) -> Option<&Arc<search::Catalog>> {
+        self.catalog.as_ref()
     }
 
     /// Exposed tool names, in model order.
@@ -224,6 +259,46 @@ impl ToolSurface {
     pub fn posture(&self) -> bool {
         self.posture
     }
+}
+
+/// Moves the deferrable tools out of `tools` and `definitions` and appends
+/// the bridge tools when tool search is active for the session.
+fn defer(
+    registry: &ToolRegistry,
+    tools: &mut Vec<Arc<RegisteredTool>>,
+    definitions: &mut Vec<ToolDefinition>,
+    config: &pmt_config::schema::ToolSearchConfig,
+    route: &RouteTraits,
+) -> (Vec<Arc<RegisteredTool>>, Option<Arc<search::Catalog>>) {
+    let Some(split) = search::split(tools, definitions, registry, config, route) else {
+        return (Vec::new(), None);
+    };
+    let mut kept_tools = Vec::new();
+    let mut kept_definitions = Vec::new();
+    let mut deferred = Vec::new();
+    let mut deferred_definitions = Vec::new();
+    for (i, (tool, definition)) in tools.drain(..).zip(definitions.drain(..)).enumerate() {
+        if split.deferred.contains(&i) {
+            deferred.push(tool);
+            deferred_definitions.push(definition);
+        } else {
+            kept_tools.push(tool);
+            kept_definitions.push(definition);
+        }
+    }
+    let pairs: Vec<_> = deferred.iter().zip(deferred_definitions.iter()).collect();
+    let (catalog, bridge) = search::bridge(&pairs, config);
+    for tool in bridge {
+        kept_definitions.push(ToolDefinition {
+            name: tool.name().to_owned(),
+            description: tool.descriptor.description.clone(),
+            parameters: tool.descriptor.parameters.clone(),
+        });
+        kept_tools.push(Arc::new(tool));
+    }
+    *tools = kept_tools;
+    *definitions = kept_definitions;
+    (deferred, Some(catalog))
 }
 
 /// The first reason found without probing: toolset membership, then the

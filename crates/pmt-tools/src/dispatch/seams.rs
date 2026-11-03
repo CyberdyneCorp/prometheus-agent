@@ -50,10 +50,11 @@ pub enum PreDecision {
     Modify(serde_json::Map<String, Value>),
 }
 
-/// A plugin rule asking for human approval of one call.
+/// A rule asking for human approval of one call: a plugin hook's, or a
+/// tool's own ([`crate::ToolDescriptor::approval`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Escalation {
-    /// The plugin's rule key; approvals record it as `plugin_rule:<key>`.
+    /// The rule key; approvals record it as `plugin_rule:<key>`.
     pub rule_key: String,
     /// Why the rule wants a human to look.
     pub reason: String,

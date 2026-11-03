@@ -17,6 +17,7 @@ pmt-agent = { path = "crates/pmt-agent" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-memory = { path = "crates/pmt-memory" }
+pmt-mcp = { path = "crates/pmt-mcp" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
 pmt-plugins = { path = "crates/pmt-plugins" }
@@ -39,6 +40,10 @@ pmt-tui = { path = "crates/pmt-tui" }
 pmt-update = { path = "crates/pmt-update" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
+# MCP client and server (design D7): stdio and streamable HTTP transports,
+# no macros, OAuth or child-process wrapper (stdio servers are spawned
+# through the execution sandbox and handed over as pipes).
+rmcp = { version = "3.8.0", default-features = false }
 # WASM plugin host (design D7): the Component Model on Cranelift, with no
 # WASI (plugins get only the WIT host interfaces) and no on-disk code cache.
 wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std"] }

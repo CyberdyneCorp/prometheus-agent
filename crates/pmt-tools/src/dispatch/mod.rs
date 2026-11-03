@@ -13,6 +13,7 @@
 //! model sees it. Provenance tagging (M2) attaches after the budget.
 
 mod batch;
+mod bridge;
 pub mod plan;
 pub mod seams;
 
@@ -146,11 +147,15 @@ impl Dispatcher {
         agent: Option<&Arc<dyn AgentLoopCalls>>,
     ) -> Executed {
         let setup = &self.setup;
+        if call.name == crate::search::TOOL_CALL && setup.surface.catalog().is_some() {
+            // Boxed: each bridged call runs through `execute` again.
+            return Box::pin(self.bridge(call, cancel, agent)).await;
+        }
         setup
             .observer
             .tool_call(&call.call_id, &call.name, &call.arguments);
         let started = Instant::now();
-        let tool = setup.surface.get(&call.name).cloned();
+        let tool = setup.surface.resolve(&call.name).cloned();
         let (arguments, result) = tokio::select! {
             biased;
             () = cancel.cancelled() => (raw(call), cancelled(&call.name)),

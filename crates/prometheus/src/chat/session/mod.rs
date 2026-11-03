@@ -10,6 +10,7 @@ pub mod env;
 pub mod model;
 mod plugins;
 pub mod progress;
+pub mod serve;
 pub mod skills;
 pub mod summarize;
 pub mod tools;
@@ -221,6 +222,7 @@ impl Factory {
         let tools = Mutex::new(plugins::PluginTools::build(
             &scope,
             &plugins,
+            &crate::mcp_host::manager(&scope),
             &plugins::session_calls(&store, &options.cwd),
         )?);
         let grants = Arc::new(SessionGrants::new(
@@ -409,6 +411,7 @@ impl Factory {
         let session = self.store.session(id)?;
         self.record.session(id, session.root_session_id, target);
         self.record_launch_flags(id)?;
+        self.discover_mcp().await;
         let (registry, selection, session_surface) = self.session_selection(&session)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
         let skills = Arc::new(SkillsSession::new(self.skills_setup(
@@ -500,6 +503,8 @@ impl Factory {
         &self,
         session: &pmt_store::Session,
     ) -> Result<(Arc<ToolRegistry>, Selection, pmt_tools::SessionSurface), Error> {
+        // Plugin and MCP toolsets: enabling a plugin or configuring a
+        // server opts its tools in.
         let (registry, plugin_toolsets) = self.session_registry()?;
         let surface = tools::surface_of(session);
         let selection = tools::selection(

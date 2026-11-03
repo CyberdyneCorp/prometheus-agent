@@ -25,6 +25,9 @@ pub mod fallback_cmd;
 pub mod grants_cmd;
 pub mod hooks_host;
 pub mod logs_cmd;
+#[cfg(feature = "mcp")]
+pub mod mcp_cmd;
+pub mod mcp_host;
 pub mod memory_cmd;
 pub mod model_cmd;
 pub mod model_slash;

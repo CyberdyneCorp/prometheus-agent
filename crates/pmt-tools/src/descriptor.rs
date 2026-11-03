@@ -158,6 +158,10 @@ pub struct ToolDescriptor {
     /// Tools the session must also expose for this one to be offered
     /// (`browser_exec` needs `terminal`).
     pub requires: Vec<String>,
+    /// A rule asking for human approval of every call (an untrusted MCP
+    /// server's tool that is not read-only); the approval gate asks as for
+    /// a plugin hook's escalation.
+    pub approval: Option<crate::dispatch::Escalation>,
 }
 
 impl ToolDescriptor {
@@ -182,6 +186,7 @@ impl ToolDescriptor {
             timeout: None,
             result_cap: None,
             requires: Vec::new(),
+            approval: None,
         }
     }
 

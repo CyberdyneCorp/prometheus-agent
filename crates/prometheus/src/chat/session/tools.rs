@@ -163,6 +163,7 @@ const ACP_UNATTENDED_TAG: &str = "acp-unattended";
 pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> RouteTraits {
     let route = model.route().await;
     RouteTraits::of(&route.provider, &route.model, route.wire_format)
+        .with_context_window(route.context_window)
 }
 
 /// What one surface build needs.
@@ -200,6 +201,23 @@ pub struct SurfaceInputsOwned<'a> {
 ///
 /// Store errors recording the surface.
 pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<SessionTools>, Error> {
+    let (dispatcher, timings) = dispatcher(inputs).await?;
+    Ok(Arc::new(SessionTools::new(
+        inputs.agent.map(Arc::clone),
+        Arc::new(dispatcher),
+        timings,
+    )))
+}
+
+/// The session's dispatcher over its surface (recorded for `tools list
+/// --session`) and the timings it reports to.
+///
+/// # Errors
+///
+/// Store errors recording the surface.
+pub async fn dispatcher(
+    inputs: &SurfaceInputsOwned<'_>,
+) -> Result<(Dispatcher, Arc<Timings>), Error> {
     let config = inputs.scope.config();
     let surface = ToolSurface::build(SurfaceInputs {
         registry: inputs.registry,
@@ -241,11 +259,7 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
             .unwrap_or(1)
             .max(1),
     });
-    Ok(Arc::new(SessionTools::new(
-        inputs.agent.map(Arc::clone),
-        Arc::new(dispatcher),
-        timings,
-    )))
+    Ok((dispatcher, timings))
 }
 
 /// The session's tool port; a `--now` change swaps it at a turn boundary.

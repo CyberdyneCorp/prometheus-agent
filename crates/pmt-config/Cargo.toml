@@ -8,6 +8,8 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# MCP tool filters (`mcp.servers.<name>.tools`) are checked as globs.
+glob.workspace = true
 jiff.workspace = true
 keyring-core.workspace = true
 pmt-core.workspace = true

@@ -7,6 +7,7 @@
 
 mod background;
 pub mod info;
+mod mcp;
 pub(crate) mod plugins;
 pub(crate) mod quick;
 mod refine;
@@ -100,6 +101,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "reasoning" => session::reasoning(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
+        "mcp" => mcp::mcp(ctx, args).await,
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))

@@ -22,6 +22,8 @@ use super::{Inventory, unknown_toolset};
 const EXPOSED: &str = "exposed";
 /// A toolset member this binary does not register (yet).
 const UNREGISTERED: &str = "unregistered";
+/// Exposure verdict of a tool reached through the tool-search bridge.
+const DEFERRED: &str = "deferred";
 
 /// One `tools list` row: the shape a session records, so the live listing
 /// and `--session` print the same columns.
@@ -55,6 +57,9 @@ pub fn surface_rows(registry: &ToolRegistry, surface: &ToolSurface) -> Vec<ToolR
 fn exposure(surface: &ToolSurface, name: &str) -> String {
     if surface.get(name).is_some() {
         return EXPOSED.to_owned();
+    }
+    if surface.deferred().iter().any(|t| t.name() == name) {
+        return DEFERRED.to_owned();
     }
     surface
         .excluded()

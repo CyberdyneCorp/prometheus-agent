@@ -2473,6 +2473,77 @@
         }
       ]
     },
+    "McpCapabilities": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.capabilities]`: the sandbox of a `stdio` server,\nin the words of a plugin manifest.",
+      "properties": {
+        "fs_read": {
+          "default": [],
+          "description": "Paths it may read: absolute, or under `$workspace`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fs_write": {
+          "default": [],
+          "description": "Paths it may write: absolute, or under `$workspace`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "network": {
+          "default": [],
+          "description": "Hosts it may connect to (`api.github.com`, `*.example.com`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "McpConfig": {
+      "additionalProperties": false,
+      "description": "The `[mcp]` section: the external MCP servers the profile's sessions\nconnect to.",
+      "properties": {
+        "call_timeout_secs": {
+          "default": 300,
+          "description": "Bound on one tool call of a server that sets no `timeout_secs`.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "connect_timeout_secs": {
+          "default": 60,
+          "description": "Bound on starting and initializing a server that sets no\n`connect_timeout_secs`.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "discovery_concurrency": {
+          "default": 4,
+          "description": "Servers connected at once when a session needs them.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "servers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/McpServerConfig"
+          },
+          "default": {},
+          "description": "Servers by name; their tools register as `mcp__<name>__<tool>` in\ntoolset `mcp-<name>`.",
+          "type": "object"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "McpEvents": {
       "additionalProperties": false,
       "description": "`[gateway.mcp_events]` (experimental).",
@@ -2484,6 +2555,185 @@
         }
       },
       "type": "object"
+    },
+    "McpServerConfig": {
+      "additionalProperties": false,
+      "description": "One `[mcp.servers.<name>]` entry.",
+      "properties": {
+        "args": {
+          "default": [],
+          "description": "Its arguments.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "auth_secret": {
+          "default": "",
+          "description": "Secrets-store name of the bearer token sent to an `http` server.",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/McpCapabilities",
+          "default": {
+            "fs_read": [],
+            "fs_write": [],
+            "network": []
+          },
+          "description": "What a `stdio` server's sandbox lets it reach, like a plugin grant."
+        },
+        "command": {
+          "default": "",
+          "description": "The program of a `stdio` server (a bare name is looked up on\n`PATH`).",
+          "type": "string"
+        },
+        "connect_timeout_secs": {
+          "default": null,
+          "description": "Overrides `mcp.connect_timeout_secs` for this server.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": true,
+          "description": "`false` skips the server without connecting.",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Environment variables of a `stdio` server, literal values. A\n`stdio` server gets only these, `env_secrets` and `PATH`, `HOME`,\n`LANG`, `SYSTEMROOT` and `TMPDIR`.",
+          "type": "object"
+        },
+        "env_secrets": {
+          "default": [],
+          "description": "Secrets-store names passed to a `stdio` server as environment\nvariables of the same name.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_secs": {
+          "default": null,
+          "description": "Overrides `mcp.call_timeout_secs` for this server.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tools": {
+          "$ref": "#/$defs/McpToolFilter",
+          "default": {
+            "exclude": [],
+            "include": null
+          },
+          "description": "Which of the server's tools register."
+        },
+        "transport": {
+          "$ref": "#/$defs/McpTransport",
+          "default": "stdio",
+          "description": "How the server is reached."
+        },
+        "trust": {
+          "$ref": "#/$defs/McpTrust",
+          "default": "untrusted",
+          "description": "`untrusted` servers' tools need approval unless they declare\n`readOnlyHint`; `full` trusts them like built-in tools."
+        },
+        "url": {
+          "default": "",
+          "description": "The endpoint of an `http` (streamable HTTP) server.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "McpServerModeConfig": {
+      "additionalProperties": false,
+      "description": "The `[mcp_server]` section: what `prometheus mcp serve` offers MCP\nclients.",
+      "properties": {
+        "allow_remote": {
+          "default": false,
+          "description": "Let `--http` bind an address that is not loopback.",
+          "type": "boolean"
+        },
+        "expose_toolsets": {
+          "default": [
+            "skills"
+          ],
+          "description": "Toolsets exposed as MCP tools; `skills` exposes only the read-only\nskill tools.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "McpToolFilter": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.tools]`.",
+      "properties": {
+        "exclude": {
+          "default": [],
+          "description": "Tool names (exact or globs) never registered.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include": {
+          "default": null,
+          "description": "Whitelist of the server's tool names (exact or case-sensitive\nglobs); wins over `exclude`, and an empty list registers nothing.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "McpTransport": {
+      "description": "`mcp.servers.<name>.transport`.",
+      "oneOf": [
+        {
+          "const": "stdio",
+          "description": "A child process speaking JSON-RPC on its stdin and stdout.",
+          "type": "string"
+        },
+        {
+          "const": "http",
+          "description": "A streamable HTTP endpoint.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpTrust": {
+      "description": "`mcp.servers.<name>.trust`.",
+      "oneOf": [
+        {
+          "const": "full",
+          "description": "Trusted like a built-in tool.",
+          "type": "string"
+        },
+        {
+          "const": "untrusted",
+          "description": "Every tool not declaring `readOnlyHint` needs approval.",
+          "type": "string"
+        }
+      ]
     },
     "MediaConfig": {
       "additionalProperties": false,
@@ -5175,6 +5425,26 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ToolListing": {
+      "description": "`tools.tool_search.listing`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "List the deferred tools within the listing budget.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "The same as `auto`.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No listing.",
+          "type": "string"
+        }
+      ]
+    },
     "ToolLoopGuardrails": {
       "additionalProperties": false,
       "description": "The `[tool_loop_guardrails]` section.",
@@ -5279,6 +5549,86 @@
         }
       ]
     },
+    "ToolSearchConfig": {
+      "additionalProperties": false,
+      "description": "The `[tools.tool_search]` section (spec: tool-system, Tool search\nprogressive disclosure; Tool search listing, ranking and limits).",
+      "properties": {
+        "defer": {
+          "default": null,
+          "description": "Tools deferred besides MCP and plugin tools while tool search is\nactive; unset defers `computer_use`, `session_search`,\n`image_generate`, `todo`, `process`, `cronjob` and `browser_vault`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "listing": {
+          "$ref": "#/$defs/ToolListing",
+          "default": "auto",
+          "description": "Whether the `tool_search` description lists the deferred tools."
+        },
+        "listing_max_tokens": {
+          "default": 4000,
+          "description": "Token budget (4 characters each) of the deferrable schemas, and of\nthe deferred-tool manifest in the `tool_search` description.",
+          "format": "uint32",
+          "maximum": 60000,
+          "minimum": 200,
+          "type": "integer"
+        },
+        "max_search_limit": {
+          "default": 25,
+          "description": "The most matches per query `tool_search` returns.",
+          "format": "uint32",
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/ToolSearchMode",
+          "default": "auto",
+          "description": "`auto` defers MCP and plugin tools behind `tool_search`,\n`tool_describe` and `tool_call` when their schemas outgrow the\nthresholds below; `on` always does, `off` never."
+        },
+        "search_default_limit": {
+          "default": 5,
+          "description": "Matches per query when `tool_search` names no `limit`.",
+          "format": "uint32",
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "threshold_pct": {
+          "default": 5,
+          "description": "Percent of the main model's context window the deferrable tools'\nschemas may take before `auto` defers them.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ToolSearchMode": {
+      "description": "`tools.tool_search.mode`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Defer when the deferrable schemas outgrow the thresholds.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "Always defer.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never defer.",
+          "type": "string"
+        }
+      ]
+    },
     "ToolsConfig": {
       "additionalProperties": false,
       "description": "The `[tools]` section.",
@@ -5323,6 +5673,19 @@
             "overrides": {}
           },
           "description": "Tool result size budgets."
+        },
+        "tool_search": {
+          "$ref": "#/$defs/ToolSearchConfig",
+          "default": {
+            "defer": null,
+            "listing": "auto",
+            "listing_max_tokens": 4000,
+            "max_search_limit": 25,
+            "mode": "auto",
+            "search_default_limit": 5,
+            "threshold_pct": 5
+          },
+          "description": "Progressive disclosure of large tool surfaces."
         }
       },
       "type": "object",
@@ -6519,6 +6882,26 @@
       },
       "description": "Structured log files."
     },
+    "mcp": {
+      "$ref": "#/$defs/McpConfig",
+      "default": {
+        "call_timeout_secs": 300,
+        "connect_timeout_secs": 60,
+        "discovery_concurrency": 4,
+        "servers": {}
+      },
+      "description": "External MCP servers."
+    },
+    "mcp_server": {
+      "$ref": "#/$defs/McpServerModeConfig",
+      "default": {
+        "allow_remote": false,
+        "expose_toolsets": [
+          "skills"
+        ]
+      },
+      "description": "What `prometheus mcp serve` exposes."
+    },
     "memory": {
       "$ref": "#/$defs/MemoryConfig",
       "default": {
@@ -6799,6 +7182,15 @@
           "default_chars": 100000,
           "mcp_chars": 50000,
           "overrides": {}
+        },
+        "tool_search": {
+          "defer": null,
+          "listing": "auto",
+          "listing_max_tokens": 4000,
+          "max_search_limit": 25,
+          "mode": "auto",
+          "search_default_limit": 5,
+          "threshold_pct": 5
         }
       },
       "description": "Toolset selection, timeouts and result budgets."

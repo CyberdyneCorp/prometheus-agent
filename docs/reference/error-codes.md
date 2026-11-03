@@ -322,6 +322,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `plugins.removed` | `permission_denied` | 77 | The plugin (or its repository) was removed from the catalog and is blocked; only `prometheus plugins install --allow-removed` installs it anyway, recorded on its install record. |
 | `plugins.threat` | `permission_denied` | 77 | The install-time threat scan graded the plugin `dangerous` (refused; `--force` does not override it), graded it `caution` without confirmation or `--force`, or could not finish (it fails closed); the message names each finding, file and line. |
 | `plugins.catalog` | `unavailable` | 69 | The plugin catalog entry, package or repository could not be fetched or read; the message names it. |
+| `mcp.not_found` | `not_found` | 66 | No `[mcp.servers.<name>]` entry has this name in the profile's config.toml; `prometheus mcp list` shows the configured servers. |
+| `mcp.exists` | `invalid_input` | 65 | An MCP server with this name is already configured; remove it first with `prometheus mcp remove <name>` or pick another name. |
+| `mcp.unreachable` | `unavailable` | 69 | The MCP server did not start, did not complete the initialize handshake or the tool listing within its connect timeout, or refused the connection; the message says why. |
+| `mcp.remote_refused` | `permission_denied` | 77 | `prometheus mcp serve --http` binds only loopback addresses unless `mcp_server.allow_remote = true` is set in the profile's config.toml. |
 | `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
 | `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |
 | `service.unsupported` | `unavailable` | 69 | `prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor. |

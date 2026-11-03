@@ -36,6 +36,7 @@ pub mod protected;
 pub mod registry;
 pub mod result;
 pub mod sanitize;
+pub mod search;
 pub mod selection;
 pub mod setting;
 pub mod spillover;

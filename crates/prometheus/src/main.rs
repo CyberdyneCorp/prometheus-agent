@@ -146,6 +146,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         #[cfg(not(feature = "gateway"))]
         Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
         Some(Command::Plugins { command }) => prometheus::plugins_cmd::run(command, &ctx),
+        #[cfg(feature = "mcp")]
+        Some(Command::Mcp { command }) => prometheus::mcp_cmd::run(command, &ctx),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),

@@ -54,6 +54,7 @@ pub fn semantic(config: &Config, profile_dir: &std::path::Path) -> Result<(), Er
     crate::quick_commands::check(config)?;
     crate::gateway_check::check(config, profile_dir)?;
     crate::hooks_check::check(config)?;
+    crate::mcp_check::check(config)?;
     check(config)
 }
 

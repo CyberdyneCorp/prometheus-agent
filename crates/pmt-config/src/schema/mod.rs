@@ -25,6 +25,7 @@ mod gateway_policy;
 mod gateway_routes;
 mod hooks;
 mod interface;
+mod mcp;
 mod models;
 mod operations;
 mod plugins;
@@ -59,6 +60,10 @@ pub use interface::{
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
     ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
+pub use mcp::{
+    McpCapabilities, McpConfig, McpServerConfig, McpServerModeConfig, McpToolFilter, McpTransport,
+    McpTrust,
+};
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
     LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
@@ -79,8 +84,8 @@ pub use state::{
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
     FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
-    SurfaceToolsets, TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig,
-    UnattendedApproval, WebConfig, WindowsShell,
+    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
+    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
 };
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
@@ -132,6 +137,10 @@ pub struct Config {
     pub hooks: HooksConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
+    /// External MCP servers.
+    pub mcp: McpConfig,
+    /// What `prometheus mcp serve` exposes.
+    pub mcp_server: McpServerModeConfig,
     /// Built-in memory.
     pub memory: MemoryConfig,
     /// The main model and provider.
@@ -209,6 +218,8 @@ impl Default for Config {
             gateway: GatewayConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
+            mcp: McpConfig::default(),
+            mcp_server: McpServerModeConfig::default(),
             memory: MemoryConfig::default(),
             model: ModelConfig::default(),
             models: std::collections::BTreeMap::new(),

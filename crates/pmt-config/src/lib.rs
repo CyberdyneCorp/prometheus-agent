@@ -31,6 +31,7 @@ pub mod keys;
 pub mod layers;
 pub mod layout;
 pub mod managed;
+pub mod mcp_check;
 pub mod migrate;
 mod parse;
 pub mod passthrough;

@@ -292,6 +292,27 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `mcp.call_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Bound on one tool call of a server that sets no `timeout_secs`. |
+| `mcp.connect_timeout_secs` | integer | `60` | 1 to 3600 | `next_session` | Bound on starting and initializing a server that sets no `connect_timeout_secs`. |
+| `mcp.discovery_concurrency` | integer | `4` | 1 to 64 | `next_session` | Servers connected at once when a session needs them. |
+| `mcp.servers.<name>.args` | array of string | `[]` | any | `next_session` | Its arguments. |
+| `mcp.servers.<name>.auth_secret` | string | `""` | any | `next_session` | Secrets-store name of the bearer token sent to an `http` server. |
+| `mcp.servers.<name>.capabilities.fs_read` | array of string | `[]` | any | `next_session` | Paths it may read: absolute, or under `$workspace`. |
+| `mcp.servers.<name>.capabilities.fs_write` | array of string | `[]` | any | `next_session` | Paths it may write: absolute, or under `$workspace`. |
+| `mcp.servers.<name>.capabilities.network` | array of string | `[]` | any | `next_session` | Hosts it may connect to (`api.github.com`, `*.example.com`). |
+| `mcp.servers.<name>.command` | string | `""` | any | `next_session` | The program of a `stdio` server (a bare name is looked up on `PATH`). |
+| `mcp.servers.<name>.connect_timeout_secs` | integer | unset | 1 to 3600 | `next_session` | Overrides `mcp.connect_timeout_secs` for this server. |
+| `mcp.servers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` skips the server without connecting. |
+| `mcp.servers.<name>.env` | table | `{}` | any | `next_session` | Environment variables of a `stdio` server, literal values. A `stdio` server gets only these, `env_secrets` and `PATH`, `HOME`, `LANG`, `SYSTEMROOT` and `TMPDIR`. |
+| `mcp.servers.<name>.env_secrets` | array of string | `[]` | any | `next_session` | Secrets-store names passed to a `stdio` server as environment variables of the same name. |
+| `mcp.servers.<name>.timeout_secs` | integer | unset | 1 to 86400 | `next_session` | Overrides `mcp.call_timeout_secs` for this server. |
+| `mcp.servers.<name>.tools.exclude` | array of string | `[]` | any | `next_session` | Tool names (exact or globs) never registered. |
+| `mcp.servers.<name>.tools.include` | array | unset | any | `next_session` | Whitelist of the server's tool names (exact or case-sensitive globs); wins over `exclude`, and an empty list registers nothing. |
+| `mcp.servers.<name>.transport` | one of "stdio", "http" | `"stdio"` | `"stdio"`, `"http"` | `next_session` | How the server is reached. |
+| `mcp.servers.<name>.trust` | one of "full", "untrusted" | `"untrusted"` | `"full"`, `"untrusted"` | `next_session` | `untrusted` servers' tools need approval unless they declare `readOnlyHint`; `full` trusts them like built-in tools. |
+| `mcp.servers.<name>.url` | string | `""` | any | `next_session` | The endpoint of an `http` (streamable HTTP) server. |
+| `mcp_server.allow_remote` | boolean | `false` | any | `restart` | Let `--http` bind an address that is not loopback. |
+| `mcp_server.expose_toolsets` | array of string | `["skills"]` | any | `restart` | Toolsets exposed as MCP tools; `skills` exposes only the read-only skill tools. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
@@ -450,6 +471,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `tools.result_budget.default_chars` | integer | `100000` | ≥ 0 | `next_session` | Characters kept inline for tools without a declared cap. |
 | `tools.result_budget.mcp_chars` | integer | `50000` | ≥ 0 | `next_session` | Characters kept inline for MCP tools. |
 | `tools.result_budget.overrides` | table | `{}` | any | `next_session` | Per-tool overrides: tool name to characters. |
+| `tools.tool_search.defer` | array | unset | any | `next_session` | Tools deferred besides MCP and plugin tools while tool search is active; unset defers `computer_use`, `session_search`, `image_generate`, `todo`, `process`, `cronjob` and `browser_vault`. |
+| `tools.tool_search.listing` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | Whether the `tool_search` description lists the deferred tools. |
+| `tools.tool_search.listing_max_tokens` | integer | `4000` | 200 to 60000 | `next_session` | Token budget (4 characters each) of the deferrable schemas, and of the deferred-tool manifest in the `tool_search` description. |
+| `tools.tool_search.max_search_limit` | integer | `25` | 1 to 50 | `next_session` | The most matches per query `tool_search` returns. |
+| `tools.tool_search.mode` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | `auto` defers MCP and plugin tools behind `tool_search`, `tool_describe` and `tool_call` when their schemas outgrow the thresholds below; `on` always does, `off` never. |
+| `tools.tool_search.search_default_limit` | integer | `5` | 1 to 50 | `next_session` | Matches per query when `tool_search` names no `limit`. |
+| `tools.tool_search.threshold_pct` | integer | `5` | 0 to 100 | `next_session` | Percent of the main model's context window the deferrable tools' schemas may take before `auto` defers them. |
 | `toolsets.surfaces.acp` | array | unset | any | `next_session` | ACP editor sessions (default `acp`). |
 | `toolsets.surfaces.acp_unattended` | array | unset | any | `next_session` | Unattended ACP sessions (default `acp_unattended`). |
 | `toolsets.surfaces.api` | array | unset | any | `next_session` | The OpenAI-compatible API server (default `api_server`). |
