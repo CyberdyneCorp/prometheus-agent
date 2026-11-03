@@ -21,29 +21,32 @@ use serde_json::Value;
 
 use crate::host::{CallInfo, Instance};
 
+/// What a tool call reports through `session.current`, from the id of the
+/// session making it. One registry serves the sessions of every surface
+/// (CLI, TUI, gateway, cron...), so the surface is resolved per call.
+pub type SessionCalls = Arc<dyn Fn(&str) -> CallInfo + Send + Sync>;
+
 /// One plugin's tool calls run on a blocking thread under the call bounds.
 struct PluginTool {
     instance: Arc<Instance>,
     name: String,
-    /// The surface and working directory of the sessions the tool serves;
-    /// each call adds its session id.
-    base: CallInfo,
+    calls: SessionCalls,
 }
 
 impl ToolHandler for PluginTool {
     fn call<'a>(&'a self, context: &'a CallContext, arguments: Value) -> HandlerFuture<'a> {
         let instance = Arc::clone(&self.instance);
         let name = self.name.clone();
-        let call = CallInfo {
-            session_id: Some(context.session_id.clone()),
-            ..self.base.clone()
-        };
+        let calls = Arc::clone(&self.calls);
+        let session = context.session_id.clone();
         Box::pin(async move {
             let arguments = arguments.to_string();
-            let outcome =
-                tokio::task::spawn_blocking(move || instance.call_tool(&call, &name, &arguments))
-                    .await
-                    .map_err(|e| ToolFailure::new("panic", e.to_string()))?;
+            // The resolver may read the session store: off the async thread.
+            let outcome = tokio::task::spawn_blocking(move || {
+                instance.call_tool(&calls(&session), &name, &arguments)
+            })
+            .await
+            .map_err(|e| ToolFailure::new("panic", e.to_string()))?;
             Ok(match outcome {
                 Ok(Ok(text)) => ToolResult::ok(text),
                 Ok(Err(text)) => ToolResult::error(text),
@@ -58,9 +61,9 @@ impl ToolHandler for PluginTool {
 
 /// Registers `instance`'s tools under the toolset `<plugin id>`. `grants`
 /// is the plugin's current grant (`tools.override:<tool>` lets it replace
-/// a core tool); `base` is the surface and working directory its calls
-/// report through `session.current` (the session id is added per call).
-/// Returns the registered names; every refusal is also kept
+/// a core tool); `base` is what listing the tools reports through
+/// `session.current`, and `calls` gives each tool call's facts from its
+/// session id. Returns the registered names; every refusal is also kept
 /// in the registry's rejections.
 ///
 /// # Errors
@@ -72,6 +75,7 @@ pub fn register(
     instance: &Arc<Instance>,
     grants: &CapabilitySet,
     base: &CallInfo,
+    calls: &SessionCalls,
 ) -> Result<Vec<String>, Error> {
     let id = instance.id().to_owned();
     let owner = Owner::Plugin(id.clone());
@@ -94,7 +98,7 @@ pub fn register(
         let handler = Arc::new(PluginTool {
             instance: Arc::clone(instance),
             name: spec.name.clone(),
-            base: base.clone(),
+            calls: Arc::clone(calls),
         });
         if registry
             .register(

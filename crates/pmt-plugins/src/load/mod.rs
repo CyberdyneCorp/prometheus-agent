@@ -177,15 +177,28 @@ impl Loaded {
     }
 
     /// Registers every loaded plugin's tools into `registry` (each under
-    /// its current grant); `base` is the surface and working directory of
-    /// the sessions they serve. Returns the plugin toolsets that hold tools.
-    pub fn register_tools(&self, registry: &mut ToolRegistry, base: &CallInfo) -> Vec<String> {
+    /// its current grant); `base` is what listing them reports as the
+    /// session, and `calls` gives each tool call's session facts (surface
+    /// and working directory of the calling session). Returns the plugin
+    /// toolsets that hold tools.
+    pub fn register_tools(
+        &self,
+        registry: &mut ToolRegistry,
+        base: &CallInfo,
+        calls: &tools::SessionCalls,
+    ) -> Vec<String> {
         let mut toolsets = Vec::new();
         for plugin in &self.plugins {
             if !plugin.instance.implements("tool") {
                 continue;
             }
-            match tools::register(registry, &plugin.instance, &plugin.grants.current(), base) {
+            match tools::register(
+                registry,
+                &plugin.instance,
+                &plugin.grants.current(),
+                base,
+                calls,
+            ) {
                 Ok(names) if !names.is_empty() => toolsets.push(plugin.manifest.id.clone()),
                 Ok(_) => {}
                 Err(err) => tracing::warn!(plugin = %plugin.manifest.id, "{}", err.message()),

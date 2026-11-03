@@ -52,7 +52,8 @@ fn listing(loaded: &Loaded) -> String {
 }
 
 async fn reload(ctx: &Ctx<'_>, id: Option<&str>, now: bool) -> Result<String, Error> {
-    let plugins = crate::plugins_host::reload(ctx.scope, &ctx.factory.options.cwd);
+    let scope = ctx.factory.plugins_reload_scope(ctx.scope)?;
+    let plugins = crate::plugins_host::reload(&scope, &ctx.factory.options.cwd);
     let loaded = plugins.current();
     check_target(&loaded, id)?;
     if now {

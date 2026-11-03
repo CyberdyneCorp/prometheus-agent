@@ -14,14 +14,16 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use pmt_agent::prompt::frozen::Rebuild;
 use pmt_agent::turn::model::{ModelPort, NoDeltas};
-use pmt_config::ProfileScope;
+use pmt_config::{Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_plugins::host::CallInfo;
 use pmt_plugins::host::ports::{LlmCall, PortFuture};
+use pmt_plugins::tools::SessionCalls;
 use pmt_providers::cost::CallContext;
 use pmt_providers::request::{Message, Request, Role, SystemBlock};
 use pmt_providers::resolve::Target;
+use pmt_store::Store;
 use pmt_tools::ToolRegistry;
 
 use super::model::{PortMaker, SwitchableModel};
@@ -44,21 +46,18 @@ pub(super) struct PluginTools {
 
 impl PluginTools {
     /// The registry of `plugins`' current set.
+    /// `calls` resolves what each tool call reports as its session.
     pub(super) fn build(
         scope: &ProfileScope,
         plugins: &ProfilePlugins,
-        cwd: &Path,
+        calls: &SessionCalls,
     ) -> Result<Self, Error> {
         let generation = plugins.generation();
         let mut registry = crate::tools_cmd::registry(scope)?;
-        let toolsets = plugins.current().register_tools(
-            &mut registry,
-            &CallInfo {
-                session_id: None,
-                surface: "cli".to_owned(),
-                cwd: Some(cwd.to_string_lossy().into_owned()),
-            },
-        );
+        // Listing the tools runs for no session.
+        let toolsets = plugins
+            .current()
+            .register_tools(&mut registry, &calls(""), calls);
         Ok(Self {
             generation,
             registry: Arc::new(registry),
@@ -67,18 +66,82 @@ impl PluginTools {
     }
 }
 
+/// The surface that created session `id` (its stored source: `cli`,
+/// `tui`, `gateway`, `cron`...); `cli` when the store does not know it.
+pub(super) fn stored_surface(store: &Store, id: SessionId) -> String {
+    store
+        .session(id)
+        .map_or_else(|_| "cli".to_owned(), |s| s.source.as_str().to_owned())
+}
+
+/// What a plugin tool call reports as its session: the calling session's
+/// stored surface and the factory's working directory. The registry is
+/// shared by every session of the factory (in the daemon: gateway, TUI and
+/// attached CLI sessions alike), so the surface is looked up per call.
+pub(super) fn session_calls(store: &Arc<Store>, cwd: &Path) -> SessionCalls {
+    let (store, cwd) = (Arc::clone(store), cwd.to_path_buf());
+    Arc::new(move |session: &str| {
+        let surface = SessionId::parse(session)
+            .map_or_else(|_| "cli".to_owned(), |id| stored_surface(&store, id));
+        CallInfo {
+            session_id: (!session.is_empty()).then(|| session.to_owned()),
+            surface,
+            cwd: Some(cwd.to_string_lossy().into_owned()),
+        }
+    })
+}
+
 impl Factory {
     /// The tool registry and plugin toolsets for a session starting now:
     /// the profile's plugin set is refreshed first (a change since the
     /// last session loads anew) and the registry rebuilt when the set
     /// changed.
     pub(super) fn session_registry(&self) -> Result<(Arc<ToolRegistry>, Vec<String>), Error> {
-        let plugins = crate::plugins_host::for_session(&self.scope, &self.options.cwd);
+        let plugins = crate::plugins_host::for_session(&self.plugin_scope.get(), &self.options.cwd);
         let mut tools = lock(&self.tools);
         if tools.generation != plugins.generation() {
-            *tools = PluginTools::build(&self.scope, &plugins, &self.options.cwd)?;
+            let calls = session_calls(&self.store, &self.options.cwd);
+            *tools = PluginTools::build(&self.scope, &plugins, &calls)?;
         }
         Ok((Arc::clone(&tools.registry), tools.toolsets.clone()))
+    }
+
+    /// Makes `/plugins reload` re-read the profile's `config.toml` (with
+    /// the `--set` list `set` the session opened its scope with) so a
+    /// `plugins enable`/`disable` run since the session started counts. A
+    /// one-process session only: the daemon re-reads its config itself.
+    #[must_use]
+    pub fn with_config_reread(mut self, set: Vec<String>) -> Self {
+        self.reread = Some(set);
+        self
+    }
+
+    /// The configuration `/plugins reload` loads the profile's plugins
+    /// from: `current` (the daemon's), or in a one-process session
+    /// `config.toml` read again through the session's own overrides (and
+    /// `--ignore-user-config` / `--safe-mode`), which later sessions of
+    /// this process then load their plugins from too.
+    ///
+    /// # Errors
+    ///
+    /// The re-read configuration's errors (the plugin set stays as it is).
+    pub(crate) fn plugins_reload_scope(
+        &self,
+        current: &ProfileScope,
+    ) -> Result<ProfileScope, Error> {
+        let Some(set) = &self.reread else {
+            return Ok(current.clone());
+        };
+        let overrides = Overrides::parse(set)?;
+        let dir = self.scope.profile().clone();
+        let launch = Launch::Profile(&self.launch);
+        let fresh = if self.options.ignore_user_config {
+            ProfileScope::open_defaults(dir, &overrides, launch)
+        } else {
+            ProfileScope::open(dir, &overrides, launch)
+        }?;
+        self.plugin_scope.replace(fresh.clone());
+        Ok(fresh)
     }
 
     /// The plugin system-prompt sections of a session starting now.

@@ -248,9 +248,13 @@ lists the plugins with their state and load error.
 `plugins install`, `enable`, `disable`, `update`, `remove`, `adopt` and
 `grants approve|revoke` reload a running daemon's plugins the same way when
 they change something, and print the same report after `the running daemon
-reloaded its plugins:`. Without a running daemon no session runs, and the
-next one loads the change. If the daemon cannot reload, the command still
-succeeds (the change is made) and warns; `prometheus plugins reload` retries.
+reloaded its plugins:`. Without a running daemon the next session loads
+the change; a session already open in its own process (`chat
+--in-process`, `--safe-mode`) picks it up at its next `/plugins reload`,
+which reads `config.toml` again with the session's own `--set` overrides
+(and `--ignore-user-config` / `--safe-mode`) kept. If the daemon cannot
+reload, the command still succeeds (the change is made) and warns;
+`prometheus plugins reload` retries.
 
 ## Safe mode
 

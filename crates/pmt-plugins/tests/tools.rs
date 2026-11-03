@@ -9,6 +9,7 @@ use std::sync::Arc;
 use common::{Fake, Profile, TOOL};
 use pmt_core::cancel::CancelToken;
 use pmt_plugins::host::{CallInfo, Runtime};
+use pmt_plugins::tools::SessionCalls;
 use pmt_tools::descriptor::{
     CallContext, HandlerFuture, Owner, RegisteredTool, ToolDescriptor, ToolHandler,
 };
@@ -42,14 +43,33 @@ fn cli() -> CallInfo {
     }
 }
 
+/// Every session is a CLI session in `/work/repo`, except `ses_tg`, which
+/// came from the gateway.
+fn calls() -> SessionCalls {
+    Arc::new(|session: &str| CallInfo {
+        session_id: Some(session.to_owned()),
+        surface: if session == "ses_tg" {
+            "gateway"
+        } else {
+            "cli"
+        }
+        .to_owned(),
+        cwd: Some("/work/repo".to_owned()),
+    })
+}
+
 async fn run(registry: &ToolRegistry, name: &str) -> ToolResult {
+    run_in(registry, name, "ses_test").await
+}
+
+async fn run_in(registry: &ToolRegistry, name: &str, session: &str) -> ToolResult {
     let tool = registry.get(name).unwrap();
     let pmt_tools::descriptor::Executor::Handler(handler) = &tool.executor else {
         panic!("{name} runs through a handler");
     };
     let context = CallContext {
         call_id: "call_1".to_owned(),
-        session_id: "ses_test".to_owned(),
+        session_id: session.to_owned(),
         cancel: CancelToken::new(),
     };
     handler.call(&context, json!({})).await.unwrap()
@@ -63,7 +83,7 @@ async fn plugin_tools_register_under_the_plugin_toolset_and_a_timeout_is_a_resul
     let runtime = Runtime::new().unwrap();
     let loaded = profile.load(&runtime, &Fake::new().ports());
     let mut registry = registry();
-    let toolsets = loaded.register_tools(&mut registry, &cli());
+    let toolsets = loaded.register_tools(&mut registry, &cli(), &calls());
     assert_eq!(toolsets, vec!["spin"]);
     assert_eq!(
         registry.members("spin").unwrap(),
@@ -86,7 +106,7 @@ async fn overriding_a_core_tool_needs_the_grant() {
     let runtime = Runtime::new().unwrap();
     let loaded = profile.load(&runtime, &Fake::new().ports());
     let mut registry = registry();
-    loaded.register_tools(&mut registry, &cli());
+    loaded.register_tools(&mut registry, &cli(), &calls());
     assert_eq!(
         registry.get("ok").unwrap().owner,
         Owner::Plugin("spin".to_owned())
@@ -102,7 +122,7 @@ async fn a_name_another_plugin_registered_is_refused_naming_both() {
     let runtime = Runtime::new().unwrap();
     let loaded = profile.load(&runtime, &Fake::new().ports());
     let mut registry = registry();
-    loaded.register_tools(&mut registry, &cli());
+    loaded.register_tools(&mut registry, &cli(), &calls());
     assert_eq!(
         registry.get("spin").unwrap().owner,
         Owner::Plugin("alpha".to_owned())
@@ -129,9 +149,14 @@ async fn a_tool_call_reports_its_session_surface_and_working_directory() {
     let runtime = Runtime::new().unwrap();
     let loaded = profile.load(&runtime, &Fake::new().ports());
     let mut registry = registry();
-    loaded.register_tools(&mut registry, &cli());
+    loaded.register_tools(&mut registry, &cli(), &calls());
     assert_eq!(
         run(&registry, "session").await.text_content(),
         "default|cli|ses_test|/work/repo"
+    );
+    // The same registry serves a gateway session: its call sees `gateway`.
+    assert_eq!(
+        run_in(&registry, "session", "ses_tg").await.text_content(),
+        "default|gateway|ses_tg|/work/repo"
     );
 }

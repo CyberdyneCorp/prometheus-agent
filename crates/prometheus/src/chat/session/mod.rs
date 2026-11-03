@@ -119,6 +119,13 @@ pub struct Factory {
     current: SharedScope,
     /// The profile's live plugin set.
     plugins: crate::plugins_host::ProfilePlugins,
+    /// The configuration the plugin set is loaded from: `scope` until a
+    /// one-process `/plugins reload` re-reads `config.toml`.
+    plugin_scope: SharedScope,
+    /// The `--set` list a one-process session opened `scope` with, so
+    /// `/plugins reload` can re-read `config.toml` through it (`None`: the
+    /// daemon, whose own reloads keep the profile scope current).
+    reread: Option<Vec<String>>,
 }
 
 /// One running session.
@@ -202,7 +209,11 @@ impl Factory {
         let user_home = launch.user_home().map(PathBuf::as_path);
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
-        let tools = Mutex::new(plugins::PluginTools::build(&scope, &plugins, &options.cwd)?);
+        let tools = Mutex::new(plugins::PluginTools::build(
+            &scope,
+            &plugins,
+            &plugins::session_calls(&store, &options.cwd),
+        )?);
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),
             GrantsFile::of(scope.profile()),
@@ -210,6 +221,7 @@ impl Factory {
         let redactor = scope.secrets().redactor().unwrap_or_default();
         Ok(Self {
             current: SharedScope::new(scope.clone()),
+            plugin_scope: SharedScope::new(scope.clone()),
             scope,
             store,
             models,
@@ -226,6 +238,7 @@ impl Factory {
             browser: OnceLock::new(),
             messaging: None,
             plugins,
+            reread: None,
         })
     }
 
@@ -483,11 +496,11 @@ impl Factory {
     /// the surface that created it (`cli`, `tui`, `gateway`, `cron`...)
     /// and this factory's working directory.
     fn plugin_call(&self, id: SessionId) -> pmt_plugins::host::CallInfo {
-        let surface = self
-            .store
-            .session(id)
-            .map_or_else(|_| "cli".to_owned(), |s| s.source.as_str().to_owned());
-        session_call(id, &surface, &self.options.cwd)
+        session_call(
+            id,
+            &plugins::stored_surface(&self.store, id),
+            &self.options.cwd,
+        )
     }
 
     /// The session's command approval gate.

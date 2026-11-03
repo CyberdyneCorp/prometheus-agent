@@ -366,6 +366,56 @@ mod line {
     }
 
     #[test]
+    fn a_plugin_enabled_after_the_session_started_works_after_plugins_reload() {
+        // Spec: Hot reload respects the prompt-cache invariant (`/plugins
+        // reload` replaces the instances; slash commands are active at
+        // once): `plugins enable` run while a one-process session is open
+        // counts at its next `/plugins reload`, and for its next session.
+        let home = super::common::mock_home();
+        place(
+            home.path(),
+            "radio",
+            "testing-hooks",
+            "\"hook@1.1\"",
+            "commands = [\"forecast\"]",
+        );
+        ok(&run(
+            home.path(),
+            &[
+                "config",
+                "set",
+                "plugins.entries.radio.commands",
+                "\"forecast\"",
+            ],
+        ));
+        let mut p = spawn(home.path());
+        prompt(&mut p);
+        p.send_line("/forecast berlin").unwrap();
+        p.expect("Unknown command").unwrap();
+        prompt(&mut p);
+        ok(&run(
+            home.path(),
+            &["plugins", "enable", "radio", "--grant", "all"],
+        ));
+        p.send_line("/plugins reload").unwrap();
+        p.expect("radio loaded").unwrap();
+        p.expect("slash commands: now").unwrap();
+        prompt(&mut p);
+        p.send_line("/forecast berlin").unwrap();
+        p.expect("ran /forecast berlin in ses_").unwrap();
+        prompt(&mut p);
+        p.send_line("/new").unwrap();
+        p.expect("once / always / cancel").unwrap();
+        p.send_line("once").unwrap();
+        p.expect("new session").unwrap();
+        prompt(&mut p);
+        p.send_line("/forecast paris").unwrap();
+        p.expect("ran /forecast paris in ses_").unwrap();
+        prompt(&mut p);
+        exit(p);
+    }
+
+    #[test]
     fn reload_now_reports_skills_for_the_next_session_as_the_prompt_shows() {
         // Spec: Hot reload respects the prompt-cache invariant (the command
         // prints which parts became active now and which are deferred): an
@@ -518,6 +568,45 @@ mod daemon {
         let said = texts(home, "default");
         let answer = said.iter().find(|t| t.contains("ran /forecast")).unwrap();
         assert!(answer.contains(" from gateway at /"), "{answer}");
+        daemon.stop(home);
+    }
+
+    #[test]
+    fn a_plugin_tool_called_in_a_messaging_session_sees_the_gateway_surface() {
+        // Spec: Host interfaces offered to plugins (`session.info` gives
+        // the surface): the tool registry is shared by every session of the
+        // daemon, yet a gateway session's tool call reports `gateway`.
+        use super::common::gateway::{Daemon, gateway_home_with, send, wait_said};
+
+        let rules = r#"
+[[rule]]
+user = "probe"
+[[rule.tool_calls]]
+name = "session"
+arguments = {}
+
+[[rule]]
+tool_result_regex = '^default\|gateway\|ses_'
+text = "probe saw gateway"
+
+[[rule]]
+tool_result_regex = '.'
+text = "probe saw another surface"
+
+[[rule]]
+repeat = true
+text = "fast done"
+"#;
+        let home = gateway_home_with(rules, "");
+        let home = home.path();
+        place(home, "probe", "testing-probe", "\"tool@1.0\"", "");
+        ok(&run(
+            home,
+            &["plugins", "enable", "probe", "--grant", "all"],
+        ));
+        let daemon = Daemon::start(home);
+        send(home, "default", "u1", "probe");
+        wait_said(home, "default", "probe saw gateway");
         daemon.stop(home);
     }
 }

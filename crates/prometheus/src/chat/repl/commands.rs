@@ -118,6 +118,10 @@ impl Repl {
                 };
                 self.immediate(name, args, &live).await;
                 self.live = Some(live);
+                if name == "plugins" {
+                    // A reload replaces the plugins' slash commands at once.
+                    self.load_registry();
+                }
                 return Flow::Continue;
             }
         };

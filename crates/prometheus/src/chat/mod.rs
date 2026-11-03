@@ -208,7 +208,26 @@ fn run_recorded(
     }
     let _lock = WriterLock::acquire(scope.home(), Role::Chat, vec![scope.name().to_string()])?;
     let ad_hoc = crate::model_cmd::explain::ad_hoc(&args.endpoint)?;
-    let options = Options {
+    let options = session_options(args, mode)?;
+    let flags = RouteFlags {
+        provider: args.provider.as_deref(),
+        model: args.model.as_deref(),
+        mock_script: args.mock_script.as_deref(),
+    };
+    let mut factory =
+        Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?.with_config_reread(set.clone());
+    record.store(&factory.store);
+    factory.record = Arc::clone(record);
+    let first = First {
+        text: first,
+        images,
+    };
+    crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
+}
+
+/// The session flags of a chat in this process.
+fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
+    Ok(Options {
         interactive: mode == Mode::Line,
         yolo: args.yolo,
         cwd: current_dir()?,
@@ -220,20 +239,7 @@ fn run_recorded(
         source_tag: args.source.clone().or_else(|| {
             (mode == Mode::OneShot).then(|| pmt_store::sessions::ONESHOT_TAG.to_owned())
         }),
-    };
-    let flags = RouteFlags {
-        provider: args.provider.as_deref(),
-        model: args.model.as_deref(),
-        mock_script: args.mock_script.as_deref(),
-    };
-    let mut factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?;
-    record.store(&factory.store);
-    factory.record = Arc::clone(record);
-    let first = First {
-        text: first,
-        images,
-    };
-    crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
+    })
 }
 
 /// A chat that opens the TUI.
