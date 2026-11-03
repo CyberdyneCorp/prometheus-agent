@@ -13,6 +13,7 @@ mod api;
 /// `adapter-kits`), so release binaries do not carry it.
 #[cfg(feature = "kit")]
 pub mod mock;
+mod power;
 mod sync;
 
 use std::collections::{BTreeSet, HashMap};
@@ -27,8 +28,8 @@ use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, LengthUnit, Markup, MediaKind, MediaStream, Outgoing, Reaction,
-    SendError, Sent, markup,
+    ChatInfo, ChatType, Descriptor, Inbound, LengthUnit, Markup, MediaKind, MediaStream, Outgoing,
+    Reaction, SendError, Sent, markup,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -288,6 +289,7 @@ impl Adapter for Matrix {
             supports_typing: true,
             supports_reactions: true,
             supports_threads: true,
+            exposes_roles: true,
             media_in: all.clone(),
             media_out: all,
             ..Descriptor::new(PLATFORM, limit)
@@ -443,6 +445,19 @@ impl Adapter for Matrix {
 
     fn credential_identity(&self) -> Option<String> {
         credential(&self.scope, &self.secret).ok()
+    }
+
+    fn member_roles<'a>(
+        &'a self,
+        inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
+        Box::pin(
+            async move { power::held(&self.api()?, &inbound.chat_id, &inbound.sender_id).await },
+        )
+    }
+
+    fn resolve_role<'a>(&'a self, name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        Box::pin(async move { power::named(name) })
     }
 
     fn open_media<'a>(

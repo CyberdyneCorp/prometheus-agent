@@ -139,3 +139,37 @@ async fn a_missing_homeserver_fails_validation_naming_it() {
         err.message()
     );
 }
+
+/// Spec: messaging-gateway, Role-based access grants: Matrix roles are
+/// power levels; a member holds every level up to their own, and a room
+/// whose power levels cannot be read is an error (the gateway denies).
+#[tokio::test]
+async fn power_levels_are_the_senders_roles() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = MatrixMock::start().await;
+    mock.set_power_level(mock::USER, 50);
+    let matrix = adapter(home.path(), &mock, "");
+    assert!(matrix.describe().exposes_roles);
+    let sender = Inbound::text(
+        pmt_gateway::messaging::ChatType::Group,
+        "!ops:kit",
+        mock::USER,
+        "hi",
+    );
+    let held = matrix.member_roles(&sender).await.unwrap();
+    assert!(held.iter().any(|r| r == "50") && held.iter().any(|r| r == "0"));
+    assert!(!held.iter().any(|r| r == "100"));
+    let stranger = Inbound::text(
+        pmt_gateway::messaging::ChatType::Group,
+        "!ops:kit",
+        "@stranger:kit",
+        "hi",
+    );
+    assert_eq!(matrix.member_roles(&stranger).await.unwrap(), ["0"]);
+    assert_eq!(
+        matrix.resolve_role("Moderators").await.as_deref(),
+        Some("50")
+    );
+    mock.refuse_power_levels();
+    assert!(matrix.member_roles(&sender).await.is_err());
+}

@@ -193,3 +193,92 @@ async fn a_slash_command_runs_and_is_answered_privately() {
     );
     slack.disconnect().await;
 }
+
+/// Spec: messaging-gateway, Platform start pings: opening the app's
+/// Messages tab is a start ping; the Home tab is not a conversation.
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_the_app_messages_tab_is_a_start_ping() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let slack = adapter(home.path(), &mock);
+    let link = Arc::new(Recorder::default());
+    slack.connect(Arc::clone(&link) as _).await.unwrap();
+    mock.open_app_home("home");
+    mock.open_app_home("messages");
+    mock.inject("after");
+    eventually(|| link.events.lock().unwrap().len() == 2).await;
+    let events = link.events.lock().unwrap().clone();
+    assert_eq!(events[0].text, "/start");
+    assert_eq!(events[0].chat_id, mock::DM);
+    assert_eq!(events[0].sender_id, mock::USER);
+    assert_eq!(events[0].chat_type, pmt_gateway::messaging::ChatType::Dm);
+    assert_eq!(events[1].text, "after");
+    slack.disconnect().await;
+}
+
+fn sender(user: &str) -> Inbound {
+    let mut inbound = Inbound::text(
+        pmt_gateway::messaging::ChatType::Group,
+        mock::CHANNEL,
+        user,
+        "hi",
+    );
+    inbound.scope_id = Some(mock::TEAM.to_owned());
+    inbound
+}
+
+/// Spec: messaging-gateway, Role-based access grants: Slack's roles are
+/// its user groups; a failed lookup is an error (the gateway denies).
+#[tokio::test(flavor = "multi_thread")]
+async fn user_groups_are_the_senders_roles() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    mock.add_usergroup("S0ONCALL", "oncall", &[mock::USER, "U0OTHER"]);
+    mock.add_usergroup("S0ADMINS", "admins", &["U0OTHER"]);
+    let slack = adapter(home.path(), &mock);
+    slack
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    assert!(slack.describe().exposes_roles);
+    let roles = slack.member_roles(&sender(mock::USER)).await.unwrap();
+    assert_eq!(roles, ["S0ONCALL"]);
+    assert_eq!(
+        slack.resolve_role("@OnCall").await.as_deref(),
+        Some("S0ONCALL")
+    );
+    assert_eq!(slack.resolve_role("nobody").await, None);
+    mock.refuse_usergroups();
+    assert!(slack.member_roles(&sender(mock::USER)).await.is_err());
+    slack.disconnect().await;
+}
+
+/// Spec: messaging-gateway, Channel history backfill: Slack fetches a
+/// channel's or a thread's recent messages, oldest first, knowing its own.
+#[tokio::test(flavor = "multi_thread")]
+async fn channel_and_thread_history_come_oldest_first() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    mock.post_history(mock::CHANNEL, None, mock::USER, "one");
+    mock.post_history(mock::CHANNEL, None, mock::BOT, "bot reply");
+    mock.post_history(mock::CHANNEL, None, mock::USER, "three");
+    let root = mock.post_history(mock::CHANNEL, None, mock::USER, "root");
+    mock.post_history(mock::CHANNEL, Some(&root), "U0OTHER", "in thread");
+    let slack = adapter(home.path(), &mock);
+    slack
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    assert!(slack.describe().can_fetch_history);
+    let channel = slack.fetch_history(mock::CHANNEL, None, 3).await.unwrap();
+    let texts: Vec<&str> = channel.iter().map(|e| e.text.as_str()).collect();
+    assert_eq!(texts, ["bot reply", "three", "root"]);
+    assert!(channel[0].from_self);
+    let thread = slack
+        .fetch_history(mock::CHANNEL, Some(&root), 50)
+        .await
+        .unwrap();
+    let texts: Vec<&str> = thread.iter().map(|e| e.text.as_str()).collect();
+    assert_eq!(texts, ["root", "in thread"]);
+    slack.disconnect().await;
+}

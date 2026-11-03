@@ -58,6 +58,12 @@ struct State {
     connections: usize,
     /// Acknowledgements that carried a payload (slash command placeholders).
     ack_payloads: Vec<Value>,
+    /// User groups (`usergroups.list` objects with their `users`).
+    usergroups: Vec<Value>,
+    /// `usergroups.list` answers `missing_scope`.
+    refuse_usergroups: bool,
+    /// Conversation messages by channel, oldest first (history fixtures).
+    history: Vec<(String, Value)>,
     /// Bodies posted to slash commands' response URLs.
     responses: Vec<Value>,
 }
@@ -189,6 +195,82 @@ impl SlackMock {
         ts
     }
 
+    /// Adds user group `id` (handle `handle`) with `users` as members.
+    pub fn add_usergroup(&self, id: &str, handle: &str, users: &[&str]) {
+        self.lock().usergroups.push(
+            json!({"id": id, "handle": handle, "name": handle.to_uppercase(), "users": users}),
+        );
+    }
+
+    /// `usergroups.list` fails (the token lacks `usergroups:read`).
+    pub fn refuse_usergroups(&self) {
+        self.lock().refuse_usergroups = true;
+    }
+
+    /// Records a message of `user` in `channel` (in `thread` when given)
+    /// without delivering it as an event; its `ts`.
+    pub fn post_history(
+        &self,
+        channel: &str,
+        thread: Option<&str>,
+        user: &str,
+        text: &str,
+    ) -> String {
+        let ts = self.ts();
+        let mut message = json!({"type": "message", "ts": ts, "user": user, "text": text});
+        if let Some(thread) = thread {
+            message["thread_ts"] = json!(thread);
+        }
+        self.lock().history.push((channel.to_owned(), message));
+        ts
+    }
+
+    fn usergroups(&self) -> HttpResponse {
+        let state = self.lock();
+        if state.refuse_usergroups {
+            return refused("missing_scope");
+        }
+        ok(&json!({"usergroups": state.usergroups}))
+    }
+
+    /// `conversations.history` (newest first) or, with `ts`,
+    /// `conversations.replies` (the root then its replies, oldest first).
+    fn history(&self, args: &Value, replies: bool) -> HttpResponse {
+        let channel = args["channel"].as_str().unwrap_or_default();
+        let root = args["ts"].as_str();
+        let limit = args["limit"].as_u64().unwrap_or(100);
+        let state = self.lock();
+        let mut found: Vec<Value> = state
+            .history
+            .iter()
+            .filter(|(c, m)| {
+                c == channel
+                    && if replies {
+                        m["ts"].as_str() == root || m["thread_ts"].as_str() == root
+                    } else {
+                        m["thread_ts"].is_null()
+                    }
+            })
+            .map(|(_, m)| m.clone())
+            .collect();
+        if !replies {
+            found.reverse();
+        }
+        found.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        ok(&json!({"messages": found, "has_more": false}))
+    }
+
+    /// The kit user opens the app's `tab` (`messages`, `home`, `about`).
+    pub fn open_app_home(&self, tab: &str) {
+        let ts = self.ts();
+        let event = json!({"type": "app_home_opened", "user": USER, "channel": DM,
+                           "tab": tab, "event_ts": ts});
+        self.envelope(
+            "events_api",
+            &json!({"team_id": TEAM, "event": event, "type": "event_callback"}),
+        );
+    }
+
     async fn socket_mode(self: Arc<Self>, stream: tokio::net::TcpStream) {
         let Ok(socket) = tokio_tungstenite::accept_async(stream).await else {
             return;
@@ -299,6 +381,9 @@ impl SlackMock {
                 )
             }
             "files.completeUploadExternal" => self.complete(args),
+            "usergroups.list" => self.usergroups(),
+            "conversations.history" => self.history(args, false),
+            "conversations.replies" => self.history(args, true),
             "chat.delete" => {
                 let ts = args["ts"].as_str().unwrap_or_default().to_owned();
                 self.lock().deleted.push(ts);

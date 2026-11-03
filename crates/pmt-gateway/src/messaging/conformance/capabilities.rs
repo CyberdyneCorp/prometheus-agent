@@ -70,7 +70,9 @@ impl Kit {
     }
 
     /// Registers more commands than any platform menu holds: the menu
-    /// must show a non-empty prefix of them, in order.
+    /// must show a non-empty prefix of them, in order. An adapter whose
+    /// platform has no app-home event may lead with its own `start`
+    /// command (the start ping, spec: messaging-gateway).
     async fn menu(&self) -> Result<(), String> {
         let commands: Vec<MenuCommand> = (0..150)
             .map(|i| MenuCommand {
@@ -83,7 +85,10 @@ impl Kit {
             .register_commands(&commands)
             .await
             .map_err(|e| format!("registration failed: {}", e.describe()))?;
-        let shown = self.platform.menu().unwrap_or_default();
+        let mut shown = self.platform.menu().unwrap_or_default();
+        if shown.first().is_some_and(|first| first == "start") {
+            shown.remove(0);
+        }
         if shown.is_empty() {
             return Err("the platform's menu is empty after registration".to_owned());
         }

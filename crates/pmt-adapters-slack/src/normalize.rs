@@ -109,6 +109,37 @@ pub(crate) fn message(event: &Value, team: Option<&str>, bot_user: &str) -> Opti
     })
 }
 
+/// An `app_home_opened` event on the Messages tab as the gateway's start
+/// ping (spec: messaging-gateway, Platform start pings): a `/start` in the
+/// user's DM with the app. Its id names the user, not the event, so the
+/// gateway's redelivery window also keeps a user flipping between tabs
+/// from being greeted again and again; the Home and About tabs are not
+/// conversations and are ignored.
+pub(crate) fn app_home(event: &Value, team: Option<&str>) -> Option<Inbound> {
+    if event["type"].as_str() != Some("app_home_opened") || event["tab"] != "messages" {
+        return None;
+    }
+    let user = text(&event["user"])?;
+    let ts = text(&event["event_ts"]).unwrap_or_default();
+    Some(Inbound {
+        message_id: format!("app_home:{user}"),
+        sender_id: user,
+        sender_name: None,
+        chat_id: text(&event["channel"])?,
+        chat_type: ChatType::Dm,
+        scope_id: text(&event["team"]).or_else(|| team.map(str::to_owned)),
+        thread_id: None,
+        timestamp: timestamp(&ts),
+        text: "/start".to_owned(),
+        attachments: Vec::new(),
+        reply_to: None,
+        is_bot: false,
+        callback: None,
+        profile: None,
+        addressing: pmt_gateway::messaging::Addressing::default(),
+    })
+}
+
 /// The action id of a multi-select's checkboxes.
 pub(crate) const SELECT_ACTION: &str = "pmt_select";
 /// The action id of a multi-select's Submit button.
@@ -227,6 +258,22 @@ mod tests {
         for event in [own, edit, join] {
             assert_eq!(message(&event, None, "UBOT"), None, "{event}");
         }
+    }
+
+    #[test]
+    fn opening_the_messages_tab_is_a_start_ping_in_the_dm() {
+        let open = json!({"type": "app_home_opened", "user": "U1", "channel": "D1",
+            "tab": "messages", "event_ts": "1700000000.5"});
+        let inbound = app_home(&open, Some("T1")).unwrap();
+        assert_eq!(inbound.text, "/start");
+        assert_eq!(inbound.chat_type, ChatType::Dm);
+        assert_eq!(
+            (inbound.chat_id.as_str(), inbound.sender_id.as_str()),
+            ("D1", "U1")
+        );
+        assert_eq!(inbound.message_id, "app_home:U1");
+        let home = json!({"type": "app_home_opened", "user": "U1", "channel": "D1", "tab": "home"});
+        assert_eq!(app_home(&home, None), None);
     }
 
     #[test]

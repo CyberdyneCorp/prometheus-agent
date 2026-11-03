@@ -121,7 +121,7 @@ fn the_usage_file_is_written_on_sigint() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    wait_for_the_turn(home.path());
+    wait_for_the_turn(home.path(), &mut child);
     kill(
         Pid::from_raw(i32::try_from(child.id()).unwrap()),
         Signal::SIGINT,
@@ -137,10 +137,13 @@ fn the_usage_file_is_written_on_sigint() {
 /// listeners are installed before the turn is first polled, so from then
 /// on a SIGINT is the run's to handle; a fixed sleep raced process start
 /// on slow runners (the child then died of the signal, without a status).
+/// Under a fully loaded test run the release-less debug binary can take
+/// well over a minute to reach its first turn, so the wait is generous and
+/// a child that exits early fails at once with its output instead.
 #[cfg(unix)]
-fn wait_for_the_turn(home: &Path) {
+fn wait_for_the_turn(home: &Path, child: &mut std::process::Child) {
     use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
-    let deadline = std::time::Instant::now() + std::time::Duration::from_mins(1);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_mins(5);
     let started = || -> Option<bool> {
         let home = Home::open(home).ok()?;
         let profile = home
@@ -158,9 +161,16 @@ fn wait_for_the_turn(home: &Path) {
         Some(store.active_lineage_messages(id).ok()? > 0)
     };
     while started() != Some(true) {
+        if let Some(status) = child.try_wait().unwrap() {
+            let mut err = String::new();
+            if let Some(mut stderr) = child.stderr.take() {
+                std::io::Read::read_to_string(&mut stderr, &mut err).unwrap();
+            }
+            panic!("the run exited ({status}) before its turn started: {err}");
+        }
         assert!(
             std::time::Instant::now() < deadline,
-            "the turn did not start within a minute"
+            "the turn did not start within five minutes"
         );
         std::thread::sleep(std::time::Duration::from_millis(50));
     }

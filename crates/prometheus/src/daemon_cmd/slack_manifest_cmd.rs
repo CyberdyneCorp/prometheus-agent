@@ -112,6 +112,8 @@ fn scopes(assistant: bool) -> Vec<&'static str> {
         "mpim:read",
         "reactions:read",
         "reactions:write",
+        // User groups are the roles `allow_roles` grants.
+        "usergroups:read",
         "users:read",
     ];
     if assistant {
@@ -120,8 +122,11 @@ fn scopes(assistant: bool) -> Vec<&'static str> {
     scopes
 }
 
-fn events(assistant: bool, agent_view: bool) -> Vec<&'static str> {
+fn events(assistant: bool) -> Vec<&'static str> {
+    // `app_home_opened` is the start ping (opening the Messages tab), so
+    // every manifest subscribes to it, not only the agent view.
     let mut events = vec![
+        "app_home_opened",
         "app_mention",
         "message.channels",
         "message.groups",
@@ -134,9 +139,6 @@ fn events(assistant: bool, agent_view: bool) -> Vec<&'static str> {
             "assistant_thread_started",
             "assistant_thread_context_changed",
         ]);
-    }
-    if agent_view {
-        events.push("app_home_opened");
     }
     events
 }
@@ -193,7 +195,7 @@ fn manifest(args: &SlackManifestArgs, commands: &[Value]) -> Result<Value, Error
         "features": features,
         "oauth_config": {"scopes": {"bot": scopes(assistant)}},
         "settings": {
-            "event_subscriptions": {"bot_events": events(assistant, args.agent_view)},
+            "event_subscriptions": {"bot_events": events(assistant)},
             "interactivity": {"is_enabled": true},
             "org_deploy_enabled": false,
             "socket_mode_enabled": true,

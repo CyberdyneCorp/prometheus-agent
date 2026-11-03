@@ -45,6 +45,13 @@ fn the_manifest_enables_socket_mode_with_the_bot_scopes() {
     assert!(scopes.iter().any(|s| s == "chat:write"));
     assert!(scopes.iter().any(|s| s == "assistant:write"));
     assert!(full["features"]["slash_commands"].as_array().unwrap().len() > 3);
+    let events = full["settings"]["event_subscriptions"]["bot_events"]
+        .as_array()
+        .unwrap();
+    assert!(
+        events.iter().any(|e| e == "app_home_opened"),
+        "opening the Messages tab is the start ping"
+    );
     let lean = manifest(home.path(), &["--no-assistant", "--agent-view"]);
     let scopes = lean["oauth_config"]["scopes"]["bot"].as_array().unwrap();
     assert!(!scopes.iter().any(|s| s == "assistant:write"));

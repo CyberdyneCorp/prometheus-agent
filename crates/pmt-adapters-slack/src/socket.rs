@@ -160,7 +160,9 @@ impl Run {
         let payload = &envelope["payload"];
         let inbound = match envelope["type"].as_str() {
             Some("events_api") => {
-                normalize::message(&payload["event"], self.team.as_deref(), &self.bot_user)
+                let event = &payload["event"];
+                normalize::message(event, self.team.as_deref(), &self.bot_user)
+                    .or_else(|| normalize::app_home(event, self.team.as_deref()))
             }
             Some("interactive") => normalize::action(payload),
             Some("slash_commands") => self.slash.event(payload, self.team.as_deref()),

@@ -13,24 +13,30 @@ use serde_json::Value;
 use self::common::gateway::{Daemon, gateway_home, send, texts, wait_said};
 use self::common::{append_config, session_messages};
 
-/// The stored messages of every session, oldest session first.
+/// The stored messages of every session.
 fn all_messages(home: &Path) -> Vec<Vec<Value>> {
     let listed = common::ok(&common::run(home, &["--json", "sessions", "list", "--all"]));
     let listed: Value = serde_json::from_str(&listed).unwrap();
-    let mut sessions: Vec<(String, String)> = listed["sessions"]
+    listed["sessions"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|s| {
-            let started = s["started_at"].as_str().unwrap_or_default().to_owned();
-            (started, s["id"].as_str().unwrap().to_owned())
-        })
-        .collect();
-    sessions.sort();
+        .map(|s| session_messages(home, s["id"].as_str().unwrap()))
+        .collect()
+}
+
+/// The session whose user messages include `text` (sessions started in
+/// the same second have no reliable order, so they are told apart by
+/// what was said in them).
+fn session_saying<'a>(sessions: &'a [Vec<Value>], text: &str) -> &'a [Value] {
     sessions
         .iter()
-        .map(|(_, id)| session_messages(home, id))
-        .collect()
+        .find(|messages| {
+            of_role(messages, "user")
+                .iter()
+                .any(|m| m["metadata"]["user_text"] == text || m["content"] == text)
+        })
+        .unwrap_or_else(|| panic!("no session says {text:?}"))
 }
 
 /// Waits until the agent answered `n` messages.
@@ -109,12 +115,12 @@ fn timestamps_apply_to_sessions_created_after_they_are_enabled() {
     daemon.stop(home);
     let sessions = all_messages(home);
     assert_eq!(sessions.len(), 2);
-    let old: Vec<String> = of_role(&sessions[0], "user")
+    let old: Vec<String> = of_role(session_saying(&sessions, "one"), "user")
         .iter()
         .map(|m| m["content"].as_str().unwrap().to_owned())
         .collect();
     assert_eq!(old, ["one", "two"], "the existing session stays unchanged");
-    let new = of_role(&sessions[1], "user");
+    let new = of_role(session_saying(&sessions, "three"), "user");
     let content = new[0]["content"].as_str().unwrap();
     assert!(
         content.starts_with('[') && content.ends_with("] three"),

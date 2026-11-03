@@ -327,7 +327,28 @@ async fn application_commands_are_registered_up_to_the_limit() {
     let puts = mock.command_puts();
     assert_eq!(puts.len(), 1);
     assert_eq!(puts[0].as_array().unwrap().len(), 100);
-    assert_eq!(puts[0][0]["options"][0]["name"], "args");
+    assert_eq!(puts[0][1]["options"][0]["name"], "args");
+    adapter.disconnect().await;
+}
+
+/// Spec: messaging-gateway, Platform start pings: Discord has no app-home
+/// event, so its start ping is the `/start` command registered first.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_start_command_is_registered_first_and_arrives_as_a_start_ping() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = DiscordMock::start().await;
+    let adapter = Discord::new(&profile(home.path(), true), mock.endpoints()).unwrap();
+    let link = Arc::new(Recorder::default());
+    adapter.connect(Arc::clone(&link) as _).await.unwrap();
+    adapter.register_commands(&many(3)).await.unwrap();
+    assert_eq!(mock.command_puts()[0][0]["name"], "start");
+    mock.dispatch(
+        "INTERACTION_CREATE",
+        &serde_json::json!({"id": "i2", "token": "tok", "type": 2, "channel_id": mock::DM,
+            "user": {"id": mock::USER}, "data": {"name": "start"}}),
+    );
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    assert_eq!(link.events.lock().unwrap()[0].text.trim(), "/start");
     adapter.disconnect().await;
 }
 

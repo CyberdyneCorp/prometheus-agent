@@ -8,6 +8,7 @@
 //! files go up through Slack's external upload flow.
 
 mod api;
+mod directory;
 /// The mock platform the conformance kit runs this adapter against; only
 /// in builds with the `kit` feature (tests, `prometheus` with
 /// `adapter-kits`), so release binaries do not carry it.
@@ -29,8 +30,8 @@ use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
-    ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream, MenuCommand,
-    Outgoing, Reaction, Select, SendError, Sent,
+    ChatInfo, ChatType, Descriptor, HistoryEntry, Inbound, Interactive, Markup, MediaKind,
+    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, Sent,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -63,6 +64,8 @@ pub struct Slack {
     api: Mutex<Option<Api>>,
     socket: Mutex<Option<CancellationToken>>,
     slash: Arc<slash::Replies>,
+    /// The bot's user id and workspace, from `auth.test` at connect.
+    me: Mutex<(String, Option<String>)>,
 }
 
 impl std::fmt::Debug for Slack {
@@ -110,6 +113,7 @@ impl Slack {
             api: Mutex::default(),
             socket: Mutex::default(),
             slash: Arc::default(),
+            me: Mutex::default(),
         })
     }
 
@@ -155,11 +159,14 @@ impl Slack {
             old.cancel();
         }
         *self.api.lock().expect("api poisoned") = Some(bot);
+        let bot_user = me["user_id"].as_str().unwrap_or_default().to_owned();
+        let team = me["team_id"].as_str().map(str::to_owned);
+        *self.me.lock().expect("me poisoned") = (bot_user.clone(), team.clone());
         socket::open(socket::Run {
             app,
             link,
-            bot_user: me["user_id"].as_str().unwrap_or_default().to_owned(),
-            team: me["team_id"].as_str().map(str::to_owned),
+            bot_user,
+            team,
             extra_ca: self.extra_ca.clone(),
             proxy: self.proxy.clone(),
             slash: Arc::clone(&self.slash),
@@ -277,6 +284,8 @@ impl Adapter for Slack {
             media_out: all,
             markup: Markup::Platform,
             stateless_send: true,
+            exposes_roles: true,
+            can_fetch_history: true,
             ..Descriptor::new(PLATFORM, limit)
         }
     }
@@ -442,6 +451,35 @@ impl Adapter for Slack {
 
     fn credential_identity(&self) -> Option<String> {
         credential(&self.scope, &self.bot_secret).ok()
+    }
+
+    fn member_roles<'a>(
+        &'a self,
+        inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
+        Box::pin(async move {
+            let team = inbound
+                .scope_id
+                .clone()
+                .or_else(|| self.me.lock().expect("me poisoned").1.clone());
+            directory::member_groups(&self.api()?, team.as_deref(), &inbound.sender_id).await
+        })
+    }
+
+    fn resolve_role<'a>(&'a self, name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        Box::pin(async move { directory::group_id(&self.api().ok()?, name).await })
+    }
+
+    fn fetch_history<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        limit: usize,
+    ) -> AdapterFuture<'a, Result<Vec<HistoryEntry>, SendError>> {
+        Box::pin(async move {
+            let bot = self.me.lock().expect("me poisoned").0.clone();
+            directory::history(&self.api()?, &bot, chat_id, thread_id, limit).await
+        })
     }
 
     fn open_media<'a>(

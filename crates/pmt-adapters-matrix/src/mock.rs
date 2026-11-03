@@ -50,6 +50,10 @@ struct State {
     fail_next_sync: bool,
     invites: Vec<(String, String)>,
     joined: Vec<String>,
+    /// Power levels by user (`m.room.power_levels` of every room).
+    power: Vec<(String, i64)>,
+    /// Reading power levels fails with 403.
+    refuse_power: bool,
 }
 
 /// The mock.
@@ -108,6 +112,29 @@ impl MatrixMock {
             .invites
             .push((room.to_owned(), inviter.to_owned()));
         self.arrived.notify_waiters();
+    }
+
+    /// Gives `user` power level `level` in every room.
+    pub fn set_power_level(&self, user: &str, level: i64) {
+        self.lock().power.push((user.to_owned(), level));
+    }
+
+    /// Reading a room's power levels is refused.
+    pub fn refuse_power_levels(&self) {
+        self.lock().refuse_power = true;
+    }
+
+    fn power_levels(&self) -> HttpResponse {
+        let state = self.lock();
+        if state.refuse_power {
+            return error(403, "M_FORBIDDEN");
+        }
+        let users: serde_json::Map<String, Value> = state
+            .power
+            .iter()
+            .map(|(u, l)| (u.clone(), json!(l)))
+            .collect();
+        mock_server::json(200, &json!({"users": users, "users_default": 0}))
     }
 
     /// Redactions received.
@@ -195,6 +222,7 @@ impl MatrixMock {
                 mock_server::json(200, &json!({"joined": members}))
             }
             ("GET", ["rooms", _, "state", "m.room.name"]) => error(404, "M_NOT_FOUND"),
+            ("GET", ["rooms", _, "state", "m.room.power_levels", ..]) => self.power_levels(),
             ("POST", ["join", room]) => {
                 self.lock().joined.push((*room).to_owned());
                 mock_server::json(200, &json!({"room_id": room}))

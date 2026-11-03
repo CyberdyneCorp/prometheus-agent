@@ -399,9 +399,14 @@ and its source, for example "steer (platform override)".
 
 ## Chat controls
 
-- **Start pings.** Telegram's `/start` (and an app-home open an adapter
-  reports the same way) gets a short greeting naming `/help`; it creates
-  no session, starts no turn and does not count against rate limits.
+- **Start pings.** Telegram's `/start`, opening the Slack app's Messages
+  tab (`app_home_opened`; subscribe the app to that event, as the
+  generated manifest does) and Discord's `/start` command (Discord has no
+  app-home event, so the adapter always registers `/start` first) get a
+  short greeting naming `/help`; it creates no session, starts no turn and
+  does not count against rate limits. Slack sends the event on every open,
+  so a user is greeted at most once per redelivery window
+  (`gateway.dedup.ttl_secs`).
 - **`/commands [page]`** lists every command and skill command the sender
   may run here (their tier applies), 15 per page on Telegram and 20
   elsewhere. Platforms with buttons page with Previous/Next buttons that
@@ -495,9 +500,21 @@ With `observe_unmentioned`, unaddressed messages are kept and added to the
 session of the chat's next turn as `[name|user_id]` lines, which the model
 is told are context, not instructions. A mention-triggered turn on Discord
 or Slack gets the channel's messages since the bot's last reply as one
-untrusted block. `gateway.platforms.<name>.allow_roles` admits holders of a
-role id (Discord roles, Slack user groups, Matrix power levels), checked
-right after `allow_users`; a failed role lookup denies. A chat policy with
+untrusted block (Slack reads `conversations.history`, or
+`conversations.replies` in a thread; the app needs the `*:history`
+scopes). `gateway.platforms.<name>.allow_roles` admits holders of a role
+id, checked right after `allow_users`; a failed role lookup denies:
+
+- Discord: role ids (numbers).
+- Slack: user group ids (`S…`, from `usergroups.list`; the app needs
+  `usergroups:read`).
+- Matrix: power levels. A member holds every level from 0 up to their
+  own in the room, so `allow_roles = ["50"]` admits moderators and admins;
+  levels above 100 match exactly.
+
+A role name instead of an id fails validation, with the id suggested when
+the daemon's adapter can resolve it (Matrix knows `admin` = 100,
+`moderator` = 50, `member` = 0). A chat policy with
 `thread_id` binds one thread or forum topic, and its `preload_skills` open
 each new session there as context, outside the system prompt.
 
