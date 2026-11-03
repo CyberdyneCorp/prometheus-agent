@@ -72,7 +72,7 @@ async fn connected(table: &str) -> (tempfile::TempDir, Webhook, Arc<Recorder>) {
     (home, webhook, link)
 }
 
-const PR_ROUTE: &str = "routes.pr = { secret_secret = \"KIT_WEBHOOK_SECRET\", events = [\"pull_request\"], prompt = \"Review PR #{pull_request.number}: {pull_request.title}\" }";
+const PR_ROUTE: &str = "routes.pr = { secret_secret = \"KIT_WEBHOOK_SECRET\", events = [\"pull_request\"], deliver = \"log\", prompt = \"Review PR #{pull_request.number}: {pull_request.title}\" }";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_adapter_passes_the_conformance_kit() {

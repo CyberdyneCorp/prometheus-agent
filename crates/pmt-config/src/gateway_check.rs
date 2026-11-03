@@ -106,6 +106,7 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     check_policies(config, profile_dir)?;
     crate::gateway_check_display::check(config, profile_dir)?;
     crate::gateway_check_groups::check(config, profile_dir)?;
+    crate::gateway_check_routes::check(config, profile_dir)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
     for name in config.quick_commands.keys() {
@@ -198,18 +199,29 @@ fn profile_toolsets(config: &Config) -> Vec<String> {
 }
 
 fn check_policy_toolsets(config: &Config, policy: &ChatPolicy, key: &str) -> Result<(), Error> {
-    let Some(toolsets) = &policy.toolsets else {
+    check_narrowing(config, policy.toolsets.as_deref(), key, "a policy")
+}
+
+/// `toolsets` (at `key`) only narrows the profile's toolsets (`what`
+/// names who sets them in the refusal).
+pub(crate) fn check_narrowing(
+    config: &Config,
+    toolsets: Option<&[String]>,
+    key: &str,
+    what: &str,
+) -> Result<(), Error> {
+    let Some(toolsets) = toolsets else {
         return Ok(());
     };
     let profile = profile_toolsets(config);
     let outside = |name: &str| {
         invalid(format!(
-            "{key}.toolsets: '{name}' is outside the profile's toolsets ({}); a policy can only narrow them",
+            "{key}.toolsets: '{name}' is outside the profile's toolsets ({}); {what} can only narrow them",
             profile.join(", ")
         ))
     };
     let Some(expand) = TOOLSETS.get() else {
-        return match toolsets.iter().find(|t| !profile.contains(t)) {
+        return match toolsets.iter().find(|t| !profile.contains(*t)) {
             Some(name) => Err(outside(name)),
             None => Ok(()),
         };

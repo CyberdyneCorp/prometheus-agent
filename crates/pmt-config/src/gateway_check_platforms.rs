@@ -29,7 +29,7 @@ pub(crate) fn check(config: &Config) -> Result<(), Error> {
                 "{key}.max_body_bytes: only the webhook platform reads request bodies"
             )));
         }
-        check_routes(platform, table)?;
+        check_routes(config, platform, table)?;
         check_mode_rules(platform, &key, table)?;
         if table.enabled {
             check_required(platform, &key, table)?;
@@ -174,7 +174,7 @@ fn e164(number: &str) -> bool {
 
 /// Routes belong to the webhook platform; each needs a signing secret
 /// unless it explicitly admits unsigned requests.
-fn check_routes(platform: &str, table: &PlatformConfig) -> Result<(), Error> {
+fn check_routes(config: &Config, platform: &str, table: &PlatformConfig) -> Result<(), Error> {
     for (name, route) in &table.routes {
         let key = format!("gateway.platforms.{platform}.routes.{name}");
         if platform != "webhook" {
@@ -189,6 +189,7 @@ fn check_routes(platform: &str, table: &PlatformConfig) -> Result<(), Error> {
             )));
         }
         check_route_delivery(&key, route)?;
+        crate::gateway_check::check_narrowing(config, route.toolsets.as_deref(), &key, "a route")?;
         if let Some(script) = &route.script {
             check_confined(
                 &format!("{key}.script"),
@@ -222,6 +223,11 @@ fn check_route_delivery(key: &str, route: &WebhookRoute) -> Result<(), Error> {
     if route.deliver_only && target == "log" {
         return Err(invalid(format!(
             "{key}.deliver: deliver_only sends the rendered prompt somewhere; set deliver to a send target (platform[:chat_id[:thread_id]])"
+        )));
+    }
+    if target == "github_comment" && route.github_token_secret.is_none() {
+        return Err(invalid(format!(
+            "{key}.github_token_secret: deliver = \"github_comment\" posts with a GitHub token; name the secret holding it"
         )));
     }
     if route.deliver_only && matches!(target, "origin" | "github_comment") {

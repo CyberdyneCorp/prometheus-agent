@@ -172,7 +172,7 @@ async fn decide(
         Some(scope) => inbound::prepare(shared, owner, platform, &scope, &mut inbound).await,
         None => false,
     };
-    let (routing, key) = routing_of(owner, platform, &inbound, gateway);
+    let (routing, key) = super::profile_routes::routing(shared, owner, platform, &inbound, gateway);
     lane::input(shared, &key, routing, inbound, voice)
 }
 

@@ -229,3 +229,13 @@ async fn a_detailed_busy_acknowledgement_names_what_the_turn_does() {
     )
     .await;
 }
+
+/// Spec: messaging-gateway, Concurrency caps across surfaces: a turn the
+/// daemon holds back for a free slot is announced in its chat.
+#[tokio::test]
+async fn a_turn_waiting_for_a_slot_is_announced() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    h.dm("telegram", "1", "wait:2").await;
+    said(&h.adapter("telegram"), "Waiting for a free slot (2 ahead)").await;
+    said(&h.adapter("telegram"), "echo: wait:2").await;
+}

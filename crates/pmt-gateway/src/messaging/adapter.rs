@@ -378,6 +378,12 @@ pub trait AdapterLink: Send + Sync {
     ) -> AdapterFuture<'a, Result<String, String>> {
         Box::pin(async { Err("delivery is not available".to_owned()) })
     }
+    /// Appends `text` to the session `target`'s chat routes to, as an
+    /// attributed assistant message (a webhook route's
+    /// `mirror_to_session`); nothing when that chat has no session.
+    fn mirror<'a>(&'a self, _target: &'a str, _text: &'a str) -> AdapterFuture<'a, ()> {
+        Box::pin(async {})
+    }
     /// Whether `sender_id` may use the bot in a direct message (inline
     /// pickers answer nothing to anyone else).
     fn authorized<'a>(&'a self, _sender_id: &'a str) -> AdapterFuture<'a, bool> {
@@ -561,6 +567,52 @@ pub trait Adapter: Send + Sync + 'static {
     ) -> AdapterFuture<'a, Result<String, SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
     }
+    /// Starts a native stream (adapters declaring `native_stream`) where
+    /// `message` would go; the id of the message it streams into.
+    fn stream_start<'a>(
+        &'a self,
+        _message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Appends `text` to stream `message_id` of `chat_id`.
+    fn stream_append<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _message_id: &'a str,
+        _text: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Shows or updates `task` as a native task card in stream
+    /// `message_id` (adapters declaring `task_cards`).
+    fn stream_task<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _message_id: &'a str,
+        _task: &'a TaskCard,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Ends stream `message_id` (it is an ordinary message from then on).
+    fn stream_stop<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
+    /// Shows `status` ("is thinking…") as the working status of the chat
+    /// or thread, or clears it with `None` (adapters declaring
+    /// `status_line`).
+    fn set_status<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+        _status: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async { Err(SendError::Unsupported) })
+    }
     /// Renames thread (or topic) `thread_id` of `chat_id` to `title`.
     fn rename_thread<'a>(
         &'a self,
@@ -602,6 +654,28 @@ pub fn credential(scope: &ProfileScope, name: &str) -> Result<String, AdapterErr
             ),
         }),
     }
+}
+
+/// A tool call shown as a native task card.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskCard {
+    /// Stable per card (the tool call's id).
+    pub id: String,
+    /// What it does (`terminal: ls -la`).
+    pub title: String,
+    /// Where it is.
+    pub status: TaskStatus,
+}
+
+/// A task card's state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskStatus {
+    /// Running.
+    Running,
+    /// Done.
+    Done,
+    /// Failed.
+    Failed,
 }
 
 /// One message of a chat's history (`fetch_history`).

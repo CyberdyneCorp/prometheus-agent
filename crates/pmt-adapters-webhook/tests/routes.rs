@@ -109,7 +109,9 @@ impl Route {
 
 #[tokio::test]
 async fn a_redelivery_within_the_hour_starts_no_second_turn() {
-    let route = Route::new("routes.ci = { secret_secret = \"KIT_WEBHOOK_SECRET\" }").await;
+    let route =
+        Route::new("routes.ci = { secret_secret = \"KIT_WEBHOOK_SECRET\", deliver = \"log\" }")
+            .await;
     let payload = json!({"ref": "main"});
     let first = route.post("ci", "push", "gh-1", &payload).await;
     assert_eq!(first.status, 202);
@@ -125,7 +127,7 @@ async fn a_redelivery_within_the_hour_starts_no_second_turn() {
 #[tokio::test]
 async fn only_failing_ci_runs_pass_the_filter() {
     let route = Route::new(
-        "routes.ci = { secret_secret = \"KIT_WEBHOOK_SECRET\", filters = { equals = { path = \"payload.workflow_run.conclusion\", value = \"failure\" } } }",
+        "routes.ci = { secret_secret = \"KIT_WEBHOOK_SECRET\", deliver = \"log\", filters = { equals = { path = \"payload.workflow_run.conclusion\", value = \"failure\" } } }",
     )
     .await;
     let success = json!({"workflow_run": {"conclusion": "success"}});
@@ -150,7 +152,7 @@ async fn only_failing_ci_runs_pass_the_filter() {
 #[tokio::test]
 async fn the_route_rate_limit_answers_429() {
     let route = Route::new(
-        "routes.ci = { secret_secret = \"KIT_WEBHOOK_SECRET\", rate_limit_per_min = 2 }",
+        "routes.ci = { secret_secret = \"KIT_WEBHOOK_SECRET\", deliver = \"log\", rate_limit_per_min = 2 }",
     )
     .await;
     for n in 0..2 {
@@ -195,12 +197,12 @@ async fn a_deliver_only_route_forwards_the_rendered_text_without_a_turn() {
 #[tokio::test]
 async fn route_skills_and_toolsets_shape_the_delivery_sessions() {
     let route = Route::new(
-        "routes.pr = { secret_secret = \"KIT_WEBHOOK_SECRET\", skills = [\"review\"], toolsets = [\"web\"] }",
+        "routes.pr = { secret_secret = \"KIT_WEBHOOK_SECRET\", skills = [\"review\"], toolsets = [\"core\"] }",
     )
     .await;
     let hints = route.webhook.session_hints("pr", Some("delivery-1"));
     assert_eq!(hints.skills, vec!["review"]);
-    assert_eq!(hints.toolsets, Some(vec!["web".to_owned()]));
+    assert_eq!(hints.toolsets, Some(vec!["core".to_owned()]));
     assert!(route.webhook.session_hints("other", None).is_empty());
 }
 
@@ -235,7 +237,7 @@ mod scripts {
 
     fn route_with(name: &str) -> String {
         format!(
-            "routes.ci = {{ secret_secret = \"KIT_WEBHOOK_SECRET\", script = \"{name}\", script_timeout_secs = 2, prompt = \"{{summary}}|{{script_output}}\" }}"
+            "routes.ci = {{ secret_secret = \"KIT_WEBHOOK_SECRET\", deliver = \"log\", script = \"{name}\", script_timeout_secs = 2, prompt = \"{{summary}}|{{script_output}}\" }}"
         )
     }
 

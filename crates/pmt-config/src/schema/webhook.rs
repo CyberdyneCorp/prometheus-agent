@@ -32,18 +32,31 @@ pub struct WebhookRoute {
     /// `deliver_only`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<String>,
-    /// Toolsets of each delivery's session, replacing the default webhook
-    /// toolset rather than adding to it.
+    /// Toolsets of each delivery's session, replacing the default
+    /// read-only `webhook-safe` toolset rather than adding to it; only
+    /// toolsets the profile enables.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub toolsets: Option<Vec<String>>,
-    /// Where the answer goes: `log` (recorded under
-    /// `<profile>/logs/webhook/<route>.jsonl`), `origin`, `github_comment`
-    /// or a send target `platform[:chat_id[:thread_id]]`. Unset: `log`.
+    /// Where the answer goes: `origin` (the HTTP caller's response),
+    /// `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`),
+    /// `github_comment` (a comment on the payload's pull request or issue)
+    /// or a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deliver: Option<String>,
     /// More send targets that receive a copy.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub deliver_extra: Vec<String>,
+    /// Append the delivered answer to each send target's chat session as
+    /// an attributed assistant message.
+    pub mirror_to_session: bool,
+    /// With `deliver = "origin"`: seconds the HTTP caller is kept waiting
+    /// for the answer; a run taking longer is answered 202 `accepted` and
+    /// its answer goes to the route's log.
+    #[schemars(range(min = 1, max = 600))]
+    pub origin_wait_secs: u64,
+    /// The secret holding the GitHub token `github_comment` posts with.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub github_token_secret: Option<SecretName>,
     /// Run no model: the rendered prompt is sent verbatim to `deliver`.
     pub deliver_only: bool,
     /// Requests per minute the route admits (fixed window); more are
@@ -74,6 +87,9 @@ impl Default for WebhookRoute {
             toolsets: None,
             deliver: None,
             deliver_extra: Vec::new(),
+            mirror_to_session: false,
+            origin_wait_secs: 30,
+            github_token_secret: None,
             deliver_only: false,
             rate_limit_per_min: 30,
             filters: None,
@@ -84,10 +100,10 @@ impl Default for WebhookRoute {
 }
 
 impl WebhookRoute {
-    /// The delivery target in effect (`log` when unset).
+    /// The delivery target in effect (`origin` when unset).
     #[must_use]
     pub fn deliver_target(&self) -> &str {
-        self.deliver.as_deref().unwrap_or("log")
+        self.deliver.as_deref().unwrap_or("origin")
     }
 }
 

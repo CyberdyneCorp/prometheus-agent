@@ -39,6 +39,7 @@ use tokio_util::sync::CancellationToken;
 /// - `clarify-multi` asks a multi-select question of 4 options;
 /// - `stream` streams its answer in pieces first;
 /// - `say:<text>` answers `<text>` verbatim;
+/// - `wait:<n>` announces a wait for a turn slot with `n` ahead first;
 /// - anything else answers `echo: <text>` at once.
 async fn script(
     text: &str,
@@ -101,6 +102,14 @@ async fn script(
     }
     if let Some(rest) = text.strip_prefix("tools:") {
         return tools(rest, link).await;
+    }
+    if let Some(ahead) = text.strip_prefix("wait:") {
+        // The daemon's turn slots announce a wait this way.
+        let ahead: u64 = ahead.parse().unwrap_or(1);
+        link.emit::<pmt_rpc::contracts::SessionEvent>(
+            &serde_json::json!({"type": "turn.waiting", "payload": {"ahead": ahead}}),
+        );
+        return ("completed", Some(format!("echo: {text}")));
     }
     if let Some(rest) = text.strip_prefix("say:") {
         return ("completed", Some(rest.to_owned()));
@@ -620,6 +629,11 @@ pub struct FakeAdapter {
     /// Threads opened: (chat, title, thread id); renames: (thread, title).
     pub threads: Mutex<Vec<(String, String, String)>>,
     pub renamed: Mutex<Vec<(String, String)>>,
+    /// Native stream operations, in order (`start <id>`, `append <text>`,
+    /// `task <id> <status>`, `stop <id>`, `status <text|none>`).
+    pub streamed: Mutex<Vec<String>>,
+    /// Stream appends that succeed before the next ones fail.
+    pub appends_before_failure: Mutex<Option<usize>>,
 }
 
 impl FakeAdapter {
@@ -653,6 +667,8 @@ impl FakeAdapter {
             history: Mutex::default(),
             threads: Mutex::default(),
             renamed: Mutex::default(),
+            streamed: Mutex::default(),
+            appends_before_failure: Mutex::default(),
         })
     }
 
@@ -732,6 +748,74 @@ impl Adapter for FakeAdapter {
             .lock()
             .unwrap()
             .push((thread_id.to_owned(), title.to_owned()));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn stream_start<'a>(&'a self, _: &'a Outgoing) -> AdapterFuture<'a, Result<String, SendError>> {
+        let id = format!("s{}", self.next.fetch_add(1, Ordering::Relaxed));
+        self.streamed.lock().unwrap().push(format!("start {id}"));
+        Box::pin(async move { Ok(id) })
+    }
+
+    fn stream_append<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        text: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let mut left = self.appends_before_failure.lock().unwrap();
+        let refused = match left.as_mut() {
+            Some(0) => true,
+            Some(n) => {
+                *n -= 1;
+                false
+            }
+            None => false,
+        };
+        if !refused {
+            self.streamed.lock().unwrap().push(format!("append {text}"));
+        }
+        Box::pin(async move {
+            if refused {
+                Err(SendError::Server("stream refused".into()))
+            } else {
+                Ok(())
+            }
+        })
+    }
+
+    fn stream_task<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        task: &'a pmt_gateway::messaging::TaskCard,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.streamed
+            .lock()
+            .unwrap()
+            .push(format!("task {} {:?}", task.id, task.status));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn stream_stop<'a>(
+        &'a self,
+        _: &'a str,
+        id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.streamed.lock().unwrap().push(format!("stop {id}"));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn set_status<'a>(
+        &'a self,
+        _: &'a str,
+        _: Option<&'a str>,
+        status: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        self.streamed
+            .lock()
+            .unwrap()
+            .push(format!("status {}", status.unwrap_or("none")));
         Box::pin(async { Ok(()) })
     }
 

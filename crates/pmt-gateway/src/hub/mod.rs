@@ -373,6 +373,27 @@ impl Hub {
             .collect()
     }
 
+    /// Sessions no client is attached to and that have no open request,
+    /// least recently attended first: `(session, profile)`.
+    pub fn detached(&self) -> Vec<(String, String)> {
+        let state = self.state();
+        let mut found: Vec<(Instant, String, String)> = state
+            .sessions
+            .iter()
+            .filter(|(_, log)| log.attached.is_empty() && !log.profile.is_empty())
+            .filter(|(id, _)| !state.requests.values().any(|p| &p.session_id == *id))
+            .filter_map(|(id, log)| {
+                log.unattended_since
+                    .map(|since| (since, id.clone(), log.profile.clone()))
+            })
+            .collect();
+        found.sort();
+        found
+            .into_iter()
+            .map(|(_, id, profile)| (id, profile))
+            .collect()
+    }
+
     /// The host closed `session_id`: it is no longer a reaping candidate
     /// until a client attaches and leaves again.
     pub fn closed(&self, session_id: &str) {

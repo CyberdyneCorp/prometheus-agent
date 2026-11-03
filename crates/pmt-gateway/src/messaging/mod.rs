@@ -48,6 +48,7 @@ mod lane;
 mod limits;
 mod locks;
 pub mod markup;
+pub mod mcp_events;
 mod media;
 pub mod menu;
 mod menus;
@@ -58,6 +59,7 @@ pub mod operate;
 mod outbox;
 mod peer;
 pub mod policy;
+mod profile_routes;
 pub mod proxy;
 pub mod proxy_env;
 mod recovery;
@@ -94,7 +96,7 @@ pub use adapter::{
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
     Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive, LengthUnit, Markup,
     MediaKind, MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, SenderVerdict,
-    Sent, SessionHints,
+    Sent, SessionHints, TaskCard, TaskStatus,
 };
 pub use agents::{Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateFromChat};
 pub use hooks::{Hook, Hooks, PreCommand};
@@ -373,6 +375,7 @@ impl Gateway {
         for profile in &profiles {
             outbox::spawn(&shared, profile);
         }
+        profile_routes::lend_configured(&shared);
         restart::announce(&shared);
         cache::spawn(&shared);
         menus::spawn(&shared);
@@ -461,6 +464,7 @@ impl Gateway {
         for profile in &shared.server.profiles() {
             adapters::start_profile(shared, profile);
         }
+        profile_routes::lend_configured(shared);
         menus::refresh(shared);
     }
 

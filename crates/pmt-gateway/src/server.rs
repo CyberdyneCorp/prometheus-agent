@@ -63,6 +63,9 @@ pub struct ServerOptions {
     /// running turn, no open request and no queued input is closed after
     /// this long.
     pub idle_session_close: Duration,
+    /// `gateway.limits.max_live_client_sessions`: detached client sessions
+    /// kept loaded beyond it are unloaded, oldest first (`0`: no cap).
+    pub max_live_client_sessions: u32,
     /// Where a panicking request handler's crash report goes; `None`
     /// keeps none (the request still answers `-32099`).
     pub crash_reporter: Option<Arc<CrashReporter>>,
@@ -85,6 +88,7 @@ impl ServerOptions {
             limits: Limits::default(),
             abort_on_violation: cfg!(debug_assertions),
             idle_session_close: Duration::from_hours(1),
+            max_live_client_sessions: 16,
             crash_reporter: None,
             only_pid: None,
         }
@@ -186,6 +190,7 @@ pub struct Server {
     started_at: String,
     endpoint: OnceLock<Endpoint>,
     idle_session_close: Duration,
+    max_live_client_sessions: u32,
     crash_reporter: Option<Arc<CrashReporter>>,
     only_pid: Option<u32>,
     /// Sessions created with an idempotency key: (profile, key) to the
@@ -262,6 +267,7 @@ impl Server {
             started_at: jiff::Timestamp::now().to_string(),
             endpoint: OnceLock::new(),
             idle_session_close: options.idle_session_close,
+            max_live_client_sessions: options.max_live_client_sessions,
             crash_reporter: options.crash_reporter,
             only_pid: options.only_pid,
             created: tokio::sync::Mutex::default(),
@@ -343,6 +349,12 @@ impl Server {
     #[must_use]
     pub fn idle_session_close(&self) -> Duration {
         self.idle_session_close
+    }
+
+    /// Detached client sessions kept loaded at most (`0`: no cap).
+    #[must_use]
+    pub fn max_live_client_sessions(&self) -> usize {
+        self.max_live_client_sessions as usize
     }
 
     /// The only client pid tickets are issued to, when restricted.

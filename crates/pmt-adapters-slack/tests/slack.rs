@@ -309,3 +309,53 @@ async fn a_thread_is_opened_by_posting_its_root() {
     );
     slack.disconnect().await;
 }
+
+/// Spec: messaging-gateway, Native platform streaming and task cards: a
+/// stream in the asking message's thread, task cards as plan chunks, and
+/// a refused append surfaces as an error (the gateway then edits).
+#[tokio::test(flavor = "multi_thread")]
+async fn answers_stream_with_task_cards_and_a_refused_append_is_an_error() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let slack = adapter(home.path(), &mock);
+    slack
+        .connect(Arc::new(Recorder::default()) as _)
+        .await
+        .unwrap();
+    let d = slack.describe();
+    assert!(d.native_stream && d.task_cards && d.status_line);
+    let mut asked = Outgoing::text(mock::DM, None, "");
+    asked.reply_to = Some("1700000000.000200".into());
+    let ts = slack.stream_start(&asked).await.unwrap();
+    slack
+        .set_status(mock::DM, Some("1700000000.000200"), Some("is thinking…"))
+        .await
+        .unwrap();
+    slack.stream_append(mock::DM, &ts, "Hello ").await.unwrap();
+    let card = pmt_gateway::messaging::TaskCard {
+        id: "c1".into(),
+        title: "terminal: ls".into(),
+        status: pmt_gateway::messaging::TaskStatus::Running,
+    };
+    slack.stream_task(mock::DM, &ts, &card).await.unwrap();
+    mock.refuse_appends_after(0);
+    assert!(slack.stream_append(mock::DM, &ts, "world").await.is_err());
+    slack.stream_stop(mock::DM, &ts).await.unwrap();
+    assert_eq!(
+        mock.streams(),
+        [
+            format!("start {ts}"),
+            "status is thinking…".to_owned(),
+            "append Hello ".to_owned(),
+            "task c1 in_progress".to_owned(),
+            format!("stop {ts}"),
+        ]
+    );
+    let streamed = mock
+        .sent()
+        .into_iter()
+        .find(|m| m.message_id == ts)
+        .unwrap();
+    assert_eq!(streamed.thread_id.as_deref(), Some("1700000000.000200"));
+    slack.disconnect().await;
+}

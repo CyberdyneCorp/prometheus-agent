@@ -6,10 +6,13 @@
 //! route admits unsigned requests, which only a loopback listener allows);
 //! its event type must be one the route accepts; its JSON payload becomes
 //! the turn's input through the route's prompt template. Each delivery is
-//! its own conversation thread of the route; replies are recorded under
-//! `<profile>/logs/webhook/<route>.jsonl` (`log` delivery). Because only
-//! verified requests reach the adapter, it vouches for its senders
-//! (`enforces_own_access_policy = allowlist`).
+//! its own conversation thread of the route, run with the read-only
+//! `webhook-safe` toolset unless the route names toolsets. The answer goes
+//! where the route's `deliver` says (`delivery`): back to the HTTP caller
+//! (`origin`, the default), the route's log under
+//! `<profile>/logs/webhook/<route>.jsonl`, a GitHub comment or a send
+//! target. Because only verified requests reach the adapter, it vouches
+//! for its senders (`enforces_own_access_policy = allowlist`).
 //!
 //! Before a turn starts, a request passes, in order: the route's
 //! per-minute limit, its event list, its declarative filters, the
@@ -17,6 +20,7 @@
 //! `deliver_only` route then forwards the rendered prompt to its target
 //! without any model call.
 
+mod delivery;
 mod filter;
 mod guard;
 mod render;
@@ -37,6 +41,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use pmt_config::ProfileScope;
+use pmt_config::platforms::WebhookOptions;
 use pmt_config::schema::WebhookRoute;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::sign::hex;
@@ -74,7 +79,14 @@ pub struct Webhook {
     sent: AtomicU64,
     max_body: usize,
     guard: guard::Guard,
+    options: WebhookOptions,
+    /// For `github_comment` (absent when it cannot be built).
+    client: Option<reqwest::Client>,
+    deliveries: delivery::Deliveries,
 }
+
+/// The toolset of a route's runs unless it names its own.
+const DEFAULT_TOOLSET: &str = "webhook-safe";
 
 impl std::fmt::Debug for Webhook {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -96,6 +108,7 @@ struct Call<'a> {
     event: Option<&'a str>,
     delivery: &'a str,
     text: &'a str,
+    payload: &'a Value,
 }
 
 /// The event type GitHub, GitLab or the payload names.
@@ -103,9 +116,14 @@ fn event_type(request: &HttpRequest, payload: &Value) -> Option<String> {
     request
         .header("x-github-event")
         .or_else(|| request.header("x-gitlab-event"))
+        .or_else(|| request.header(INTERNAL_EVENT))
         .map(str::to_owned)
         .or_else(|| payload["event_type"].as_str().map(str::to_owned))
 }
+
+/// The header carrying an internal event's type (MCP notifications the
+/// gateway admits on a route, `Gateway::mcp_event`).
+const INTERNAL_EVENT: &str = pmt_gateway::messaging::mcp_events::EVENT_HEADER;
 
 /// The delivery's id: the sender's, or the body's digest.
 fn delivery_id(request: &HttpRequest) -> String {
@@ -122,6 +140,11 @@ impl Webhook {
     /// The adapter for `setup`.
     #[must_use]
     pub fn new(setup: &AdapterSetup) -> Self {
+        let options: WebhookOptions =
+            pmt_config::platforms::options(PLATFORM, &setup.config.options).unwrap_or_default();
+        let client = pmt_gateway::messaging::proxy::client_builder(setup)
+            .ok()
+            .and_then(|(builder, _)| builder.build().ok());
         Self {
             scope: setup.scope.clone(),
             routes: setup.config.routes.clone(),
@@ -130,6 +153,9 @@ impl Webhook {
             sent: AtomicU64::new(0),
             max_body: usize::try_from(setup.config.webhook_body_limit()).unwrap_or(usize::MAX),
             guard: guard::Guard::default(),
+            options,
+            client,
+            deliveries: delivery::Deliveries::default(),
         }
     }
 
@@ -240,6 +266,7 @@ impl Webhook {
             event: event.as_deref(),
             delivery: &delivery,
             text: &text,
+            payload: &payload,
         };
         let (answer, handled) = if route.deliver_only {
             self.forward(&call).await
@@ -333,8 +360,18 @@ impl Webhook {
         inbound.thread_id = Some(call.delivery.to_owned());
         let body = json!({"status": "accepted", "route": call.route_name, "event": call.event,
                           "delivery_id": call.delivery});
+        let target = call.route.deliver_target();
+        let github = (target == "github_comment")
+            .then(|| delivery::GithubThread::of(call.payload))
+            .flatten();
+        let answer = self
+            .deliveries
+            .open(call.delivery, target == "origin", github);
         match link.submit(inbound).await {
-            Admission::Accepted | Admission::Queued => (status(202, &body), true),
+            Admission::Accepted | Admission::Queued => match answer {
+                Some(answer) => (self.wait_for(call, answer, body).await, true),
+                None => (status(202, &body), true),
+            },
             Admission::Duplicate => (status(200, &json!({"status": "duplicate"})), true),
             Admission::RateLimited => (status(429, &json!({"status": "rate_limited"})), false),
             Admission::Unauthorized | Admission::PairingIssued => {
@@ -344,6 +381,124 @@ impl Webhook {
             Admission::Paused => (status(503, &json!({"status": "paused"})), false),
             Admission::Handled => (status(200, &json!({"status": "handled"})), true),
         }
+    }
+
+    /// `origin`: the run's answer as the HTTP response, unless it takes
+    /// longer than the route waits (then 202 and the answer is logged).
+    async fn wait_for(
+        &self,
+        call: &Call<'_>,
+        answer: tokio::sync::oneshot::Receiver<String>,
+        accepted: Value,
+    ) -> HttpResponse {
+        let wait = Duration::from_secs(call.route.origin_wait_secs.max(1));
+        if let Ok(Ok(text)) = tokio::time::timeout(wait, answer).await {
+            return status(
+                200,
+                &json!({"status": "completed", "route": call.route_name, "event": call.event,
+                        "delivery_id": call.delivery, "answer": text}),
+            );
+        }
+        self.deliveries.give_up(call.delivery);
+        status(202, &accepted)
+    }
+
+    /// Delivers one answer of a run as its route says, then to each
+    /// `deliver_extra` target.
+    async fn answer(&self, message: &Outgoing) -> Result<Sent, SendError> {
+        let Some(route) = self.routes.get(&message.chat_id) else {
+            return self.record(message);
+        };
+        let delivery = message.thread_id.as_deref().unwrap_or_default();
+        let sent = match route.deliver_target() {
+            "log" => self.record(message)?,
+            "origin" => {
+                let answered = self
+                    .deliveries
+                    .waiting(delivery)
+                    .is_some_and(|caller| caller.send(message.text.clone()).is_ok());
+                if answered {
+                    Sent {
+                        message_id: Some(format!("{}:{delivery}", message.chat_id)),
+                    }
+                } else {
+                    // The caller gave up waiting: the answer is kept in the log.
+                    self.record(message)?
+                }
+            }
+            "github_comment" => self.github_comment(route, delivery, &message.text).await?,
+            target => {
+                self.forward_answer(route, &message.chat_id, target, &message.text)
+                    .await?
+            }
+        };
+        for target in &route.deliver_extra {
+            if let Err(err) = self
+                .forward_answer(route, &message.chat_id, target, &message.text)
+                .await
+            {
+                tracing::warn!(
+                    platform = PLATFORM,
+                    route = message.chat_id,
+                    "deliver_extra {target}: {}",
+                    err.describe()
+                );
+            }
+        }
+        Ok(sent)
+    }
+
+    /// An answer to a send target (mirrored when the route asks).
+    async fn forward_answer(
+        &self,
+        route: &WebhookRoute,
+        route_name: &str,
+        target: &str,
+        text: &str,
+    ) -> Result<Sent, SendError> {
+        let link = self
+            .link
+            .lock()
+            .expect("link poisoned")
+            .clone()
+            .ok_or_else(|| SendError::Network("the webhook adapter is not connected".to_owned()))?;
+        let label = link
+            .deliver(target, text)
+            .await
+            .map_err(SendError::Permanent)?;
+        if route.mirror_to_session {
+            link.mirror(target, &format!("[Webhook delivery: {route_name}]\n{text}"))
+                .await;
+        }
+        Ok(Sent {
+            message_id: Some(label),
+        })
+    }
+
+    /// An answer as a comment on the payload's pull request or issue.
+    async fn github_comment(
+        &self,
+        route: &WebhookRoute,
+        delivery: &str,
+        text: &str,
+    ) -> Result<Sent, SendError> {
+        let thread = self.deliveries.github(delivery).ok_or_else(|| {
+            SendError::Permanent("the payload names no pull request or issue".to_owned())
+        })?;
+        let secret = route
+            .github_token_secret
+            .as_ref()
+            .ok_or_else(|| SendError::Permanent("no github_token_secret".to_owned()))?;
+        let token =
+            credential(&self.scope, &secret.0).map_err(|e| SendError::Permanent(e.message))?;
+        let client = self
+            .client
+            .as_ref()
+            .ok_or_else(|| SendError::Permanent("no HTTP client".to_owned()))?;
+        delivery::comment(client, &self.options.github_api_url, &token, &thread, text).await?;
+        Ok(Sent {
+            message_id: Some(format!("{}#{}", thread.repo, thread.number)),
+        })
     }
 
     fn record(&self, message: &Outgoing) -> Result<Sent, SendError> {
@@ -413,8 +568,8 @@ impl Adapter for Webhook {
     }
 
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
-        let sent = self.record(message);
-        Box::pin(async move { sent })
+        let message = message.clone();
+        Box::pin(async move { self.answer(&message).await })
     }
 
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
@@ -480,7 +635,13 @@ impl Adapter for Webhook {
             .filter(|r| !r.deliver_only)
             .map(|route| SessionHints {
                 skills: route.skills.clone(),
-                toolsets: route.toolsets.clone(),
+                // Read-only unless the route names toolsets.
+                toolsets: Some(
+                    route
+                        .toolsets
+                        .clone()
+                        .unwrap_or_else(|| vec![DEFAULT_TOOLSET.to_owned()]),
+                ),
             })
             .unwrap_or_default()
     }

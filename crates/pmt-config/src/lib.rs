@@ -23,6 +23,7 @@ pub mod gateway_check;
 mod gateway_check_display;
 mod gateway_check_groups;
 mod gateway_check_platforms;
+mod gateway_check_routes;
 pub mod grants;
 pub mod home;
 pub mod keys;

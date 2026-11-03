@@ -119,3 +119,70 @@ fn a_deliver_only_route_forwards_an_alert_to_the_home_channel_without_a_model_ca
     assert_eq!(status, 413);
     daemon.stop(home);
 }
+
+/// The tools the profile's only session started with.
+fn session_tools(home: &Path) -> String {
+    rusqlite::Connection::open_with_flags(
+        home.join("profiles/default/state.db"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap()
+    .query_row("SELECT tools FROM session_tool_surface", [], |r| {
+        r.get::<_, String>(0)
+    })
+    .unwrap_or_default()
+}
+
+/// Spec scenario: Default toolset is read-only. The payload asks for a
+/// command; the run has no terminal tool, so nothing is executed, and
+/// the HTTP caller gets the answer (`deliver` defaults to `origin`).
+#[test]
+fn a_route_without_toolsets_runs_read_only_and_answers_the_caller() {
+    let home = gateway_home_with(
+        "[[rule]]\nuser_regex = 'rm -rf build'\ntimes = 1\n\
+         [[rule.tool_calls]]\nname = \"terminal\"\narguments = { command = \"rm -rf build\" }\n\n\
+         [[rule]]\nrepeat = true\ntext = \"I cannot run commands here.\"\n",
+        "\n[gateway.platforms.webhook]\nenabled = true\n\
+         routes.ask = { secret_secret = \"ALERT_SECRET\", prompt = \"{request}\" }\n",
+    );
+    let home = home.path();
+    let build = home.join("profiles/default/workspace/build");
+    std::fs::create_dir_all(&build).unwrap();
+    let port = free_port();
+    std::fs::write(
+        home.join("daemon.toml"),
+        format!("[gateway.http]\nlisten = \"127.0.0.1:{port}\"\n"),
+    )
+    .unwrap();
+    ok(&run_with_stdin(
+        home,
+        &["secrets", "set", "ALERT_SECRET"],
+        SECRET,
+    ));
+    let daemon = Daemon::start(home);
+    wait("the webhook listener", Duration::from_secs(30), || {
+        listener_up(port)
+    });
+    let body = r#"{"request": "please run rm -rf build"}"#;
+    let (status, answer) = post(port, "/p/default/webhook/ask", "r-1", body, body.len());
+    assert_eq!(status, 200, "{answer}");
+    let answer: serde_json::Value = serde_json::from_str(&answer).unwrap();
+    assert_eq!(answer["status"], "completed");
+    assert_eq!(answer["answer"], "I cannot run commands here.");
+    let tools: serde_json::Value = serde_json::from_str(&session_tools(home)).unwrap();
+    let exposed: Vec<&str> = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|t| t["exposure"] == "exposed")
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    let read_only = ["web_search", "web_extract", "vision_analyze", "clarify"];
+    assert!(
+        exposed.iter().all(|t| read_only.contains(t)),
+        "only read-only tools are exposed: {exposed:?}"
+    );
+    assert!(!exposed.contains(&"terminal"));
+    assert!(build.exists(), "nothing was executed");
+    daemon.stop(home);
+}

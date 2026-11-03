@@ -44,6 +44,8 @@ pub struct FakeHost {
     pub config_reads: Mutex<Vec<String>>,
     /// Sessions closed as idle.
     pub closed: Mutex<Vec<String>>,
+    /// Sessions unloaded without being ended, in order.
+    pub unloaded: Mutex<Vec<String>>,
     /// Each session's turn answers, kept as its transcript.
     answers: Answers,
 }
@@ -385,6 +387,11 @@ impl Host for FakeHost {
 
     fn close_idle<'a>(&'a self, _: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
         self.closed.lock().unwrap().push(session_id.to_owned());
+        Box::pin(async { Ok(true) })
+    }
+
+    fn unload_idle<'a>(&'a self, _: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        self.unloaded.lock().unwrap().push(session_id.to_owned());
         Box::pin(async { Ok(true) })
     }
 

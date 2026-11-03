@@ -127,6 +127,39 @@ async fn reap(server: Arc<Server>) {
                 .instrument(span)
                 .await;
         }
+        evict_beyond_cap(&server).await;
+    }
+}
+
+/// Unloads the least recently attended detached sessions beyond
+/// `gateway.limits.max_live_client_sessions` (spec: messaging-gateway,
+/// Concurrency caps across surfaces); a session the host keeps (a running
+/// turn, queued input) is skipped. Sessions the messaging gateway routes
+/// stay attached to it, so only client sessions count.
+pub(crate) async fn evict_beyond_cap(server: &Server) {
+    let cap = server.max_live_client_sessions();
+    if cap == 0 {
+        return;
+    }
+    let detached = server.hub().detached();
+    let mut excess = detached.len().saturating_sub(cap);
+    for (session, profile) in detached {
+        if excess == 0 {
+            return;
+        }
+        match server.host().unload_idle(&profile, &session).await {
+            Ok(true) => {
+                tracing::info!(
+                    profile,
+                    session_id = session,
+                    "unloaded a detached session over the cap"
+                );
+                server.hub().closed(&session);
+                excess -= 1;
+            }
+            Ok(false) => {}
+            Err(err) => tracing::warn!("cannot unload a detached session: {err}"),
+        }
     }
 }
 

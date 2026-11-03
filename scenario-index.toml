@@ -1980,3 +1980,17 @@ capabilities = [
 
 [messaging-gateway."Branching into a sibling thread"]
 "Branch opens a thread" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_branch_opens_a_sibling_thread_bound_to_the_fork", "crates/pmt-adapters-slack/tests/slack.rs::a_thread_is_opened_by_posting_its_root"]
+
+[messaging-gateway."Native platform streaming and task cards"]
+"Native stream fallback" = ["crates/pmt-gateway/tests/messaging/native.rs::a_stream_failing_mid_turn_goes_on_by_editing_the_same_message", "crates/pmt-adapters-slack/tests/slack.rs::answers_stream_with_task_cards_and_a_refused_append_is_an_error"]
+
+[messaging-gateway."Webhook route delivery and safe default toolset"]
+"Default toolset is read-only" = ["crates/prometheus/tests/gateway_webhooks.rs::a_route_without_toolsets_runs_read_only_and_answers_the_caller", "crates/pmt-adapters-webhook/tests/delivery.rs::deliveries_run_read_only_unless_the_route_names_toolsets", "crates/pmt-tools/tests/toolsets.rs::webhook_safe_is_read_only"]
+"Deliver to Discord" = { tests = ["crates/pmt-adapters-webhook/tests/delivery.rs::a_send_target_gets_the_answer_mirrored_and_the_extras_a_copy", "crates/pmt-gateway/tests/messaging/targets.rs::a_sent_message_is_mirrored_into_the_chats_session"], note = "the adapter delivers and mirrors through the gateway link; the gateway's target resolution and session mirror are the send_message ones" }
+
+[messaging-gateway."Shared-credential profile routes"]
+"One Discord bot, two communities" = { tests = ["crates/pmt-gateway/tests/messaging/profile_routes.rs::a_routed_event_runs_in_the_target_profile_and_the_receiving_bot_replies", "crates/pmt-config/src/schema/gateway_routes.rs::the_most_specific_route_wins_and_a_channel_route_covers_its_threads"], note = "on the fake adapter with a guild-scoped chat; matching is platform-independent" }
+"Target did not opt in" = ["crates/pmt-config/src/gateway_check_routes.rs::a_target_that_did_not_opt_in_fails_naming_it"]
+
+[messaging-gateway."Concurrency caps across surfaces"]
+"Cap queues a turn" = ["crates/prometheus/tests/gateway_limits.rs::a_third_turn_waits_for_a_free_slot_and_then_runs", "crates/pmt-gateway/src/slots.rs::a_turn_beyond_the_cap_waits_its_turn_in_order", "crates/pmt-gateway/tests/messaging/display.rs::a_turn_waiting_for_a_slot_is_announced"]

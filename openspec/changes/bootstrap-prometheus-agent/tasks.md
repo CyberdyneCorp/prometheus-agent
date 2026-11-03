@@ -297,7 +297,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 27.3 Implement display policy with per-platform overrides, the runtime metadata footer kept out of model context, per-platform warning notification suppression, message timestamps in model context (new sessions only) and intentional silence tokens; verify with the fake adapter (spec: messaging-gateway)
 - [x] 27.4 Implement group mention gating with observe mode, bot-authored message admission (ignored by default, multipart collection), channel history backfill up to the bot's last reply, role-based access grants that deny on lookup failure, and per-chat policy thread matching with skill preload; verify with table tests (spec: messaging-gateway)
 - [x] 27.5 Implement multi-session DM topics (lobby redirect, restore into a new topic), the interactive model picker with a chat model override that survives `/new`, background sessions from chat, session handoff to a messaging platform and branching into a sibling thread; verify with the fake adapter (spec: messaging-gateway)
-- [ ] 27.6 Implement native platform streaming and task cards with fallback, webhook route delivery with the read-only default toolset, shared-credential profile routes (target profile must opt in) and concurrency caps across surfaces (excess turns queue); verify with integration tests (spec: messaging-gateway)
+- [x] 27.6 Implement native platform streaming and task cards with fallback, webhook route delivery with the read-only default toolset, shared-credential profile routes (target profile must opt in) and concurrency caps across surfaces (excess turns queue); verify with integration tests (spec: messaging-gateway)
 
 ## 28. M2 WASM plugin host
 

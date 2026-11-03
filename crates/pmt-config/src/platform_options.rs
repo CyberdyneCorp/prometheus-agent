@@ -359,6 +359,18 @@ pub enum GroupPolicy {
 }
 
 /// `gateway.platforms.webhook.options`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
-pub struct WebhookOptions {}
+pub struct WebhookOptions {
+    /// The GitHub REST API `deliver = "github_comment"` posts to (GitHub
+    /// Enterprise: `https://<host>/api/v3`).
+    pub github_api_url: String,
+}
+
+impl Default for WebhookOptions {
+    fn default() -> Self {
+        Self {
+            github_api_url: "https://api.github.com".to_owned(),
+        }
+    }
+}

@@ -64,6 +64,11 @@ struct State {
     refuse_usergroups: bool,
     /// Conversation messages by channel, oldest first (history fixtures).
     history: Vec<(String, Value)>,
+    /// Stream calls, in order: `start <ts>`, `append <text>`,
+    /// `task <id> <status>`, `stop <ts>`, `status <text>`.
+    streams: Vec<String>,
+    /// Stream appends that succeed before `chat.appendStream` fails.
+    appends_left: Option<usize>,
     /// Bodies posted to slash commands' response URLs.
     responses: Vec<Value>,
 }
@@ -225,6 +230,70 @@ impl SlackMock {
         ts
     }
 
+    /// Stream calls so far.
+    pub fn streams(&self) -> Vec<String> {
+        self.lock().streams.clone()
+    }
+
+    /// `chat.appendStream` succeeds `n` more times, then fails.
+    pub fn refuse_appends_after(&self, n: usize) {
+        self.lock().appends_left = Some(n);
+    }
+
+    fn stream(&self, method: &str, args: &Value) -> HttpResponse {
+        let channel = args["channel"].as_str().unwrap_or_default().to_owned();
+        match method {
+            "chat.startStream" => {
+                let ts = self.ts();
+                let mut state = self.lock();
+                state.sent.push(MockSent {
+                    chat_id: channel,
+                    message_id: ts.clone(),
+                    text: String::new(),
+                    buttons: Vec::new(),
+                    thread_id: args["thread_ts"].as_str().map(str::to_owned),
+                });
+                state.streams.push(format!("start {ts}"));
+                ok(&json!({"ts": ts}))
+            }
+            "chat.appendStream" => {
+                let mut state = self.lock();
+                if let Some(left) = state.appends_left.as_mut() {
+                    if *left == 0 {
+                        return refused("streaming_state_conflict");
+                    }
+                    *left -= 1;
+                }
+                let ts = args["ts"].as_str().unwrap_or_default().to_owned();
+                if let Some(text) = args["markdown_text"].as_str() {
+                    if let Some(message) = state.sent.iter_mut().find(|m| m.message_id == ts) {
+                        message.text.push_str(text);
+                    }
+                    state.streams.push(format!("append {text}"));
+                }
+                for chunk in args["chunks"].as_array().into_iter().flatten() {
+                    let line = format!(
+                        "task {} {}",
+                        chunk["id"].as_str().unwrap_or_default(),
+                        chunk["status"].as_str().unwrap_or_default()
+                    );
+                    state.streams.push(line);
+                }
+                ok(&json!({"ts": ts}))
+            }
+            "chat.stopStream" => {
+                let ts = args["ts"].as_str().unwrap_or_default();
+                self.lock().streams.push(format!("stop {ts}"));
+                ok(&json!({"ts": ts}))
+            }
+            _ => {
+                let status = args["status"].as_str().unwrap_or_default();
+                self.lock().streams.push(format!("status {status}"));
+                ok(&json!({}))
+            }
+        }
+    }
+
     fn usergroups(&self) -> HttpResponse {
         let state = self.lock();
         if state.refuse_usergroups {
@@ -382,6 +451,10 @@ impl SlackMock {
             }
             "files.completeUploadExternal" => self.complete(args),
             "usergroups.list" => self.usergroups(),
+            "chat.startStream"
+            | "chat.appendStream"
+            | "chat.stopStream"
+            | "assistant.threads.setStatus" => self.stream(method, args),
             "conversations.history" => self.history(args, false),
             "conversations.replies" => self.history(args, true),
             "chat.delete" => {

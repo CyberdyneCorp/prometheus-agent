@@ -27,6 +27,14 @@
           },
           "description": "The shared HTTP listener of webhook-style adapters."
         },
+        "limits": {
+          "$ref": "#/$defs/GatewayLimits",
+          "default": {
+            "max_concurrent_sessions": 0,
+            "max_live_client_sessions": 16
+          },
+          "description": "How much the daemon runs at once across profiles and surfaces."
+        },
         "on_all_adapters_down": {
           "$ref": "#/$defs/AllAdaptersDown",
           "default": "stay_alive",
@@ -92,6 +100,27 @@
           "default": false,
           "description": "Allow a non-loopback `listen` address (logged at WARN on every\nstart).",
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "GatewayLimits": {
+      "additionalProperties": false,
+      "description": "`daemon.toml [gateway.limits]` (spec: messaging-gateway, Concurrency\ncaps across surfaces).",
+      "properties": {
+        "max_concurrent_sessions": {
+          "default": 0,
+          "description": "Sessions with a running turn at once, across every profile and\nsurface; further turns wait first in, first out (\"Waiting for a\nfree slot\"). `0`: unbounded.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_live_client_sessions": {
+          "default": 16,
+          "description": "Detached TUI, desktop and dashboard sessions kept loaded; the least\nrecently active beyond it are unloaded (never one running a turn or\nwith a client attached) and resumed from storage when reopened.\n`0`: no cap.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -352,6 +381,10 @@
         "http": {
           "listen": "127.0.0.1:8644",
           "public": false
+        },
+        "limits": {
+          "max_concurrent_sessions": 0,
+          "max_live_client_sessions": 16
         },
         "on_all_adapters_down": "stay_alive",
         "relay": {

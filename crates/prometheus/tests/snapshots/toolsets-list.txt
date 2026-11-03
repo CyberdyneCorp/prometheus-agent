@@ -81,6 +81,9 @@
   web  (2 tools)
     Web search and page extraction
     tools: web_search, web_extract
+  webhook-safe  (4 tools)
+    Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes
+    tools: web_search, web_extract, vision_analyze, clarify
   x_search  (1 tool)  [default-off]
     Search posts on X
     tools: x_search

@@ -173,3 +173,50 @@ async fn an_open_adapter_policy_is_never_asked() {
     assert_eq!(h.send("matrix", message).await, Admission::Unauthorized);
     assert_eq!(adapter.sender_checks.load(Ordering::Relaxed), 0);
 }
+
+/// Spec: messaging-gateway, Webhook route delivery and safe default
+/// toolset: where nobody can answer (a webhook route), clarify is answered
+/// as unavailable at once and no question is sent.
+#[tokio::test]
+async fn clarify_is_unavailable_where_nobody_can_answer() {
+    let mut setup = Setup::new(&open("webhook"));
+    setup.descriptors.push(pmt_gateway::messaging::Descriptor {
+        interactive: pmt_gateway::messaging::Interactive::None,
+        ..pmt_gateway::messaging::Descriptor::new("webhook", 4096)
+    });
+    let h = Harness::start(setup).await;
+    h.dm("webhook", "hook", "clarify").await;
+    said(&h.adapter("webhook"), "clarified: null").await;
+    let texts = h.adapter("webhook").texts();
+    assert!(
+        !texts.iter().any(|t| t.contains("Which colour?")),
+        "{texts:?}"
+    );
+}
+
+/// Spec: messaging-gateway, Webhook route delivery and safe default
+/// toolset: MCP notifications reach a webhook route only while
+/// `gateway.mcp_events.enabled` is on (the gateway vouches for them).
+#[tokio::test]
+async fn mcp_events_reach_the_webhook_route_only_when_enabled() {
+    let payload = serde_json::json!({"uri": "file:///notes.md"});
+    let h = Harness::start(Setup::new(&open("webhook"))).await;
+    let refused = h
+        .gateway
+        .mcp_event("default", "mcp", "resource.updated", "n1", &payload)
+        .await
+        .unwrap_err();
+    assert!(refused.message().contains("gateway.mcp_events.enabled"));
+    let on = format!(
+        "{}\n[gateway.mcp_events]\nenabled = true\n",
+        open("webhook")
+    );
+    let h = Harness::start(Setup::new(&on)).await;
+    let answer = h
+        .gateway
+        .mcp_event("default", "mcp", "resource.updated", "n1", &payload)
+        .await
+        .unwrap();
+    assert_eq!(answer.status, 200);
+    said(&h.adapter("webhook"), "file:///notes.md").await;
+}

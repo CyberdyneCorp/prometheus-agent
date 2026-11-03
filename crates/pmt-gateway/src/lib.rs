@@ -28,6 +28,7 @@ pub mod messaging;
 pub mod methods;
 pub mod router;
 pub mod server;
+pub mod slots;
 pub mod tickets;
 
 pub use daemon::{Exit, run};

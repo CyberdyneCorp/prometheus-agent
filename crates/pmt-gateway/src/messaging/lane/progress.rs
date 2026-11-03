@@ -27,6 +27,7 @@ use tokio::time::Instant;
 
 use super::Lane;
 use crate::messaging::adapter::Outgoing;
+use crate::messaging::adapter::TaskStatus;
 
 /// How often the long-running bubble is updated.
 pub(crate) const WORKING_EVERY: Duration = Duration::from_mins(3);
@@ -89,6 +90,8 @@ pub(crate) struct Progress {
     working: Option<String>,
     working_minutes: u64,
     calls: usize,
+    /// Tool calls shown as task cards: call id to title.
+    cards: std::collections::HashMap<String, String>,
 }
 
 impl Progress {
@@ -102,6 +105,7 @@ impl Progress {
             interim: None,
             working: None,
             working_minutes: 0,
+            cards: std::collections::HashMap::new(),
             calls: 0,
         }
     }
@@ -138,6 +142,9 @@ impl Lane {
             return;
         }
         let display = self.display();
+        if kind == "tool.result" && self.finish_card(payload).await {
+            return;
+        }
         match kind {
             "assistant.message" if display.interim_messages => {
                 let text = payload["text"]
@@ -179,6 +186,19 @@ impl Lane {
         progress.last_tool = Some(tool.clone());
         progress.calls += 1;
         let arguments = &payload["arguments"];
+        if matches!(
+            display.tool_progress,
+            ChatToolProgress::New | ChatToolProgress::All | ChatToolProgress::Verbose
+        ) {
+            let id = payload["call_id"].as_str().unwrap_or_default().to_owned();
+            let title = format!("{tool}: {}", preview(arguments, display.preview_length));
+            if self.task_card(&id, &title, TaskStatus::Running).await {
+                if let Some(running) = self.running.as_mut() {
+                    running.progress.cards.insert(id, title);
+                }
+                return;
+            }
+        }
         match display.tool_progress {
             ChatToolProgress::Off => {}
             ChatToolProgress::Log => self.log_call(&tool, arguments),
@@ -198,6 +218,27 @@ impl Lane {
                 self.progress_line(display, line).await;
             }
         }
+    }
+
+    /// A tool result whose call is a task card: the card is marked done
+    /// or failed; `false` for calls shown otherwise.
+    async fn finish_card(&mut self, payload: &Value) -> bool {
+        let id = payload["call_id"].as_str().unwrap_or_default();
+        let Some(title) = self
+            .running
+            .as_mut()
+            .and_then(|r| r.progress.cards.remove(id))
+        else {
+            return false;
+        };
+        let failed = payload.get("error").is_some_and(|e| !e.is_null());
+        let status = if failed {
+            TaskStatus::Failed
+        } else {
+            TaskStatus::Done
+        };
+        self.task_card(id, &title, status).await;
+        true
     }
 
     /// Shows one progress line: appended to the edited bubble, or as a

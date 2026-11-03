@@ -149,6 +149,13 @@ pub trait Host: Send + Sync + 'static {
     /// input is queued; `true` when it was closed (or was not loaded).
     fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool>;
 
+    /// Unloads a session no client is attached to without ending it (it
+    /// is resumed from storage when reopened), unless a turn runs or an
+    /// input is queued; `true` when it was unloaded (or was not loaded).
+    fn unload_idle<'a>(&'a self, _profile: &'a str, _session_id: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
+    }
+
     /// Each served profile's configuration state, for `daemon status`.
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         Vec::new()

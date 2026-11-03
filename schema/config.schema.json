@@ -1685,6 +1685,15 @@
       "additionalProperties": false,
       "description": "The `[gateway]` section.",
       "properties": {
+        "accept_routes_from": {
+          "default": [],
+          "description": "Profiles whose `profile_routes` may route events to this one.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-apply": "live"
+        },
         "agent_cache": {
           "$ref": "#/$defs/AgentCacheConfig",
           "default": {
@@ -1758,6 +1767,14 @@
           "description": "When group, channel and thread messages start a turn, overridable\nper platform.",
           "x-apply": "live"
         },
+        "mcp_events": {
+          "$ref": "#/$defs/McpEvents",
+          "default": {
+            "enabled": false
+          },
+          "description": "MCP server notifications as internal webhook events.",
+          "x-apply": "live"
+        },
         "media": {
           "$ref": "#/$defs/MediaConfig",
           "default": {
@@ -1804,6 +1821,15 @@
           "description": "Messaging platforms this profile answers on, keyed by platform\n(`telegram`, `discord`, ...). A profile clone leaves them out\nunless `--clone-channels` is given, so two profiles never answer\nthe same bot account.",
           "type": "object",
           "x-apply": "next_session"
+        },
+        "profile_routes": {
+          "default": [],
+          "description": "Events this profile's adapters receive that belong to another\nserved profile (one shared bot, several communities); the target\nmust list this profile in its `accept_routes_from`.",
+          "items": {
+            "$ref": "#/$defs/ProfileRoute"
+          },
+          "type": "array",
+          "x-apply": "live"
         },
         "proxy_url": {
           "description": "The proxy every adapter without its own `proxy_url` uses\n(`http://`, `https://` or `socks5://`, without a password; a URL\nwith credentials goes in a secret named by `proxy_url_secret`).",
@@ -2412,6 +2438,18 @@
           "type": "string"
         }
       ]
+    },
+    "McpEvents": {
+      "additionalProperties": false,
+      "description": "`[gateway.mcp_events]` (experimental).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Admit notifications of configured MCP servers that declare an\n`events` webhook route as signed internal events on that route\n(same delivery and toolset rules as a webhook request).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "MediaConfig": {
       "additionalProperties": false,
@@ -3571,6 +3609,58 @@
         }
       ]
     },
+    "ProfileRoute": {
+      "additionalProperties": false,
+      "description": "One `[[gateway.profile_routes]]` entry.",
+      "properties": {
+        "chat_id": {
+          "description": "Matches this chat or channel.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guild_id": {
+          "description": "Matches this workspace or server (Discord guild, Slack team).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The route's name (logs, `gateway status`).",
+          "type": "string"
+        },
+        "platform": {
+          "description": "The platform whose events it routes.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The served profile matching events go to.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "Matches this thread or forum topic (a channel route also matches\nits threads).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user_id": {
+          "description": "Matches this sender.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "platform",
+        "profile"
+      ],
+      "type": "object"
+    },
     "PromptCacheConfig": {
       "additionalProperties": false,
       "description": "The `[prompt_cache]` section.",
@@ -4525,7 +4615,12 @@
       "oneOf": [
         {
           "const": "auto",
-          "description": "`edit` where the platform edits messages, else no streaming.",
+          "description": "`native` where the platform streams natively, else `edit` where it\nedits messages, else no streaming.",
+          "type": "string"
+        },
+        {
+          "const": "native",
+          "description": "The platform's own streaming message API (falls back to `edit`,\nalso mid-turn when the stream fails).",
           "type": "string"
         },
         {
@@ -5620,7 +5715,7 @@
       "description": "One webhook route.",
       "properties": {
         "deliver": {
-          "description": "Where the answer goes: `log` (recorded under\n`<profile>/logs/webhook/<route>.jsonl`), `origin`, `github_comment`\nor a send target `platform[:chat_id[:thread_id]]`. Unset: `log`.",
+          "description": "Where the answer goes: `origin` (the HTTP caller's response),\n`log` (recorded under `<profile>/logs/webhook/<route>.jsonl`),\n`github_comment` (a comment on the payload's pull request or issue)\nor a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`.",
           "type": [
             "string",
             "null"
@@ -5657,10 +5752,34 @@
           ],
           "description": "Conditions a payload must meet; a request that fails them is\nanswered `ignored` with reason `filter`."
         },
+        "github_token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the GitHub token `github_comment` posts with."
+        },
         "insecure_no_auth": {
           "default": false,
           "description": "Admit unsigned requests (only while `gateway.http.listen` is a\nloopback address).",
           "type": "boolean"
+        },
+        "mirror_to_session": {
+          "default": false,
+          "description": "Append the delivered answer to each send target's chat session as\nan attributed assistant message.",
+          "type": "boolean"
+        },
+        "origin_wait_secs": {
+          "default": 30,
+          "description": "With `deliver = \"origin\"`: seconds the HTTP caller is kept waiting\nfor the answer; a run taking longer is answered 202 `accepted` and\nits answer goes to the route's log.",
+          "format": "uint64",
+          "maximum": 600,
+          "minimum": 1,
+          "type": "integer"
         },
         "prompt": {
           "description": "The turn's input: `{a.b.c}` paths into the payload, `{__raw__}`\nthe whole payload. Unset: the payload as JSON.",
@@ -5711,7 +5830,7 @@
           "type": "array"
         },
         "toolsets": {
-          "description": "Toolsets of each delivery's session, replacing the default webhook\ntoolset rather than adding to it.",
+          "description": "Toolsets of each delivery's session, replacing the default\nread-only `webhook-safe` toolset rather than adding to it; only\ntoolsets the profile enables.",
           "items": {
             "type": "string"
           },
@@ -5940,6 +6059,7 @@
     "gateway": {
       "$ref": "#/$defs/GatewayConfig",
       "default": {
+        "accept_routes_from": [],
         "agent_cache": {
           "idle_ttl_secs": 3600,
           "max_size": 128,
@@ -5966,6 +6086,9 @@
         },
         "display": {},
         "groups": {},
+        "mcp_events": {
+          "enabled": false
+        },
         "media": {
           "cache_max_age_secs": 86400,
           "max_inbound_bytes": 134217728
@@ -5982,6 +6105,7 @@
           "max_attempts": 8
         },
         "platforms": {},
+        "profile_routes": [],
         "quick_commands": {
           "timeout_secs": 30
         },

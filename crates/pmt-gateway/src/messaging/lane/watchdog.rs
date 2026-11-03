@@ -84,6 +84,15 @@ impl Lane {
         if PROGRESS.contains(&kind) {
             self.progressed();
         }
+        if kind == "turn.waiting" {
+            // Waiting for a daemon-wide slot is not a stall.
+            self.progressed();
+            let ahead = payload["ahead"].as_u64().unwrap_or(1);
+            self.say(&crate::slots::waiting_notice(
+                usize::try_from(ahead).unwrap_or(1),
+            ));
+            return;
+        }
         self.show_progress(kind, payload).await;
     }
 

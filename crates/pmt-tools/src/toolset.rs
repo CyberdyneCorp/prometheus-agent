@@ -206,6 +206,13 @@ pub fn builtin() -> Vec<Toolset> {
             &[],
         )
         .including(&["web", "vision", "image_gen"]),
+        // The default of webhook-triggered runs (spec: messaging-gateway,
+        // Webhook route delivery and safe default toolset).
+        Toolset::new(
+            "webhook-safe",
+            "Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes",
+            &["web_search", "web_extract", "vision_analyze", "clarify"],
+        ),
         coding,
     ]
 }

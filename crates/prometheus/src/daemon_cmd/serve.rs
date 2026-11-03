@@ -60,15 +60,19 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
         })?;
     let exit = runtime.block_on(
         async {
-            let host = Arc::new(DaemonHost::new(
-                scopes,
-                ctx.launch.clone(),
-                ctx.set.to_vec(),
-                launch_profile.as_str().to_owned(),
-            )?);
+            let host = Arc::new(
+                DaemonHost::new(
+                    scopes,
+                    ctx.launch.clone(),
+                    ctx.set.to_vec(),
+                    launch_profile.as_str().to_owned(),
+                )?
+                .with_turn_cap(config.gateway.limits.max_concurrent_sessions),
+            );
             let mut options = ServerOptions::new(identity(), host.names());
             options.rpc = config.daemon.rpc.clone();
             options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
+            options.max_live_client_sessions = config.gateway.limits.max_live_client_sessions;
             options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
                 Some(&home.to_path_buf()),
                 ctx.launch,

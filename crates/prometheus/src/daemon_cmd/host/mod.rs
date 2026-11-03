@@ -111,6 +111,8 @@ pub(super) struct DaemonHost {
     /// The profile that sees the launch environment's secrets.
     launch_profile: String,
     turns: Arc<AtomicUsize>,
+    /// `gateway.limits.max_concurrent_sessions`: turns beyond it wait.
+    slots: pmt_gateway::slots::Slots,
     /// The messaging gateway, for the `send_message` tool.
     gateway: send_tool::GatewayCell,
 }
@@ -176,8 +178,15 @@ impl DaemonHost {
             set,
             launch_profile,
             turns: Arc::default(),
+            slots: pmt_gateway::slots::Slots::new(0),
             gateway: Arc::default(),
         })
+    }
+
+    /// Bounds the turns running at once (`gateway.limits.max_concurrent_sessions`).
+    pub(super) fn with_turn_cap(mut self, max: u32) -> Self {
+        self.slots = pmt_gateway::slots::Slots::new(max);
+        self
     }
 
     /// Hands sessions the started messaging gateway (`send_message`).
@@ -602,6 +611,13 @@ impl Host for DaemonHost {
 
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {
         Box::pin(async move { Self::config_value(&*self.profile(profile)?, key) })
+    }
+
+    fn unload_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            Ok(Self::unload(profile, self::session_id(session_id)?).await)
+        })
     }
 
     fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {

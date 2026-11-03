@@ -127,6 +127,27 @@ pub struct GatewayConfig {
     /// `/background` tasks started from chats.
     #[schemars(extend("x-apply" = "live"))]
     pub background: GatewayBackground,
+    /// Events this profile's adapters receive that belong to another
+    /// served profile (one shared bot, several communities); the target
+    /// must list this profile in its `accept_routes_from`.
+    #[schemars(extend("x-apply" = "live"))]
+    pub profile_routes: Vec<super::ProfileRoute>,
+    /// Profiles whose `profile_routes` may route events to this one.
+    #[schemars(extend("x-apply" = "live"))]
+    pub accept_routes_from: Vec<String>,
+    /// MCP server notifications as internal webhook events.
+    #[schemars(extend("x-apply" = "live"))]
+    pub mcp_events: McpEvents,
+}
+
+/// `[gateway.mcp_events]` (experimental).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct McpEvents {
+    /// Admit notifications of configured MCP servers that declare an
+    /// `events` webhook route as signed internal events on that route
+    /// (same delivery and toolset rules as a webhook request).
+    pub enabled: bool,
 }
 
 /// `[gateway.background]`.
@@ -280,9 +301,13 @@ impl Default for StreamingConfig {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StreamTransport {
-    /// `edit` where the platform edits messages, else no streaming.
+    /// `native` where the platform streams natively, else `edit` where it
+    /// edits messages, else no streaming.
     #[default]
     Auto,
+    /// The platform's own streaming message API (falls back to `edit`,
+    /// also mid-turn when the stream fails).
+    Native,
     /// A platform-native draft (falls back to `edit`).
     Draft,
     /// One message edited as the answer grows.

@@ -58,6 +58,33 @@ pub struct DaemonGateway {
     pub relay: crate::daemon_relay::RelayConfig,
     /// The shared HTTP listener of webhook-style adapters.
     pub http: GatewayHttp,
+    /// How much the daemon runs at once across profiles and surfaces.
+    pub limits: GatewayLimits,
+}
+
+/// `daemon.toml [gateway.limits]` (spec: messaging-gateway, Concurrency
+/// caps across surfaces).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayLimits {
+    /// Sessions with a running turn at once, across every profile and
+    /// surface; further turns wait first in, first out ("Waiting for a
+    /// free slot"). `0`: unbounded.
+    pub max_concurrent_sessions: u32,
+    /// Detached TUI, desktop and dashboard sessions kept loaded; the least
+    /// recently active beyond it are unloaded (never one running a turn or
+    /// with a client attached) and resumed from storage when reopened.
+    /// `0`: no cap.
+    pub max_live_client_sessions: u32,
+}
+
+impl Default for GatewayLimits {
+    fn default() -> Self {
+        Self {
+            max_concurrent_sessions: 0,
+            max_live_client_sessions: 16,
+        }
+    }
 }
 
 /// `daemon.toml [gateway.http]` (spec: platform-adapters, Shared HTTP

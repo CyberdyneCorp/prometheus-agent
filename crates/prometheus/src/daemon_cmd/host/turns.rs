@@ -127,13 +127,17 @@ impl DaemonHost {
             }
         };
         turns.fetch_add(1, Ordering::AcqRel);
+        let slots = self.slots.clone();
         // In the submitting request's session span: the turn's records go
         // to the profile's logs.
         tokio::spawn(
             async move {
                 let mut job = first;
                 loop {
+                    let link = job.link.clone();
+                    let permit = slots.acquire(|ahead| waiting(&link, ahead)).await;
                     run_one(id, &session, job, &record).await;
+                    drop(permit);
                     let next = {
                         let mut queue = session.queue.lock().expect("queue poisoned");
                         let next = queue.pop_front();
@@ -259,6 +263,30 @@ impl DaemonHost {
         {
             session.live.end(&profile.store, reason).await;
         }
+    }
+}
+
+/// Tells the session's clients that its turn waits for a free slot: the
+/// messaging gateway says it in the chat (`turn.waiting`), terminals show
+/// a notice.
+fn waiting(link: &Link, ahead: usize) {
+    let text = pmt_gateway::slots::waiting_notice(ahead);
+    tracing::info!(ahead, "turn waiting for a free slot");
+    for (kind, payload) in [
+        (
+            "turn.waiting",
+            serde_json::json!({"ahead": ahead, "text": text}),
+        ),
+        ("command.notice", serde_json::json!({"text": text})),
+    ] {
+        link.emit::<pmt_rpc::contracts::SessionEvent>(&serde_json::json!({
+            "type": kind,
+            "ts": jiff::Timestamp::now().to_string(),
+            "turn_id": null,
+            "span_id": null,
+            "parent_span_id": null,
+            "payload": payload,
+        }));
     }
 }
 

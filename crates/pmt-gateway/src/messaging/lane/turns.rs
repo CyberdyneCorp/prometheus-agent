@@ -30,10 +30,10 @@ pub(crate) const SUSPENDED_NOTICE: &str = "Your previous session was suspended a
 /// A streamed answer being shown as one edited message.
 #[derive(Debug, Default)]
 pub(crate) struct Draft {
-    text: String,
+    pub(super) text: String,
     pub(super) message_id: Option<String>,
-    last_edit: Option<Instant>,
-    failed: bool,
+    pub(super) last_edit: Option<Instant>,
+    pub(super) failed: bool,
 }
 
 impl Lane {
@@ -283,7 +283,9 @@ impl Lane {
                     watch: super::watchdog::Watch::new(Instant::now()),
                     progress: super::progress::Progress::new(Instant::now()),
                     addressed: pending.addressed,
+                    stream: super::native::Stream::default(),
                 });
+                self.working_status(true).await;
             }
             Err(err) => {
                 self.turn_over(&session);
@@ -354,6 +356,8 @@ impl Lane {
         if !ours {
             return;
         }
+        self.stop_stream().await;
+        self.working_status(false).await;
         let Some(mut running) = self.running.take() else {
             return;
         };
@@ -433,16 +437,14 @@ impl Lane {
                 running.speech = Some(speech);
             }
         }
-        let streams = self
-            .config()
-            .is_some_and(|s| s.config().gateway.streams_on(&self.routing.platform))
-            && self
-                .shared
-                .adapters
-                .descriptor(&self.profile, &self.routing.platform)
-                .is_some_and(|d| d.supports_edit);
-        if streams {
-            self.draft(text).await;
+        match self.transport() {
+            super::native::Transport::Native => {
+                if !self.native_delta(text).await {
+                    self.draft(text).await;
+                }
+            }
+            super::native::Transport::Edit => self.draft(text).await,
+            super::native::Transport::Off => {}
         }
     }
 

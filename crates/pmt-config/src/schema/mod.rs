@@ -22,6 +22,7 @@ mod gateway_display;
 mod gateway_groups;
 mod gateway_platform;
 mod gateway_policy;
+mod gateway_routes;
 mod interface;
 mod models;
 mod operations;
@@ -42,13 +43,14 @@ pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
     GatewayBackground, GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay, GatewayGroups,
-    GatewayQuickCommands, GatewaySessions, HomeChannel, MediaConfig, MessageTimestamps,
+    GatewayQuickCommands, GatewaySessions, HomeChannel, McpEvents, MediaConfig, MessageTimestamps,
     NotificationsConfig, OutboxConfig, PhraseMode, PlatformBots, PlatformBusy, PlatformConfig,
     PlatformDisplay, PlatformGroups, PlatformSessions, PlatformStreaming, PolicyChatType,
     PolicyFacts, RateLimitConfig, RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases,
     StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute,
     resolve_policy,
 };
+pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,

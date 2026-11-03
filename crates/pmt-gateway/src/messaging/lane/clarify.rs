@@ -70,6 +70,21 @@ impl Lane {
         if questions.is_empty() {
             return;
         }
+        if self.tier() == Interactive::None {
+            // Nobody can answer here (a webhook route): the question is
+            // answered as unavailable at once instead of waiting it out.
+            let unavailable = pmt_core::error::Error::new(
+                &pmt_core::error::codes::GATEWAY_NO_ADAPTER,
+                "nobody can answer questions in this conversation",
+            );
+            let _ = self.shared.server.hub().resolve(
+                self.shared.conn,
+                &self.shared.peer.client_id,
+                &id,
+                Err(pmt_rpc::RpcError::from_error(&unavailable)),
+            );
+            return;
+        }
         let requester = self
             .running
             .as_ref()

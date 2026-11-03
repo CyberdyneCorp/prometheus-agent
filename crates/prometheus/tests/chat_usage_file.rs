@@ -137,28 +137,31 @@ fn the_usage_file_is_written_on_sigint() {
 /// listeners are installed before the turn is first polled, so from then
 /// on a SIGINT is the run's to handle; a fixed sleep raced process start
 /// on slow runners (the child then died of the signal, without a status).
-/// Under a fully loaded test run the release-less debug binary can take
-/// well over a minute to reach its first turn, so the wait is generous and
-/// a child that exits early fails at once with its output instead.
+/// The store is only read, read-only and once the run created it: opening
+/// it through `Store::open` raced the run creating the same file, which
+/// then refused to write to a database "replaced while it was open". A
+/// child that exits early fails at once with its output.
 #[cfg(unix)]
 fn wait_for_the_turn(home: &Path, child: &mut std::process::Child) {
-    use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+    let db = home.join("profiles/default/state.db");
     let deadline = std::time::Instant::now() + std::time::Duration::from_mins(5);
     let started = || -> Option<bool> {
-        let home = Home::open(home).ok()?;
-        let profile = home
-            .existing_profile(&ProfileName::parse("default").unwrap())
+        if !db.is_file() {
+            return None;
+        }
+        let conn = rusqlite::Connection::open_with_flags(
+            &db,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .ok()?;
+        let users: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM messages WHERE role = 'user'",
+                [],
+                |r| r.get(0),
+            )
             .ok()?;
-        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).ok()?;
-        let store = pmt_store::Store::open(&scope).ok()?;
-        let sessions = store
-            .list_sessions(&pmt_store::ListOptions {
-                all: true,
-                ..pmt_store::ListOptions::default()
-            })
-            .ok()?;
-        let id = sessions.first()?.id;
-        Some(store.active_lineage_messages(id).ok()? > 0)
+        Some(users > 0)
     };
     while started() != Some(true) {
         if let Some(status) = child.try_wait().unwrap() {

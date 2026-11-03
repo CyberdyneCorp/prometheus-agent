@@ -20,8 +20,7 @@ pub const SECRET_NAME: &str = "KIT_WEBHOOK_SECRET";
 /// The signing key.
 pub const SECRET: &str = "kit-signing-key";
 /// The route's table lines.
-pub const TABLE: &str =
-    "routes.kit = { secret_secret = \"KIT_WEBHOOK_SECRET\", prompt = \"{text}\" }";
+pub const TABLE: &str = "routes.kit = { secret_secret = \"KIT_WEBHOOK_SECRET\", deliver = \"log\", prompt = \"{text}\" }";
 
 /// The sender.
 pub struct WebhookSender {

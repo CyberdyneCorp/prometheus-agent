@@ -181,7 +181,10 @@ impl GatewayDisplay {
         let all = self.base();
         let pick =
             |get: fn(&PlatformDisplay) -> Option<bool>| own.and_then(get).or_else(|| get(&all));
-        let progress_default = if platform == "telegram" {
+        // A webhook run's only output is its answer: whatever it sends
+        // goes on to the route's delivery target.
+        let quiet = platform == "webhook";
+        let progress_default = if platform == "telegram" || quiet {
             ChatToolProgress::Off
         } else {
             ChatToolProgress::All
@@ -199,8 +202,8 @@ impl GatewayDisplay {
                 .and_then(|o| o.tool_preview_length)
                 .or(all.tool_preview_length)
                 .unwrap_or(40) as usize,
-            interim_messages: pick(|s| s.interim_assistant_messages).unwrap_or(true),
-            long_running: pick(|s| s.long_running_notifications).unwrap_or(true),
+            interim_messages: pick(|s| s.interim_assistant_messages).unwrap_or(!quiet),
+            long_running: pick(|s| s.long_running_notifications).unwrap_or(!quiet),
             busy_ack_detail: pick(|s| s.busy_ack_detail).unwrap_or(false),
             cleanup_progress: pick(|s| s.cleanup_progress).unwrap_or(false),
             tool_progress_command: pick(|s| s.tool_progress_command).unwrap_or(false),
@@ -251,6 +254,12 @@ mod tests {
         assert_eq!(discord.tool_progress, ChatToolProgress::All);
         assert_eq!(discord.grouping, ToolProgressGrouping::Accumulate);
         assert_eq!(discord.preview_length, 40);
+        let webhook = config.for_platform("webhook");
+        assert_eq!(webhook.tool_progress, ChatToolProgress::Off);
+        assert!(
+            !webhook.interim_messages && !webhook.long_running,
+            "a webhook run sends only its answer on"
+        );
     }
 
     #[test]

@@ -170,15 +170,35 @@ impl Slot {
 pub(crate) struct Adapters {
     slots: RwLock<BTreeMap<(String, String), Arc<Slot>>>,
     failed: RwLock<BTreeMap<(String, String), AdapterStatus>>,
+    /// Adapters lent to a profile that has none of its own for the
+    /// platform: (profile, platform) to the owning profile (shared-
+    /// credential profile routes).
+    lent: RwLock<BTreeMap<(String, String), String>>,
 }
 
 impl Adapters {
     fn slot(&self, profile: &str, platform: &str) -> Option<Arc<Slot>> {
-        self.slots
+        let key = (profile.to_owned(), platform.to_owned());
+        let slots = self.slots.read().expect("adapters poisoned");
+        if let Some(slot) = slots.get(&key) {
+            return Some(Arc::clone(slot));
+        }
+        let owner = self
+            .lent
             .read()
             .expect("adapters poisoned")
-            .get(&(profile.to_owned(), platform.to_owned()))
-            .cloned()
+            .get(&key)
+            .cloned()?;
+        slots.get(&(owner, platform.to_owned())).cloned()
+    }
+
+    /// Lends `owner`'s `platform` adapter to `profile` (which then sends
+    /// through it while it has no adapter of its own).
+    pub(crate) fn lend(&self, profile: &str, platform: &str, owner: &str) {
+        self.lent
+            .write()
+            .expect("adapters poisoned")
+            .insert((profile.to_owned(), platform.to_owned()), owner.to_owned());
     }
 
     /// Whether the relay carries `platform` for `profile` (`None`: no
@@ -812,6 +832,19 @@ impl AdapterLink for Link {
                 .enqueue(&self.profile, &resolved, text, &[])
                 .map(|_| resolved.label())
                 .map_err(|e| e.message().to_owned())
+        })
+    }
+
+    fn mirror<'a>(&'a self, target: &'a str, text: &'a str) -> AdapterFuture<'a, ()> {
+        Box::pin(async move {
+            let Some(shared) = self.shared.upgrade() else {
+                return;
+            };
+            let gateway = super::Gateway { shared };
+            match gateway.resolve_target(&self.profile, target).await {
+                Ok(resolved) => gateway.mirror(&self.profile, &resolved, text, None),
+                Err(err) => tracing::warn!("not mirrored to {target}: {}", err.message()),
+            }
         })
     }
 

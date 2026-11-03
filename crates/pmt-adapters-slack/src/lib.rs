@@ -17,6 +17,7 @@ pub mod mock;
 mod normalize;
 mod slash;
 mod socket;
+mod stream;
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -31,7 +32,7 @@ use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, ChatType, Descriptor, HistoryEntry, Inbound, Interactive, Markup, MediaKind,
-    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, Sent,
+    MediaStream, MenuCommand, Outgoing, Reaction, Select, SendError, Sent, TaskCard,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -286,6 +287,9 @@ impl Adapter for Slack {
             stateless_send: true,
             exposes_roles: true,
             can_fetch_history: true,
+            native_stream: true,
+            task_cards: true,
+            status_line: true,
             ..Descriptor::new(PLATFORM, limit)
         }
     }
@@ -451,6 +455,48 @@ impl Adapter for Slack {
 
     fn credential_identity(&self) -> Option<String> {
         credential(&self.scope, &self.bot_secret).ok()
+    }
+
+    fn stream_start<'a>(
+        &'a self,
+        message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        Box::pin(async move { stream::start(&self.api()?, message).await })
+    }
+
+    fn stream_append<'a>(
+        &'a self,
+        chat_id: &'a str,
+        message_id: &'a str,
+        text: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move { stream::append(&self.api()?, chat_id, message_id, text).await })
+    }
+
+    fn stream_task<'a>(
+        &'a self,
+        chat_id: &'a str,
+        message_id: &'a str,
+        task: &'a TaskCard,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move { stream::task(&self.api()?, chat_id, message_id, task).await })
+    }
+
+    fn stream_stop<'a>(
+        &'a self,
+        chat_id: &'a str,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move { stream::stop(&self.api()?, chat_id, message_id).await })
+    }
+
+    fn set_status<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        status: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move { stream::status(&self.api()?, chat_id, thread_id, status).await })
     }
 
     fn open_thread<'a>(

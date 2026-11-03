@@ -207,8 +207,30 @@ The other first-party adapters:
   `insecure_no_auth = true`, which only a loopback listener allows.
   `events` limits the accepted event types and `prompt` renders the turn's
   input from the payload (`{pull_request.title}`, `{__raw__}`). Each
-  delivery runs as its own conversation; replies are recorded in
-  `<profile>/logs/webhook/<route>.jsonl`.
+  delivery runs as its own conversation, with the read-only
+  `webhook-safe` toolset ([`web_search`](../reference/tools.md#web_search), [`web_extract`](../reference/tools.md#web_extract), [`vision_analyze`](../reference/tools.md#vision_analyze),
+  and [`clarify`](../reference/tools.md#clarify), which is answered as unavailable since nobody can reply)
+  unless the route lists `toolsets` (only ones the profile enables; no
+  terminal, file, browser or code execution by default). Where the answer
+  goes is `deliver`:
+  - `origin` (the default): the HTTP caller waits up to
+    `origin_wait_secs` (30) and gets 200
+    `{"status":"completed",...,"answer":"..."}`; a longer run is answered
+    202 `accepted` and its answer goes to the log;
+  - `log`: recorded in `<profile>/logs/webhook/<route>.jsonl` (202 at
+    once);
+  - `github_comment`: a comment on the payload's pull request or issue,
+    posted with the token in `github_token_secret`
+    (`options.github_api_url` for GitHub Enterprise);
+  - a send target `platform[:chat_id[:thread_id]]` of the profile.
+
+  `deliver_extra` targets get a copy, and `mirror_to_session = true`
+  appends the delivered text to each target chat's session as
+  `[Webhook delivery: <route>]` (an attributed assistant message). With
+  `[gateway.mcp_events] enabled = true` (experimental, off by default)
+  notifications of MCP servers that declare an `events` route arrive on
+  that route as internal events the gateway vouches for (no HTTP, no
+  signature), with the same filters, delivery and toolsets.
 
 ```toml
 [gateway.platforms.webhook.routes.ci]
@@ -596,6 +618,64 @@ looks for a release.
   next message written there continues the session. The client then exits
   0 printing `continued on <platform>; resume locally with prometheus chat
   --resume <session-id>`. Refused while a turn runs.
+
+### Streaming, task cards and the working status
+
+`[gateway.streaming] transport` picks how an answer streams: `auto` (the
+default) uses the platform's own streaming API where the adapter has one
+(Slack's `chat.startStream`), otherwise one message edited as the answer
+grows (`edit`; `draft` also edits until a platform offers drafts), and
+`off` sends only the final answer. A native stream that fails mid-turn
+is stopped and the same message is edited from then on, so the answer
+appears exactly once. Where the adapter shows task cards (Slack), tool
+calls appear as cards in the stream, updated as they finish, instead of
+progress bubbles (unless `tool_progress = "off"`); where it has a working
+status line (Slack assistant threads) the thread shows "is thinking…"
+while the turn runs, if `typing_indicator` is on for the platform.
+
+### One bot for several profiles
+
+A profile whose adapter holds the credential can route matching events
+to another served profile:
+
+```toml
+# profiles/default/config.toml: the bot's profile
+[[gateway.profile_routes]]
+name = "acme"
+platform = "discord"
+guild_id = "123"          # also chat_id, thread_id, user_id
+profile = "acme"
+
+# profiles/acme/config.toml: the target must opt in
+[gateway]
+accept_routes_from = ["default"]
+```
+
+The most specific route wins (`user_id` 16, `thread_id` 8, `chat_id` 4,
+`guild_id` 2; every field set must match; ties keep declaration order; a
+channel route also covers its threads). The receiving profile authorizes
+the event; then the target's session keys (`acme:discord@123:...`),
+config, memory and toolsets apply, and the reply leaves through the
+receiving profile's bot. Unmatched events stay. Validation refuses an
+empty id (`user_id = ""` would widen the route) and a target whose
+`accept_routes_from` does not name the receiving profile.
+
+### Concurrency caps
+
+`daemon.toml` bounds what runs at once across every profile and surface:
+
+```toml
+[gateway.limits]
+max_concurrent_sessions = 4     # turns running at once; 0 = unbounded (default)
+max_live_client_sessions = 16   # detached TUI/desktop/dashboard sessions kept loaded
+```
+
+A turn beyond `max_concurrent_sessions` waits first in, first out and its
+chat (or terminal) is told `Waiting for a free slot (<n> ahead)`; it
+starts when a running turn ends. Detached client sessions beyond
+`max_live_client_sessions` are unloaded, least recently attended first
+(never one with a running turn or an attached client), and resumed from
+storage when reopened.
 
 ## Home channels and one-shot sends
 

@@ -17,6 +17,8 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.rpc.workers` | integer | `8` | 1 to 256 | `restart` | Requests run concurrently per connection; `rpc.ping` never waits for one. |
 | `gateway.http.listen` | string | `"127.0.0.1:8644"` | any | `restart` | Where every webhook-style adapter is served, at `/p/<profile>/<platform>/`. |
 | `gateway.http.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
+| `gateway.limits.max_concurrent_sessions` | integer | `0` | ≥ 0 | `restart` | Sessions with a running turn at once, across every profile and surface; further turns wait first in, first out ("Waiting for a free slot"). `0`: unbounded. |
+| `gateway.limits.max_live_client_sessions` | integer | `16` | ≥ 0 | `restart` | Detached TUI, desktop and dashboard sessions kept loaded; the least recently active beyond it are unloaded (never one running a turn or with a client attached) and resumed from storage when reopened. `0`: no cap. |
 | `gateway.on_all_adapters_down` | one of "stay_alive", "exit" | `"stay_alive"` | `"stay_alive"`, `"exit"` | `restart` | What the daemon does once every messaging adapter failed for good: keep serving local clients and schedulers, or exit 78. |
 | `gateway.relay.allow_direct_platforms` | array of string | `[]` | any | `restart` | Platforms the relay fronts whose direct adapters still connect. |
 | `gateway.relay.gateway_id` | string | unset | any | `restart` | This gateway's id at the connector. |

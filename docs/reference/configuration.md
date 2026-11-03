@@ -139,6 +139,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `gateway.accept_routes_from` | array of string | `[]` | any | `live` | Profiles whose `profile_routes` may route events to this one. |
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
 | `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
@@ -200,6 +201,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.groups.platforms.<name>.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
 | `gateway.groups.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
 | `gateway.groups.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
+| `gateway.mcp_events.enabled` | boolean | `false` | any | `live` | Admit notifications of configured MCP servers that declare an `events` webhook route as signed internal events on that route (same delivery and toolset rules as a webhook request). |
 | `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
 | `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
 | `gateway.message_timestamps.enabled` | boolean | `false` | any | `next_session` | Prefix each user message the model sees with its send time in the profile's time zone (`[Tue 2026-04-28 13:40:53 CEST]`). Frozen per session when it is created: a change applies to new sessions. |
@@ -237,19 +239,22 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.reactions` | boolean | unset | any | `next_session` | Mark the triggering message with processing reactions (eyes, then a check mark or a cross). Unset: on for Discord and Slack, off elsewhere. |
 | `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
 | `gateway.platforms.<name>.restart_notification` | boolean | unset | any | `next_session` | Post one notice to this platform's home channel after a graceful restart or update that interrupted running turns (default true). |
-| `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `origin`, `github_comment` or a send target `platform[:chat_id[:thread_id]]`. Unset: `log`. |
+| `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `origin` (the HTTP caller's response), `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `github_comment` (a comment on the payload's pull request or issue) or a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`. |
 | `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
 | `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |
 | `gateway.platforms.<name>.routes.<name>.events` | array of string | `[]` | any | `next_session` | Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the payload's `event_type`); empty admits every event. |
 | `gateway.platforms.<name>.routes.<name>.filters` | any or array of any | unset | any | `next_session` | Conditions a payload must meet; a request that fails them is answered `ignored` with reason `filter`. |
+| `gateway.platforms.<name>.routes.<name>.github_token_secret` | string | unset | a secret name | `next_session` | The secret holding the GitHub token `github_comment` posts with. |
 | `gateway.platforms.<name>.routes.<name>.insecure_no_auth` | boolean | `false` | any | `next_session` | Admit unsigned requests (only while `gateway.http.listen` is a loopback address). |
+| `gateway.platforms.<name>.routes.<name>.mirror_to_session` | boolean | `false` | any | `next_session` | Append the delivered answer to each send target's chat session as an attributed assistant message. |
+| `gateway.platforms.<name>.routes.<name>.origin_wait_secs` | integer | `30` | 1 to 600 | `next_session` | With `deliver = "origin"`: seconds the HTTP caller is kept waiting for the answer; a run taking longer is answered 202 `accepted` and its answer goes to the route's log. |
 | `gateway.platforms.<name>.routes.<name>.prompt` | string | unset | any | `next_session` | The turn's input: `{a.b.c}` paths into the payload, `{__raw__}` the whole payload. Unset: the payload as JSON. |
 | `gateway.platforms.<name>.routes.<name>.rate_limit_per_min` | integer | `30` | 1 to 100000 | `next_session` | Requests per minute the route admits (fixed window); more are answered 429. |
 | `gateway.platforms.<name>.routes.<name>.script` | string | unset | any | `next_session` | A transform script under the profile's `scripts/` directory, run in the sandbox with the payload JSON on stdin. |
 | `gateway.platforms.<name>.routes.<name>.script_timeout_secs` | integer | `30` | 1 to 3600 | `next_session` | Seconds the transform script may run. |
 | `gateway.platforms.<name>.routes.<name>.secret_secret` | string | unset | a secret name | `next_session` | The secret every request must be signed with (GitHub, GitLab, Standard Webhooks or the generic scheme). |
 | `gateway.platforms.<name>.routes.<name>.skills` | array of string | unset | any | `next_session` | Skills preloaded into each delivery's session (ignored with `deliver_only`). |
-| `gateway.platforms.<name>.routes.<name>.toolsets` | array | unset | any | `next_session` | Toolsets of each delivery's session, replacing the default webhook toolset rather than adding to it. |
+| `gateway.platforms.<name>.routes.<name>.toolsets` | array | unset | any | `next_session` | Toolsets of each delivery's session, replacing the default read-only `webhook-safe` toolset rather than adding to it; only toolsets the profile enables. |
 | `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
 | `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
 | `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |
@@ -257,6 +262,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.typing_indicator` | boolean | unset | any | `next_session` | Show the platform's typing indicator while a turn runs. Unset: `true`. |
 | `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
 | `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
+| `gateway.profile_routes` | array of table | `[]` | any | `live` | Events this profile's adapters receive that belong to another served profile (one shared bot, several communities); the target must list this profile in its `accept_routes_from`. |
 | `gateway.proxy_url` | string | unset | any | `restart` | The proxy every adapter without its own `proxy_url` uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). |
 | `gateway.proxy_url_secret` | string | unset | a secret name | `restart` | The secret holding the shared proxy URL when it carries credentials. |
 | `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
@@ -277,7 +283,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.streaming.cursor` | string | `" ▉"` | any | `live` | Shown at the end of a draft still being written. |
 | `gateway.streaming.edit_interval_ms` | integer | `800` | 100 to 60000 | `live` | Least time between two edits of a draft. |
 | `gateway.streaming.enabled` | boolean | `false` | any | `live` | Stream answers while they are written. A platform can turn it off for itself, never on when this is off. |
-| `gateway.streaming.transport` | one of "auto", "draft", "edit", "off" | `"auto"` | `"auto"`, `"draft"`, `"edit"`, `"off"` | `live` | How a streamed draft reaches the platform. |
+| `gateway.streaming.transport` | one of "auto", "native", "draft", "edit", "off" | `"auto"` | `"auto"`, `"native"`, `"draft"`, `"edit"`, `"off"` | `live` | How a streamed draft reaches the platform. |
 | `gateway.trust_env` | boolean | `false` | any | `restart` | Honour inherited proxy environment variables (`HTTPS_PROXY`, ...) and the OS proxy settings when no proxy is configured; off, adapters connect directly. |
 | `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
 | `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |

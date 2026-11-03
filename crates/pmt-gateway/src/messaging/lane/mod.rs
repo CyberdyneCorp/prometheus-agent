@@ -20,6 +20,7 @@ mod history;
 mod input;
 mod lifecycle;
 mod models;
+mod native;
 mod observe;
 mod pages;
 mod progress;
@@ -209,6 +210,8 @@ struct Running {
     progress: progress::Progress,
     /// The input was addressed to the bot.
     addressed: bool,
+    /// The platform's native stream of the answer, if one is used.
+    stream: native::Stream,
 }
 
 /// A transition run once the stopped turn has ended.
