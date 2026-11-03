@@ -39,8 +39,12 @@ error: --ref must be a full commit SHA
 Every install and update scans each plugin file in full with the skills
 guard's threat patterns (reverse shells, credential exfiltration,
 destructive commands, persistence, obfuscated execution, prompt
-injection); files that are not UTF-8 text are binary and skipped, and a
-text line longer than 8 MiB fails the scan. A finding
+injection), and a line longer than 8 MiB fails the scan. A file that is
+not wholly UTF-8 is scanned too, its invalid bytes read as U+FFFD, since a
+shell still runs the lines around a stray byte; none of its lines counts
+as a comment. A finding inside a WebAssembly module (a file starting with
+`\0asm`) is data the sandboxed plugin holds, so it is lowered one step
+like a fixture's, but still reported. A finding
 in documentation, a changelog, a test fixture or a line that is entirely a
 comment in the file's own language (judged by its extension: `#` in shell
 and Python, `//` or a closed `/* */` with nothing after it in JavaScript,
