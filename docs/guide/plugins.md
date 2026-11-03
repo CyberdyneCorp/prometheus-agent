@@ -39,8 +39,11 @@ error: --ref must be a full commit SHA
 Every install and update scans the plugin's files with the skills guard's
 threat patterns (reverse shells, credential exfiltration, destructive
 commands, persistence, obfuscated execution, prompt injection). A finding
-in documentation, a comment line, a changelog or a test fixture counts one
-step lower; bundled skills keep full weight. `dangerous` is refused (exit
+in documentation, a changelog, a test fixture or a line that is entirely a
+comment in the file's own language (judged by its extension: `#` in shell
+and Python, `//` or a closed `/* */` with nothing after it in JavaScript,
+Rust and Go; files of unknown language have no comments) counts one step
+lower; bundled skills keep full weight. `dangerous` is refused (exit
 77, naming each finding, file and line) even with `--force`; `caution`
 installs after a yes on the terminal or with `--force` (recorded on the
 install record); a scan that fails refuses the install. A dangerous update

