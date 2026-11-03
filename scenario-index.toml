@@ -2151,3 +2151,23 @@ capabilities = [
 
 [plugin-system."Platform actions"]
 "Ungranted verb returns structured error" = ["crates/pmt-plugins/tests/surfaces.rs::an_ungranted_platform_verb_returns_a_structured_error_without_an_adapter_call"]
+
+# Group 30: toolset surfaces and schema variants (tasks 30.1-30.2).
+
+[tool-system."Per-surface default toolsets"]
+"Cron override" = { tests = ["crates/pmt-tools/tests/surfaces.rs::cron_override", "crates/prometheus/tests/tools_surfaces_cli.rs::the_summary_lists_each_surfaces_toolsets_providers_and_unavailable_tools"], note = "cron job execution lands with task group 41; its sessions (source cron) resolve the `cron` surface through `chat::session::tools::surface_of`, so the surface resolution is what is proven here" }
+"Webhook payload cannot execute" = ["crates/pmt-tools/tests/surfaces.rs::webhook_payload_cannot_execute", "crates/prometheus/tests/gateway_webhooks.rs::a_route_without_toolsets_runs_read_only_and_answers_the_caller"]
+
+[tool-system."Platform bundles"]
+"Feishu tools stay on Feishu" = { tests = ["crates/pmt-tools/tests/surfaces.rs::feishu_tools_stay_on_feishu"], note = "the Feishu adapter and its tools are M3 (task 78.5); the bundle mechanism is proven with test toolsets `feishu_doc`/`feishu_drive` registered for platform `feishu`" }
+"Plugin platform bundle" = ["crates/pmt-tools/tests/surfaces.rs::plugin_platform_bundle"]
+
+[tool-system."Disabling a bundle never strips core"]
+"Disable the Discord bundle" = { tests = ["crates/pmt-tools/tests/surfaces.rs::disable_the_discord_bundle"], note = "the Discord tools are M3 (task 78.7); a `discord` toolset registered by the adapter's owner stands in for them" }
+
+[tool-system."Tool configuration summary and post-setup"]
+"Browser needs a runtime" = ["crates/prometheus/src/tools_cmd/setup/tests.rs::the_browser_runtime_is_installed_and_the_tools_become_available", "crates/prometheus/tests/tools_surfaces_cli.rs::post_setup_installs_the_browser_runtime_only_after_confirmation"]
+
+[tool-system."Model-dependent schema variants"]
+"Variant frozen for the session" = ["crates/prometheus/tests/chat_model_switch.rs::a_model_switch_keeps_the_frozen_patch_variant", "crates/pmt-tools/tests/file_tools/variants.rs::patch_advertises_v4a_only_to_openai_family_routes"]
+"Handler accepts any variant" = ["crates/pmt-tools/tests/file_tools/variants.rs::handler_accepts_any_variant"]

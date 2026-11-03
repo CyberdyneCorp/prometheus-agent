@@ -14,6 +14,23 @@ use pmt_core::registry::Registry;
 
 use crate::descriptor::Owner;
 
+/// How a toolset is built on `core` (spec: tool-system, Platform
+/// bundles; Disabling a bundle never strips core). Disabling a toolset
+/// built on `core` removes only its members that are not in `core`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Composition {
+    /// Its members are what it lists and includes.
+    Plain,
+    /// Built on `core` (`api_server`).
+    OnCore,
+    /// The bundle of this messaging platform: its members also include
+    /// the platform's own toolsets registered when it is expanded.
+    Platform(String),
+    /// `gateway`: its members also include every platform bundle
+    /// registered when it is expanded.
+    Gateway,
+}
+
 /// One toolset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Toolset {
@@ -31,6 +48,8 @@ pub struct Toolset {
     pub posture: bool,
     /// Folded in only from the session's surface; never part of `all`.
     pub surface_gated: bool,
+    /// How it is built on `core`.
+    pub composition: Composition,
     /// Who registered it.
     pub owner: Owner,
 }
@@ -47,8 +66,25 @@ impl Toolset {
             default_off: false,
             posture: false,
             surface_gated: false,
+            composition: Composition::Plain,
             owner: Owner::Builtin,
         }
+    }
+
+    /// The bundle `platform-<platform>`: `core` plus the platform's own
+    /// toolsets ([`platform_toolsets`]); folded in only from that
+    /// platform's sessions.
+    #[must_use]
+    pub fn bundle(platform: &str) -> Self {
+        let mut set = Self::new(
+            &bundle_name(platform),
+            &format!("The core tools plus those of the {platform} platform"),
+            &[],
+        )
+        .including(&["core"]);
+        set.surface_gated = true;
+        set.composition = Composition::Platform(platform.to_owned());
+        set
     }
 
     /// Adds includes.
@@ -104,6 +140,45 @@ pub const CORE: &[&str] = &[
     "manage_connections",
 ];
 
+/// The prefix of platform bundle names.
+pub const BUNDLE_PREFIX: &str = "platform-";
+
+/// The union of every platform bundle.
+pub const GATEWAY: &str = "gateway";
+
+/// The bundle name of `platform`: `platform-<platform>`.
+#[must_use]
+pub fn bundle_name(platform: &str) -> String {
+    format!("{BUNDLE_PREFIX}{platform}")
+}
+
+/// The toolsets a platform contributes to its bundle, when registered:
+/// Feishu's document and drive toolsets, otherwise the toolset named
+/// after the platform (`discord`, `yuanbao`, a plugin platform's own
+/// toolset). `discord_admin` is never part of a bundle: it is named
+/// explicitly.
+#[must_use]
+pub fn platform_toolsets(platform: &str) -> Vec<String> {
+    match platform {
+        "feishu" => vec!["feishu_doc".to_owned(), "feishu_drive".to_owned()],
+        other => vec![other.to_owned()],
+    }
+}
+
+/// The first-party messaging platforms with a bundle. The webhook
+/// platform has none: its sessions start from `webhook-safe`.
+pub const BUNDLED_PLATFORMS: &[&str] = &[
+    "telegram", "discord", "slack", "email", "matrix", "signal", "whatsapp",
+];
+
+/// `core` tools the `api_server` toolset leaves out (no one is there to
+/// answer, hear or watch).
+const NOT_API: &[&str] = &["text_to_speech", "clarify", "computer_use"];
+
+/// Tools unattended ACP sessions leave out: shell, processes and code
+/// execution.
+const NOT_ACP_UNATTENDED: &[&str] = &["terminal", "process", "execute_code", "browser_exec"];
+
 /// `core` tools the `coding` posture leaves out.
 const NOT_CODING: &[&str] = &[
     "image_generate",
@@ -126,7 +201,7 @@ pub fn builtin() -> Vec<Toolset> {
         &coding,
     );
     coding.posture = true;
-    vec![
+    let mut sets = vec![
         Toolset::new("core", "The default tool set of every surface", CORE),
         Toolset::new(
             "web",
@@ -214,7 +289,60 @@ pub fn builtin() -> Vec<Toolset> {
             &["web_search", "web_extract", "vision_analyze", "clarify"],
         ),
         coding,
-    ]
+    ];
+    sets.extend(surface_defaults());
+    sets
+}
+
+/// The defaults of surfaces other than the CLI's (spec: tool-system,
+/// Per-surface default toolsets; Platform bundles): `acp`,
+/// `acp_unattended`, `api_server`, `gateway` and the platform bundles.
+fn surface_defaults() -> Vec<Toolset> {
+    let acp_unattended: Vec<&str> = CORE
+        .iter()
+        .copied()
+        .filter(|t| !NOT_CODING.contains(t) && !NOT_ACP_UNATTENDED.contains(t))
+        .collect();
+    let mut sets = vec![
+        Toolset::new("acp", "The coding tools for ACP editor sessions", &[]).including(&["coding"]),
+        Toolset::new(
+            "acp_unattended",
+            "ACP tools for clients that cannot answer prompts: no shell or code execution",
+            &acp_unattended,
+        ),
+        api_server(),
+        gateway(),
+    ];
+    sets.extend(BUNDLED_PLATFORMS.iter().map(|p| Toolset::bundle(p)));
+    sets
+}
+
+/// `api_server`: `core` without the tools that need a person present.
+fn api_server() -> Toolset {
+    let tools: Vec<&str> = CORE
+        .iter()
+        .copied()
+        .filter(|t| !NOT_API.contains(t))
+        .collect();
+    let mut set = Toolset::new(
+        "api_server",
+        "The core tools without speech, clarify and computer use, for API server callers",
+        &tools,
+    );
+    set.composition = Composition::OnCore;
+    set
+}
+
+/// `gateway`: every platform bundle.
+fn gateway() -> Toolset {
+    let mut set = Toolset::new(
+        GATEWAY,
+        "Every messaging platform bundle: core plus each platform's tools",
+        &[],
+    );
+    set.surface_gated = true;
+    set.composition = Composition::Gateway;
+    set
 }
 
 /// Every tool name the shipped toolsets refer to, each once, in toolset

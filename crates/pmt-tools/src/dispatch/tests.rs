@@ -130,6 +130,7 @@ pub(super) async fn harness(tools: Vec<RegisteredTool>, options: Options) -> Har
         capabilities: &options.capabilities,
         config: &Config::default(),
         probes: &ProbeCache::new(),
+        route: &crate::variants::RouteTraits::default(),
     })
     .await;
     let profile = tempfile::tempdir().unwrap();

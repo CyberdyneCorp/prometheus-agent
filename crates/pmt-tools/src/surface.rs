@@ -26,6 +26,7 @@ use crate::descriptor::{ExposedNames, RegisteredTool};
 use crate::probe::{ProbeCache, ProbeContext};
 use crate::registry::ToolRegistry;
 use crate::selection::Selection;
+use crate::variants::RouteTraits;
 
 /// Why a registered tool is not exposed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +79,8 @@ pub struct SurfaceInputs<'a> {
     pub config: &'a Config,
     /// The process-wide probe cache.
     pub probes: &'a ProbeCache,
+    /// The session's main route, which picks schema variants.
+    pub route: &'a RouteTraits,
 }
 
 /// The frozen tool surface of one session.
@@ -89,6 +92,7 @@ pub struct ToolSurface {
     serialized: Arc<str>,
     excluded: BTreeMap<String, Exclusion>,
     posture: bool,
+    variants: BTreeMap<String, &'static str>,
 }
 
 impl ToolSurface {
@@ -127,13 +131,7 @@ impl ToolSurface {
             .map(|(i, name)| (name.as_str(), i))
             .collect();
         candidates.sort_by_key(|tool| position.get(tool.name()).copied().unwrap_or(usize::MAX));
-        Self::freeze(
-            registry,
-            candidates,
-            excluded,
-            selection.posture,
-            inputs.config,
-        )
+        Self::freeze(registry, candidates, excluded, selection.posture, inputs)
     }
 
     fn freeze(
@@ -141,22 +139,27 @@ impl ToolSurface {
         tools: Vec<Arc<RegisteredTool>>,
         excluded: BTreeMap<String, Exclusion>,
         posture: bool,
-        config: &Config,
+        inputs: SurfaceInputs<'_>,
     ) -> Self {
         let exposed: ExposedNames = tools.iter().map(|t| t.name().to_owned()).collect();
         let absent: BTreeSet<&str> = excluded.keys().map(String::as_str).collect();
+        let mut variants = BTreeMap::new();
         let definitions: Vec<ToolDefinition> = tools
             .iter()
             .map(|tool| {
+                let advertised = tool.advertised(inputs.config, inputs.route);
+                if let Some(variant) = advertised.variant {
+                    variants.insert(tool.name().to_owned(), variant);
+                }
                 let description = match &tool.rewriter {
-                    Some(rewrite) => rewrite(&tool.descriptor.description, &exposed),
-                    None => tool.descriptor.description.clone(),
+                    Some(rewrite) => rewrite(&advertised.description, &exposed),
+                    None => advertised.description,
                 };
                 warn_on_absent_names(tool.name(), &description, &absent);
                 ToolDefinition {
                     name: tool.name().to_owned(),
                     description,
-                    parameters: tool.parameters_for(config),
+                    parameters: advertised.parameters,
                 }
             })
             .collect();
@@ -170,7 +173,15 @@ impl ToolSurface {
             serialized,
             excluded,
             posture,
+            variants,
         }
+    }
+
+    /// The schema variant `tool` advertises in this surface (`None`: it is
+    /// not exposed or has no variants).
+    #[must_use]
+    pub fn variant(&self, tool: &str) -> Option<&'static str> {
+        self.variants.get(tool).copied()
     }
 
     /// The registry generation the surface was built from.

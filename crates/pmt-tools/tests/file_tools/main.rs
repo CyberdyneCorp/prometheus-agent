@@ -8,4 +8,5 @@ mod read;
 mod search;
 mod stores;
 mod support;
+mod variants;
 mod write;

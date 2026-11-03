@@ -1,3 +1,12 @@
+  acp  (23 tools)
+    The coding tools for ACP editor sessions
+    includes: coding
+  acp_unattended  (19 tools)
+    ACP tools for clients that cannot answer prompts: no shell or code execution
+    tools: web_search, web_extract, read_file, write_file, patch, search_files, vision_analyze, skills_list, skill_view, skill_manage, browser_cdp, browser_dialog, browser_vault, todo, memory, session_search, clarify, delegate_task, manage_connections
+  api_server  (24 tools)
+    The core tools without speech, clarify and computer use, for API server callers
+    tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, todo, memory, session_search, execute_code, delegate_task, cronjob, manage_connections
   browser  (4 tools)
     Browser automation
     tools: browser_exec, browser_cdp, browser_dialog, browser_vault
@@ -34,6 +43,8 @@
   file  (4 tools)
     Read, write, patch and search files
     tools: read_file, write_file, patch, search_files
+  gateway  (27 tools)
+    Every messaging platform bundle: core plus each platform's tools
   image_gen  (1 tool)
     Image generation
     tools: image_generate
@@ -45,6 +56,27 @@
   messaging  (1 tool)
     Send messages and reactions to messaging chats (needs the gateway daemon)
     tools: send_message
+  platform-discord  (27 tools)
+    The core tools plus those of the discord platform
+    includes: core
+  platform-email  (27 tools)
+    The core tools plus those of the email platform
+    includes: core
+  platform-matrix  (27 tools)
+    The core tools plus those of the matrix platform
+    includes: core
+  platform-signal  (27 tools)
+    The core tools plus those of the signal platform
+    includes: core
+  platform-slack  (27 tools)
+    The core tools plus those of the slack platform
+    includes: core
+  platform-telegram  (27 tools)
+    The core tools plus those of the telegram platform
+    includes: core
+  platform-whatsapp  (27 tools)
+    The core tools plus those of the whatsapp platform
+    includes: core
   process  (1 tool)
     Background process management
     tools: process

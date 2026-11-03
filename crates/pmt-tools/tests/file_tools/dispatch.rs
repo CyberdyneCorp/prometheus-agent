@@ -16,7 +16,7 @@ use serde_json::json;
 use crate::support::{Fixture, body};
 
 #[path = "../common/dispatcher.rs"]
-mod common;
+pub(crate) mod common;
 
 #[tokio::test]
 async fn an_edit_after_an_out_of_band_change_is_refused_through_the_dispatcher() {

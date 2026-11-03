@@ -43,6 +43,74 @@ $ prometheus config validate
 <...>config.toml is valid
 ```
 
+## Toolsets per surface
+
+Each kind of session starts from its own surface's toolsets:
+`toolsets.surfaces.<surface>` when set, otherwise `tools.enabled_toolsets`
+where `core` stands for the surface's built-in default:
+
+| Surface | Key | Built-in default |
+|---|---|---|
+| line chat and one-shot runs | `cli` | `core` |
+| terminal UI | `tui` | `core` |
+| desktop app | `desktop` | `core` |
+| scheduled jobs | `cron` | `core` |
+| API server | `api` | `api_server` (`core` without [`text_to_speech`](../reference/tools.md#text_to_speech), [`clarify`](../reference/tools.md#clarify), [`computer_use`](../reference/tools.md#computer_use)) |
+| ACP editors | `acp`, `acp_unattended` | `acp` (the `coding` tools), `acp_unattended` (no shell or code execution) |
+| a messaging platform | `gateway.<platform>` | `platform-<platform>` |
+| webhook-triggered runs | `gateway.webhook` | `webhook-safe` |
+
+```toml
+[toolsets.surfaces]
+cron = ["web", "file"]
+
+[toolsets.surfaces.gateway]
+telegram = ["platform-telegram", "x_search"]
+```
+
+`tools.disabled_toolsets` is still subtracted last on every surface. A
+webhook-triggered run never falls back to `tools.enabled_toolsets`: its
+payload comes from outside, so it gets `webhook-safe` ([`web_search`](../reference/tools.md#web_search),
+[`web_extract`](../reference/tools.md#web_extract), [`vision_analyze`](../reference/tools.md#vision_analyze), [`clarify`](../reference/tools.md#clarify)) unless
+`toolsets.surfaces.gateway.webhook` or the route names toolsets. An unknown
+surface key fails validation with exit 78.
+
+Every messaging platform has a bundle `platform-<platform>`: `core` plus
+that platform's own tools (`discord` for Discord, `feishu_doc` and
+`feishu_drive` for Feishu, a plugin platform's toolset named after it), so
+platform tools appear only in that platform's chats; `discord_admin` is
+never in a bundle and is enabled by naming it. `gateway` is every bundle.
+Disabling a toolset built on `core` (a bundle, `gateway`, `api_server`)
+removes only its tools outside `core`: `disabled_toolsets =
+["platform-discord"]` drops the Discord tools and keeps
+[`terminal`](../reference/tools.md#terminal).
+Disabling `core` itself or a single-purpose toolset removes all of its
+tools. A toolset an enabled plugin registers joins every session except
+webhook-triggered runs; one named after a messaging platform joins only
+that platform's sessions, through its bundle.
+
+`prometheus tools summary` prints, per surface, the toolsets its sessions
+start from, the provider of each tool category they use and every selected
+tool that is not available, with its reason (`--json` for a document).
+`prometheus tools post-setup <toolset>` runs the setup a toolset still
+needs: for `browser` (or a toolset including it, such as `core`) it
+installs the pinned browser engine (and the Python that
+[`browser_exec`](../reference/tools.md#browser_exec) runs, when the host has none) from the managed runtime store after asking,
+with the same digest checks as `prometheus runtimes install`; without a
+terminal it needs `--yes` and otherwise exits 4. For web search it points to
+the backend to configure. `prometheus tools configure` offers the install
+when you enable a toolset whose runtime is missing.
+
+```console
+$ prometheus tools summary
+cli: toolsets core, x_search
+gateway.webhook: toolsets webhook-safe
+$ prometheus tools post-setup file
+toolset file: setup complete
+$ prometheus tools post-setup fiel   # exits 2
+error: unknown toolset 'fiel' (did you mean 'file'?)
+```
+
 The [tools reference](../reference/tools.md) lists every shipped toolset
 and tool name. To see them in your profile:
 
@@ -90,6 +158,15 @@ The tool list is fixed when a session starts and sent unchanged on every
 model call, which keeps the provider's prompt cache valid. Toolset, plugin,
 credential and config changes apply from the next session (or a compaction
 or explicit `--now` reload).
+
+Some tools describe themselves differently for different models, chosen
+from the session's main route when the list is fixed: [`patch`](../reference/tools.md#patch) offers its
+V4A multi-file mode (`mode = "v4a"` with the patch text) only to OpenAI-family models
+(GPT, o-series, Codex) and the replace-only form to others, and
+[`read_file`](../reference/tools.md#read_file) mentions scanned PDF pages only when hosted OCR is reachable.
+Switching models with `/model` keeps the variant until the next session
+(or a `--now` rebuild), and a tool accepts the arguments of every variant,
+so a resumed session's earlier V4A call still runs.
 
 ## How a call runs
 

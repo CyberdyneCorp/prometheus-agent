@@ -42,6 +42,7 @@ pub mod spillover;
 pub mod surface;
 pub mod terminal;
 pub mod toolset;
+pub mod variants;
 pub mod vision;
 pub mod web;
 
@@ -55,7 +56,7 @@ pub use descriptor::{
 pub use dispatch::{DispatchSetup, Dispatcher, ToolCall};
 pub use registry::{Builtins, ToolRegistry};
 pub use result::{Content, Status, ToolResult};
-pub use selection::Selection;
+pub use selection::{Selection, SessionSurface};
 pub use surface::{Exclusion, SurfaceInputs, ToolSurface};
 pub use toolset::Toolset;
 

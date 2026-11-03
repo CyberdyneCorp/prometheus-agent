@@ -155,6 +155,11 @@ pub struct Live {
     /// The toolset selection the session's tools are built from (`/tools
     /// --now` replaces it).
     selection: Mutex<Selection>,
+    /// The surface the session's toolsets start from.
+    session_surface: pmt_tools::SessionSurface,
+    /// The main route the tool surface's schema variants were picked for:
+    /// frozen with the surface, re-read only by a `--now` rebuild.
+    route: Mutex<pmt_tools::variants::RouteTraits>,
     /// The tool registry the session's tools come from (`/plugins reload
     /// --now` replaces it).
     registry: Mutex<Arc<ToolRegistry>>,
@@ -404,8 +409,7 @@ impl Factory {
         let session = self.store.session(id)?;
         self.record.session(id, session.root_session_id, target);
         self.record_launch_flags(id)?;
-        let (registry, plugin_toolsets) = self.session_registry()?;
-        let selection = tools::selection(&registry, config, interactive, &plugin_toolsets)?;
+        let (registry, selection, session_surface) = self.session_selection(&session)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
         let skills = Arc::new(SkillsSession::new(self.skills_setup(
             id,
@@ -429,7 +433,8 @@ impl Factory {
         let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
         let gate = self.gate(id)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
-        let built = (&*registry, &selection, &capabilities);
+        let route = tools::route_traits(model.as_ref()).await;
+        let built = (&*registry, &selection, &capabilities, &route);
         let tool_port = self.tool_port(id, built, &gate.gate, &agent_tools).await?;
         let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
@@ -467,6 +472,8 @@ impl Factory {
             memory,
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
             selection: Mutex::new(selection),
+            session_surface,
+            route: Mutex::new(route),
             registry: Mutex::new(registry),
             plugins: self.plugins.clone(),
             cwd: self.options.cwd.clone(),
@@ -485,6 +492,24 @@ impl Factory {
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// The registry of a session of `session`'s row, its toolset selection
+    /// and the surface it starts from.
+    fn session_selection(
+        &self,
+        session: &pmt_store::Session,
+    ) -> Result<(Arc<ToolRegistry>, Selection, pmt_tools::SessionSurface), Error> {
+        let (registry, plugin_toolsets) = self.session_registry()?;
+        let surface = tools::surface_of(session);
+        let selection = tools::selection(
+            &registry,
+            self.scope.config(),
+            self.options.interactive,
+            &plugin_toolsets,
+            &surface,
+        )?;
+        Ok((registry, selection, surface))
     }
 
     /// The parts of a session's agent setup that come from this factory's
@@ -693,7 +718,12 @@ impl Factory {
     async fn tool_port(
         &self,
         id: SessionId,
-        (registry, selection, capabilities): (&ToolRegistry, &Selection, &CapabilitySet),
+        (registry, selection, capabilities, route): (
+            &ToolRegistry,
+            &Selection,
+            &CapabilitySet,
+            &pmt_tools::variants::RouteTraits,
+        ),
         gate: &Arc<CommandGate>,
         agent: &Arc<AgentTools>,
     ) -> Result<Arc<SwappableTools>, Error> {
@@ -709,6 +739,7 @@ impl Factory {
             redactor: &self.redactor,
             context_window: None,
             hooks: self.plugins.tool_hooks(self.plugin_call(id)),
+            route,
         })
         .await?;
         Ok(Arc::new(SwappableTools::new(session_tools)))
@@ -781,7 +812,8 @@ impl Factory {
     }
 
     /// Rebuilds `live`'s tool surface from `selection` (`/tools ... --now`);
-    /// the new tools serve from the next turn.
+    /// the new tools serve from the next turn. Schema variants are picked
+    /// again for the route the session is on now.
     ///
     /// # Errors
     ///
@@ -792,6 +824,7 @@ impl Factory {
         selection: &Selection,
     ) -> Result<(), Error> {
         let registry = live.registry();
+        let route = tools::route_traits(live.model.as_ref()).await;
         let tools = tools::session_tools(&SurfaceInputsOwned {
             scope: &self.scope,
             store: &self.store,
@@ -804,9 +837,11 @@ impl Factory {
             redactor: &self.redactor,
             context_window: None,
             hooks: self.plugins.tool_hooks(self.plugin_call(live.id)),
+            route: &route,
         })
         .await?;
         live.tools.swap(tools);
+        *plugins::lock(&live.route) = route;
         Ok(())
     }
 }
@@ -826,6 +861,7 @@ impl Factory {
         child: SessionId,
     ) -> Result<Arc<SessionTools>, Error> {
         let registry = live.registry();
+        let route = plugins::lock(&live.route).clone();
         let selection =
             Selection::resolve(&registry, &[pmt_skills::tools::TOOLSET.to_owned()], &[])?;
         tools::session_tools(&SurfaceInputsOwned {
@@ -840,6 +876,7 @@ impl Factory {
             redactor: &self.redactor,
             context_window: None,
             hooks: self.plugins.tool_hooks(self.plugin_call(child)),
+            route: &route,
         })
         .await
     }

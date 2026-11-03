@@ -26,7 +26,10 @@ use pmt_tools::budget::ResultBudget;
 use pmt_tools::dispatch::ToolHooks;
 use pmt_tools::probe::ProbeCache;
 use pmt_tools::protected::ProtectedFiles;
-use pmt_tools::{DispatchSetup, Dispatcher, Selection, SurfaceInputs, ToolRegistry, ToolSurface};
+use pmt_tools::variants::RouteTraits;
+use pmt_tools::{
+    DispatchSetup, Dispatcher, Selection, SessionSurface, SurfaceInputs, ToolRegistry, ToolSurface,
+};
 
 /// The approval gate of a session and, on an interactive surface, the
 /// receiving end of its prompts.
@@ -91,43 +94,75 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
     })
 }
 
-/// The tool selection of a session: `tools.enabled_toolsets` (or
-/// `--toolsets`) minus the disabled toolsets; a non-interactive run drops
-/// the tools that need a person.
+/// The tool selection of a session of `surface` (spec: tool-system,
+/// Per-surface default toolsets): `toolsets.surfaces.<surface>`, else
+/// `tools.enabled_toolsets` with `core` standing for the surface's
+/// default, minus the disabled toolsets; a non-interactive run drops the
+/// tools that need a person.
+///
+/// `plugins` are the toolsets of the profile's enabled plugins: enabling a
+/// plugin opts its tools in (`tools.disabled_toolsets` still removes them),
+/// except on webhook-triggered runs (read-only unless the surface or route
+/// names toolsets) and for a toolset named after a messaging platform,
+/// which reaches only that platform's sessions through its bundle.
 ///
 /// # Errors
 ///
 /// An unknown toolset (`registry.unknown_name`, exit 78).
-///
-/// `plugins` are the toolsets of the profile's enabled plugins: enabling a
-/// plugin opts its tools in (`tools.disabled_toolsets` still removes them).
 pub fn selection(
     registry: &ToolRegistry,
     config: &Config,
     interactive: bool,
     plugins: &[String],
+    surface: &SessionSurface,
 ) -> Result<Selection, Error> {
-    // `toolsets.surfaces.cli` (the tool configurator's per-surface list)
-    // wins over the profile-wide `tools.enabled_toolsets`.
-    let mut enabled = config
-        .toolsets
-        .surfaces
-        .get("cli")
-        .unwrap_or(&config.tools.enabled_toolsets)
-        .clone();
-    enabled.extend(
-        plugins
+    let mut enabled = surface.starting_toolsets(registry, &config.tools, &config.toolsets);
+    if !surface.is_webhook() {
+        let opted_in: Vec<String> = plugins
             .iter()
-            .filter(|p| !enabled.contains(p))
+            .filter(|p| !enabled.contains(p) && !pmt_config::platforms::is_known(p))
             .cloned()
-            .collect::<Vec<_>>(),
-    );
+            .collect();
+        enabled.extend(opted_in);
+    }
     let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
         selection
     } else {
         selection.without_interactive(registry)
     })
+}
+
+/// The surface stored session `session` was started from: a messaging
+/// session's platform (`webhook` for webhook-triggered runs), else its
+/// source; sources without a surface of their own (subagents, evals,
+/// imports) start like the CLI.
+#[must_use]
+pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
+    use pmt_store::{Origin, Source};
+    if let Origin::Gateway { platform, .. } = &session.origin {
+        return SessionSurface::Gateway(platform.to_lowercase());
+    }
+    match session.source {
+        Source::Tui => SessionSurface::Tui,
+        Source::Desktop => SessionSurface::Desktop,
+        Source::Cron => SessionSurface::Cron,
+        Source::Api => SessionSurface::Api,
+        Source::Acp if session.source_tag.as_deref() == Some(ACP_UNATTENDED_TAG) => {
+            SessionSurface::AcpUnattended
+        }
+        Source::Acp => SessionSurface::Acp,
+        _ => SessionSurface::Cli,
+    }
+}
+
+/// The source tag of unattended ACP sessions (spec: acp-adapter).
+const ACP_UNATTENDED_TAG: &str = "acp-unattended";
+
+/// The schema-variant traits of `model`'s current route.
+pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> RouteTraits {
+    let route = model.route().await;
+    RouteTraits::of(&route.provider, &route.model, route.wire_format)
 }
 
 /// What one surface build needs.
@@ -154,6 +189,8 @@ pub struct SurfaceInputsOwned<'a> {
     pub context_window: Option<u64>,
     /// Plugin tool hooks (`pre_tool_call`, `post_tool_call`).
     pub hooks: Arc<dyn ToolHooks>,
+    /// The main route schema variants are picked for.
+    pub route: &'a RouteTraits,
 }
 
 /// Builds the surface and the dispatcher over it, and records the
@@ -170,6 +207,7 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
         capabilities: inputs.capabilities,
         config,
         probes: &ProbeCache::new(),
+        route: inputs.route,
     })
     .await;
     crate::tools_cmd::record_session_surface(

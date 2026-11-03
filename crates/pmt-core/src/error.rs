@@ -584,6 +584,9 @@ error_codes! {
     /// A tool category names an unregistered provider.
     TOOLS_UNKNOWN_PROVIDER = ("tools.unknown_provider", Config,
         "The tool configurator (`prometheus tools provider|enable|disable|configure`) named a category, provider or surface that is not registered, or a posture toolset (chosen per session, never saved); the message lists the valid names and nothing was written.");
+    /// A toolset's post-setup needs a confirmation nobody can give.
+    TOOLS_SETUP_CONFIRMATION = ("tools.setup_confirmation", PermissionDenied,
+        "`prometheus tools post-setup <toolset>` would install managed runtimes and needs a confirmation: run it on a terminal or pass `--yes`; nothing was downloaded (the command exits 4).");
     /// `prometheus doctor` was given an unknown group.
     DOCTOR_UNKNOWN_GROUP = ("doctor.unknown_group", Usage,
         "`prometheus doctor <group>` names a group that does not exist; the message lists the groups.");

@@ -9,8 +9,9 @@ pub enum ToolsCommand {
     /// Enable or disable toolsets per surface and choose tool providers,
     /// interactively.
     Configure {
-        /// The surface: cli, tui, cron, acp or gateway.<platform> (every
-        /// surface when omitted).
+        /// The surface: `cli`, `tui`, `desktop`, `cron`, `api`, `acp`,
+        /// `acp_unattended` or `gateway.<platform>` (every surface when
+        /// omitted).
         #[arg(long, value_name = "SURFACE")]
         surface: Option<String>,
     },
@@ -51,6 +52,20 @@ pub enum ToolsCommand {
     },
     /// The toolsets, as `prometheus toolsets list`.
     Toolsets(ToolsetsListArgs),
+    /// Per surface: the toolsets its sessions start from, the provider of
+    /// each tool category they use and every selected tool that is not
+    /// available, with its reason.
+    Summary,
+    /// Run the setup steps a toolset still needs: install the managed
+    /// runtimes it uses (after confirmation) and point to the sign-ins it
+    /// needs.
+    PostSetup {
+        /// The toolset (`browser`, or one including it such as `core`).
+        toolset: String,
+        /// Install without asking (needed without a terminal).
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// `prometheus tools list` arguments.
@@ -79,7 +94,8 @@ pub enum ToolsetsCommand {
 #[derive(Debug, Clone, Default, clap::Args)]
 pub struct ToolsetsListArgs {
     /// Mark the toolsets active on this surface (`toolsets.surfaces.<s>`,
-    /// else `tools.enabled_toolsets`).
+    /// else `tools.enabled_toolsets` with `core` standing for the
+    /// surface's default).
     #[arg(long, value_name = "SURFACE")]
     pub surface: Option<String>,
 }

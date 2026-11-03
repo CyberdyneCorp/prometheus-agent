@@ -207,6 +207,49 @@ fn a_group_policy_gives_its_sessions_only_the_policy_toolsets() {
     daemon.stop(home);
 }
 
+/// The surface a session froze, as (tool, exposure) rows.
+fn frozen_surface(home: &Path) -> Vec<Value> {
+    let surface: String = rusqlite::Connection::open_with_flags(
+        home.join("profiles/default/state.db"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap()
+    .query_row("SELECT tools FROM session_tool_surface", [], |r| r.get(0))
+    .unwrap();
+    serde_json::from_str(&surface).unwrap()
+}
+
+/// Spec: tool-system, Per-surface default toolsets: a messaging session
+/// starts from its platform's `toolsets.surfaces.gateway.<platform>`, not
+/// from the CLI's list.
+#[test]
+fn a_messaging_session_starts_from_its_platforms_surface_toolsets() {
+    let home = gateway_home(
+        "\n[toolsets.surfaces]\ncli = [\"terminal\"]\n\n[toolsets.surfaces.gateway]\ntest = [\"file\"]\n",
+    );
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    send(home, "default", "u1", "hello");
+    wait_said(home, "default", "fast done");
+    let surface = frozen_surface(home);
+    let exposure = |name: &str| {
+        surface
+            .iter()
+            .find(|t| t["name"] == name)
+            .map(|t| t["exposure"].as_str().unwrap_or_default().to_owned())
+            .unwrap_or_default()
+    };
+    assert_ne!(exposure("read_file"), "not_in_toolset", "{surface:?}");
+    for outside in ["terminal", "web_search"] {
+        assert_eq!(
+            exposure(outside),
+            "not_in_toolset",
+            "{outside}: {surface:?}"
+        );
+    }
+    daemon.stop(home);
+}
+
 const TOOL_RULES: &str = r#"
 [[rule]]
 user_regex = '^bad$'

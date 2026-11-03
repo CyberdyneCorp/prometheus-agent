@@ -14,6 +14,8 @@
 pub mod args;
 pub mod configure;
 mod render;
+pub mod setup;
+pub mod summary;
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -66,17 +68,19 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
     tools
 }
 
-/// The registry of profile `scope`: this binary's built-in tools and the
-/// shipped toolsets.
+/// The registry of profile `scope`: this binary's built-in tools, the
+/// shipped toolsets and a bundle per platform of an adapter plugin.
 ///
 /// # Errors
 ///
 /// A built-in tool or toolset that does not load (a programming error).
 pub fn registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
+    let plugin_platforms = pmt_config::platforms::plugin_platforms();
     Ok(ToolRegistry::new(
         scope.name().as_str(),
         Arc::new(Builtins::standard(builtin_tools(scope.home()))?),
-    ))
+    )
+    .with_platforms(plugin_platforms.iter().map(String::as_str)))
 }
 
 /// The tools `names` select (composites expanded), for checking that a
@@ -128,15 +132,22 @@ impl Inventory<'_> {
     pub async fn surface(&self, enabled: &[String]) -> Result<(Selection, ToolSurface), Error> {
         let selection =
             Selection::resolve(self.registry, enabled, &self.config.tools.disabled_toolsets)?;
-        let surface = ToolSurface::build(SurfaceInputs {
+        let surface = self.build(&selection).await;
+        Ok((selection, surface))
+    }
+
+    /// The surface a session with `selection` would get (schema variants
+    /// of an unknown route).
+    pub async fn build(&self, selection: &Selection) -> ToolSurface {
+        ToolSurface::build(SurfaceInputs {
             registry: self.registry,
-            selection: &selection,
+            selection,
             capabilities: self.capabilities,
             config: self.config,
             probes: self.probes,
+            route: &pmt_tools::variants::RouteTraits::default(),
         })
-        .await;
-        Ok((selection, surface))
+        .await
     }
 }
 
@@ -175,7 +186,50 @@ pub fn run(command: &ToolsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         ToolsCommand::Provider { category, provider } => {
             configure::provider(ctx, category, provider)
         }
+        ToolsCommand::Summary => summary(ctx),
+        ToolsCommand::PostSetup { toolset, yes } => {
+            let consent = if *yes {
+                setup::Consent::Given
+            } else {
+                setup::Consent::Ask
+            };
+            setup::post_setup(ctx, toolset, &consent)
+        }
     }
+}
+
+/// `tools summary [--json]`.
+fn summary(ctx: &Context<'_>) -> Result<u8, Error> {
+    let scope = ctx.scope()?;
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let plugins = crate::plugins_host::for_session(&scope, &cwd).current();
+    let secrets = scope.secrets().clone();
+    let has_secret = move |name: &str| secrets.resolve(name).is_ok();
+    let plugin_web = |capability: pmt_tools::web::Capability, id: &str| {
+        let category = match capability {
+            pmt_tools::web::Capability::Search => pmt_plugins::providers::Category::WebSearch,
+            pmt_tools::web::Capability::Extract => pmt_plugins::providers::Category::WebExtract,
+        };
+        plugins
+            .providers
+            .require(category, id)
+            .ok()
+            .map(|p| p.plugin.clone())
+    };
+    let lookups = summary::Lookups {
+        has_secret: &has_secret,
+        plugin_web: &plugin_web,
+    };
+    with_inventory(ctx, async |inv| {
+        let summaries = summary::summarize(&inv, &lookups).await?;
+        if ctx.json {
+            return document(
+                "tools summary",
+                &serde_json::json!({ "surfaces": summaries }),
+            );
+        }
+        print_raw(&summary::render(&summaries))
+    })
 }
 
 /// Records the surface `session` just built, so `tools list --session`
@@ -254,12 +308,15 @@ fn list_toolsets(args: &ToolsetsListArgs, ctx: &Context<'_>) -> Result<u8, Error
     let scope = ctx.scope()?;
     let config = scope.config();
     let registry = registry(&scope)?;
-    let enabled = args
-        .surface
-        .as_ref()
-        .and_then(|s| config.toolsets.surfaces.get(s))
-        .unwrap_or(&config.tools.enabled_toolsets);
-    let selection = Selection::resolve(&registry, enabled, &config.tools.disabled_toolsets)?;
+    let enabled = match &args.surface {
+        Some(surface) => configure::check_surface(surface)?.starting_toolsets(
+            &registry,
+            &config.tools,
+            &config.toolsets,
+        ),
+        None => config.tools.enabled_toolsets.clone(),
+    };
+    let selection = Selection::resolve(&registry, &enabled, &config.tools.disabled_toolsets)?;
     let rows = toolset_rows(
         &registry,
         &active(&selection, &config.tools.disabled_toolsets),

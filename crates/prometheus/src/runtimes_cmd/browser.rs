@@ -218,17 +218,33 @@ pub fn outbound(network: &NetworkConfig) -> OutboundPolicy {
 pub fn probe(home: PathBuf) -> Arc<dyn Probe> {
     Arc::new(FnProbe::new(PROBE_ID, move |context| {
         let config = DaemonConfig::load(&home).map_err(|e| e.message().to_owned())?;
-        let view = StoreView {
-            store: Store::open(&home),
-            exclude: config.runtimes.exclude,
-        };
         let path_var = std::env::var_os("PATH");
-        over(
-            Arc::new(view),
-            config.runtimes.allow_lazy_install,
+        availability(
+            Store::open(&home),
+            &config,
+            &context.config.browser,
             path_var.as_deref(),
         )
-        .availability(&context.config.browser)
         .map_err(str::to_owned)
     }))
+}
+
+/// The browser tools' availability over `store` under `config`'s
+/// `[runtimes]` policy (what the probe reports): `Err` carries the
+/// `unavailable:<reason>` reason.
+///
+/// # Errors
+///
+/// The reason.
+pub fn availability(
+    store: Store,
+    config: &DaemonConfig,
+    browser: &BrowserConfig,
+    path_var: Option<&OsStr>,
+) -> Result<(), &'static str> {
+    let view = StoreView {
+        store,
+        exclude: config.runtimes.exclude.clone(),
+    };
+    over(Arc::new(view), config.runtimes.allow_lazy_install, path_var).availability(browser)
 }

@@ -21,6 +21,7 @@ use serde_json::Value;
 
 use crate::probe::Probe;
 use crate::result::ToolResult;
+use crate::variants::{RouteTraits, SchemaVariant, VariantPicker};
 
 /// The longest tool name (`^[a-z][a-z0-9_]{0,63}$`).
 pub const MAX_NAME_LEN: usize = 64;
@@ -321,6 +322,20 @@ pub struct RegisteredTool {
     pub rewriter: Option<Rewriter>,
     /// Session-time argument schema rewriter.
     pub parameters: Option<ParametersRewriter>,
+    /// Picks the advertised schema variant for the session's route.
+    pub variants: Option<VariantPicker>,
+}
+
+/// What a session advertises for one tool: its variant, the description
+/// before rewriting and the argument schema.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Advertised {
+    /// The variant's name (`None`: the tool has no variants).
+    pub variant: Option<&'static str>,
+    /// The description, before the description rewriter.
+    pub description: String,
+    /// The argument schema.
+    pub parameters: serde_json::Value,
 }
 
 impl RegisteredTool {
@@ -334,6 +349,7 @@ impl RegisteredTool {
             probe: None,
             rewriter: None,
             parameters: None,
+            variants: None,
         }
     }
 
@@ -347,6 +363,7 @@ impl RegisteredTool {
             probe: None,
             rewriter: None,
             parameters: None,
+            variants: None,
         }
     }
 
@@ -371,12 +388,45 @@ impl RegisteredTool {
         self
     }
 
+    /// Adds schema variants chosen by the session's route.
+    #[must_use]
+    pub fn with_variants(mut self, picker: VariantPicker) -> Self {
+        self.variants = Some(picker);
+        self
+    }
+
     /// The argument schema a session of `config` sees.
     #[must_use]
     pub fn parameters_for(&self, config: &pmt_config::schema::Config) -> serde_json::Value {
-        match &self.parameters {
-            Some(rewrite) => rewrite(&self.descriptor.parameters, config),
-            None => self.descriptor.parameters.clone(),
+        self.advertised(config, &RouteTraits::default()).parameters
+    }
+
+    /// What a session of `config` on a route with `route`'s traits is
+    /// offered: the variant picked for the route, then the configuration's
+    /// argument schema rewriter over it.
+    #[must_use]
+    pub fn advertised(
+        &self,
+        config: &pmt_config::schema::Config,
+        route: &RouteTraits,
+    ) -> Advertised {
+        let variant = self.variants.as_ref().map(|pick| pick(route));
+        let (name, description, parameters) = match variant {
+            Some(SchemaVariant {
+                name,
+                description,
+                parameters,
+            }) => (Some(name), description, parameters),
+            None => (None, None, None),
+        };
+        let parameters = parameters.unwrap_or_else(|| self.descriptor.parameters.clone());
+        Advertised {
+            variant: name,
+            description: description.unwrap_or_else(|| self.descriptor.description.clone()),
+            parameters: match &self.parameters {
+                Some(rewrite) => rewrite(&parameters, config),
+                None => parameters,
+            },
         }
     }
 

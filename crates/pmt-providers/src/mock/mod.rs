@@ -169,6 +169,8 @@ struct Call<'a> {
     model: &'a str,
     user: Option<String>,
     tool_result: Option<&'a str>,
+    /// The offered tool array as JSON.
+    tools: String,
 }
 
 impl<'a> Call<'a> {
@@ -204,6 +206,7 @@ impl<'a> Call<'a> {
             model: &route.model,
             user,
             tool_result,
+            tools: serde_json::to_string(&request.tools).unwrap_or_default(),
         }
     }
 
@@ -217,6 +220,7 @@ impl<'a> Call<'a> {
             && m.tool_result
                 .as_ref()
                 .is_none_or(|t| self.tool_result.is_some_and(|r| t.matches(r)))
+            && m.tools.as_ref().is_none_or(|t| t.matches(&self.tools))
     }
 }
 

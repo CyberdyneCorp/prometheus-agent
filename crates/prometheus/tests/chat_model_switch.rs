@@ -71,3 +71,55 @@ fn a_session_switch_lasts_and_a_once_switch_returns_to_it() {
     turn_on(&mut p, "fourth", "beta");
     exit(p);
 }
+
+/// Spec: tool-system, Model-dependent schema variants — Variant frozen for
+/// the session: a session started on an OpenAI-family model is offered
+/// the V4A `patch` schema; after `/model` switches to a Claude model
+/// mid-session it is still offered (the surface is frozen), while a new
+/// session on the Claude model gets the replace-only schema.
+#[test]
+fn a_model_switch_keeps_the_frozen_patch_variant() {
+    let home = mock_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "model.default", "gpt-5"],
+    ));
+    let path = home.path().join("variants.toml");
+    std::fs::write(
+        &path,
+        "[[rule]]\ntools = '\"v4a\"'\nrepeat = true\ntext = \"patch offers v4a\"\n\n\
+         [[rule]]\nrepeat = true\ntext = \"patch offers replace only\"\n",
+    )
+    .unwrap();
+    let script = path.to_string_lossy().into_owned();
+    let mut p = spawn(home.path(), &["--no-color", "--mock-script", &script]);
+    prompt(&mut p);
+    p.send_line("first").unwrap();
+    p.expect("patch offers v4a").unwrap();
+    prompt(&mut p);
+    p.send_line("/model mock/claude-sonnet-4 --session")
+        .unwrap();
+    p.expect("until the session ends").unwrap();
+    prompt(&mut p);
+    p.send_line("second").unwrap();
+    p.expect("patch offers v4a").unwrap();
+    prompt(&mut p);
+    exit(p);
+
+    let out = run(
+        home.path(),
+        &[
+            "-z",
+            "third",
+            "--model",
+            "mock/claude-sonnet-4",
+            "--mock-script",
+            &script,
+        ],
+    );
+    assert!(
+        common::stdout(&out).contains("patch offers replace only"),
+        "{}",
+        common::stderr(&out)
+    );
+}

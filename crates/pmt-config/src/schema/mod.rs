@@ -79,8 +79,8 @@ pub use state::{
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
     FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
-    TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
-    WindowsShell,
+    SurfaceToolsets, TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig,
+    UnattendedApproval, WebConfig, WindowsShell,
 };
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,

@@ -450,7 +450,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `tools.result_budget.default_chars` | integer | `100000` | ≥ 0 | `next_session` | Characters kept inline for tools without a declared cap. |
 | `tools.result_budget.mcp_chars` | integer | `50000` | ≥ 0 | `next_session` | Characters kept inline for MCP tools. |
 | `tools.result_budget.overrides` | table | `{}` | any | `next_session` | Per-tool overrides: tool name to characters. |
-| `toolsets.surfaces` | table | `{}` | any | `next_session` | Default toolsets per surface (otherwise `core`). |
+| `toolsets.surfaces.acp` | array | unset | any | `next_session` | ACP editor sessions (default `acp`). |
+| `toolsets.surfaces.acp_unattended` | array | unset | any | `next_session` | Unattended ACP sessions (default `acp_unattended`). |
+| `toolsets.surfaces.api` | array | unset | any | `next_session` | The OpenAI-compatible API server (default `api_server`). |
+| `toolsets.surfaces.cli` | array | unset | any | `next_session` | Line-mode chat and one-shot runs (default `core`). |
+| `toolsets.surfaces.cron` | array | unset | any | `next_session` | Scheduled jobs without per-job toolsets (default `core`). |
+| `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
+| `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
+| `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |
 | `ui.composer.paste_collapse_chars` | integer | `2000` | ≥ 0 | `next_session` | A paste of at least this many characters collapses into a chip; `0` disables the character threshold. |
 | `ui.composer.paste_collapse_lines` | integer | `5` | ≥ 0 | `next_session` | A paste of at least this many lines collapses into a chip; `0` disables the line threshold. |
 | `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |

@@ -320,8 +320,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 30. M2 Toolset surfaces and schema variants
 
-- [ ] 30.1 Implement per-surface default toolsets (cron overrides, webhook payloads that cannot execute), platform bundles (platform tools only on their platform, plugin platform bundles), the rule that disabling a bundle never strips core, and the tool configuration summary with post-setup steps; verify with surface resolution tests (spec: tool-system)
-- [ ] 30.2 Implement model-dependent schema variants (variant chosen and frozen per session, handlers accept every variant); verify that a model switch does not change the frozen variant mid-session (spec: tool-system)
+- [x] 30.1 Implement per-surface default toolsets (cron overrides, webhook payloads that cannot execute), platform bundles (platform tools only on their platform, plugin platform bundles), the rule that disabling a bundle never strips core, and the tool configuration summary with post-setup steps; verify with surface resolution tests (spec: tool-system)
+- [x] 30.2 Implement model-dependent schema variants (variant chosen and frozen per session, handlers accept every variant); verify that a model switch does not change the frozen variant mid-session (spec: tool-system)
 
 ## 31. M2 MCP client and server
 

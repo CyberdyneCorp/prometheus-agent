@@ -164,6 +164,7 @@ async fn session(
         capabilities: &caps,
         config: &Config::default(),
         probes: &ProbeCache::new(),
+        route: &crate::variants::RouteTraits::default(),
     })
     .await;
     let dispatcher = Dispatcher::new(DispatchSetup {

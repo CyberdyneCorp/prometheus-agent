@@ -4942,6 +4942,93 @@
       },
       "type": "object"
     },
+    "SurfaceToolsets": {
+      "additionalProperties": false,
+      "description": "`[toolsets.surfaces]`: one optional toolset list per session surface.\nAn unset surface starts from `tools.enabled_toolsets`, where `core`\nstands for the surface's built-in default.",
+      "properties": {
+        "acp": {
+          "description": "ACP editor sessions (default `acp`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "acp_unattended": {
+          "description": "Unattended ACP sessions (default `acp_unattended`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "api": {
+          "description": "The OpenAI-compatible API server (default `api_server`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cli": {
+          "description": "Line-mode chat and one-shot runs (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cron": {
+          "description": "Scheduled jobs without per-job toolsets (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "desktop": {
+          "description": "The desktop app (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "gateway": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Messaging sessions per platform (`gateway.<platform>`, default\n`platform-<platform>`; `gateway.webhook` defaults to\n`webhook-safe`).",
+          "type": "object"
+        },
+        "tui": {
+          "description": "The terminal UI (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "TailMode": {
       "description": "Tail retention modes.",
       "oneOf": [
@@ -5246,15 +5333,9 @@
       "description": "The `[toolsets]` section.",
       "properties": {
         "surfaces": {
-          "additionalProperties": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
+          "$ref": "#/$defs/SurfaceToolsets",
           "default": {},
-          "description": "Default toolsets per surface (otherwise `core`).",
-          "type": "object"
+          "description": "Starting toolsets per session surface, replacing the surface's\ndefault (spec: tool-system, Per-surface default toolsets)."
         }
       },
       "type": "object",

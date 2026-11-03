@@ -177,7 +177,13 @@ impl Factory {
     pub(crate) async fn apply_plugins_now(&self, live: &Live) -> Result<(), Error> {
         let (registry, toolsets) = self.session_registry()?;
         let config = self.scope.config();
-        let selection = tools::selection(&registry, config, self.options.interactive, &toolsets)?;
+        let selection = tools::selection(
+            &registry,
+            config,
+            self.options.interactive,
+            &toolsets,
+            &live.session_surface,
+        )?;
         *lock(&live.registry) = registry;
         self.rebuild_tools(live, &selection).await?;
         live.set_selection(selection);

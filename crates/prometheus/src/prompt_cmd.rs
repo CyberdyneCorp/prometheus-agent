@@ -98,6 +98,7 @@ async fn measure<'a>(
         capabilities: inventory.capabilities,
         config: inventory.config,
         probes: inventory.probes,
+        route: &pmt_tools::variants::RouteTraits::default(),
     })
     .await;
     let built = prompt::build(&PromptInputs {

@@ -59,6 +59,7 @@ async fn surface(enabled: &[&str], disabled: &[&str]) -> ToolSurface {
         capabilities: &CapabilitySet::parse(BASELINE.iter().copied()).unwrap(),
         config: &Config::default(),
         probes: &ProbeCache::new(),
+        route: &pmt_tools::variants::RouteTraits::default(),
     })
     .await
 }
@@ -68,6 +69,41 @@ fn without(list: &[&str], removed: &[&str]) -> Vec<String> {
         .filter(|t| !removed.contains(t))
         .map(|&t| t.to_owned())
         .collect()
+}
+
+/// The surface defaults (spec: tool-system, Per-surface default
+/// toolsets; Platform bundles): `acp`, `acp_unattended`, `api_server`,
+/// `gateway` and one bundle per bundled first-party platform (core plus
+/// the platform's own tools, none registered by first-party adapters
+/// yet).
+fn surface_defaults() -> Vec<(String, Vec<String>)> {
+    let coding = without(
+        CORE,
+        &[
+            "image_generate",
+            "text_to_speech",
+            "cronjob",
+            "computer_use",
+        ],
+    );
+    let acp_unattended: Vec<String> = coding
+        .iter()
+        .filter(|t| !["terminal", "process", "execute_code", "browser_exec"].contains(&t.as_str()))
+        .cloned()
+        .collect();
+    let mut table = vec![
+        ("acp".to_owned(), coding),
+        ("acp_unattended".to_owned(), acp_unattended),
+        (
+            "api_server".to_owned(),
+            without(CORE, &["text_to_speech", "clarify", "computer_use"]),
+        ),
+        ("gateway".to_owned(), strings(CORE)),
+    ];
+    for platform in pmt_tools::toolset::BUNDLED_PLATFORMS {
+        table.push((format!("platform-{platform}"), strings(CORE)));
+    }
+    table
 }
 
 #[test]
@@ -147,6 +183,9 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
             ),
         ),
     ];
+    let defaults = surface_defaults();
+    let mut table = table;
+    table.extend(defaults.iter().map(|(n, t)| (n.as_str(), t.clone())));
     for (name, expected) in &table {
         assert_eq!(&resolve(&[name], &[]).tools, expected, "toolset {name}");
     }
@@ -294,6 +333,7 @@ async fn browser_exec_needs_the_terminal_toolset() {
             capabilities: &CapabilitySet::parse(BASELINE.iter().copied()).unwrap(),
             config: &Config::default(),
             probes: &ProbeCache::new(),
+            route: &pmt_tools::variants::RouteTraits::default(),
         })
         .await
     };

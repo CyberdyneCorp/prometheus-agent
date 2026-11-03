@@ -55,6 +55,7 @@ pub(crate) async fn dispatcher_gated(
         capabilities: &capabilities,
         config,
         probes: &ProbeCache::new(),
+        route: &pmt_tools::variants::RouteTraits::default(),
     })
     .await;
     Dispatcher::new(DispatchSetup {

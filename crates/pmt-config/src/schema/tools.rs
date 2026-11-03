@@ -62,8 +62,89 @@ impl Default for ResultBudget {
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct ToolsetsConfig {
-    /// Default toolsets per surface (otherwise `core`).
-    pub surfaces: BTreeMap<String, Vec<String>>,
+    /// Starting toolsets per session surface, replacing the surface's
+    /// default (spec: tool-system, Per-surface default toolsets).
+    pub surfaces: SurfaceToolsets,
+}
+
+/// `[toolsets.surfaces]`: one optional toolset list per session surface.
+/// An unset surface starts from `tools.enabled_toolsets`, where `core`
+/// stands for the surface's built-in default.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SurfaceToolsets {
+    /// Line-mode chat and one-shot runs (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cli: Option<Vec<String>>,
+    /// The terminal UI (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tui: Option<Vec<String>>,
+    /// The desktop app (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub desktop: Option<Vec<String>>,
+    /// Scheduled jobs without per-job toolsets (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cron: Option<Vec<String>>,
+    /// The OpenAI-compatible API server (default `api_server`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api: Option<Vec<String>>,
+    /// ACP editor sessions (default `acp`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acp: Option<Vec<String>>,
+    /// Unattended ACP sessions (default `acp_unattended`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acp_unattended: Option<Vec<String>>,
+    /// Messaging sessions per platform (`gateway.<platform>`, default
+    /// `platform-<platform>`; `gateway.webhook` defaults to
+    /// `webhook-safe`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub gateway: BTreeMap<String, Vec<String>>,
+}
+
+impl SurfaceToolsets {
+    /// The surfaces with a key of their own (besides `gateway.<platform>`).
+    pub const KEYS: &[&str] = &[
+        "cli",
+        "tui",
+        "desktop",
+        "cron",
+        "api",
+        "acp",
+        "acp_unattended",
+    ];
+
+    /// The list saved for surface `key` (`cli`, `gateway.telegram`...).
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<&Vec<String>> {
+        if let Some(platform) = key.strip_prefix("gateway.") {
+            return self.gateway.get(platform);
+        }
+        match key {
+            "cli" => self.cli.as_ref(),
+            "tui" => self.tui.as_ref(),
+            "desktop" => self.desktop.as_ref(),
+            "cron" => self.cron.as_ref(),
+            "api" => self.api.as_ref(),
+            "acp" => self.acp.as_ref(),
+            "acp_unattended" => self.acp_unattended.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Every saved list with its surface key, in key order.
+    #[must_use]
+    pub fn entries(&self) -> Vec<(String, &Vec<String>)> {
+        let mut out: Vec<(String, &Vec<String>)> = Self::KEYS
+            .iter()
+            .filter_map(|key| self.get(key).map(|list| ((*key).to_owned(), list)))
+            .collect();
+        out.extend(
+            self.gateway
+                .iter()
+                .map(|(platform, list)| (format!("gateway.{platform}"), list)),
+        );
+        out
+    }
 }
 
 /// The `[approvals]` section.

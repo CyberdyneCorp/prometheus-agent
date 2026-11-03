@@ -9,6 +9,12 @@
 //!
 //! `all` expands to every toolset except surface-gated and default-off
 //! ones: default-off toolsets are exposed only when named explicitly.
+//!
+//! Disabling a toolset built on `core` (a platform bundle, `gateway`,
+//! `api_server`) removes only its members outside `core` (spec:
+//! tool-system, Disabling a bundle never strips core).
+
+mod surfaces;
 
 use std::collections::BTreeSet;
 
@@ -16,6 +22,8 @@ use pmt_config::schema::{ToolsConfig, ToolsetsConfig};
 use pmt_core::error::Error;
 
 use crate::registry::ToolRegistry;
+
+pub use self::surfaces::{SessionSurface, WEBHOOK};
 
 /// The keyword for every (non-gated, non-default-off) toolset.
 pub const ALL: &str = "all";
@@ -57,7 +65,13 @@ impl Selection {
         }
         let mut subtracted = BTreeSet::new();
         for name in &removed {
-            subtracted.extend(registry.members(name)?);
+            let members = registry.members(name)?;
+            if registry.builds_on_core(name) {
+                let core = registry.members("core")?;
+                subtracted.extend(members.into_iter().filter(|t| !core.contains(t)));
+            } else {
+                subtracted.extend(members);
+            }
         }
         let disabled: BTreeSet<String> = tools
             .iter()
@@ -100,6 +114,22 @@ impl Selection {
         self
     }
 
+    /// The selection of a session of `surface`: its starting toolsets
+    /// ([`SessionSurface::starting_toolsets`]) minus `tools.disabled_toolsets`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Selection::resolve`].
+    pub fn for_surface(
+        registry: &ToolRegistry,
+        surface: &SessionSurface,
+        tools: &ToolsConfig,
+        toolsets: &ToolsetsConfig,
+    ) -> Result<Self, Error> {
+        let enabled = surface.starting_toolsets(registry, tools, toolsets);
+        Self::resolve(registry, &enabled, &tools.disabled_toolsets)
+    }
+
     /// The selection `[tools]` configures.
     ///
     /// # Errors
@@ -135,7 +165,7 @@ pub fn validate(
     };
     keyed("tools.enabled_toolsets".into(), &tools.enabled_toolsets)?;
     keyed("tools.disabled_toolsets".into(), &tools.disabled_toolsets)?;
-    for (surface, list) in &toolsets.surfaces {
+    for (surface, list) in toolsets.surfaces.entries() {
         keyed(format!("toolsets.surfaces.{surface}"), list)?;
     }
     Ok(())
@@ -218,7 +248,10 @@ mod tests {
                 .starts_with("tools.disabled_toolsets: unknown toolset 'webb'")
         );
         let surfaces = ToolsetsConfig {
-            surfaces: [("cron".to_owned(), strings(&["fil"]))].into(),
+            surfaces: pmt_config::schema::SurfaceToolsets {
+                cron: Some(strings(&["fil"])),
+                ..Default::default()
+            },
         };
         let err = validate(&registry(), &ToolsConfig::default(), &surfaces).unwrap_err();
         assert!(

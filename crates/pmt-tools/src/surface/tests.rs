@@ -118,6 +118,7 @@ impl Fixture {
             capabilities: caps,
             config: &self.config,
             probes: &self.probes,
+            route: &crate::variants::RouteTraits::default(),
         })
         .await
     }
@@ -293,6 +294,7 @@ async fn descriptions_reference_only_present_tools() {
                 capabilities: &CapabilitySet::new(),
                 config,
                 probes,
+                route: &crate::variants::RouteTraits::default(),
             })
             .await
         }

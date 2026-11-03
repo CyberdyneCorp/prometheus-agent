@@ -7583,14 +7583,16 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus tools [OPTIONS] <COMMAND>
 
 Commands:
-  configure  Enable or disable toolsets per surface and choose tool providers, interactively
-  enable     Enable a toolset from the next session
-  disable    Disable a toolset from the next session
-  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
-  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
-  toolsets   The toolsets, as `prometheus toolsets list`
-  help       Print this message or the help of the given subcommand(s)
+  configure   Enable or disable toolsets per surface and choose tool providers, interactively
+  enable      Enable a toolset from the next session
+  disable     Disable a toolset from the next session
+  provider    Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list        Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain     A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
+  toolsets    The toolsets, as `prometheus toolsets list`
+  summary     Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+  post-setup  Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -7636,7 +7638,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --surface <SURFACE>
-          The surface: cli, tui, cron, acp or gateway.<platform> (every surface when omitted)
+          The surface: `cli`, `tui`, `desktop`, `cron`, `api`, `acp`, `acp_unattended` or `gateway.<platform>` (every surface when omitted)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -7901,7 +7903,92 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --surface <SURFACE>
-          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets` with `core` standing for the surface's default)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools summary`
+
+```text
+Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+
+Usage: prometheus tools summary [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools post-setup`
+
+```text
+Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+
+Usage: prometheus tools post-setup [OPTIONS] <TOOLSET>
+
+Arguments:
+  <TOOLSET>
+          The toolset (`browser`, or one including it such as `core`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Install without asking (needed without a terminal)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -7939,14 +8026,16 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus tools help [COMMAND]
 
 Commands:
-  configure  Enable or disable toolsets per surface and choose tool providers, interactively
-  enable     Enable a toolset from the next session
-  disable    Disable a toolset from the next session
-  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
-  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
-  toolsets   The toolsets, as `prometheus toolsets list`
-  help       Print this message or the help of the given subcommand(s)
+  configure   Enable or disable toolsets per surface and choose tool providers, interactively
+  enable      Enable a toolset from the next session
+  disable     Disable a toolset from the next session
+  provider    Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list        Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain     A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets    The toolsets, as `prometheus toolsets list`
+  summary     Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+  post-setup  Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+  help        Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus tools help configure`
@@ -8003,6 +8092,22 @@ Usage: prometheus tools help explain
 The toolsets, as `prometheus toolsets list`
 
 Usage: prometheus tools help toolsets
+```
+
+## `prometheus tools help summary`
+
+```text
+Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+
+Usage: prometheus tools help summary
+```
+
+## `prometheus tools help post-setup`
+
+```text
+Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+
+Usage: prometheus tools help post-setup
 ```
 
 ## `prometheus tools help help`
@@ -8069,7 +8174,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --surface <SURFACE>
-          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets` with `core` standing for the surface's default)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -14414,13 +14519,15 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus help tools [COMMAND]
 
 Commands:
-  configure  Enable or disable toolsets per surface and choose tool providers, interactively
-  enable     Enable a toolset from the next session
-  disable    Disable a toolset from the next session
-  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
-  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
-  toolsets   The toolsets, as `prometheus toolsets list`
+  configure   Enable or disable toolsets per surface and choose tool providers, interactively
+  enable      Enable a toolset from the next session
+  disable     Disable a toolset from the next session
+  provider    Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list        Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain     A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets    The toolsets, as `prometheus toolsets list`
+  summary     Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+  post-setup  Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
 ```
 
 ## `prometheus help tools configure`
@@ -14477,6 +14584,22 @@ Usage: prometheus help tools explain
 The toolsets, as `prometheus toolsets list`
 
 Usage: prometheus help tools toolsets
+```
+
+## `prometheus help tools summary`
+
+```text
+Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+
+Usage: prometheus help tools summary
+```
+
+## `prometheus help tools post-setup`
+
+```text
+Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+
+Usage: prometheus help tools post-setup
 ```
 
 ## `prometheus help toolsets`
@@ -15368,6 +15491,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.auth_status.v1` | `prometheus auth status` |
 | `prometheus.tools.v1` | `prometheus tools list` |
 | `prometheus.tool.v1` | `prometheus tools explain` |
+| `prometheus.tools_summary.v1` | `prometheus tools summary` |
 | `prometheus.toolsets.v1` | `prometheus toolsets list` |
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |

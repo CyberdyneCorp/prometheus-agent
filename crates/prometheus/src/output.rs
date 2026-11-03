@@ -200,6 +200,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "tools explain",
     },
     JsonShape {
+        schema: "prometheus.tools_summary.v1",
+        command: "tools summary",
+    },
+    JsonShape {
         schema: "prometheus.toolsets.v1",
         command: "toolsets list",
     },
