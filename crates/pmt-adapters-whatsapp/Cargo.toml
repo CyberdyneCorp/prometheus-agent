@@ -20,6 +20,7 @@ pmt-core.workspace = true
 pmt-gateway.workspace = true
 percent-encoding.workspace = true
 pmt-update.workspace = true
+sha2.workspace = true
 pmt-net.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true

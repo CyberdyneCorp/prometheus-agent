@@ -95,6 +95,19 @@ pub enum MediaKind {
     Video,
     /// Any other file.
     Document,
+    /// A location pin: a structured attachment whose `location` is a
+    /// `geo:` URI (see [`crate::messaging::geo`]), not a file.
+    Location,
+    /// A live location (received only), like [`Self::Location`].
+    LiveLocation,
+}
+
+impl MediaKind {
+    /// A location, which travels as a `geo:` URI rather than a file.
+    #[must_use]
+    pub fn is_location(self) -> bool {
+        matches!(self, Self::Location | Self::LiveLocation)
+    }
 }
 
 /// Where a scheduled job's continuation lands (spec: scheduled-jobs).

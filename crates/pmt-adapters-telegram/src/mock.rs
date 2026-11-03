@@ -497,7 +497,7 @@ fn message_key(kind: MediaKind) -> &'static str {
         MediaKind::Audio => "audio",
         MediaKind::Voice => "voice",
         MediaKind::Video => "video",
-        MediaKind::Document => "document",
+        MediaKind::Document | MediaKind::Location | MediaKind::LiveLocation => "document",
     }
 }
 

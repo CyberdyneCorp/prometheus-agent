@@ -296,6 +296,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `gateway.pairing_not_found` | `not_found` | 66 | No pairing entry matches; `prometheus pairing list` shows pending and approved entries. |
 | `gateway.outbox_entry` | `not_found` | 66 | No outbox entry with that id is in a state the action applies to; `prometheus gateway outbox list` shows the entries. |
 | `gateway.recovery` | `io` | 74 | The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again. |
+| `gateway.pairing_timeout` | `conflict` | 75 | The phone did not link within the pairing window (120 seconds); run `prometheus gateway whatsapp pair` again and scan the newest QR code (or use `--pairing-code <phone>`). |
 | `gateway.no_adapter` | `unavailable` | 69 | The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`. |
 | `gateway.all_adapters_down` | `config` | 78 | Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = "exit"`; fix the adapters' configuration or credentials, or set it to `stay_alive`. |
 | `pause.active` | `unavailable` | 69 | The home is paused (`<home>/run/paused`): no new turns or scheduled work start until `prometheus pause off` (or `/pause off` from an admin chat). |

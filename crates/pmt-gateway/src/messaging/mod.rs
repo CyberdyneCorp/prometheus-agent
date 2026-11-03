@@ -38,6 +38,7 @@ mod dedup;
 pub mod deliverable;
 pub mod descriptor;
 mod gating;
+pub mod geo;
 pub mod handoff;
 pub mod health;
 pub mod hooks;

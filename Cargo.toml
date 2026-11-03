@@ -52,6 +52,8 @@ toml_edit = "0.25"
 trybuild = "1.0"
 tracing = "0.1"
 sha2 = "0.11"
+# Terminal QR codes for `gateway whatsapp pair` (no image rendering).
+qrcode = { version = "0.14", default-features = false }
 reqwest = { version = "0.13", default-features = false }
 # TLS for every outbound client: rustls on the ring provider (aws-lc-sys
 # carries the OpenSSL license, outside deny.toml) with the platform verifier,

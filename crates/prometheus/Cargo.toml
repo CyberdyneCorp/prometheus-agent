@@ -27,6 +27,7 @@ default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
 tui = ["dep:pmt-tui", "dep:ratatui"]
 gateway = [
     "dep:pmt-gateway",
+    "dep:qrcode",
     "dep:pmt-adapters-telegram",
     "dep:pmt-adapters-discord",
     "dep:pmt-adapters-slack",
@@ -65,6 +66,7 @@ pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-gateway = { workspace = true, optional = true }
+qrcode = { workspace = true, optional = true }
 pmt-adapters-telegram = { workspace = true, optional = true }
 pmt-adapters-discord = { workspace = true, optional = true }
 pmt-adapters-email = { workspace = true, optional = true }

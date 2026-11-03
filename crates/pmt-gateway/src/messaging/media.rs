@@ -130,6 +130,7 @@ fn extension(attachment: &Attachment) -> String {
             MediaKind::Audio => "mp3",
             MediaKind::Video => "mp4",
             MediaKind::Document => "bin",
+            MediaKind::Location | MediaKind::LiveLocation => "geo",
         }
         .to_owned()
     });

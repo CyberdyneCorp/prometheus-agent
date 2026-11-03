@@ -91,6 +91,28 @@ fn kind(media_type: &str) -> MediaKind {
     }
 }
 
+/// A location or live location the bridge reports (its `nativeMetadata`)
+/// as a structured attachment.
+fn location(media_type: &str, event: &Value) -> Option<Attachment> {
+    let kind = match media_type {
+        "location" => MediaKind::Location,
+        "live_location" => MediaKind::LiveLocation,
+        _ => return None,
+    };
+    let found = &event["nativeMetadata"]["location"];
+    let name = [&found["name"], &found["address"]]
+        .into_iter()
+        .find_map(|v| v.as_str().filter(|s| !s.is_empty()).map(str::to_owned));
+    let pin = pmt_gateway::messaging::geo::Location::new(
+        found["latitude"].as_f64()?,
+        found["longitude"].as_f64()?,
+        name.clone(),
+    )?;
+    let mut attachment = Attachment::new(kind, &pin.uri());
+    attachment.name = name;
+    Some(attachment)
+}
+
 /// A bridge event as an inbound event, and whether the account itself
 /// sent it; `None` for events without a sender.
 pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<(Inbound, bool)> {
@@ -108,12 +130,13 @@ pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<(Inbound, bool)>
         aliases.canonical(&raw_chat)
     };
     let media_type = event["mediaType"].as_str().unwrap_or_default();
-    let attachments = event["mediaUrls"]
+    let mut attachments: Vec<Attachment> = event["mediaUrls"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|url| Some(Attachment::new(kind(media_type), url.as_str()?)))
         .collect();
+    attachments.extend(location(media_type, event));
     let inbound = Inbound {
         message_id: text(&event["messageId"])?,
         sender_id: sender,

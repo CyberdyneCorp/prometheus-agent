@@ -8102,6 +8102,7 @@ Commands:
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  whatsapp        WhatsApp linked-device setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   help            Print this message or the help of the given subcommand(s)
@@ -8650,6 +8651,107 @@ Options:
           Print help
 ```
 
+## `prometheus gateway whatsapp`
+
+```text
+WhatsApp linked-device setup
+
+Usage: prometheus gateway whatsapp [OPTIONS] <COMMAND>
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus gateway whatsapp pair [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --pairing-code <PHONE>
+          Link with an 8-character code for this phone number (with country code) instead of a QR code
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp help [COMMAND]
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway whatsapp help pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus gateway whatsapp help pair
+```
+
+## `prometheus gateway whatsapp help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp help help
+```
+
 ## `prometheus gateway pause`
 
 ```text
@@ -8741,6 +8843,7 @@ Commands:
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  whatsapp        WhatsApp linked-device setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   help            Print this message or the help of the given subcommand(s)
@@ -8845,6 +8948,25 @@ Usage: prometheus gateway help enroll
 Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
 
 Usage: prometheus gateway help slack-manifest
+```
+
+## `prometheus gateway help whatsapp`
+
+```text
+WhatsApp linked-device setup
+
+Usage: prometheus gateway help whatsapp [COMMAND]
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+```
+
+## `prometheus gateway help whatsapp pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus gateway help whatsapp pair
 ```
 
 ## `prometheus gateway help pause`
@@ -11654,6 +11776,7 @@ Commands:
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  whatsapp        WhatsApp linked-device setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
 ```
@@ -11757,6 +11880,25 @@ Usage: prometheus help gateway enroll
 Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
 
 Usage: prometheus help gateway slack-manifest
+```
+
+## `prometheus help gateway whatsapp`
+
+```text
+WhatsApp linked-device setup
+
+Usage: prometheus help gateway whatsapp [COMMAND]
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+```
+
+## `prometheus help gateway whatsapp pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus help gateway whatsapp pair
 ```
 
 ## `prometheus help gateway pause`

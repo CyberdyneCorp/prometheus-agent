@@ -122,6 +122,19 @@ impl Lane {
         let (mut files, notes) = roots.filter(files);
         files.extend(detected);
         fit_kinds(&mut files, &descriptor);
+        let (text, pins) = crate::messaging::geo::extract(&text);
+        let text = if descriptor.sends(MediaKind::Location) {
+            files.extend(pins.iter().map(crate::messaging::geo::Location::attachment));
+            text
+        } else {
+            // A map link where the platform has no location pins.
+            [text]
+                .into_iter()
+                .chain(pins.iter().map(crate::messaging::geo::Location::link))
+                .filter(|t| !t.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
         let footer = self.footer(answer.session, &descriptor).await;
         let text = [text]
             .into_iter()

@@ -3,7 +3,8 @@
 //! transcription): each attachment is downloaded into the owning
 //! profile's media cache under the size cap (an oversize one is dropped
 //! and the user told), and voice and audio clips become their transcript
-//! (or a note naming the cached file).
+//! (or a note naming the cached file). Locations are not files: each
+//! becomes a line of the text the model reads.
 
 use std::sync::Arc;
 
@@ -13,6 +14,28 @@ use super::Shared;
 use super::adapter::{Inbound, MediaKind};
 use super::media::{self, Refused};
 use super::voice;
+
+/// Takes `inbound`'s location attachments out, as lines of its text.
+fn read_locations(inbound: &mut Inbound) {
+    let (locations, files): (Vec<_>, Vec<_>) = std::mem::take(&mut inbound.attachments)
+        .into_iter()
+        .partition(|a| a.kind.is_location());
+    inbound.attachments = files;
+    let mut lines: Vec<String> = Some(inbound.text.clone())
+        .filter(|t| !t.trim().is_empty())
+        .into_iter()
+        .collect();
+    for attachment in locations {
+        let mut location = super::geo::Location::parse(&attachment.location);
+        if let Some(found) = location.as_mut() {
+            found.name.clone_from(&attachment.name);
+        }
+        if let Some(location) = location {
+            lines.push(location.describe(attachment.kind == MediaKind::LiveLocation));
+        }
+    }
+    inbound.text = lines.join("\n");
+}
 
 /// Downloads `inbound`'s attachments through adapter `platform` of
 /// `adapter_profile` and turns its clips into text; `true` when the user
@@ -24,6 +47,7 @@ pub(crate) async fn prepare(
     scope: &ProfileScope,
     inbound: &mut Inbound,
 ) -> bool {
+    read_locations(inbound);
     if inbound.attachments.is_empty() {
         return false;
     }

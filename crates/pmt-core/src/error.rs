@@ -893,6 +893,9 @@ error_codes! {
     /// The clean-shutdown marker exists but cannot be removed.
     GATEWAY_RECOVERY = ("gateway.recovery", Io,
         "The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again.");
+    /// `gateway whatsapp pair` linked nothing in time.
+    GATEWAY_PAIRING_TIMEOUT = ("gateway.pairing_timeout", Conflict,
+        "The phone did not link within the pairing window (120 seconds); run `prometheus gateway whatsapp pair` again and scan the newest QR code (or use `--pairing-code <phone>`).");
     /// A messaging delivery with no adapter for its platform.
     GATEWAY_NO_ADAPTER = ("gateway.no_adapter", Unavailable,
         "The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`.");

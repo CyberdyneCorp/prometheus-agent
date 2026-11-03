@@ -431,7 +431,7 @@ impl MockPlatform for MatrixMock {
             MediaKind::Image => "m.image",
             MediaKind::Audio | MediaKind::Voice => "m.audio",
             MediaKind::Video => "m.video",
-            MediaKind::Document => "m.file",
+            MediaKind::Document | MediaKind::Location | MediaKind::LiveLocation => "m.file",
         };
         let mut content = json!({"msgtype": msgtype, "body": caption, "filename": name,
                                  "url": uri, "info": {"mimetype": mime_of_name(name)}});

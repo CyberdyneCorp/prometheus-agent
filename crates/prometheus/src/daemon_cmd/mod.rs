@@ -21,6 +21,7 @@ pub(crate) mod standalone;
 mod test_adapter;
 mod turn;
 mod update_chat;
+mod whatsapp_cmd;
 
 use std::fmt::Write as _;
 use std::path::Path;

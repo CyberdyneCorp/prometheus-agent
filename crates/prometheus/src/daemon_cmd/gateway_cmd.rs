@@ -53,6 +53,10 @@ pub enum GatewayCommand {
     /// Print (or write) a Slack app manifest for Socket Mode with one
     /// slash command per gateway command.
     SlackManifest(super::slack_manifest_cmd::SlackManifestArgs),
+    /// `WhatsApp` linked-device setup (the help text below spells the
+    /// name without backticks).
+    #[command(about = "WhatsApp linked-device setup")]
+    Whatsapp(super::whatsapp_cmd::WhatsappArgs),
     /// Stop dispatching one adapter's inbound messages (they are
     /// acknowledged and dropped) without disconnecting it; kept across
     /// restarts.
@@ -148,6 +152,7 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::List => super::inventory::list(ctx),
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
         GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),
+        GatewayCommand::Whatsapp(args) => super::whatsapp_cmd::run(args, ctx),
         GatewayCommand::Pause { platform } => super::platform_cmd::run(platform, true, ctx),
         GatewayCommand::Resume { platform } => super::platform_cmd::run(platform, false, ctx),
     }

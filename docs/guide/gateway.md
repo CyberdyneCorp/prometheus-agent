@@ -198,7 +198,25 @@ The other first-party adapters:
   with yourself counts); `options.group_policy` is `pairing` (no group
   until listed in `allow_chats`), `allowlist` or `open`. Clarify questions
   arrive as polls whose vote is the answer; approvals are numbered and
-  answered by number.
+  answered by number. Locations and live locations arrive as structured
+  attachments the model reads as `[Location: <name> (<lat>, <lon>)]`; a
+  reply line `LOCATION: <lat>,<lon> [name]` is sent as a location pin
+  (other platforms get a map link instead).
+
+  Link a profile with `prometheus -p <profile> gateway whatsapp pair`: it
+  installs the bridge runtime when needed (the pinned Node runtime, then
+  the bridge shipped with Prometheus, adapted from the MIT-licensed Hermes
+  Agent bridge, whose packages `npm ci` installs from its lockfile), then
+  draws the linking QR code in the terminal and refreshes it until the
+  phone links (WhatsApp > Settings > Linked devices), at most 120 seconds
+  (exit 75). A terminal narrower than 60 columns is refused (exit 2); use
+  `--pairing-code <phone>` to link by typing a code on the phone instead.
+  Pairing replaces the profile's earlier session (kept mode 0700).
+
+  ```text
+  prometheus -p work gateway whatsapp pair
+  prometheus -p work gateway whatsapp pair --pairing-code +5511999999999
+  ```
 - **Webhook** serves each route `[gateway.platforms.webhook.routes.<name>]`
   at `/p/<profile>/webhook/<name>`. A route needs `secret_secret`, a
   secret its senders sign with (GitHub `X-Hub-Signature-256`, GitLab

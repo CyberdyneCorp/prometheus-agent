@@ -41,6 +41,8 @@ struct State {
     polls: Vec<(String, String, String, Vec<String>, u64)>,
     /// Poll sends refused from now on.
     refuse_polls: bool,
+    /// Location pins sent: `(chat, latitude, longitude, name)`.
+    locations: Vec<(String, f64, f64, Option<String>)>,
 }
 
 /// The mock.
@@ -188,6 +190,17 @@ impl BridgeMock {
                 ));
                 mock_server::json(200, &json!({"success": true, "messageId": id}))
             }
+            ("POST", "/send-location") => {
+                state.next += 1;
+                let id = format!("WA{}", state.next);
+                state.locations.push((
+                    body["chatId"].as_str().unwrap_or_default().to_owned(),
+                    body["latitude"].as_f64().unwrap_or_default(),
+                    body["longitude"].as_f64().unwrap_or_default(),
+                    body["name"].as_str().map(str::to_owned),
+                ));
+                mock_server::json(200, &json!({"success": true, "messageId": id}))
+            }
             ("POST", "/typing") => {
                 state.typing += 1;
                 mock_server::json(200, &json!({"success": true}))
@@ -315,6 +328,8 @@ impl MockPlatform for BridgeMock {
             MediaKind::Voice => "ptt",
             MediaKind::Video => "video",
             MediaKind::Document => "document",
+            MediaKind::Location => "location",
+            MediaKind::LiveLocation => "live_location",
         };
         Some(
             self.receive(&json!({"body": caption, "mediaType": media_type,
@@ -324,6 +339,25 @@ impl MockPlatform for BridgeMock {
 
     fn files(&self) -> Vec<MockFile> {
         self.lock().received.clone()
+    }
+
+    fn inject_location(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        name: &str,
+        live: bool,
+    ) -> Option<String> {
+        let media_type = if live { "live_location" } else { "location" };
+        Some(self.receive(&json!({
+            "body": format!("Location: {name}"),
+            "mediaType": media_type,
+            "nativeMetadata": {"location": {"name": name, "latitude": latitude, "longitude": longitude}}
+        })))
+    }
+
+    fn locations(&self) -> Vec<(String, f64, f64, Option<String>)> {
+        self.lock().locations.clone()
     }
 }
 

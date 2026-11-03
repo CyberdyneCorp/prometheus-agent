@@ -8,6 +8,7 @@
 //! the interactive features).
 
 mod bridge;
+pub mod install;
 /// The mock platform the conformance kit runs this adapter against; only
 /// in builds with the `kit` feature (tests, `prometheus` with
 /// `adapter-kits`), so release binaries do not carry it.
@@ -280,6 +281,18 @@ impl Whatsapp {
     }
 }
 
+/// Sends a location pin (`POST /send-location`).
+async fn send_location(
+    bridge: &Bridge,
+    chat: &str,
+    pin: &pmt_gateway::messaging::geo::Location,
+) -> Result<Option<String>, SendError> {
+    let body = json!({"chatId": chat, "latitude": pin.latitude, "longitude": pin.longitude,
+                      "name": pin.name});
+    let sent = bridge.post("/send-location", &body).await?;
+    Ok(sent["messageId"].as_str().map(str::to_owned))
+}
+
 /// The bridge's media type of an outbound file.
 fn media_type(path: &str, as_document: bool, as_voice: bool) -> &'static str {
     if as_voice {
@@ -371,6 +384,10 @@ impl Adapter for Whatsapp {
         // to Ogg Opus and sets `ptt`), so a plain audio file cannot go out.
         let mut out = all.clone();
         out.remove(&MediaKind::Audio);
+        // Locations are pins both ways; live locations only come in.
+        let mut all = all;
+        all.extend([MediaKind::Location, MediaKind::LiveLocation]);
+        out.insert(MediaKind::Location);
         Descriptor {
             markup: Markup::Platform,
             interactive: Interactive::Native,
@@ -408,6 +425,11 @@ impl Adapter for Whatsapp {
                 first = self.send_text(&bridge, &message).await?;
             }
             for file in &message.attachments {
+                if let Some(pin) = pmt_gateway::messaging::geo::Location::parse(&file.path) {
+                    let id = send_location(&bridge, &message.chat_id, &pin).await?;
+                    first = first.or(id);
+                    continue;
+                }
                 let kind = media_type(&file.path, file.as_document, file.as_voice);
                 let id = self
                     .send_file(&bridge, &message.chat_id, &file.path, kind)

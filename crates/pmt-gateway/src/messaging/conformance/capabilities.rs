@@ -18,6 +18,7 @@ fn file_name(kind: MediaKind) -> &'static str {
         MediaKind::Voice => "kit-voice.ogg",
         MediaKind::Video => "kit-video.mp4",
         MediaKind::Document => "kit-document.pdf",
+        MediaKind::Location | MediaKind::LiveLocation => "kit-location.geo",
     }
 }
 
@@ -38,16 +39,7 @@ impl Kit {
         } else {
             report.skip("delete", "not declared");
         }
-        if self.descriptor.media_in.is_empty() {
-            report.skip("media in", "no media_in kind declared");
-        } else {
-            report.add("media in", self.media_in().await);
-        }
-        if self.descriptor.media_out.is_empty() {
-            report.skip("media out", "no media_out kind declared");
-        } else {
-            report.add("media out", self.media_out().await);
-        }
+        self.media_checks(report).await;
         if self.descriptor.streaming_tts {
             report.add("streaming tts", self.streaming_tts().await);
         } else {
@@ -67,6 +59,31 @@ impl Kit {
                 "not declared"
             },
         );
+    }
+
+    /// Files in and out, and locations, for the declared kinds.
+    async fn media_checks(&self, report: &mut Report) {
+        if self.descriptor.media_in.is_empty() {
+            report.skip("media in", "no media_in kind declared");
+        } else {
+            report.add("media in", self.media_in().await);
+        }
+        let locations = self
+            .descriptor
+            .media_in
+            .iter()
+            .chain(&self.descriptor.media_out)
+            .any(|k| k.is_location());
+        if locations {
+            report.add("locations", self.locations().await);
+        } else {
+            report.skip("locations", "not declared");
+        }
+        if self.descriptor.media_out.is_empty() {
+            report.skip("media out", "no media_out kind declared");
+        } else {
+            report.add("media out", self.media_out().await);
+        }
     }
 
     /// Registers more commands than any platform menu holds: the menu
@@ -160,7 +177,14 @@ impl Kit {
     }
 
     async fn media_in(&self) -> Result<(), String> {
-        for kind in self.descriptor.media_in.clone() {
+        // Locations are not files: the `locations` check covers them.
+        for kind in self
+            .descriptor
+            .media_in
+            .clone()
+            .into_iter()
+            .filter(|k| !k.is_location())
+        {
             self.one_media_in(kind)
                 .await
                 .map_err(|why| format!("{kind:?}: {why}"))?;
@@ -198,6 +222,66 @@ impl Kit {
             .ok_or_else(|| "open_media streamed other bytes than the platform holds".to_owned())
     }
 
+    /// Every declared location kind: in, as a structured `geo:`
+    /// attachment; out, as a pin.
+    async fn locations(&self) -> Result<(), String> {
+        for kind in self
+            .descriptor
+            .media_in
+            .iter()
+            .copied()
+            .filter(|k| k.is_location())
+        {
+            let live = kind == MediaKind::LiveLocation;
+            let name = format!("kit place {kind:?}");
+            self.platform
+                .inject_location(-23.5614, -46.6559, &name, live)
+                .ok_or("a location kind is declared but the mock cannot deliver locations")?;
+            if !eventually(|| {
+                self.link
+                    .accepted()
+                    .iter()
+                    .any(|i| i.attachments.iter().any(|a| a.kind == kind))
+            })
+            .await
+            {
+                return Err(format!("{kind:?}: never arrived as a location attachment"));
+            }
+            let inbound = self.link.accepted();
+            let got = inbound
+                .iter()
+                .flat_map(|i| &i.attachments)
+                .find(|a| a.kind == kind)
+                .ok_or("lost")?;
+            let pin = crate::messaging::geo::Location::parse(&got.location)
+                .ok_or_else(|| format!("{kind:?}: '{}' is not a geo: URI", got.location))?;
+            if (pin.latitude + 23.5614).abs() > 1e-6 || got.name.as_deref() != Some(name.as_str()) {
+                return Err(format!(
+                    "{kind:?}: arrived as {} named {:?}",
+                    got.location, got.name
+                ));
+            }
+        }
+        if self.descriptor.media_out.contains(&MediaKind::Location) {
+            let pin =
+                crate::messaging::geo::Location::new(48.8584, 2.2945, Some("kit tower".into()))
+                    .ok_or("bad pin")?;
+            let mut message = Outgoing::text(&self.dm(), None, "");
+            message.attachments.push(pin.attachment());
+            self.adapter
+                .send(&message)
+                .await
+                .map_err(|e| e.describe())?;
+            let sent = self.platform.locations();
+            if !sent.iter().any(|(_, lat, _, name)| {
+                (lat - 48.8584).abs() < 1e-6 && name.as_deref() == Some("kit tower")
+            }) {
+                return Err(format!("the pin did not arrive as a location: {sent:?}"));
+            }
+        }
+        Ok(())
+    }
+
     async fn download(&self, attachment: &Attachment) -> Result<Vec<u8>, String> {
         let mut stream = self
             .adapter
@@ -213,7 +297,13 @@ impl Kit {
 
     async fn media_out(&self) -> Result<(), String> {
         let dir = tempfile::tempdir().map_err(|e| format!("no scratch directory: {e}"))?;
-        for kind in self.descriptor.media_out.clone() {
+        for kind in self
+            .descriptor
+            .media_out
+            .clone()
+            .into_iter()
+            .filter(|k| !k.is_location())
+        {
             self.one_media_out(dir.path(), kind)
                 .await
                 .map_err(|why| format!("{kind:?}: {why}"))?;

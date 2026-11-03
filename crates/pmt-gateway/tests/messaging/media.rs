@@ -227,3 +227,49 @@ async fn an_attachment_outside_the_allowed_roots_is_withheld_with_a_note() {
     assert_eq!(paths.len(), 1);
     assert!(paths[0].ends_with("chart.png"));
 }
+
+/// Spec: platform-adapters, `WhatsApp` interactive and rich features:
+/// locations travel as structured attachments both ways.
+#[tokio::test]
+async fn locations_are_read_as_text_and_sent_as_pins_or_links() {
+    let mut setup = Setup::new(&open("whatsapp"));
+    let mut pins = Descriptor::new("whatsapp", 4096);
+    pins.media_in
+        .extend([MediaKind::Location, MediaKind::LiveLocation]);
+    pins.media_out.insert(MediaKind::Location);
+    setup.descriptors.push(pins);
+    setup.profiles[0]
+        .1
+        .push_str("\n[gateway.platforms.telegram]\nenabled = true\nallow_all = true\n");
+    let h = Harness::start(setup).await;
+    let mut shared = Inbound::text(ChatType::Dm, "1", "1", "meet me");
+    let mut pin = Attachment::new(MediaKind::LiveLocation, "geo:-23.5,-46.6");
+    pin.name = Some("Paulista".into());
+    shared.attachments.push(pin);
+    h.send("whatsapp", shared).await;
+    eventually("the turn reads the location", || {
+        h.agents
+            .texts()
+            .iter()
+            .any(|t| t == "meet me\n[Live location: Paulista (-23.5, -46.6)]")
+    })
+    .await;
+    h.dm(
+        "whatsapp",
+        "1",
+        "say:Here it is\nLOCATION: 48.8584,2.2945 Eiffel Tower",
+    )
+    .await;
+    eventually("the pin goes out as an attachment", || {
+        h.adapter("whatsapp").all().iter().any(|d| matches!(d,
+            Did::Send(m) if m.attachments.iter().any(|a| a.path == "geo:48.8584,2.2945#Eiffel Tower")))
+    })
+    .await;
+    h.dm("telegram", "1", "say:LOCATION: 48.8584,2.2945 Eiffel Tower")
+        .await;
+    said(
+        &h.adapter("telegram"),
+        "📍 Eiffel Tower: https://www.openstreetmap.org/?mlat=48.8584&mlon=2.2945",
+    )
+    .await;
+}

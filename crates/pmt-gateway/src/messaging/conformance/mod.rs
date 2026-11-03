@@ -156,6 +156,22 @@ pub trait MockPlatform: Send + Sync {
     ) -> Option<String> {
         None
     }
+    /// The platform delivers a location pin (or live location) named
+    /// `name` in the DM; its message id, or `None` when the mock cannot.
+    fn inject_location(
+        &self,
+        _latitude: f64,
+        _longitude: f64,
+        _name: &str,
+        _live: bool,
+    ) -> Option<String> {
+        None
+    }
+    /// Location pins the platform accepted: `(chat, latitude, longitude,
+    /// name)`.
+    fn locations(&self) -> Vec<(String, f64, f64, Option<String>)> {
+        Vec::new()
+    }
     /// Every file the platform accepted, in order.
     fn files(&self) -> Vec<MockFile> {
         Vec::new()

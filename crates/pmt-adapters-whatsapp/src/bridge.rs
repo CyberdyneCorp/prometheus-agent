@@ -117,9 +117,7 @@ pub(crate) fn health_error(health: &Value, profile: &str) -> Option<AdapterError
 
 /// Where the managed bridge runtime lives.
 pub(crate) fn script(home: &Path) -> PathBuf {
-    home.join("runtimes")
-        .join("whatsapp-bridge")
-        .join("bridge.js")
+    crate::install::dir(home).join("bridge.js")
 }
 
 /// Starts the managed bridge for a profile: its session under
