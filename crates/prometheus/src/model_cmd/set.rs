@@ -10,7 +10,7 @@ use pmt_config::Config;
 use pmt_config::provider_urls;
 use pmt_config::schema::WireFormat;
 use pmt_core::error::Error;
-use pmt_providers::{ProviderRegistry, local, target};
+use pmt_providers::{local, target};
 use serde::Serialize;
 
 use super::{Models, block_on, client, validate};
@@ -77,7 +77,7 @@ async fn set(
         base_url,
         user_home,
     } = *request;
-    let registry = ProviderRegistry::for_profile(config, Vec::new())?;
+    let (registry, _) = crate::plugins_host::providers::registry(scope, config)?;
     let target = target::parse(
         reference,
         &config.model,

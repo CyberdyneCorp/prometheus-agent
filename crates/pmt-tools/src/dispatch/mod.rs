@@ -45,6 +45,9 @@ pub struct ToolCall {
     pub name: String,
     /// Argument JSON text.
     pub arguments: String,
+    /// The turn the call belongs to, when a turn loop made it (hooks see
+    /// it as `turn_id`).
+    pub turn_id: Option<String>,
 }
 
 impl ToolCall {
@@ -55,7 +58,15 @@ impl ToolCall {
             call_id: call_id.to_owned(),
             name: name.to_owned(),
             arguments: arguments.to_owned(),
+            turn_id: None,
         }
+    }
+
+    /// The same call, made in turn `turn_id`.
+    #[must_use]
+    pub fn in_turn(mut self, turn_id: &str) -> Self {
+        self.turn_id = Some(turn_id.to_owned());
+        self
     }
 }
 
@@ -150,6 +161,7 @@ impl Dispatcher {
         let hook_call = HookCall {
             session_id: &setup.session_id,
             call_id: &call.call_id,
+            turn_id: call.turn_id.as_deref(),
             tool: &call.name,
             arguments: &arguments,
         };
@@ -215,6 +227,7 @@ impl Dispatcher {
         let hook_call = HookCall {
             session_id: &setup.session_id,
             call_id: &call.call_id,
+            turn_id: call.turn_id.as_deref(),
             tool: &call.name,
             arguments,
         };

@@ -28,7 +28,7 @@ pub use bindings::exports::prometheus::hook::plugin as hook_world;
 pub use bindings::exports::prometheus::hook::surfaces as surfaces_world;
 pub use bindings::exports::prometheus::provider::plugin as provider_world;
 pub use bindings::exports::prometheus::tool::plugin as tool_world;
-pub use imports::{CallInfo, Context};
+pub use imports::{CallInfo, Console, Context};
 pub use instance::Instance;
 
 /// How often the epoch advances; a call overruns its deadline by at most

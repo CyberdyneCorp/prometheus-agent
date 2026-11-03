@@ -410,7 +410,7 @@ impl Lane {
             .emit(
                 &self.profile,
                 "on_turn_end",
-                json!({"session_id": session, "exit_reason": finished.exit_reason}),
+                super::hook_events::turn_end(&session, &finished),
             )
             .await;
         self.flush_mirrors();

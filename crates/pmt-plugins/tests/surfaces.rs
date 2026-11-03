@@ -1,4 +1,4 @@
-//! What plugins register through hook world 1.2 and provider world 1.1,
+//! What plugins register through hook world 1.2/1.3 and provider world 1.1,
 //! and the messaging imports (spec: plugin-system, Model-provider
 //! plugins; Plugin CLI subcommands; Approval transports; Plugin live
 //! messages and message injection; Platform actions; Transform hooks
@@ -6,10 +6,13 @@
 
 mod common;
 
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
 use common::{Fake, HOOK, PROVIDER, Profile, instance};
 use pmt_config::schema::Config;
 use pmt_plugins::host::surfaces_world::Terminal;
-use pmt_plugins::host::{CallInfo, Runtime};
+use pmt_plugins::host::{CallInfo, Console, Runtime};
 use pmt_plugins::load::{Loaded, State};
 use pmt_providers::registry::Origin;
 use pmt_providers::{PluginProvider, ProviderRegistry};
@@ -229,6 +232,7 @@ async fn cli_commands_transports_and_held_streams_need_their_grants() {
                 rows: 24,
                 tty: false,
             },
+            Arc::new(Streamed::default()),
         )
     })
     .await
@@ -239,5 +243,78 @@ async fn cli_commands_transports_and_held_streams_need_their_grants() {
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
         "ran status now as default tty=false cols=80\n"
+    );
+}
+
+/// A console that keeps what a command streamed and, once `started`
+/// arrives, stores the state key `go` in `release` (the plugin data dir)
+/// so the command can finish.
+#[derive(Default)]
+struct Streamed {
+    written: Mutex<Vec<String>>,
+    release: Option<PathBuf>,
+}
+
+impl Console for Streamed {
+    fn stdout(&self, bytes: &[u8]) {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        if text == "started\n"
+            && let Some(dir) = &self.release
+        {
+            std::fs::create_dir_all(dir.join("kv")).unwrap();
+            // Key `go`, hex-encoded.
+            std::fs::write(dir.join("kv/676f"), b"1").unwrap();
+        }
+        self.written.lock().unwrap().push(format!("out:{text}"));
+    }
+
+    fn stderr(&self, bytes: &[u8]) {
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        self.written.lock().unwrap().push(format!("err:{text}"));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cli_command_streams_its_output_while_it_runs() {
+    // The command cannot finish before its console delivered `started`,
+    // so the output is streamed, not printed when the call returns.
+    let mut profile = Profile::new("default");
+    let fake = Fake::new();
+    profile.install(
+        "tools",
+        "testing-hooks",
+        "\"hook@1.3\"",
+        "cli_commands = [\"stream\"]",
+    );
+    fake.set("tools", "cli", "\"stream\"");
+    let loaded = profile.load(&Runtime::new().unwrap(), &fake.ports());
+    let tools = instance(&loaded, "tools");
+    let console = Arc::new(Streamed {
+        written: Mutex::default(),
+        release: Some(profile.path().join("plugin-data/tools")),
+    });
+    let sink: Arc<dyn Console> = console.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        tools.run_cli(
+            &CallInfo::default(),
+            "stream",
+            &[],
+            Terminal {
+                columns: 80,
+                rows: 24,
+                tty: false,
+            },
+            sink,
+        )
+    })
+    .await
+    .unwrap()
+    .unwrap()
+    .unwrap();
+    assert_eq!(output.code, 0);
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "finished\n");
+    assert_eq!(
+        *console.written.lock().unwrap(),
+        ["out:started\n", "err:working\n"]
     );
 }

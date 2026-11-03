@@ -24,8 +24,10 @@
 //! Its `surfaces` (hook world 1.2): `hold` (comma list) is what
 //! `hold-stream` answers; `cli` (comma list) the `prometheus plugins run`
 //! commands, where `fail` exits 3 with a message on stderr, `crash`
-//! traps, and any other prints `ran <name> <args> as <profile> tty=<b>
-//! cols=<n>`; `transports` (comma list) the approval transports, answered
+//! traps, `stream` writes `started` to its console's stdout and
+//! `working` to its stderr (hook world 1.3), waits until the state key
+//! `go` exists and then prints `finished`, and any other prints
+//! `ran <name> <args> as <profile> tty=<b> cols=<n>`; `transports` (comma list) the approval transports, answered
 //! by `transport_mode`: `once` or `always` (that choice, bound to the
 //! request), `stale` (a wrong digest), `error`, or `spin`. Commands
 //! `post <text>` (posts, then edits three times to `<text> 1..3`),
@@ -43,6 +45,7 @@ use exports::prometheus::hook::plugin::{Approval, Guest, HookEvent, Reply};
 use exports::prometheus::hook::surfaces::{
     self, ApprovalRequest, ApprovalResponse, CliCommand, CliOutput, Terminal,
 };
+use prometheus::hook::console;
 use prometheus::host::{config, events, session, state};
 use prometheus::messaging::{conversation, inject, platform};
 
@@ -210,6 +213,16 @@ impl surfaces::Guest for Hooks {
                 stderr: b"failed on purpose\n".to_vec(),
             }),
             "crash" => panic!("crashed on purpose"),
+            "stream" => {
+                console::write_stdout(b"started\n");
+                console::write_stderr(b"working\n");
+                while !matches!(state::get("go"), Ok(Some(_))) {}
+                Ok(CliOutput {
+                    code: 0,
+                    stdout: b"finished\n".to_vec(),
+                    stderr: Vec::new(),
+                })
+            }
             _ => Ok(CliOutput {
                 code: 0,
                 stdout: format!(

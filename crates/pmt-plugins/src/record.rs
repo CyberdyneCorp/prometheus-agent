@@ -86,6 +86,22 @@ pub struct InstallRecord {
     /// The flags it was installed with.
     #[serde(default)]
     pub flags: Flags,
+    /// An update the threat scan graded `dangerous`: it stays disabled,
+    /// and this version active, until a different update is published.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_update: Option<HeldUpdate>,
+}
+
+/// A refused (`dangerous`) update of an installed plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HeldUpdate {
+    /// What it would have moved to: the catalog ref or the package digest.
+    pub target: String,
+    /// The scan's verdict (`dangerous (<pattern> in <file>:<line>)`).
+    pub verdict: String,
+    /// When it was refused (RFC 3339).
+    pub held_at: String,
 }
 
 impl InstallRecord {
@@ -158,6 +174,7 @@ mod tests {
                 allow_unsigned: true,
                 ..Flags::default()
             },
+            held_update: None,
         };
         record.write(dir.path()).unwrap();
         assert_eq!(InstallRecord::read(dir.path()).unwrap(), Some(record));

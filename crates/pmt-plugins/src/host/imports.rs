@@ -12,6 +12,7 @@ use std::sync::Arc;
 use pmt_core::capability::{Capability, PluginRight};
 use wasmtime::StoreLimits;
 
+use super::bindings::prometheus::hook::console;
 use super::bindings::prometheus::host::{
     config, events, http, llm, log, secrets, session, state, tools, types,
 };
@@ -51,11 +52,22 @@ pub struct CallInfo {
     pub cwd: Option<String>,
 }
 
+/// The invoking terminal of a running `run-cli` command (hook world 1.3
+/// `console`): what the plugin writes reaches it as it is written.
+pub trait Console: Send + Sync {
+    /// Bytes for the command's stdout.
+    fn stdout(&self, bytes: &[u8]);
+    /// Bytes for the command's stderr.
+    fn stderr(&self, bytes: &[u8]);
+}
+
 /// The data of one wasmtime store.
 pub(crate) struct HostState {
     pub(crate) ctx: Arc<Context>,
     pub(crate) call: CallInfo,
     pub(crate) limits: StoreLimits,
+    /// Set only while a `run-cli` call runs.
+    pub(crate) console: Option<Arc<dyn Console>>,
 }
 
 impl HostState {
@@ -108,6 +120,21 @@ fn state_error(error: StateError) -> HostError {
 }
 
 impl types::Host for HostState {}
+
+/// Outside a `run-cli` call there is no terminal: writes are dropped.
+impl console::Host for HostState {
+    fn write_stdout(&mut self, bytes: Vec<u8>) {
+        if let Some(console) = &self.console {
+            console.stdout(&bytes);
+        }
+    }
+
+    fn write_stderr(&mut self, bytes: Vec<u8>) {
+        if let Some(console) = &self.console {
+            console.stderr(&bytes);
+        }
+    }
+}
 
 impl log::Host for HostState {
     fn log(&mut self, level: log::Level, message: String) {

@@ -20,6 +20,7 @@ pub mod llm;
 #[cfg(feature = "gateway")]
 pub mod messaging;
 mod ports;
+pub mod providers;
 pub mod reload;
 
 use std::collections::HashMap;

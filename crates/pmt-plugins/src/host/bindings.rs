@@ -15,7 +15,7 @@ wasmtime::component::bindgen!({
         package prometheus:runtime;
         world plugin-host {
             include prometheus:tool/tool@1.1.0;
-            include prometheus:hook/hook@1.2.0;
+            include prometheus:hook/hook@1.3.0;
             include prometheus:provider/provider@1.1.0;
         }
     ",

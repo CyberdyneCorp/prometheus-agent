@@ -313,10 +313,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 29. M2 Plugin hooks, shell hooks and extension surfaces
 
-- [ ] 29.1 Implement transform hooks that rewrite tool results and replies (held replies never leak), streaming and lifecycle observer hooks (cannot change output), the bounded `pre_verify` continuation hook, `transform_api_error_classification` and approval and human-input observer hooks; verify with sample plugins (spec: plugin-system)
-- [ ] 29.2 Implement shell hooks with first-use consent (exit 2 blocks a tool call, an edited script needs re-approval), the hooks CLI with a test command showing the fail-closed outcome, and gateway hook directories that stay inert until granted; verify with hook fixtures (spec: plugin-system)
-- [ ] 29.3 Implement outbound webhooks (signed deliveries, a dead endpoint never stalls a turn), plugin CLI subcommands, approval transports that cannot widen scope, plugin live messages with message injection (no cross-profile injection) and platform actions (ungranted verbs return structured errors); verify with sample plugins (spec: plugin-system)
-- [ ] 29.4 Implement the install-time threat scan (a reverse shell is blocked even with `--force`) and model-provider plugins that cannot silently replace a built-in provider; verify with malicious and conflicting plugin fixtures (spec: plugin-system)
+- [x] 29.1 Implement transform hooks that rewrite tool results and replies (held replies never leak), streaming and lifecycle observer hooks (cannot change output), the bounded `pre_verify` continuation hook, `transform_api_error_classification` and approval and human-input observer hooks; verify with sample plugins (spec: plugin-system)
+- [x] 29.2 Implement shell hooks with first-use consent (exit 2 blocks a tool call, an edited script needs re-approval), the hooks CLI with a test command showing the fail-closed outcome, and gateway hook directories that stay inert until granted; verify with hook fixtures (spec: plugin-system)
+- [x] 29.3 Implement outbound webhooks (signed deliveries, a dead endpoint never stalls a turn), plugin CLI subcommands, approval transports that cannot widen scope, plugin live messages with message injection (no cross-profile injection) and platform actions (ungranted verbs return structured errors); verify with sample plugins (spec: plugin-system)
+- [x] 29.4 Implement the install-time threat scan (a reverse shell is blocked even with `--force`) and model-provider plugins that cannot silently replace a built-in provider; verify with malicious and conflicting plugin fixtures (spec: plugin-system)
 
 ## 30. M2 Toolset surfaces and schema variants
 

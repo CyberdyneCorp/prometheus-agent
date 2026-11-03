@@ -24,8 +24,18 @@ pub struct Added {
     pub minor: u64,
 }
 
-/// Fields added after hook world 1.0 (none yet).
-pub const ADDED: &[Added] = &[];
+/// Fields added after hook world 1.0.
+pub const ADDED: &[Added] = &[
+    added("pre_tool_call", "turn_id", 3),
+    added("post_tool_call", "turn_id", 3),
+    added("transform_tool_result", "turn_id", 3),
+    added("on_turn_end", "response", 3),
+    added("on_gateway_startup", "platforms", 3),
+];
+
+const fn added(hook: &'static str, field: &'static str, minor: u64) -> Added {
+    Added { hook, field, minor }
+}
 
 /// One hook's payload.
 #[derive(Debug, Clone, PartialEq)]

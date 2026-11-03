@@ -235,12 +235,42 @@ fn doctor_reports_a_hook_that_is_not_executable_or_approved() {
     assert!(stdout(&out).contains(": ok ("), "{}", stdout(&out));
 }
 
+/// A foreground interactive chat asks about each unapproved shell hook
+/// before it starts; `y` stores the consent, anything else leaves it
+/// pending (spec: plugin-system, Shell hooks with first-use consent).
+#[cfg(unix)]
+#[test]
+fn a_foreground_chat_asks_for_consent_before_it_starts() {
+    use expectrl::Expect as _;
+
+    use self::common::pty;
+
+    let (home, guard) = guarded_home();
+    let question = format!("Shell hook on pre_tool_call: `{}`", guard.display());
+    for (answer, status) in [("n", "pending approval"), ("y", "approved")] {
+        let mut p = pty::spawn(home.path(), &[]);
+        p.expect(question.as_str()).unwrap();
+        p.expect("Run it in this profile's sessions? [y/N] ")
+            .unwrap();
+        p.send_line(answer).unwrap();
+        pty::prompt(&mut p);
+        pty::exit(p);
+        let listed = ok(&run(home.path(), &["plugins", "hooks", "list"]));
+        assert!(
+            listed.contains(&format!("matcher=terminal  timeout=60s  {status}")),
+            "after {answer}: {listed}"
+        );
+    }
+    // Consented, the hook now runs in every session of the profile.
+    assert_eq!(run_terminal_turn(home.path()), "the hook blocked it\n");
+}
+
 #[cfg(all(unix, feature = "gateway"))]
 mod gateway {
     use std::path::Path;
     use std::time::Duration;
 
-    use super::common::gateway::{Daemon, gateway_home, send, wait, wait_said};
+    use super::common::gateway::{Daemon, gateway_home, gateway_home_with, send, wait, wait_said};
     use super::common::{ok, run};
 
     fn alert_dir(home: &Path) {
@@ -291,6 +321,88 @@ mod gateway {
             seen.contains("\"hook_event_name\":\"post_gateway_admission\""),
             "{seen}"
         );
+        daemon.stop(home);
+    }
+
+    /// A Hermes hook directory (`HOOK.yaml`) whose handler keeps every
+    /// document it receives as `<TMPDIR>/ev-<pid>.json`.
+    fn hermes_dir(home: &Path) {
+        let dir = home.join("profiles/default/hooks/watcher");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("HOOK.yaml"),
+            "name: watcher\ndescription: Watches turns\nevents:\n  - gateway:startup\n  - agent:step\n  - agent:end\n",
+        )
+        .unwrap();
+        let handler = dir.join("handler");
+        std::fs::write(
+            &handler,
+            "#!/bin/sh\nf=\"$TMPDIR/ev-$$\"\ncat > \"$f.part\" && mv \"$f.part\" \"$f.json\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(
+            &handler,
+            <std::fs::Permissions as std::os::unix::fs::PermissionsExt>::from_mode(0o755),
+        )
+        .unwrap();
+    }
+
+    /// The documents the handler received, by hook name.
+    fn received(home: &Path) -> Vec<serde_json::Value> {
+        let dir = home.join("profiles/default/cache/hooks");
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        entries
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .filter_map(|e| serde_json::from_str(&std::fs::read_to_string(e.path()).ok()?).ok())
+            .collect()
+    }
+
+    #[test]
+    fn a_translated_hermes_hook_receives_step_end_and_startup_fields() {
+        let rules = "[[rule]]\nuser = \"go\"\n[[rule.tool_calls]]\nname = \"read_file\"\n\
+                     arguments = { path = \"page.txt\" }\n\n[[rule]]\ntext = \"";
+        let home = gateway_home_with(&format!("{rules}{}\"\n", "y".repeat(600)), "");
+        let home = home.path();
+        hermes_dir(home);
+        ok(&run(
+            home,
+            &["plugins", "hooks", "allow", "--dir", "watcher"],
+        ));
+        let daemon = Daemon::start(home);
+        send(home, "default", "u1", "go");
+        wait_said(home, "default", "yyyy");
+        let named = |docs: &[serde_json::Value], hook: &str| {
+            docs.iter()
+                .filter(|d| d["hook_event_name"] == hook)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        wait(
+            "the agent:end and startup handlers",
+            Duration::from_mins(1),
+            || {
+                let docs = received(home);
+                !named(&docs, "on_turn_end").is_empty()
+                    && !named(&docs, "on_gateway_startup").is_empty()
+            },
+        );
+        let docs = received(home);
+        let startup = named(&docs, "on_gateway_startup");
+        assert_eq!(
+            startup[0]["extra"]["platforms"],
+            serde_json::json!(["test"])
+        );
+        let steps = named(&docs, "post_llm_call");
+        assert!(
+            steps.iter().any(|s| s["extra"]["iteration"] == 1
+                && s["extra"]["tool_names"] == serde_json::json!(["read_file"])),
+            "{steps:?}"
+        );
+        let end = &named(&docs, "on_turn_end")[0];
+        assert_eq!(end["extra"]["response"], "y".repeat(500));
         daemon.stop(home);
     }
 }

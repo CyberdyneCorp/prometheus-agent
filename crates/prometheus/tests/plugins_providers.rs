@@ -1,6 +1,7 @@
-//! Model-provider plugins in sessions (spec: plugin-system, Model-provider
-//! plugins): a registered provider joins the session's registry, its
-//! request hooks run in the plugin and the request stays in the host.
+//! Model-provider plugins in sessions and in the `model` and `auth`
+//! commands (spec: plugin-system, Model-provider plugins): a registered
+//! provider joins the registry, its request hooks (model listing
+//! included) run in the plugin and the request stays in the host.
 
 mod common;
 
@@ -76,6 +77,53 @@ async fn a_plugin_provider_serves_a_session_through_its_request_hooks() {
         stdout(&out).contains("from the plugin provider"),
         "{}",
         stdout(&out)
+    );
+}
+
+#[test]
+fn model_and_auth_commands_see_plugin_providers_and_their_listing() {
+    let home = mock_home();
+    place(home.path(), "providers = [\"acme\"]");
+    append_config(
+        home.path(),
+        "\n[plugins.entries.llms]\nmodel_ids = \"acme\"\nlisted = \"alpha,beta\"\n",
+    );
+    let listed = ok(&run(
+        home.path(),
+        &["--json", "model", "list", "--provider", "acme"],
+    ));
+    let listed: serde_json::Value = serde_json::from_str(&listed).unwrap();
+    let ids: Vec<&str> = listed["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["model"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["alpha", "beta"]);
+    let providers = ok(&run(
+        home.path(),
+        &["--json", "model", "list", "--providers"],
+    ));
+    assert!(
+        providers.contains("\"id\":\"acme\"") && providers.contains("\"origin\":\"plugin\""),
+        "{providers}"
+    );
+    // `auth` stores a key for the plugin provider like for a built-in.
+    let out = run_with_stdin(home.path(), &["auth", "add", "acme"], "pk-test\n");
+    assert!(out.status.success(), "{}", stderr(&out));
+    let status = ok(&run(home.path(), &["auth", "status", "acme"]));
+    assert!(status.contains("acme"), "{status}");
+    // A failing listing is reported and the catalog answers instead.
+    ok(&run(
+        home.path(),
+        &["config", "set", "plugins.entries.llms.listed", "\"fail\""],
+    ));
+    let out = run(home.path(), &["model", "list", "--provider", "acme"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("acme: the plugin's model listing failed: listing failed on purpose"),
+        "{}",
+        stderr(&out)
     );
 }
 

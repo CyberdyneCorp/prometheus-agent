@@ -29,6 +29,24 @@ const COMMENT_MARKERS: &[&str] = &["#", "//", "--", ";", "/*", "*", "<!--", "rem
 /// The largest file read (bigger files are scanned up to this many bytes).
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
+/// Why the scan refused a plugin.
+pub(super) struct Refused {
+    /// The error the command fails with.
+    pub error: Error,
+    /// The summary of a `dangerous` verdict (an update is then held until
+    /// reviewed).
+    pub dangerous: Option<String>,
+}
+
+impl From<Error> for Refused {
+    fn from(error: Error) -> Self {
+        Self {
+            error,
+            dangerous: None,
+        }
+    }
+}
+
 /// Scans the staged plugin and decides: `Ok` installs it (recording a
 /// skipped scan or a forced `caution` in `flags`), `Err` refuses it.
 ///
@@ -42,6 +60,20 @@ pub(super) fn check(
     force: bool,
     flags: &mut Flags,
 ) -> Result<(), Error> {
+    assess(scan_on_install, staged, force, flags).map_err(|refused| refused.error)
+}
+
+/// [`check`], telling a `dangerous` verdict apart.
+///
+/// # Errors
+///
+/// As [`check`].
+pub(super) fn assess(
+    scan_on_install: bool,
+    staged: &Staged,
+    force: bool,
+    flags: &mut Flags,
+) -> Result<(), Refused> {
     let id = &staged.manifest.id;
     if !scan_on_install {
         tracing::warn!(
@@ -65,15 +97,18 @@ pub(super) fn check(
             }
             Ok(())
         }
-        Verdict::Dangerous => Err(Error::new(
-            &codes::PLUGINS_THREAT,
-            format!(
-                "plugin '{id}' was refused: threat scan verdict {}",
-                report.summary()
-            ),
-        )
-        .with_hint("a dangerous verdict cannot be overridden, not even with --force")),
-        Verdict::Caution => confirm_caution(id, &report, force, flags),
+        Verdict::Dangerous => Err(Refused {
+            error: Error::new(
+                &codes::PLUGINS_THREAT,
+                format!(
+                    "plugin '{id}' was refused: threat scan verdict {}",
+                    report.summary()
+                ),
+            )
+            .with_hint("a dangerous verdict cannot be overridden, not even with --force"),
+            dangerous: Some(report.summary()),
+        }),
+        Verdict::Caution => Ok(confirm_caution(id, &report, force, flags)?),
     }
 }
 

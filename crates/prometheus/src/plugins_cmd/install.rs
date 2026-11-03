@@ -74,6 +74,7 @@ fn record(source: Origin, location: &str, staged: &Staged, args: &InstallArgs) -
             allow_removed: args.allow_removed,
             ..Flags::default()
         },
+        held_update: None,
     }
 }
 

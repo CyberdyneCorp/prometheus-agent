@@ -427,6 +427,7 @@ impl Instance {
                 ctx: Arc::clone(&self.ctx),
                 call: call.clone(),
                 limits,
+                console: None,
             },
         );
         store.limiter(|state| &mut state.limits);

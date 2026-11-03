@@ -44,7 +44,10 @@ step lower; bundled skills keep full weight. `dangerous` is refused (exit
 77, naming each finding, file and line) even with `--force`; `caution`
 installs after a yes on the terminal or with `--force` (recorded on the
 install record); a scan that fails refuses the install. A dangerous update
-leaves the installed version running. `plugins.scan_on_install = false`
+leaves the installed version running and is held on its install record:
+`plugins check-updates` and `plugins update` report it as disabled until
+reviewed (exit 77) without fetching it again, until the source publishes a
+different version. `plugins.scan_on_install = false`
 skips the scan, and the install record says so.
 
 A package is checked before anything lands in the profile. Catalog installs
@@ -172,8 +175,9 @@ The plugin interface is a set of WIT packages in `wit/`, one per world
 `wit/host`, the host interfaces every world imports: `log`, `state` (data
 under `<profile>/plugin-data/<id>/`), `http`, `secrets`, `llm`, `tools`,
 `events`, `config` (`plugins.entries.<id>.*`) and `session`; `tool` (1.1)
-and `hook` (1.2) worlds also import `wit/messaging` (live messages,
-injection, platform actions). Each world
+and `hook` (1.3) worlds also import `wit/messaging` (live messages,
+injection, platform actions), and `hook` imports `console` (a CLI
+command's streamed output). Each world
 versions on its own; a component built against the current or the previous
 major version of a world loads. `plugins/samples/` holds a sample plugin for
 every world, built with `cargo component` (`cargo xtask plugin-samples`).
@@ -318,8 +322,9 @@ up to 5 seconds at exit for its queued deliveries.
   installed or not enabled`, never silently another provider.
 
 - **Commands for the command line** in its `cli_commands` grant:
-  `prometheus plugins run <id> <command> [args...]` runs one (its output,
-  then its exit code; 70 when the plugin crashes) and `prometheus plugins
+  `prometheus plugins run <id> <command> [args...]` runs one (its stdout
+  and stderr streamed as the plugin writes them, then its exit code; 70
+  when the plugin crashes) and `prometheus plugins
   run <id>` lists them; `prometheus help` lists them under `plugin
   commands`.
 - **An approval transport** (`approval_transport`): with
@@ -336,9 +341,11 @@ up to 5 seconds at exit for its queued deliveries.
   `platform_actions` adds reactions or sets thread titles; every call
   answers what happened instead of failing.
 - **Model providers** (`providers`): a provider plugin's descriptors join
-  the session's provider registry, with its header and request hooks; an
-  id of a built-in provider is refused (the built-in stays) unless the
-  plugin holds `providers_override` for it.
+  the profile's provider registry (sessions, `prometheus model` and
+  `prometheus auth`), with its header and request hooks; `model list` and
+  the model pickers ask its model-listing hook (a failing one is reported
+  and the catalog answers). An id of a built-in provider is refused (the
+  built-in stays) unless the plugin holds `providers_override` for it.
 
 Plugins load in `requires_plugins` order: a plugin whose dependency is
 missing, disabled or failed is refused with `missing dependency '<id>'`,

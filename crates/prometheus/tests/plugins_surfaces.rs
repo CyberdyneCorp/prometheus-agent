@@ -17,7 +17,7 @@ fn place(home: &Path, id: &str, capabilities: &str, settings: &[(&str, &str)]) {
         format!(
             "manifest_version = 1\nid = \"{id}\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
              description = \"test\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
-             worlds = [\"hook@1.2\"]\n\n[capabilities]\n{capabilities}\n"
+             worlds = [\"hook@1.3\"]\n\n[capabilities]\n{capabilities}\n"
         ),
     )
     .unwrap();
@@ -75,6 +75,45 @@ fn a_plugin_command_runs_with_its_exit_code_and_shows_in_help() {
         text.contains("plugin commands:\n  prometheus plugins run tools status"),
         "{text}"
     );
+}
+
+#[test]
+fn a_plugin_command_streams_its_output_before_it_exits() {
+    // Spec: Plugin CLI subcommands stream stdout and stderr. The command
+    // waits for the state key `go`, written only once `started` was read.
+    use std::io::{BufRead as _, BufReader, Read as _};
+
+    let home = mock_home();
+    place(
+        home.path(),
+        "tools",
+        "cli_commands = [\"stream\"]",
+        &[("cli", "\"stream\"")],
+    );
+    let mut child = command(home.path())
+        .args(["plugins", "run", "tools", "stream"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut out = BufReader::new(child.stdout.take().unwrap());
+    let mut err = BufReader::new(child.stderr.take().unwrap());
+    let mut line = String::new();
+    out.read_line(&mut line).unwrap();
+    assert_eq!(line, "started\n");
+    line.clear();
+    err.read_line(&mut line).unwrap();
+    assert_eq!(line, "working\n");
+    assert!(child.try_wait().unwrap().is_none(), "still running");
+    let kv = home.path().join("profiles/default/plugin-data/tools/kv");
+    std::fs::create_dir_all(&kv).unwrap();
+    // Key `go`, hex-encoded.
+    std::fs::write(kv.join("676f"), "1").unwrap();
+    let mut rest = String::new();
+    out.read_to_string(&mut rest).unwrap();
+    assert_eq!(rest, "finished\n");
+    assert!(child.wait().unwrap().success());
 }
 
 fn work(home: &Path) -> PathBuf {

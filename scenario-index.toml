@@ -2031,7 +2031,7 @@ capabilities = [
 "Typo is a load error" = ["crates/pmt-plugins/tests/hooks.rs::an_unknown_hook_name_fails_at_load", "crates/pmt-plugins/src/manifest/tests.rs::hook_typos_and_bad_values_are_refused"]
 
 [plugin-system."Hook payloads are versioned and additive"]
-"Old plugin receives a new payload" = { tests = ["crates/pmt-plugins/src/hooks/payload.rs::an_old_plugin_receives_only_the_fields_of_its_version"], note = "hook world 1.0 has no later minor yet; the addition table of a host at 1.3 is supplied by the test" }
+"Old plugin receives a new payload" = { tests = ["crates/pmt-plugins/src/hooks/payload.rs::an_old_plugin_receives_only_the_fields_of_its_version"], note = "the test supplies its own addition table; the host's real one (`ADDED`: `turn_id`, `response`, `platforms` at 1.3) is applied the same way" }
 
 [plugin-system."Hook isolation and time bounds"]
 "Failing hook does not block others" = ["crates/pmt-plugins/tests/hooks.rs::a_failing_hook_does_not_block_the_next_one", "crates/pmt-plugins/tests/hooks.rs::a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while"]

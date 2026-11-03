@@ -119,6 +119,7 @@ impl PluginToolHooks {
         let mut fields = Map::new();
         fields.insert("session_id".to_owned(), call.session_id.into());
         fields.insert("call_id".to_owned(), call.call_id.into());
+        fields.insert("turn_id".to_owned(), call.turn_id.into());
         fields.insert("tool".to_owned(), call.tool.into());
         fields.insert("arguments".to_owned(), call.arguments.clone());
         for (key, value) in extra {

@@ -1,19 +1,21 @@
 //! `prometheus plugins run <plugin_id> [<command> [args...]]` (spec:
 //! plugin-system, Plugin CLI subcommands): a command a plugin registered
 //! under its `cli_commands` grant, run with argv, the invoking profile and
-//! the terminal's size and TTY flag. The plugin's stdout and stderr are
-//! written as it returns them and its exit code is the command's (70 when
-//! the plugin crashes). Without a command, the plugin's commands are
+//! the terminal's size and TTY flag. What the plugin writes to its
+//! `console` (hook world 1.3) is streamed to stdout and stderr as it is
+//! written, the output it returns follows, and its exit code is the
+//! command's (70 when the plugin crashes). Without a command, the plugin's commands are
 //! listed; `prometheus help` lists every enabled plugin's commands under
 //! `plugin commands`.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
+use std::sync::Arc;
 
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
-use pmt_plugins::host::CallInfo;
-use pmt_plugins::host::surfaces_world::Terminal;
+use pmt_plugins::host::surfaces_world;
+use pmt_plugins::host::{CallInfo, Console};
 use pmt_plugins::manifest::Manifest;
 
 use crate::context::Context;
@@ -78,12 +80,15 @@ pub(super) fn run(
         cwd: Some(cwd.display().to_string()),
     };
     let (columns, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-    let terminal = Terminal {
+    let terminal = surfaces_world::Terminal {
         columns,
         rows,
         tty: crate::prompt::stdin_is_tty(),
     };
-    match entry.instance.run_cli(&call, name, args, terminal) {
+    match entry
+        .instance
+        .run_cli(&call, name, args, terminal, Arc::new(Terminal))
+    {
         Ok(Ok(output)) => {
             let _ = std::io::stdout().write_all(&output.stdout);
             let _ = std::io::stderr().write_all(&output.stderr);
@@ -97,6 +102,22 @@ pub(super) fn run(
             eprintln!("plugin '{id}' crashed: {}", err.message());
             Ok(pmt_core::exit::INTERNAL)
         }
+    }
+}
+
+/// The process's own stdout and stderr, flushed after every write so the
+/// output streams.
+struct Terminal;
+
+impl Console for Terminal {
+    fn stdout(&self, bytes: &[u8]) {
+        let mut out = std::io::stdout().lock();
+        let _ = out.write_all(bytes);
+        let _ = out.flush();
+    }
+
+    fn stderr(&self, bytes: &[u8]) {
+        let _ = std::io::stderr().lock().write_all(bytes);
     }
 }
 

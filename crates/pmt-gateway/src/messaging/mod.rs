@@ -395,7 +395,11 @@ impl Gateway {
             shared
                 .options
                 .hooks
-                .emit(profile, "on_gateway_startup", serde_json::json!({}))
+                .emit(
+                    profile,
+                    "on_gateway_startup",
+                    serde_json::json!({"platforms": enabled_platforms(&shared, profile)}),
+                )
                 .await;
             adapters::start_profile(&shared, profile);
         }
@@ -506,4 +510,18 @@ impl Gateway {
             restart::mark_interrupted(&shared.options.home);
         }
     }
+}
+
+/// The platforms `profile` enables, by name (`on_gateway_startup`).
+fn enabled_platforms(shared: &Shared, profile: &str) -> Vec<String> {
+    shared.agents.scope(profile).map_or_else(Vec::new, |scope| {
+        scope
+            .config()
+            .gateway
+            .platforms
+            .iter()
+            .filter(|(_, table)| table.enabled)
+            .map(|(name, _)| name.clone())
+            .collect()
+    })
 }

@@ -4,6 +4,57 @@
 #[rustfmt::skip]
 #[allow(dead_code, clippy::all)]
 pub mod prometheus {
+    pub mod hook {
+        /// Added in 1.3: the invoking terminal of a running `run-cli` command,
+        /// so a command streams its output as it goes (spec: plugin-system,
+        /// Plugin CLI subcommands). Outside `run-cli` writes are dropped.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod console {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            #[allow(unused_unsafe, clippy::all)]
+            /// Writes `bytes` to the command's stdout.
+            pub fn write_stdout(bytes: &[u8]) -> () {
+                unsafe {
+                    let vec0 = bytes;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "prometheus:hook/console@1.3.0")]
+                    unsafe extern "C" {
+                        #[link_name = "write-stdout"]
+                        fn wit_import1(_: *mut u8, _: usize);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: *mut u8, _: usize) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import1(ptr0.cast_mut(), len0) };
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Writes `bytes` to the command's stderr.
+            pub fn write_stderr(bytes: &[u8]) -> () {
+                unsafe {
+                    let vec0 = bytes;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "prometheus:hook/console@1.3.0")]
+                    unsafe extern "C" {
+                        #[link_name = "write-stderr"]
+                        fn wit_import1(_: *mut u8, _: usize);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: *mut u8, _: usize) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import1(ptr0.cast_mut(), len0) };
+                }
+            }
+        }
+    }
     pub mod host {
         /// Always available; lines go to the profile log tagged with the plugin id.
         #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
@@ -3663,28 +3714,28 @@ pub mod exports {
                     fn on_hook(event: HookEvent) -> Result<Reply, _rt::String>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_prometheus_hook_plugin_1_2_0_cabi {
+                macro_rules! __export_prometheus_hook_plugin_1_3_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "prometheus:hook/plugin@1.2.0#hooks")] unsafe extern "C" fn
+                        "prometheus:hook/plugin@1.3.0#hooks")] unsafe extern "C" fn
                         export_hooks() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_hooks_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/plugin@1.2.0#hooks")] unsafe extern
+                        "cabi_post_prometheus:hook/plugin@1.3.0#hooks")] unsafe extern
                         "C" fn _post_return_hooks(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_hooks::<$ty > (arg0) } }
-                        #[unsafe (export_name = "prometheus:hook/plugin@1.2.0#on-hook")]
+                        #[unsafe (export_name = "prometheus:hook/plugin@1.3.0#on-hook")]
                         unsafe extern "C" fn export_on_hook(arg0 : * mut u8, arg1 :
                         usize, arg2 : * mut u8, arg3 : usize, arg4 : * mut u8, arg5 :
                         usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_on_hook_cabi::<$ty > (arg0, arg1, arg2, arg3, arg4, arg5)
                         } } #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/plugin@1.2.0#on-hook")] unsafe extern
+                        "cabi_post_prometheus:hook/plugin@1.3.0#on-hook")] unsafe extern
                         "C" fn _post_return_on_hook(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_on_hook::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_prometheus_hook_plugin_1_2_0_cabi;
+                pub(crate) use __export_prometheus_hook_plugin_1_3_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -4160,54 +4211,54 @@ pub mod exports {
                     ) -> Result<(), _rt::String>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_prometheus_hook_extensions_1_2_0_cabi {
+                macro_rules! __export_prometheus_hook_extensions_1_3_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "prometheus:hook/extensions@1.2.0#sections")] unsafe extern "C"
+                        "prometheus:hook/extensions@1.3.0#sections")] unsafe extern "C"
                         fn export_sections() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_sections_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/extensions@1.2.0#sections")] unsafe
+                        "cabi_post_prometheus:hook/extensions@1.3.0#sections")] unsafe
                         extern "C" fn _post_return_sections(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_sections::<$ty > (arg0) } }
                         #[unsafe (export_name =
-                        "prometheus:hook/extensions@1.2.0#render-section")] unsafe extern
+                        "prometheus:hook/extensions@1.3.0#render-section")] unsafe extern
                         "C" fn export_render_section(arg0 : * mut u8, arg1 : usize,) -> *
                         mut u8 { unsafe { $($path_to_types)*::
                         _export_render_section_cabi::<$ty > (arg0, arg1) } } #[unsafe
                         (export_name =
-                        "cabi_post_prometheus:hook/extensions@1.2.0#render-section")]
+                        "cabi_post_prometheus:hook/extensions@1.3.0#render-section")]
                         unsafe extern "C" fn _post_return_render_section(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
                         __post_return_render_section::<$ty > (arg0) } } #[unsafe
-                        (export_name = "prometheus:hook/extensions@1.2.0#commands")]
+                        (export_name = "prometheus:hook/extensions@1.3.0#commands")]
                         unsafe extern "C" fn export_commands() -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_commands_cabi::<$ty > () } }
                         #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/extensions@1.2.0#commands")] unsafe
+                        "cabi_post_prometheus:hook/extensions@1.3.0#commands")] unsafe
                         extern "C" fn _post_return_commands(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_commands::<$ty > (arg0) } }
                         #[unsafe (export_name =
-                        "prometheus:hook/extensions@1.2.0#run-command")] unsafe extern
+                        "prometheus:hook/extensions@1.3.0#run-command")] unsafe extern
                         "C" fn export_run_command(arg0 : * mut u8, arg1 : usize, arg2 : *
                         mut u8, arg3 : usize,) -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_run_command_cabi::<$ty > (arg0,
                         arg1, arg2, arg3) } } #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/extensions@1.2.0#run-command")] unsafe
+                        "cabi_post_prometheus:hook/extensions@1.3.0#run-command")] unsafe
                         extern "C" fn _post_return_run_command(arg0 : * mut u8,) { unsafe
                         { $($path_to_types)*:: __post_return_run_command::<$ty > (arg0) }
                         } #[unsafe (export_name =
-                        "prometheus:hook/extensions@1.2.0#on-event")] unsafe extern "C"
+                        "prometheus:hook/extensions@1.3.0#on-event")] unsafe extern "C"
                         fn export_on_event(arg0 : * mut u8, arg1 : usize, arg2 : * mut
                         u8, arg3 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_on_event_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
                         #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/extensions@1.2.0#on-event")] unsafe
+                        "cabi_post_prometheus:hook/extensions@1.3.0#on-event")] unsafe
                         extern "C" fn _post_return_on_event(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_on_event::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_prometheus_hook_extensions_1_2_0_cabi;
+                pub(crate) use __export_prometheus_hook_extensions_1_3_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -4268,7 +4319,8 @@ pub mod exports {
                             .finish()
                     }
                 }
-                /// What a command printed and its exit code.
+                /// What a command printed and its exit code (printed after anything
+                /// it streamed through `console`).
                 #[derive(Clone)]
                 pub struct CliOutput {
                     pub code: u8,
@@ -4862,43 +4914,43 @@ pub mod exports {
                     ) -> Result<ApprovalResponse, _rt::String>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_prometheus_hook_surfaces_1_2_0_cabi {
+                macro_rules! __export_prometheus_hook_surfaces_1_3_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "prometheus:hook/surfaces@1.2.0#hold-stream")] unsafe extern "C"
+                        "prometheus:hook/surfaces@1.3.0#hold-stream")] unsafe extern "C"
                         fn export_hold_stream() -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_hold_stream_cabi::<$ty > () } }
                         #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/surfaces@1.2.0#hold-stream")] unsafe
+                        "cabi_post_prometheus:hook/surfaces@1.3.0#hold-stream")] unsafe
                         extern "C" fn _post_return_hold_stream(arg0 : * mut u8,) { unsafe
                         { $($path_to_types)*:: __post_return_hold_stream::<$ty > (arg0) }
                         } #[unsafe (export_name =
-                        "prometheus:hook/surfaces@1.2.0#cli-commands")] unsafe extern "C"
+                        "prometheus:hook/surfaces@1.3.0#cli-commands")] unsafe extern "C"
                         fn export_cli_commands() -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_cli_commands_cabi::<$ty > () } }
                         #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/surfaces@1.2.0#cli-commands")] unsafe
+                        "cabi_post_prometheus:hook/surfaces@1.3.0#cli-commands")] unsafe
                         extern "C" fn _post_return_cli_commands(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_cli_commands::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "prometheus:hook/surfaces@1.2.0#run-cli")] unsafe extern "C" fn
+                        "prometheus:hook/surfaces@1.3.0#run-cli")] unsafe extern "C" fn
                         export_run_cli(arg0 : * mut u8, arg1 : usize, arg2 : * mut u8,
                         arg3 : usize, arg4 : i32, arg5 : i32, arg6 : i32,) -> * mut u8 {
                         unsafe { $($path_to_types)*:: _export_run_cli_cabi::<$ty > (arg0,
                         arg1, arg2, arg3, arg4, arg5, arg6) } } #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/surfaces@1.2.0#run-cli")] unsafe
+                        "cabi_post_prometheus:hook/surfaces@1.3.0#run-cli")] unsafe
                         extern "C" fn _post_return_run_cli(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_run_cli::<$ty > (arg0) } }
                         #[unsafe (export_name =
-                        "prometheus:hook/surfaces@1.2.0#transports")] unsafe extern "C"
+                        "prometheus:hook/surfaces@1.3.0#transports")] unsafe extern "C"
                         fn export_transports() -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_transports_cabi::<$ty > () } }
                         #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/surfaces@1.2.0#transports")] unsafe
+                        "cabi_post_prometheus:hook/surfaces@1.3.0#transports")] unsafe
                         extern "C" fn _post_return_transports(arg0 : * mut u8,) { unsafe
                         { $($path_to_types)*:: __post_return_transports::<$ty > (arg0) }
                         } #[unsafe (export_name =
-                        "prometheus:hook/surfaces@1.2.0#present-approval")] unsafe extern
+                        "prometheus:hook/surfaces@1.3.0#present-approval")] unsafe extern
                         "C" fn export_present_approval(arg0 : * mut u8, arg1 : usize,
                         arg2 : * mut u8, arg3 : usize, arg4 : * mut u8, arg5 : usize,
                         arg6 : * mut u8, arg7 : usize, arg8 : * mut u8, arg9 : usize,
@@ -4907,14 +4959,14 @@ pub mod exports {
                         _export_present_approval_cabi::<$ty > (arg0, arg1, arg2, arg3,
                         arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13,
                         arg14) } } #[unsafe (export_name =
-                        "cabi_post_prometheus:hook/surfaces@1.2.0#present-approval")]
+                        "cabi_post_prometheus:hook/surfaces@1.3.0#present-approval")]
                         unsafe extern "C" fn _post_return_present_approval(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
                         __post_return_present_approval::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_prometheus_hook_surfaces_1_2_0_cabi;
+                pub(crate) use __export_prometheus_hook_surfaces_1_3_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -5057,13 +5109,13 @@ macro_rules! __export_hook_impl {
     };
     ($ty:ident with_types_in $($path_to_types_root:tt)*) => {
         $($path_to_types_root)*::
-        exports::prometheus::hook::plugin::__export_prometheus_hook_plugin_1_2_0_cabi!($ty
+        exports::prometheus::hook::plugin::__export_prometheus_hook_plugin_1_3_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::prometheus::hook::plugin);
         $($path_to_types_root)*::
-        exports::prometheus::hook::extensions::__export_prometheus_hook_extensions_1_2_0_cabi!($ty
+        exports::prometheus::hook::extensions::__export_prometheus_hook_extensions_1_3_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::prometheus::hook::extensions);
         $($path_to_types_root)*::
-        exports::prometheus::hook::surfaces::__export_prometheus_hook_surfaces_1_2_0_cabi!($ty
+        exports::prometheus::hook::surfaces::__export_prometheus_hook_surfaces_1_3_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::prometheus::hook::surfaces);
     };
 }
@@ -5071,68 +5123,70 @@ macro_rules! __export_hook_impl {
 pub(crate) use __export_hook_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:prometheus:hook@1.2.0:hook:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:prometheus:hook@1.3.0:hook:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 3007] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xc4\x16\x01A\x02\x01\
-A!\x01B\x04\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05level\x03\
-\0\0\x01@\x02\x05level\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19prome\
-theus:host/log@1.0.0\x05\0\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01s\0\x06\
-failed\x01s\0\x04\0\x0ahost-error\x03\0\0\x03\0\x1bprometheus:host/types@1.0.0\x05\
-\x01\x02\x03\0\x01\x0ahost-error\x01B\x15\x02\x03\x02\x01\x02\x04\0\x0ahost-erro\
-r\x03\0\0\x01p}\x01k\x02\x01j\x01\x03\x01\x01\x01@\x01\x03keys\0\x04\x04\0\x03ge\
-t\x01\x05\x01j\0\x01\x01\x01@\x02\x03keys\x05value\x02\0\x06\x04\0\x03set\x01\x07\
-\x01@\x01\x03keys\0\x06\x04\0\x06delete\x01\x08\x01ps\x01j\x01\x09\x01\x01\x01@\0\
-\0\x0a\x04\0\x04keys\x01\x0b\x01j\x01\x02\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x09\
-read-file\x01\x0d\x01@\x02\x04paths\x08contents\x02\0\x06\x04\0\x0awrite-file\x01\
-\x0e\x03\0\x1bprometheus:host/state@1.0.0\x05\x03\x01B\x0d\x02\x03\x02\x01\x02\x04\
-\0\x0ahost-error\x03\0\0\x01o\x02ss\x01p\x02\x01p}\x01k\x04\x01r\x04\x06methods\x03\
-urls\x07headers\x03\x04body\x05\x04\0\x07request\x03\0\x06\x01r\x03\x06status{\x07\
-headers\x03\x04body\x04\x04\0\x08response\x03\0\x08\x01j\x01\x09\x01\x01\x01@\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 3093] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x9a\x17\x01A\x02\x01\
+A#\x01B\x04\x01p}\x01@\x01\x05bytes\0\x01\0\x04\0\x0cwrite-stdout\x01\x01\x04\0\x0c\
+write-stderr\x01\x01\x03\0\x1dprometheus:hook/console@1.3.0\x05\0\x01B\x04\x01m\x05\
+\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x05level\x03\0\0\x01@\x02\x05l\
+evel\x01\x07messages\x01\0\x04\0\x03log\x01\x02\x03\0\x19prometheus:host/log@1.0\
+.0\x05\x01\x01B\x02\x01q\x03\x06denied\x01s\0\x07invalid\x01s\0\x06failed\x01s\0\
+\x04\0\x0ahost-error\x03\0\0\x03\0\x1bprometheus:host/types@1.0.0\x05\x02\x02\x03\
+\0\x02\x0ahost-error\x01B\x15\x02\x03\x02\x01\x03\x04\0\x0ahost-error\x03\0\0\x01\
+p}\x01k\x02\x01j\x01\x03\x01\x01\x01@\x01\x03keys\0\x04\x04\0\x03get\x01\x05\x01\
+j\0\x01\x01\x01@\x02\x03keys\x05value\x02\0\x06\x04\0\x03set\x01\x07\x01@\x01\x03\
+keys\0\x06\x04\0\x06delete\x01\x08\x01ps\x01j\x01\x09\x01\x01\x01@\0\0\x0a\x04\0\
+\x04keys\x01\x0b\x01j\x01\x02\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x09read-file\
+\x01\x0d\x01@\x02\x04paths\x08contents\x02\0\x06\x04\0\x0awrite-file\x01\x0e\x03\
+\0\x1bprometheus:host/state@1.0.0\x05\x04\x01B\x0d\x02\x03\x02\x01\x03\x04\0\x0a\
+host-error\x03\0\0\x01o\x02ss\x01p\x02\x01p}\x01k\x04\x01r\x04\x06methods\x03url\
+s\x07headers\x03\x04body\x05\x04\0\x07request\x03\0\x06\x01r\x03\x06status{\x07h\
+eaders\x03\x04body\x04\x04\0\x08response\x03\0\x08\x01j\x01\x09\x01\x01\x01@\x01\
 \x07request\x07\0\x0a\x04\0\x04send\x01\x0b\x03\0\x1aprometheus:host/http@1.0.0\x05\
-\x04\x01B\x05\x02\x03\x02\x01\x02\x04\0\x0ahost-error\x03\0\0\x01j\x01s\x01\x01\x01\
+\x05\x01B\x05\x02\x03\x02\x01\x03\x04\0\x0ahost-error\x03\0\0\x01j\x01s\x01\x01\x01\
 @\x01\x04names\0\x02\x04\0\x03get\x01\x03\x03\0\x1dprometheus:host/secrets@1.0.0\
-\x05\x05\x01B\x0e\x02\x03\x02\x01\x02\x04\0\x0ahost-error\x03\0\0\x01r\x02\x04ro\
+\x05\x06\x01B\x0e\x02\x03\x02\x01\x03\x04\0\x0ahost-error\x03\0\0\x01r\x02\x04ro\
 les\x07contents\x04\0\x07message\x03\0\x02\x01p\x03\x01ks\x01ky\x01r\x04\x08mess\
 ages\x04\x05model\x05\x08provider\x05\x0amax-tokens\x06\x04\0\x07request\x03\0\x07\
 \x01j\x01s\x01\x01\x01@\x01\x07request\x08\0\x09\x04\0\x08complete\x01\x0a\x01@\x02\
 \x07request\x08\x06schemas\0\x09\x04\0\x13complete-structured\x01\x0b\x03\0\x19p\
-rometheus:host/llm@1.0.0\x05\x06\x01B\x05\x02\x03\x02\x01\x02\x04\0\x0ahost-erro\
+rometheus:host/llm@1.0.0\x05\x07\x01B\x05\x02\x03\x02\x01\x03\x04\0\x0ahost-erro\
 r\x03\0\0\x01j\x01s\x01\x01\x01@\x02\x04names\x09argumentss\0\x02\x04\0\x08dispa\
-tch\x01\x03\x03\0\x1bprometheus:host/tools@1.0.0\x05\x07\x01B\x07\x02\x03\x02\x01\
-\x02\x04\0\x0ahost-error\x03\0\0\x01j\0\x01\x01\x01@\x02\x04names\x07payloads\0\x02\
+tch\x01\x03\x03\0\x1bprometheus:host/tools@1.0.0\x05\x08\x01B\x07\x02\x03\x02\x01\
+\x03\x04\0\x0ahost-error\x03\0\0\x01j\0\x01\x01\x01@\x02\x04names\x07payloads\0\x02\
 \x04\0\x04emit\x01\x03\x01@\x01\x07patterns\0\x02\x04\0\x09subscribe\x01\x04\x03\
-\0\x1cprometheus:host/events@1.0.0\x05\x08\x01B\x09\x02\x03\x02\x01\x02\x04\0\x0a\
+\0\x1cprometheus:host/events@1.0.0\x05\x09\x01B\x09\x02\x03\x02\x01\x03\x04\0\x0a\
 host-error\x03\0\0\x01ks\x01j\x01\x02\x01\x01\x01@\x01\x03keys\0\x03\x04\0\x03ge\
 t\x01\x04\x01j\0\x01\x01\x01@\x02\x03keys\x05values\0\x05\x04\0\x03set\x01\x06\x03\
-\0\x1cprometheus:host/config@1.0.0\x05\x09\x01B\x05\x01ks\x01r\x04\x0asession-id\
+\0\x1cprometheus:host/config@1.0.0\x05\x0a\x01B\x05\x01ks\x01r\x04\x0asession-id\
 \0\x07profiles\x07surfaces\x03cwd\0\x04\0\x04info\x03\0\x01\x01@\0\0\x02\x04\0\x07\
-current\x01\x03\x03\0\x1dprometheus:host/session@1.0.0\x05\x0a\x01B\x09\x01r\x02\
+current\x01\x03\x03\0\x1dprometheus:host/session@1.0.0\x05\x0b\x01B\x09\x01r\x02\
 \x06handles\x08fallback\x7f\x04\0\x06posted\x03\0\0\x01m\x06\x0fno-conversation\x13\
 gateway-unavailable\x13adapter-unavailable\x0bsend-failed\x0bedit-failed\x07time\
 out\x04\0\x07failure\x03\0\x02\x01j\x01\x01\x01\x03\x01@\x01\x04texts\0\x04\x04\0\
 \x04post\x01\x05\x01@\x02\x06handles\x04texts\0\x04\x04\0\x04edit\x01\x06\x03\0'\
-prometheus:messaging/conversation@1.0.0\x05\x0b\x01B\x04\x01q\x02\x0bsession-key\
+prometheus:messaging/conversation@1.0.0\x05\x0c\x01B\x04\x01q\x02\x0bsession-key\
 \x01s\0\x06origin\x01s\0\x04\0\x06target\x03\0\0\x01@\x03\x07contents\x04roles\x06\
 target\x01\0\x7f\x04\0\x06inject\x01\x02\x03\0!prometheus:messaging/inject@1.0.0\
-\x05\x0c\x01B\x07\x01ks\x01r\x04\x02ok\x7f\x06actions\x05error\0\x06detail\0\x04\
+\x05\x0d\x01B\x07\x01ks\x01r\x04\x02ok\x7f\x06actions\x05error\0\x06detail\0\x04\
 \0\x07outcome\x03\0\x01\x01@\x04\x08platforms\x07chat-ids\x0amessage-ids\x05emoj\
 is\0\x02\x04\0\x0cadd-reaction\x01\x03\x01@\x04\x08platforms\x07chat-ids\x09thre\
 ad-ids\x05titles\0\x02\x04\0\x10set-thread-title\x01\x04\x03\0#prometheus:messag\
-ing/platform@1.0.0\x05\x0d\x01B\x0d\x01r\x03\x04hooks\x0eschema-versions\x07payl\
+ing/platform@1.0.0\x05\x0e\x01B\x0d\x01r\x03\x04hooks\x0eschema-versions\x07payl\
 oads\x04\0\x0ahook-event\x03\0\0\x01ks\x01r\x02\x07messages\x08rule-key\x02\x04\0\
 \x08approval\x03\0\x03\x01q\x05\x04none\0\0\x07context\x01s\0\x06modify\x01s\0\x05\
 block\x01s\0\x07approve\x01\x04\0\x04\0\x05reply\x03\0\x05\x01ps\x01@\0\0\x07\x04\
 \0\x05hooks\x01\x08\x01j\x01\x06\x01s\x01@\x01\x05event\x01\0\x09\x04\0\x07on-ho\
-ok\x01\x0a\x04\0\x1cprometheus:hook/plugin@1.2.0\x05\x0e\x01B\x10\x01ps\x01r\x03\
+ok\x01\x0a\x04\0\x1cprometheus:hook/plugin@1.3.0\x05\x0f\x01B\x10\x01ps\x01r\x03\
 \x04names\x0bdescriptions\x08surfaces\0\x04\0\x07command\x03\0\x01\x01@\0\0\0\x04\
 \0\x08sections\x01\x03\x01j\x01s\x01s\x01@\x01\x02ids\0\x04\x04\0\x0erender-sect\
 ion\x01\x05\x01p\x02\x01@\0\0\x06\x04\0\x08commands\x01\x07\x01@\x02\x04names\x04\
 argss\0\x04\x04\0\x0brun-command\x01\x08\x01j\0\x01s\x01@\x02\x04names\x07payloa\
-ds\0\x09\x04\0\x08on-event\x01\x0a\x04\0\x20prometheus:hook/extensions@1.2.0\x05\
-\x0f\x01B\x18\x01r\x02\x04names\x0bdescriptions\x04\0\x0bcli-command\x03\0\0\x01\
+ds\0\x09\x04\0\x08on-event\x01\x0a\x04\0\x20prometheus:hook/extensions@1.3.0\x05\
+\x10\x01B\x18\x01r\x02\x04names\x0bdescriptions\x04\0\x0bcli-command\x03\0\0\x01\
 r\x03\x07columns{\x04rows{\x03tty\x7f\x04\0\x08terminal\x03\0\x02\x01p}\x01r\x03\
 \x04code}\x06stdout\x04\x06stderr\x04\x04\0\x0acli-output\x03\0\x05\x01ps\x01r\x07\
 \x02ids\x06digests\x07commands\x0bdescriptions\x07surfaces\x0ctimeout-secsy\x07c\
@@ -5141,8 +5195,8 @@ ices\x04\0\x11approval-response\x03\0\x0a\x01@\0\0\x07\x04\0\x0bhold-stream\x01\
 \x01p\x01\x01@\0\0\x0d\x04\0\x0ccli-commands\x01\x0e\x01j\x01\x06\x01s\x01@\x03\x04\
 names\x04args\x07\x08terminal\x03\0\x0f\x04\0\x07run-cli\x01\x10\x04\0\x0atransp\
 orts\x01\x0c\x01j\x01\x0b\x01s\x01@\x02\x04names\x07request\x09\0\x11\x04\0\x10p\
-resent-approval\x01\x12\x04\0\x1eprometheus:hook/surfaces@1.2.0\x05\x10\x04\0\x1a\
-prometheus:hook/hook@1.2.0\x04\0\x0b\x0a\x01\0\x04hook\x03\0\0\0G\x09producers\x01\
+resent-approval\x01\x12\x04\0\x1eprometheus:hook/surfaces@1.3.0\x05\x11\x04\0\x1a\
+prometheus:hook/hook@1.3.0\x04\0\x0b\x0a\x01\0\x04hook\x03\0\0\0G\x09producers\x01\
 \x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]

@@ -230,6 +230,10 @@ skills always wait for a new session.
   size; each name in the `cli_commands` capability) and approval
   transports (`transports`, `present-approval`, which must answer with the
   request's `id`, `digest` and one of its `choices`).
+- Hook world 1.3 imports `console` (`write-stdout`, `write-stderr`): a
+  `run-cli` command writes through it to stream its output to the
+  invoking terminal as it goes; the `cli-output` it returns is printed
+  after. Outside `run-cli` the writes are dropped.
 - Transform hooks answer with `context`: the new tool result
   (`transform_tool_result`) or reply (`transform_llm_output`).
   `transform_api_error_classification` and `pre_verify` answer `modify`

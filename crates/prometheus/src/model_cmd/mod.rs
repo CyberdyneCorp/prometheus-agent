@@ -21,6 +21,7 @@ use pmt_providers::ProviderRegistry;
 use pmt_providers::auth::Accounts;
 use pmt_providers::capability::{self, Needs};
 use pmt_providers::metadata::{Catalog, ModelMetadata};
+use pmt_providers::registry::Provider;
 use pmt_providers::resolve::{AdHoc, Resolver, Route, Target, TcpProbe, Trace};
 
 use crate::cli::ModelCommand;
@@ -70,6 +71,9 @@ pub(crate) struct Models {
     /// The profile's credentials (resolution uses them like a session
     /// would).
     pub accounts: Accounts,
+    /// The model providers the profile's plugins register (also in
+    /// `registry`).
+    pub plugin_providers: Vec<pmt_plugins::surfaces::ModelProvider>,
 }
 
 impl Models {
@@ -88,7 +92,8 @@ impl Models {
         config: &Config,
         user_home: Option<&std::path::Path>,
     ) -> Result<Self, Error> {
-        let registry = ProviderRegistry::for_profile(config, Vec::new())?;
+        let (registry, plugin_providers) =
+            crate::plugins_host::providers::registry(&scope, config)?;
         let catalog = Catalog::new(config, Some(scope.path("cache/models")));
         let accounts = crate::accounts::open(&scope, config, &registry, user_home)?;
         Ok(Self {
@@ -96,7 +101,26 @@ impl Models {
             registry,
             catalog,
             accounts,
+            plugin_providers,
         })
+    }
+
+    /// The models to offer for `provider`: what a plugin provider's
+    /// `list-models` hook answers (a failing hook is reported and the
+    /// catalog answers instead), else the catalog's listing or built-in
+    /// entries.
+    pub(crate) fn model_ids(&self, provider: &Provider) -> Vec<String> {
+        match crate::plugins_host::providers::list_models(&self.plugin_providers, provider.id()) {
+            Some(Ok(listed)) => listed,
+            Some(Err(reason)) => {
+                eprintln!(
+                    "warning: {}: the plugin's model listing failed: {reason}",
+                    provider.id()
+                );
+                self.catalog.picker_models(provider)
+            }
+            None => self.catalog.picker_models(provider),
+        }
     }
 
     /// A resolver over this profile's secrets.

@@ -74,7 +74,7 @@ struct Profile {
 impl Profile {
     fn open(ctx: &Context<'_>) -> Result<Self, Error> {
         let scope = ctx.scope()?;
-        let registry = ProviderRegistry::for_profile(scope.config(), Vec::new())?;
+        let (registry, _) = crate::plugins_host::providers::registry(&scope, scope.config())?;
         let credentials = Credentials::new(scope.secrets().store().clone());
         let user_home = ctx.launch.user_home().map(std::path::PathBuf::as_path);
         let accounts = crate::accounts::open(&scope, scope.config(), &registry, user_home)?;

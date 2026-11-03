@@ -1,6 +1,6 @@
 /// Callbacks on the closed hook list (spec: plugin-system, Typed hook
 /// registry; Hook payloads are versioned and additive).
-package prometheus:hook@1.2.0;
+package prometheus:hook@1.3.0;
 
 interface plugin {
     /// One hook firing. `payload` is a JSON object carrying
@@ -106,7 +106,8 @@ interface surfaces {
         tty: bool,
     }
 
-    /// What a command printed and its exit code.
+    /// What a command printed and its exit code (printed after anything
+    /// it streamed through `console`).
     record cli-output {
         code: u8,
         stdout: list<u8>,
@@ -144,9 +145,20 @@ interface surfaces {
     present-approval: func(name: string, request: approval-request) -> result<approval-response, string>;
 }
 
+/// Added in 1.3: the invoking terminal of a running `run-cli` command,
+/// so a command streams its output as it goes (spec: plugin-system,
+/// Plugin CLI subcommands). Outside `run-cli` writes are dropped.
+interface console {
+    /// Writes `bytes` to the command's stdout.
+    write-stdout: func(bytes: list<u8>);
+    /// Writes `bytes` to the command's stderr.
+    write-stderr: func(bytes: list<u8>);
+}
+
 world hook {
     include prometheus:host/imports@1.0.0;
     include prometheus:messaging/imports@1.0.0;
+    import console;
     export plugin;
     export extensions;
     export surfaces;

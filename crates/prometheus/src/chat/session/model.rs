@@ -175,13 +175,7 @@ impl Models {
         let loaded = plugins.current();
         let models = loaded.surfaces.models.clone();
         if !models.is_empty() {
-            let registered = models
-                .iter()
-                .map(|m| pmt_providers::PluginProvider {
-                    descriptor: m.descriptor.clone(),
-                    replaces_builtin: m.replaces_builtin,
-                })
-                .collect();
+            let registered = crate::plugins_host::providers::registered(&models);
             let registry = ProviderRegistry::for_profile(scope.config(), registered)?;
             let parts = &self.setup;
             self.setup = Arc::new(ProviderSetupParts {

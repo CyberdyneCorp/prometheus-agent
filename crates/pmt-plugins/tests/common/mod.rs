@@ -322,6 +322,7 @@ pub(crate) fn adopted(dir: &Path, digest: &str) {
         tier: None,
         installed_at: "2026-11-03T00:00:00Z".to_owned(),
         flags: pmt_plugins::record::Flags::default(),
+        held_update: None,
     }
     .write(dir)
     .unwrap();

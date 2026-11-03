@@ -44,6 +44,7 @@ async fn pre_tool_call(loaded: &Loaded) -> PreDecision {
         .pre_tool_call(HookCall {
             session_id: "ses_test",
             call_id: "call_1",
+            turn_id: None,
             tool: "write_file",
             arguments: &arguments,
         })
@@ -132,6 +133,7 @@ async fn a_failing_hook_does_not_block_the_next_one() {
     let call = HookCall {
         session_id: "ses_test",
         call_id: "call_1",
+        turn_id: None,
         tool: "read_file",
         arguments: &arguments,
     };

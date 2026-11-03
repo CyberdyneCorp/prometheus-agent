@@ -26,6 +26,8 @@ pub struct HookCall<'a> {
     pub session_id: &'a str,
     /// The model's call id.
     pub call_id: &'a str,
+    /// The turn that made the call (none outside a turn loop).
+    pub turn_id: Option<&'a str>,
     /// Tool name as called.
     pub tool: &'a str,
     /// Validated arguments (or the raw text when they did not parse).

@@ -17,6 +17,7 @@ mod commands;
 mod confirm;
 mod controls;
 mod history;
+mod hook_events;
 mod input;
 mod lifecycle;
 mod models;
@@ -480,7 +481,10 @@ impl Lane {
                 self.progressed();
                 self.delta(&text).await;
             }
-            Msg::Event { kind, payload } => self.session_event(&kind, &payload).await,
+            Msg::Event { kind, payload } => {
+                self.hook_event(&kind, &payload).await;
+                self.session_event(&kind, &payload).await;
+            }
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),
             Msg::Resolved { id, by_client } => self.resolved(&id, &by_client),
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),

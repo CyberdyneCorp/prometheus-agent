@@ -3,11 +3,13 @@
 //! model providers). A component built against an older minor exports
 //! neither; the calls then answer as if it registered nothing.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use pmt_core::error::Error;
 
 use super::super::bindings::exports::prometheus::hook;
+use super::super::imports::Console;
 use super::{CallInfo, Instance};
 
 use hook::surfaces::{ApprovalRequest, ApprovalResponse, CliCommand, CliOutput, Terminal};
@@ -52,7 +54,8 @@ impl Instance {
         })
     }
 
-    /// `surfaces.run-cli(name, args, terminal)`.
+    /// `surfaces.run-cli(name, args, terminal)`; what the plugin writes
+    /// to its `console` (1.3) meanwhile goes to `console`.
     ///
     /// # Errors
     ///
@@ -63,15 +66,19 @@ impl Instance {
         name: &str,
         args: &[String],
         terminal: Terminal,
+        console: Arc<dyn Console>,
     ) -> Result<Result<CliOutput, String>, Error> {
         let indices = self
             .surfaces
             .as_ref()
             .ok_or_else(|| self.missing("hook@1.2"))?;
         self.with_live(call, None, |store, instance| {
-            indices
-                .load(&mut *store, instance)?
-                .call_run_cli(&mut *store, name, args, terminal)
+            store.data_mut().console = Some(console);
+            let output = indices
+                .load(&mut *store, instance)
+                .and_then(|surfaces| surfaces.call_run_cli(&mut *store, name, args, terminal));
+            store.data_mut().console = None;
+            output
         })
     }
 

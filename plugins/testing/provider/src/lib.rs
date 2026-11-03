@@ -7,7 +7,8 @@
 //! provider per id in the `model_ids` setting (comma list), served at the
 //! `base_url` setting (default `https://llm.example.com/v1`) with secret
 //! `PLUGIN_LLM_KEY`; every request to them carries header
-//! `x-plugin: <id>`.
+//! `x-plugin: <id>`, and their model listing is the `listed` setting
+//! (comma list; `plugin-model` when unset, `fail` fails the listing).
 
 wit_bindgen::generate!({
     path: ["../../../wit/host", "../../../wit/messaging", "../../../wit/provider"],
@@ -103,7 +104,11 @@ impl models::Guest for Provider {
     }
 
     fn list_models(_provider: String) -> Result<Vec<String>, String> {
-        Ok(vec!["plugin-model".to_owned()])
+        match setting("listed").as_str() {
+            "" => Ok(vec!["plugin-model".to_owned()]),
+            "fail" => Err("listing failed on purpose".to_owned()),
+            listed => Ok(listed.split(',').map(str::to_owned).collect()),
+        }
     }
 }
 

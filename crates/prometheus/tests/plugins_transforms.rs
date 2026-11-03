@@ -134,6 +134,25 @@ text = "saw it redacted"
     assert_eq!(tools.len(), 1);
     assert!(tools[0].contains("[redacted]"), "{tools:?}");
     assert!(!tools[0].contains("sk-abc123"), "{tools:?}");
+    // The payload carries every field the spec lists.
+    let payload: serde_json::Value = serde_json::from_str(&plugin_state(
+        home.path(),
+        "redact",
+        "last_transform_tool_result",
+    ))
+    .unwrap();
+    assert_eq!(payload["tool"], "read_file");
+    assert_eq!(payload["arguments"]["path"], "page.txt");
+    assert!(payload["result"].as_str().unwrap().contains("sk-abc123"));
+    assert_eq!(payload["status"], "ok");
+    assert!(payload["error_type"].is_null());
+    assert!(payload["duration_ms"].is_u64());
+    for id in ["session_id", "call_id", "turn_id"] {
+        assert!(
+            !payload[id].as_str().unwrap_or_default().is_empty(),
+            "{id}: {payload}"
+        );
+    }
 }
 
 #[test]

@@ -124,6 +124,7 @@ pub(super) fn adopt(ctx: &Context<'_>, dir_or_id: &str, grant: Option<&str>) -> 
         tier: None,
         installed_at: pmt_plugins::install::now(),
         flags: Flags::default(),
+        held_update: None,
     }
     .write(&dir)?;
     eprintln!("adopted '{id}' in profile '{}'", scope.name());

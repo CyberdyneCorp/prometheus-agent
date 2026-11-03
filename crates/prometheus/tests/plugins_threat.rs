@@ -1,5 +1,6 @@
 //! The install-time threat scan (spec: plugin-system, Install-time threat
-//! scan): `prometheus plugins install` of hostile and suspicious packages.
+//! scan): `prometheus plugins install` and `update` of hostile and
+//! suspicious packages.
 
 mod common;
 
@@ -10,19 +11,28 @@ use self::common::{ok, run, stderr, temp_home};
 /// A plugin `p` (sample tool) with `extra` files, packed into
 /// `<home>/p.pmtpkg`.
 fn package(home: &Path, extra: &[(&str, &str)]) -> PathBuf {
+    package_at(home, "1.0.0", extra)
+}
+
+/// [`package`] at `version` (the package file is replaced).
+fn package_at(home: &Path, version: &str, extra: &[(&str, &str)]) -> PathBuf {
     let dir = home.join("src/p");
+    let _ = std::fs::remove_dir_all(&dir);
     pmt_plugins::testkit::install("sample-tool", &dir);
     std::fs::write(
         dir.join("plugin.toml"),
-        "manifest_version = 1\nid = \"p\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
-         description = \"p\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
-         worlds = [\"tool@1.1\"]\n\n[capabilities]\n",
+        format!(
+            "manifest_version = 1\nid = \"p\"\nversion = \"{version}\"\nkind = \"wasm\"\n\
+             description = \"p\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
+             worlds = [\"tool@1.1\"]\n\n[capabilities]\n"
+        ),
     )
     .unwrap();
     for (name, text) in extra {
         std::fs::write(dir.join(name), text).unwrap();
     }
     let out = home.join("p.pmtpkg");
+    let _ = std::fs::remove_file(&out);
     ok(&run(
         home,
         &[
@@ -106,4 +116,57 @@ fn turning_the_scan_off_is_recorded_on_the_install() {
         std::fs::read_to_string(home.path().join("profiles/default/plugins/p/.install.toml"))
             .unwrap();
     assert!(record.contains("scan_skipped = true"), "{record}");
+}
+
+fn installed_version(home: &Path) -> String {
+    std::fs::read_to_string(home.join("profiles/default/plugins/p/plugin.toml"))
+        .unwrap()
+        .lines()
+        .find_map(|l| l.strip_prefix("version = "))
+        .unwrap()
+        .trim_matches('"')
+        .to_owned()
+}
+
+#[test]
+fn a_dangerous_update_is_held_until_a_new_version_replaces_it() {
+    // Spec: a dangerous verdict on update keeps the previous version
+    // active and disables the update until reviewed.
+    let home = temp_home();
+    let package = package(home.path(), &[]);
+    ok(&install(home.path(), &package, &[]));
+    package_at(home.path(), "1.0.1", &[("setup.sh", REVERSE_SHELL)]);
+    let update = |home: &Path| run(home, &["plugins", "update", "p", "--allow-unsigned"]);
+    let out = update(home.path());
+    assert_eq!(out.status.code(), Some(77), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("verdict dangerous"),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(installed_version(home.path()), "1.0.0");
+    let record =
+        std::fs::read_to_string(home.path().join("profiles/default/plugins/p/.install.toml"))
+            .unwrap();
+    assert!(record.contains("[held_update]"), "{record}");
+    // Held: not offered or fetched again.
+    let listed = ok(&run(home.path(), &["plugins", "check-updates"]));
+    assert!(listed.contains("is disabled until reviewed"), "{listed}");
+    let out = update(home.path());
+    assert_eq!(out.status.code(), Some(77), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("is disabled until reviewed (threat scan verdict dangerous"),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(installed_version(home.path()), "1.0.0");
+    // A different (clean) update replaces it and clears the hold.
+    package_at(home.path(), "1.0.2", &[]);
+    let out = update(home.path());
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    assert_eq!(installed_version(home.path()), "1.0.2");
+    let record =
+        std::fs::read_to_string(home.path().join("profiles/default/plugins/p/.install.toml"))
+            .unwrap();
+    assert!(!record.contains("held_update"), "{record}");
 }

@@ -11,7 +11,9 @@
 //! that asks for more (or changed signer) keeps the current version
 //! active: the new one waits in the profile's `cache/plugins/pending/`
 //! until approved (`--grant`, or a yes on a terminal), and `diff-grants`
-//! shows what it asks for.
+//! shows what it asks for. An update the threat scan grades `dangerous`
+//! is refused and held: the record keeps it, and it is neither fetched
+//! nor offered again until the source publishes a different one.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -25,7 +27,7 @@ use pmt_plugins::host::state::StateDir;
 use pmt_plugins::install::{self, Staged};
 use pmt_plugins::manifest::{Manifest, describe, label};
 use pmt_plugins::package;
-use pmt_plugins::record::{InstallRecord, Origin};
+use pmt_plugins::record::{HeldUpdate, InstallRecord, Origin};
 
 use super::InstallArgs;
 use super::install::{Fetched, from_catalog, from_package};
@@ -37,7 +39,26 @@ use crate::plugins_host;
 struct Available {
     id: String,
     record: InstallRecord,
+    /// The catalog ref or package digest it would move to.
+    target: String,
     what: String,
+}
+
+impl Available {
+    /// The refusal of this very update, when it was graded `dangerous`.
+    fn held(&self) -> Option<&HeldUpdate> {
+        self.record
+            .held_update
+            .as_ref()
+            .filter(|held| held.target == self.target)
+    }
+
+    fn held_line(&self, held: &HeldUpdate) -> String {
+        format!(
+            "{}: {} is disabled until reviewed (threat scan verdict {}); the installed version stays active",
+            self.id, self.what, held.verdict
+        )
+    }
 }
 
 /// The installed plugins (with records) of the profile.
@@ -58,25 +79,27 @@ fn installed(scope: &ProfileScope) -> Vec<(String, InstallRecord)> {
     found
 }
 
-/// What moved for one installed plugin, if anything.
-fn moved(scope: &ProfileScope, id: &str, record: &InstallRecord) -> Option<String> {
+/// What moved for one installed plugin, if anything: the target (catalog
+/// ref or package digest) and a description.
+fn moved(scope: &ProfileScope, id: &str, record: &InstallRecord) -> Option<(String, String)> {
     match record.source {
         Origin::Catalog => {
             let catalog = plugins_host::catalog::current(scope, true);
             let entry = catalog.find(id)?;
             (Some(&entry.r#ref) != record.r#ref.as_ref()).then(|| {
-                format!(
+                let what = format!(
                     "catalog ref {} -> {}",
                     record.r#ref.as_deref().unwrap_or("-"),
                     entry.r#ref
-                )
+                );
+                (entry.r#ref.clone(), what)
             })
         }
         Origin::Package => {
             let bytes = std::fs::read(&record.location).ok()?;
             let digest = package::digest(&bytes);
             (Some(&digest) != record.package_digest.as_ref())
-                .then(|| format!("package {} changed", record.location))
+                .then(|| (digest, format!("package {} changed", record.location)))
         }
         Origin::Git | Origin::Adopted => None,
     }
@@ -86,8 +109,13 @@ fn available(scope: &ProfileScope) -> Vec<Available> {
     installed(scope)
         .into_iter()
         .filter_map(|(id, record)| {
-            let what = moved(scope, &id, &record)?;
-            Some(Available { id, record, what })
+            let (target, what) = moved(scope, &id, &record)?;
+            Some(Available {
+                id,
+                record,
+                target,
+                what,
+            })
         })
         .collect()
 }
@@ -101,7 +129,14 @@ pub(super) fn check(ctx: &Context<'_>) -> Result<u8, Error> {
     }
     let mut text = String::new();
     for update in found {
-        let _ = writeln!(text, "{}: {}", update.id, update.what);
+        match update.held() {
+            Some(held) => {
+                let _ = writeln!(text, "{}", update.held_line(held));
+            }
+            None => {
+                let _ = writeln!(text, "{}: {}", update.id, update.what);
+            }
+        }
     }
     print_raw(&text)
 }
@@ -141,6 +176,11 @@ pub(super) fn update(
     }
     let mut code = 0;
     for update in found {
+        if let Some(held) = update.held() {
+            eprintln!("{}", update.held_line(held));
+            code = code.max(pmt_core::exit::PERMISSION_DENIED);
+            continue;
+        }
         let args = update_args(&update.record, flags);
         code = code.max(update_one(ctx, &scope, &update, &args, grant)?);
     }
@@ -182,13 +222,18 @@ fn update_one(
     }
     super::install::check_kill_list(scope, &fetched, args)?;
     // A dangerous new version is refused here, before anything replaces
-    // the installed one, which stays active.
-    super::threat::check(
+    // the installed one, which stays active; it is held until reviewed.
+    if let Err(refused) = super::threat::assess(
         scope.config().plugins.scan_on_install,
         &fetched.staged,
         args.force,
         &mut fetched.record.flags,
-    )?;
+    ) {
+        if let Some(verdict) = refused.dangerous {
+            hold(scope, update, verdict)?;
+        }
+        return Err(refused.error);
+    }
     let diff = difference(scope, &update.id, &fetched.staged.manifest)?;
     let signer_changed = fetched.record.signer != update.record.signer;
     let file = GrantsFile::of(scope.profile());
@@ -285,6 +330,17 @@ fn new_capabilities_screen(id: &str, staged: &Staged, diff: &Difference) -> Stri
         let _ = writeln!(screen, "  - {}", describe(capability));
     }
     screen
+}
+
+/// Records `update` as refused on the installed plugin's record.
+fn hold(scope: &ProfileScope, update: &Available, verdict: String) -> Result<(), Error> {
+    let mut record = update.record.clone();
+    record.held_update = Some(HeldUpdate {
+        target: update.target.clone(),
+        verdict,
+        held_at: install::now(),
+    });
+    record.write(&scope.dir().join("plugins").join(&update.id))
 }
 
 fn replace(scope: &ProfileScope, fetched: Fetched) -> Result<u8, Error> {

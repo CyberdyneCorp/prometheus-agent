@@ -246,9 +246,10 @@ impl ToolPort for SwappableTools {
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         let tools = self.tools();
-        Box::pin(async move { tools.run(calls, cancel).await })
+        Box::pin(async move { tools.run(calls, turn_id, cancel).await })
     }
 }

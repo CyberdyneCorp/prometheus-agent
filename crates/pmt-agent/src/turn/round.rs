@@ -47,7 +47,11 @@ impl Turn<'_> {
             .collect();
         let token = self.options.interrupt.token().child();
         let tools = self.agent.setup.tools.clone();
-        let batch = match self.race_tools(tools.run(&runnable, &token)).await {
+        let turn_id = self.id.to_string();
+        let batch = match self
+            .race_tools(tools.run(&runnable, &turn_id, &token))
+            .await
+        {
             Ok(batch) => batch,
             Err(end) => {
                 token.cancel();
