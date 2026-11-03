@@ -130,20 +130,29 @@ pub(super) fn update(
     if found.is_empty() {
         return print_raw("every plugin is up to date\n");
     }
-    let args = InstallArgs {
-        identifier: String::new(),
-        git_ref: None,
-        allow_unsigned,
-        allow_removed: false,
-        enable: false,
-        no_enable: true,
-        grant: None,
-    };
     let mut code = 0;
     for update in found {
+        let args = update_args(&update.record, allow_unsigned);
         code = code.max(update_one(ctx, &scope, &update, &args, grant)?);
     }
     Ok(code)
+}
+
+/// The install options an update runs with. `--allow-removed` is a
+/// standing choice the install record keeps, so the update honours it and
+/// the new record carries it on. `--allow-unsigned` is not: it admitted
+/// the code installed then, and a new version is new code, so an unsigned
+/// update needs the flag again (the new record says whether it was used).
+fn update_args(record: &InstallRecord, allow_unsigned: bool) -> InstallArgs {
+    InstallArgs {
+        identifier: String::new(),
+        git_ref: None,
+        allow_unsigned,
+        allow_removed: record.flags.allow_removed,
+        enable: false,
+        no_enable: true,
+        grant: None,
+    }
 }
 
 fn update_one(
@@ -161,6 +170,7 @@ fn update_one(
     if update.record.source == Origin::Package {
         fetched.record.location.clone_from(&update.record.location);
     }
+    super::install::check_kill_list(scope, &fetched, args)?;
     let diff = difference(scope, &update.id, &fetched.staged.manifest)?;
     let signer_changed = fetched.record.signer != update.record.signer;
     let file = GrantsFile::of(scope.profile());

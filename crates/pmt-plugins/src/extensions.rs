@@ -89,7 +89,8 @@ impl Contributions {
     /// # Errors
     ///
     /// `plugins.load`: `system prompt section '<id>' is already registered
-    /// by plugin '<other>'` (nothing of the plugin's sections registers).
+    /// by plugin '<other>'`, naming the plugin itself when it lists `<id>`
+    /// twice (nothing of the plugin's sections registers).
     pub fn add_sections(
         &mut self,
         instance: &Arc<Instance>,
@@ -109,13 +110,17 @@ impl Contributions {
                 "capability_denied: prompt_section; plugin '{plugin}' sections are not registered"
             )]);
         }
-        for id in &ids {
-            if let Some(owner) = self.sections.iter().find(|s| &s.id == id) {
+        for (at, id) in ids.iter().enumerate() {
+            // A plugin listing an id twice collides with itself.
+            let owner = match self.sections.iter().find(|s| &s.id == id) {
+                Some(section) => Some(section.plugin.as_str()),
+                None => ids[..at].contains(id).then_some(plugin),
+            };
+            if let Some(owner) = owner {
                 return Err(Error::new(
                     &codes::PLUGINS_LOAD,
                     format!(
-                        "system prompt section '{id}' is already registered by plugin '{}'",
-                        owner.plugin
+                        "system prompt section '{id}' is already registered by plugin '{owner}'"
                     ),
                 ));
             }

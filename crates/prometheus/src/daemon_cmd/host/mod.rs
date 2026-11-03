@@ -625,7 +625,11 @@ impl Host for DaemonHost {
         plugin: Option<&'a str>,
     ) -> HostFuture<'a, String> {
         Box::pin(async move {
-            let scope = self.profile(profile)?.scope();
+            let profile = self.profile(profile)?;
+            // `plugins enable` and friends write `config.toml` and ask for
+            // the reload at once: read it now rather than at the next poll.
+            self.check(&profile).await;
+            let scope = profile.scope();
             let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
             let loaded = crate::plugins_host::reload(&scope, &cwd).current();
             crate::plugins_host::reload::check_target(&loaded, plugin)?;

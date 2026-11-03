@@ -11,6 +11,7 @@
 
 mod cleanup;
 mod support;
+mod warm;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

@@ -24,6 +24,29 @@ pub(super) fn reload(ctx: &Context<'_>, id: Option<&str>) -> Result<u8, Error> {
     print_raw(&format!("{report}\n"))
 }
 
+/// After a command changed the profile's plugins (install, enable,
+/// disable, update, remove, adopt): a running daemon reloads them so its
+/// sessions get the hooks, slash commands and event subscribers at once,
+/// and the report says what is active now and what waits for the next
+/// session. Without a daemon no session runs, and the next one loads the
+/// change. The change itself is already made, so a failed reload is a
+/// warning naming the command that retries it, not a failure.
+pub(super) fn after_change(ctx: &Context<'_>, id: Option<&str>) {
+    let pushed = ctx.scope().and_then(|scope| {
+        crate::daemon_client::running(scope.home())?
+            .map(|record| in_daemon(&record, scope.name().as_str(), id))
+            .transpose()
+    });
+    match pushed {
+        Ok(Some(report)) => eprintln!("the running daemon reloaded its plugins:\n{report}"),
+        Ok(None) => {}
+        Err(err) => eprintln!(
+            "warning: the running daemon did not reload its plugins ({}); `prometheus plugins reload` retries",
+            err.message()
+        ),
+    }
+}
+
 /// Asks the running daemon to reload `profile`'s plugins.
 fn in_daemon(
     record: &pmt_rpc::discovery::DaemonRecord,

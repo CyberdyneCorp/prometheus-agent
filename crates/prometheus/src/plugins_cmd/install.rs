@@ -291,21 +291,35 @@ fn git_checkout(url: &str, commit: &str, dir: &Path) -> Result<(), Error> {
 /// Applies the kill list, shows the unsigned screen, then moves the plugin
 /// into the profile with its record.
 fn commit(scope: &ProfileScope, fetched: Fetched, args: &InstallArgs) -> Result<(), Error> {
-    let id = fetched.staged.manifest.id.clone();
-    let catalog = Catalog {
-        entries: Vec::new(),
-        removed: plugins_host::catalog::kill_list(scope),
-    };
-    if let Some(removed) = catalog.blocked(&id, fetched.repo.as_deref())
-        && !args.allow_removed
-    {
-        return Err(removed.refusal(&id));
-    }
+    check_kill_list(scope, &fetched, args)?;
     if let Some(why) = &fetched.unsigned {
         unsigned_screen(scope, &fetched.staged, why)?;
     }
     install::commit(fetched.staged, scope.dir(), &fetched.record, false)?;
     Ok(())
+}
+
+/// Refuses a staged plugin (install or update) whose id or repository is
+/// on the kill list, unless `--allow-removed` (or, for an update, the
+/// install record) allows it.
+///
+/// # Errors
+///
+/// `plugins.removed` (77) with the kill list's reason.
+pub(super) fn check_kill_list(
+    scope: &ProfileScope,
+    fetched: &Fetched,
+    args: &InstallArgs,
+) -> Result<(), Error> {
+    let id = &fetched.staged.manifest.id;
+    let catalog = Catalog {
+        entries: Vec::new(),
+        removed: plugins_host::catalog::kill_list(scope),
+    };
+    match catalog.blocked(id, fetched.repo.as_deref()) {
+        Some(removed) if !args.allow_removed => Err(removed.refusal(id)),
+        _ => Ok(()),
+    }
 }
 
 /// What an unsigned install shows before it proceeds: id, digest and the

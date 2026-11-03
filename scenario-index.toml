@@ -2062,7 +2062,7 @@ capabilities = [
 "Capability escalation on update waits for approval" = { tests = ["crates/prometheus/tests/plugins_catalog.rs::capability_escalation_on_update_waits_for_approval"], note = "a package install; the update is a new package at the recorded path (a catalog update takes the same path), reported with the full version 1.1.0" }
 
 [plugin-system."Plugin system-prompt sections are bounded and frozen"]
-"Duplicate section id refused" = ["crates/pmt-plugins/tests/extensions.rs::duplicate_section_id_is_refused_naming_the_first_plugin", "crates/pmt-plugins/tests/extensions.rs::sections_need_the_grant_and_stay_within_their_bounds", "crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
+"Duplicate section id refused" = ["crates/pmt-plugins/tests/extensions.rs::duplicate_section_id_is_refused_naming_the_first_plugin", "crates/pmt-plugins/tests/extensions.rs::a_section_id_listed_twice_by_one_plugin_is_refused", "crates/pmt-plugins/tests/extensions.rs::sections_need_the_grant_and_stay_within_their_bounds", "crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
 
 [plugin-system."Plugin slash commands"]
 "Core command cannot be taken" = ["crates/prometheus/src/slash/tests.rs::a_plugin_redeclaring_a_built_in_fails_and_the_built_in_stays", "crates/pmt-plugins/tests/extensions.rs::commands_register_only_when_granted_and_run_in_the_plugin", "crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now"]
@@ -2077,7 +2077,7 @@ capabilities = [
 "Cycle refuses only its members" = ["crates/pmt-plugins/src/load/order.rs::cycle_refuses_only_its_members", "crates/pmt-plugins/tests/loading.rs::a_cycle_refuses_only_its_members_and_dependencies_load_first", "crates/pmt-plugins/tests/loading.rs::a_plugin_overrunning_the_load_deadline_is_skipped_and_others_load"]
 
 [plugin-system."Hot reload respects the prompt-cache invariant"]
-"New tool waits for the next session" = ["crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now"]
+"New tool waits for the next session" = ["crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now", "crates/prometheus/tests/plugins_session.rs::an_enabled_plugin_command_works_at_once_in_a_running_daemon_session"]
 
 [plugin-system."Safe mode"]
 "Broken config does not block safe mode" = ["crates/prometheus/tests/plugins_session.rs::safe_mode_starts_with_a_broken_config_and_without_plugins"]
@@ -2098,3 +2098,6 @@ capabilities = [
 
 [security-boundaries."Signed plugins"]
 "Tampered plugin" = ["crates/prometheus/tests/plugins_catalog.rs::a_tampered_plugin_does_not_load_and_doctor_reports_it"]
+
+[security-boundaries."Grants pinned to plugin identity"]
+"Update adds network access" = ["crates/prometheus/tests/plugins_catalog.rs::an_update_adding_network_access_waits_while_the_installed_version_runs"]

@@ -138,7 +138,8 @@ impl Fixture {
     }
 }
 
-/// Chromium-family browsers of this host, then Playwright's downloads.
+/// Chromium-family browsers of this host, then Playwright's downloads;
+/// the first one (the one tests start) is warmed once per run.
 pub(crate) fn browsers() -> Vec<PathBuf> {
     let mut found =
         pmt_tools::browser::launch::system_candidates(std::env::var_os("PATH").as_deref());
@@ -178,6 +179,7 @@ pub(crate) fn browsers() -> Vec<PathBuf> {
         !found.is_empty(),
         "no Chromium-family browser on this host: install Chrome/Chromium or run `npx playwright install chromium`"
     );
+    crate::warm::once(&found[0]);
     found
 }
 

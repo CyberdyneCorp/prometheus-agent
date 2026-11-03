@@ -242,6 +242,13 @@ session`). `--now` also rebuilds the current session's tools and prompt,
 recorded as `prompt.rebuilt` with reason `plugins --now`. `/plugins` alone
 lists the plugins with their state and load error.
 
+`plugins install`, `enable`, `disable`, `update`, `remove`, `adopt` and
+`grants approve|revoke` reload a running daemon's plugins the same way when
+they change something, and print the same report after `the running daemon
+reloaded its plugins:`. Without a running daemon no session runs, and the
+next one loads the change. If the daemon cannot reload, the command still
+succeeds (the change is made) and warns; `prometheus plugins reload` retries.
+
 ## Safe mode
 
 `prometheus --safe-mode chat --model <m> --provider <p>` starts with no

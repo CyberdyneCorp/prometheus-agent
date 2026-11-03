@@ -610,3 +610,127 @@ fn a_tampered_plugin_does_not_load_and_doctor_reports_it() {
         stdout(&doctor)
     );
 }
+
+/// Installs the package at `package` (unsigned, enabled, every capability
+/// granted) with `extra` flags.
+fn install_enabled(home: &Path, package: &Path, extra: &[&str]) {
+    let mut args = vec![
+        "plugins",
+        "install",
+        package.to_str().unwrap(),
+        "--allow-unsigned",
+        "--enable",
+        "--grant",
+        "all",
+    ];
+    args.extend(extra);
+    let out = run(home, &args);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+}
+
+#[test]
+fn an_update_adding_network_access_waits_while_the_installed_version_runs() {
+    // security-boundaries scenario "Update adds network access".
+    let home = temp_home();
+    let package = home.path().join("weather.pmtpkg");
+    pack(home.path(), &source(home.path(), "1.0.0", ""), &package);
+    install_enabled(home.path(), &package, &[]);
+    ok(&run(
+        home.path(),
+        &["config", "set", "plugins.signature_policy", "off"],
+    ));
+    pack(
+        home.path(),
+        &source(home.path(), "1.1.0", "network = [\"*.tracker.example\"]"),
+        &package,
+    );
+    let out = run(home.path(), &["plugins", "update", "weather"]);
+    assert_eq!(code(&out), 4, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("weather 1.1.0 requests new capabilities: network *.tracker.example"),
+        "{}",
+        stderr(&out)
+    );
+    let listing = ok(&run(home.path(), &["plugins", "list"]));
+    assert!(
+        listing.contains("weather  1.0.0  wasm  user  loaded"),
+        "{listing}"
+    );
+    let capabilities = ok(&run(home.path(), &["plugins", "capabilities", "weather"]));
+    assert_eq!(
+        capabilities, "weather\n  declared: none\n  granted: none\n",
+        "{capabilities}"
+    );
+    let diff = ok(&run(home.path(), &["plugins", "diff-grants", "weather"]));
+    assert!(
+        diff.contains("new      network *.tracker.example"),
+        "{diff}"
+    );
+}
+
+/// Serves a kill list naming `weather` and refreshes the cache from it.
+fn remove_weather_from_the_catalog(home: &Path) -> CatalogServer {
+    let server = CatalogServer::start(home);
+    server.catalog(
+        &serde_json::json!({
+            "plugins": [],
+            "removed": [{ "id": "weather", "reason": "exfiltrates tokens" }]
+        }),
+        TEST_KEY,
+    );
+    ok(&run(home, &["plugins", "search", "anything"]));
+    server
+}
+
+#[test]
+fn an_update_keeps_the_allow_removed_choice_of_its_install() {
+    // Spec: Catalog kill list (an update is allowed when the install record
+    // carries allow_removed = true, and the new record keeps it).
+    let home = temp_home();
+    let _server = remove_weather_from_the_catalog(home.path());
+    let package = home.path().join("weather.pmtpkg");
+    pack(home.path(), &source(home.path(), "1.0.0", ""), &package);
+    install_enabled(home.path(), &package, &["--allow-removed"]);
+    pack(home.path(), &source(home.path(), "1.1.0", ""), &package);
+    let out = run(
+        home.path(),
+        &["plugins", "update", "weather", "--allow-unsigned"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let recorded = record(home.path(), "weather");
+    assert!(recorded.contains("allow_removed = true"), "{recorded}");
+    let listing = ok(&run(home.path(), &["plugins", "list"]));
+    assert!(
+        listing.contains("weather  1.1.0  wasm  user  loaded"),
+        "{listing}"
+    );
+}
+
+#[test]
+fn a_removed_plugin_installed_without_the_flag_is_not_updated() {
+    // Spec: Catalog kill list (update refused).
+    let home = temp_home();
+    let package = home.path().join("weather.pmtpkg");
+    pack(home.path(), &source(home.path(), "1.0.0", ""), &package);
+    install_enabled(home.path(), &package, &[]);
+    let _server = remove_weather_from_the_catalog(home.path());
+    pack(home.path(), &source(home.path(), "1.1.0", ""), &package);
+    let out = run(
+        home.path(),
+        &["plugins", "update", "weather", "--allow-unsigned"],
+    );
+    assert_eq!(code(&out), 77, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains(
+            "Plugin 'weather' was removed from the catalog and is blocked: exfiltrates tokens"
+        ),
+        "{}",
+        stderr(&out)
+    );
+    let manifest = std::fs::read_to_string(
+        home.path()
+            .join("profiles/default/plugins/weather/plugin.toml"),
+    )
+    .unwrap();
+    assert!(manifest.contains("version = \"1.0.0\""), "{manifest}");
+}

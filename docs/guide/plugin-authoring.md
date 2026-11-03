@@ -2,9 +2,10 @@
 
 This guide builds a WebAssembly plugin from scratch: a `tool` plugin that
 gives the agent a forecast tool. The finished plugin lives in the
-repository at `plugins/examples/weather/`; CI builds it with
-`cargo component` and loads it on every run, so the code below is known to
-work. [Plugins](plugins.md) covers installing and managing plugins as a
+repository at `plugins/examples/weather/`. On every run CI builds it with
+`cargo component` (`cargo xtask plugin-samples --check`), and a test builds
+the same source into a component, then validates, packs, installs and loads
+it with its `plugin.toml`, so the code below is known to work. [Plugins](plugins.md) covers installing and managing plugins as a
 user.
 
 ## What a plugin is
@@ -142,6 +143,13 @@ Build it:
 cargo component build --release --target wasm32-unknown-unknown
 cp target/wasm32-unknown-unknown/release/example_weather.wasm plugin.wasm
 ```
+
+The file is named after the crate (`example-weather` here, with `_` for
+`-`) and lands in the `target/` directory of the Cargo workspace the crate
+belongs to. For a plugin in a project of its own that is the project's
+`target/`, as above. The in-repository example is a member of the
+`plugins/` workspace, so there it lands in
+`plugins/target/wasm32-unknown-unknown/release/example_weather.wasm`.
 
 ## Check, package, install
 

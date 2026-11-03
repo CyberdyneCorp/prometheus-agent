@@ -213,6 +213,44 @@ pub enum GrantsAction {
 ///
 /// The subcommand's failure; the caller prints it and exits with its code.
 pub fn run(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+    let code = dispatch(command, ctx)?;
+    let target = match changed(command) {
+        Change::None => return Ok(code),
+        Change::Plugin(id) => Some(id),
+        Change::Plugins => None,
+    };
+    if code == 0 {
+        reload::after_change(ctx, target);
+    }
+    Ok(code)
+}
+
+/// What a command changes of which plugins load.
+enum Change<'a> {
+    None,
+    /// One plugin, which stays installed (the reload reports on it).
+    Plugin(&'a str),
+    /// Some plugins.
+    Plugins,
+}
+
+fn changed(command: &PluginsCommand) -> Change<'_> {
+    match command {
+        PluginsCommand::Enable { id, .. }
+        | PluginsCommand::Disable { id }
+        | PluginsCommand::Update { id: Some(id), .. }
+        | PluginsCommand::Grants {
+            command: GrantsAction::Approve { id, .. } | GrantsAction::Revoke { id, .. },
+        } => Change::Plugin(id),
+        PluginsCommand::Install(_)
+        | PluginsCommand::Update { id: None, .. }
+        | PluginsCommand::Remove { .. }
+        | PluginsCommand::Adopt { .. } => Change::Plugins,
+        _ => Change::None,
+    }
+}
+
+fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
         PluginsCommand::Install(args) => install::install(ctx, args),
         PluginsCommand::Search { query } => catalog_cmd::search(ctx, Some(query)),

@@ -82,7 +82,10 @@ impl DaemonHost {
             .collect()
     }
 
-    async fn check(&self, profile: &Profile) {
+    /// Re-reads `profile`'s `config.toml` when it changed since the last
+    /// read (the poll calls it; so does a plugin reload, which must see a
+    /// change the CLI wrote a moment ago).
+    pub(super) async fn check(&self, profile: &Profile) {
         let current = profile.scope();
         let text = std::fs::read(config_path(&current)).ok();
         {

@@ -64,6 +64,30 @@ async fn duplicate_section_id_is_refused_naming_the_first_plugin() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_section_id_listed_twice_by_one_plugin_is_refused() {
+    let mut profile = Profile::new("default");
+    let fake = Fake::new();
+    extension(
+        &mut profile,
+        &fake,
+        "a",
+        "prompt_section = 100",
+        &[
+            ("sections", "\"style.guide,style.guide\""),
+            ("section", "\"be brief\""),
+        ],
+    );
+    let loaded = profile.load(&Runtime::new().unwrap(), &fake.ports());
+    let a = loaded.statuses.iter().find(|s| s.id == "a").unwrap();
+    assert_eq!(a.state, State::Error);
+    assert_eq!(
+        a.problem.as_deref(),
+        Some("system prompt section 'style.guide' is already registered by plugin 'a'")
+    );
+    assert!(loaded.contributions.sections.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn sections_need_the_grant_and_stay_within_their_bounds() {
     let mut profile = Profile::new("default");
     let fake = Fake::new();

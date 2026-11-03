@@ -63,7 +63,11 @@ Tests that start a real headless Chromium (`pmt-tools`' `browser` test
 binary) belong to the nextest test group `browser` in
 `.config/nextest.toml`, which runs at most two of them at a time: several
 browsers starting at once on a small runner exceed the 30 s launch and CDP
-timeouts. A new test binary that starts a browser joins that group.
+timeouts. A new test binary that starts a browser joins that group. The
+first start of a runner image's preinstalled browser is slow (its files come
+from a cold disk: 20 s and more), so the binary's `support::browsers()`
+starts it once per test run before any test does (`tests/browser/warm.rs`);
+a new test binary that starts a browser calls it too.
 
 ### Pre-push hook
 

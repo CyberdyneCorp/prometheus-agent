@@ -361,3 +361,61 @@ mod line {
         );
     }
 }
+
+#[cfg(all(unix, feature = "gateway"))]
+mod daemon {
+    use expectrl::Expect as _;
+
+    use super::common::{daemon, mock_home, ok, pty, run, stderr};
+    use super::place;
+
+    #[test]
+    fn an_enabled_plugin_command_works_at_once_in_a_running_daemon_session() {
+        // Spec: Hot reload respects the prompt-cache invariant (an enable
+        // replaces the running daemon's plugin instances; slash commands
+        // are active at once in sessions started before it).
+        let home = mock_home();
+        place(
+            home.path(),
+            "radio",
+            "testing-hooks",
+            "\"hook@1.1\"",
+            "commands = [\"forecast\"]",
+        );
+        ok(&run(
+            home.path(),
+            &[
+                "config",
+                "set",
+                "plugins.entries.radio.commands",
+                "\"forecast\"",
+            ],
+        ));
+        let _daemon = daemon::start(home.path(), &[]);
+        let mut p = pty::spawn(home.path(), &[]);
+        p.expect("attached to the gateway daemon").unwrap();
+        pty::prompt(&mut p);
+        p.send_line("first").unwrap();
+        p.expect("mock: first").unwrap();
+        pty::prompt(&mut p);
+        p.send_line("/forecast berlin").unwrap();
+        p.expect("Unknown command").unwrap();
+        pty::prompt(&mut p);
+        let out = run(
+            home.path(),
+            &["plugins", "enable", "radio", "--grant", "all"],
+        );
+        assert!(out.status.success(), "{}", stderr(&out));
+        let said = stderr(&out);
+        assert!(
+            said.contains("the running daemon reloaded its plugins:\nradio loaded"),
+            "{said}"
+        );
+        assert!(said.contains("slash commands: now"), "{said}");
+        assert!(said.contains("tools: next session"), "{said}");
+        p.send_line("/forecast berlin").unwrap();
+        p.expect("ran /forecast berlin in ses_").unwrap();
+        pty::prompt(&mut p);
+        pty::exit(p);
+    }
+}
