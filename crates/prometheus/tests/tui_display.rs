@@ -213,8 +213,11 @@ fn redraw_clears_and_repaints_the_screen() {
     let _daemon = daemon::start(home.path(), &[]);
     let mut p = tui(home.path(), &[], &[]);
     opened(&mut p);
-    // Once the model is known, a repaint shows the status line whole.
+    // The model and the banner each arrive by their own request after the
+    // first frame (drawn in, only their changed cells are written); once
+    // both have been repainted whole, every later repaint shows them.
     see_repainted(&mut p, "default │ mock/mock");
+    see_repainted(&mut p, "Prometheus");
     enter(&mut p, "/redraw");
     p.expect("\u{1b}[2J").unwrap();
     // Everything is painted again, the banner's title included.

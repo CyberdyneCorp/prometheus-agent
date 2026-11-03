@@ -282,7 +282,13 @@ mod gateway {
         )
         .unwrap();
         let handler = dir.join("handler");
-        std::fs::write(&handler, "#!/bin/sh\ncat > \"$TMPDIR/alert-ran.json\"\n").unwrap();
+        // Written aside and renamed, so the test never reads a half-written
+        // marker.
+        std::fs::write(
+            &handler,
+            "#!/bin/sh\nf=\"$TMPDIR/alert-ran\"\ncat > \"$f.part\" && mv \"$f.part\" \"$f.json\"\n",
+        )
+        .unwrap();
         std::fs::set_permissions(
             &handler,
             <std::fs::Permissions as std::os::unix::fs::PermissionsExt>::from_mode(0o755),
