@@ -37,7 +37,7 @@ impl Repl {
             Resolution::External { command, args } => match command.source {
                 Source::Quick => self.quick(&command.name, &args, 0).await,
                 Source::Plugin => {
-                    match commands::plugins::run_line(self.live(), &line).await {
+                    match commands::plugins::run_line(self.live(), &line, "cli").await {
                         Ok(text) | Err(text) => self.notice(&text),
                     }
                     Flow::Continue

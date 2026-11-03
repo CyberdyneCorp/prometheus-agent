@@ -14,7 +14,7 @@ pub mod skills;
 pub mod summarize;
 pub mod tools;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use jiff::Timestamp;
@@ -153,6 +153,10 @@ pub struct Live {
     registry: Mutex<Arc<ToolRegistry>>,
     /// The profile's live plugin set (slash commands, reload).
     pub plugins: crate::plugins_host::ProfilePlugins,
+    /// The session's working directory (plugin `session.info`).
+    cwd: PathBuf,
+    /// The surface that created the session (`cli`, `tui`, `gateway`...).
+    surface: &'static str,
     /// The plugin system-prompt sections the session's prompt carries.
     plugin_sections: Arc<Mutex<Vec<String>>>,
     _plugin_llm: crate::plugins_host::llm::Registration,
@@ -448,6 +452,8 @@ impl Factory {
             selection: Mutex::new(selection),
             registry: Mutex::new(registry),
             plugins: self.plugins.clone(),
+            cwd: self.options.cwd.clone(),
+            surface: session.source.as_str(),
             plugin_sections,
             notices,
             progress,
@@ -473,13 +479,15 @@ impl Factory {
         setup.turn_hooks = Some(self.plugins.turn_hooks(self.plugin_call(id)));
     }
 
-    /// What plugin host calls of session `id` report as their session.
+    /// What plugin host calls of session `id` report as their session:
+    /// the surface that created it (`cli`, `tui`, `gateway`, `cron`...)
+    /// and this factory's working directory.
     fn plugin_call(&self, id: SessionId) -> pmt_plugins::host::CallInfo {
-        pmt_plugins::host::CallInfo {
-            session_id: Some(id.to_string()),
-            surface: "cli".to_owned(),
-            cwd: Some(self.options.cwd.to_string_lossy().into_owned()),
-        }
+        let surface = self
+            .store
+            .session(id)
+            .map_or_else(|_| "cli".to_owned(), |s| s.source.as_str().to_owned());
+        session_call(id, &surface, &self.options.cwd)
     }
 
     /// The session's command approval gate.
@@ -530,6 +538,7 @@ impl Factory {
             image_input: self.image_input(target),
             completions: clients.and_then(|c| c.completions.clone()),
             providers: self.plugins.current().providers.clone(),
+            plugin_call: self.plugin_call(id),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -850,7 +859,30 @@ fn refresher(
     })
 }
 
+/// The `session.info` of a plugin call made for session `id` from
+/// `surface` in `cwd`.
+fn session_call(id: SessionId, surface: &str, cwd: &Path) -> pmt_plugins::host::CallInfo {
+    pmt_plugins::host::CallInfo {
+        session_id: Some(id.to_string()),
+        surface: surface.to_owned(),
+        cwd: Some(cwd.to_string_lossy().into_owned()),
+    }
+}
+
 impl Live {
+    /// What a plugin call made for this session from `surface` (where the
+    /// user typed it: `cli`, `tui`, `gateway`...) reports as its session.
+    #[must_use]
+    pub fn plugin_call(&self, surface: &str) -> pmt_plugins::host::CallInfo {
+        session_call(self.id, surface, &self.cwd)
+    }
+
+    /// The surface that created the session (`cli`, `tui`, `gateway`...).
+    #[must_use]
+    pub fn surface(&self) -> &'static str {
+        self.surface
+    }
+
     /// The tool registry the session's tools come from.
     #[must_use]
     pub fn registry(&self) -> Arc<ToolRegistry> {

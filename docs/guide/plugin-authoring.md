@@ -200,9 +200,10 @@ until `prometheus plugins adopt <dir>`.
 
 `prometheus plugins reload` swaps the running plugin for its current files
 without a restart: hooks, slash commands and event subscribers change at
-once, while tools and system-prompt sections reach new sessions only (the
-current session's cached prompt stays as it was). `/plugins reload --now`
-applies them to the current session too.
+once, while tools, system-prompt sections and skills reach new sessions
+only (the current session's cached prompt stays as it was). `/plugins
+reload --now` applies tools and sections to the current session too;
+skills always wait for a new session.
 
 ## Other worlds
 

@@ -5,7 +5,6 @@
 use std::fmt::Write as _;
 
 use pmt_core::error::{Error, codes};
-use pmt_plugins::host::CallInfo;
 use pmt_plugins::load::Loaded;
 
 use super::Ctx;
@@ -79,18 +78,14 @@ pub(crate) fn register(registry: &mut Registry, live: &Live) {
     }
 }
 
-/// Runs the plugin command of `line` on `live`'s session: the text to
-/// show, or why it failed.
-pub(crate) async fn run_line(live: &Live, typed: &str) -> Result<String, String> {
+/// Runs the plugin command of `line`, typed on `surface` (`cli`, `tui`,
+/// `gateway`...), on `live`'s session: the text to show, or why it failed.
+pub(crate) async fn run_line(live: &Live, typed: &str, surface: &str) -> Result<String, String> {
     let (name, args) = slash::split_line(typed);
     let Some(command) = live.plugins.current().contributions.command(&name).cloned() else {
         return Err(format!("Unknown command: /{name}"));
     };
-    let call = CallInfo {
-        session_id: Some(live.id.to_string()),
-        surface: "cli".to_owned(),
-        cwd: None,
-    };
+    let call = live.plugin_call(surface);
     let outcome = tokio::task::spawn_blocking(move || command.run(&call, &args))
         .await
         .map_err(|e| e.to_string())?;

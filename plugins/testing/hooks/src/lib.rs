@@ -7,7 +7,8 @@
 //! Its `extensions` (hook world 1.1) are driven the same way: `sections`
 //! (comma list of ids) rendered as `<id>:<section>` or, with
 //! `section_len`, that many `s`; `commands` (comma list) answered as
-//! `ran /<name> <args>`, where command `emit` emits event `<args>`;
+//! `ran /<name> <args> in <session> from <surface> at <cwd>` (its
+//! `session.info`), where command `emit` emits event `<args>`;
 //! `subscribe` (comma list of patterns) subscribed when `hooks()` runs
 //! (`load = spin` makes `hooks()` never return);
 //! every event received is appended to the state key `events`, and
@@ -104,8 +105,13 @@ impl extensions::Guest for Hooks {
         if name == "emit" {
             events::emit(&args, "{}").map_err(|e| format!("{e:?}"))?;
         }
-        let session = session::current().session_id.unwrap_or_default();
-        Ok(format!("ran /{name} {args} in {session}"))
+        let info = session::current();
+        let id = info.session_id.unwrap_or_default();
+        let cwd = info.cwd.unwrap_or_else(|| "-".to_owned());
+        Ok(format!(
+            "ran /{name} {args} in {id} from {} at {cwd}",
+            info.surface
+        ))
     }
 
     fn on_event(name: String, payload: String) -> Result<(), String> {

@@ -11,8 +11,14 @@ use pmt_plugins::load::{Loaded, State};
 /// The parts a reload activates in running sessions at once.
 const NOW: &[&str] = &["hooks", "slash commands", "event subscribers"];
 
-/// The parts that are read when a session starts (and by `--now`).
-const DEFERRED: &[&str] = &["tools", "system prompt sections", "skills"];
+/// The parts that are read when a session starts; `--now` rebuilds them
+/// for the current session too.
+const DEFERRED: &[&str] = &["tools", "system prompt sections"];
+
+/// The parts only a new session picks up, even with `--now`: a session's
+/// skill roots, and the sandbox reads granted for them, are fixed when it
+/// starts.
+const NEXT_SESSION: &[&str] = &["skills"];
 
 /// Checks that `id`, when given, is a plugin of the profile.
 ///
@@ -30,8 +36,8 @@ pub fn check_target(loaded: &Loaded, id: Option<&str>) -> Result<(), Error> {
 }
 
 /// What a reload did: the plugins' states after it, then one line per
-/// part; with `now` the deferred parts were applied to the current
-/// session too.
+/// part; with `now` the deferred parts (but not skills) were applied to
+/// the current session too.
 #[must_use]
 pub fn report(loaded: &Loaded, id: Option<&str>, now: bool) -> String {
     let mut text = String::new();
@@ -59,6 +65,9 @@ pub fn report(loaded: &Loaded, id: Option<&str>, now: bool) -> String {
     };
     for part in DEFERRED {
         let _ = writeln!(text, "{part}: {deferred}");
+    }
+    for part in NEXT_SESSION {
+        let _ = writeln!(text, "{part}: next session");
     }
     text.trim_end().to_owned()
 }

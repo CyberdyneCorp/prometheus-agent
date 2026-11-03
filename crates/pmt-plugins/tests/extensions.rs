@@ -187,7 +187,10 @@ async fn commands_register_only_when_granted_and_run_in_the_plugin() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(answer.unwrap(), "ran /forecast berlin in ses_1");
+    assert_eq!(
+        answer.unwrap(),
+        "ran /forecast berlin in ses_1 from cli at -"
+    );
 }
 
 /// The `events` state value of `id` once it holds `want` events.

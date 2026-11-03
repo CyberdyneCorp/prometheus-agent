@@ -63,6 +63,10 @@ struct Run<'a> {
     /// Where the command was typed: a client (`Cli`) or a messaging
     /// platform (`Gateway`).
     surface: Surface,
+    /// The surface plugin commands see in `session.info`: `gateway`, or
+    /// for a client the surface that created the session (`cli`, `tui`,
+    /// `desktop`...).
+    caller: &'a str,
 }
 
 impl DaemonHost {
@@ -81,6 +85,7 @@ impl DaemonHost {
             registry: &registry,
             link: &link,
             surface: Surface::Cli,
+            caller: session.live.surface(),
         };
         Ok(run.line(line_of(&params), 0).await)
     }
@@ -105,6 +110,7 @@ impl DaemonHost {
             registry: &registry,
             link: &link,
             surface: Surface::Gateway,
+            caller: "gateway",
         };
         Ok(run.line(input.to_owned(), 0).await)
     }
@@ -117,7 +123,8 @@ impl Run<'_> {
             Resolution::External { command, args } => match command.source {
                 Source::Quick => Box::pin(self.quick(&command.name, &args, depth)).await,
                 Source::Plugin => {
-                    match commands::plugins::run_line(&self.session.live, &line).await {
+                    match commands::plugins::run_line(&self.session.live, &line, self.caller).await
+                    {
                         Ok(notice) => Dispatched::Done { notice },
                         Err(reason) => refused(reason),
                     }

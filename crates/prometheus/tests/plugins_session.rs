@@ -304,6 +304,10 @@ mod line {
         prompt(&mut p);
         p.send_line("/forecast berlin").unwrap();
         p.expect("ran /forecast berlin in ses_").unwrap();
+        // `session.info` names the surface and the session's cwd.
+        p.expect(" from cli at ").unwrap();
+        p.expect(home.path().file_name().unwrap().to_str().unwrap())
+            .unwrap();
         prompt(&mut p);
         p.send_line("/model").unwrap();
         p.expect("mock").unwrap();
@@ -360,6 +364,64 @@ mod line {
             "{trajectory}"
         );
     }
+
+    #[test]
+    fn reload_now_reports_skills_for_the_next_session_as_the_prompt_shows() {
+        // Spec: Hot reload respects the prompt-cache invariant (the command
+        // prints which parts became active now and which are deferred): an
+        // update adding a section and a skill, reloaded with `--now`, puts
+        // the section into the current prompt, while the skill, reported
+        // `next session`, joins only a new session's prompt.
+        let home = super::common::mock_home();
+        place(
+            home.path(),
+            "kanban",
+            "testing-hooks",
+            "\"hook@1.1\"",
+            "prompt_section = 200\ncommands = [\"sample\"]",
+        );
+        ok(&run(
+            home.path(),
+            &["plugins", "enable", "kanban", "--grant", "all"],
+        ));
+        let mut p = spawn(home.path());
+        prompt(&mut p);
+        p.send_line("first").unwrap();
+        p.expect("mock: first").unwrap();
+        prompt(&mut p);
+        // The update: the plugin now renders a section and ships a skill.
+        let dir = plugin_dir(home.path(), "kanban");
+        pmt_plugins::testkit::install("sample-hook", &dir);
+        let skill = dir.join("skills/board");
+        std::fs::create_dir_all(&skill).unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: board\ndescription: Works the kanban board.\n---\n\nBOARD-STEPS\n",
+        )
+        .unwrap();
+        super::record(&dir);
+        ok(&run(
+            home.path(),
+            &["plugins", "grants", "approve", "kanban"],
+        ));
+        p.send_line("/plugins reload --now").unwrap();
+        p.expect("kanban loaded").unwrap();
+        p.expect("system prompt sections: now (this session)")
+            .unwrap();
+        p.expect("skills: next session").unwrap();
+        prompt(&mut p);
+        p.send_line("second").unwrap();
+        p.expect("mock: second").unwrap();
+        prompt(&mut p);
+        exit(p);
+        let first = sessions(home.path())[0].clone();
+        let rebuilt = super::frozen_prompt(home.path(), &first);
+        assert!(rebuilt.contains("Prefer short sentences."), "{rebuilt}");
+        assert!(!rebuilt.contains("kanban:board"), "{rebuilt}");
+        super::one_shot(home.path(), &["-z", "third"]);
+        let next = super::frozen_prompt(home.path(), &super::common::newest_session(home.path()));
+        assert!(next.contains("kanban:board"), "{next}");
+    }
 }
 
 #[cfg(all(unix, feature = "gateway"))]
@@ -415,7 +477,47 @@ mod daemon {
         assert!(said.contains("tools: next session"), "{said}");
         p.send_line("/forecast berlin").unwrap();
         p.expect("ran /forecast berlin in ses_").unwrap();
+        p.expect(" from cli at /").unwrap();
         pty::prompt(&mut p);
         pty::exit(p);
+    }
+
+    #[test]
+    fn a_plugin_command_sent_on_a_messaging_platform_sees_the_gateway_surface() {
+        // Spec: Host interfaces offered to plugins (`session.info` gives
+        // the surface and cwd) for a command run by the daemon's gateway.
+        use super::common::gateway::{Daemon, gateway_home, send, texts, wait_said};
+
+        let home = gateway_home("");
+        let home = home.path();
+        place(
+            home,
+            "radio",
+            "testing-hooks",
+            "\"hook@1.1\"",
+            "commands = [\"forecast\"]",
+        );
+        ok(&run(
+            home,
+            &[
+                "config",
+                "set",
+                "plugins.entries.radio.commands",
+                "\"forecast\"",
+            ],
+        ));
+        ok(&run(
+            home,
+            &["plugins", "enable", "radio", "--grant", "all"],
+        ));
+        let daemon = Daemon::start(home);
+        send(home, "default", "u1", "hello");
+        wait_said(home, "default", "fast done");
+        send(home, "default", "u1", "/forecast berlin");
+        wait_said(home, "default", "ran /forecast berlin in ses_");
+        let said = texts(home, "default");
+        let answer = said.iter().find(|t| t.contains("ran /forecast")).unwrap();
+        assert!(answer.contains(" from gateway at /"), "{answer}");
+        daemon.stop(home);
     }
 }

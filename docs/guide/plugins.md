@@ -239,7 +239,10 @@ running sessions; tools, system-prompt sections and skills reach sessions
 started afterwards, so a running session keeps its cached prompt. The
 command prints which parts are active now and which wait (`tools: next
 session`). `--now` also rebuilds the current session's tools and prompt,
-recorded as `prompt.rebuilt` with reason `plugins --now`. `/plugins` alone
+recorded as `prompt.rebuilt` with reason `plugins --now`; skills still wait
+for the next session (`skills: next session`), because a session's skill
+directories and the sandbox reads granted for them are fixed when it
+starts. `/plugins` alone
 lists the plugins with their state and load error.
 
 `plugins install`, `enable`, `disable`, `update`, `remove`, `adopt` and
