@@ -32,6 +32,25 @@ pub fn register_toolsets(expand: ToolsetExpander) {
 /// resolves them.
 pub type SkillResolver = Box<dyn Fn(&Config, &Path, &[String]) -> Option<String> + Send + Sync>;
 
+/// Asks a connected adapter of the profile in `profile_dir` for the id of
+/// a role name on a platform (`None`: no running daemon, adapter or role).
+pub type RoleResolver = Box<dyn Fn(&Path, &str, &str) -> Option<String> + Send + Sync>;
+
+static ROLES: OnceLock<RoleResolver> = OnceLock::new();
+
+/// Registers the role lookup that suggests the id of an `allow_roles`
+/// entry naming a role. The first call wins; unset, no id is suggested.
+pub fn register_roles(resolve: RoleResolver) {
+    let _ = ROLES.set(resolve);
+}
+
+/// The id a connected adapter knows role `name` by, if any.
+pub(crate) fn resolve_role(profile_dir: &Path, platform: &str, name: &str) -> Option<String> {
+    ROLES
+        .get()
+        .and_then(|resolve| resolve(profile_dir, platform, name))
+}
+
 /// The skill catalog lookup, set once by the binary that owns the catalog.
 /// Unset (libraries, tests): only disabled skills are refused.
 static SKILLS: OnceLock<SkillResolver> = OnceLock::new();
@@ -86,7 +105,7 @@ pub fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     crate::gateway_check_platforms::check(config)?;
     check_policies(config, profile_dir)?;
     crate::gateway_check_display::check(config, profile_dir)?;
-    crate::gateway_check_groups::check(config)?;
+    crate::gateway_check_groups::check(config, profile_dir)?;
     check_health(config)?;
     let reserved = RESERVED.get().map(Vec::as_slice).unwrap_or_default();
     for name in config.quick_commands.keys() {

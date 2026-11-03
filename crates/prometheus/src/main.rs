@@ -77,6 +77,7 @@ fn main() -> ExitCode {
     pmt_config::gateway_check::register_skills(prometheus::skills_cmd::policy_skill_resolver(
         launch.user_home().cloned(),
     ));
+    pmt_config::gateway_check::register_roles(prometheus::daemon_client::role_resolver());
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));

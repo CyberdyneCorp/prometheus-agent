@@ -143,6 +143,15 @@ impl Adapter for FileAdapter {
         Box::pin(async move { outcome })
     }
 
+    /// Roles by name from `<dir>/<profile>/roles.json` (`{"name": "id"}`).
+    fn resolve_role<'a>(&'a self, name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        let roles: Option<Value> = std::fs::read_to_string(self.root.join("roles.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok());
+        let found = roles.and_then(|r| r[name].as_str().map(str::to_owned));
+        Box::pin(async move { found })
+    }
+
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
         Box::pin(async move {
             Ok(ChatInfo {

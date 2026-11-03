@@ -1,7 +1,10 @@
 //! Checks of group gating and role grants beyond their schema (spec:
 //! messaging-gateway, Group mention gating and observe mode; Role-based
 //! access grants): at most 32 mention patterns, each a valid regular
-//! expression, and role grants given as ids, not names.
+//! expression, and role grants given as ids, not names (with the id
+//! suggested when the profile's adapter is connected and knows the name).
+
+use std::path::Path;
 
 use pmt_core::error::{Error, codes};
 
@@ -15,7 +18,7 @@ const MAX_PATTERNS: usize = 32;
 /// # Errors
 ///
 /// `config.invalid` naming the key.
-pub(crate) fn check(config: &Config) -> Result<(), Error> {
+pub(crate) fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
     let groups = &config.gateway.groups;
     let tables = groups
         .mention_patterns
@@ -35,11 +38,15 @@ pub(crate) fn check(config: &Config) -> Result<(), Error> {
     for (platform, table) in &config.gateway.platforms {
         for role in &table.allow_roles {
             if !role_id_shaped(platform, role) {
+                let hint = crate::gateway_check::resolve_role(profile_dir, platform, role)
+                    .map_or_else(
+                        || id_hint(platform).to_owned(),
+                        |id| format!("the connected {platform} adapter knows it as '{id}'"),
+                    );
                 return Err(Error::new(
                     &codes::CONFIG_INVALID,
                     format!(
-                        "gateway.platforms.{platform}.allow_roles: '{role}' is not a role id; {}",
-                        id_hint(platform)
+                        "gateway.platforms.{platform}.allow_roles: '{role}' is not a role id; {hint}"
                     ),
                 ));
             }
@@ -105,17 +112,15 @@ mod tests {
     #[test]
     fn a_role_name_and_a_bad_pattern_are_refused() {
         let name = config("[gateway.platforms.discord]\nallow_roles = [\"moderators\"]\n");
-        let err = check(&name).unwrap_err();
+        let err = check(&name, Path::new(".")).unwrap_err();
         assert!(
             err.message().contains("'moderators' is not a role id"),
             "{err}"
         );
-        check(&config(
-            "[gateway.platforms.discord]\nallow_roles = [\"111222333\"]\n",
-        ))
-        .unwrap();
+        let id = config("[gateway.platforms.discord]\nallow_roles = [\"111222333\"]\n");
+        check(&id, Path::new(".")).unwrap();
         let bad = config("[gateway.groups.platforms.slack]\nmention_patterns = [\"(unclosed\"]\n");
-        let err = check(&bad).unwrap_err();
+        let err = check(&bad, Path::new(".")).unwrap_err();
         assert!(
             err.message()
                 .starts_with("gateway.groups.platforms.slack.mention_patterns")
@@ -124,6 +129,6 @@ mod tests {
             "[gateway.groups]\nmention_patterns = [{}]\n",
             vec!["\"hey\""; 33].join(", ")
         );
-        assert!(check(&config(&many)).is_err());
+        assert!(check(&config(&many), Path::new(".")).is_err());
     }
 }

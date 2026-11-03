@@ -199,4 +199,11 @@ impl Gateway {
     ) -> Result<AdapterStatus, Error> {
         resume(&self.shared, profile, platform).await
     }
+
+    /// The id of role `name` as `platform`'s connected adapter of
+    /// `profile` knows it (`None`: not connected, or no such role).
+    pub async fn resolve_role(&self, profile: &str, platform: &str, name: &str) -> Option<String> {
+        let slot = self.shared.adapters.ready(profile, platform)?;
+        slot.adapter.resolve_role(name).await
+    }
 }

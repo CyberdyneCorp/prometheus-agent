@@ -59,6 +59,16 @@ pub enum ControlRequest {
     },
     /// The daemon's process state.
     Status,
+    /// Asks a connected adapter for the id of a role name (the hint of
+    /// an `allow_roles` entry that names a role instead of its id).
+    ResolveRole {
+        /// The owning profile.
+        profile: String,
+        /// The platform.
+        platform: String,
+        /// The role name.
+        name: String,
+    },
     /// Pauses or resumes one messaging adapter of a profile (`prometheus
     /// gateway pause|resume <platform>`); answers the new status.
     GatewayPlatform {
@@ -226,6 +236,9 @@ pub struct ControlResponse {
     /// Set when the request failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ControlError>,
+    /// `ResolveRole`: the role's id, when a connected adapter knows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
 }
 
 /// How long a control exchange may take.

@@ -498,6 +498,11 @@ pub trait Adapter: Send + Sync + 'static {
     ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
     }
+    /// The id of the role named `name` (case-insensitive) in the
+    /// workspaces the bot is in, when the adapter can tell.
+    fn resolve_role<'a>(&'a self, _name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        Box::pin(async { None })
+    }
     /// The chat's (or thread's) latest messages, oldest first, at most
     /// `limit` (adapters declaring `can_fetch_history`).
     fn fetch_history<'a>(

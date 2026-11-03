@@ -76,3 +76,33 @@ fn platforms_on_the_line_interface_lists_the_daemons_adapters() {
     p.expect(expectrl::Eof).unwrap();
     daemon.stop(home);
 }
+
+#[test]
+fn a_role_name_is_refused_with_the_id_the_connected_adapter_knows() {
+    let home = gateway_home("");
+    let home = home.path();
+    let daemon = Daemon::start(home);
+    std::fs::write(
+        adapter_dir(home).join("default").join("roles.json"),
+        r#"{"Release Mods": "4242"}"#,
+    )
+    .unwrap();
+    let out = run(
+        home,
+        &[
+            "config",
+            "set",
+            "gateway.platforms.test.allow_roles",
+            r#"["Release Mods"]"#,
+        ],
+    );
+    assert_eq!(out.status.code(), Some(78));
+    let err = common::stderr(&out);
+    assert!(
+        err.contains(
+            "'Release Mods' is not a role id; the connected test adapter knows it as '4242'"
+        ),
+        "{err}"
+    );
+    daemon.stop(home);
+}

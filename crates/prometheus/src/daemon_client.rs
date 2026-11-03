@@ -104,3 +104,36 @@ pub async fn connect_cli(
     }
     Ok((client, inbox))
 }
+
+/// The `allow_roles` hint of config validation (spec: messaging-gateway,
+/// Role-based access grants): a role name is looked up by the home's
+/// running daemon, whose connected adapter may know its id. Never asked
+/// from inside an async runtime (the daemon validating its own reload),
+/// and only of a daemon that is already running.
+#[must_use]
+pub fn role_resolver() -> pmt_config::gateway_check::RoleResolver {
+    Box::new(|profile_dir: &Path, platform: &str, name: &str| {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return None;
+        }
+        let profile = profile_dir.file_name()?.to_string_lossy().into_owned();
+        let home = profile_dir.parent()?.parent()?;
+        let Ok(Discovery::Running(record)) = discover(home) else {
+            return None;
+        };
+        let request = pmt_rpc::control::ControlRequest::ResolveRole {
+            profile,
+            platform: platform.to_owned(),
+            name: name.to_owned(),
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()?;
+        let control = record.endpoint.control;
+        runtime
+            .block_on(pmt_rpc::control::call(&control, &request))
+            .ok()?
+            .resolved
+    })
+}

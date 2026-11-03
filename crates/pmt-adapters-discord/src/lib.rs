@@ -494,6 +494,34 @@ impl Adapter for Discord {
         })
     }
 
+    fn resolve_role<'a>(&'a self, name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let api = self.api().ok()?;
+            let guilds = api
+                .call(Method::GET, "/users/@me/guilds", Body::Empty)
+                .await
+                .ok()?;
+            for guild in guilds.as_array().into_iter().flatten() {
+                let Some(id) = guild["id"].as_str() else {
+                    continue;
+                };
+                let path = format!("/guilds/{id}/roles");
+                let Ok(roles) = api.call(Method::GET, &path, Body::Empty).await else {
+                    continue;
+                };
+                let found = roles.as_array().into_iter().flatten().find(|r| {
+                    r["name"]
+                        .as_str()
+                        .is_some_and(|n| n.eq_ignore_ascii_case(name))
+                });
+                if let Some(role) = found.and_then(|r| r["id"].as_str()) {
+                    return Some(role.to_owned());
+                }
+            }
+            None
+        })
+    }
+
     fn fetch_history<'a>(
         &'a self,
         chat_id: &'a str,

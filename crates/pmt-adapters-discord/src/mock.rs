@@ -378,6 +378,10 @@ impl DiscordMock {
                 (200, body)
             }
             ("GET", ["oauth2", "applications", "@me"]) => (200, json!({"id": APPLICATION})),
+            ("GET", ["users", "@me", "guilds"]) => (200, json!([{"id": GUILD, "name": "kit"}])),
+            ("GET", ["guilds", _, "roles"]) => {
+                (200, json!([{"id": "111222333", "name": "Moderators"}]))
+            }
             ("GET", ["guilds", _, "members", user]) => match self.lock().roles.get(*user) {
                 Some(roles) => (200, json!({"user": {"id": user}, "roles": roles})),
                 None => (

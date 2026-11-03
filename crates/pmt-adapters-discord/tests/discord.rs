@@ -531,6 +531,11 @@ async fn member_roles_and_channel_history_come_from_the_platform() {
     );
     mock.set_roles(&event.sender_id, &["111222333"]);
     assert_eq!(adapter.member_roles(&event).await.unwrap(), ["111222333"]);
+    assert_eq!(
+        adapter.resolve_role("moderators").await.as_deref(),
+        Some("111222333")
+    );
+    assert_eq!(adapter.resolve_role("nobody").await, None);
     mock.post_history(mock::CHANNEL, "1", mock::BOT, "earlier answer");
     mock.post_history(mock::CHANNEL, "2", mock::USER, "a new question");
     let history = adapter

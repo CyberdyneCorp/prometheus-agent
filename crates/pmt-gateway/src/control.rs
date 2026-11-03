@@ -146,12 +146,12 @@ pub(crate) fn answer(
             ControlResponse::default()
         }
         // Answered by `handle`, which can wait for the adapter.
-        ControlRequest::GatewaySend { .. } | ControlRequest::GatewayPlatform { .. } => {
-            failure(&Error::new(
-                &codes::RPC_INVALID_REQUEST,
-                "this request is answered asynchronously",
-            ))
-        }
+        ControlRequest::GatewaySend { .. }
+        | ControlRequest::GatewayPlatform { .. }
+        | ControlRequest::ResolveRole { .. } => failure(&Error::new(
+            &codes::RPC_INVALID_REQUEST,
+            "this request is answered asynchronously",
+        )),
     }
 }
 
@@ -263,6 +263,17 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
             platform,
             pause,
         }) => platform_op(&server, &profile, &platform, pause).await,
+        Ok(ControlRequest::ResolveRole {
+            profile,
+            platform,
+            name,
+        }) => ControlResponse {
+            resolved: match server.messaging() {
+                Some(messaging) => messaging.resolve_role(&profile, &platform, &name).await,
+                None => None,
+            },
+            ..ControlResponse::default()
+        },
         Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,

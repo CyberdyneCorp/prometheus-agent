@@ -1959,7 +1959,7 @@ capabilities = [
 "Backfill stops at the bot's last reply" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_backfill_brings_the_channel_since_the_bots_last_reply", "crates/pmt-gateway/src/messaging/gating.rs::backfill_stops_at_the_bots_last_reply", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform"]
 
 [messaging-gateway."Role-based access grants"]
-"Role grant" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform"]
+"Role grant" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform", "crates/prometheus/tests/gateway_platforms.rs::a_role_name_is_refused_with_the_id_the_connected_adapter_knows", "crates/pmt-config/src/gateway_check_groups.rs::a_role_name_and_a_bad_pattern_are_refused"]
 "Lookup failure denies" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies"]
 
 [messaging-gateway."Per-chat policy thread matching and skill preload"]
