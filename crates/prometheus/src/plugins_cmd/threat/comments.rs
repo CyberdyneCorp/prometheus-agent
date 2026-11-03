@@ -5,7 +5,8 @@
 //! strict: the language comes from the file extension (unknown languages
 //! have no comments), the whole line must be a comment, and a block comment
 //! counts only when it closes on the same line with nothing after it. Lines
-//! inside a multi-line block comment are not recognised; they keep their
+//! inside a multi-line block comment, and lines holding a character another
+//! interpreter reads as a line end, are not recognised; they keep their
 //! severity, which fails closed.
 
 use std::path::Path;
@@ -92,7 +93,16 @@ pub(super) fn is_comment(file: &str, text: &str, line: usize) -> bool {
     }
     text.lines()
         .nth(line.saturating_sub(1))
-        .is_some_and(|line| whole_line_comment(syntax, line))
+        .is_some_and(|line| !has_foreign_terminator(line) && whole_line_comment(syntax, line))
+}
+
+/// Characters some interpreter treats as a line end although `str::lines`
+/// does not: Python ends a line at a lone CR, VT, FF or U+0085, JavaScript
+/// at U+2028/U+2029. Code after one runs, so such a line is never a comment.
+const FOREIGN_TERMINATORS: &[char] = &['\r', '\u{b}', '\u{c}', '\u{85}', '\u{2028}', '\u{2029}'];
+
+fn has_foreign_terminator(line: &str) -> bool {
+    line.contains(FOREIGN_TERMINATORS)
 }
 
 fn syntax(file: &str) -> Option<&'static Syntax> {
@@ -166,6 +176,19 @@ mod tests {
         assert!(!first("setup.sh", "rem x"));
         assert!(!first("tool.php", "// x ?> <?php system('x');"));
         assert!(!first("install", "# no extension, no language"));
+    }
+
+    #[test]
+    fn a_line_holding_another_line_terminator_is_not_a_comment() {
+        // Python ends a line at a lone CR (and VT, FF); JS at U+2028/U+2029.
+        for sep in ["\r", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}"] {
+            assert!(!first("setup.py", &format!("# x{sep}import os")), "{sep:?}");
+            assert!(
+                !first("setup.js", &format!("// x{sep}execSync('x')")),
+                "{sep:?}"
+            );
+        }
+        assert!(is_comment("setup.py", "# x\r\nimport os\r\n", 1));
     }
 
     #[test]

