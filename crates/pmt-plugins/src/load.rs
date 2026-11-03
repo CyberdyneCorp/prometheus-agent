@@ -114,19 +114,15 @@ pub struct Loaded {
 
 impl Loaded {
     /// Registers every loaded plugin's tools into `registry` (each under
-    /// its current grant); returns the plugin toolsets that hold tools.
-    pub fn register_tools(&self, registry: &mut ToolRegistry, surface: &str) -> Vec<String> {
+    /// its current grant); `base` is the surface and working directory of
+    /// the sessions they serve. Returns the plugin toolsets that hold tools.
+    pub fn register_tools(&self, registry: &mut ToolRegistry, base: &CallInfo) -> Vec<String> {
         let mut toolsets = Vec::new();
         for plugin in &self.plugins {
             if !plugin.instance.implements("tool") {
                 continue;
             }
-            match tools::register(
-                registry,
-                &plugin.instance,
-                &plugin.grants.current(),
-                surface,
-            ) {
+            match tools::register(registry, &plugin.instance, &plugin.grants.current(), base) {
                 Ok(names) if !names.is_empty() => toolsets.push(plugin.manifest.id.clone()),
                 Ok(_) => {}
                 Err(err) => tracing::warn!(plugin = %plugin.manifest.id, "{}", err.message()),

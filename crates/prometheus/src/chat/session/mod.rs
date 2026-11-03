@@ -191,7 +191,14 @@ impl Factory {
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
         let mut registry = crate::tools_cmd::registry(&scope)?;
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
-        let plugin_toolsets = plugins.loaded.register_tools(&mut registry, "cli");
+        let plugin_toolsets = plugins.loaded.register_tools(
+            &mut registry,
+            &pmt_plugins::host::CallInfo {
+                session_id: None,
+                surface: "cli".to_owned(),
+                cwd: Some(options.cwd.to_string_lossy().into_owned()),
+            },
+        );
         let registry = Arc::new(registry);
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),

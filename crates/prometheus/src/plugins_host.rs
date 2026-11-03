@@ -212,14 +212,17 @@ impl SecretsPort for Secrets {
 }
 
 /// Outbound HTTP for plugins. Redirects are not followed: each hop must
-/// come back through the host's `network` check.
+/// come back through the host's `network` check. A request is bounded by
+/// `plugins.wasm.call_timeout_ms`: the plugin call waiting on it holds its
+/// instance, and the epoch deadline does not run while the host blocks.
 struct Http {
     client: reqwest::Client,
 }
 
 impl Http {
     fn new(scope: &ProfileScope) -> Option<Self> {
-        let network = &scope.config().network;
+        let config = scope.config();
+        let network = &config.network;
         let policy = OutboundPolicy {
             force_ipv4: network.force_ipv4,
             extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
@@ -228,6 +231,9 @@ impl Http {
         let client = pmt_net::http::client_builder(&policy)
             .ok()?
             .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_millis(
+                config.plugins.wasm.call_timeout_ms,
+            ))
             .build()
             .ok()?;
         Some(Self { client })
@@ -246,7 +252,7 @@ impl HttpPort for Http {
             if let Some(body) = request.body {
                 builder = builder.body(body);
             }
-            let response = builder.send().await.map_err(|e| e.to_string())?;
+            let response = builder.send().await.map_err(|e| failure(&e))?;
             let status = response.status().as_u16();
             let headers = response
                 .headers()
@@ -258,7 +264,7 @@ impl HttpPort for Http {
                     )
                 })
                 .collect();
-            let body = response.bytes().await.map_err(|e| e.to_string())?.to_vec();
+            let body = response.bytes().await.map_err(|e| failure(&e))?.to_vec();
             Ok(HttpResponse {
                 status,
                 headers,
@@ -266,6 +272,21 @@ impl HttpPort for Http {
             })
         })
     }
+}
+
+/// What a plugin sees of a failed request: a timeout by name, else the
+/// error with its causes (reqwest's own text hides them).
+fn failure(err: &reqwest::Error) -> String {
+    if err.is_timeout() {
+        return "request timed out (plugins.wasm.call_timeout_ms)".to_owned();
+    }
+    let mut text = err.to_string();
+    let mut source = std::error::Error::source(err);
+    while let Some(cause) = source {
+        let _ = write!(text, ": {cause}");
+        source = cause.source();
+    }
+    text
 }
 
 /// `plugins.entries.<id>.*`: read from the snapshot the session started

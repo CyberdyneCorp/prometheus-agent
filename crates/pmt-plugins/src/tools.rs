@@ -25,7 +25,9 @@ use crate::host::{CallInfo, Instance};
 struct PluginTool {
     instance: Arc<Instance>,
     name: String,
-    surface: String,
+    /// The surface and working directory of the sessions the tool serves;
+    /// each call adds its session id.
+    base: CallInfo,
 }
 
 impl ToolHandler for PluginTool {
@@ -34,8 +36,7 @@ impl ToolHandler for PluginTool {
         let name = self.name.clone();
         let call = CallInfo {
             session_id: Some(context.session_id.clone()),
-            surface: self.surface.clone(),
-            cwd: None,
+            ..self.base.clone()
         };
         Box::pin(async move {
             let arguments = arguments.to_string();
@@ -57,7 +58,9 @@ impl ToolHandler for PluginTool {
 
 /// Registers `instance`'s tools under the toolset `<plugin id>`. `grants`
 /// is the plugin's current grant (`tools.override:<tool>` lets it replace
-/// a core tool). Returns the registered names; every refusal is also kept
+/// a core tool); `base` is the surface and working directory its calls
+/// report through `session.current` (the session id is added per call).
+/// Returns the registered names; every refusal is also kept
 /// in the registry's rejections.
 ///
 /// # Errors
@@ -68,14 +71,11 @@ pub fn register(
     registry: &mut ToolRegistry,
     instance: &Arc<Instance>,
     grants: &CapabilitySet,
-    surface: &str,
+    base: &CallInfo,
 ) -> Result<Vec<String>, Error> {
     let id = instance.id().to_owned();
     let owner = Owner::Plugin(id.clone());
-    let specs = instance.tools(&CallInfo {
-        surface: surface.to_owned(),
-        ..CallInfo::default()
-    })?;
+    let specs = instance.tools(base)?;
     let mut toolset = Toolset::new(&id, &format!("Tools of plugin '{id}'"), &[]);
     toolset.owner = owner.clone();
     registry.register_toolsets(&owner, vec![toolset])?;
@@ -94,7 +94,7 @@ pub fn register(
         let handler = Arc::new(PluginTool {
             instance: Arc::clone(instance),
             name: spec.name.clone(),
-            surface: surface.to_owned(),
+            base: base.clone(),
         });
         if registry
             .register(

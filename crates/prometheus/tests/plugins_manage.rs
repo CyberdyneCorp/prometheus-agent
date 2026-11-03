@@ -202,3 +202,75 @@ text = "echoed and blocked"
         "{messages:?}"
     );
 }
+
+#[test]
+fn a_plugin_request_to_a_silent_server_ends_with_the_call_timeout() {
+    // Spec: WASM sandbox resource limits. A host call blocks outside the
+    // epoch deadline, so the plugin's HTTP request carries the call bound;
+    // otherwise the tool would wait for the dispatcher's own timeout.
+    let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = silent.local_addr().unwrap().port();
+    let held = std::thread::spawn(move || {
+        let (stream, _) = silent.accept().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        drop(stream);
+    });
+    let home = mock_home();
+    place(
+        home.path(),
+        "probe",
+        "testing-probe",
+        "tool",
+        &format!("network = [\"127.0.0.1:{port}\"]"),
+    );
+    ok(&run(
+        home.path(),
+        &["plugins", "enable", "probe", "--grant", "all"],
+    ));
+    for (key, value) in [
+        ("plugins.wasm.call_timeout_ms", "500"),
+        ("tools.default_timeout_secs", "20"),
+    ] {
+        ok(&run(home.path(), &["config", "set", key, value]));
+    }
+    let script = home.path().join("script.toml");
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+[[rule]]
+user = "fetch"
+[[rule.tool_calls]]
+name = "fetch"
+arguments = {{ v = "http://127.0.0.1:{port}/" }}
+
+[[rule]]
+tool_result_regex = "."
+text = "done"
+"#
+        ),
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
+    let out = command(home.path())
+        .args(["-z", "fetch", "--mock-script", script.to_str().unwrap()])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let took = started.elapsed();
+    assert_eq!(stdout(&out), "done\n", "{}", stderr(&out));
+    assert!(
+        took < std::time::Duration::from_secs(10),
+        "the request outlived the call bound: {took:?}"
+    );
+    let results: Vec<String> = self::common::active_messages(home.path())
+        .iter()
+        .filter(|m| m["role"] == "tool")
+        .map(|m| m["content"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert!(
+        results.iter().any(|r| r.contains("request timed out")),
+        "{results:?}"
+    );
+    drop(held);
+}

@@ -79,10 +79,11 @@ impl Guest for Probe {
             "session" => {
                 let info = session::current();
                 Ok(format!(
-                    "{}|{}|{}",
+                    "{}|{}|{}|{}",
                     info.profile,
                     info.surface,
-                    info.session_id.unwrap_or_default()
+                    info.session_id.unwrap_or_default(),
+                    info.cwd.unwrap_or_default()
                 ))
             }
             "emit" => events::emit(&v, "{}").map(|()| "emitted".to_owned()).map_err(text),

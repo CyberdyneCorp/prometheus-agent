@@ -106,7 +106,9 @@ every world, built with `cargo component` (`cargo xtask plugin-samples`).
 Every call into a plugin is bounded by `plugins.wasm.call_timeout_ms`
 (default 30 s, through fuel and epoch interruption) and its memory by
 `plugins.wasm.max_memory_bytes` (256 MiB). A call that overruns fails with
-`plugin '<id>' exceeded call timeout` and the turn goes on; three traps
+`plugin '<id>' exceeded call timeout` and the turn goes on. A plugin's
+HTTP request carries the same bound and fails with `request timed out`
+when the server does not answer in time. Three traps
 within a minute suspend the plugin until it is loaded again. Each profile
 gets its own plugin instance; two profiles never share a plugin's state.
 

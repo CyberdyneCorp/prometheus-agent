@@ -165,7 +165,7 @@ async fn two_profiles_get_two_instances() {
     assert!(!b.path().join("plugin-data/notes/kv").exists());
     assert_eq!(
         call(&in_b, "session", "").await.unwrap().unwrap(),
-        "b|cli|ses_test"
+        "b|cli|ses_test|"
     );
 }
 
