@@ -295,7 +295,7 @@ error_codes! {
         "Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed.");
     /// The invoked surface was not compiled into this build.
     SURFACE_NOT_INCLUDED = ("surface.not_included", Unavailable,
-        "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build.");
+        "The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build, or `plugins test-adapter <platform>` ran in a build without the first-party adapter kits (`adapter-kits` feature).");
     /// The profile's identity file is unreadable or malformed.
     PROFILE_ID_INVALID = ("profile.id_invalid", Config,
         "The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup.");
@@ -878,6 +878,70 @@ error_codes! {
     /// `prometheus tui` without an interactive terminal.
     TUI_NOT_A_TERMINAL = ("tui.not_a_terminal", Usage,
         "`prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping.");
+    /// A pairing approval while pairing is locked after failed attempts.
+    GATEWAY_PAIRING_LOCKED = ("gateway.pairing_locked", PermissionDenied,
+        "Five failed pairing approvals locked pairing for that platform for an hour; wait until the stated time.");
+    /// A pairing code that matches no pending request.
+    GATEWAY_PAIRING_UNKNOWN = ("gateway.pairing_unknown", NotFound,
+        "No pending pairing request has that code (it may have expired after an hour); ask the sender to message the bot again for a new code.");
+    /// An approved sender or pending request that does not exist.
+    GATEWAY_PAIRING_NOT_FOUND = ("gateway.pairing_not_found", NotFound,
+        "No pairing entry matches; `prometheus pairing list` shows pending and approved entries.");
+    /// An outbox entry that does not exist or is not in a state the action applies to.
+    GATEWAY_OUTBOX_ENTRY = ("gateway.outbox_entry", NotFound,
+        "No outbox entry with that id is in a state the action applies to; `prometheus gateway outbox list` shows the entries.");
+    /// The clean-shutdown marker exists but cannot be removed.
+    GATEWAY_RECOVERY = ("gateway.recovery", Io,
+        "The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again.");
+    /// `gateway whatsapp pair` linked nothing in time.
+    GATEWAY_PAIRING_TIMEOUT = ("gateway.pairing_timeout", Conflict,
+        "The phone did not link within the pairing window (120 seconds); run `prometheus gateway whatsapp pair` again and scan the newest QR code (or use `--pairing-code <phone>`).");
+    /// A messaging delivery with no adapter for its platform.
+    GATEWAY_NO_ADAPTER = ("gateway.no_adapter", Unavailable,
+        "The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`.");
+    /// Every messaging adapter failed for good with `on_all_adapters_down = "exit"`.
+    GATEWAY_ALL_ADAPTERS_DOWN = ("gateway.all_adapters_down", Config,
+        "Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = \"exit\"`; fix the adapters' configuration or credentials, or set it to `stay_alive`.");
+    /// A new turn while the home is paused.
+    PAUSE_ACTIVE = ("pause.active", Unavailable,
+        "The home is paused (`<home>/run/paused`): no new turns or scheduled work start until `prometheus pause off` (or `/pause off` from an admin chat).");
+    /// A delivery to a platform without a home channel.
+    GATEWAY_NO_HOME_CHANNEL = ("gateway.no_home_channel", NotFound,
+        "The delivery names only a platform and that platform has no home channel; run /sethome in the target chat or name the chat (`platform:chat_id`).");
+    /// A send target that is malformed or names nothing known.
+    GATEWAY_UNKNOWN_TARGET = ("gateway.unknown_target", NotFound,
+        "The target is not `platform`, `platform:chat_id`, `platform:chat_id:thread_id` or `platform:#channel-name`, or names a channel nobody knows; `prometheus gateway send --list` shows the known targets.");
+    /// A send to a platform the profile does not enable.
+    GATEWAY_PLATFORM_NOT_CONFIGURED = ("gateway.platform_not_configured", Config,
+        "The profile does not enable that platform; add `[gateway.platforms.<name>]` with `enabled = true` and its credential.");
+    /// A one-shot send that needs the daemon.
+    GATEWAY_DAEMON_REQUIRED = ("gateway.daemon_required", Unavailable,
+        "The platform's adapter cannot send without a running connection; start the daemon with `prometheus daemon start` and send again.");
+    /// A one-shot send the platform refused or that was not delivered in time.
+    GATEWAY_DELIVERY_FAILED = ("gateway.delivery_failed", Tool,
+        "The message was not delivered; `prometheus gateway outbox list` shows the entry and its last error.");
+    /// A destination the `send_message` tool may not reach.
+    GATEWAY_TARGET_REFUSED = ("gateway.target_refused", PermissionDenied,
+        "The tool may send only to a platform's home channel, a chat in `allow_chats` or a chat the profile already has a session in.");
+    /// A relay enrollment token the connector refused.
+    GATEWAY_ENROLL_REJECTED = ("gateway.enroll_rejected", Config,
+        "The relay connector refused the enrollment token (already used, expired or unknown); ask the relay operator for a new one-time token.");
+    /// The relay connector could not be reached or answered nonsense.
+    GATEWAY_RELAY = ("gateway.relay", Unavailable,
+        "The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network.");
+    /// A plugin directory given to `plugins test-adapter` needs the WASM
+    /// plugin host, which this build does not have yet.
+    PLUGINS_HOST_UNAVAILABLE = ("plugins.host_unavailable", Unavailable,
+        "The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`) in a build with the `adapter-kits` feature.");
+    /// A system-scope service install without root or administrator rights.
+    SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
+        "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");
+    /// The OS service manager refused or is missing.
+    SERVICE_MANAGER = ("service.manager", Unavailable,
+        "The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output.");
+    /// No supported service manager on this OS.
+    SERVICE_UNSUPPORTED = ("service.unsupported", Unavailable,
+        "`prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor.");
 }
 
 /// A user-visible error: a catalog code (which fixes the kind), a one-line

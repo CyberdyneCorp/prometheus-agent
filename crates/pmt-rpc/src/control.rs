@@ -59,6 +59,53 @@ pub enum ControlRequest {
     },
     /// The daemon's process state.
     Status,
+    /// Asks a connected adapter for the id of a role name (the hint of
+    /// an `allow_roles` entry that names a role instead of its id).
+    ResolveRole {
+        /// The owning profile.
+        profile: String,
+        /// The platform.
+        platform: String,
+        /// The role name.
+        name: String,
+    },
+    /// Pauses or resumes one messaging adapter of a profile (`prometheus
+    /// gateway pause|resume <platform>`); answers the new status.
+    GatewayPlatform {
+        /// The owning profile.
+        profile: String,
+        /// The platform.
+        platform: String,
+        /// Pause (`true`) or resume.
+        pause: bool,
+    },
+    /// Starts the messaging adapters served profiles enable that are not
+    /// running (`prometheus gateway reload`); answers the new status.
+    GatewayReload,
+    /// Queues one message in a profile's outbox without an agent turn
+    /// (`prometheus gateway send`); answers the stored entry.
+    GatewaySend {
+        /// The owning profile.
+        profile: String,
+        /// `platform`, `platform:chat_id[:thread_id]` or `platform:#name`.
+        target: String,
+        /// The text (`MEDIA:` directives already taken out).
+        text: String,
+        /// Files sent with it.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<SendAttachment>,
+    },
+    /// Hands a session over to a chat of its profile (`/handoff` in the CLI
+    /// or TUI); answers where it went.
+    GatewayHandoff {
+        /// The owning profile.
+        profile: String,
+        /// The session.
+        session: String,
+        /// `platform[:chat_id[:thread_id]]` (a bare platform is its home
+        /// channel).
+        target: String,
+    },
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -66,6 +113,34 @@ pub enum ControlRequest {
         #[serde(default)]
         restart: bool,
     },
+}
+
+/// A file sent with a `gateway send` message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendAttachment {
+    /// Absolute path the daemon reads.
+    pub path: String,
+    /// Sent as a document (images uncompressed).
+    #[serde(default)]
+    pub as_document: bool,
+}
+
+/// A message `gateway send` queued.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Queued {
+    /// The outbox entry id.
+    pub entry: i64,
+    /// Where it goes (`platform:chat_id[:thread_id]`).
+    pub destination: String,
+}
+
+/// Where `gateway_handoff` moved a session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HandedOff {
+    /// The platform.
+    pub platform: String,
+    /// `platform:chat_id[:thread_id]`.
+    pub destination: String,
 }
 
 /// A granted ticket.
@@ -109,6 +184,36 @@ pub struct DaemonStatus {
     /// invalid edit it ignored, keys waiting for a restart.
     #[serde(default)]
     pub config: Vec<ProfileConfig>,
+    /// Each messaging adapter's state (spec: messaging-gateway, One gateway
+    /// daemon per home; platform-adapters, Adapter state reporting).
+    #[serde(default)]
+    pub adapters: Vec<AdapterReport>,
+}
+
+/// One messaging adapter in `daemon status` and `gateway status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterReport {
+    /// The owning profile.
+    pub profile: String,
+    /// Platform name.
+    pub platform: String,
+    /// `disabled`, `connecting`, `connected`, `degraded`, `retrying` or
+    /// `fatal`.
+    pub state: String,
+    /// Error code of a `degraded`, `retrying` or `fatal` adapter.
+    pub code: Option<String>,
+    /// What happened.
+    pub message: Option<String>,
+    /// Outside `connected` longer than `gateway.reconnect_attention_secs`.
+    #[serde(default)]
+    pub attention: bool,
+    /// Paused by an admin (`/platform pause`, `gateway pause`).
+    #[serde(default)]
+    pub paused: bool,
+    /// The capability descriptor the adapter loaded with (`gateway
+    /// platforms`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descriptor: Option<serde_json::Value>,
 }
 
 /// A served profile's configuration state.
@@ -145,9 +250,18 @@ pub struct ControlResponse {
     /// For `status`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<DaemonStatus>,
+    /// For `gateway_send`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued: Option<Queued>,
+    /// For `gateway_handoff`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandedOff>,
     /// Set when the request failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<ControlError>,
+    /// `ResolveRole`: the role's id, when a connected adapter knows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved: Option<String>,
 }
 
 /// How long a control exchange may take.
@@ -233,6 +347,29 @@ pub fn ticket_of(response: ControlResponse) -> Result<Ticket, Error> {
     response
         .ticket
         .ok_or_else(|| Error::new(&codes::RPC_TICKET, "the daemon granted no ticket"))
+}
+
+impl AdapterReport {
+    /// `platform: state (code): message [paused] [needs attention]`.
+    #[must_use]
+    pub fn line(&self) -> String {
+        use std::fmt::Write as _;
+
+        let mut line = format!("{}: {}", self.platform, self.state);
+        if let Some(code) = &self.code {
+            let _ = write!(line, " ({code})");
+        }
+        if let Some(message) = &self.message {
+            let _ = write!(line, ": {message}");
+        }
+        if self.paused {
+            line.push_str(" [paused]");
+        }
+        if self.attention {
+            line.push_str(" [needs attention]");
+        }
+        line
+    }
 }
 
 #[cfg(test)]

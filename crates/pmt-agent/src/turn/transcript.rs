@@ -94,14 +94,22 @@ pub fn images_of(row: &Row) -> Vec<ImageRef> {
 }
 
 /// The user row: the user's text plus request-time additions (memory
-/// prefetch, plugin context, image descriptions), stored as sent, and the
-/// images sent as pixels.
+/// prefetch, plugin context, image descriptions) and a `prefix` (a send
+/// time), stored as sent, and the images sent as pixels.
 #[must_use]
-pub fn user_row(text: &str, additions: &[String], images: &[ImageRef]) -> NewMessage {
-    if additions.is_empty() && images.is_empty() {
+pub fn user_row(
+    text: &str,
+    prefix: Option<&str>,
+    additions: &[String],
+    images: &[ImageRef],
+) -> NewMessage {
+    if additions.is_empty() && images.is_empty() && prefix.is_none() {
         return NewMessage::new(Role::User, text);
     }
-    let mut wire = text.to_owned();
+    let mut wire = match prefix {
+        Some(prefix) => format!("{prefix} {text}"),
+        None => text.to_owned(),
+    };
     for addition in additions {
         wire.push_str("\n\n");
         wire.push_str(addition);

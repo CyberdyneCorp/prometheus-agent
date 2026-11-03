@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pmt_config::ProfileScope;
+use pmt_config::schema::SkillsConfig;
 use pmt_core::error::{Error, codes};
 use pmt_core::private_fs;
 use similar::TextDiff;
@@ -35,16 +36,28 @@ pub fn profile_catalog(
     user_home: Option<&Path>,
     bundled: Arc<Bundled>,
 ) -> Catalog {
-    let config = scope.config();
+    profile_catalog_at(&scope.config().skills, scope.dir(), cwd, user_home, bundled)
+}
+
+/// [`profile_catalog`] from the `[skills]` table and the profile
+/// directory, for checks that run while the profile is still loading.
+#[must_use]
+pub fn profile_catalog_at(
+    config: &SkillsConfig,
+    profile_dir: &Path,
+    cwd: Option<&Path>,
+    user_home: Option<&Path>,
+    bundled: Arc<Bundled>,
+) -> Catalog {
     let roots = Roots::resolve(&RootInputs {
-        config: &config.skills,
-        profile_dir: scope.dir(),
+        config,
+        profile_dir,
         cwd,
         user_home,
         plugins: &[],
         bundled,
     });
-    let lock = LockFile::in_dir(&profile_skills(scope.dir())).read();
+    let lock = LockFile::in_dir(&profile_skills(profile_dir)).read();
     Catalog::load(&roots, &lock, &PatternScanner)
 }
 

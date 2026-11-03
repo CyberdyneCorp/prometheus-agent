@@ -1,0 +1,540 @@
+//! The first-party `WhatsApp` adapter (spec: platform-adapters, First-party
+//! platforms and typed platform names; First-party adapter transports and
+//! required settings): the `WhatsApp` Web multi-device protocol through a
+//! bridge runtime on loopback HTTP — the managed one the adapter starts,
+//! or one already running at `options.bridge_url`. Each profile links its
+//! own device; one person is one sender whether `WhatsApp` names them by
+//! phone number or LID. Choices are numbered text (native polls come with
+//! the interactive features).
+
+mod bridge;
+pub mod install;
+
+pub use bridge::{TOKEN_ENV, TOKEN_SECRET, isolate, profile_args};
+/// The mock platform the conformance kit runs this adapter against; only
+/// in builds with the `kit` feature (tests, `prometheus` with
+/// `adapter-kits`), so release binaries do not carry it.
+#[cfg(feature = "kit")]
+pub mod mock;
+mod normalize;
+mod session;
+
+use std::collections::BTreeSet;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use bridge::Bridge;
+use normalize::Aliases;
+use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use pmt_config::ProfileScope;
+use pmt_config::platforms::WhatsappOptions;
+use pmt_core::error::Error;
+use pmt_gateway::messaging::adapter::credential;
+use pmt_gateway::messaging::{
+    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
+    Attachment, ChatInfo, ChatType, Descriptor, Interactive, Markup, MediaKind, MediaStream,
+    Outgoing, Private, SendError, Sent,
+};
+use serde_json::json;
+use tokio_util::sync::CancellationToken;
+
+/// The platform name.
+pub const PLATFORM: &str = "whatsapp";
+/// How often the bridge's queue is fetched.
+const POLL_INTERVAL: Duration = Duration::from_secs(1);
+/// How long a connect waits for the bridge to reach `WhatsApp`.
+const READY_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The factory the daemon registers for `whatsapp`.
+#[must_use]
+pub fn factory() -> AdapterFactory {
+    Arc::new(|setup| Ok(Arc::new(Whatsapp::new(setup)?) as Arc<dyn Adapter>))
+}
+
+/// A linked `WhatsApp` device of one profile.
+pub struct Whatsapp {
+    scope: ProfileScope,
+    bridge_url: Option<String>,
+    /// The secret holding an external bridge's token.
+    token_secret: String,
+    client: reqwest::Client,
+    aliases: Arc<Aliases>,
+    bridge: Mutex<Option<Bridge>>,
+    /// The managed bridge process, when the adapter started one.
+    child: Mutex<Option<tokio::process::Child>>,
+    poller: Mutex<Option<CancellationToken>>,
+    session: Arc<session::Session>,
+}
+
+impl std::fmt::Debug for Whatsapp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Whatsapp")
+            .field("profile", &self.scope.name().as_str())
+            .field("bridge_url", &self.bridge_url)
+            .finish_non_exhaustive()
+    }
+}
+
+fn unreachable(url: &str, why: &str) -> AdapterError {
+    AdapterError {
+        retryable: true,
+        code: "whatsapp_bridge_unreachable".to_owned(),
+        message: format!("the WhatsApp bridge at {url} is unreachable: {why}"),
+    }
+}
+
+impl Whatsapp {
+    /// The adapter for `setup`.
+    ///
+    /// # Errors
+    ///
+    /// `config.invalid` for bad options; the HTTP client cannot be built.
+    pub fn new(setup: &AdapterSetup) -> Result<Self, Error> {
+        let options: WhatsappOptions =
+            pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
+        // The bridge is a loopback service: never through a proxy.
+        let client = pmt_net::http::client_builder(&pmt_net::OutboundPolicy::default())?
+            .no_proxy()
+            .build()
+            .map_err(|e| {
+                Error::new(
+                    &pmt_core::error::codes::NET_CLIENT_INIT,
+                    format!("cannot build the WhatsApp bridge client: {e}"),
+                )
+            })?;
+        let aliases = Aliases::load(setup.scope.path("platforms/whatsapp/aliases.json"));
+        Ok(Self {
+            scope: setup.scope.clone(),
+            bridge_url: options
+                .bridge_url
+                .map(|u| u.trim_end_matches('/').to_owned()),
+            token_secret: setup
+                .config
+                .token_secret
+                .as_ref()
+                .map_or_else(|| bridge::TOKEN_SECRET.to_owned(), |s| s.0.clone()),
+            client,
+            aliases: Arc::new(aliases),
+            bridge: Mutex::default(),
+            child: Mutex::default(),
+            poller: Mutex::default(),
+            session: Arc::new(session::Session::new(
+                options.mode,
+                options.group_policy,
+                setup.config.allow_chats.clone(),
+            )),
+        })
+    }
+
+    fn profile(&self) -> &str {
+        self.scope.name().as_str()
+    }
+
+    fn bridge(&self) -> Result<Bridge, SendError> {
+        if let Some(bridge) = self.bridge.lock().expect("bridge poisoned").clone() {
+            return Ok(bridge);
+        }
+        match &self.bridge_url {
+            Some(_) => self
+                .external_bridge()
+                .map_err(|e| SendError::Permanent(e.message)),
+            None => Err(SendError::Network(
+                "the WhatsApp bridge runs only while the daemon is connected".to_owned(),
+            )),
+        }
+    }
+
+    /// The bridge at `options.bridge_url`, with the token from the secret
+    /// `token_secret` names (it must match the bridge's `PMT_BRIDGE_TOKEN`).
+    fn external_bridge(&self) -> Result<Bridge, AdapterError> {
+        let url = self.bridge_url.clone().unwrap_or_default();
+        Ok(Bridge {
+            client: self.client.clone(),
+            url,
+            token: credential(&self.scope, &self.token_secret)?,
+        })
+    }
+
+    /// The bridge to talk to: the configured one, the running managed
+    /// one, or a newly started managed one.
+    fn start_bridge(&self) -> Result<Bridge, AdapterError> {
+        if self.bridge_url.is_some() {
+            return self.external_bridge();
+        }
+        let mut child = self.child.lock().expect("child poisoned");
+        let running = child
+            .as_mut()
+            .is_some_and(|c| matches!(c.try_wait(), Ok(None)));
+        if running && let Some(bridge) = self.bridge.lock().expect("bridge poisoned").clone() {
+            return Ok(bridge);
+        }
+        let mode = match self.session.mode {
+            pmt_config::platforms::WhatsappMode::Bot => "bot",
+            pmt_config::platforms::WhatsappMode::SelfChat => "self-chat",
+        };
+        let (process, url, token) =
+            bridge::launch(self.scope.home(), self.scope.dir(), self.profile(), mode)?;
+        *child = Some(process);
+        Ok(Bridge {
+            client: self.client.clone(),
+            url,
+            token,
+        })
+    }
+
+    /// Waits until the bridge reaches `WhatsApp`.
+    async fn ready(&self, bridge: &Bridge) -> Result<(), AdapterError> {
+        let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
+        loop {
+            let error = match bridge.get("/health").await {
+                Ok(health) => match bridge::health_error(&health, self.profile()) {
+                    None => return Ok(()),
+                    Some(err) if !err.retryable => return Err(err),
+                    Some(err) => err,
+                },
+                Err(err) => unreachable(&bridge.url, &err.describe()),
+            };
+            if tokio::time::Instant::now() >= deadline {
+                return Err(error);
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+
+    async fn connect_with(&self, link: Arc<dyn AdapterLink>) -> Result<(), AdapterError> {
+        let bridge = self.start_bridge()?;
+        self.ready(&bridge).await?;
+        let stop = CancellationToken::new();
+        if let Some(old) = self
+            .poller
+            .lock()
+            .expect("poller poisoned")
+            .replace(stop.clone())
+        {
+            old.cancel();
+        }
+        *self.bridge.lock().expect("bridge poisoned") = Some(bridge.clone());
+        let poll = Poll {
+            bridge,
+            link,
+            aliases: Arc::clone(&self.aliases),
+            session: Arc::clone(&self.session),
+            profile: self.profile().to_owned(),
+            stop,
+        };
+        tokio::spawn(poll.run());
+        Ok(())
+    }
+
+    /// Sends the text of `message`: an approval card's choices numbered
+    /// (approvals are answered by number; a clarify question whose poll
+    /// failed is already numbered by the gateway).
+    async fn send_text(
+        &self,
+        bridge: &Bridge,
+        message: &Outgoing,
+    ) -> Result<Option<String>, SendError> {
+        let approval = message.buttons.iter().any(|b| b.data.starts_with("appr:"));
+        let text = if approval {
+            self.session
+                .numbered(&message.chat_id, &message.text, &message.buttons)
+        } else {
+            message.text.clone()
+        };
+        let mut body = json!({"chatId": message.chat_id, "message": text});
+        if let Some(reply) = &message.reply_to {
+            body["replyTo"] = json!(reply);
+        }
+        let sent = bridge.post("/send", &body).await?;
+        let id = sent["messageId"].as_str().map(str::to_owned);
+        if let Some(id) = &id {
+            self.session.sent(id, &text);
+        }
+        Ok(id)
+    }
+
+    /// A clarify question as a native poll; `None` when the message is
+    /// not one or the poll could not be sent (the numbered text goes
+    /// instead).
+    async fn poll(&self, bridge: &Bridge, message: &Outgoing) -> Option<Sent> {
+        let request =
+            session::Session::poll_for(&message.text, &message.buttons, message.select.as_ref())?;
+        let body = json!({"chatId": message.chat_id, "question": request.question,
+                          "options": request.options, "selectableCount": request.selectable});
+        match bridge.post("/send-poll", &body).await {
+            Ok(sent) => {
+                let id = sent["messageId"].as_str()?.to_owned();
+                self.session
+                    .opened(&id, &request, &message.buttons, message.select.as_ref());
+                self.session.sent(&id, &request.question);
+                Some(Sent {
+                    message_id: Some(id),
+                })
+            }
+            Err(err) => {
+                tracing::warn!(
+                    platform = PLATFORM,
+                    "poll not sent ({}); asking with numbered choices",
+                    err.describe()
+                );
+                None
+            }
+        }
+    }
+
+    async fn send_file(
+        &self,
+        bridge: &Bridge,
+        chat: &str,
+        path: &str,
+        kind: &str,
+    ) -> Result<Option<String>, SendError> {
+        let name = Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned());
+        let body = json!({"chatId": chat, "filePath": path, "mediaType": kind, "fileName": name});
+        let sent = bridge.post("/send-media", &body).await?;
+        Ok(sent["messageId"].as_str().map(str::to_owned))
+    }
+}
+
+/// Sends a location pin (`POST /send-location`).
+async fn send_location(
+    bridge: &Bridge,
+    chat: &str,
+    pin: &pmt_gateway::messaging::geo::Location,
+) -> Result<Option<String>, SendError> {
+    let body = json!({"chatId": chat, "latitude": pin.latitude, "longitude": pin.longitude,
+                      "name": pin.name});
+    let sent = bridge.post("/send-location", &body).await?;
+    Ok(sent["messageId"].as_str().map(str::to_owned))
+}
+
+/// The bridge's media type of an outbound file.
+fn media_type(path: &str, as_document: bool, as_voice: bool) -> &'static str {
+    if as_voice {
+        return "audio";
+    }
+    if as_document {
+        return "document";
+    }
+    let ext = Path::new(path)
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "jpg" | "jpeg" | "png" | "webp" | "gif" => "image",
+        "mp4" | "mov" | "3gp" => "video",
+        "ogg" | "opus" | "mp3" | "m4a" | "wav" | "aac" => "audio",
+        _ => "document",
+    }
+}
+
+/// The queue poller of one connection.
+struct Poll {
+    bridge: Bridge,
+    link: Arc<dyn AdapterLink>,
+    aliases: Arc<Aliases>,
+    session: Arc<session::Session>,
+    profile: String,
+    stop: CancellationToken,
+}
+
+impl Poll {
+    async fn run(self) {
+        loop {
+            let fetched = tokio::select! {
+                () = self.stop.cancelled() => return,
+                fetched = self.bridge.get("/messages") => fetched,
+            };
+            let events = match fetched {
+                Ok(events) => events,
+                Err(err) => return self.lost(&err).await,
+            };
+            for raw in events.as_array().into_iter().flatten() {
+                if let Some((inbound, from_me)) = normalize::event(raw, &self.aliases)
+                    && self.session.admits(&inbound, from_me)
+                {
+                    let inbound = self.session.enrich(inbound, raw);
+                    self.link.submit(inbound).await;
+                }
+            }
+            tokio::select! {
+                () = self.stop.cancelled() => return,
+                () = tokio::time::sleep(POLL_INTERVAL) => {}
+            }
+        }
+    }
+
+    /// Reports the lost bridge: fatal when `WhatsApp` logged the device out.
+    async fn lost(&self, err: &SendError) {
+        let logged_out = match self.bridge.get("/health").await {
+            Ok(health) => bridge::health_error(&health, &self.profile).filter(|e| !e.retryable),
+            Err(_) => None,
+        };
+        let (state, error) = match logged_out {
+            Some(error) => (AdapterState::Fatal, error),
+            None => (
+                AdapterState::Retrying,
+                unreachable(&self.bridge.url, &err.describe()),
+            ),
+        };
+        tracing::warn!(platform = PLATFORM, "{}", error.message);
+        self.link.report(state, Some(error));
+    }
+}
+
+impl Adapter for Whatsapp {
+    fn describe(&self) -> Descriptor {
+        let all: BTreeSet<MediaKind> = [
+            MediaKind::Image,
+            MediaKind::Audio,
+            MediaKind::Voice,
+            MediaKind::Video,
+            MediaKind::Document,
+        ]
+        .into_iter()
+        .collect();
+        let limit = pmt_config::platforms::first_party(PLATFORM)
+            .map_or(4096, |p| p.max_message_length as usize);
+        // The bridge sends every audio file as a voice note (it converts
+        // to Ogg Opus and sets `ptt`), so a plain audio file cannot go out.
+        let mut out = all.clone();
+        out.remove(&MediaKind::Audio);
+        // Locations are pins both ways; live locations only come in.
+        let mut all = all;
+        all.extend([MediaKind::Location, MediaKind::LiveLocation]);
+        out.insert(MediaKind::Location);
+        Descriptor {
+            markup: Markup::Platform,
+            interactive: Interactive::Native,
+            supports_edit: true,
+            supports_typing: true,
+            media_in: all,
+            media_out: out,
+            private_replies: true,
+            ..Descriptor::new(PLATFORM, limit)
+        }
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        // A direct message: a person's own chat is their (canonical) id.
+        Box::pin(async move {
+            self.send(&Outgoing::text(&to.sender_id, None, &to.text))
+                .await
+                .map(drop)
+        })
+    }
+
+    fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
+        Box::pin(self.connect_with(link))
+    }
+
+    fn disconnect(&self) -> AdapterFuture<'_, ()> {
+        if let Some(stop) = self.poller.lock().expect("poller poisoned").take() {
+            stop.cancel();
+        }
+        // Dropping the managed bridge kills it.
+        self.child.lock().expect("child poisoned").take();
+        self.bridge.lock().expect("bridge poisoned").take();
+        Box::pin(async {})
+    }
+
+    fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
+        let message = message.clone();
+        Box::pin(async move {
+            let bridge = self.bridge()?;
+            if let Some(sent) = self.poll(&bridge, &message).await {
+                return Ok(sent);
+            }
+            let mut first = None;
+            if !message.text.is_empty() || message.attachments.is_empty() {
+                first = self.send_text(&bridge, &message).await?;
+            }
+            for file in &message.attachments {
+                if let Some(pin) = pmt_gateway::messaging::geo::Location::parse(&file.path) {
+                    let id = send_location(&bridge, &message.chat_id, &pin).await?;
+                    first = first.or(id);
+                    continue;
+                }
+                let kind = media_type(&file.path, file.as_document, file.as_voice);
+                let id = self
+                    .send_file(&bridge, &message.chat_id, &file.path, kind)
+                    .await?;
+                first = first.or(id);
+            }
+            Ok(Sent { message_id: first })
+        })
+    }
+
+    fn edit<'a>(
+        &'a self,
+        message_id: &'a str,
+        message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let body = json!({"chatId": message.chat_id, "messageId": message_id,
+                              "message": message.text});
+            self.bridge()?.post("/edit", &body).await.map(drop)
+        })
+    }
+
+    fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
+        Box::pin(async move {
+            let path = format!("/chat/{}", utf8_percent_encode(chat_id, NON_ALPHANUMERIC));
+            let found = self.bridge()?.get(&path).await?;
+            Ok(ChatInfo {
+                name: found["name"].as_str().unwrap_or(chat_id).to_owned(),
+                chat_type: if found["isGroup"].as_bool() == Some(true) {
+                    ChatType::Group
+                } else {
+                    ChatType::Dm
+                },
+            })
+        })
+    }
+
+    fn send_typing<'a>(
+        &'a self,
+        chat_id: &'a str,
+        _thread_id: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let done = self
+                .bridge()?
+                .post("/typing", &json!({"chatId": chat_id}))
+                .await?;
+            if done["success"].as_bool() == Some(false) {
+                return Err(SendError::Server(
+                    "the bridge could not show typing".to_owned(),
+                ));
+            }
+            Ok(())
+        })
+    }
+
+    fn open_media<'a>(
+        &'a self,
+        attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        Box::pin(async move {
+            // The bridge downloads media into its own cache on this machine.
+            let bytes = tokio::fs::read(&attachment.location)
+                .await
+                .map_err(|e| SendError::Permanent(format!("{}: {e}", attachment.location)))?;
+            Ok(MediaStream {
+                declared_len: Some(bytes.len() as u64),
+                chunks: Box::pin(futures_util::stream::iter([Ok::<_, String>(bytes)])),
+            })
+        })
+    }
+}
+
+impl Drop for Whatsapp {
+    fn drop(&mut self) {
+        if let Some(stop) = self.poller.lock().map(|mut p| p.take()).ok().flatten() {
+            stop.cancel();
+        }
+    }
+}

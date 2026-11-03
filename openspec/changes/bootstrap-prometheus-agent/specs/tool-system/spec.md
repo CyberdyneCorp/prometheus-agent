@@ -361,7 +361,7 @@ The system SHALL ship composites `debugging` (`terminal`, `process` and includes
 - **THEN** `image_generate`, `text_to_speech`, `cronjob` and `computer_use` SHALL be absent and `delegate_task`, `browser_exec` and `clarify` SHALL be present
 
 ### Requirement: Per-surface default toolsets
-The system SHALL resolve a session's starting toolsets from `toolsets.surfaces.<surface>` when set and otherwise from `tools.enabled_toolsets`, with built-in defaults `cli`, `tui`, `desktop` and `cron` = `["core"]`, `api` = `["api_server"]`, `gateway.webhook` = `["webhook_safe"]`, `gateway.<platform>` = `["platform-<platform>"]` and `acp` and `acp_unattended` as `acp-adapter` specifies; `api_server` SHALL be `core` without `text_to_speech`, `clarify` and `computer_use`; `webhook_safe` SHALL be exactly `web_search`, `web_extract`, `vision_analyze` and `clarify`; `tools.disabled_toolsets` SHALL still be subtracted last on every surface, and an unknown surface key SHALL fail validation with exit 78.
+The system SHALL resolve a session's starting toolsets from `toolsets.surfaces.<surface>` when set and otherwise from `tools.enabled_toolsets`, with built-in defaults `cli`, `tui`, `desktop` and `cron` = `["core"]`, `api` = `["api_server"]`, `gateway.webhook` = `["webhook-safe"]`, `gateway.<platform>` = `["platform-<platform>"]` and `acp` and `acp_unattended` as `acp-adapter` specifies; `api_server` SHALL be `core` without `text_to_speech`, `clarify` and `computer_use`; `webhook-safe` SHALL be exactly `web_search`, `web_extract`, `vision_analyze` and `clarify`; `tools.disabled_toolsets` SHALL still be subtracted last on every surface, and an unknown surface key SHALL fail validation with exit 78.
 **Milestone:** M2
 
 #### Scenario: Cron override

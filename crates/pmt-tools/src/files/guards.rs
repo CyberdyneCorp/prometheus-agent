@@ -25,23 +25,6 @@ const RUNTIME_SOCKETS: &[&str] = &["docker.sock", "podman.sock", "containerd.soc
 /// Per-profile files that steer Prometheus itself.
 const CONTROL_FILES: &[&str] = &["config.toml", "secrets.toml", "grants.toml"];
 
-/// `/proc` entries that expose process memory or environment secrets.
-const PROC_SECRETS: &[&str] = &[
-    "environ",
-    "mem",
-    "maps",
-    "smaps",
-    "smaps_rollup",
-    "numa_maps",
-    "pagemap",
-    "auxv",
-    "stack",
-    "syscall",
-];
-
-/// Dotenv templates that hold no secrets.
-const ENV_TEMPLATES: &[&str] = &[".env.example", ".env.sample", ".env.template"];
-
 /// `Refusing device-namespace or UNC path '<path>'` for an NT/device
 /// namespace path or a UNC host, checked on the raw text before any
 /// filesystem access, so a crafted path cannot trigger outbound
@@ -73,9 +56,7 @@ fn is_slash_unc(raw: &str) -> bool {
 /// secrets. Writing and creating them stays allowed.
 #[must_use]
 pub fn secret_file(path: &Path, shown: &str) -> Option<String> {
-    let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
-    let dotenv = name == ".env" || name == ".envrc" || name.starts_with(".env.");
-    (dotenv && !ENV_TEMPLATES.contains(&name.as_str())).then(|| {
+    pmt_core::secret_paths::is_dotenv(path).then(|| {
         format!(
             "Refusing to read '{shown}': it typically holds secrets; ask the user to share the specific value you need"
         )
@@ -109,22 +90,7 @@ fn on_path_or_target(path: &Path, guard: impl Fn(&Path) -> Option<String>) -> Op
 /// The read refusal for `/proc/<pid>/environ|mem|maps`-style files.
 #[must_use]
 pub fn proc_secret(path: &Path, shown: &str) -> Option<String> {
-    let parts: Vec<String> = path
-        .components()
-        .filter_map(|c| match c {
-            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
-            _ => None,
-        })
-        .collect();
-    let leaks = match parts.as_slice() {
-        [proc, rest @ ..] if proc == "proc" => match rest {
-            [kcore] => kcore == "kcore",
-            [_, file] | [_, _, _, file] => PROC_SECRETS.contains(&file.as_str()),
-            _ => false,
-        },
-        _ => false,
-    };
-    leaks.then(|| {
+    pmt_core::secret_paths::is_proc_secret(path).then(|| {
         format!("Cannot read '{shown}': it exposes process memory or environment secrets.")
     })
 }

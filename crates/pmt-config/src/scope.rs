@@ -109,7 +109,7 @@ impl ProfileScope {
         };
         let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env);
         crate::passthrough::check_with_secrets(&config.config().terminal, &secrets)?;
-        crate::essential::semantic(config.config())?;
+        crate::essential::semantic(config.config(), profile.path())?;
         Ok(Self {
             inner: Arc::new(Inner {
                 profile,

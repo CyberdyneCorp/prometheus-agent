@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::catalog::{self, allowed_values, resolve, type_label};
 use crate::credential;
-use crate::schema::{MACHINE_WIDE_SECTIONS, is_secret_name};
+use crate::schema::{MACHINE_WIDE_GATEWAY_KEYS, MACHINE_WIDE_SECTIONS, is_secret_name};
 
 /// One validation problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,24 +119,21 @@ impl Node {
 #[must_use]
 pub fn document(root: &Node) -> Vec<Issue> {
     let mut issues = Vec::new();
-    if let Kind::Table(entries) = &root.kind {
-        for (key, span, _) in entries {
-            if MACHINE_WIDE_SECTIONS.contains(&key.as_str()) {
-                issues.push(Issue {
-                    code: &codes::CONFIG_UNKNOWN_KEY,
-                    key: key.clone(),
-                    span: span.clone(),
-                    message: format!(
-                        "'{key}' is machine-wide and belongs in daemon.toml, not a profile config.toml"
-                    ),
-                });
-            }
-        }
+    for (key, span) in machine_wide_keys(root) {
+        issues.push(Issue {
+            code: &codes::CONFIG_UNKNOWN_KEY,
+            message: format!(
+                "'{key}' is machine-wide and only valid in <home>/daemon.toml, not a profile config.toml"
+            ),
+            key,
+            span,
+        });
     }
     let mut checker = Checker {
         issues: &mut issues,
     };
     checker.check(root, catalog::schema(), "");
+    crate::validate_platforms::check(root, &mut issues);
     issues.retain(|i| i.code != &codes::CONFIG_UNKNOWN_KEY || !is_machine_wide_duplicate(i));
     issues.sort_by_key(|i| i.span.as_ref().map_or(usize::MAX, |s| s.start));
     issues.dedup();
@@ -146,7 +143,35 @@ pub fn document(root: &Node) -> Vec<Issue> {
 /// The machine-wide check already reported these sections; drop the
 /// generic "unknown key" for them.
 fn is_machine_wide_duplicate(issue: &Issue) -> bool {
-    MACHINE_WIDE_SECTIONS.contains(&issue.key.as_str()) && issue.message.starts_with("unknown key")
+    let machine_wide = MACHINE_WIDE_SECTIONS.contains(&issue.key.as_str())
+        || issue
+            .key
+            .strip_prefix("gateway.")
+            .is_some_and(|k| MACHINE_WIDE_GATEWAY_KEYS.contains(&k));
+    machine_wide && issue.message.starts_with("unknown key")
+}
+
+/// Root sections and `[gateway]` keys of a profile document that belong in
+/// `daemon.toml` (spec: messaging-gateway, Profiles served by one daemon).
+fn machine_wide_keys(root: &Node) -> Vec<(String, Option<Range<usize>>)> {
+    let mut found = Vec::new();
+    let Kind::Table(entries) = &root.kind else {
+        return found;
+    };
+    for (key, span, node) in entries {
+        if MACHINE_WIDE_SECTIONS.contains(&key.as_str()) {
+            found.push((key.clone(), span.clone()));
+        } else if key == "gateway"
+            && let Kind::Table(gateway) = &node.kind
+        {
+            for (sub, span, _) in gateway {
+                if MACHINE_WIDE_GATEWAY_KEYS.contains(&sub.as_str()) {
+                    found.push((format!("gateway.{sub}"), span.clone()));
+                }
+            }
+        }
+    }
+    found
 }
 
 /// Validates one value for `key` (a `--set` or `config set` argument).
@@ -185,8 +210,8 @@ pub fn unknown_key(key: &str, span: Option<Range<usize>>) -> Issue {
     }
 }
 
-struct Checker<'a> {
-    issues: &'a mut Vec<Issue>,
+pub(crate) struct Checker<'a> {
+    pub(crate) issues: &'a mut Vec<Issue>,
 }
 
 impl Checker<'_> {
@@ -199,13 +224,16 @@ impl Checker<'_> {
         });
     }
 
-    fn check(&mut self, node: &Node, schema: &'static Value, key: &str) {
+    pub(crate) fn check(&mut self, node: &Node, schema: &'static Value, key: &str) {
         let schema = resolve(schema);
         if let Some(allowed) = allowed_values(schema) {
             return self.check_enum(node, &allowed, key);
         }
         if let Some(variants) = schema.get("anyOf").and_then(Value::as_array) {
             return self.check_any_of(node, schema, variants, key);
+        }
+        if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
+            return self.check_one_of(node, variants, key);
         }
         if !type_matches(schema, node) {
             let message = format!(
@@ -305,6 +333,36 @@ impl Checker<'_> {
             );
             self.invalid(key, node, message);
         }
+    }
+
+    /// A tagged value (a table with one variant key, such as a webhook
+    /// filter): the variant whose keys the table uses decides; when none
+    /// does, the error lists the variants' keys.
+    fn check_one_of(&mut self, node: &Node, variants: &'static [Value], key: &str) {
+        let keys_of = |variant: &Value| -> Vec<String> {
+            variant
+                .get("properties")
+                .and_then(Value::as_object)
+                .map(|p| p.keys().cloned().collect())
+                .unwrap_or_default()
+        };
+        let fitting = variants.iter().map(resolve).find(|variant| {
+            let Kind::Table(entries) = &node.kind else {
+                return type_matches(variant, node);
+            };
+            let keys = keys_of(variant);
+            type_matches(variant, node) && entries.iter().all(|(name, ..)| keys.contains(name))
+        });
+        if let Some(variant) = fitting {
+            return self.check(node, variant, key);
+        }
+        let names: Vec<String> = variants.iter().map(resolve).flat_map(keys_of).collect();
+        let message = format!(
+            "{key}: expected a table with one of the keys {}, found {}",
+            names.join(", "),
+            node.toml_type()
+        );
+        self.invalid(key, node, message);
     }
 
     /// A schema-free table (plugin or skill settings) has no types to
@@ -633,8 +691,46 @@ mod tests {
     fn machine_wide_sections_are_refused() {
         assert_eq!(
             messages("[update]\nauto_apply = true\n"),
-            ["'update' is machine-wide and belongs in daemon.toml, not a profile config.toml"]
+            [
+                "'update' is machine-wide and only valid in <home>/daemon.toml, not a profile config.toml"
+            ]
         );
+    }
+
+    #[test]
+    fn daemon_wide_keys_in_a_profile_config_point_to_daemon_toml() {
+        assert_eq!(
+            messages("[daemon.rpc]\nbind = \"127.0.0.1:0\"\n"),
+            [
+                "'daemon' is machine-wide and only valid in <home>/daemon.toml, not a profile config.toml"
+            ]
+        );
+        assert_eq!(
+            messages("[gateway]\non_all_adapters_down = \"exit\"\n[gateway.relay]\nurl = \"x\"\n"),
+            [
+                "'gateway.on_all_adapters_down' is machine-wide and only valid in <home>/daemon.toml, not a profile config.toml",
+                "'gateway.relay' is machine-wide and only valid in <home>/daemon.toml, not a profile config.toml",
+            ]
+        );
+    }
+
+    #[test]
+    fn gateway_values_are_validated() {
+        assert_eq!(
+            messages("[busy]\ninput_mode = \"loud\"\n"),
+            [
+                "busy.input_mode: unknown value \"loud\" (allowed: \"queue\", \"steer\", \"interrupt\")"
+            ]
+        );
+        assert_eq!(
+            messages("[gateway.platforms.telegram.busy]\ninput_mode = \"loud\"\n").len(),
+            1
+        );
+        let negative = messages("[gateway.sessions]\nroute_max_age_secs = -1\n");
+        assert_eq!(negative.len(), 1, "{negative:?}");
+        assert!(negative[0].starts_with("gateway.sessions.route_max_age_secs"));
+        let unknown = messages("[gateway.notifications]\nbackground = \"loud\"\n");
+        assert!(unknown[0].contains("\"concise\""), "{unknown:?}");
     }
 
     #[test]

@@ -30,22 +30,24 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `session_search` | `session_search` |  |  | Search past sessions |
 | `connections` | `manage_connections` |  |  | Manage connectors and MCP connections |
 | `clarify` | `clarify` |  |  | Ask the user a question |
+| `messaging` | `send_message` |  |  | Send messages and reactions to messaging chats (needs the gateway daemon) |
 | `code_execution` | `execute_code` |  |  | Run code in a sandbox |
 | `delegation` | `delegate_task` |  |  | Delegate work to subagents |
 | `kanban` |  |  | default-off | Kanban boards |
 | `debugging` | `terminal`, `process` | `web`, `file` |  | Terminal, processes, web and files |
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
+| `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
 | `coding` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `manage_connections` |  | posture | Software work: core without media generation, speech, scheduling or computer use |
 
 ## Tool names
 
 ### `web_search`
 
-Toolsets: `core`, `web`, `search`, `coding`.
+Toolsets: `core`, `web`, `search`, `webhook-safe`, `coding`.
 
 ### `web_extract`
 
-Toolsets: `core`, `web`, `coding`.
+Toolsets: `core`, `web`, `webhook-safe`, `coding`.
 
 ### `terminal`
 
@@ -73,7 +75,7 @@ Toolsets: `core`, `file`, `coding`.
 
 ### `vision_analyze`
 
-Toolsets: `core`, `vision`, `coding`.
+Toolsets: `core`, `vision`, `webhook-safe`, `coding`.
 
 ### `image_generate`
 
@@ -125,7 +127,7 @@ Toolsets: `core`, `session_search`, `coding`.
 
 ### `clarify`
 
-Toolsets: `core`, `clarify`, `coding`.
+Toolsets: `core`, `clarify`, `webhook-safe`, `coding`.
 
 ### `execute_code`
 
@@ -158,3 +160,7 @@ Toolsets: `video`.
 ### `video_generate`
 
 Toolsets: `video_gen`.
+
+### `send_message`
+
+Toolsets: `messaging`.

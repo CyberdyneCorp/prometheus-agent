@@ -36,7 +36,11 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -7522,6 +7526,151 @@ Options:
           Print help
 ```
 
+## `prometheus pause`
+
+```text
+Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+
+Usage: prometheus pause [OPTIONS]
+       prometheus pause <COMMAND>
+
+Commands:
+  off     Lift the pause
+  status  Print whether the home is paused, why, by whom and since when
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --reason <REASON>
+          Why (shown in every refusal)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pause off`
+
+```text
+Lift the pause
+
+Usage: prometheus pause off [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pause status`
+
+```text
+Print whether the home is paused, why, by whom and since when
+
+Usage: prometheus pause status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pause help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pause help [COMMAND]
+
+Commands:
+  off     Lift the pause
+  status  Print whether the home is paused, why, by whom and since when
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus pause help off`
+
+```text
+Lift the pause
+
+Usage: prometheus pause help off
+```
+
+## `prometheus pause help status`
+
+```text
+Print whether the home is paused, why, by whom and since when
+
+Usage: prometheus pause help status
+```
+
+## `prometheus pause help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pause help help
+```
+
 ## `prometheus daemon`
 
 ```text
@@ -7530,13 +7679,15 @@ Run, start, stop and inspect the gateway daemon that owns this home's sessions (
 Usage: prometheus daemon [OPTIONS] <COMMAND>
 
 Commands:
-  run      Run the daemon in the foreground (what `start` launches)
-  start    Start the daemon in the background; does nothing when it runs
-  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
-  stop     Stop the daemon after its running turns finish
-  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
-  status   Print the daemon's process state
-  help     Print this message or the help of the given subcommand(s)
+  run                Run the daemon in the foreground (what `start` launches)
+  start              Start the daemon in the background; does nothing when it runs
+  ensure             Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop               Stop the daemon after its running turns finish
+  restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status             Print the daemon's process state
+  install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+  uninstall-service  Stop and remove the unit `install-service` installed
+  help               Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -7574,6 +7725,9 @@ Usage: prometheus daemon run [OPTIONS]
 Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --replace
+          Take over messaging platform credentials (bot tokens) that a live daemon of another home or profile holds
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -7762,6 +7916,84 @@ Options:
           Print help
 ```
 
+## `prometheus daemon install-service`
+
+```text
+Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+
+Usage: prometheus daemon install-service [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --system
+          Install a boot-time system unit instead (root or administrator)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --run-as-user <USER>
+          The user the system unit runs the daemon as
+
+      --no-start
+          Install without starting the daemon now
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus daemon uninstall-service`
+
+```text
+Stop and remove the unit `install-service` installed
+
+Usage: prometheus daemon uninstall-service [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --system
+          Remove the system unit instead of the per-user one
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus daemon help`
 
 ```text
@@ -7770,13 +8002,15 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus daemon help [COMMAND]
 
 Commands:
-  run      Run the daemon in the foreground (what `start` launches)
-  start    Start the daemon in the background; does nothing when it runs
-  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
-  stop     Stop the daemon after its running turns finish
-  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
-  status   Print the daemon's process state
-  help     Print this message or the help of the given subcommand(s)
+  run                Run the daemon in the foreground (what `start` launches)
+  start              Start the daemon in the background; does nothing when it runs
+  ensure             Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop               Stop the daemon after its running turns finish
+  restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status             Print the daemon's process state
+  install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+  uninstall-service  Stop and remove the unit `install-service` installed
+  help               Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus daemon help run`
@@ -7827,12 +8061,1289 @@ Print the daemon's process state
 Usage: prometheus daemon help status
 ```
 
+## `prometheus daemon help install-service`
+
+```text
+Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+
+Usage: prometheus daemon help install-service
+```
+
+## `prometheus daemon help uninstall-service`
+
+```text
+Stop and remove the unit `install-service` installed
+
+Usage: prometheus daemon help uninstall-service
+```
+
 ## `prometheus daemon help help`
 
 ```text
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus daemon help help
+```
+
+## `prometheus gateway`
+
+```text
+Messaging adapters of the running daemon and the profile's delivery outbox
+
+Usage: prometheus gateway [OPTIONS] <COMMAND>
+
+Commands:
+  status          Print each served profile's messaging adapters and their state
+  reload          Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms       Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox          The durable delivery outbox of the selected profile
+  send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list            List every running Prometheus daemon of this OS user, whatever its home
+  enroll          Enroll this home with a relay connector using a one-time token
+  slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  whatsapp        WhatsApp linked-device setup
+  pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
+  resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  help            Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway status`
+
+```text
+Print each served profile's messaging adapters and their state
+
+Usage: prometheus gateway status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway reload`
+
+```text
+Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+
+Usage: prometheus gateway reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway platforms`
+
+```text
+Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+
+Usage: prometheus gateway platforms [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway stop`
+
+```text
+Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+
+Usage: prometheus gateway stop [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox`
+
+```text
+The durable delivery outbox of the selected profile
+
+Usage: prometheus gateway outbox [OPTIONS] <COMMAND>
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox list`
+
+```text
+List entries, newest first
+
+Usage: prometheus gateway outbox list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --state <STATE>
+          Only entries in this state (`queued`, `sending`, `sent`, `delivered`, `read`, `failed`, `unknown`)
+
+      --limit <LIMIT>
+          At most this many
+
+          [default: 50]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus gateway outbox retry [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id from `outbox list`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus gateway outbox drop [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id from `outbox list`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway outbox help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway outbox help [COMMAND]
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway outbox help list`
+
+```text
+List entries, newest first
+
+Usage: prometheus gateway outbox help list
+```
+
+## `prometheus gateway outbox help retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus gateway outbox help retry
+```
+
+## `prometheus gateway outbox help drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus gateway outbox help drop
+```
+
+## `prometheus gateway outbox help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway outbox help help
+```
+
+## `prometheus gateway send`
+
+```text
+Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+
+Usage: prometheus gateway send [OPTIONS] [MESSAGE]
+
+Arguments:
+  [MESSAGE]
+          The message; without it, `--file` or piped stdin
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TARGET>
+          Where: `platform` (its home channel), `platform:chat_id`, `platform:chat_id:thread_id` or `platform:#channel-name`
+
+      --file <PATH>
+          Read the message from a text file (`-` for stdin)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --subject <SUBJECT>
+          A subject line put before the message
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --list [<PLATFORM>]
+          List known targets (home channels, allowed chats, chats with sessions), optionally of one platform
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway list`
+
+```text
+List every running Prometheus daemon of this OS user, whatever its home
+
+Usage: prometheus gateway list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway enroll`
+
+```text
+Enroll this home with a relay connector using a one-time token
+
+Usage: prometheus gateway enroll [OPTIONS] --token <TOKEN> --connector-url <URL>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --token <TOKEN>
+          The one-time enrollment token from the relay operator
+
+      --connector-url <URL>
+          The connector's HTTPS base URL
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --gateway-id <ID>
+          The gateway id to ask for (the connector may assign one)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --wake-url <URL>
+          An HTTPS URL the connector calls to wake this host when it scaled to zero
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway slack-manifest`
+
+```text
+Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+
+Usage: prometheus gateway slack-manifest [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The app's display name
+
+          [default: Prometheus]
+
+      --description <DESCRIPTION>
+          The app's short description
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --long-description <LONG_DESCRIPTION>
+          The app's long description (175-4000 characters)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --long-description-file <PATH>
+          A file holding the long description
+
+      --agent-view
+          Subscribe to the agent messaging events (the app's Messages tab)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-assistant
+          Leave out the assistant view, its scope and events
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --commands-only
+          Print only the slash-command array
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --write [<PATH>]
+          Write the manifest to PATH (default `<profile>/slack-manifest.json`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp`
+
+```text
+WhatsApp linked-device setup
+
+Usage: prometheus gateway whatsapp [OPTIONS] <COMMAND>
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus gateway whatsapp pair [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --pairing-code <PHONE>
+          Link with an 8-character code for this phone number (with country code) instead of a QR code
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp help [COMMAND]
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+  help  Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway whatsapp help pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus gateway whatsapp help pair
+```
+
+## `prometheus gateway whatsapp help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp help help
+```
+
+## `prometheus gateway pause`
+
+```text
+Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
+
+Usage: prometheus gateway pause [OPTIONS] <PLATFORM>
+
+Arguments:
+  <PLATFORM>
+          The platform (`telegram`, `discord`, ...)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway resume`
+
+```text
+Clear an adapter's pause and reconnect backoff and reconnect it now
+
+Usage: prometheus gateway resume [OPTIONS] <PLATFORM>
+
+Arguments:
+  <PLATFORM>
+          The platform
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway help [COMMAND]
+
+Commands:
+  status          Print each served profile's messaging adapters and their state
+  reload          Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms       Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox          The durable delivery outbox of the selected profile
+  send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list            List every running Prometheus daemon of this OS user, whatever its home
+  enroll          Enroll this home with a relay connector using a one-time token
+  slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  whatsapp        WhatsApp linked-device setup
+  pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
+  resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  help            Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway help status`
+
+```text
+Print each served profile's messaging adapters and their state
+
+Usage: prometheus gateway help status
+```
+
+## `prometheus gateway help reload`
+
+```text
+Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+
+Usage: prometheus gateway help reload
+```
+
+## `prometheus gateway help platforms`
+
+```text
+Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+
+Usage: prometheus gateway help platforms
+```
+
+## `prometheus gateway help stop`
+
+```text
+Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+
+Usage: prometheus gateway help stop
+```
+
+## `prometheus gateway help outbox`
+
+```text
+The durable delivery outbox of the selected profile
+
+Usage: prometheus gateway help outbox [COMMAND]
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+```
+
+## `prometheus gateway help outbox list`
+
+```text
+List entries, newest first
+
+Usage: prometheus gateway help outbox list
+```
+
+## `prometheus gateway help outbox retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus gateway help outbox retry
+```
+
+## `prometheus gateway help outbox drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus gateway help outbox drop
+```
+
+## `prometheus gateway help send`
+
+```text
+Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+
+Usage: prometheus gateway help send
+```
+
+## `prometheus gateway help list`
+
+```text
+List every running Prometheus daemon of this OS user, whatever its home
+
+Usage: prometheus gateway help list
+```
+
+## `prometheus gateway help enroll`
+
+```text
+Enroll this home with a relay connector using a one-time token
+
+Usage: prometheus gateway help enroll
+```
+
+## `prometheus gateway help slack-manifest`
+
+```text
+Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+
+Usage: prometheus gateway help slack-manifest
+```
+
+## `prometheus gateway help whatsapp`
+
+```text
+WhatsApp linked-device setup
+
+Usage: prometheus gateway help whatsapp [COMMAND]
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+```
+
+## `prometheus gateway help whatsapp pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus gateway help whatsapp pair
+```
+
+## `prometheus gateway help pause`
+
+```text
+Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
+
+Usage: prometheus gateway help pause
+```
+
+## `prometheus gateway help resume`
+
+```text
+Clear an adapter's pause and reconnect backoff and reconnect it now
+
+Usage: prometheus gateway help resume
+```
+
+## `prometheus gateway help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway help help
+```
+
+## `prometheus pairing`
+
+```text
+Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+
+Usage: prometheus pairing [OPTIONS] <COMMAND>
+
+Commands:
+  list     List pending codes (unexpired) and approved senders
+  approve  Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+  deny     Refuse a pending code
+  revoke   Remove an approved sender
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing list`
+
+```text
+List pending codes (unexpired) and approved senders
+
+Usage: prometheus pairing list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --platform <PLATFORM>
+          Only this platform
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing approve`
+
+```text
+Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+
+Usage: prometheus pairing approve [OPTIONS] <PLATFORM> <CODE>
+
+Arguments:
+  <PLATFORM>
+          The platform the code was issued on
+
+  <CODE>
+          The code the sender got
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing deny`
+
+```text
+Refuse a pending code
+
+Usage: prometheus pairing deny [OPTIONS] <PLATFORM> <CODE>
+
+Arguments:
+  <PLATFORM>
+          The platform the code was issued on
+
+  <CODE>
+          The code the sender got
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing revoke`
+
+```text
+Remove an approved sender
+
+Usage: prometheus pairing revoke [OPTIONS] <PLATFORM> <SENDER>
+
+Arguments:
+  <PLATFORM>
+          The platform
+
+  <SENDER>
+          The sender's platform id (from `pairing list`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pairing help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pairing help [COMMAND]
+
+Commands:
+  list     List pending codes (unexpired) and approved senders
+  approve  Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+  deny     Refuse a pending code
+  revoke   Remove an approved sender
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus pairing help list`
+
+```text
+List pending codes (unexpired) and approved senders
+
+Usage: prometheus pairing help list
+```
+
+## `prometheus pairing help approve`
+
+```text
+Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+
+Usage: prometheus pairing help approve
+```
+
+## `prometheus pairing help deny`
+
+```text
+Refuse a pending code
+
+Usage: prometheus pairing help deny
+```
+
+## `prometheus pairing help revoke`
+
+```text
+Remove an approved sender
+
+Usage: prometheus pairing help revoke
+```
+
+## `prometheus pairing help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pairing help help
+```
+
+## `prometheus plugins`
+
+```text
+Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+
+Usage: prometheus plugins [OPTIONS] <COMMAND>
+
+Commands:
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins test-adapter`
+
+```text
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+
+Usage: prometheus plugins test-adapter [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The platform name or plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins help [COMMAND]
+
+Commands:
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  help          Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins help test-adapter`
+
+```text
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+
+Usage: prometheus plugins help test-adapter
+```
+
+## `prometheus plugins help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins help help
 ```
 
 ## `prometheus tui`
@@ -8834,7 +10345,11 @@ Commands:
   toolsets     List toolsets and show the tools a toolset resolves to
   approvals    Check how the approval gate treats a command, without running it
   update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -10134,6 +11649,34 @@ Update this install to its channel's newest signed release, check for one (exit 
 Usage: prometheus help update
 ```
 
+## `prometheus help pause`
+
+```text
+Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+
+Usage: prometheus help pause [COMMAND]
+
+Commands:
+  off     Lift the pause
+  status  Print whether the home is paused, why, by whom and since when
+```
+
+## `prometheus help pause off`
+
+```text
+Lift the pause
+
+Usage: prometheus help pause off
+```
+
+## `prometheus help pause status`
+
+```text
+Print whether the home is paused, why, by whom and since when
+
+Usage: prometheus help pause status
+```
+
 ## `prometheus help daemon`
 
 ```text
@@ -10142,12 +11685,14 @@ Run, start, stop and inspect the gateway daemon that owns this home's sessions (
 Usage: prometheus help daemon [COMMAND]
 
 Commands:
-  run      Run the daemon in the foreground (what `start` launches)
-  start    Start the daemon in the background; does nothing when it runs
-  ensure   Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
-  stop     Stop the daemon after its running turns finish
-  restart  Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
-  status   Print the daemon's process state
+  run                Run the daemon in the foreground (what `start` launches)
+  start              Start the daemon in the background; does nothing when it runs
+  ensure             Start the daemon when it is not running and print its endpoint (with `--json`: one object for clients that spawn it)
+  stop               Stop the daemon after its running turns finish
+  restart            Replace the daemon (after a binary update): drain running turns, stop it and start this binary's daemon
+  status             Print the daemon's process state
+  install-service    Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+  uninstall-service  Stop and remove the unit `install-service` installed
 ```
 
 ## `prometheus help daemon run`
@@ -10196,6 +11741,245 @@ Usage: prometheus help daemon restart
 Print the daemon's process state
 
 Usage: prometheus help daemon status
+```
+
+## `prometheus help daemon install-service`
+
+```text
+Install a per-user supervisor unit that starts the daemon at login (no administrator rights); `--system --run-as-user` installs a boot-time unit instead (root only)
+
+Usage: prometheus help daemon install-service
+```
+
+## `prometheus help daemon uninstall-service`
+
+```text
+Stop and remove the unit `install-service` installed
+
+Usage: prometheus help daemon uninstall-service
+```
+
+## `prometheus help gateway`
+
+```text
+Messaging adapters of the running daemon and the profile's delivery outbox
+
+Usage: prometheus help gateway [COMMAND]
+
+Commands:
+  status          Print each served profile's messaging adapters and their state
+  reload          Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+  platforms       Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+  stop            Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+  outbox          The durable delivery outbox of the selected profile
+  send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+  list            List every running Prometheus daemon of this OS user, whatever its home
+  enroll          Enroll this home with a relay connector using a one-time token
+  slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+  whatsapp        WhatsApp linked-device setup
+  pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
+  resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+```
+
+## `prometheus help gateway status`
+
+```text
+Print each served profile's messaging adapters and their state
+
+Usage: prometheus help gateway status
+```
+
+## `prometheus help gateway reload`
+
+```text
+Start the adapters served profiles enable that are not running (running adapters and conversations are untouched)
+
+Usage: prometheus help gateway reload
+```
+
+## `prometheus help gateway platforms`
+
+```text
+Print each loaded adapter's capability descriptor (limits, unit, media, interactive tier, optional capabilities)
+
+Usage: prometheus help gateway platforms
+```
+
+## `prometheus help gateway stop`
+
+```text
+Stop the daemon that serves this profile's adapters (releasing their platform credentials), after its running turns finish
+
+Usage: prometheus help gateway stop
+```
+
+## `prometheus help gateway outbox`
+
+```text
+The durable delivery outbox of the selected profile
+
+Usage: prometheus help gateway outbox [COMMAND]
+
+Commands:
+  list   List entries, newest first
+  retry  Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+  drop   Remove an entry that is not being sent
+```
+
+## `prometheus help gateway outbox list`
+
+```text
+List entries, newest first
+
+Usage: prometheus help gateway outbox list
+```
+
+## `prometheus help gateway outbox retry`
+
+```text
+Queue a `failed` or `unknown` entry again (a resend of an `unknown` one may duplicate it on the platform)
+
+Usage: prometheus help gateway outbox retry
+```
+
+## `prometheus help gateway outbox drop`
+
+```text
+Remove an entry that is not being sent
+
+Usage: prometheus help gateway outbox drop
+```
+
+## `prometheus help gateway send`
+
+```text
+Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
+
+Usage: prometheus help gateway send
+```
+
+## `prometheus help gateway list`
+
+```text
+List every running Prometheus daemon of this OS user, whatever its home
+
+Usage: prometheus help gateway list
+```
+
+## `prometheus help gateway enroll`
+
+```text
+Enroll this home with a relay connector using a one-time token
+
+Usage: prometheus help gateway enroll
+```
+
+## `prometheus help gateway slack-manifest`
+
+```text
+Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
+
+Usage: prometheus help gateway slack-manifest
+```
+
+## `prometheus help gateway whatsapp`
+
+```text
+WhatsApp linked-device setup
+
+Usage: prometheus help gateway whatsapp [COMMAND]
+
+Commands:
+  pair  Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+```
+
+## `prometheus help gateway whatsapp pair`
+
+```text
+Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
+
+Usage: prometheus help gateway whatsapp pair
+```
+
+## `prometheus help gateway pause`
+
+```text
+Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
+
+Usage: prometheus help gateway pause
+```
+
+## `prometheus help gateway resume`
+
+```text
+Clear an adapter's pause and reconnect backoff and reconnect it now
+
+Usage: prometheus help gateway resume
+```
+
+## `prometheus help pairing`
+
+```text
+Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+
+Usage: prometheus help pairing [COMMAND]
+
+Commands:
+  list     List pending codes (unexpired) and approved senders
+  approve  Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+  deny     Refuse a pending code
+  revoke   Remove an approved sender
+```
+
+## `prometheus help pairing list`
+
+```text
+List pending codes (unexpired) and approved senders
+
+Usage: prometheus help pairing list
+```
+
+## `prometheus help pairing approve`
+
+```text
+Approve a pending code (spaces, dashes and case are ignored); the sender is told in their DM
+
+Usage: prometheus help pairing approve
+```
+
+## `prometheus help pairing deny`
+
+```text
+Refuse a pending code
+
+Usage: prometheus help pairing deny
+```
+
+## `prometheus help pairing revoke`
+
+```text
+Remove an approved sender
+
+Usage: prometheus help pairing revoke
+```
+
+## `prometheus help plugins`
+
+```text
+Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+
+Usage: prometheus help plugins [COMMAND]
+
+Commands:
+  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+```
+
+## `prometheus help plugins test-adapter`
+
+```text
+Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+
+Usage: prometheus help plugins test-adapter
 ```
 
 ## `prometheus help tui`
@@ -10437,3 +12221,12 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
+| `prometheus.gateway_status.v1` | `prometheus gateway status` |
+| `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |
+| `prometheus.gateway_outbox.v1` | `prometheus gateway outbox list` |
+| `prometheus.pairing.v1` | `prometheus pairing list` |
+| `prometheus.gateway_send.v1` | `prometheus gateway send` |
+| `prometheus.gateway_targets.v1` | `prometheus gateway send --list` |
+| `prometheus.gateway_list.v1` | `prometheus gateway list` |
+| `prometheus.pause.v1` | `prometheus pause status` |
+| `prometheus.gateway_pause.v1` | `prometheus gateway pause` |

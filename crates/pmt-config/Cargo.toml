@@ -11,6 +11,8 @@ repository.workspace = true
 jiff.workspace = true
 keyring-core.workspace = true
 pmt-core.workspace = true
+# Webhook filter patterns are checked when the configuration loads.
+regex.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

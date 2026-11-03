@@ -182,6 +182,11 @@ pub fn builtin() -> Vec<Toolset> {
             &["manage_connections"],
         ),
         Toolset::new("clarify", "Ask the user a question", &["clarify"]),
+        Toolset::new(
+            "messaging",
+            "Send messages and reactions to messaging chats (needs the gateway daemon)",
+            &["send_message"],
+        ),
         Toolset::new("code_execution", "Run code in a sandbox", &["execute_code"]),
         Toolset::new(
             "delegation",
@@ -201,6 +206,13 @@ pub fn builtin() -> Vec<Toolset> {
             &[],
         )
         .including(&["web", "vision", "image_gen"]),
+        // The default of webhook-triggered runs (spec: messaging-gateway,
+        // Webhook route delivery and safe default toolset).
+        Toolset::new(
+            "webhook-safe",
+            "Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes",
+            &["web_search", "web_extract", "vision_analyze", "clarify"],
+        ),
         coding,
     ]
 }

@@ -1418,6 +1418,7 @@ capabilities = [
 "Second foreground daemon refused" = ["crates/prometheus/tests/daemon_cli.rs::a_second_daemon_exits_75_without_opening_any_store"]
 "Idempotent start" = ["crates/prometheus/tests/daemon_cli.rs::starting_a_running_daemon_is_a_no_op"]
 "Stale endpoint file after crash" = ["crates/prometheus/tests/daemon_cli.rs::a_stale_endpoint_file_is_replaced_by_the_new_daemon"]
+"Invalid config does not crash-loop" = { tests = ["crates/prometheus/tests/daemon_cli.rs::an_invalid_profile_config_exits_78_naming_the_key", "crates/prometheus/src/daemon_cmd/service/units.rs::the_systemd_user_unit_restarts_on_75_and_1_but_not_78", "crates/prometheus/src/daemon_cmd/service/units.rs::the_launch_agent_turns_78_into_a_clean_exit", "crates/prometheus/src/daemon_cmd/service/units.rs::the_windows_wrapper_supervises_and_the_fallback_starts"], note = "the daemon exits 78 naming busy.input_mode; each generated supervisor unit refuses to restart on 78 (systemd RestartPreventExitStatus=78, launchd maps 78 to a clean exit, the Windows wrapper loop exits on 78)" }
 
 [messaging-gateway."Loopback client attachment"]
 "Wrong token rejected" = ["crates/pmt-gateway/tests/protocol.rs::an_unknown_ticket_closes_with_4401_and_no_frame_is_processed"]
@@ -1599,3 +1600,399 @@ capabilities = [
 
 [tui."Auto-resume of the last TUI session"]
 "Reconnecting after a dropped SSH link" = ["crates/prometheus/tests/tui_sessions.rs::after_the_transport_is_killed_the_next_tui_resumes_the_session", "crates/prometheus/tests/tui_sessions.rs::a_deleted_recent_session_falls_back_to_a_new_one"]
+
+# Group 24.1-24.6 (messaging gateway core: routing, busy input, commands
+# and hooks, authorization and pairing, delivery, crash recovery).
+[messaging-gateway."Profiles served by one daemon"]
+"Eviction flushes into the owning profile" = { tests = ["crates/pmt-gateway/tests/messaging/routing.rs::an_evicted_agent_is_unloaded_in_its_own_profile", "crates/prometheus/tests/gateway_daemon.rs::an_evicted_agent_is_rebuilt_with_the_same_frozen_prompt"], note = "eviction unloads the agent through the session's own profile (Live::unload); built-in memory is written to the session's own profile store at every call, so nothing is left to flush" }
+"Daemon-wide key in a secondary profile" = ["crates/pmt-config/src/validate.rs::daemon_wide_keys_in_a_profile_config_point_to_daemon_toml"]
+"Profile added while running" = ["crates/prometheus/tests/gateway_daemon.rs::a_profile_created_while_running_is_served_after_gateway_reload"]
+"Pairing written to the owning profile" = ["crates/pmt-gateway/tests/messaging/routing.rs::pairing_is_stored_in_the_owning_profile", "crates/prometheus/tests/gateway_daemon.rs::a_pairing_code_is_approved_from_the_cli_whatever_its_formatting"]
+
+[messaging-gateway."Routing identity and deterministic session keys"]
+"Default profile key" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar"]
+"Profile names never alias" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/tests/messaging/routing.rs::profiles_route_the_same_chat_to_their_own_sessions"]
+"Separator in an id is escaped" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/src/messaging/key.rs::every_key_parses_back_to_its_fields"]
+"Unserved profile route is dropped" = ["crates/pmt-gateway/tests/messaging/routing.rs::an_event_for_an_unserved_profile_is_dropped"]
+
+[messaging-gateway."DM, group and thread isolation"]
+"Group members isolated by default" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/tests/messaging/routing.rs::group_members_get_sessions_of_their_own_and_a_thread_is_shared"]
+"Thread shared by default" = ["crates/pmt-gateway/src/messaging/key.rs::session_keys_follow_the_grammar", "crates/pmt-gateway/tests/messaging/routing.rs::group_members_get_sessions_of_their_own_and_a_thread_is_shared"]
+
+[messaging-gateway."Single-flight session routing"]
+"Burst of first messages" = ["crates/pmt-gateway/tests/messaging/routing.rs::a_burst_of_first_messages_creates_one_session", "crates/pmt-gateway/tests/messaging/commands.rs::concurrent_new_commands_create_one_session"]
+
+[messaging-gateway."Conversations never rotate on time"]
+"Month-old conversation resumes" = ["crates/pmt-gateway/tests/messaging/routing.rs::a_month_old_conversation_continues_its_session"]
+"Suspended session replaced" = ["crates/pmt-gateway/tests/messaging/recovery.rs::the_third_restart_during_a_turn_suspends_the_session"]
+"Pruned route keeps its transcript" = ["crates/pmt-store/tests/store/gateway.rs::a_pruned_route_keeps_its_session_searchable", "crates/pmt-gateway/tests/messaging/routing.rs::a_pruned_route_starts_a_new_session_marked_stale"]
+
+[messaging-gateway."Busy input policy from configuration only"]
+"Unknown mode is a validation error" = ["crates/pmt-config/src/validate.rs::gateway_values_are_validated"]
+"Steer reaches the running turn" = ["crates/pmt-gateway/tests/messaging/busy.rs::steer_reaches_the_running_turn_without_a_second_turn"]
+"Acknowledgement throttled" = ["crates/pmt-gateway/tests/messaging/busy.rs::three_follow_ups_get_one_acknowledgement_and_one_merged_turn"]
+
+[messaging-gateway."Command busy policy declared in the registry"]
+"Approval bypasses the queue" = ["crates/pmt-gateway/tests/messaging/busy.rs::approve_runs_at_once_while_the_turn_waits_for_it"]
+"Config change rejected mid-turn" = ["crates/pmt-gateway/tests/messaging/busy.rs::a_reject_command_mid_turn_is_refused_and_the_turn_continues"]
+"Unknown slash text is plain input" = ["crates/pmt-gateway/tests/messaging/busy.rs::unknown_slash_text_mid_turn_is_ordinary_input"]
+
+[messaging-gateway."Queued turns run in FIFO order"]
+"Two queued prompts" = ["crates/pmt-gateway/tests/messaging/busy.rs::queued_prompts_run_as_separate_turns_in_order", "crates/pmt-gateway/tests/messaging/busy.rs::the_queue_is_bounded"]
+
+[messaging-gateway."Stop preserves the session"]
+"Continue after stop" = ["crates/pmt-gateway/tests/messaging/busy.rs::stop_keeps_the_session_for_the_next_message"]
+
+[messaging-gateway."Gateway slash commands, quick commands and hooks"]
+"Hook denies a command" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_denying_a_command_replies_and_skips_the_handler"]
+"Quick command timeout" = { tests = ["crates/prometheus/tests/gateway_daemon.rs::a_gateway_quick_command_is_killed_after_its_timeout"], note = "gateway.quick_commands.timeout_secs = 2 in the test (the default is 30); the command forks a pipeline child and the session terminal kills the process group" }
+
+[messaging-gateway."Slash command access tiers"]
+"Non-admin refused" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_non_admin_keeps_only_the_user_tier", "crates/pmt-gateway/src/messaging/auth.rs::a_non_admin_keeps_only_the_user_tier"]
+
+[messaging-gateway."Authorization order and fail-closed default"]
+"Default deny" = ["crates/pmt-gateway/tests/messaging/access.rs::nobody_is_admitted_by_default", "crates/pmt-gateway/src/messaging/auth.rs::nothing_configured_denies"]
+"Wildcard rejected" = ["crates/pmt-config/src/gateway_check.rs::a_wildcard_allowlist_points_to_allow_all"]
+"Bot loop cooled down" = ["crates/pmt-gateway/tests/messaging/access.rs::a_sixth_bot_message_in_a_minute_is_refused", "crates/pmt-gateway/src/messaging/auth.rs::five_bot_exchanges_cool_the_chat_down_for_a_minute"]
+
+[messaging-gateway."Documented pairing flow"]
+"Approval tolerates formatting" = ["crates/prometheus/tests/gateway_daemon.rs::a_pairing_code_is_approved_from_the_cli_whatever_its_formatting", "crates/pmt-store/tests/store/gateway.rs::a_code_approves_its_sender_whatever_the_formatting"]
+"Lockout after failures" = ["crates/pmt-store/tests/store/gateway.rs::five_failures_lock_pairing_even_for_a_valid_code"]
+"Code never logged" = ["crates/pmt-gateway/tests/messaging/access.rs::a_pairing_code_is_never_logged", "crates/pmt-store/tests/store/gateway.rs::a_code_approves_its_sender_whatever_the_formatting"]
+
+[messaging-gateway."Durable delivery outbox (upgrade)"]
+"Reply survives a crash" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_reply_stored_before_a_crash_is_sent_exactly_once"]
+"Ambiguous timeout not duplicated" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_ambiguous_send_is_not_repeated", "crates/pmt-store/tests/store/gateway.rs::an_attempt_in_flight_at_a_crash_becomes_unknown_and_is_not_resent"]
+"Platform outage" = { tests = ["crates/pmt-gateway/tests/messaging/delivery.rs::replies_wait_out_an_outage_and_arrive_in_order", "crates/pmt-store/tests/store/gateway.rs::parts_of_one_chat_leave_in_order"], note = "the outage is two 503 answers (waits of 2 s and up); network and 5xx failures use no attempt, so a 20-minute outage is bounded only by gateway.outbox.max_age_secs" }
+
+[messaging-gateway."Approval requests routed to every surface"]
+"Resolved in the desktop app" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_answered_in_the_desktop_app_updates_the_card"]
+"Timeout denies" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_unanswered_approval_expires_as_a_denial"]
+"Bystander cannot approve" = { tests = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_bystander_cannot_approve", "crates/pmt-gateway/tests/messaging/delivery.rs::a_refusal_the_platform_cannot_deliver_privately_is_posted", "crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_without_a_requester_needs_an_admin_in_a_group", "crates/pmt-adapters-telegram/tests/features.rs::a_private_reply_is_an_alert_on_the_pressed_button_or_a_dm", "crates/pmt-adapters-discord/tests/discord.rs::a_private_reply_is_an_ephemeral_follow_up_or_a_dm"], note = "Adapter::reply_privately (descriptor private_replies): Telegram alert on the pressed button else a DM, Slack chat.postEphemeral, Discord ephemeral interaction follow-up else a DM, Signal/WhatsApp/Matrix a DM; the conformance kit checks every adapter declaring it; posted in the chat only when the platform can do neither (email chats are always direct)" }
+
+[messaging-gateway."Streaming to platforms"]
+"Per-platform cannot enable" = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_platform_cannot_turn_streaming_on_by_itself", "crates/pmt-config/src/schema/gateway.rs::a_platform_cannot_enable_streaming_that_is_off_globally"]
+"Final edits the draft" = ["crates/pmt-gateway/tests/messaging/delivery.rs::the_final_answer_edits_the_streamed_draft"]
+
+[messaging-gateway."Background and internal notifications"]
+"Errors only" = ["crates/prometheus/tests/gateway_daemon.rs::errors_only_announces_the_failed_background_process_alone", "crates/prometheus/tests/gateway_daemon.rs::a_background_process_completion_reaches_the_chat", "crates/pmt-gateway/tests/messaging/delivery.rs::errors_only_skips_a_successful_background_exit", "crates/pmt-gateway/src/messaging/lane/mod.rs::errors_only_hides_a_successful_exit"]
+
+[messaging-gateway."Crash recovery and clean shutdown marker"]
+"Timed-out drain" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_clean_stop_skips_recovery_and_a_timed_out_drain_does_not", "crates/prometheus/tests/gateway_daemon.rs::a_daemon_killed_mid_turn_recovers_the_conversation"]
+
+[messaging-gateway."Stuck-loop suspension"]
+"Third restart suspends" = ["crates/pmt-gateway/tests/messaging/recovery.rs::the_third_restart_during_a_turn_suspends_the_session", "crates/pmt-store/tests/store/gateway.rs::the_third_restart_during_a_turn_suspends_the_session"]
+
+[messaging-gateway."Agent cache and eviction"]
+"Rebuilt agent preserves the cached prefix" = ["crates/prometheus/tests/gateway_daemon.rs::an_evicted_agent_is_rebuilt_with_the_same_frozen_prompt"]
+
+[messaging-gateway."All adapters down policy"]
+"Revoked token keeps local clients alive" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_revoked_token_keeps_local_clients_alive_by_default", "crates/pmt-gateway/tests/messaging/recovery.rs::with_exit_the_daemon_stops_when_every_adapter_is_down"]
+
+[messaging-gateway."Gateway lifecycle hooks are typed"]
+"Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs", "crates/pmt-gateway/tests/messaging/commands.rs::reset_ends_the_replaced_session_for_its_own_profile_hooks"]
+
+# Group 24.7-24.10 (relay, health export, rate limits, chat policies,
+# service installation, daemon inventory, enrollment, pause, home channel,
+# one-shot send, send_message).
+
+[messaging-gateway."Per-user rate limiting (upgrade)"]
+"Burst exceeded" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_burst_beyond_the_limit_is_dropped_with_one_slow_down_reply", "crates/pmt-gateway/src/messaging/limits.rs::a_burst_is_admitted_then_refilled_at_the_rate"]
+"Daily cost cap" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_spent_daily_budget_starts_no_turn", "crates/pmt-store/tests/store/gateway_chats.rs::a_senders_spend_counts_only_their_turns_since_the_cutoff"]
+"Shared thread spend is per sender" = ["crates/pmt-gateway/tests/messaging/limits.rs::in_a_shared_session_each_sender_pays_for_their_own_turns", "crates/pmt-store/tests/store/gateway_chats.rs::in_a_shared_thread_each_sender_pays_for_their_own_turns"]
+
+[messaging-gateway."Per-chat policies (upgrade)"]
+"Group gets a restricted toolset" = ["crates/prometheus/tests/gateway_send.rs::a_group_policy_gives_its_sessions_only_the_policy_toolsets", "crates/pmt-gateway/tests/messaging/limits.rs::a_matched_chat_gets_the_policy_frozen_with_its_session"]
+"Policy cannot widen" = ["crates/pmt-config/src/gateway_check.rs::a_policy_cannot_widen_the_toolsets"]
+"Mid-session edit is deferred" = ["crates/pmt-gateway/tests/messaging/limits.rs::a_policy_edit_reaches_the_next_session_only"]
+
+[messaging-gateway."Relay connector"]
+"Relay fronts Slack" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_relay_fronts_slack_instead_of_the_direct_adapter"]
+
+[messaging-gateway."Gateway health export is opt-in and content-free"]
+"Endpoint down" = ["crates/pmt-gateway/tests/messaging/health.rs::an_unreachable_collector_changes_nothing_but_one_warning", "crates/pmt-gateway/src/messaging/health.rs::export_failures_are_logged_at_most_once_a_minute"]
+
+[messaging-gateway."Per-OS service installation without elevation"]
+"Re-install is idempotent" = { tests = ["crates/prometheus/tests/gateway_service.rs::reinstalling_the_launch_agent_rewrites_one_plist", "crates/prometheus/tests/gateway_service.rs::reinstalling_the_user_unit_rewrites_one_unit"], note = "macOS and Linux tests run on their CI hosts against the PMT_TEST_SERVICE_DIR seam (units written under the seam, launchctl/systemctl invocations recorded)" }
+"Windows fallback without Task Scheduler rights" = { tests = ["crates/prometheus/tests/gateway_service.rs::without_task_scheduler_rights_a_startup_launcher_is_used"], note = "runs in the CI \"Windows service install tests\" step on both Windows targets; schtasks refusal is simulated by the PMT_TEST_SERVICE_DIR seam" }
+"System scope needs root" = ["crates/prometheus/tests/gateway_service.rs::system_scope_needs_root"]
+
+[messaging-gateway."Daemon inventory across homes"]
+"Two homes on one machine" = ["crates/prometheus/tests/gateway_service.rs::two_homes_on_one_machine_are_both_listed", "crates/pmt-core/src/inventory.rs::two_homes_are_two_entries_and_a_dead_one_is_pruned"]
+
+[messaging-gateway."Relay enrollment"]
+"Token reused" = ["crates/prometheus/tests/gateway_service.rs::a_reused_enrollment_token_changes_nothing"]
+
+[messaging-gateway."Global emergency pause"]
+"Message during pause" = ["crates/pmt-gateway/tests/messaging/pause.rs::a_message_during_a_pause_starts_no_turn", "crates/prometheus/tests/gateway_send.rs::a_pause_refuses_new_turns_across_a_restart_until_lifted"]
+"In-flight turn finishes" = ["crates/pmt-gateway/tests/messaging/pause.rs::an_in_flight_turn_finishes_and_the_next_message_is_refused"]
+"Pause survives restart" = { tests = ["crates/pmt-gateway/tests/messaging/pause.rs::a_pause_survives_a_restart", "crates/prometheus/tests/gateway_send.rs::a_pause_refuses_new_turns_across_a_restart_until_lifted", "crates/pmt-core/src/pause.rs::a_pause_is_a_file_any_process_of_the_home_reads"], note = "no scheduler exists before scheduled-jobs (41.x); the tests prove the sentinel survives the restart and refuses turns, and every scheduler must consult pmt_core::pause::check before it fires" }
+
+[messaging-gateway."Home channel and /sethome"]
+"Cron output goes home" = { tests = ["crates/pmt-gateway/tests/messaging/targets.rs::sethome_makes_scheduled_output_go_to_that_chat_and_topic", "crates/prometheus/tests/gateway_send.rs::sethome_makes_a_platform_only_send_go_to_that_chat"], note = "the job delivery is the gateway delivery API (Gateway::send with the job's deliver target); scheduled-jobs (41.x) calls it" }
+"Missing home channel" = ["crates/pmt-gateway/tests/messaging/targets.rs::a_delivery_without_a_home_channel_fails_naming_sethome", "crates/pmt-gateway/src/messaging/target.rs::a_bare_platform_is_its_home_channel"]
+
+[agent-interop."One-shot send command"]
+"Pipe a status line" = ["crates/prometheus/tests/gateway_send.rs::piping_a_status_line_sends_it_through_the_daemon_without_a_turn", "crates/prometheus/tests/gateway_send.rs::without_the_daemon_a_stateless_adapter_sends_directly"]
+"No home channel" = ["crates/prometheus/tests/gateway_send.rs::send_exit_codes_name_the_problem"]
+
+[agent-interop."send_message tool"]
+"Unknown chat refused" = ["crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_unknown_chats_and_reaches_known_ones", "crates/pmt-gateway/tests/messaging/targets.rs::the_tool_may_reach_only_home_allowed_or_known_chats"]
+"Guard fault fails closed" = ["crates/pmt-gateway/tests/messaging/relay.rs::the_send_tool_asks_the_relay_and_fails_closed"]
+
+# platform-adapters, host side of the adapter contract (25.1-25.4) and
+# the telegram and discord adapters (25.5)
+[platform-adapters."Adapter contract"]
+"Reconnect does not drop updates" = ["crates/pmt-adapters-telegram/tests/telegram.rs::updates_arriving_while_disconnected_arrive_once_after_reconnecting", "crates/pmt-adapters-telegram/tests/telegram.rs::the_adapter_passes_the_conformance_kit", "crates/pmt-adapters-discord/tests/discord.rs::a_lost_connection_resumes_and_replays_what_was_missed"]
+
+[platform-adapters."Scoped credential access"]
+"Secondary profile secret miss" = ["crates/pmt-adapters-telegram/tests/telegram.rs::a_secondary_profile_never_uses_the_default_profiles_token"]
+
+[platform-adapters."Capability descriptor is the single source of truth"]
+"Missing limit fails load" = ["crates/pmt-gateway/src/messaging/descriptor.rs::a_descriptor_without_a_limit_fails_to_load", "crates/pmt-gateway/tests/messaging/platforms.rs::a_descriptor_without_a_positive_limit_fails_the_load"]
+"One limit everywhere" = ["crates/pmt-gateway/tests/messaging/platforms.rs::one_limit_everywhere_comes_from_the_descriptor", "crates/prometheus/tests/gateway_daemon.rs::gateway_platforms_prints_each_loaded_descriptor"]
+
+[platform-adapters."Optional capabilities degrade in the host"]
+"Edit unsupported" = ["crates/pmt-gateway/tests/messaging/platforms.rs::without_editing_the_resolved_card_is_a_new_message", "crates/pmt-gateway/tests/messaging/platforms.rs::a_declared_edit_answering_unsupported_is_dropped_for_the_connection"]
+
+[platform-adapters."First-party platforms and typed platform names"]
+"Unknown platform table" = ["crates/pmt-config/src/validate_platforms.rs::an_unknown_platform_table_fails_validation"]
+
+[platform-adapters."Default first-party message limits"]
+"Raising a limit is rejected" = ["crates/pmt-config/src/validate_platforms.rs::raising_a_first_party_limit_is_rejected", "crates/pmt-gateway/tests/messaging/platforms.rs::a_lowered_limit_applies_and_a_raised_one_fails_the_load"]
+"Telegram counts UTF-16" = ["crates/pmt-gateway/src/messaging/split.rs::utf16_limits_count_astral_characters_twice", "crates/pmt-adapters-telegram/tests/telegram.rs::the_adapter_passes_the_conformance_kit"]
+
+[platform-adapters."Platform configuration shape"]
+"Inline token rejected" = ["crates/pmt-config/src/validate_platforms.rs::an_inline_token_points_to_the_secrets_store"]
+"Adapter option validated" = ["crates/pmt-config/src/validate_platforms.rs::adapter_options_are_validated_against_the_adapter_schema"]
+
+[platform-adapters."Typed admission result"]
+"Duplicate reported" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_redelivered_event_is_a_duplicate_and_starts_nothing", "crates/pmt-gateway/src/messaging/dedup.rs::a_redelivery_within_the_window_is_a_duplicate"]
+
+[platform-adapters."Inbound deduplication and text batching in the host"]
+"Batch of a split paste" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_split_paste_is_batched_into_one_turn"]
+"Out of range delay" = ["crates/pmt-config/src/validate_platforms.rs::batching_out_of_range_names_the_maximum"]
+
+[platform-adapters."Fence-aware message splitting"]
+"Code fence carried across parts" = ["crates/pmt-gateway/src/messaging/split.rs::a_code_fence_is_carried_across_parts"]
+"Pathological limit terminates" = ["crates/pmt-gateway/src/messaging/split.rs::a_pathological_limit_terminates"]
+
+[platform-adapters."Oversized output handling"]
+"Long cron output to Telegram" = { tests = ["crates/pmt-gateway/tests/messaging/platforms.rs::long_scheduled_output_is_truncated_with_the_full_text_attached"], note = "scheduled output is delivered through Gateway::send (the delivery API scheduled-jobs 41.x calls), which shapes text like a turn's reply" }
+
+[platform-adapters."Send retry semantics"]
+"Long flood wait handed off" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_long_flood_wait_goes_back_to_the_outbox_at_once", "crates/pmt-gateway/src/messaging/retry.rs::transient_errors_back_off_and_long_waits_leave_for_the_outbox"]
+"Markup rejected" = ["crates/pmt-gateway/tests/messaging/platforms.rs::refused_markup_is_resent_once_as_plain_text"]
+
+[platform-adapters."Inbound media limits and caching"]
+"Lying content length" = ["crates/pmt-gateway/tests/messaging/media.rs::a_download_lying_about_its_length_is_aborted_and_nothing_is_cached"]
+
+[platform-adapters."Outbound attachments and path safety"]
+"Secrets file refused" = ["crates/pmt-gateway/tests/messaging/media.rs::an_attachment_outside_the_allowed_roots_is_withheld_with_a_note", "crates/pmt-gateway/src/messaging/attachments.rs::secrets_and_symlink_escapes_are_withheld"]
+"Symlink escape refused" = { tests = ["crates/pmt-gateway/src/messaging/attachments.rs::secrets_and_symlink_escapes_are_withheld"], note = "the symlink half runs on Unix hosts (creating symlinks on Windows needs a privilege CI lacks); real paths are compared after canonicalization on every OS" }
+"Dotenv file refused" = ["crates/pmt-gateway/tests/messaging/media.rs::a_workspace_dotenv_file_is_withheld", "crates/prometheus/tests/gateway_send.rs::the_send_tool_refuses_to_attach_a_dotenv_file"]
+
+[platform-adapters."Voice input transcription"]
+"Transcription failure is explicit" = { tests = ["crates/pmt-gateway/tests/messaging/media.rs::a_failed_transcription_hands_the_agent_the_voice_note"], note = "the profile's speech providers reach the gateway through messaging::Speech (Agents::speech); the built-in STT/TTS providers are web-and-media-tools 49.3" }
+
+[platform-adapters."Voice replies and streaming TTS"]
+"No double playback" = ["crates/pmt-gateway/tests/messaging/media.rs::streamed_reply_audio_is_not_played_twice"]
+
+[platform-adapters."Typing indicator and human delay"]
+"Slow typing call" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_slow_typing_call_never_stalls_the_cadence"]
+
+[platform-adapters."Interactive approval cards on every platform (upgrade)"]
+"Signal numbered approval" = ["crates/pmt-gateway/tests/messaging/platforms.rs::a_signal_style_numbered_card_is_answered_by_number"]
+"Forged callback" = ["crates/pmt-gateway/tests/messaging/delivery.rs::a_forged_callback_leaves_the_approval_pending", "crates/pmt-gateway/src/messaging/cards.rs::only_data_signed_with_this_boots_key_verifies"]
+"Card updated after resolution" = ["crates/pmt-gateway/tests/messaging/delivery.rs::an_approval_answered_in_the_desktop_app_updates_the_card"]
+
+[platform-adapters."Adapter access-policy delegation"]
+"Open adapter policy not trusted" = ["crates/pmt-gateway/tests/messaging/platforms.rs::an_open_adapter_policy_is_not_trusted", "crates/pmt-gateway/src/messaging/auth.rs::only_an_allow_from_an_adapter_allowlist_is_trusted", "crates/pmt-gateway/tests/messaging/cards.rs::an_open_adapter_policy_is_never_asked"]
+
+[platform-adapters."Credential locks across homes"]
+"Same bot token in two profiles" = ["crates/pmt-gateway/tests/messaging/platforms.rs::one_credential_in_two_profiles_connects_once", "crates/pmt-gateway/src/messaging/locks.rs::a_live_holder_keeps_the_lock_and_a_dead_one_loses_it"]
+
+[platform-adapters."Shared HTTP listener for webhook-style platforms"]
+"Two profiles share the listener" = ["crates/pmt-gateway/tests/messaging/platforms.rs::two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401"]
+"Unsigned webhook" = ["crates/pmt-gateway/tests/messaging/platforms.rs::two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401"]
+
+[platform-adapters."Adapter state reporting and reconnect"]
+"Degraded is visible" = ["crates/pmt-gateway/tests/messaging/recovery.rs::a_connected_adapter_is_degraded_until_a_send_succeeds", "crates/prometheus/tests/gateway_daemon.rs::gateway_status_reports_each_adapter"]
+
+# platform-adapters, the slack, email, matrix, signal, whatsapp and webhook
+# adapters (25.6-25.8) and the conformance kit command (25.9)
+[platform-adapters."Adapter conformance kit (upgrade)"]
+"Wrong unit detected" = { tests = ["crates/pmt-adapters-telegram/tests/telegram.rs::the_kit_catches_a_wrong_length_unit", "crates/prometheus/tests/plugins_cli.rs::the_kit_passes_for_all_eight_first_party_adapters"], note = "the kit's report fails the splitting check; `prometheus plugins test-adapter` exits 1 whenever a check fails and 0 for all eight first-party adapters" }
+
+[platform-adapters."Inbound event normalization"]
+"WhatsApp alias flip" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::whatsapp_alias_flip_keeps_one_sender_and_one_chat", "crates/pmt-adapters-whatsapp/src/normalize.rs::a_person_is_one_sender_and_one_chat_under_either_identifier"]
+
+[platform-adapters."First-party adapter transports and required settings"]
+"Signal daemon unreachable" = ["crates/pmt-adapters-signal/tests/signal.rs::an_unreachable_daemon_is_retried_naming_its_url"]
+"Email missing host" = ["crates/pmt-config/src/gateway_check_platforms.rs::email_missing_host_names_the_option", "crates/pmt-adapters-email/tests/email.rs::a_missing_imap_host_fails_validation_naming_it"]
+
+[platform-adapters."Email adapter behaviour"]
+"Spoofed From rejected" = ["crates/pmt-adapters-email/tests/email.rs::a_spoofed_from_is_dropped_as_unauthorized", "crates/pmt-adapters-email/src/mime.rs::a_spoofed_from_failing_dmarc_is_dropped"]
+"Threaded reply" = ["crates/pmt-adapters-email/tests/email.rs::threaded_reply", "crates/pmt-adapters-email/src/mime.rs::a_threaded_reply_has_one_re_prefix_and_the_thread_headers"]
+
+[platform-adapters."WhatsApp pairing and modes"]
+"Logged out from the phone" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::a_logged_out_device_is_fatal_naming_the_pair_command"]
+"Self-chat only" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::self_chat_mode_ignores_contacts", "crates/pmt-adapters-whatsapp/src/session.rs::self_chat_mode_admits_only_the_users_own_chat"]
+
+[platform-adapters."Webhook routes"]
+"Event filtered by type" = ["crates/pmt-adapters-webhook/tests/webhook.rs::an_event_outside_the_route_filter_is_ignored"]
+"Prompt rendering" = ["crates/pmt-adapters-webhook/tests/webhook.rs::a_signed_pull_request_becomes_the_rendered_prompt_once", "crates/pmt-adapters-webhook/src/render.rs::prompt_rendering_reads_dot_paths"]
+
+# platform-adapters, adapter features and webhooks (26.x)
+[platform-adapters."Webhook limits, idempotency and responses"]
+"Redelivery deduplicated" = ["crates/pmt-adapters-webhook/tests/routes.rs::a_redelivery_within_the_hour_starts_no_second_turn", "crates/pmt-adapters-webhook/src/guard.rs::deliveries_are_remembered_for_an_hour"]
+
+[platform-adapters."Webhook payload filters and transform scripts"]
+"Only failing CI runs" = ["crates/pmt-adapters-webhook/tests/routes.rs::only_failing_ci_runs_pass_the_filter", "crates/pmt-adapters-webhook/src/filter.rs::only_failing_ci_runs_pass_the_equals_filter"]
+"Script escapes scripts directory" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_script_outside_the_scripts_directory_is_path_traversal"]
+
+[platform-adapters."Webhook direct delivery mode"]
+"Zero-LLM alert forwarding" = ["crates/prometheus/tests/gateway_webhooks.rs::a_deliver_only_route_forwards_an_alert_to_the_home_channel_without_a_model_call", "crates/pmt-adapters-webhook/tests/routes.rs::a_deliver_only_route_forwards_the_rendered_text_without_a_turn"]
+
+[platform-adapters."Adapter proxy settings and environment trust"]
+"Ambient proxy ignored" = ["crates/pmt-adapters-discord/tests/discord.rs::ambient_proxy_variables_are_ignored_unless_the_environment_is_trusted", "crates/pmt-gateway/src/messaging/proxy.rs::ambient_proxy_settings_count_only_with_trust_env"]
+
+[platform-adapters."Native command menus and slash registration"]
+"Priority survives the cap" = ["crates/pmt-adapters-telegram/tests/features.rs::priority_entries_survive_the_menu_cap", "crates/pmt-gateway/src/messaging/menu.rs::priority_survives_the_cap"]
+"Follower does not overwrite" = ["crates/pmt-adapters-discord/tests/discord.rs::a_follower_does_not_overwrite_application_commands", "crates/pmt-adapters-telegram/tests/features.rs::a_follower_never_registers_the_menu"]
+
+[platform-adapters."Markup conversion per platform"]
+"Table on Telegram" = ["crates/pmt-gateway/src/messaging/markup/tests.rs::a_small_table_on_telegram_is_bullet_groups_without_pipes"]
+"Link on SMS" = ["crates/pmt-gateway/src/messaging/markup/tests.rs::a_link_on_a_plain_platform_shows_its_url"]
+
+[platform-adapters."Processing lifecycle reactions"]
+"Failed turn marked" = ["crates/pmt-gateway/tests/messaging/features.rs::a_failed_turn_is_marked_with_eyes_and_a_cross_on_discord"]
+
+[platform-adapters."Clarify multi-select on platforms"]
+"Numbered multi-answer" = ["crates/pmt-gateway/tests/messaging/features.rs::a_numbered_multi_select_takes_several_numbers_and_refuses_out_of_range", "crates/pmt-gateway/src/messaging/lane/clarify.rs::numbered_multi_answers_pick_each_option"]
+"Out of range" = ["crates/pmt-gateway/tests/messaging/features.rs::a_numbered_multi_select_takes_several_numbers_and_refuses_out_of_range", "crates/pmt-gateway/src/messaging/lane/clarify.rs::out_of_range_numbers_name_the_valid_range"]
+
+[platform-adapters."Container media path translation"]
+"Chart rendered in container" = ["crates/pmt-gateway/tests/messaging/features.rs::a_chart_rendered_in_the_container_is_delivered_from_the_host", "crates/pmt-gateway/src/messaging/attachments.rs::a_container_path_is_delivered_as_its_host_file"]
+
+[platform-adapters."Deliverable mode"]
+"Report path becomes an upload" = ["crates/pmt-gateway/tests/messaging/features.rs::a_report_path_in_the_reply_becomes_a_document_upload", "crates/pmt-gateway/src/messaging/deliverable.rs::a_report_path_becomes_an_upload"]
+"Code block untouched" = ["crates/pmt-gateway/tests/messaging/features.rs::a_path_inside_a_code_block_is_delivered_unchanged", "crates/pmt-gateway/src/messaging/deliverable.rs::code_blocks_and_inline_code_are_untouched"]
+
+[platform-adapters."Response-wide delivery modifiers and kanban artifacts"]
+"Image sent uncompressed" = ["crates/pmt-gateway/tests/messaging/features.rs::as_document_makes_a_skill_photo_go_uncompressed", "crates/pmt-gateway/src/messaging/attachments.rs::modifiers_apply_wherever_they_stand"]
+"Kanban artifact delivered" = { tests = ["crates/pmt-gateway/tests/messaging/features.rs::a_completed_kanban_task_uploads_its_artifacts_to_a_slack_channel"], note = "verified at the gateway delivery API (Gateway::deliver_artifacts); kanban itself is M3 (67.x)" }
+
+[platform-adapters."Telegram webhook mode"]
+"Missing webhook secret" = ["crates/pmt-config/src/gateway_check_platforms.rs::telegram_webhook_mode_requires_a_secret_token"]
+"Forged update" = ["crates/pmt-adapters-telegram/tests/features.rs::webhook_mode_admits_signed_updates_and_refuses_forged_ones"]
+
+[platform-adapters."Telegram topics and per-topic skills"]
+"Topic preloads a skill" = ["crates/pmt-adapters-telegram/tests/features.rs::a_dm_topic_is_created_once_and_preloads_its_skill", "crates/pmt-gateway/tests/messaging/features.rs::a_topic_skill_preloads_into_that_topics_own_session"]
+
+[platform-adapters."Discord auto-threading and forum channels"]
+"Mention creates a thread" = ["crates/pmt-adapters-discord/tests/discord.rs::a_mention_creates_a_thread_named_after_the_message", "crates/pmt-adapters-discord/src/threads.rs::thread_names_drop_mentions_and_stay_short"]
+"Excluded channel stays inline" = ["crates/pmt-adapters-discord/tests/discord.rs::an_excluded_channel_stays_inline"]
+
+[platform-adapters."Slack app manifest generator"]
+"Commands only" = ["crates/prometheus/tests/gateway_slack_manifest.rs::commands_only_prints_one_slash_command_per_gateway_command"]
+"Description too short" = ["crates/prometheus/tests/gateway_slack_manifest.rs::a_short_long_description_is_a_usage_error"]
+
+[platform-adapters."Slack slash commands and thread command prefix"]
+"Stop inside a thread" = ["crates/pmt-gateway/tests/messaging/features.rs::a_bang_stop_after_the_bot_mention_stops_the_thread_turn", "crates/pmt-gateway/src/messaging/admit.rs::a_bang_command_in_the_first_token_is_a_command"]
+"Bang later in text is ordinary" = ["crates/pmt-gateway/tests/messaging/features.rs::a_bang_stop_after_the_bot_mention_stops_the_thread_turn", "crates/pmt-gateway/src/messaging/admit.rs::a_bang_command_in_the_first_token_is_a_command"]
+
+[platform-adapters."Signal adapter specifics"]
+"Note to self" = ["crates/pmt-adapters-signal/tests/signal.rs::note_to_self_is_admitted_and_the_reply_is_not", "crates/pmt-adapters-signal/src/events.rs::note_to_self_is_inbound_and_the_agents_own_reply_is_not"]
+
+[platform-adapters."WhatsApp interactive and rich features"]
+"Clarify as poll" = ["crates/pmt-adapters-whatsapp/tests/whatsapp.rs::a_clarify_question_is_a_poll_whose_vote_is_the_answer", "crates/pmt-adapters-whatsapp/src/session.rs::a_clarify_question_is_a_poll_and_a_vote_answers_it"]
+
+# Group 27: gateway chat controls, display and routing (tasks 27.1-27.6).
+
+[messaging-gateway."Platform start pings and paginated command browser"]
+"Start ping is free" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_start_ping_greets_without_a_session_or_a_rate_limit_count"]
+"Page out of range" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_page_past_the_last_names_the_page_count", "crates/pmt-gateway/src/messaging/lane/pages.rs::thirty_seven_commands_make_two_pages_of_twenty"]
+
+[messaging-gateway."Text approval and busy-mode commands"]
+"Approve by text" = ["crates/pmt-gateway/tests/messaging/controls.rs::approve_session_by_text_resolves_the_oldest_pending_approval"]
+"Busy mode persisted" = ["crates/pmt-gateway/tests/messaging/controls.rs::busy_mode_is_persisted_for_the_platform_and_reported_with_its_source"]
+
+[messaging-gateway."Discarding a restart-interrupted turn"]
+"Discard unblocks the queue" = ["crates/pmt-gateway/tests/messaging/controls.rs::discard_marks_the_pending_turn_and_runs_the_queue_in_order"]
+
+[messaging-gateway."Session stall watchdog and reconnect attention"]
+"Stalled turn interrupted" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_stalled_turn_is_noticed_once_then_interrupted", "crates/pmt-gateway/src/messaging/lane/watchdog.rs::five_minutes_without_progress"]
+"Long outage escalated once" = ["crates/pmt-gateway/tests/messaging/controls.rs::a_long_outage_is_escalated_once_to_the_other_home_channel", "crates/pmt-gateway/src/messaging/attention.rs::an_eleven_minute_outage_is_named_in_minutes"]
+
+[messaging-gateway."Adapter operations from chat"]
+"Breaker cleared" = ["crates/pmt-gateway/tests/messaging/operations.rs::resume_clears_the_backoff_and_reconnects_at_once", "crates/pmt-gateway/tests/messaging/operations.rs::a_paused_adapter_drops_its_messages_and_stays_paused_across_restarts", "crates/prometheus/tests/gateway_platforms.rs::a_pause_set_without_the_daemon_holds_until_resumed_through_it"]
+
+[messaging-gateway."Restart and update from chat"]
+"Restart confirmed in the same thread" = ["crates/pmt-gateway/tests/messaging/operations.rs::a_restart_confirmed_in_a_thread_is_announced_there_by_the_next_daemon"]
+"Update confirmation denied" = ["crates/pmt-gateway/tests/messaging/operations.rs::a_denied_update_confirmation_aborts_without_running_the_updater"]
+
+[messaging-gateway."Display policy and per-platform overrides"]
+"Mobile default" = ["crates/pmt-gateway/tests/messaging/display.rs::by_default_telegram_shows_no_progress_and_discord_one_accumulating_bubble", "crates/pmt-config/src/schema/gateway_display.rs::telegram_shows_no_progress_by_default"]
+"Failed run keeps breadcrumbs" = ["crates/pmt-gateway/tests/messaging/display.rs::a_failed_run_keeps_its_progress_and_a_successful_one_cleans_up"]
+
+[messaging-gateway."Runtime metadata footer"]
+"Footer not in context" = ["crates/prometheus/tests/gateway_display.rs::the_footer_is_sent_but_never_stored_in_the_transcript", "crates/pmt-gateway/tests/messaging/display.rs::the_footer_ends_final_replies_where_the_chat_turned_it_on"]
+
+[messaging-gateway."Warning notification suppression"]
+"Cron failure muted on one platform" = { tests = ["crates/pmt-gateway/tests/messaging/display.rs::a_suppressed_warning_is_settled_without_reaching_its_platform", "crates/pmt-config/src/schema/gateway_display.rs::a_platform_value_wins_and_an_absent_one_inherits"], note = "verified at the gateway delivery API (Gateway::send with warning = true); the scheduler that records the run failed is 41.x" }
+
+[messaging-gateway."Message timestamps in model context"]
+"Toggle applies to new sessions only" = ["crates/prometheus/tests/gateway_display.rs::timestamps_apply_to_sessions_created_after_they_are_enabled"]
+
+[messaging-gateway."Intentional silence tokens"]
+"Group chatter stays silent" = ["crates/pmt-gateway/tests/messaging/display.rs::unaddressed_silence_sends_nothing_and_addressed_silence_gets_a_notice"]
+"Direct question gets a notice" = ["crates/pmt-gateway/tests/messaging/display.rs::unaddressed_silence_sends_nothing_and_addressed_silence_gets_a_notice"]
+
+[messaging-gateway."Group mention gating and observe mode"]
+"Unmentioned message ignored" = ["crates/pmt-gateway/tests/messaging/groups.rs::an_unmentioned_channel_message_starts_no_turn", "crates/pmt-gateway/src/messaging/gating.rs::gating_table"]
+"Observed context used later" = ["crates/pmt-gateway/tests/messaging/groups.rs::observed_lines_are_context_for_the_next_mention"]
+
+[messaging-gateway."Bot-authored message admission"]
+"Bot ignored by default" = ["crates/pmt-gateway/tests/messaging/groups.rs::bots_are_ignored_unless_allowed_and_a_burst_is_one_turn", "crates/pmt-gateway/src/messaging/gating.rs::bot_admission_table"]
+"Multipart bot message collected" = ["crates/pmt-gateway/tests/messaging/groups.rs::bots_are_ignored_unless_allowed_and_a_burst_is_one_turn"]
+
+[messaging-gateway."Channel history backfill"]
+"Backfill stops at the bot's last reply" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_backfill_brings_the_channel_since_the_bots_last_reply", "crates/pmt-gateway/src/messaging/gating.rs::backfill_stops_at_the_bots_last_reply", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform", "crates/pmt-adapters-slack/tests/slack.rs::channel_and_thread_history_come_oldest_first"]
+
+[messaging-gateway."Role-based access grants"]
+"Role grant" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies", "crates/pmt-adapters-discord/tests/discord.rs::member_roles_and_channel_history_come_from_the_platform", "crates/prometheus/tests/gateway_platforms.rs::a_role_name_is_refused_with_the_id_the_connected_adapter_knows", "crates/pmt-config/src/gateway_check_groups.rs::a_role_name_and_a_bad_pattern_are_refused"]
+"Lookup failure denies" = ["crates/pmt-gateway/tests/messaging/groups.rs::a_role_grants_access_and_a_failed_lookup_denies", "crates/pmt-adapters-slack/tests/slack.rs::user_groups_are_the_senders_roles", "crates/pmt-adapters-matrix/tests/matrix.rs::power_levels_are_the_senders_roles"]
+
+[messaging-gateway."Per-chat policy thread matching and skill preload"]
+"Forum topic bound to a skill" = ["crates/prometheus/tests/gateway_groups.rs::a_topic_policy_preloads_its_skill_as_context_not_into_the_prompt", "crates/pmt-gateway/tests/messaging/groups.rs::a_thread_policy_preloads_its_skills_only_in_that_topic", "crates/pmt-config/src/schema/gateway_policy.rs::a_thread_policy_outranks_its_channels_and_the_channel_covers_other_threads"]
+
+[messaging-gateway."Interactive model picker and chat model override"]
+"Override survives /new" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_picked_model_survives_new", "crates/pmt-gateway/tests/messaging/chats.rs::without_buttons_the_models_are_numbered"]
+
+[messaging-gateway."Multi-session DM topics"]
+"Lobby redirects" = ["crates/pmt-gateway/tests/messaging/chats.rs::the_root_dm_is_a_lobby_and_each_topic_is_a_session", "crates/pmt-gateway/src/messaging/topics.rs::only_root_dm_text_lands_in_the_lobby"]
+"Restore into a new topic" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_restored_topic_continues_the_earlier_session", "crates/pmt-adapters-telegram/tests/features.rs::topics_are_opened_and_renamed_on_request"]
+
+[messaging-gateway."Background sessions from chat"]
+"Main chat stays responsive" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking", "crates/prometheus/tests/chat_background.rs::a_background_task_reports_while_the_chat_keeps_answering"]
+
+[messaging-gateway."Session handoff to a messaging platform"]
+"Handoff to Telegram home" = { tests = ["crates/prometheus/tests/gateway_handoff.rs::a_cli_session_continues_in_a_new_thread_of_the_home_channel"], note = "the daemon's file-backed test platform stands in for Telegram (threads opened like Telegram topics)" }
+
+[messaging-gateway."Branching into a sibling thread"]
+"Branch opens a thread" = ["crates/pmt-gateway/tests/messaging/chats.rs::a_branch_opens_a_sibling_thread_bound_to_the_fork", "crates/pmt-adapters-slack/tests/slack.rs::a_thread_is_opened_by_posting_its_root"]
+
+[messaging-gateway."Native platform streaming and task cards"]
+"Native stream fallback" = ["crates/pmt-gateway/tests/messaging/native.rs::a_stream_failing_mid_turn_goes_on_by_editing_the_same_message", "crates/pmt-adapters-slack/tests/slack.rs::answers_stream_with_task_cards_and_a_refused_append_is_an_error"]
+
+[messaging-gateway."Webhook route delivery and safe default toolset"]
+"Default toolset is read-only" = ["crates/prometheus/tests/gateway_webhooks.rs::a_route_without_toolsets_runs_read_only_and_answers_the_caller", "crates/pmt-adapters-webhook/tests/delivery.rs::deliveries_run_read_only_unless_the_route_names_toolsets", "crates/pmt-tools/tests/toolsets.rs::webhook_safe_is_read_only"]
+"Deliver to Discord" = { tests = ["crates/pmt-adapters-webhook/tests/delivery.rs::a_send_target_gets_the_answer_mirrored_and_the_extras_a_copy", "crates/pmt-gateway/tests/messaging/targets.rs::a_sent_message_is_mirrored_into_the_chats_session"], note = "the adapter delivers and mirrors through the gateway link; the gateway's target resolution and session mirror are the send_message ones" }
+
+[messaging-gateway."Shared-credential profile routes"]
+"One Discord bot, two communities" = { tests = ["crates/pmt-gateway/tests/messaging/profile_routes.rs::a_routed_event_runs_in_the_target_profile_and_the_receiving_bot_replies", "crates/pmt-config/src/schema/gateway_routes.rs::the_most_specific_route_wins_and_a_channel_route_covers_its_threads"], note = "on the fake adapter with a guild-scoped chat; matching is platform-independent" }
+"Target did not opt in" = ["crates/pmt-config/src/gateway_check_routes.rs::a_target_that_did_not_opt_in_fails_naming_it"]
+
+[messaging-gateway."Concurrency caps across surfaces"]
+"Cap queues a turn" = ["crates/prometheus/tests/gateway_limits.rs::a_third_turn_waits_for_a_free_slot_and_then_runs", "crates/pmt-gateway/src/slots.rs::a_turn_beyond_the_cap_waits_its_turn_in_order", "crates/pmt-gateway/tests/messaging/display.rs::a_turn_waiting_for_a_slot_is_announced"]

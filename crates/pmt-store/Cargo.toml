@@ -8,6 +8,8 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Pairing code salts and codes.
+getrandom.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true

@@ -1,5 +1,34 @@
 {
   "$defs": {
+    "AgentCacheConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.agent_cache]`.",
+      "properties": {
+        "idle_ttl_secs": {
+          "default": 3600,
+          "description": "An agent unused this long is unloaded (its session stays open).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_size": {
+          "default": 128,
+          "description": "Conversations whose agent stays loaded.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "memory_high_bytes": {
+          "default": 0,
+          "description": "Above this resident memory the least recently used agents are\nunloaded; `0` is half the physical memory.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "AgentConfig": {
       "additionalProperties": false,
       "description": "The `[agent]` section.",
@@ -143,6 +172,26 @@
         "model"
       ],
       "type": "object"
+    },
+    "AllowBots": {
+      "description": "Which bot-authored messages are admitted.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "None (default).",
+          "type": "string"
+        },
+        {
+          "const": "mentions",
+          "description": "Those that mention this bot.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "All of them.",
+          "type": "string"
+        }
+      ]
     },
     "ApprovalMode": {
       "description": "Interactive approval modes. In TOML they are strings: `mode = \"off\"`;\nthe YAML habit `mode = off` does not parse and `mode = false` is not a\nmode.",
@@ -423,6 +472,59 @@
       },
       "type": "object"
     },
+    "BackgroundNotifications": {
+      "description": "Background notification levels.",
+      "oneOf": [
+        {
+          "const": "concise",
+          "description": "Results and errors, one line each.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every event.",
+          "type": "string"
+        },
+        {
+          "const": "result",
+          "description": "Results only.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Errors only.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Nothing.",
+          "type": "string"
+        }
+      ]
+    },
+    "Batching": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.batching]`.",
+      "properties": {
+        "delay_ms": {
+          "default": 300,
+          "description": "Text from the same sender within this many milliseconds joins the\npending input.",
+          "format": "uint64",
+          "maximum": 2000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "split_delay_ms": {
+          "default": 1000,
+          "description": "The wait after a part that filled the platform's limit (the client\nprobably split a longer message); at least `delay_ms`.",
+          "format": "uint64",
+          "maximum": 4000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "BrowserConfig": {
       "additionalProperties": false,
       "description": "The `[browser]` section.",
@@ -609,6 +711,155 @@
       "description": "A capability string of the closed vocabulary (`pmt_core::capability`);\nvalidation refuses any other string with `unknown capability '<s>'`.",
       "type": "string",
       "x-capability": true
+    },
+    "ChatPolicy": {
+      "additionalProperties": false,
+      "description": "One `[[gateway.chat_policies]]` entry: what sessions of the chats it\nmatches get. A policy is resolved once when a session is created and\nfrozen for that session.",
+      "properties": {
+        "busy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlatformBusy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Busy handling in matched chats (over the platform's)."
+        },
+        "chat_id": {
+          "description": "Matches this chat.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chat_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolicyChatType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Matches this kind of chat."
+        },
+        "max_cost_usd_per_turn": {
+          "description": "USD one turn of a matched session may cost.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "The model of matched sessions (`[<provider>/]<model>` or an alias).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "default": "",
+          "description": "The platform it applies to.",
+          "type": "string"
+        },
+        "preload_skills": {
+          "description": "Skills whose content opens each matched session as its first\nuser-side context (never in the system prompt); enabled skills\nonly.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "rate_limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RateLimitOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Rate limits in matched chats (over the platform's)."
+        },
+        "skills": {
+          "description": "Skills preloaded into matched sessions; only enabled skills.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "system_prompt_append": {
+          "description": "Text appended to the platform hint of matched sessions' system\nprompt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thread_id": {
+          "description": "Matches this thread or forum topic of the chat (more specific than\nthe chat alone; a chat policy also applies to its threads).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "toolsets": {
+          "description": "Toolsets of matched sessions; only narrows the profile's enabled\ntoolsets.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "user_id": {
+          "description": "Matches this sender.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ChatToolProgress": {
+      "description": "How tool calls show in a chat.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Nothing.",
+          "type": "string"
+        },
+        {
+          "const": "new",
+          "description": "A line when the tool changes.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "A line per tool call.",
+          "type": "string"
+        },
+        {
+          "const": "verbose",
+          "description": "Every call with a longer preview, and each result.",
+          "type": "string"
+        },
+        {
+          "const": "log",
+          "description": "Nothing in the chat; each call is appended to\n`<home>/logs/<profile>/tool_calls.log`.",
+          "type": "string"
+        }
+      ]
     },
     "CliConfig": {
       "additionalProperties": false,
@@ -856,6 +1107,29 @@
       "type": "object",
       "x-apply": "live"
     },
+    "DedupConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.dedup]`.",
+      "properties": {
+        "max_entries": {
+          "default": 2000,
+          "description": "Message ids remembered per adapter (the oldest are forgotten\nfirst).",
+          "format": "uint32",
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ttl_secs": {
+          "default": 300,
+          "description": "A redelivered inbound event within this many seconds is dropped\nas a duplicate.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "DegradedFeature": {
       "description": "Sandbox hardening features.",
       "oneOf": [
@@ -920,6 +1194,26 @@
           "type": "string"
         }
       ]
+    },
+    "DeliveryConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.delivery]`.",
+      "properties": {
+        "detect_paths": {
+          "default": true,
+          "description": "Deliver files a final reply names by bare path (outside code) as\nuploads, removing the path from the text.",
+          "type": "boolean"
+        },
+        "max_parts": {
+          "default": 10,
+          "description": "A reply that would need more parts is sent as its first part plus\na truncation notice, with the full text attached.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 2,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "DialogPolicy": {
       "description": "Dialog policies.",
@@ -1180,6 +1474,96 @@
       "type": "object",
       "x-apply": "live"
     },
+    "FilterFile": {
+      "additionalProperties": false,
+      "description": "`{path, file}`.",
+      "properties": {
+        "file": {
+          "description": "A file of accepted values, one per line, relative to the profile\ndirectory.",
+          "type": "string"
+        },
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "file"
+      ],
+      "type": "object"
+    },
+    "FilterPath": {
+      "additionalProperties": false,
+      "description": "`{path}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "FilterPattern": {
+      "additionalProperties": false,
+      "description": "`{path, pattern}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        },
+        "pattern": {
+          "description": "A regular expression.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "pattern"
+      ],
+      "type": "object"
+    },
+    "FilterValue": {
+      "additionalProperties": false,
+      "description": "`{path, value}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value compared."
+        }
+      },
+      "required": [
+        "path",
+        "value"
+      ],
+      "type": "object"
+    },
+    "FilterValues": {
+      "additionalProperties": false,
+      "description": "`{path, values}`.",
+      "properties": {
+        "path": {
+          "description": "`payload.<a.b>`, `event` or `headers.<Name>`.",
+          "type": "string"
+        },
+        "values": {
+          "description": "The accepted values.",
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "values"
+      ],
+      "type": "object"
+    },
     "FirecrawlConfig": {
       "additionalProperties": false,
       "description": "The `[web.firecrawl]` section.",
@@ -1194,14 +1578,240 @@
       },
       "type": "object"
     },
+    "GatewayBackground": {
+      "additionalProperties": false,
+      "description": "`[gateway.background]`.",
+      "properties": {
+        "max_per_chat": {
+          "default": 3,
+          "description": "Background tasks one chat may have running at once; more are\nrefused.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "GatewayBots": {
+      "additionalProperties": false,
+      "description": "`[gateway.bots]`: messages other bots send.",
+      "properties": {
+        "allow_bots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AllowBots"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`none` (default), `mentions` or `all`."
+        },
+        "burst_window_ms": {
+          "description": "Follow-up chunks of the same bot in the same chat within this many\nmilliseconds join the same turn (default 1500).",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "human_user_ids": {
+          "description": "Senders treated as people although their messages are marked as a\nbot's (posts made with the owner's own user token).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformBots"
+          },
+          "description": "Per-platform overrides, by platform name.",
+          "type": "object"
+        },
+        "require_inline_mention": {
+          "description": "An admitted bot message starts a turn only with a literal inline\nmention of this bot; a reply ping alone does not (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "GatewayBusy": {
+      "additionalProperties": false,
+      "description": "`[gateway.busy]`.",
+      "properties": {
+        "ack": {
+          "default": true,
+          "description": "Send one busy acknowledgement per conversation per 30 seconds.",
+          "type": "boolean"
+        },
+        "debounce_cap_ms": {
+          "default": 1000,
+          "description": "An input is never held longer than this for more text.",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "debounce_ms": {
+          "default": 350,
+          "description": "Text arriving within this many milliseconds of the previous text\njoins it into one input.",
+          "format": "uint64",
+          "maximum": 10000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_queued": {
+          "default": 16,
+          "description": "`/queue` entries kept per conversation.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "GatewayConfig": {
       "additionalProperties": false,
       "description": "The `[gateway]` section.",
       "properties": {
+        "accept_routes_from": {
+          "default": [],
+          "description": "Profiles whose `profile_routes` may route events to this one.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-apply": "live"
+        },
+        "agent_cache": {
+          "$ref": "#/$defs/AgentCacheConfig",
+          "default": {
+            "idle_ttl_secs": 3600,
+            "max_size": 128,
+            "memory_high_bytes": 0
+          },
+          "description": "Live agents kept in memory (read from the launch profile)."
+        },
+        "background": {
+          "$ref": "#/$defs/GatewayBackground",
+          "default": {
+            "max_per_chat": 3
+          },
+          "description": "`/background` tasks started from chats.",
+          "x-apply": "live"
+        },
+        "bots": {
+          "$ref": "#/$defs/GatewayBots",
+          "default": {},
+          "description": "Messages other bots send, overridable per platform.",
+          "x-apply": "live"
+        },
+        "busy": {
+          "$ref": "#/$defs/GatewayBusy",
+          "default": {
+            "ack": true,
+            "debounce_cap_ms": 1000,
+            "debounce_ms": 350,
+            "max_queued": 16
+          },
+          "description": "Input that arrives while a turn runs (the mode itself is\n`busy.input_mode`, overridable per platform).",
+          "x-apply": "live"
+        },
+        "chat_policies": {
+          "default": [],
+          "description": "Per-chat policies; each applies to sessions created after it\nchanged (`/policy apply --now` replaces a chat's session at once).",
+          "items": {
+            "$ref": "#/$defs/ChatPolicy"
+          },
+          "type": "array",
+          "x-apply": "next_session"
+        },
+        "dedup": {
+          "$ref": "#/$defs/DedupConfig",
+          "default": {
+            "max_entries": 2000,
+            "ttl_secs": 300
+          },
+          "description": "Redelivered inbound events.",
+          "x-apply": "live"
+        },
+        "delivery": {
+          "$ref": "#/$defs/DeliveryConfig",
+          "default": {
+            "detect_paths": true,
+            "max_parts": 10
+          },
+          "description": "Long replies.",
+          "x-apply": "live"
+        },
+        "display": {
+          "$ref": "#/$defs/GatewayDisplay",
+          "default": {},
+          "description": "How turns look in a chat (tool progress, footers, notices),\noverridable per platform.",
+          "x-apply": "live"
+        },
+        "groups": {
+          "$ref": "#/$defs/GatewayGroups",
+          "default": {},
+          "description": "When group, channel and thread messages start a turn, overridable\nper platform.",
+          "x-apply": "live"
+        },
+        "mcp_events": {
+          "$ref": "#/$defs/McpEvents",
+          "default": {
+            "enabled": false
+          },
+          "description": "MCP server notifications as internal webhook events.",
+          "x-apply": "live"
+        },
+        "media": {
+          "$ref": "#/$defs/MediaConfig",
+          "default": {
+            "cache_max_age_secs": 86400,
+            "max_inbound_bytes": 134217728
+          },
+          "description": "Inbound media.",
+          "x-apply": "live"
+        },
+        "message_timestamps": {
+          "$ref": "#/$defs/MessageTimestamps",
+          "default": {
+            "enabled": false
+          },
+          "description": "The send time in front of each user message the model sees.",
+          "x-apply": "next_session"
+        },
         "multiplex": {
           "default": false,
           "description": "In the daemon's launch profile: serve every profile of the home\n(each in its own scope) instead of the launch profile only.",
           "type": "boolean"
+        },
+        "notifications": {
+          "$ref": "#/$defs/NotificationsConfig",
+          "default": {
+            "background": "concise"
+          },
+          "description": "Notifications of background work.",
+          "x-apply": "live"
+        },
+        "outbox": {
+          "$ref": "#/$defs/OutboxConfig",
+          "default": {
+            "max_age_secs": 86400,
+            "max_attempts": 8
+          },
+          "description": "The durable delivery outbox."
         },
         "platforms": {
           "additionalProperties": {
@@ -1212,14 +1822,385 @@
           "type": "object",
           "x-apply": "next_session"
         },
+        "profile_routes": {
+          "default": [],
+          "description": "Events this profile's adapters receive that belong to another\nserved profile (one shared bot, several communities); the target\nmust list this profile in its `accept_routes_from`.",
+          "items": {
+            "$ref": "#/$defs/ProfileRoute"
+          },
+          "type": "array",
+          "x-apply": "live"
+        },
+        "proxy_url": {
+          "description": "The proxy every adapter without its own `proxy_url` uses\n(`http://`, `https://` or `socks5://`, without a password; a URL\nwith credentials goes in a secret named by `proxy_url_secret`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proxy_url_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the shared proxy URL when it carries\ncredentials."
+        },
+        "quick_commands": {
+          "$ref": "#/$defs/GatewayQuickCommands",
+          "default": {
+            "timeout_secs": 30
+          },
+          "description": "`exec` quick commands run from a chat.",
+          "x-apply": "live"
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/RateLimitConfig",
+          "default": {
+            "burst": 10,
+            "messages_per_minute": 20,
+            "turns_per_hour": 120
+          },
+          "description": "Per-sender rate limits (overridable per platform and chat policy).",
+          "x-apply": "live"
+        },
+        "reconnect_attention_secs": {
+          "$ref": "#/$defs/Seconds2",
+          "default": 600,
+          "description": "An adapter outside `connected` for longer than this is flagged for\nattention (`adapter.state`, `/platforms`, `gateway status`) and the\nprofile's other home channels are told once per outage.",
+          "x-apply": "live"
+        },
+        "session_stall_timeout_secs": {
+          "$ref": "#/$defs/Seconds",
+          "default": 900,
+          "description": "A running turn with no model output, tool progress or tool result\nfor this long gets one no-progress notice in its chat; after twice\nas long it is interrupted as stalled. `0` disables the watchdog.",
+          "x-apply": "live"
+        },
+        "sessions": {
+          "$ref": "#/$defs/GatewaySessions",
+          "default": {
+            "group_per_user": true,
+            "resume_pending_ttl_secs": 86400,
+            "route_max_age_secs": 7776000,
+            "stuck_loop_threshold": 3,
+            "thread_per_user": false
+          },
+          "description": "How conversations map to sessions."
+        },
+        "shutdown": {
+          "$ref": "#/$defs/ShutdownConfig",
+          "default": {
+            "drain_timeout_secs": 30
+          },
+          "description": "Stopping the daemon (read from the launch profile)."
+        },
         "standalone": {
           "default": false,
           "description": "Never serve this profile from a multiplexing daemon (it gets a\ndaemon of its own home).",
           "type": "boolean"
+        },
+        "streaming": {
+          "$ref": "#/$defs/StreamingConfig",
+          "default": {
+            "buffer_threshold": 24,
+            "cursor": " ▉",
+            "edit_interval_ms": 800,
+            "enabled": false,
+            "transport": "auto"
+          },
+          "description": "Token streaming to platforms.",
+          "x-apply": "live"
+        },
+        "trust_env": {
+          "default": false,
+          "description": "Honour inherited proxy environment variables (`HTTPS_PROXY`, ...)\nand the OS proxy settings when no proxy is configured; off, adapters\nconnect directly.",
+          "type": "boolean"
+        },
+        "voice": {
+          "$ref": "#/$defs/VoiceConfig",
+          "default": {
+            "echo_transcripts": true,
+            "reply_mode": "mirror",
+            "stt_enabled": true
+          },
+          "description": "Voice messages in and out.",
+          "x-apply": "live"
         }
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "GatewayDisplay": {
+      "additionalProperties": false,
+      "description": "`[gateway.display]`.",
+      "properties": {
+        "busy_ack_detail": {
+          "description": "Busy acknowledgements name what the running turn is doing (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cleanup_progress": {
+          "description": "Delete the progress bubbles after a successful final reply on\nadapters that can delete (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interim_assistant_messages": {
+          "description": "Send what the model says between tool calls (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "long_running_notifications": {
+          "description": "One edited `Working — <n> min` bubble every 180 seconds of a long\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformDisplay"
+          },
+          "description": "Per-platform overrides, by platform name.",
+          "type": "object"
+        },
+        "runtime_footer": {
+          "description": "Append a model / context / directory footer to final replies\n(default false; `/footer on|off` per chat).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "status_phrases": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusPhrases"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Working-status phrases."
+        },
+        "suppress_warning_notifications": {
+          "description": "Mute automatic warning and error notices on this destination\n(default false; logs and stored state are unchanged).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_preview_length": {
+          "description": "Characters of a tool call's arguments shown (default 40).",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tool_progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChatToolProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`off`, `new`, `all` (default; `off` on Telegram), `verbose` or\n`log`."
+        },
+        "tool_progress_command": {
+          "description": "`/verbose` cycles the chat's tool progress mode (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_progress_grouping": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolProgressGrouping"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`accumulate` (default: one edited bubble) or `separate`."
+        }
+      },
+      "type": "object"
+    },
+    "GatewayGroups": {
+      "additionalProperties": false,
+      "description": "`[gateway.groups]`: when group, channel and thread messages start a turn.",
+      "properties": {
+        "free_response_chats": {
+          "description": "Chats answered without a mention.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "history_backfill": {
+          "description": "Give a mention-triggered turn the channel's messages since the\nbot's last reply (default true on Discord and Slack).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "history_backfill_limit": {
+          "description": "The most channel messages backfilled (default 50).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ignored_chats": {
+          "description": "Chats and threads that never start a turn.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "mention_patterns": {
+          "description": "Case-insensitive regular expressions that count as a mention (at\nmost 32).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "observe_unmentioned": {
+          "description": "Keep unmentioned messages of authorized group chats in the chat's\nsession as attributed context, without a turn (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PlatformGroups"
+          },
+          "description": "Per-platform overrides, by platform name.",
+          "type": "object"
+        },
+        "require_mention": {
+          "description": "Only messages that mention the bot, reply to it, match a\n`mention_patterns` entry or are in a thread it takes part in start a\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thread_require_mention": {
+          "description": "A thread the bot takes part in still needs a mention (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "GatewayHealthConfig": {
+      "additionalProperties": false,
+      "description": "The `[observability.gateway_health]` section (spec: messaging-gateway,\nGateway health export is opt-in and content-free): allowlisted gateway,\nadapter, outbox and cron gauges and counters with bounded attributes,\nposted as OTLP/HTTP JSON metrics; never message text, user ids, chat\nids or secrets.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Export gateway health. Off by default: nothing is sent.",
+          "type": "boolean"
+        },
+        "endpoint": {
+          "description": "The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a\nloopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interval_secs": {
+          "default": 60,
+          "description": "Seconds between two exports.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "GatewayQuickCommands": {
+      "additionalProperties": false,
+      "description": "`[gateway.quick_commands]`.",
+      "properties": {
+        "timeout_secs": {
+          "default": 30,
+          "description": "An `exec` quick command run from a chat is killed, with its whole\nprocess tree, after this many seconds.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "GatewaySessions": {
+      "additionalProperties": false,
+      "description": "`[gateway.sessions]`.",
+      "properties": {
+        "group_per_user": {
+          "default": true,
+          "description": "Each member of a non-thread group or channel gets a session of\ntheir own.",
+          "type": "boolean"
+        },
+        "resume_pending_ttl_secs": {
+          "default": 86400,
+          "description": "A turn left `resume_pending` by a restart holds its chat's queue\nuntil `/retry` or `/discard`, at most this long; then it is\ndiscarded automatically.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "route_max_age_secs": {
+          "default": 7776000,
+          "description": "Routes (conversation to session, never transcripts) unused this\nlong are pruned; `0` keeps them forever.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stuck_loop_threshold": {
+          "default": 3,
+          "description": "A session whose turn was running during this many consecutive\ndaemon restarts is suspended; its next message starts a new one.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "thread_per_user": {
+          "default": false,
+          "description": "Each participant of a thread gets a session of their own.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "GuardrailThresholds": {
       "additionalProperties": false,
@@ -1249,6 +2230,32 @@
         "same_tool_failure",
         "idempotent_no_progress"
       ],
+      "type": "object"
+    },
+    "HomeChannel": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.home_channel]`: the default destination of\nscheduled output, platform-only send targets and notices without an\noriginating chat.",
+      "properties": {
+        "chat_id": {
+          "default": "",
+          "description": "The chat id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A display name (also accepted as `platform:#name` in send targets).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thread_id": {
+          "description": "The thread (forum topic) inside the chat.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ImageInputMode": {
@@ -1432,6 +2439,39 @@
         }
       ]
     },
+    "McpEvents": {
+      "additionalProperties": false,
+      "description": "`[gateway.mcp_events]` (experimental).",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Admit notifications of configured MCP servers that declare an\n`events` webhook route as signed internal events on that route\n(same delivery and toolset rules as a webhook request).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "MediaConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.media]`.",
+      "properties": {
+        "cache_max_age_secs": {
+          "default": 86400,
+          "description": "Cached inbound media older than this many seconds is deleted\nunless a kept session references it.",
+          "format": "uint64",
+          "minimum": 60,
+          "type": "integer"
+        },
+        "max_inbound_bytes": {
+          "default": 134217728,
+          "description": "Largest inbound attachment downloaded, in bytes; `0` disables the\ncap.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "MemoryConfig": {
       "additionalProperties": false,
       "description": "The `[memory]` section.",
@@ -1515,6 +2555,18 @@
           "type": "string"
         }
       ]
+    },
+    "MessageTimestamps": {
+      "additionalProperties": false,
+      "description": "`[gateway.message_timestamps]`.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Prefix each user message the model sees with its send time in the\nprofile's time zone (`[Tue 2026-04-28 13:40:53 CEST]`). Frozen per\nsession when it is created: a change applies to new sessions.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "ModelAlias": {
       "anyOf": [
@@ -1771,6 +2823,18 @@
       "type": "object",
       "x-apply": "restart"
     },
+    "NotificationsConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.notifications]`.",
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/BackgroundNotifications",
+          "default": "concise",
+          "description": "Which background process and subagent events reach the chat."
+        }
+      },
+      "type": "object"
+    },
     "OAuthEndpoints": {
       "additionalProperties": false,
       "description": "A `[providers.<id>.oauth]` table: sign-in endpoints. Endpoints must be\n`https://` (plain `http://` only on a loopback address) and their hosts\nmust be in `allowed_hosts`.",
@@ -1868,6 +2932,15 @@
       "additionalProperties": false,
       "description": "The `[observability]` section.",
       "properties": {
+        "gateway_health": {
+          "$ref": "#/$defs/GatewayHealthConfig",
+          "default": {
+            "enabled": false,
+            "interval_secs": 60
+          },
+          "description": "The gateway daemon's health export (read from the launch profile).",
+          "x-apply": "restart"
+        },
         "trajectories": {
           "$ref": "#/$defs/TrajectoriesConfig",
           "default": {
@@ -1881,13 +2954,150 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OutboxConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.outbox]`.",
+      "properties": {
+        "max_age_secs": {
+          "default": 86400,
+          "description": "An entry older than this becomes `failed`.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_attempts": {
+          "default": 8,
+          "description": "Send attempts before an entry becomes `failed`.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "PhraseMode": {
+      "description": "How a status phrase file combines with the built-in phrases.",
+      "oneOf": [
+        {
+          "const": "append",
+          "description": "After the built-in phrases.",
+          "type": "string"
+        },
+        {
+          "const": "replace",
+          "description": "Instead of them.",
+          "type": "string"
+        }
+      ]
+    },
+    "PlatformBots": {
+      "additionalProperties": false,
+      "description": "One platform's overrides; each unset key inherits.",
+      "properties": {
+        "allow_bots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AllowBots"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`none` (default), `mentions` or `all`."
+        },
+        "burst_window_ms": {
+          "description": "Follow-up chunks of the same bot in the same chat within this many\nmilliseconds join the same turn (default 1500).",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "human_user_ids": {
+          "description": "Senders treated as people although their messages are marked as a\nbot's (posts made with the owner's own user token).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "require_inline_mention": {
+          "description": "An admitted bot message starts a turn only with a literal inline\nmention of this bot; a reply ping alone does not (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PlatformBusy": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.busy]`: unset keys follow `busy.input_mode`\nand `gateway.busy`.",
+      "properties": {
+        "ack": {
+          "description": "Overrides `gateway.busy.ack`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "debounce_cap_ms": {
+          "description": "Overrides `gateway.busy.debounce_cap_ms`.",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "debounce_ms": {
+          "description": "Overrides `gateway.busy.debounce_ms`.",
+          "format": "uint64",
+          "maximum": 10000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusyInputMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Overrides `busy.input_mode`."
+        },
+        "max_queued": {
+          "description": "Overrides `gateway.busy.max_queued`.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "PlatformConfig": {
       "additionalProperties": false,
       "description": "One `[gateway.platforms.<name>]` table: the keys every adapter shares.",
       "properties": {
         "admins": {
           "default": [],
-          "description": "Platform user ids with the admin command tier.",
+          "description": "User ids with every command in direct messages.",
           "items": {
             "type": "string"
           },
@@ -1906,25 +3116,163 @@
           },
           "type": "array"
         },
-        "allow_users": {
-          "default": [],
-          "description": "Platform user ids admitted without pairing.",
+        "allow_roles": {
+          "description": "Role ids whose holders are authorized (Discord roles, Slack user\ngroups, Matrix power levels), checked right after `allow_users` on\nadapters that expose roles; a failed role lookup denies.",
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "allow_users": {
+          "default": [],
+          "description": "Platform user ids admitted without pairing (no wildcards: use\n`allow_all`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "batching": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Batching"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Joins rapid consecutive text of one sender into one input (a\nclient that splits a long paste); replaces the busy debounce on\nthis platform when set."
+        },
+        "busy": {
+          "$ref": "#/$defs/PlatformBusy",
+          "default": {},
+          "description": "Busy handling on this platform (overrides `busy.input_mode` and\n`gateway.busy`)."
         },
         "enabled": {
           "default": false,
           "description": "Start this adapter with the daemon.",
           "type": "boolean"
         },
+        "group_admins": {
+          "default": [],
+          "description": "User ids with every command in groups.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "home_channel": {
-          "description": "The chat that receives notifications and scheduled output.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HomeChannel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The chat that receives scheduled output, platform-only send\ntargets and notifications without an originating chat (`/sethome`\nsets it)."
+        },
+        "human_delay_ms": {
+          "description": "A uniformly random delay `[min, max]` in milliseconds before each\noutbound part. Unset: none.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "max_body_bytes": {
+          "description": "Largest request body a webhook route reads (`webhook` only), in\nbytes; larger requests are answered 413 unread. Unset: 1048576.",
+          "format": "uint64",
+          "maximum": 16777216,
+          "minimum": 1024,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_message_length": {
+          "description": "Lowers the adapter's message length limit (in its own unit); it\ncan never raise it.",
+          "format": "uint32",
+          "minimum": 16,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "options": {
+          "additionalProperties": true,
+          "description": "The adapter's own settings, validated against the schema it\npublishes (`prometheus gateway platforms` lists the adapters).",
+          "type": "object"
+        },
+        "proxy_url": {
+          "description": "The proxy this adapter's outbound HTTP and WebSocket traffic uses\n(`http://`, `https://` or `socks5://`, without a password; a URL\nwith credentials goes in a secret named by `proxy_url_secret`).\nUnset: `gateway.proxy_url`.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "proxy_url_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding this adapter's proxy URL when it carries\ncredentials."
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/RateLimitOverride",
+          "default": {},
+          "description": "Rate limits on this platform (overrides `gateway.rate_limit`)."
+        },
+        "reactions": {
+          "description": "Mark the triggering message with processing reactions (eyes, then a\ncheck mark or a cross). Unset: on for Discord and Slack, off\nelsewhere.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "reply_to_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReplyToMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which parts of a reply quote the message they answer: none, the\nfirst part, or every part. Unset: `first`."
+        },
+        "restart_notification": {
+          "description": "Post one notice to this platform's home channel after a graceful\nrestart or update that interrupted running turns (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "routes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/WebhookRoute"
+          },
+          "description": "Webhook routes by name (`webhook` only), each served at\n`/p/<profile>/webhook/<route>` on the shared listener.",
+          "type": "object"
+        },
+        "sessions": {
+          "$ref": "#/$defs/PlatformSessions",
+          "default": {},
+          "description": "Session mapping on this platform (overrides `gateway.sessions`)."
+        },
+        "streaming": {
+          "$ref": "#/$defs/PlatformStreaming",
+          "default": {},
+          "description": "Streaming on this platform."
         },
         "token_secret": {
           "anyOf": [
@@ -1936,6 +3284,206 @@
             }
           ],
           "description": "The secret holding the adapter's credential (never the value)."
+        },
+        "typing_indicator": {
+          "description": "Show the platform's typing indicator while a turn runs. Unset:\n`true`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "unauthorized_dm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnauthorizedDm"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What an unauthorized direct message gets: a pairing code (`pair`),\nnothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for\nemail or when `allow_users` is set, else `pair`."
+        },
+        "user_commands": {
+          "default": [],
+          "description": "Commands other users may run where an admin list is set, besides\n`/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "PlatformDisplay": {
+      "additionalProperties": false,
+      "description": "One platform's display overrides; each unset key inherits from\n`[gateway.display]`, then the built-in default.",
+      "properties": {
+        "busy_ack_detail": {
+          "description": "Busy acknowledgements name what the running turn is doing (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cleanup_progress": {
+          "description": "Delete the progress bubbles after a successful final reply on\nadapters that can delete (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interim_assistant_messages": {
+          "description": "Send what the model says between tool calls (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "long_running_notifications": {
+          "description": "One edited `Working — <n> min` bubble every 180 seconds of a long\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "runtime_footer": {
+          "description": "Append a model / context / directory footer to final replies\n(default false; `/footer on|off` per chat).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "status_phrases": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatusPhrases"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Working-status phrases."
+        },
+        "suppress_warning_notifications": {
+          "description": "Mute automatic warning and error notices on this destination\n(default false; logs and stored state are unchanged).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_preview_length": {
+          "description": "Characters of a tool call's arguments shown (default 40).",
+          "format": "uint32",
+          "maximum": 2000,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tool_progress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChatToolProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`off`, `new`, `all` (default; `off` on Telegram), `verbose` or\n`log`."
+        },
+        "tool_progress_command": {
+          "description": "`/verbose` cycles the chat's tool progress mode (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tool_progress_grouping": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolProgressGrouping"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`accumulate` (default: one edited bubble) or `separate`."
+        }
+      },
+      "type": "object"
+    },
+    "PlatformGroups": {
+      "additionalProperties": false,
+      "description": "One platform's overrides; each unset key inherits.",
+      "properties": {
+        "free_response_chats": {
+          "description": "Chats answered without a mention.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "history_backfill": {
+          "description": "Give a mention-triggered turn the channel's messages since the\nbot's last reply (default true on Discord and Slack).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "history_backfill_limit": {
+          "description": "The most channel messages backfilled (default 50).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ignored_chats": {
+          "description": "Chats and threads that never start a turn.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "mention_patterns": {
+          "description": "Case-insensitive regular expressions that count as a mention (at\nmost 32).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "observe_unmentioned": {
+          "description": "Keep unmentioned messages of authorized group chats in the chat's\nsession as attributed context, without a turn (default false).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "require_mention": {
+          "description": "Only messages that mention the bot, reply to it, match a\n`mention_patterns` entry or are in a thread it takes part in start a\nturn (default true).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thread_require_mention": {
+          "description": "A thread the bot takes part in still needs a mention (default\nfalse).",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -1960,6 +3508,66 @@
         }
       },
       "type": "object"
+    },
+    "PlatformSessions": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.sessions]`.",
+      "properties": {
+        "group_per_user": {
+          "description": "Overrides `gateway.sessions.group_per_user`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thread_per_user": {
+          "description": "Overrides `gateway.sessions.thread_per_user`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PlatformStreaming": {
+      "additionalProperties": false,
+      "description": "`[gateway.platforms.<name>.streaming]`.",
+      "properties": {
+        "enabled": {
+          "description": "`false` turns streaming off for this platform; `true` cannot turn\nit on while `gateway.streaming.enabled` is off.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PolicyChatType": {
+      "description": "The chat kinds a policy can match.",
+      "oneOf": [
+        {
+          "const": "dm",
+          "description": "Direct messages.",
+          "type": "string"
+        },
+        {
+          "const": "group",
+          "description": "Group chats.",
+          "type": "string"
+        },
+        {
+          "const": "channel",
+          "description": "Channels.",
+          "type": "string"
+        },
+        {
+          "const": "thread",
+          "description": "Threads inside a group or channel.",
+          "type": "string"
+        }
+      ]
     },
     "PoolStrategy": {
       "description": "Credential pool strategies.",
@@ -2000,6 +3608,58 @@
           "type": "string"
         }
       ]
+    },
+    "ProfileRoute": {
+      "additionalProperties": false,
+      "description": "One `[[gateway.profile_routes]]` entry.",
+      "properties": {
+        "chat_id": {
+          "description": "Matches this chat or channel.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "guild_id": {
+          "description": "Matches this workspace or server (Discord guild, Slack team).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The route's name (logs, `gateway status`).",
+          "type": "string"
+        },
+        "platform": {
+          "description": "The platform whose events it routes.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The served profile matching events go to.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "Matches this thread or forum topic (a channel route also matches\nits threads).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user_id": {
+          "description": "Matches this sender.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "platform",
+        "profile"
+      ],
+      "type": "object"
     },
     "PromptCacheConfig": {
       "additionalProperties": false,
@@ -2342,6 +4002,92 @@
         }
       ]
     },
+    "RateLimitConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.rate_limit]`: per-sender limits (admins and local clients are\nexempt).",
+      "properties": {
+        "burst": {
+          "default": 10,
+          "description": "Messages a sender may send at once above the sustained rate.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "daily_cost_usd": {
+          "description": "USD a sender's turns may cost per local day (from the usage\nledger); unset is no cap.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "messages_per_minute": {
+          "default": 20,
+          "description": "Messages a sender may send per minute (sustained rate).",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "turns_per_hour": {
+          "default": 120,
+          "description": "Turns a sender may start per hour.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RateLimitOverride": {
+      "additionalProperties": false,
+      "description": "Overrides of `[gateway.rate_limit]` (per platform or chat policy); unset\nkeys keep the shared value.",
+      "properties": {
+        "burst": {
+          "description": "Overrides `burst`.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "daily_cost_usd": {
+          "description": "Overrides `daily_cost_usd`.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "messages_per_minute": {
+          "description": "Overrides `messages_per_minute`.",
+          "format": "uint32",
+          "maximum": 10000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "turns_per_hour": {
+          "description": "Overrides `turns_per_hour`.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ReasoningLevel": {
       "description": "Reasoning effort levels, in increasing order.",
       "oneOf": [
@@ -2407,6 +4153,26 @@
         }
       },
       "type": "object"
+    },
+    "ReplyToMode": {
+      "description": "Which parts of a reply quote the message they answer.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "None.",
+          "type": "string"
+        },
+        {
+          "const": "first",
+          "description": "The first part.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every part.",
+          "type": "string"
+        }
+      ]
     },
     "ResultBudget": {
       "additionalProperties": false,
@@ -2507,6 +4273,18 @@
         }
       },
       "type": "object"
+    },
+    "Seconds": {
+      "description": "A number of seconds whose default is `DEFAULT` (a top-level key of a\nsection that otherwise derives its defaults).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "Seconds2": {
+      "description": "A number of seconds whose default is `DEFAULT` (a top-level key of a\nsection that otherwise derives its defaults).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
     },
     "SecretName": {
       "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
@@ -2634,6 +4412,21 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "ShutdownConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.shutdown]`.",
+      "properties": {
+        "drain_timeout_secs": {
+          "default": 30,
+          "description": "A stop whose conversations finish within this many seconds is\nclean: the next start skips crash recovery.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "SkillsConfig": {
       "additionalProperties": false,
@@ -2785,6 +4578,25 @@
       },
       "type": "object"
     },
+    "StatusPhrases": {
+      "additionalProperties": false,
+      "description": "`status_phrases`: the working-status phrases a surface rotates through\n(never interpolating tool arguments).",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/PhraseMode",
+          "default": "append",
+          "description": "`append` (default) or `replace`."
+        },
+        "path": {
+          "description": "A file under the profile directory, one phrase per line (at most\n80 phrases of 160 characters).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
     "StorageConfig": {
       "additionalProperties": false,
       "description": "The `[storage]` section.",
@@ -2797,6 +4609,74 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "StreamTransport": {
+      "description": "How a streamed draft reaches a platform.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "`native` where the platform streams natively, else `edit` where it\nedits messages, else no streaming.",
+          "type": "string"
+        },
+        {
+          "const": "native",
+          "description": "The platform's own streaming message API (falls back to `edit`,\nalso mid-turn when the stream fails).",
+          "type": "string"
+        },
+        {
+          "const": "draft",
+          "description": "A platform-native draft (falls back to `edit`).",
+          "type": "string"
+        },
+        {
+          "const": "edit",
+          "description": "One message edited as the answer grows.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No streaming.",
+          "type": "string"
+        }
+      ]
+    },
+    "StreamingConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.streaming]`.",
+      "properties": {
+        "buffer_threshold": {
+          "default": 24,
+          "description": "Characters gathered before the first draft is sent.",
+          "format": "uint32",
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "cursor": {
+          "default": " ▉",
+          "description": "Shown at the end of a draft still being written.",
+          "type": "string"
+        },
+        "edit_interval_ms": {
+          "default": 800,
+          "description": "Least time between two edits of a draft.",
+          "format": "uint64",
+          "maximum": 60000,
+          "minimum": 100,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Stream answers while they are written. A platform can turn it off\nfor itself, never on when this is off.",
+          "type": "boolean"
+        },
+        "transport": {
+          "$ref": "#/$defs/StreamTransport",
+          "default": "auto",
+          "description": "How a streamed draft reaches the platform."
+        }
+      },
+      "type": "object"
     },
     "TailMode": {
       "description": "Tail retention modes.",
@@ -3526,6 +5406,26 @@
         }
       ]
     },
+    "UnauthorizedDm": {
+      "description": "What an unauthorized direct message gets.",
+      "oneOf": [
+        {
+          "const": "pair",
+          "description": "A pairing code the owner can approve.",
+          "type": "string"
+        },
+        {
+          "const": "ignore",
+          "description": "Nothing.",
+          "type": "string"
+        },
+        {
+          "const": "decline",
+          "description": "A short refusal.",
+          "type": "string"
+        }
+      ]
+    },
     "VisionConfig": {
       "additionalProperties": false,
       "description": "The `[vision]` section.",
@@ -3538,6 +5438,48 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "VoiceConfig": {
+      "additionalProperties": false,
+      "description": "`[gateway.voice]`.",
+      "properties": {
+        "echo_transcripts": {
+          "default": true,
+          "description": "Echo a transcript back to the chat once.",
+          "type": "boolean"
+        },
+        "reply_mode": {
+          "$ref": "#/$defs/VoiceReplyMode",
+          "default": "mirror",
+          "description": "When replies are spoken."
+        },
+        "stt_enabled": {
+          "default": true,
+          "description": "Transcribe inbound voice and audio clips with the profile's\nspeech-to-text provider.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "VoiceReplyMode": {
+      "description": "When replies are spoken.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Never.",
+          "type": "string"
+        },
+        {
+          "const": "mirror",
+          "description": "When the user's message was voice.",
+          "type": "string"
+        },
+        {
+          "const": "always",
+          "description": "Always.",
+          "type": "string"
+        }
+      ]
     },
     "WebConfig": {
       "additionalProperties": false,
@@ -3597,6 +5539,308 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "WebhookFilter": {
+      "description": "One filter condition over `payload.<path>`, `event` or\n`headers.<Name>`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The path resolves.",
+          "properties": {
+            "exists": {
+              "$ref": "#/$defs/FilterPath"
+            }
+          },
+          "required": [
+            "exists"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The path does not resolve.",
+          "properties": {
+            "missing": {
+              "$ref": "#/$defs/FilterPath"
+            }
+          },
+          "required": [
+            "missing"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value equals `value`.",
+          "properties": {
+            "equals": {
+              "$ref": "#/$defs/FilterValue"
+            }
+          },
+          "required": [
+            "equals"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value differs from `value` (or is missing).",
+          "properties": {
+            "not_equals": {
+              "$ref": "#/$defs/FilterValue"
+            }
+          },
+          "required": [
+            "not_equals"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The string contains `value`, or the list holds it.",
+          "properties": {
+            "contains": {
+              "$ref": "#/$defs/FilterValue"
+            }
+          },
+          "required": [
+            "contains"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value is one of `values`.",
+          "properties": {
+            "in": {
+              "$ref": "#/$defs/FilterValues"
+            }
+          },
+          "required": [
+            "in"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The value is a line of `file` (relative to the profile directory).",
+          "properties": {
+            "in_file": {
+              "$ref": "#/$defs/FilterFile"
+            }
+          },
+          "required": [
+            "in_file"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The string matches the regular expression `pattern`.",
+          "properties": {
+            "regex": {
+              "$ref": "#/$defs/FilterPattern"
+            }
+          },
+          "required": [
+            "regex"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Every condition holds.",
+          "properties": {
+            "all": {
+              "items": {
+                "$ref": "#/$defs/WebhookFilter"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "all"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "At least one condition holds.",
+          "properties": {
+            "any": {
+              "items": {
+                "$ref": "#/$defs/WebhookFilter"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "any"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The condition does not hold.",
+          "properties": {
+            "not": {
+              "$ref": "#/$defs/WebhookFilter"
+            }
+          },
+          "required": [
+            "not"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "WebhookFilters": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WebhookFilter",
+          "description": "One condition."
+        },
+        {
+          "description": "Every condition.",
+          "items": {
+            "$ref": "#/$defs/WebhookFilter"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A route's filters: one condition or a list that must all hold."
+    },
+    "WebhookRoute": {
+      "additionalProperties": false,
+      "description": "One webhook route.",
+      "properties": {
+        "deliver": {
+          "description": "Where the answer goes: `origin` (the HTTP caller's response),\n`log` (recorded under `<profile>/logs/webhook/<route>.jsonl`),\n`github_comment` (a comment on the payload's pull request or issue)\nor a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deliver_extra": {
+          "description": "More send targets that receive a copy.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deliver_only": {
+          "default": false,
+          "description": "Run no model: the rendered prompt is sent verbatim to `deliver`.",
+          "type": "boolean"
+        },
+        "events": {
+          "default": [],
+          "description": "Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the\npayload's `event_type`); empty admits every event.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "filters": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookFilters"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Conditions a payload must meet; a request that fails them is\nanswered `ignored` with reason `filter`."
+        },
+        "github_token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the GitHub token `github_comment` posts with."
+        },
+        "insecure_no_auth": {
+          "default": false,
+          "description": "Admit unsigned requests (only while `gateway.http.listen` is a\nloopback address).",
+          "type": "boolean"
+        },
+        "mirror_to_session": {
+          "default": false,
+          "description": "Append the delivered answer to each send target's chat session as\nan attributed assistant message.",
+          "type": "boolean"
+        },
+        "origin_wait_secs": {
+          "default": 30,
+          "description": "With `deliver = \"origin\"`: seconds the HTTP caller is kept waiting\nfor the answer; a run taking longer is answered 202 `accepted` and\nits answer goes to the route's log.",
+          "format": "uint64",
+          "maximum": 600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "prompt": {
+          "description": "The turn's input: `{a.b.c}` paths into the payload, `{__raw__}`\nthe whole payload. Unset: the payload as JSON.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rate_limit_per_min": {
+          "default": 30,
+          "description": "Requests per minute the route admits (fixed window); more are\nanswered 429.",
+          "format": "uint32",
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "script": {
+          "description": "A transform script under the profile's `scripts/` directory, run in\nthe sandbox with the payload JSON on stdin.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "script_timeout_secs": {
+          "default": 30,
+          "description": "Seconds the transform script may run.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "secret_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret every request must be signed with (GitHub, GitLab,\nStandard Webhooks or the generic scheme)."
+        },
+        "skills": {
+          "description": "Skills preloaded into each delivery's session (ignored with\n`deliver_only`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "toolsets": {
+          "description": "Toolsets of each delivery's session, replacing the default\nread-only `webhook-safe` toolset rather than adding to it; only\ntoolsets the profile enables.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "WindowsShell": {
       "description": "Windows shells.",
@@ -3815,9 +6059,87 @@
     "gateway": {
       "$ref": "#/$defs/GatewayConfig",
       "default": {
+        "accept_routes_from": [],
+        "agent_cache": {
+          "idle_ttl_secs": 3600,
+          "max_size": 128,
+          "memory_high_bytes": 0
+        },
+        "background": {
+          "max_per_chat": 3
+        },
+        "bots": {},
+        "busy": {
+          "ack": true,
+          "debounce_cap_ms": 1000,
+          "debounce_ms": 350,
+          "max_queued": 16
+        },
+        "chat_policies": [],
+        "dedup": {
+          "max_entries": 2000,
+          "ttl_secs": 300
+        },
+        "delivery": {
+          "detect_paths": true,
+          "max_parts": 10
+        },
+        "display": {},
+        "groups": {},
+        "mcp_events": {
+          "enabled": false
+        },
+        "media": {
+          "cache_max_age_secs": 86400,
+          "max_inbound_bytes": 134217728
+        },
+        "message_timestamps": {
+          "enabled": false
+        },
         "multiplex": false,
+        "notifications": {
+          "background": "concise"
+        },
+        "outbox": {
+          "max_age_secs": 86400,
+          "max_attempts": 8
+        },
         "platforms": {},
-        "standalone": false
+        "profile_routes": [],
+        "quick_commands": {
+          "timeout_secs": 30
+        },
+        "rate_limit": {
+          "burst": 10,
+          "messages_per_minute": 20,
+          "turns_per_hour": 120
+        },
+        "reconnect_attention_secs": 600,
+        "session_stall_timeout_secs": 900,
+        "sessions": {
+          "group_per_user": true,
+          "resume_pending_ttl_secs": 86400,
+          "route_max_age_secs": 7776000,
+          "stuck_loop_threshold": 3,
+          "thread_per_user": false
+        },
+        "shutdown": {
+          "drain_timeout_secs": 30
+        },
+        "standalone": false,
+        "streaming": {
+          "buffer_threshold": 24,
+          "cursor": " ▉",
+          "edit_interval_ms": 800,
+          "enabled": false,
+          "transport": "auto"
+        },
+        "trust_env": false,
+        "voice": {
+          "echo_transcripts": true,
+          "reply_mode": "mirror",
+          "stt_enabled": true
+        }
       },
       "description": "The profile's part in the home's gateway daemon."
     },
@@ -3880,6 +6202,10 @@
     "observability": {
       "$ref": "#/$defs/ObservabilityConfig",
       "default": {
+        "gateway_health": {
+          "enabled": false,
+          "interval_secs": 60
+        },
         "trajectories": {
           "enabled": true,
           "max_bytes_per_session": 268435456,

@@ -502,3 +502,26 @@ async fn detaching_one_session_keeps_another_sessions_requests() {
     );
     assert_eq!(asking.await.unwrap(), Some(json!({"password": "pw"})));
 }
+
+/// Spec: messaging-gateway, Concurrency caps across surfaces: detached
+/// sessions are listed least recently attended first; attached ones never.
+#[tokio::test(start_paused = true)]
+async fn detached_sessions_come_least_recently_attended_first() {
+    let hub = hub();
+    for (conn, session) in [(1, "ses_a"), (2, "ses_b"), (3, "ses_c")] {
+        hub.register(session, "default");
+        let (p, _rx) = peer(false);
+        hub.attach(conn, session, p, None);
+    }
+    hub.detach_all(2);
+    tokio::time::advance(Duration::from_secs(5)).await;
+    hub.detach_all(1);
+    let order: Vec<String> = hub.detached().into_iter().map(|(s, _)| s).collect();
+    assert_eq!(order, ["ses_b", "ses_a"], "ses_c is still attached");
+    hub.closed("ses_b");
+    assert_eq!(
+        hub.detached().len(),
+        1,
+        "an unloaded session is no candidate"
+    );
+}

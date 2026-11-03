@@ -18,11 +18,17 @@
 
 mod agent;
 mod gateway;
+mod gateway_display;
+mod gateway_groups;
+mod gateway_platform;
+mod gateway_policy;
+mod gateway_routes;
 mod interface;
 mod models;
 mod operations;
 mod state;
 mod tools;
+mod webhook;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -33,7 +39,18 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
-pub use gateway::{GatewayConfig, PlatformConfig};
+pub use gateway::{
+    AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
+    DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
+    GatewayBackground, GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay, GatewayGroups,
+    GatewayQuickCommands, GatewaySessions, HomeChannel, McpEvents, MediaConfig, MessageTimestamps,
+    NotificationsConfig, OutboxConfig, PhraseMode, PlatformBots, PlatformBusy, PlatformConfig,
+    PlatformDisplay, PlatformGroups, PlatformSessions, PlatformStreaming, PolicyChatType,
+    PolicyFacts, RateLimitConfig, RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases,
+    StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute,
+    resolve_policy,
+};
+pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
@@ -45,9 +62,9 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, LogLevel, LoggingConfig,
-    NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend, SecretsConfig,
-    SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, GatewayHealthConfig, LogLevel,
+    LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend,
+    SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
 };
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
@@ -58,6 +75,9 @@ pub use tools::{
     FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
     TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
     WindowsShell,
+};
+pub use webhook::{
+    FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
 };
 
 /// The `config.toml` schema version this build writes and reads.
@@ -210,6 +230,9 @@ impl Default for Config {
 /// a profile `config.toml` that contains one is refused (design D13).
 pub const MACHINE_WIDE_SECTIONS: &[&str] =
     &["daemon", "local_runtime", "process", "runtimes", "update"];
+
+/// `[gateway]` keys that are daemon-wide and live in `daemon.toml`.
+pub const MACHINE_WIDE_GATEWAY_KEYS: &[&str] = &["http", "relay", "on_all_adapters_down"];
 
 /// The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).
 /// Config keys that need a credential hold a name, never the value.

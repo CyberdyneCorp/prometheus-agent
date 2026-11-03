@@ -6,10 +6,22 @@
 //! prints its endpoint, `stop` drains and stops it, `restart` drains and
 //! replaces it, `status` prints its process state.
 
+mod enroll_cmd;
+mod gateway_cmd;
 mod host;
+mod inventory;
+mod messaging;
+mod platform_cmd;
+mod send_cmd;
 mod serve;
+pub mod service;
+mod slack_manifest_cmd;
 pub(crate) mod standalone;
+#[cfg(debug_assertions)]
+mod test_adapter;
 mod turn;
+mod update_chat;
+mod whatsapp_cmd;
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -28,7 +40,12 @@ use crate::context::Context;
 #[derive(Debug, Clone, Subcommand)]
 pub enum DaemonCommand {
     /// Run the daemon in the foreground (what `start` launches).
-    Run,
+    Run {
+        /// Take over messaging platform credentials (bot tokens) that a
+        /// live daemon of another home or profile holds.
+        #[arg(long)]
+        replace: bool,
+    },
     /// Start the daemon in the background; does nothing when it runs.
     Start,
     /// Start the daemon when it is not running and print its endpoint
@@ -41,6 +58,32 @@ pub enum DaemonCommand {
     Restart,
     /// Print the daemon's process state.
     Status,
+    /// Install a per-user supervisor unit that starts the daemon at login
+    /// (no administrator rights); `--system --run-as-user` installs a
+    /// boot-time unit instead (root only).
+    InstallService(service::InstallArgs),
+    /// Stop and remove the unit `install-service` installed.
+    UninstallService(service::UninstallArgs),
+}
+
+pub use gateway_cmd::{GatewayCommand, OutboxCommand, PairingCommand};
+
+/// Runs `prometheus gateway <command>`.
+///
+/// # Errors
+///
+/// As [`gateway_cmd::run`].
+pub fn gateway(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+    gateway_cmd::run(command, ctx)
+}
+
+/// Runs `prometheus pairing <command>`.
+///
+/// # Errors
+///
+/// As [`gateway_cmd::pairing`].
+pub fn pairing(command: &PairingCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+    gateway_cmd::pairing(command, ctx)
 }
 
 /// How long `start` waits for the endpoint.
@@ -55,12 +98,14 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let home = ctx.home()?;
     let root = home.root().to_path_buf();
     match command {
-        DaemonCommand::Run => serve::run(&root, ctx),
+        DaemonCommand::Run { replace } => serve::run(&root, ctx, *replace),
         DaemonCommand::Start => start(&root, ctx),
         DaemonCommand::Ensure => ensure(&root, ctx),
         DaemonCommand::Stop => stop(&root, ctx.json),
         DaemonCommand::Restart => restart(&root, ctx),
         DaemonCommand::Status => status(&root, ctx.json),
+        DaemonCommand::InstallService(args) => service::install(args, ctx),
+        DaemonCommand::UninstallService(args) => service::uninstall(args, ctx),
     }
 }
 
@@ -196,6 +241,22 @@ fn last_stderr_line(home: &Path) -> Option<String> {
         .map(|line| line.trim_start_matches("error: ").to_owned())
 }
 
+/// Runs `command` outside this process group and terminal, so it
+/// outlives the daemon (a stop, a restart) that started it.
+pub(super) fn detach(command: &mut Command) {
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(command, 0);
+    #[cfg(windows)]
+    {
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        std::os::windows::process::CommandExt::creation_flags(
+            command,
+            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+        );
+    }
+}
+
 /// `<this binary> --home <home> [-p <profile>] daemon run`, detached from
 /// this process group and terminal.
 fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Child, Error> {
@@ -217,17 +278,7 @@ fn spawn_detached(home: &Path, profile: Option<&str>) -> Result<std::process::Ch
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(stderr);
-    #[cfg(unix)]
-    std::os::unix::process::CommandExt::process_group(&mut command, 0);
-    #[cfg(windows)]
-    {
-        const DETACHED_PROCESS: u32 = 0x0000_0008;
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-        std::os::windows::process::CommandExt::creation_flags(
-            &mut command,
-            DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-        );
-    }
+    detach(&mut command);
     command
         .spawn()
         .map_err(|e| start_failed(&format!("cannot launch it: {e}")))

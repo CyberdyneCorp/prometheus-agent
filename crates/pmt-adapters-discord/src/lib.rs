@@ -1,0 +1,695 @@
+//! The first-party Discord adapter (spec: platform-adapters, First-party
+//! platforms and typed platform names; Adapter contract): the Gateway
+//! WebSocket for inbound events (resumed after a dropped connection, so
+//! Discord replays what the bot missed), REST for sends, edits, typing,
+//! reactions and button components. The token is the profile's secret
+//! `DISCORD_BOT_TOKEN` (or the table's `token_secret`), read from that
+//! profile's store only.
+
+mod api;
+mod commands;
+mod gateway;
+/// The mock platform the conformance kit runs this adapter against; only
+/// in builds with the `kit` feature (tests, `prometheus` with
+/// `adapter-kits`), so release binaries do not carry it.
+#[cfg(feature = "kit")]
+pub mod mock;
+mod normalize;
+mod threads;
+mod voice;
+
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+pub use api::Endpoints;
+use api::{Api, Body};
+use pmt_config::ProfileScope;
+use pmt_config::platforms::DiscordOptions;
+use pmt_core::error::Error;
+use pmt_gateway::messaging::adapter::credential;
+use pmt_gateway::messaging::multipart::Form;
+use pmt_gateway::messaging::{
+    Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
+    ChatInfo, ChatType, Descriptor, HistoryEntry, Inbound, Interactive, Markup, MediaKind,
+    MediaStream, MenuCommand, Outgoing, Private, Reaction, Select, SendError, Sent,
+};
+use reqwest::Method;
+use serde_json::{Value, json};
+use tokio_util::sync::CancellationToken;
+
+/// The platform name.
+pub const PLATFORM: &str = "discord";
+/// The secret holding the bot token unless the table names another.
+pub const TOKEN_SECRET: &str = "DISCORD_BOT_TOKEN";
+
+/// The factory the daemon registers for `discord`.
+#[must_use]
+pub fn factory() -> AdapterFactory {
+    Arc::new(|setup| Ok(Arc::new(Discord::new(setup, Endpoints::default())?) as Arc<dyn Adapter>))
+}
+
+/// A Discord bot of one profile.
+pub struct Discord {
+    scope: ProfileScope,
+    secret: String,
+    options: DiscordOptions,
+    endpoints: Endpoints,
+    client: reqwest::Client,
+    extra_ca: Option<PathBuf>,
+    /// How the WebSocket reaches the platform.
+    proxy: pmt_gateway::messaging::proxy::Proxy,
+    session: Arc<Mutex<gateway::Session>>,
+    api: Mutex<Option<Api>>,
+    connection: Mutex<Option<CancellationToken>>,
+    channels: Arc<threads::Channels>,
+}
+
+impl std::fmt::Debug for Discord {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Discord")
+            .field("profile", &self.scope.name().as_str())
+            .field("endpoints", &self.endpoints)
+            .finish_non_exhaustive()
+    }
+}
+
+fn unreachable(err: &SendError) -> AdapterError {
+    let unauthorized = matches!(err, SendError::Permanent(why) if why.starts_with("401"));
+    AdapterError {
+        retryable: !unauthorized,
+        code: if unauthorized {
+            "unauthorized"
+        } else {
+            "discord_unreachable"
+        }
+        .to_owned(),
+        message: format!("Discord: {}", err.describe()),
+    }
+}
+
+impl Discord {
+    /// The adapter for `setup`, talking to `endpoints`.
+    ///
+    /// # Errors
+    ///
+    /// `config.invalid` for bad options; the HTTP client cannot be built.
+    pub fn new(setup: &AdapterSetup, endpoints: Endpoints) -> Result<Self, Error> {
+        let options: DiscordOptions =
+            pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
+        let network = &setup.scope.config().network;
+        let extra_ca = network.extra_ca_file.as_deref().map(PathBuf::from);
+        // Direct unless a proxy is configured or the environment trusted.
+        let (builder, proxy) = pmt_gateway::messaging::proxy::client_builder(setup)?;
+        let client = builder.build().map_err(|e| {
+            Error::new(
+                &pmt_core::error::codes::NET_CLIENT_INIT,
+                format!("cannot build the Discord client: {e}"),
+            )
+        })?;
+        let secret = setup
+            .config
+            .token_secret
+            .as_ref()
+            .map_or_else(|| TOKEN_SECRET.to_owned(), |s| s.0.clone());
+        Ok(Self {
+            scope: setup.scope.clone(),
+            secret,
+            options,
+            endpoints,
+            client,
+            extra_ca,
+            proxy,
+            session: Arc::default(),
+            api: Mutex::default(),
+            connection: Mutex::default(),
+            channels: Arc::default(),
+        })
+    }
+
+    fn api_with(&self, token: String) -> Api {
+        Api {
+            client: self.client.clone(),
+            endpoints: self.endpoints.clone(),
+            token,
+        }
+    }
+
+    fn api(&self) -> Result<Api, SendError> {
+        if let Some(api) = self.api.lock().expect("api poisoned").clone() {
+            return Ok(api);
+        }
+        // A one-shot send without the daemon has not connected.
+        let token =
+            credential(&self.scope, &self.secret).map_err(|e| SendError::Permanent(e.message))?;
+        Ok(self.api_with(token))
+    }
+
+    /// The Gateway URL: the session's resume URL, else Discord's answer.
+    async fn gateway_url(&self, api: &Api) -> Result<String, AdapterError> {
+        let resume = {
+            let session = self.session.lock().expect("session poisoned");
+            session.id.as_ref().and(session.resume_url.clone())
+        };
+        if let Some(url) = resume {
+            return Ok(url);
+        }
+        let found = api
+            .call(Method::GET, "/gateway/bot", Body::Empty)
+            .await
+            .map_err(|e| unreachable(&e))?;
+        found["url"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| unreachable(&SendError::Server("no gateway URL".into())))
+    }
+}
+
+/// The channel a message goes to (a thread is its own channel).
+fn channel(message: &Outgoing) -> &str {
+    message.thread_id.as_deref().unwrap_or(&message.chat_id)
+}
+
+fn components(message: &Outgoing) -> Value {
+    let rows: Vec<Value> = message
+        .buttons
+        .chunks(5)
+        .map(|row| {
+            let buttons: Vec<Value> = row
+                .iter()
+                .map(|b| json!({"type": 2, "style": 2, "label": b.label, "custom_id": b.data}))
+                .collect();
+            json!({"type": 1, "components": buttons})
+        })
+        .collect();
+    let mut rows = rows;
+    if let Some(select) = &message.select {
+        rows.push(select_menu(select));
+    }
+    json!(rows)
+}
+
+/// A multi-select as a string select menu (25 options at most): the
+/// submission's values are the picked options' numbers.
+fn select_menu(select: &Select) -> Value {
+    let options: Vec<Value> = select
+        .options
+        .iter()
+        .take(25)
+        .enumerate()
+        .map(|(i, label)| {
+            let label: String = label.chars().take(100).collect();
+            json!({"label": label, "value": (i + 1).to_string()})
+        })
+        .collect();
+    let count = options.len();
+    json!({"type": 1, "components": [{"type": 3, "custom_id": select.data,
+        "options": options, "min_values": 1, "max_values": count}]})
+}
+
+fn payload(message: &Outgoing) -> Value {
+    let mut body = json!({
+        "content": message.text,
+        "components": components(message),
+        "allowed_mentions": {"parse": []},
+    });
+    if let Some(reply) = &message.reply_to {
+        body["message_reference"] = json!({"message_id": reply, "fail_if_not_exists": false});
+    }
+    body
+}
+
+/// A new forum post of `message`: titled by its first line, its files on
+/// the starter message.
+fn forum_post(message: &Outgoing) -> Result<Body, SendError> {
+    let title = threads::post_title(if message.text.trim().is_empty() {
+        message.attachments.first().map_or("Message", |a| {
+            a.path.rsplit(['/', '\\']).next().unwrap_or("Message")
+        })
+    } else {
+        &message.text
+    });
+    if message.attachments.is_empty() {
+        return Ok(Body::Json(
+            json!({"name": title, "message": payload(message)}),
+        ));
+    }
+    form(
+        message,
+        |starter| json!({"name": title, "message": starter}),
+    )
+}
+
+/// A message with files, as Discord's multipart form.
+fn with_files(message: &Outgoing) -> Result<Body, SendError> {
+    form(message, |body| body)
+}
+
+/// The multipart form of `message`'s files, its `payload_json` the
+/// message payload as `wrap` places it.
+fn form(message: &Outgoing, wrap: impl FnOnce(Value) -> Value) -> Result<Body, SendError> {
+    let mut form = Form::new();
+    let mut attachments = Vec::new();
+    let mut files = Vec::new();
+    for (i, file) in message.attachments.iter().enumerate() {
+        let path = Path::new(&file.path);
+        let bytes = std::fs::read(path)
+            .map_err(|e| SendError::Permanent(format!("{}: {e}", path.display())))?;
+        let name = path
+            .file_name()
+            .map_or_else(|| format!("file{i}"), |n| n.to_string_lossy().into_owned());
+        attachments.push(json!({"id": i, "filename": name}));
+        files.push((format!("files[{i}]"), name, bytes));
+    }
+    let mut body = payload(message);
+    body["attachments"] = json!(attachments);
+    form.text("payload_json", &wrap(body).to_string());
+    for (field, name, bytes) in &files {
+        form.file(field, name, bytes);
+    }
+    let kind = form.content_type();
+    Ok(Body::Form(kind, form.finish()))
+}
+
+fn emoji(reaction: &Reaction) -> String {
+    percent_encoding::utf8_percent_encode(&reaction.emoji, percent_encoding::NON_ALPHANUMERIC)
+        .to_string()
+}
+
+impl Discord {
+    /// A new post in the forum `message.chat_id`.
+    async fn post(&self, api: &Api, message: &Outgoing) -> Result<Sent, SendError> {
+        let path = format!("/channels/{}/threads", message.chat_id);
+        let created = api.call(Method::POST, &path, forum_post(message)?).await?;
+        self.channels.learn(&created);
+        let id = created["message"]["id"]
+            .as_str()
+            .or_else(|| created["id"].as_str())
+            .map(str::to_owned);
+        Ok(Sent { message_id: id })
+    }
+}
+
+impl Adapter for Discord {
+    fn describe(&self) -> Descriptor {
+        let all: BTreeSet<MediaKind> = [
+            MediaKind::Image,
+            MediaKind::Audio,
+            MediaKind::Voice,
+            MediaKind::Video,
+            MediaKind::Document,
+        ]
+        .into_iter()
+        .collect();
+        let limit = pmt_config::platforms::first_party(PLATFORM)
+            .map_or(2000, |p| p.max_message_length as usize);
+        Descriptor {
+            supports_edit: true,
+            supports_delete: true,
+            supports_typing: true,
+            supports_reactions: true,
+            supports_threads: true,
+            interactive: Interactive::Native,
+            media_in: all.clone(),
+            media_out: all,
+            markup: Markup::Markdown,
+            stateless_send: true,
+            can_fetch_history: true,
+            exposes_roles: true,
+            private_replies: true,
+            ..Descriptor::new(PLATFORM, limit)
+        }
+    }
+
+    fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
+        Box::pin(async move {
+            let token = credential(&self.scope, &self.secret)?;
+            let api = self.api_with(token);
+            let me = api
+                .call(Method::GET, "/users/@me", Body::Empty)
+                .await
+                .map_err(|e| unreachable(&e))?;
+            if let Some(id) = me["id"].as_str() {
+                id.clone_into(&mut self.session.lock().expect("session poisoned").bot_id);
+            }
+            let url = self.gateway_url(&api).await?;
+            let stop = CancellationToken::new();
+            if let Some(old) = self
+                .connection
+                .lock()
+                .expect("connection poisoned")
+                .replace(stop.clone())
+            {
+                old.cancel();
+            }
+            *self.api.lock().expect("api poisoned") = Some(api.clone());
+            let run = gateway::Run {
+                api,
+                link,
+                session: Arc::clone(&self.session),
+                options: self.options.clone(),
+                channels: Arc::clone(&self.channels),
+                extra_ca: self.extra_ca.clone(),
+                proxy: self.proxy.clone(),
+                stop,
+            };
+            gateway::open(run, &url).await
+        })
+    }
+
+    fn disconnect(&self) -> AdapterFuture<'_, ()> {
+        if let Some(stop) = self.connection.lock().expect("connection poisoned").take() {
+            stop.cancel();
+        }
+        Box::pin(async {})
+    }
+
+    fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
+        let message = message.clone();
+        Box::pin(async move {
+            // A voice note is a message of its own (no text, one clip).
+            let (voices, files) = message
+                .attachments
+                .iter()
+                .cloned()
+                .partition(|f| f.as_voice);
+            let rest = Outgoing {
+                attachments: files,
+                ..message.clone()
+            };
+            let mut bodies = Vec::new();
+            if !rest.text.is_empty() || !rest.attachments.is_empty() || voices.is_empty() {
+                bodies.push(if rest.attachments.is_empty() {
+                    Body::Json(payload(&rest))
+                } else {
+                    with_files(&rest)?
+                });
+            }
+            for clip in &voices {
+                bodies.push(voice::message(Path::new(&clip.path))?);
+            }
+            let api = self.api()?;
+            let forum = message.thread_id.is_none()
+                && self
+                    .channels
+                    .get(&api, &message.chat_id)
+                    .await
+                    .is_some_and(|c| c.is_forum());
+            if forum {
+                return self.post(&api, &rest).await;
+            }
+            let path = format!("/channels/{}/messages", channel(&message));
+            let mut first = None;
+            for body in bodies {
+                let sent = api.call(Method::POST, &path, body).await?;
+                first = first.or_else(|| sent["id"].as_str().map(str::to_owned));
+            }
+            Ok(Sent { message_id: first })
+        })
+    }
+
+    fn edit<'a>(
+        &'a self,
+        message_id: &'a str,
+        message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let path = format!("/channels/{}/messages/{message_id}", channel(message));
+            let body =
+                Body::Json(json!({"content": message.text, "components": components(message)}));
+            self.api()?.call(Method::PATCH, &path, body).await.map(drop)
+        })
+    }
+
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let path = format!(
+                "/channels/{}/messages/{message_id}",
+                thread_id.unwrap_or(chat_id)
+            );
+            self.api()?
+                .call(Method::DELETE, &path, Body::Empty)
+                .await
+                .map(drop)
+        })
+    }
+
+    fn react<'a>(&'a self, reaction: &'a Reaction) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let path = format!(
+                "/channels/{}/messages/{}/reactions/{}/@me",
+                reaction.chat_id,
+                reaction.message_id,
+                emoji(reaction)
+            );
+            let method = if reaction.remove {
+                Method::DELETE
+            } else {
+                Method::PUT
+            };
+            self.api()?.call(method, &path, Body::Empty).await.map(drop)
+        })
+    }
+
+    fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
+        Box::pin(async move {
+            let path = format!("/channels/{chat_id}");
+            let found = self.api()?.call(Method::GET, &path, Body::Empty).await?;
+            let chat_type = match found["type"].as_u64() {
+                Some(1) => ChatType::Dm,
+                Some(3) => ChatType::Group,
+                Some(10..=12) => ChatType::Thread,
+                _ => ChatType::Channel,
+            };
+            let name = found["name"]
+                .as_str()
+                .or_else(|| found["recipients"][0]["username"].as_str())
+                .unwrap_or(chat_id)
+                .to_owned();
+            Ok(ChatInfo { name, chat_type })
+        })
+    }
+
+    fn member_roles<'a>(
+        &'a self,
+        inbound: &'a Inbound,
+    ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
+        Box::pin(async move {
+            let guild = inbound
+                .scope_id
+                .as_deref()
+                .ok_or_else(|| SendError::Permanent("roles exist only in a server".to_owned()))?;
+            let path = format!("/guilds/{guild}/members/{}", inbound.sender_id);
+            let member = self.api()?.call(Method::GET, &path, Body::Empty).await?;
+            Ok(member["roles"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|r| r.as_str().map(str::to_owned))
+                .collect())
+        })
+    }
+
+    fn resolve_role<'a>(&'a self, name: &'a str) -> AdapterFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let api = self.api().ok()?;
+            let guilds = api
+                .call(Method::GET, "/users/@me/guilds", Body::Empty)
+                .await
+                .ok()?;
+            for guild in guilds.as_array().into_iter().flatten() {
+                let Some(id) = guild["id"].as_str() else {
+                    continue;
+                };
+                let path = format!("/guilds/{id}/roles");
+                let Ok(roles) = api.call(Method::GET, &path, Body::Empty).await else {
+                    continue;
+                };
+                let found = roles.as_array().into_iter().flatten().find(|r| {
+                    r["name"]
+                        .as_str()
+                        .is_some_and(|n| n.eq_ignore_ascii_case(name))
+                });
+                if let Some(role) = found.and_then(|r| r["id"].as_str()) {
+                    return Some(role.to_owned());
+                }
+            }
+            None
+        })
+    }
+
+    fn fetch_history<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        limit: usize,
+    ) -> AdapterFuture<'a, Result<Vec<HistoryEntry>, SendError>> {
+        Box::pin(async move {
+            let channel = thread_id.unwrap_or(chat_id);
+            let path = format!("/channels/{channel}/messages?limit={}", limit.clamp(1, 100));
+            let found = self.api()?.call(Method::GET, &path, Body::Empty).await?;
+            let bot = self
+                .session
+                .lock()
+                .expect("session poisoned")
+                .bot_id
+                .clone();
+            // Discord lists the newest first.
+            let mut history: Vec<HistoryEntry> = found
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|m| {
+                    let author = m["author"]["id"].as_str()?.to_owned();
+                    Some(HistoryEntry {
+                        message_id: m["id"].as_str()?.to_owned(),
+                        author_name: m["author"]["global_name"]
+                            .as_str()
+                            .or_else(|| m["author"]["username"].as_str())
+                            .unwrap_or(&author)
+                            .to_owned(),
+                        from_self: author == bot,
+                        author_id: author,
+                        text: m["content"].as_str().unwrap_or_default().to_owned(),
+                    })
+                })
+                .collect();
+            history.reverse();
+            Ok(history)
+        })
+    }
+
+    fn send_typing<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let path = format!("/channels/{}/typing", thread_id.unwrap_or(chat_id));
+            self.api()?
+                .call(Method::POST, &path, Body::Empty)
+                .await
+                .map(drop)
+        })
+    }
+
+    fn credential_identity(&self) -> Option<String> {
+        credential(&self.scope, &self.secret).ok()
+    }
+
+    fn open_media<'a>(
+        &'a self,
+        attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        Box::pin(async move { self.api()?.download(&attachment.location).await })
+    }
+
+    fn register_commands<'a>(
+        &'a self,
+        commands: &'a [MenuCommand],
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            if !self.options.slash_commands {
+                return Ok(());
+            }
+            let api = self.api()?;
+            let known = self
+                .session
+                .lock()
+                .expect("session poisoned")
+                .application_id
+                .clone();
+            let application = match known {
+                Some(id) => id,
+                None => api
+                    .call(Method::GET, "/oauth2/applications/@me", Body::Empty)
+                    .await?["id"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| SendError::Server("no application id".to_owned()))?,
+            };
+            commands::register(&api, &application, commands).await
+        })
+    }
+
+    fn open_thread<'a>(
+        &'a self,
+        chat_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<String, SendError>> {
+        Box::pin(async move { self.channels.open_named(&self.api()?, chat_id, title).await })
+    }
+
+    fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let api = self.api()?;
+            // A pressed button or command: an ephemeral follow-up of its
+            // interaction (`<application>/<token>`), seen by the presser
+            // alone. Otherwise a direct message.
+            if let Some(interaction) = &to.interaction {
+                let body = Body::Json(json!({"content": to.text, "flags": 64}));
+                return api
+                    .call(Method::POST, &format!("/webhooks/{interaction}"), body)
+                    .await
+                    .map(drop);
+            }
+            let body = Body::Json(json!({"recipient_id": to.sender_id}));
+            let channel = api.call(Method::POST, "/users/@me/channels", body).await?;
+            let channel = channel["id"]
+                .as_str()
+                .ok_or_else(|| SendError::Server("Discord opened no DM channel".to_owned()))?;
+            let body = Body::Json(json!({"content": to.text}));
+            api.call(Method::POST, &format!("/channels/{channel}/messages"), body)
+                .await
+                .map(drop)
+        })
+    }
+
+    fn rename_thread<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        thread_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        Box::pin(async move {
+            let name: String = title.chars().take(100).collect();
+            let body = Body::Json(json!({"name": name}));
+            self.api()?
+                .call(Method::PATCH, &format!("/channels/{thread_id}"), body)
+                .await
+                .map(drop)
+        })
+    }
+
+    fn thread_titled<'a>(
+        &'a self,
+        _chat_id: &'a str,
+        thread_id: &'a str,
+        title: &'a str,
+    ) -> AdapterFuture<'a, ()> {
+        Box::pin(async move {
+            let Some(first) = self.channels.take_first_name(thread_id) else {
+                return;
+            };
+            let Ok(api) = self.api() else { return };
+            let path = format!("/channels/{thread_id}");
+            // Renamed only while nobody changed the first name.
+            let unchanged = api
+                .call(Method::GET, &path, Body::Empty)
+                .await
+                .is_ok_and(|c| c["name"].as_str() == Some(first.as_str()));
+            if unchanged {
+                let name: String = title.chars().take(100).collect();
+                let body = Body::Json(json!({"name": name}));
+                if let Err(err) = api.call(Method::PATCH, &path, body).await {
+                    tracing::debug!("thread not renamed: {}", err.describe());
+                }
+            }
+        })
+    }
+}

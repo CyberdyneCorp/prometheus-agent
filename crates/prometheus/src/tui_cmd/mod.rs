@@ -88,6 +88,8 @@ pub(crate) enum Ending {
     Signal(u8),
     /// `/update [flags]`: run the updater once the terminal is restored.
     Update(Vec<String>),
+    /// `/handoff`: the session went to a chat; print how to resume, exit 0.
+    Detached(String),
 }
 
 /// The message for `prometheus tui` without a terminal.
@@ -188,6 +190,10 @@ pub fn start(
         Ending::Quit => Ok(0),
         Ending::Signal(code) => Ok(code),
         Ending::Update(args) => update(&args, ctx),
+        Ending::Detached(line) => {
+            crate::output::print(&line)?;
+            Ok(0)
+        }
     }
 }
 

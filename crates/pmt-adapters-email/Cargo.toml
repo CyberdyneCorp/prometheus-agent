@@ -1,0 +1,41 @@
+[package]
+name = "pmt-adapters-email"
+description = "Prometheus first-party email adapter: IMAP polling and SMTP replies"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[features]
+# The mock platform server the conformance kit runs this adapter against
+# (`pub mod mock`, `prometheus plugins test-adapter`).
+kit = []
+
+[dependencies]
+# SMTP AUTH and MIME bodies.
+base64.workspace = true
+futures-util.workspace = true
+jiff.workspace = true
+# Inbound MIME: headers, encodings, charsets, multipart, HTML to text.
+mail-parser.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-gateway.workspace = true
+pmt-net.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-rustls.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# A self-signed TLS server for the certificate verification test.
+rcgen.workspace = true
+# The tests run the adapter against its mock.
+pmt-adapters-email = { path = ".", features = ["kit"] }
+pmt-store.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

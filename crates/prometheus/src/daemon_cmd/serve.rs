@@ -23,6 +23,7 @@ use std::time::Duration;
 use pmt_config::{DaemonConfig, Launch, Overrides, ProfileScope};
 use pmt_core::error::Error;
 use pmt_core::runtime::{Role, WriterLock};
+use pmt_gateway::messaging::Gateway;
 use pmt_gateway::{Exit, Identity, Server, ServerOptions};
 use tracing::Instrument as _;
 
@@ -35,7 +36,7 @@ use crate::context::Context;
 ///
 /// `home.locked` (75) when a daemon or chat holds the home, `config.*`
 /// (78) for `daemon.toml` or when no profile loads, listener errors.
-pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
+pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result<u8, Error> {
     let span = tracing::info_span!("daemon", component = "gateway");
     let _daemon = span.enter();
     let layout = ctx.home()?;
@@ -59,34 +60,92 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>) -> Result<u8, Error> {
         })?;
     let exit = runtime.block_on(
         async {
-            let host = Arc::new(DaemonHost::new(
-                scopes,
-                ctx.launch.clone(),
-                ctx.set.to_vec(),
-                launch_profile.as_str().to_owned(),
-            )?);
+            let host = Arc::new(
+                DaemonHost::new(
+                    scopes,
+                    ctx.launch.clone(),
+                    ctx.set.to_vec(),
+                    launch_profile.as_str().to_owned(),
+                )?
+                .with_turn_cap(config.gateway.limits.max_concurrent_sessions),
+            );
             let mut options = ServerOptions::new(identity(), host.names());
             options.rpc = config.daemon.rpc.clone();
             options.idle_session_close = Duration::from_secs(config.daemon.idle_session_close_secs);
+            options.max_live_client_sessions = config.gateway.limits.max_live_client_sessions;
             options.crash_reporter = Some(Arc::new(crate::startup::crash_reporter(
                 Some(&home.to_path_buf()),
                 ctx.launch,
             )));
             let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
-            let server = Server::new(options, host)?;
+            let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
+            let mut messaging =
+                super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
+            messaging.replace_locks = replace_locks;
+            let agents = Arc::clone(&host) as Arc<dyn pmt_gateway::messaging::Agents>;
+            match Gateway::start(Arc::clone(&server), agents, messaging).await {
+                Ok(gateway) => host.set_gateway(gateway),
+                Err(err) => {
+                    // The daemon cannot tell whether its last stop was clean.
+                    tracing::error!("{err}");
+                    eprint!("{}", crate::output::render_error(&err, false));
+                    watcher.abort();
+                    return Ok(pmt_core::exit::FAILURE);
+                }
+            }
+            super::inventory::register(
+                home,
+                ctx.launch,
+                enabled_adapters(&scopes_of(&server, &host)),
+            );
             let drain = Duration::from_secs(config.daemon.restart_drain_secs);
             let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
+            super::inventory::unregister(home, ctx.launch);
             watcher.abort();
-            exit
+            exit.map(exit_code)
         }
         .in_current_span(),
     )?;
     // Turns still running past the drain are abandoned with the runtime.
     runtime.shutdown_timeout(Duration::from_secs(1));
-    Ok(match exit {
+    Ok(exit)
+}
+
+/// The served profiles' scopes.
+fn scopes_of(server: &Server, host: &DaemonHost) -> Vec<ProfileScope> {
+    use pmt_gateway::messaging::Agents as _;
+    server
+        .profiles()
+        .iter()
+        .filter_map(|name| host.scope(name))
+        .collect()
+}
+
+/// The platforms each served profile enables, for the daemon registry.
+fn enabled_adapters(scopes: &[ProfileScope]) -> std::collections::BTreeMap<String, Vec<String>> {
+    scopes
+        .iter()
+        .map(|scope| {
+            let platforms = scope
+                .config()
+                .gateway
+                .platforms
+                .iter()
+                .filter(|(_, t)| t.enabled)
+                .map(|(name, _)| name.clone())
+                .collect();
+            (scope.name().as_str().to_owned(), platforms)
+        })
+        .collect()
+}
+
+/// The process exit status of a daemon stop.
+fn exit_code(exit: Exit) -> u8 {
+    match exit {
         Exit::Stopped => 0,
         Exit::Restart => pmt_core::exit::TEMPORARY_FAILURE,
-    })
+        Exit::AdaptersDown => pmt_core::exit::CONFIG,
+    }
 }
 
 pub(super) fn identity() -> Identity {

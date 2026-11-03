@@ -139,15 +139,155 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `gateway.accept_routes_from` | array of string | `[]` | any | `live` | Profiles whose `profile_routes` may route events to this one. |
+| `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
+| `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
+| `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
+| `gateway.background.max_per_chat` | integer | `3` | 1 to 100 | `live` | Background tasks one chat may have running at once; more are refused. |
+| `gateway.bots.allow_bots` | one of "none", "mentions", "all" | unset | `"none"`, `"mentions"`, `"all"` | `live` | `none` (default), `mentions` or `all`. |
+| `gateway.bots.burst_window_ms` | integer | unset | 0 to 60000 | `live` | Follow-up chunks of the same bot in the same chat within this many milliseconds join the same turn (default 1500). |
+| `gateway.bots.human_user_ids` | array | unset | any | `live` | Senders treated as people although their messages are marked as a bot's (posts made with the owner's own user token). |
+| `gateway.bots.platforms.<name>.allow_bots` | one of "none", "mentions", "all" | unset | `"none"`, `"mentions"`, `"all"` | `live` | `none` (default), `mentions` or `all`. |
+| `gateway.bots.platforms.<name>.burst_window_ms` | integer | unset | 0 to 60000 | `live` | Follow-up chunks of the same bot in the same chat within this many milliseconds join the same turn (default 1500). |
+| `gateway.bots.platforms.<name>.human_user_ids` | array | unset | any | `live` | Senders treated as people although their messages are marked as a bot's (posts made with the owner's own user token). |
+| `gateway.bots.platforms.<name>.require_inline_mention` | boolean | unset | any | `live` | An admitted bot message starts a turn only with a literal inline mention of this bot; a reply ping alone does not (default true). |
+| `gateway.bots.require_inline_mention` | boolean | unset | any | `live` | An admitted bot message starts a turn only with a literal inline mention of this bot; a reply ping alone does not (default true). |
+| `gateway.busy.ack` | boolean | `true` | any | `live` | Send one busy acknowledgement per conversation per 30 seconds. |
+| `gateway.busy.debounce_cap_ms` | integer | `1000` | 0 to 60000 | `live` | An input is never held longer than this for more text. |
+| `gateway.busy.debounce_ms` | integer | `350` | 0 to 10000 | `live` | Text arriving within this many milliseconds of the previous text joins it into one input. |
+| `gateway.busy.max_queued` | integer | `16` | 1 to 1000 | `live` | `/queue` entries kept per conversation. |
+| `gateway.chat_policies` | array of table | `[]` | any | `next_session` | Per-chat policies; each applies to sessions created after it changed (`/policy apply --now` replaces a chat's session at once). |
+| `gateway.dedup.max_entries` | integer | `2000` | 1 to 1000000 | `live` | Message ids remembered per adapter (the oldest are forgotten first). |
+| `gateway.dedup.ttl_secs` | integer | `300` | 1 to 86400 | `live` | A redelivered inbound event within this many seconds is dropped as a duplicate. |
+| `gateway.delivery.detect_paths` | boolean | `true` | any | `live` | Deliver files a final reply names by bare path (outside code) as uploads, removing the path from the text. |
+| `gateway.delivery.max_parts` | integer | `10` | 2 to 100 | `live` | A reply that would need more parts is sent as its first part plus a truncation notice, with the full text attached. |
+| `gateway.display.busy_ack_detail` | boolean | unset | any | `live` | Busy acknowledgements name what the running turn is doing (default false). |
+| `gateway.display.cleanup_progress` | boolean | unset | any | `live` | Delete the progress bubbles after a successful final reply on adapters that can delete (default false). |
+| `gateway.display.interim_assistant_messages` | boolean | unset | any | `live` | Send what the model says between tool calls (default true). |
+| `gateway.display.long_running_notifications` | boolean | unset | any | `live` | One edited `Working — <n> min` bubble every 180 seconds of a long turn (default true). |
+| `gateway.display.platforms.<name>.busy_ack_detail` | boolean | unset | any | `live` | Busy acknowledgements name what the running turn is doing (default false). |
+| `gateway.display.platforms.<name>.cleanup_progress` | boolean | unset | any | `live` | Delete the progress bubbles after a successful final reply on adapters that can delete (default false). |
+| `gateway.display.platforms.<name>.interim_assistant_messages` | boolean | unset | any | `live` | Send what the model says between tool calls (default true). |
+| `gateway.display.platforms.<name>.long_running_notifications` | boolean | unset | any | `live` | One edited `Working — <n> min` bubble every 180 seconds of a long turn (default true). |
+| `gateway.display.platforms.<name>.runtime_footer` | boolean | unset | any | `live` | Append a model / context / directory footer to final replies (default false; `/footer on\|off` per chat). |
+| `gateway.display.platforms.<name>.status_phrases.mode` | one of "append", "replace" | `"append"` | `"append"`, `"replace"` | `live` | `append` (default) or `replace`. |
+| `gateway.display.platforms.<name>.status_phrases.path` | string | unset | any | `live` | A file under the profile directory, one phrase per line (at most 80 phrases of 160 characters). |
+| `gateway.display.platforms.<name>.suppress_warning_notifications` | boolean | unset | any | `live` | Mute automatic warning and error notices on this destination (default false; logs and stored state are unchanged). |
+| `gateway.display.platforms.<name>.tool_preview_length` | integer | unset | 0 to 2000 | `live` | Characters of a tool call's arguments shown (default 40). |
+| `gateway.display.platforms.<name>.tool_progress` | one of "off", "new", "all", "verbose", "log" | unset | `"off"`, `"new"`, `"all"`, `"verbose"`, `"log"` | `live` | `off`, `new`, `all` (default; `off` on Telegram), `verbose` or `log`. |
+| `gateway.display.platforms.<name>.tool_progress_command` | boolean | unset | any | `live` | `/verbose` cycles the chat's tool progress mode (default false). |
+| `gateway.display.platforms.<name>.tool_progress_grouping` | one of "accumulate", "separate" | unset | `"accumulate"`, `"separate"` | `live` | `accumulate` (default: one edited bubble) or `separate`. |
+| `gateway.display.runtime_footer` | boolean | unset | any | `live` | Append a model / context / directory footer to final replies (default false; `/footer on\|off` per chat). |
+| `gateway.display.status_phrases.mode` | one of "append", "replace" | `"append"` | `"append"`, `"replace"` | `live` | `append` (default) or `replace`. |
+| `gateway.display.status_phrases.path` | string | unset | any | `live` | A file under the profile directory, one phrase per line (at most 80 phrases of 160 characters). |
+| `gateway.display.suppress_warning_notifications` | boolean | unset | any | `live` | Mute automatic warning and error notices on this destination (default false; logs and stored state are unchanged). |
+| `gateway.display.tool_preview_length` | integer | unset | 0 to 2000 | `live` | Characters of a tool call's arguments shown (default 40). |
+| `gateway.display.tool_progress` | one of "off", "new", "all", "verbose", "log" | unset | `"off"`, `"new"`, `"all"`, `"verbose"`, `"log"` | `live` | `off`, `new`, `all` (default; `off` on Telegram), `verbose` or `log`. |
+| `gateway.display.tool_progress_command` | boolean | unset | any | `live` | `/verbose` cycles the chat's tool progress mode (default false). |
+| `gateway.display.tool_progress_grouping` | one of "accumulate", "separate" | unset | `"accumulate"`, `"separate"` | `live` | `accumulate` (default: one edited bubble) or `separate`. |
+| `gateway.groups.free_response_chats` | array | unset | any | `live` | Chats answered without a mention. |
+| `gateway.groups.history_backfill` | boolean | unset | any | `live` | Give a mention-triggered turn the channel's messages since the bot's last reply (default true on Discord and Slack). |
+| `gateway.groups.history_backfill_limit` | integer | unset | 1 to 200 | `live` | The most channel messages backfilled (default 50). |
+| `gateway.groups.ignored_chats` | array | unset | any | `live` | Chats and threads that never start a turn. |
+| `gateway.groups.mention_patterns` | array | unset | any | `live` | Case-insensitive regular expressions that count as a mention (at most 32). |
+| `gateway.groups.observe_unmentioned` | boolean | unset | any | `live` | Keep unmentioned messages of authorized group chats in the chat's session as attributed context, without a turn (default false). |
+| `gateway.groups.platforms.<name>.free_response_chats` | array | unset | any | `live` | Chats answered without a mention. |
+| `gateway.groups.platforms.<name>.history_backfill` | boolean | unset | any | `live` | Give a mention-triggered turn the channel's messages since the bot's last reply (default true on Discord and Slack). |
+| `gateway.groups.platforms.<name>.history_backfill_limit` | integer | unset | 1 to 200 | `live` | The most channel messages backfilled (default 50). |
+| `gateway.groups.platforms.<name>.ignored_chats` | array | unset | any | `live` | Chats and threads that never start a turn. |
+| `gateway.groups.platforms.<name>.mention_patterns` | array | unset | any | `live` | Case-insensitive regular expressions that count as a mention (at most 32). |
+| `gateway.groups.platforms.<name>.observe_unmentioned` | boolean | unset | any | `live` | Keep unmentioned messages of authorized group chats in the chat's session as attributed context, without a turn (default false). |
+| `gateway.groups.platforms.<name>.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
+| `gateway.groups.platforms.<name>.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
+| `gateway.groups.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
+| `gateway.groups.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
+| `gateway.mcp_events.enabled` | boolean | `false` | any | `live` | Admit notifications of configured MCP servers that declare an `events` webhook route as signed internal events on that route (same delivery and toolset rules as a webhook request). |
+| `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
+| `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
+| `gateway.message_timestamps.enabled` | boolean | `false` | any | `next_session` | Prefix each user message the model sees with its send time in the profile's time zone (`[Tue 2026-04-28 13:40:53 CEST]`). Frozen per session when it is created: a change applies to new sessions. |
 | `gateway.multiplex` | boolean | `false` | any | `restart` | In the daemon's launch profile: serve every profile of the home (each in its own scope) instead of the launch profile only. |
-| `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | Platform user ids with the admin command tier. |
+| `gateway.notifications.background` | one of "concise", "all", "result", "error", "off" | `"concise"` | `"concise"`, `"all"`, `"result"`, `"error"`, `"off"` | `live` | Which background process and subagent events reach the chat. |
+| `gateway.outbox.max_age_secs` | integer | `86400` | ≥ 1 | `restart` | An entry older than this becomes `failed`. |
+| `gateway.outbox.max_attempts` | integer | `8` | 1 to 100 | `restart` | Send attempts before an entry becomes `failed`. |
+| `gateway.platforms.<name>.admins` | array of string | `[]` | any | `next_session` | User ids with every command in direct messages. |
 | `gateway.platforms.<name>.allow_all` | boolean | `false` | any | `next_session` | Admit everyone (logged at WARN on every start). |
 | `gateway.platforms.<name>.allow_chats` | array of string | `[]` | any | `next_session` | Chats every member of which is admitted. |
-| `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing. |
+| `gateway.platforms.<name>.allow_roles` | array of string | unset | any | `next_session` | Role ids whose holders are authorized (Discord roles, Slack user groups, Matrix power levels), checked right after `allow_users` on adapters that expose roles; a failed role lookup denies. |
+| `gateway.platforms.<name>.allow_users` | array of string | `[]` | any | `next_session` | Platform user ids admitted without pairing (no wildcards: use `allow_all`). |
+| `gateway.platforms.<name>.batching.delay_ms` | integer | `300` | 0 to 2000 | `next_session` | Text from the same sender within this many milliseconds joins the pending input. |
+| `gateway.platforms.<name>.batching.split_delay_ms` | integer | `1000` | 0 to 4000 | `next_session` | The wait after a part that filled the platform's limit (the client probably split a longer message); at least `delay_ms`. |
+| `gateway.platforms.<name>.busy.ack` | boolean | unset | any | `next_session` | Overrides `gateway.busy.ack`. |
+| `gateway.platforms.<name>.busy.debounce_cap_ms` | integer | unset | 0 to 60000 | `next_session` | Overrides `gateway.busy.debounce_cap_ms`. |
+| `gateway.platforms.<name>.busy.debounce_ms` | integer | unset | 0 to 10000 | `next_session` | Overrides `gateway.busy.debounce_ms`. |
+| `gateway.platforms.<name>.busy.input_mode` | one of "queue", "steer", "interrupt" | unset | `"queue"`, `"steer"`, `"interrupt"` | `next_session` | Overrides `busy.input_mode`. |
+| `gateway.platforms.<name>.busy.max_queued` | integer | unset | 1 to 1000 | `next_session` | Overrides `gateway.busy.max_queued`. |
 | `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
-| `gateway.platforms.<name>.home_channel` | string | unset | any | `next_session` | The chat that receives notifications and scheduled output. |
+| `gateway.platforms.<name>.group_admins` | array of string | `[]` | any | `next_session` | User ids with every command in groups. |
+| `gateway.platforms.<name>.home_channel.chat_id` | string | `""` | any | `next_session` | The chat id. |
+| `gateway.platforms.<name>.home_channel.name` | string | unset | any | `next_session` | A display name (also accepted as `platform:#name` in send targets). |
+| `gateway.platforms.<name>.home_channel.thread_id` | string | unset | any | `next_session` | The thread (forum topic) inside the chat. |
+| `gateway.platforms.<name>.human_delay_ms` | array | unset | any | `next_session` | A uniformly random delay `[min, max]` in milliseconds before each outbound part. Unset: none. |
+| `gateway.platforms.<name>.max_body_bytes` | integer | unset | 1024 to 16777216 | `next_session` | Largest request body a webhook route reads (`webhook` only), in bytes; larger requests are answered 413 unread. Unset: 1048576. |
+| `gateway.platforms.<name>.max_message_length` | integer | unset | ≥ 16 | `next_session` | Lowers the adapter's message length limit (in its own unit); it can never raise it. |
+| `gateway.platforms.<name>.options` | table | unset | any | `next_session` | The adapter's own settings, validated against the schema it publishes (`prometheus gateway platforms` lists the adapters). |
+| `gateway.platforms.<name>.proxy_url` | string | unset | any | `next_session` | The proxy this adapter's outbound HTTP and WebSocket traffic uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). Unset: `gateway.proxy_url`. |
+| `gateway.platforms.<name>.proxy_url_secret` | string | unset | a secret name | `next_session` | The secret holding this adapter's proxy URL when it carries credentials. |
+| `gateway.platforms.<name>.rate_limit.burst` | integer | unset | 1 to 10000 | `next_session` | Overrides `burst`. |
+| `gateway.platforms.<name>.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `next_session` | Overrides `daily_cost_usd`. |
+| `gateway.platforms.<name>.rate_limit.messages_per_minute` | integer | unset | 1 to 10000 | `next_session` | Overrides `messages_per_minute`. |
+| `gateway.platforms.<name>.rate_limit.turns_per_hour` | integer | unset | 1 to 100000 | `next_session` | Overrides `turns_per_hour`. |
+| `gateway.platforms.<name>.reactions` | boolean | unset | any | `next_session` | Mark the triggering message with processing reactions (eyes, then a check mark or a cross). Unset: on for Discord and Slack, off elsewhere. |
+| `gateway.platforms.<name>.reply_to_mode` | one of "off", "first", "all" | unset | `"off"`, `"first"`, `"all"` | `next_session` | Which parts of a reply quote the message they answer: none, the first part, or every part. Unset: `first`. |
+| `gateway.platforms.<name>.restart_notification` | boolean | unset | any | `next_session` | Post one notice to this platform's home channel after a graceful restart or update that interrupted running turns (default true). |
+| `gateway.platforms.<name>.routes.<name>.deliver` | string | unset | any | `next_session` | Where the answer goes: `origin` (the HTTP caller's response), `log` (recorded under `<profile>/logs/webhook/<route>.jsonl`), `github_comment` (a comment on the payload's pull request or issue) or a send target `platform[:chat_id[:thread_id]]`. Unset: `origin`. |
+| `gateway.platforms.<name>.routes.<name>.deliver_extra` | array of string | unset | any | `next_session` | More send targets that receive a copy. |
+| `gateway.platforms.<name>.routes.<name>.deliver_only` | boolean | `false` | any | `next_session` | Run no model: the rendered prompt is sent verbatim to `deliver`. |
+| `gateway.platforms.<name>.routes.<name>.events` | array of string | `[]` | any | `next_session` | Event types admitted (`X-GitHub-Event`, `X-GitLab-Event` or the payload's `event_type`); empty admits every event. |
+| `gateway.platforms.<name>.routes.<name>.filters` | any or array of any | unset | any | `next_session` | Conditions a payload must meet; a request that fails them is answered `ignored` with reason `filter`. |
+| `gateway.platforms.<name>.routes.<name>.github_token_secret` | string | unset | a secret name | `next_session` | The secret holding the GitHub token `github_comment` posts with. |
+| `gateway.platforms.<name>.routes.<name>.insecure_no_auth` | boolean | `false` | any | `next_session` | Admit unsigned requests (only while `gateway.http.listen` is a loopback address). |
+| `gateway.platforms.<name>.routes.<name>.mirror_to_session` | boolean | `false` | any | `next_session` | Append the delivered answer to each send target's chat session as an attributed assistant message. |
+| `gateway.platforms.<name>.routes.<name>.origin_wait_secs` | integer | `30` | 1 to 600 | `next_session` | With `deliver = "origin"`: seconds the HTTP caller is kept waiting for the answer; a run taking longer is answered 202 `accepted` and its answer goes to the route's log. |
+| `gateway.platforms.<name>.routes.<name>.prompt` | string | unset | any | `next_session` | The turn's input: `{a.b.c}` paths into the payload, `{__raw__}` the whole payload. Unset: the payload as JSON. |
+| `gateway.platforms.<name>.routes.<name>.rate_limit_per_min` | integer | `30` | 1 to 100000 | `next_session` | Requests per minute the route admits (fixed window); more are answered 429. |
+| `gateway.platforms.<name>.routes.<name>.script` | string | unset | any | `next_session` | A transform script under the profile's `scripts/` directory, run in the sandbox with the payload JSON on stdin. |
+| `gateway.platforms.<name>.routes.<name>.script_timeout_secs` | integer | `30` | 1 to 3600 | `next_session` | Seconds the transform script may run. |
+| `gateway.platforms.<name>.routes.<name>.secret_secret` | string | unset | a secret name | `next_session` | The secret every request must be signed with (GitHub, GitLab, Standard Webhooks or the generic scheme). |
+| `gateway.platforms.<name>.routes.<name>.skills` | array of string | unset | any | `next_session` | Skills preloaded into each delivery's session (ignored with `deliver_only`). |
+| `gateway.platforms.<name>.routes.<name>.toolsets` | array | unset | any | `next_session` | Toolsets of each delivery's session, replacing the default read-only `webhook-safe` toolset rather than adding to it; only toolsets the profile enables. |
+| `gateway.platforms.<name>.sessions.group_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.group_per_user`. |
+| `gateway.platforms.<name>.sessions.thread_per_user` | boolean | unset | any | `next_session` | Overrides `gateway.sessions.thread_per_user`. |
+| `gateway.platforms.<name>.streaming.enabled` | boolean | unset | any | `next_session` | `false` turns streaming off for this platform; `true` cannot turn it on while `gateway.streaming.enabled` is off. |
 | `gateway.platforms.<name>.token_secret` | string | unset | a secret name | `next_session` | The secret holding the adapter's credential (never the value). |
+| `gateway.platforms.<name>.typing_indicator` | boolean | unset | any | `next_session` | Show the platform's typing indicator while a turn runs. Unset: `true`. |
+| `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
+| `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
+| `gateway.profile_routes` | array of table | `[]` | any | `live` | Events this profile's adapters receive that belong to another served profile (one shared bot, several communities); the target must list this profile in its `accept_routes_from`. |
+| `gateway.proxy_url` | string | unset | any | `restart` | The proxy every adapter without its own `proxy_url` uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). |
+| `gateway.proxy_url_secret` | string | unset | a secret name | `restart` | The secret holding the shared proxy URL when it carries credentials. |
+| `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
+| `gateway.rate_limit.burst` | integer | `10` | 1 to 10000 | `live` | Messages a sender may send at once above the sustained rate. |
+| `gateway.rate_limit.daily_cost_usd` | number | unset | ≥ 0.0 | `live` | USD a sender's turns may cost per local day (from the usage ledger); unset is no cap. |
+| `gateway.rate_limit.messages_per_minute` | integer | `20` | 1 to 10000 | `live` | Messages a sender may send per minute (sustained rate). |
+| `gateway.rate_limit.turns_per_hour` | integer | `120` | 1 to 100000 | `live` | Turns a sender may start per hour. |
+| `gateway.reconnect_attention_secs` | integer | `600` | ≥ 0 | `live` | An adapter outside `connected` for longer than this is flagged for attention (`adapter.state`, `/platforms`, `gateway status`) and the profile's other home channels are told once per outage. |
+| `gateway.session_stall_timeout_secs` | integer | `900` | ≥ 0 | `live` | A running turn with no model output, tool progress or tool result for this long gets one no-progress notice in its chat; after twice as long it is interrupted as stalled. `0` disables the watchdog. |
+| `gateway.sessions.group_per_user` | boolean | `true` | any | `restart` | Each member of a non-thread group or channel gets a session of their own. |
+| `gateway.sessions.resume_pending_ttl_secs` | integer | `86400` | ≥ 1 | `restart` | A turn left `resume_pending` by a restart holds its chat's queue until `/retry` or `/discard`, at most this long; then it is discarded automatically. |
+| `gateway.sessions.route_max_age_secs` | integer | `7776000` | ≥ 0 | `restart` | Routes (conversation to session, never transcripts) unused this long are pruned; `0` keeps them forever. |
+| `gateway.sessions.stuck_loop_threshold` | integer | `3` | 1 to 100 | `restart` | A session whose turn was running during this many consecutive daemon restarts is suspended; its next message starts a new one. |
+| `gateway.sessions.thread_per_user` | boolean | `false` | any | `restart` | Each participant of a thread gets a session of their own. |
+| `gateway.shutdown.drain_timeout_secs` | integer | `30` | 1 to 3600 | `restart` | A stop whose conversations finish within this many seconds is clean: the next start skips crash recovery. |
 | `gateway.standalone` | boolean | `false` | any | `restart` | Never serve this profile from a multiplexing daemon (it gets a daemon of its own home). |
+| `gateway.streaming.buffer_threshold` | integer | `24` | 1 to 4096 | `live` | Characters gathered before the first draft is sent. |
+| `gateway.streaming.cursor` | string | `" ▉"` | any | `live` | Shown at the end of a draft still being written. |
+| `gateway.streaming.edit_interval_ms` | integer | `800` | 100 to 60000 | `live` | Least time between two edits of a draft. |
+| `gateway.streaming.enabled` | boolean | `false` | any | `live` | Stream answers while they are written. A platform can turn it off for itself, never on when this is off. |
+| `gateway.streaming.transport` | one of "auto", "native", "draft", "edit", "off" | `"auto"` | `"auto"`, `"native"`, `"draft"`, `"edit"`, `"off"` | `live` | How a streamed draft reaches the platform. |
+| `gateway.trust_env` | boolean | `false` | any | `restart` | Honour inherited proxy environment variables (`HTTPS_PROXY`, ...) and the OS proxy settings when no proxy is configured; off, adapters connect directly. |
+| `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
+| `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
+| `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
@@ -168,6 +308,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `network.extra_ca_file` | string | unset | any | `restart` | Extra PEM CA bundle trusted in addition to the platform store. |
 | `network.force_ipv4` | boolean | `false` | any | `restart` | Resolve and connect every outbound client (providers, MCP over HTTP, web tools, adapters, OTLP, downloads) over IPv4 only; loopback listeners are unaffected. Set it when `prometheus doctor network --online` reports a blackholed IPv6 route. |
 | `network.proxy` | string | unset | any | `restart` | Outbound HTTP(S) proxy URL. |
+| `observability.gateway_health.enabled` | boolean | `false` | any | `restart` | Export gateway health. Off by default: nothing is sent. |
+| `observability.gateway_health.endpoint` | string | unset | any | `restart` | The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`. |
+| `observability.gateway_health.interval_secs` | integer | `60` | 1 to 3600 | `restart` | Seconds between two exports. |
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |

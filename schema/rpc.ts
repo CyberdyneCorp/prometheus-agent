@@ -42,6 +42,22 @@ export interface Ack {
   ok: boolean;
 }
 
+/** `adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect). */
+export interface AdapterStatePayload {
+  /** Outside `connected` longer than `gateway.reconnect_attention_secs` (set once per outage, cleared on reconnect). */
+  attention?: boolean;
+  /** Error code of a `degraded`, `retrying` or `fatal` adapter. */
+  code?: string | null;
+  /** What happened. */
+  message?: string | null;
+  /** Platform name. */
+  platform: string;
+  /** The owning profile. */
+  profile: string;
+  /** `disabled`, `connecting`, `connected`, `degraded`, `retrying` or `fatal`. */
+  state: string;
+}
+
 /** How `prompt.submit` admitted an input (spec: tui, Prompt submission while busy). */
 export type Admission = "started" | "queued" | "steered";
 
@@ -424,6 +440,26 @@ export interface OpenRequest {
   params: unknown;
 }
 
+/** `pairing.approve` params. */
+export interface PairingApproveParams {
+  /** The code (spaces, dashes and case are ignored). */
+  code: string;
+  /** The platform the code was issued on. */
+  platform: string;
+  /** The profile; required when the connection is granted several. */
+  profile?: string | null;
+}
+
+/** `pairing.approve` result. */
+export interface PairingApproved {
+  /** The platform. */
+  platform: string;
+  /** The approved sender's platform id. */
+  sender_id: string;
+  /** The sender's display name, when known. */
+  sender_name?: string | null;
+}
+
 /** The daemon's build target and its support tier. */
 export interface PlatformSupport {
   /** The Rust target triple. */
@@ -706,6 +742,7 @@ export interface Methods {
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
   "model.options": { params: SessionRef; result: ModelOptions };
+  "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
@@ -733,6 +770,7 @@ export interface ServerRequests {
 }
 
 export interface Events {
+  "adapter.state": AdapterStatePayload;
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
@@ -781,7 +819,6 @@ export const UNDECLARED = [
   "moa.presets.delete",
   "moa.presets.list",
   "moa.presets.put",
-  "pairing.approve",
   "screen.handback",
   "screen.takeover",
   "subagent.subscribe",
@@ -802,7 +839,6 @@ export const UNDECLARED = [
   "worktree.prune",
   "worktree.status",
   "achievement.unlocked",
-  "adapter.state",
   "automation.state",
   "health.changed",
   "local_model.context_grown",

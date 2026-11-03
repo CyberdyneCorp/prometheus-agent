@@ -185,6 +185,14 @@ jobs:
           path: target/aarch64-linux-android/debug/prometheus
           if-no-files-found: error
 
+      # Supervisor units on Windows (messaging-gateway, Per-OS service
+      # installation without elevation): the Scheduled Task, its
+      # Startup-folder fallback when Task Scheduler refuses, and the daemon
+      # inventory under %LOCALAPPDATA%.
+      - name: Windows service install tests
+        if: runner.os == 'Windows'
+        run: cargo test -p prometheus --test gateway_service --features gateway --locked --target "${{ matrix.target }}"
+
       # Windows-only code with tests of its own: owner-only DACLs and
       # no-follow opens of private files (security-boundaries, Private file
       # modes). The full suite runs on the Unix check jobs.
@@ -442,8 +450,13 @@ jobs:
             exit 0
           fi
           git worktree add --detach "$RUNNER_TEMP/perf-base" FETCH_HEAD
+          # The base builds into a target dir of its own: cargo hashes path
+          # crates relative to the workspace root, so a shared dir gives base
+          # and head the same unit hashes, and the base checkout's newer
+          # mtimes make its stale crates look fresh to the head build.
+          mkdir -p "$GITHUB_WORKSPACE/target"
           (cd "$RUNNER_TEMP/perf-base" &&
-            CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" scripts/check --perf \
+            CARGO_TARGET_DIR="$RUNNER_TEMP/perf-base-target" scripts/check --perf \
               --update-baseline --baseline "$GITHUB_WORKSPACE/target/perf-base.json")
           echo "PERF_BASELINE=target/perf-base.json" >>"$GITHUB_ENV"
 

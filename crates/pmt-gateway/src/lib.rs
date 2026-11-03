@@ -12,7 +12,9 @@
 //!   and the read-only discovery methods;
 //! - [`hub`]: attachments, per-session event logs with replay, and
 //!   server-to-client requests;
-//! - [`host`]: the agent side the daemon serves sessions with.
+//! - [`host`]: the agent side the daemon serves sessions with;
+//! - [`messaging`]: the messaging gateway (adapters, conversations,
+//!   authorization and pairing, the delivery outbox, crash recovery).
 //!
 //! The protocol itself (frames, codes, catalog, client) is `pmt-rpc`.
 
@@ -22,9 +24,11 @@ pub mod daemon;
 pub mod discovery;
 pub mod host;
 pub mod hub;
+pub mod messaging;
 pub mod methods;
 pub mod router;
 pub mod server;
+pub mod slots;
 pub mod tickets;
 
 pub use daemon::{Exit, run};

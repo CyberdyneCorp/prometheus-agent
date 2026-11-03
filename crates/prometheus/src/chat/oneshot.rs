@@ -94,6 +94,12 @@ struct Report<'a> {
 /// Runs `prompt` as the session's one turn and prints the outcome;
 /// returns the exit status.
 pub async fn run(live: &Live, input: TurnInput, json: bool, run_budget: Option<Duration>) -> u8 {
+    // A paused home starts no turn (spec: messaging-gateway, Global
+    // emergency pause): exit 69 with the pause notice.
+    if let Err(err) = pmt_core::pause::check(live.scope.home()) {
+        crate::output::print_error(&err, json);
+        return err.exit_code();
+    }
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = run_budget;
     let interrupt = options.interrupt.clone();

@@ -63,6 +63,9 @@ pub struct ServerOptions {
     /// running turn, no open request and no queued input is closed after
     /// this long.
     pub idle_session_close: Duration,
+    /// `gateway.limits.max_live_client_sessions`: detached client sessions
+    /// kept loaded beyond it are unloaded, oldest first (`0`: no cap).
+    pub max_live_client_sessions: u32,
     /// Where a panicking request handler's crash report goes; `None`
     /// keeps none (the request still answers `-32099`).
     pub crash_reporter: Option<Arc<CrashReporter>>,
@@ -85,6 +88,7 @@ impl ServerOptions {
             limits: Limits::default(),
             abort_on_violation: cfg!(debug_assertions),
             idle_session_close: Duration::from_hours(1),
+            max_live_client_sessions: 16,
             crash_reporter: None,
             only_pid: None,
         }
@@ -163,7 +167,8 @@ pub struct Server {
     instance_id: String,
     catalog: Arc<Catalog>,
     digest: String,
-    profiles: Vec<String>,
+    /// Grows when `gateway reload` serves a profile created since start.
+    profiles: std::sync::RwLock<Vec<String>>,
     rpc: RpcListenerConfig,
     approvals_timeout: Duration,
     allowed_origins: Vec<String>,
@@ -185,6 +190,7 @@ pub struct Server {
     started_at: String,
     endpoint: OnceLock<Endpoint>,
     idle_session_close: Duration,
+    max_live_client_sessions: u32,
     crash_reporter: Option<Arc<CrashReporter>>,
     only_pid: Option<u32>,
     /// Sessions created with an idempotency key: (profile, key) to the
@@ -193,6 +199,10 @@ pub struct Server {
     /// Recent admissions by (session, input id), oldest first: a resent
     /// input gets its original admission.
     pub(crate) admitted: tokio::sync::Mutex<std::collections::VecDeque<Admitted>>,
+    /// The messaging gateway, once started.
+    messaging: OnceLock<crate::messaging::Gateway>,
+    /// Every messaging adapter failed for good and the policy is to exit.
+    adapters_down: AtomicBool,
 }
 
 /// One remembered `prompt.submit` admission.
@@ -237,7 +247,7 @@ impl Server {
             instance_id: random_hex(16),
             digest: catalog.digest(),
             catalog,
-            profiles: options.profiles,
+            profiles: std::sync::RwLock::new(options.profiles),
             rpc: options.rpc,
             approvals_timeout: options.approvals_timeout,
             allowed_origins: options.allowed_origins,
@@ -257,10 +267,13 @@ impl Server {
             started_at: jiff::Timestamp::now().to_string(),
             endpoint: OnceLock::new(),
             idle_session_close: options.idle_session_close,
+            max_live_client_sessions: options.max_live_client_sessions,
             crash_reporter: options.crash_reporter,
             only_pid: options.only_pid,
             created: tokio::sync::Mutex::default(),
             admitted: tokio::sync::Mutex::default(),
+            messaging: OnceLock::new(),
+            adapters_down: AtomicBool::new(false),
         };
         Ok(Arc::new(server))
     }
@@ -308,15 +321,40 @@ impl Server {
     }
 
     /// The profiles served.
+    ///
+    /// # Panics
+    ///
+    /// When the profile list's lock is poisoned.
     #[must_use]
-    pub fn profiles(&self) -> &[String] {
-        &self.profiles
+    pub fn profiles(&self) -> Vec<String> {
+        self.profiles.read().expect("profiles poisoned").clone()
+    }
+
+    /// Serves `profile` from now on (tickets may grant it); `false` when
+    /// it already was.
+    ///
+    /// # Panics
+    ///
+    /// When the profile list's lock is poisoned.
+    pub fn add_profile(&self, profile: &str) -> bool {
+        let mut profiles = self.profiles.write().expect("profiles poisoned");
+        if profiles.iter().any(|p| p == profile) {
+            return false;
+        }
+        profiles.push(profile.to_owned());
+        true
     }
 
     /// How long a session may stay without a client before it is closed.
     #[must_use]
     pub fn idle_session_close(&self) -> Duration {
         self.idle_session_close
+    }
+
+    /// Detached client sessions kept loaded at most (`0`: no cap).
+    #[must_use]
+    pub fn max_live_client_sessions(&self) -> usize {
+        self.max_live_client_sessions as usize
     }
 
     /// The only client pid tickets are issued to, when restricted.
@@ -373,6 +411,30 @@ impl Server {
             self.restart.store(true, Ordering::Relaxed);
         }
         self.stop.cancel();
+    }
+
+    /// Stops the daemon because every messaging adapter failed for good
+    /// (`gateway.on_all_adapters_down = "exit"`; exit 78).
+    pub fn request_fatal_stop(&self) {
+        self.adapters_down.store(true, Ordering::Relaxed);
+        self.request_stop(false);
+    }
+
+    /// Whether the stop is [`Server::request_fatal_stop`]'s.
+    #[must_use]
+    pub fn adapters_down(&self) -> bool {
+        self.adapters_down.load(Ordering::Relaxed)
+    }
+
+    /// Records the running messaging gateway (the first call wins).
+    pub fn set_messaging(&self, gateway: crate::messaging::Gateway) {
+        let _ = self.messaging.set(gateway);
+    }
+
+    /// The messaging gateway, when one runs.
+    #[must_use]
+    pub fn messaging(&self) -> Option<&crate::messaging::Gateway> {
+        self.messaging.get()
     }
 
     /// Whether the stop was for a restart.
@@ -455,12 +517,33 @@ impl Server {
             instance_id: self.instance_id.clone(),
             rpc_url: endpoint.map(|e| e.rpc_url.clone()).unwrap_or_default(),
             rpc_protocol: self.protocol().to_string(),
-            profiles: self.profiles.clone(),
+            profiles: self.profiles(),
             connections: self.connections.load(Ordering::Relaxed),
             sessions,
             active_turns,
             retiring: self.retiring(),
             config: self.host.config(),
+            adapters: self
+                .messaging()
+                .map(|m| {
+                    m.statuses()
+                        .into_iter()
+                        .map(|a| pmt_rpc::control::AdapterReport {
+                            profile: a.profile,
+                            platform: a.platform,
+                            state: serde_json::to_value(a.state)
+                                .ok()
+                                .and_then(|v| v.as_str().map(str::to_owned))
+                                .unwrap_or_default(),
+                            code: a.code,
+                            message: a.message,
+                            attention: a.attention,
+                            paused: a.paused,
+                            descriptor: a.descriptor.and_then(|d| serde_json::to_value(d).ok()),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 }

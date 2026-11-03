@@ -211,6 +211,42 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         schema: "prometheus.daemon_status.v1",
         command: "daemon status",
     },
+    JsonShape {
+        schema: "prometheus.gateway_status.v1",
+        command: "gateway status",
+    },
+    JsonShape {
+        schema: "prometheus.gateway_platforms.v1",
+        command: "gateway platforms",
+    },
+    JsonShape {
+        schema: "prometheus.gateway_outbox.v1",
+        command: "gateway outbox list",
+    },
+    JsonShape {
+        schema: "prometheus.pairing.v1",
+        command: "pairing list",
+    },
+    JsonShape {
+        schema: "prometheus.gateway_send.v1",
+        command: "gateway send",
+    },
+    JsonShape {
+        schema: "prometheus.gateway_targets.v1",
+        command: "gateway send --list",
+    },
+    JsonShape {
+        schema: "prometheus.gateway_list.v1",
+        command: "gateway list",
+    },
+    JsonShape {
+        schema: "prometheus.pause.v1",
+        command: "pause status",
+    },
+    JsonShape {
+        schema: "prometheus.gateway_pause.v1",
+        command: "gateway pause",
+    },
 ];
 
 /// Writes `value` as one compact JSON document and a newline.

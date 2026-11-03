@@ -1,0 +1,36 @@
+[package]
+name = "pmt-adapters-signal"
+description = "Prometheus first-party Signal adapter: a signal-cli HTTP daemon (SSE events, JSON-RPC sends)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[features]
+# The mock platform server the conformance kit runs this adapter against
+# (`pub mod mock`, `prometheus plugins test-adapter`).
+kit = []
+
+[dependencies]
+futures-util.workspace = true
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-gateway.workspace = true
+base64.workspace = true
+pmt-net.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# The tests run the adapter against its mock.
+pmt-adapters-signal = { path = ".", features = ["kit"] }
+pmt-store.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

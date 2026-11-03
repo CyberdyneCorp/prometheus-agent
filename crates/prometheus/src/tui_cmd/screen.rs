@@ -83,6 +83,8 @@ pub(super) enum Done {
     Show(String),
     /// The switcher closed a live session.
     Close(String),
+    /// `/handoff` answered: the line to print as the TUI leaves.
+    HandedOff(Result<String, Error>),
 }
 
 /// The TUI's state.

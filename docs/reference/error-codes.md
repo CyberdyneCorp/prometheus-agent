@@ -96,7 +96,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `backup.io` | `io` | 74 | A backup archive or snapshot could not be written or read. |
 | `snapshot.not_found` | `not_found` | 66 | No snapshot of this profile has the given id; list them with `prometheus snapshots list`. |
 | `output.io` | `io` | 74 | Writing the command's output to stdout (for example into a closed pipe) or reading an answer from stdin failed. |
-| `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build. |
+| `surface.not_included` | `unavailable` | 69 | The invoked surface (tui, gateway, dashboard, acp, mcp, evolve, eval) is not included in this build, or `plugins test-adapter <platform>` ran in a build without the first-party adapter kits (`adapter-kits` feature). |
 | `profile.id_invalid` | `config` | 78 | The profile's `profile_id` file is unreadable or does not hold a `prof_<ULID>` id; restore it from a backup. |
 | `store.profile_mismatch` | `config` | 78 | The profile's `state.db` records another profile's id (it was copied from another profile); nothing was written. Restore the profile's own database or move the file away. |
 | `store.schema_too_new` | `config` | 78 | `state.db` has a newer schema than this build supports: it is read-only (or unreadable when the newer build says so). Update Prometheus. |
@@ -291,3 +291,24 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `rpc.request_settled` | `conflict` | 75 | The server-to-client request already settled (answered, timed out or cancelled); the late answer changed nothing. |
 | `rpc.internal` | `internal` | 70 | The daemon's handler for the method failed unexpectedly (a crash report was written); the connection stays open. |
 | `tui.not_a_terminal` | `usage` | 2 | `prometheus tui` needs stdin and stdout to be terminals; use `prometheus chat` (line mode or one-shot) when piping. |
+| `gateway.pairing_locked` | `permission_denied` | 77 | Five failed pairing approvals locked pairing for that platform for an hour; wait until the stated time. |
+| `gateway.pairing_unknown` | `not_found` | 66 | No pending pairing request has that code (it may have expired after an hour); ask the sender to message the bot again for a new code. |
+| `gateway.pairing_not_found` | `not_found` | 66 | No pairing entry matches; `prometheus pairing list` shows pending and approved entries. |
+| `gateway.outbox_entry` | `not_found` | 66 | No outbox entry with that id is in a state the action applies to; `prometheus gateway outbox list` shows the entries. |
+| `gateway.recovery` | `io` | 74 | The daemon could not remove `<home>/run/clean_shutdown`, so it cannot tell whether the last stop was clean; fix the file's permissions and start again. |
+| `gateway.pairing_timeout` | `conflict` | 75 | The phone did not link within the pairing window (120 seconds); run `prometheus gateway whatsapp pair` again and scan the newest QR code (or use `--pairing-code <phone>`). |
+| `gateway.no_adapter` | `unavailable` | 69 | The profile has no running adapter for the platform; enable it under `[gateway.platforms.<name>]` and run `prometheus gateway reload`. |
+| `gateway.all_adapters_down` | `config` | 78 | Every messaging adapter stopped with a non-retryable error and `gateway.on_all_adapters_down = "exit"`; fix the adapters' configuration or credentials, or set it to `stay_alive`. |
+| `pause.active` | `unavailable` | 69 | The home is paused (`<home>/run/paused`): no new turns or scheduled work start until `prometheus pause off` (or `/pause off` from an admin chat). |
+| `gateway.no_home_channel` | `not_found` | 66 | The delivery names only a platform and that platform has no home channel; run /sethome in the target chat or name the chat (`platform:chat_id`). |
+| `gateway.unknown_target` | `not_found` | 66 | The target is not `platform`, `platform:chat_id`, `platform:chat_id:thread_id` or `platform:#channel-name`, or names a channel nobody knows; `prometheus gateway send --list` shows the known targets. |
+| `gateway.platform_not_configured` | `config` | 78 | The profile does not enable that platform; add `[gateway.platforms.<name>]` with `enabled = true` and its credential. |
+| `gateway.daemon_required` | `unavailable` | 69 | The platform's adapter cannot send without a running connection; start the daemon with `prometheus daemon start` and send again. |
+| `gateway.delivery_failed` | `tool` | 1 | The message was not delivered; `prometheus gateway outbox list` shows the entry and its last error. |
+| `gateway.target_refused` | `permission_denied` | 77 | The tool may send only to a platform's home channel, a chat in `allow_chats` or a chat the profile already has a session in. |
+| `gateway.enroll_rejected` | `config` | 78 | The relay connector refused the enrollment token (already used, expired or unknown); ask the relay operator for a new one-time token. |
+| `gateway.relay` | `unavailable` | 69 | The relay connector could not be reached over TLS or sent an unexpected answer; check `gateway.relay.url` (or `--connector-url`) and the network. |
+| `plugins.host_unavailable` | `unavailable` | 69 | The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`) in a build with the `adapter-kits` feature. |
+| `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
+| `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |
+| `service.unsupported` | `unavailable` | 69 | `prometheus daemon install-service` knows systemd (Linux), launchd (macOS) and Task Scheduler (Windows); on other OSes (Android/Termux, the BSDs) run `prometheus daemon run` under your own supervisor. |

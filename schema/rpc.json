@@ -14,6 +14,51 @@
       ],
       "type": "object"
     },
+    "AdapterStatePayload": {
+      "additionalProperties": false,
+      "description": "`adapter.state` payload: one messaging adapter changed state (spec:\nplatform-adapters, Adapter state reporting and reconnect).",
+      "properties": {
+        "attention": {
+          "default": false,
+          "description": "Outside `connected` longer than `gateway.reconnect_attention_secs`\n(set once per outage, cleared on reconnect).",
+          "type": "boolean"
+        },
+        "code": {
+          "default": null,
+          "description": "Error code of a `degraded`, `retrying` or `fatal` adapter.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "default": null,
+          "description": "What happened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "Platform name.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The owning profile.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`disabled`, `connecting`, `connected`, `degraded`, `retrying` or\n`fatal`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "platform",
+        "state"
+      ],
+      "type": "object"
+    },
     "Admission": {
       "description": "How `prompt.submit` admitted an input (spec: tui, Prompt submission\nwhile busy).",
       "oneOf": [
@@ -1202,6 +1247,59 @@
       ],
       "type": "object"
     },
+    "PairingApproveParams": {
+      "additionalProperties": false,
+      "description": "`pairing.approve` params.",
+      "properties": {
+        "code": {
+          "description": "The code (spaces, dashes and case are ignored).",
+          "type": "string"
+        },
+        "platform": {
+          "description": "The platform the code was issued on.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile; required when the connection is granted several.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "platform",
+        "code"
+      ],
+      "type": "object"
+    },
+    "PairingApproved": {
+      "additionalProperties": false,
+      "description": "`pairing.approve` result.",
+      "properties": {
+        "platform": {
+          "description": "The platform.",
+          "type": "string"
+        },
+        "sender_id": {
+          "description": "The approved sender's platform id.",
+          "type": "string"
+        },
+        "sender_name": {
+          "description": "The sender's display name, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "platform",
+        "sender_id"
+      ],
+      "type": "object"
+    },
     "PlatformSupport": {
       "additionalProperties": false,
       "description": "The daemon's build target and its support tier.",
@@ -2056,8 +2154,10 @@
       "since": "1.0"
     },
     "adapter.state": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "payload": {
+        "$ref": "#/$defs/AdapterStatePayload"
+      },
       "since": "1.0"
     },
     "automation.state": {
@@ -2408,8 +2508,13 @@
       "since": "1.0"
     },
     "pairing.approve": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "params": {
+        "$ref": "#/$defs/PairingApproveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PairingApproved"
+      },
       "since": "1.0"
     },
     "prompt.submit": {

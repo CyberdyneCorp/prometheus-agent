@@ -29,6 +29,9 @@ pub enum Exit {
     /// Stopped to be replaced (`daemon restart`; exit 75 so a supervisor
     /// restarts it).
     Restart,
+    /// Every messaging adapter failed for good under
+    /// `gateway.on_all_adapters_down = "exit"` (exit 78, no restart).
+    AdaptersDown,
 }
 
 /// Serves `server` for the home whose writer lock `lock` is, until a stop
@@ -74,13 +77,18 @@ pub async fn run(
         () = server.stop.cancelled() => {}
         () = shutdown => server.request_stop(false),
     }
+    if let Some(messaging) = server.messaging() {
+        messaging.shutdown().await;
+    }
     server.host().drain(drain).await;
     server.closing.cancel();
     let _ = accept_task.await;
     reap_task.abort();
     let _ = control_task.await;
     wait_for_connections(&server).await;
-    Ok(if server.restart_requested() {
+    Ok(if server.adapters_down() {
+        Exit::AdaptersDown
+    } else if server.restart_requested() {
         Exit::Restart
     } else {
         Exit::Stopped
@@ -118,6 +126,39 @@ async fn reap(server: Arc<Server>) {
             close_idle(&server, &session, &profile, idle)
                 .instrument(span)
                 .await;
+        }
+        evict_beyond_cap(&server).await;
+    }
+}
+
+/// Unloads the least recently attended detached sessions beyond
+/// `gateway.limits.max_live_client_sessions` (spec: messaging-gateway,
+/// Concurrency caps across surfaces); a session the host keeps (a running
+/// turn, queued input) is skipped. Sessions the messaging gateway routes
+/// stay attached to it, so only client sessions count.
+pub(crate) async fn evict_beyond_cap(server: &Server) {
+    let cap = server.max_live_client_sessions();
+    if cap == 0 {
+        return;
+    }
+    let detached = server.hub().detached();
+    let mut excess = detached.len().saturating_sub(cap);
+    for (session, profile) in detached {
+        if excess == 0 {
+            return;
+        }
+        match server.host().unload_idle(&profile, &session).await {
+            Ok(true) => {
+                tracing::info!(
+                    profile,
+                    session_id = session,
+                    "unloaded a detached session over the cap"
+                );
+                server.hub().closed(&session);
+                excess -= 1;
+            }
+            Ok(false) => {}
+            Err(err) => tracing::warn!("cannot unload a detached session: {err}"),
         }
     }
 }

@@ -218,7 +218,24 @@ impl Tui<'_> {
                 self.ending = Some(Ending::Update(words));
             }
             Local::New | Local::Resume | Local::Fork => self.switch(command, args),
+            Local::Handoff => self.handoff(args),
         }
+    }
+
+    /// `/handoff <destination>`: refused while a turn runs; once the
+    /// daemon moved the session, the TUI leaves.
+    fn handoff(&mut self, args: &str) {
+        if self.app.status.busy {
+            self.notice("/handoff is unavailable while the agent is working; stop it first");
+            return;
+        }
+        let home = self.open.home.clone();
+        let profile = self.open.scope.name().to_string();
+        let session = self.link.session.clone();
+        let target = args.to_owned();
+        self.background(async move {
+            Done::HandedOff(crate::chat::handoff::handoff(&home, &profile, &session, &target).await)
+        });
     }
 
     /// `/copy`: the last answer to the system clipboard with OSC 52, which

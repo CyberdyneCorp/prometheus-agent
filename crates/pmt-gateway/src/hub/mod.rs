@@ -190,6 +190,9 @@ struct State {
     owners: HashMap<String, (ConnId, Option<u32>)>,
     /// Recently settled request ids, oldest first.
     settled: VecDeque<String>,
+    /// Recently taken answers (`id`, answer, answering client), oldest
+    /// first, so a surface can show what another one decided.
+    answers: VecDeque<(String, Value, String)>,
 }
 
 impl State {
@@ -209,6 +212,8 @@ pub struct Hub {
     limits: Limits,
     violations: Arc<Violations>,
     state: Mutex<State>,
+    /// The sequence of daemon-wide events.
+    daemon_seq: std::sync::atomic::AtomicU64,
 }
 
 /// One event to send: the frame and who may see it.
@@ -232,6 +237,7 @@ impl Hub {
             limits,
             violations,
             state: Mutex::default(),
+            daemon_seq: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -367,6 +373,27 @@ impl Hub {
             .collect()
     }
 
+    /// Sessions no client is attached to and that have no open request,
+    /// least recently attended first: `(session, profile)`.
+    pub fn detached(&self) -> Vec<(String, String)> {
+        let state = self.state();
+        let mut found: Vec<(Instant, String, String)> = state
+            .sessions
+            .iter()
+            .filter(|(_, log)| log.attached.is_empty() && !log.profile.is_empty())
+            .filter(|(id, _)| !state.requests.values().any(|p| &p.session_id == *id))
+            .filter_map(|(id, log)| {
+                log.unattended_since
+                    .map(|since| (since, id.clone(), log.profile.clone()))
+            })
+            .collect();
+        found.sort();
+        found
+            .into_iter()
+            .map(|(_, id, profile)| (id, profile))
+            .collect()
+    }
+
     /// The host closed `session_id`: it is no longer a reaping candidate
     /// until a client attaches and leaves again.
     pub fn closed(&self, session_id: &str) {
@@ -433,6 +460,38 @@ impl Hub {
         };
         for (session, id) in orphaned {
             self.cancel_event(&session, &id, "no_responder");
+        }
+    }
+
+    /// Sends a daemon-level event (no session, not logged) to every
+    /// connection attached to a session of `profile`, once each, except
+    /// `except` (the sender's own connection).
+    pub fn broadcast(&self, profile: &str, event: &str, data: Value, except: ConnId) {
+        if let Err(violation) = self.catalog.check_outbound(event, &data, false) {
+            self.violations.report(event, &violation);
+            return;
+        }
+        let peers: Vec<Peer> = {
+            let state = self.state();
+            let mut seen = std::collections::HashSet::new();
+            state
+                .sessions
+                .values()
+                .filter(|log| log.profile == profile)
+                .flat_map(|log| log.attached.iter())
+                .filter(|(conn, _)| **conn != except && seen.insert(**conn))
+                .map(|(_, peer)| peer.clone())
+                .collect()
+        };
+        let envelope = Envelope {
+            event: event.to_owned(),
+            session_id: None,
+            seq: self.daemon_seq.fetch_add(1, Ordering::Relaxed) + 1,
+            epoch: self.epoch.clone(),
+            data,
+        };
+        for peer in &peers {
+            self.send_event(peer, &envelope);
         }
     }
 
@@ -696,9 +755,26 @@ impl Hub {
         };
         state.settle(id);
         if let Ok(value) = answer {
+            if state.answers.len() == SETTLED_KEPT {
+                state.answers.pop_front();
+            }
+            state
+                .answers
+                .push_back((id.to_owned(), value.clone(), by_client.to_owned()));
             let _ = pending.reply.send((value, by_client.to_owned()));
         }
         Answered::Taken
+    }
+
+    /// The answer that settled request `id` and the client that gave it,
+    /// while it is among the recently settled ones.
+    #[must_use]
+    pub fn answer_of(&self, id: &str) -> Option<(Value, String)> {
+        self.state()
+            .answers
+            .iter()
+            .find(|(settled, _, _)| settled == id)
+            .map(|(_, value, by)| (value.clone(), by.clone()))
     }
 
     /// The session of an open request.

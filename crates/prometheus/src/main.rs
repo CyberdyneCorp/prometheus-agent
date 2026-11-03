@@ -69,6 +69,15 @@ fn main() -> ExitCode {
         ),
     };
     pmt_config::managed::init(&managed_dir, owner);
+    // A quick command never shadows a command of the shared registry
+    // (spec: messaging-gateway, Gateway slash commands, quick commands and
+    // hooks): the names are reserved before any config loads.
+    pmt_config::gateway_check::reserve_command_names(prometheus::slash::reserved_names());
+    pmt_config::gateway_check::register_toolsets(prometheus::tools_cmd::expand_toolsets);
+    pmt_config::gateway_check::register_skills(prometheus::skills_cmd::policy_skill_resolver(
+        launch.user_home().cloned(),
+    ));
+    pmt_config::gateway_check::register_roles(prometheus::daemon_client::role_resolver());
     let home = pmt_config::home::resolve(cli.home.as_deref(), &launch)
         .ok()
         .filter(|_| !matches!(cli.command, Some(Command::Demo(_))));
@@ -120,10 +129,16 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Toolsets { command }) => tools_cmd::toolsets(command, &ctx),
         Some(Command::Approvals { command }) => approvals_cmd::run(command, &ctx),
         Some(Command::Update(args)) => update_cmd::run(args, &ctx),
+        Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
+        #[cfg(feature = "gateway")]
+        Some(Command::Gateway { command }) => prometheus::daemon_cmd::gateway(command, &ctx),
+        #[cfg(feature = "gateway")]
+        Some(Command::Pairing { command }) => prometheus::daemon_cmd::pairing(command, &ctx),
         #[cfg(not(feature = "gateway"))]
         Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
+        Some(Command::Plugins { command }) => prometheus::plugins_cmd::run(command),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),

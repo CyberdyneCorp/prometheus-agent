@@ -259,6 +259,8 @@ impl Tui<'_> {
             Done::Clipboard(grabbed) => self.clipboard_read(grabbed),
             Done::Show(id) => self.shown(&id).await,
             Done::Close(id) => self.closed(&id).await,
+            Done::HandedOff(Ok(line)) => self.ending = Some(super::Ending::Detached(line)),
+            Done::HandedOff(Err(err)) => self.error(&err),
         }
     }
 

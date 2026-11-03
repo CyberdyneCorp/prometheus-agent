@@ -129,16 +129,17 @@ stacked: `/pdf /summarise report.pdf`). User commands live in
 `[quick_commands.<name>]`: `type = "alias"` re-dispatches `target` with
 your arguments appended; `type = "exec"` runs `command` on the session's
 sandboxed terminal without any secret in its environment, output
-redacted, killed after `timeout_secs` (default 30). Built-in commands win
-over quick commands, which win over plugin and skill commands; a name two
-of those share is logged once as a WARN at startup.
+redacted, killed after `timeout_secs` (default 30). A quick command named
+like a built-in command (or one of its aliases) fails config validation;
+quick commands win over plugin and skill commands, and a name two of
+those share is logged once as a WARN at startup.
 
 ```toml
 [quick_commands.ship]
 type = "alias"
 target = "/title"
 
-[quick_commands.status]
+[quick_commands.gs]
 type = "exec"
 command = "git status --short"
 timeout_secs = 10

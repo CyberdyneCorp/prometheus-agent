@@ -1,15 +1,36 @@
 //! The `[gateway]` section: how a profile takes part in the home's gateway
-//! daemon (spec: configuration-and-profiles, Served profile set).
+//! daemon (spec: configuration-and-profiles, Served profile set) and how
+//! its messaging conversations are routed, queued, authorized and
+//! delivered (spec: messaging-gateway). Daemon-wide gateway keys
+//! (`gateway.http.*`, `gateway.relay.*`, `gateway.on_all_adapters_down`)
+//! live in `daemon.toml`, never here.
 
 use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::SecretName;
+use super::BusyInputMode;
+pub use super::gateway_display::{
+    ChatToolProgress, EffectiveDisplay, GatewayDisplay, MessageTimestamps, PhraseMode,
+    PlatformDisplay, StatusPhrases,
+};
+pub use super::gateway_groups::{
+    AllowBots, EffectiveBots, EffectiveGroups, GatewayBots, GatewayGroups, PlatformBots,
+    PlatformGroups,
+};
+pub use super::gateway_platform::{
+    Batching, DedupConfig, DeliveryConfig, MediaConfig, PlatformBusy, PlatformConfig,
+    PlatformSessions, PlatformStreaming, ReplyToMode, UnauthorizedDm, VoiceConfig, VoiceReplyMode,
+    WebhookRoute,
+};
+pub use super::gateway_policy::{
+    ChatPolicy, HomeChannel, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,
+    resolve_policy,
+};
 
 /// The `[gateway]` section.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "restart"))]
 pub struct GatewayConfig {
@@ -24,27 +45,507 @@ pub struct GatewayConfig {
     /// unless `--clone-channels` is given, so two profiles never answer
     /// the same bot account.
     #[schemars(extend("x-apply" = "next_session"))]
+    #[serde(deserialize_with = "super::gateway_platform::lower_case_platforms")]
     pub platforms: BTreeMap<String, PlatformConfig>,
+    /// How conversations map to sessions.
+    pub sessions: GatewaySessions,
+    /// Input that arrives while a turn runs (the mode itself is
+    /// `busy.input_mode`, overridable per platform).
+    #[schemars(extend("x-apply" = "live"))]
+    pub busy: GatewayBusy,
+    /// `exec` quick commands run from a chat.
+    #[schemars(extend("x-apply" = "live"))]
+    pub quick_commands: GatewayQuickCommands,
+    /// Token streaming to platforms.
+    #[schemars(extend("x-apply" = "live"))]
+    pub streaming: StreamingConfig,
+    /// Notifications of background work.
+    #[schemars(extend("x-apply" = "live"))]
+    pub notifications: NotificationsConfig,
+    /// The durable delivery outbox.
+    pub outbox: OutboxConfig,
+    /// Stopping the daemon (read from the launch profile).
+    pub shutdown: ShutdownConfig,
+    /// Live agents kept in memory (read from the launch profile).
+    pub agent_cache: AgentCacheConfig,
+    /// Per-sender rate limits (overridable per platform and chat policy).
+    #[schemars(extend("x-apply" = "live"))]
+    pub rate_limit: RateLimitConfig,
+    /// Per-chat policies; each applies to sessions created after it
+    /// changed (`/policy apply --now` replaces a chat's session at once).
+    #[schemars(extend("x-apply" = "next_session"))]
+    pub chat_policies: Vec<ChatPolicy>,
+    /// Redelivered inbound events.
+    #[schemars(extend("x-apply" = "live"))]
+    pub dedup: DedupConfig,
+    /// Long replies.
+    #[schemars(extend("x-apply" = "live"))]
+    pub delivery: DeliveryConfig,
+    /// Inbound media.
+    #[schemars(extend("x-apply" = "live"))]
+    pub media: MediaConfig,
+    /// Voice messages in and out.
+    #[schemars(extend("x-apply" = "live"))]
+    pub voice: VoiceConfig,
+    /// The proxy every adapter without its own `proxy_url` uses
+    /// (`http://`, `https://` or `socks5://`, without a password; a URL
+    /// with credentials goes in a secret named by `proxy_url_secret`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url: Option<String>,
+    /// The secret holding the shared proxy URL when it carries
+    /// credentials.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_url_secret: Option<super::SecretName>,
+    /// Honour inherited proxy environment variables (`HTTPS_PROXY`, ...)
+    /// and the OS proxy settings when no proxy is configured; off, adapters
+    /// connect directly.
+    pub trust_env: bool,
+    /// A running turn with no model output, tool progress or tool result
+    /// for this long gets one no-progress notice in its chat; after twice
+    /// as long it is interrupted as stalled. `0` disables the watchdog.
+    #[schemars(extend("x-apply" = "live"))]
+    pub session_stall_timeout_secs: Seconds<900>,
+    /// How turns look in a chat (tool progress, footers, notices),
+    /// overridable per platform.
+    #[schemars(extend("x-apply" = "live"))]
+    pub display: GatewayDisplay,
+    /// When group, channel and thread messages start a turn, overridable
+    /// per platform.
+    #[schemars(extend("x-apply" = "live"))]
+    pub groups: GatewayGroups,
+    /// Messages other bots send, overridable per platform.
+    #[schemars(extend("x-apply" = "live"))]
+    pub bots: GatewayBots,
+    /// The send time in front of each user message the model sees.
+    #[schemars(extend("x-apply" = "next_session"))]
+    pub message_timestamps: MessageTimestamps,
+    /// An adapter outside `connected` for longer than this is flagged for
+    /// attention (`adapter.state`, `/platforms`, `gateway status`) and the
+    /// profile's other home channels are told once per outage.
+    #[schemars(extend("x-apply" = "live"))]
+    pub reconnect_attention_secs: Seconds<600>,
+    /// `/background` tasks started from chats.
+    #[schemars(extend("x-apply" = "live"))]
+    pub background: GatewayBackground,
+    /// Events this profile's adapters receive that belong to another
+    /// served profile (one shared bot, several communities); the target
+    /// must list this profile in its `accept_routes_from`.
+    #[schemars(extend("x-apply" = "live"))]
+    pub profile_routes: Vec<super::ProfileRoute>,
+    /// Profiles whose `profile_routes` may route events to this one.
+    #[schemars(extend("x-apply" = "live"))]
+    pub accept_routes_from: Vec<String>,
+    /// MCP server notifications as internal webhook events.
+    #[schemars(extend("x-apply" = "live"))]
+    pub mcp_events: McpEvents,
 }
 
-/// One `[gateway.platforms.<name>]` table: the keys every adapter shares.
+/// `[gateway.mcp_events]` (experimental).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
-pub struct PlatformConfig {
-    /// Start this adapter with the daemon.
+pub struct McpEvents {
+    /// Admit notifications of configured MCP servers that declare an
+    /// `events` webhook route as signed internal events on that route
+    /// (same delivery and toolset rules as a webhook request).
     pub enabled: bool,
-    /// The chat that receives notifications and scheduled output.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub home_channel: Option<String>,
-    /// Platform user ids admitted without pairing.
-    pub allow_users: Vec<String>,
-    /// Chats every member of which is admitted.
-    pub allow_chats: Vec<String>,
-    /// Admit everyone (logged at WARN on every start).
-    pub allow_all: bool,
-    /// Platform user ids with the admin command tier.
-    pub admins: Vec<String>,
-    /// The secret holding the adapter's credential (never the value).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token_secret: Option<SecretName>,
+}
+
+/// `[gateway.background]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayBackground {
+    /// Background tasks one chat may have running at once; more are
+    /// refused.
+    #[schemars(range(min = 1, max = 100))]
+    pub max_per_chat: u32,
+}
+
+impl Default for GatewayBackground {
+    fn default() -> Self {
+        Self { max_per_chat: 3 }
+    }
+}
+
+/// A number of seconds whose default is `DEFAULT` (a top-level key of a
+/// section that otherwise derives its defaults).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct Seconds<const DEFAULT: u64>(pub u64);
+
+impl<const DEFAULT: u64> Default for Seconds<DEFAULT> {
+    fn default() -> Self {
+        Self(DEFAULT)
+    }
+}
+
+impl<const DEFAULT: u64> Seconds<DEFAULT> {
+    /// The value.
+    #[must_use]
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// `[gateway.sessions]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewaySessions {
+    /// Each member of a non-thread group or channel gets a session of
+    /// their own.
+    pub group_per_user: bool,
+    /// Each participant of a thread gets a session of their own.
+    pub thread_per_user: bool,
+    /// Routes (conversation to session, never transcripts) unused this
+    /// long are pruned; `0` keeps them forever.
+    pub route_max_age_secs: u64,
+    /// A session whose turn was running during this many consecutive
+    /// daemon restarts is suspended; its next message starts a new one.
+    #[schemars(range(min = 1, max = 100))]
+    pub stuck_loop_threshold: u32,
+    /// A turn left `resume_pending` by a restart holds its chat's queue
+    /// until `/retry` or `/discard`, at most this long; then it is
+    /// discarded automatically.
+    #[schemars(range(min = 1))]
+    pub resume_pending_ttl_secs: u64,
+}
+
+impl Default for GatewaySessions {
+    fn default() -> Self {
+        Self {
+            group_per_user: true,
+            thread_per_user: false,
+            route_max_age_secs: 7_776_000,
+            stuck_loop_threshold: 3,
+            resume_pending_ttl_secs: 86_400,
+        }
+    }
+}
+
+/// `[gateway.busy]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayBusy {
+    /// Text arriving within this many milliseconds of the previous text
+    /// joins it into one input.
+    #[schemars(range(max = 10_000))]
+    pub debounce_ms: u64,
+    /// An input is never held longer than this for more text.
+    #[schemars(range(max = 60_000))]
+    pub debounce_cap_ms: u64,
+    /// Send one busy acknowledgement per conversation per 30 seconds.
+    pub ack: bool,
+    /// `/queue` entries kept per conversation.
+    #[schemars(range(min = 1, max = 1000))]
+    pub max_queued: u32,
+}
+
+impl Default for GatewayBusy {
+    fn default() -> Self {
+        Self {
+            debounce_ms: 350,
+            debounce_cap_ms: 1000,
+            ack: true,
+            max_queued: 16,
+        }
+    }
+}
+
+/// `[gateway.quick_commands]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayQuickCommands {
+    /// An `exec` quick command run from a chat is killed, with its whole
+    /// process tree, after this many seconds.
+    #[schemars(range(min = 1, max = 3600))]
+    pub timeout_secs: u64,
+}
+
+impl Default for GatewayQuickCommands {
+    fn default() -> Self {
+        Self { timeout_secs: 30 }
+    }
+}
+
+/// `[gateway.streaming]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct StreamingConfig {
+    /// Stream answers while they are written. A platform can turn it off
+    /// for itself, never on when this is off.
+    pub enabled: bool,
+    /// How a streamed draft reaches the platform.
+    pub transport: StreamTransport,
+    /// Least time between two edits of a draft.
+    #[schemars(range(min = 100, max = 60_000))]
+    pub edit_interval_ms: u64,
+    /// Characters gathered before the first draft is sent.
+    #[schemars(range(min = 1, max = 4096))]
+    pub buffer_threshold: u32,
+    /// Shown at the end of a draft still being written.
+    pub cursor: String,
+}
+
+impl Default for StreamingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            transport: StreamTransport::Auto,
+            edit_interval_ms: 800,
+            buffer_threshold: 24,
+            cursor: " \u{2589}".to_owned(),
+        }
+    }
+}
+
+/// How a streamed draft reaches a platform.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamTransport {
+    /// `native` where the platform streams natively, else `edit` where it
+    /// edits messages, else no streaming.
+    #[default]
+    Auto,
+    /// The platform's own streaming message API (falls back to `edit`,
+    /// also mid-turn when the stream fails).
+    Native,
+    /// A platform-native draft (falls back to `edit`).
+    Draft,
+    /// One message edited as the answer grows.
+    Edit,
+    /// No streaming.
+    Off,
+}
+
+/// `[gateway.notifications]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct NotificationsConfig {
+    /// Which background process and subagent events reach the chat.
+    pub background: BackgroundNotifications,
+}
+
+/// Background notification levels.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BackgroundNotifications {
+    /// Results and errors, one line each.
+    #[default]
+    Concise,
+    /// Every event.
+    All,
+    /// Results only.
+    Result,
+    /// Errors only.
+    Error,
+    /// Nothing.
+    Off,
+}
+
+/// `[gateway.outbox]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct OutboxConfig {
+    /// Send attempts before an entry becomes `failed`.
+    #[schemars(range(min = 1, max = 100))]
+    pub max_attempts: u32,
+    /// An entry older than this becomes `failed`.
+    #[schemars(range(min = 1))]
+    pub max_age_secs: u64,
+}
+
+impl Default for OutboxConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: 8,
+            max_age_secs: 86_400,
+        }
+    }
+}
+
+/// `[gateway.shutdown]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ShutdownConfig {
+    /// A stop whose conversations finish within this many seconds is
+    /// clean: the next start skips crash recovery.
+    #[schemars(range(min = 1, max = 3600))]
+    pub drain_timeout_secs: u64,
+}
+
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            drain_timeout_secs: 30,
+        }
+    }
+}
+
+/// `[gateway.agent_cache]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentCacheConfig {
+    /// Conversations whose agent stays loaded.
+    #[schemars(range(min = 1, max = 100_000))]
+    pub max_size: u32,
+    /// An agent unused this long is unloaded (its session stays open).
+    #[schemars(range(min = 1))]
+    pub idle_ttl_secs: u64,
+    /// Above this resident memory the least recently used agents are
+    /// unloaded; `0` is half the physical memory.
+    pub memory_high_bytes: u64,
+}
+
+impl Default for AgentCacheConfig {
+    fn default() -> Self {
+        Self {
+            max_size: 128,
+            idle_ttl_secs: 3600,
+            memory_high_bytes: 0,
+        }
+    }
+}
+
+/// The busy settings in effect for one platform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EffectiveBusy {
+    /// The input mode.
+    pub input_mode: BusyInputMode,
+    /// Debounce window.
+    pub debounce_ms: u64,
+    /// Debounce cap.
+    pub debounce_cap_ms: u64,
+    /// Busy acknowledgements.
+    pub ack: bool,
+    /// `/queue` limit.
+    pub max_queued: u32,
+}
+
+impl GatewayConfig {
+    /// The table of `platform`, or the defaults when it has none.
+    #[must_use]
+    pub fn platform(&self, platform: &str) -> PlatformConfig {
+        self.platforms.get(platform).cloned().unwrap_or_default()
+    }
+
+    /// The busy settings of `platform`: its overrides over `gateway.busy`
+    /// and the shared `busy.input_mode`.
+    #[must_use]
+    pub fn busy_for(&self, platform: &str, shared: BusyInputMode) -> EffectiveBusy {
+        let over = self.platform(platform).busy;
+        EffectiveBusy {
+            input_mode: over.input_mode.unwrap_or(shared),
+            debounce_ms: over.debounce_ms.unwrap_or(self.busy.debounce_ms),
+            debounce_cap_ms: over.debounce_cap_ms.unwrap_or(self.busy.debounce_cap_ms),
+            ack: over.ack.unwrap_or(self.busy.ack),
+            max_queued: over.max_queued.unwrap_or(self.busy.max_queued),
+        }
+    }
+
+    /// `(group_per_user, thread_per_user)` of `platform`.
+    #[must_use]
+    pub fn sessions_for(&self, platform: &str) -> (bool, bool) {
+        let over = self.platform(platform).sessions;
+        (
+            over.group_per_user.unwrap_or(self.sessions.group_per_user),
+            over.thread_per_user
+                .unwrap_or(self.sessions.thread_per_user),
+        )
+    }
+
+    /// Whether answers stream on `platform`: only when streaming is on
+    /// globally and the platform did not turn it off.
+    #[must_use]
+    pub fn streams_on(&self, platform: &str) -> bool {
+        self.streaming.enabled
+            && self.streaming.transport != StreamTransport::Off
+            && self.platform(platform).streaming.enabled != Some(false)
+    }
+
+    /// The rate limits of `platform`: its overrides over
+    /// `gateway.rate_limit`.
+    #[must_use]
+    pub fn rate_limit_for(&self, platform: &str) -> RateLimitConfig {
+        self.rate_limit.with(&self.platform(platform).rate_limit)
+    }
+
+    /// What an unauthorized direct message on `platform` gets.
+    #[must_use]
+    pub fn unauthorized_dm(&self, platform: &str) -> UnauthorizedDm {
+        let table = self.platform(platform);
+        table
+            .unauthorized_dm
+            .unwrap_or(if platform == "email" || !table.allow_users.is_empty() {
+                UnauthorizedDm::Ignore
+            } else {
+                UnauthorizedDm::Pair
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_platform_override_wins_over_the_shared_busy_mode() {
+        let mut gateway = GatewayConfig::default();
+        gateway.platforms.insert(
+            "telegram".into(),
+            PlatformConfig {
+                busy: PlatformBusy {
+                    input_mode: Some(BusyInputMode::Steer),
+                    ack: Some(false),
+                    ..PlatformBusy::default()
+                },
+                ..PlatformConfig::default()
+            },
+        );
+        let telegram = gateway.busy_for("telegram", BusyInputMode::Queue);
+        assert_eq!(telegram.input_mode, BusyInputMode::Steer);
+        assert!(!telegram.ack);
+        assert_eq!(telegram.debounce_ms, 350);
+        let discord = gateway.busy_for("discord", BusyInputMode::Interrupt);
+        assert_eq!(discord.input_mode, BusyInputMode::Interrupt);
+        assert!(discord.ack);
+    }
+
+    #[test]
+    fn a_platform_cannot_enable_streaming_that_is_off_globally() {
+        let mut gateway = GatewayConfig::default();
+        gateway.platforms.insert(
+            "telegram".into(),
+            PlatformConfig {
+                streaming: PlatformStreaming {
+                    enabled: Some(true),
+                },
+                ..PlatformConfig::default()
+            },
+        );
+        assert!(!gateway.streams_on("telegram"));
+        gateway.streaming.enabled = true;
+        assert!(gateway.streams_on("telegram"));
+        gateway
+            .platforms
+            .get_mut("telegram")
+            .unwrap()
+            .streaming
+            .enabled = Some(false);
+        assert!(!gateway.streams_on("telegram"));
+        assert!(gateway.streams_on("discord"));
+    }
+
+    #[test]
+    fn unauthorized_dm_defaults_follow_the_platform_and_allowlist() {
+        let mut gateway = GatewayConfig::default();
+        assert_eq!(gateway.unauthorized_dm("telegram"), UnauthorizedDm::Pair);
+        assert_eq!(gateway.unauthorized_dm("email"), UnauthorizedDm::Ignore);
+        gateway.platforms.insert(
+            "discord".into(),
+            PlatformConfig {
+                allow_users: vec!["1".into()],
+                ..PlatformConfig::default()
+            },
+        );
+        assert_eq!(gateway.unauthorized_dm("discord"), UnauthorizedDm::Ignore);
+    }
 }

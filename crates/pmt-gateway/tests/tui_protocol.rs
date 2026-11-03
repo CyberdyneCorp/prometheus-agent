@@ -374,7 +374,7 @@ async fn a_client_supplied_author_is_refused_and_inputs_are_stamped() {
     submit(&client, &session, "hi").await;
     let authors = daemon.host.authors.lock().unwrap().clone();
     assert_eq!(authors.len(), 1);
-    assert_eq!(authors[0].client_kind, ClientKind::Tui);
+    assert_eq!(authors[0].client_kind, "tui");
     assert!(authors[0].client_id.starts_with("tui-"));
     assert_eq!(authors[0].principal, "default");
 }
@@ -564,4 +564,40 @@ async fn a_session_left_without_clients_is_closed_after_the_idle_limit() {
         1,
         "closed once"
     );
+}
+
+/// Spec: messaging-gateway, Concurrency caps across surfaces: detached
+/// client sessions beyond `max_live_client_sessions` are unloaded (not
+/// ended), least recently attended first; an attached one never is.
+#[tokio::test]
+async fn detached_sessions_beyond_the_cap_are_unloaded_oldest_first() {
+    let mut options = options();
+    options.idle_session_close = Duration::from_secs(8);
+    options.max_live_client_sessions = 1;
+    let daemon = Daemon::start_with(options, tempfile::tempdir().unwrap()).await;
+    let (client, _inbox) = daemon.client("default", false).await;
+    let older = create(&client).await;
+    let newer = create(&client).await;
+    let attached = create(&client).await;
+    for session in [&older, &newer] {
+        client
+            .call("session.detach", json!({"session_id": session}))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let mut unloaded = Vec::new();
+    for _ in 0..200 {
+        unloaded = daemon.host.unloaded.lock().unwrap().clone();
+        if !unloaded.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert_eq!(unloaded, [older], "only the oldest beyond the cap of one");
+    assert!(
+        daemon.host.closed.lock().unwrap().is_empty(),
+        "unloaded, not ended"
+    );
+    assert!(!unloaded.contains(&attached) && !unloaded.contains(&newer));
 }

@@ -47,9 +47,13 @@ impl DaemonHost {
         link: Link,
     ) -> Result<Submitted, Error> {
         let id = session_id(&params.session_id)?;
+        // No new turn starts while the home is paused (spec: messaging-
+        // gateway, Global emergency pause).
+        pmt_core::pause::check(profile.scope().home())?;
         Self::check_budget(profile, id)?;
         let session = self.load(profile, id, &link).await?;
         let mut input = setup::input(&session.factory, &session.live, &params).await?;
+        input.prefix.clone_from(&author.prefix);
         input.author = serde_json::to_value(&author).ok();
         let job = Queued {
             input,
@@ -123,13 +127,17 @@ impl DaemonHost {
             }
         };
         turns.fetch_add(1, Ordering::AcqRel);
+        let slots = self.slots.clone();
         // In the submitting request's session span: the turn's records go
         // to the profile's logs.
         tokio::spawn(
             async move {
                 let mut job = first;
                 loop {
+                    let link = job.link.clone();
+                    let permit = slots.acquire(|ahead| waiting(&link, ahead)).await;
                     run_one(id, &session, job, &record).await;
+                    drop(permit);
                     let next = {
                         let mut queue = session.queue.lock().expect("queue poisoned");
                         let next = queue.pop_front();
@@ -178,7 +186,7 @@ impl DaemonHost {
     /// Unloads session `id` and ends it with `reason`, unless something
     /// else (a request being answered) holds it right now; `true` when it
     /// is closed (or was not loaded).
-    async fn close_loaded(profile: &Profile, id: SessionId, reason: EndReason) -> bool {
+    pub(super) async fn close_loaded(profile: &Profile, id: SessionId, reason: EndReason) -> bool {
         let mut loaded = profile.loaded.lock().await;
         let Some(session) = loaded.remove(&id) else {
             return true;
@@ -187,6 +195,34 @@ impl DaemonHost {
             Ok(session) => {
                 drop(loaded);
                 session.live.close(&profile.store, reason).await;
+                true
+            }
+            Err(shared) => {
+                loaded.insert(id, shared);
+                false
+            }
+        }
+    }
+
+    /// Unloads an idle session without ending it (the messaging gateway's
+    /// agent cache): `false` while it runs a turn, holds queued input or
+    /// is in use by a request.
+    pub(super) async fn unload(profile: &Profile, id: SessionId) -> bool {
+        let mut loaded = profile.loaded.lock().await;
+        let Some(session) = loaded.get(&id) else {
+            return true;
+        };
+        let queued = !session.queue.lock().expect("queue poisoned").is_empty();
+        if session.busy.load(Ordering::Acquire) || queued {
+            return false;
+        }
+        let Some(session) = loaded.remove(&id) else {
+            return true;
+        };
+        match Arc::try_unwrap(session) {
+            Ok(session) => {
+                drop(loaded);
+                session.live.unload().await;
                 true
             }
             Err(shared) => {
@@ -230,6 +266,30 @@ impl DaemonHost {
     }
 }
 
+/// Tells the session's clients that its turn waits for a free slot: the
+/// messaging gateway says it in the chat (`turn.waiting`), terminals show
+/// a notice.
+fn waiting(link: &Link, ahead: usize) {
+    let text = pmt_gateway::slots::waiting_notice(ahead);
+    tracing::info!(ahead, "turn waiting for a free slot");
+    for (kind, payload) in [
+        (
+            "turn.waiting",
+            serde_json::json!({"ahead": ahead, "text": text}),
+        ),
+        ("command.notice", serde_json::json!({"text": text})),
+    ] {
+        link.emit::<pmt_rpc::contracts::SessionEvent>(&serde_json::json!({
+            "type": kind,
+            "ts": jiff::Timestamp::now().to_string(),
+            "turn_id": null,
+            "span_id": null,
+            "parent_span_id": null,
+            "payload": payload,
+        }));
+    }
+}
+
 /// How long a stopping daemon waits for an interrupted turn to end.
 const STOP_WAIT: Duration = Duration::from_secs(5);
 
@@ -246,6 +306,9 @@ async fn run_one(
     let scope = session.live.config.get();
     let mut options = TurnOptions::new(&CancelToken::new());
     options.run_budget = job.run_budget.map(Duration::from_secs);
+    if job.link.streams() {
+        options.deltas = Arc::new(crate::daemon_cmd::turn::DeltasToLink(job.link.clone()));
+    }
     *session.interrupt.lock().expect("interrupt poisoned") = Some(options.interrupt.clone());
     let outcome = session
         .live

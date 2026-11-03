@@ -206,6 +206,9 @@ pub enum Command {
     /// Update this install to its channel's newest signed release, check
     /// for one (exit 10 when available), change the channel, or roll back.
     Update(UpdateArgs),
+    /// Emergency pause: no new turns or scheduled jobs on any profile of
+    /// this home until `pause off` (running turns finish).
+    Pause(crate::pause_cmd::PauseArgs),
     /// Run, start, stop and inspect the gateway daemon that owns this
     /// home's sessions (one per home; clients attach to it).
     #[cfg(feature = "gateway")]
@@ -213,6 +216,31 @@ pub enum Command {
         /// The daemon subcommand.
         #[command(subcommand)]
         command: crate::daemon_cmd::DaemonCommand,
+    },
+    /// Messaging adapters of the running daemon and the profile's delivery
+    /// outbox.
+    #[cfg(feature = "gateway")]
+    Gateway {
+        /// The gateway subcommand.
+        #[command(subcommand)]
+        command: crate::daemon_cmd::GatewayCommand,
+    },
+    /// Approve, deny, list and revoke messaging senders' pairing requests.
+    /// A code is approved with `prometheus pairing approve <platform>
+    /// <code>`, the RPC `pairing.approve` from a client attached to the
+    /// profile, or the admin-only chat command `/pair approve <code>`.
+    #[cfg(feature = "gateway")]
+    Pairing {
+        /// The pairing subcommand.
+        #[command(subcommand)]
+        command: crate::daemon_cmd::PairingCommand,
+    },
+    /// Plugin tools: `plugins test-adapter <platform|path>` runs the adapter
+    /// conformance kit against a built-in mock of the platform.
+    Plugins {
+        /// The plugins subcommand.
+        #[command(subcommand)]
+        command: crate::plugins_cmd::PluginsCommand,
     },
     /// The full-screen terminal UI, attached to the home's gateway daemon
     /// (started when it is not running), or with `--standalone` to an

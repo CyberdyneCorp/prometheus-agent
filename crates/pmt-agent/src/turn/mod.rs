@@ -247,6 +247,9 @@ pub struct TurnInput {
     /// Who submitted it, as the gateway stamped it (kept in the stored
     /// user message's metadata under `author`).
     pub author: Option<serde_json::Value>,
+    /// Put in front of the text the model sees (a messaging session's send
+    /// time); the clean text stays in the row's `user_text`.
+    pub prefix: Option<String>,
 }
 
 impl TurnInput {
@@ -258,6 +261,7 @@ impl TurnInput {
             additions: Vec::new(),
             images: Vec::new(),
             author: None,
+            prefix: None,
         }
     }
 }

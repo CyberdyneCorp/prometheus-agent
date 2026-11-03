@@ -25,7 +25,33 @@ dist = true
 [features]
 default = ["tui", "gateway", "dashboard", "acp", "mcp", "evolve", "eval"]
 tui = ["dep:pmt-tui", "dep:ratatui"]
-gateway = ["dep:pmt-gateway"]
+gateway = [
+    "dep:pmt-gateway",
+    "dep:qrcode",
+    "dep:pmt-adapters-telegram",
+    "dep:pmt-adapters-discord",
+    "dep:pmt-adapters-slack",
+    "dep:pmt-adapters-email",
+    "dep:pmt-adapters-matrix",
+    "dep:pmt-adapters-signal",
+    "dep:pmt-adapters-whatsapp",
+    "dep:pmt-adapters-webhook",
+]
+# The first-party adapters' mock platforms for `plugins test-adapter
+# <platform>`: a developer and CI tool, left out of release builds to keep
+# the binary within its size budget (spec: workspace-architecture, Memory
+# and size budgets). `scripts/check` builds with it (`--all-features`).
+adapter-kits = [
+    "gateway",
+    "pmt-adapters-telegram/kit",
+    "pmt-adapters-discord/kit",
+    "pmt-adapters-slack/kit",
+    "pmt-adapters-email/kit",
+    "pmt-adapters-matrix/kit",
+    "pmt-adapters-signal/kit",
+    "pmt-adapters-whatsapp/kit",
+    "pmt-adapters-webhook/kit",
+]
 dashboard = []
 acp = []
 mcp = []
@@ -40,6 +66,15 @@ pmt-backup.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-gateway = { workspace = true, optional = true }
+qrcode = { workspace = true, optional = true }
+pmt-adapters-telegram = { workspace = true, optional = true }
+pmt-adapters-discord = { workspace = true, optional = true }
+pmt-adapters-email = { workspace = true, optional = true }
+pmt-adapters-matrix = { workspace = true, optional = true }
+pmt-adapters-signal = { workspace = true, optional = true }
+pmt-adapters-slack = { workspace = true, optional = true }
+pmt-adapters-webhook = { workspace = true, optional = true }
+pmt-adapters-whatsapp = { workspace = true, optional = true }
 pmt-memory.workspace = true
 pmt-net.workspace = true
 pmt-obs.workspace = true
@@ -74,8 +109,9 @@ unicode-width.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The controlling terminal's device and session leader (`-c` per terminal);
-# SIGTSTP for the line interface's Ctrl+Z.
-nix = { workspace = true, features = ["term", "process", "signal"] }
+# SIGTSTP for the line interface's Ctrl+Z; the effective uid for
+# `daemon install-service --system` and the launchd GUI domain.
+nix = { workspace = true, features = ["term", "process", "signal", "user"] }
 
 [build-dependencies]
 jiff.workspace = true

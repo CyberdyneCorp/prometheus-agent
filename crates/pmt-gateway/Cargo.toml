@@ -8,27 +8,46 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Proxy credentials (HTTP CONNECT basic authorization).
+base64.workspace = true
+bytes.workspace = true
 futures-util.workspace = true
 # Random instance ids, epochs, tickets and server-request ids.
 getrandom.workspace = true
+# The shared HTTP listener of webhook-style adapters.
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-net.workspace = true
 pmt-rpc.workspace = true
+# Conversation routes, pairing and the outbox live in each profile's state.db.
+pmt-store.workspace = true
+# Group mention patterns (`gateway.groups.mention_patterns`).
+regex.workspace = true
+# Adapters build their HTTP clients through the gateway's proxy rules.
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Tickets are kept only as hashes; the Windows control pipe is named by
 # the home's hash.
 sha2.workspace = true
+# The agent cache sheds agents above a resident-memory mark.
+sysinfo.workspace = true
+# The conformance kit writes the files it sends into a scratch directory.
+tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util"] }
 tokio-tungstenite.workspace = true
+# TLS to the relay connector (the platform verifier comes from pmt-net).
+tokio-rustls.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 tokio = { workspace = true, features = ["net", "io-util", "test-util"] }
+toml.workspace = true
 tracing-subscriber.workspace = true
 
 [lints]

@@ -42,6 +42,16 @@ impl EventSink for ToClients {
     }
 }
 
+/// Streams a turn's answer text to the link (a messaging conversation
+/// that streams; spec: messaging-gateway, Streaming to platforms).
+pub(super) struct DeltasToLink(pub(super) Link);
+
+impl pmt_agent::turn::DeltaSink for DeltasToLink {
+    fn text(&self, text: &str) {
+        self.0.delta(text);
+    }
+}
+
 /// Asks the session's clients for a skill's missing secret. The skills
 /// engine calls it on the blocking pool and stores the value itself in
 /// the profile's secrets store; it never reaches the transcript.

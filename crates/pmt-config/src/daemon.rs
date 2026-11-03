@@ -31,6 +31,10 @@ pub struct DaemonConfig {
     /// The gateway daemon: its client listener and lifecycle.
     #[serde(default)]
     pub daemon: DaemonSection,
+    /// Daemon-wide messaging gateway settings (spec: messaging-gateway,
+    /// Profiles served by one daemon).
+    #[serde(default)]
+    pub gateway: DaemonGateway,
     /// Limits applied to every `prometheus` process of this home.
     #[serde(default)]
     pub process: ProcessConfig,
@@ -40,6 +44,105 @@ pub struct DaemonConfig {
     /// The managed runtime store (`prometheus runtimes`).
     #[serde(default)]
     pub runtimes: RuntimesConfig,
+}
+
+/// `daemon.toml [gateway]`: the messaging gateway keys every served
+/// profile shares.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct DaemonGateway {
+    /// What the daemon does once every messaging adapter failed for good:
+    /// keep serving local clients and schedulers, or exit 78.
+    pub on_all_adapters_down: AllAdaptersDown,
+    /// The relay connector (`prometheus gateway enroll` writes it).
+    pub relay: crate::daemon_relay::RelayConfig,
+    /// The shared HTTP listener of webhook-style adapters.
+    pub http: GatewayHttp,
+    /// How much the daemon runs at once across profiles and surfaces.
+    pub limits: GatewayLimits,
+}
+
+/// `daemon.toml [gateway.limits]` (spec: messaging-gateway, Concurrency
+/// caps across surfaces).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayLimits {
+    /// Sessions with a running turn at once, across every profile and
+    /// surface; further turns wait first in, first out ("Waiting for a
+    /// free slot"). `0`: unbounded.
+    pub max_concurrent_sessions: u32,
+    /// Detached TUI, desktop and dashboard sessions kept loaded; the least
+    /// recently active beyond it are unloaded (never one running a turn or
+    /// with a client attached) and resumed from storage when reopened.
+    /// `0`: no cap.
+    pub max_live_client_sessions: u32,
+}
+
+impl Default for GatewayLimits {
+    fn default() -> Self {
+        Self {
+            max_concurrent_sessions: 0,
+            max_live_client_sessions: 16,
+        }
+    }
+}
+
+/// `daemon.toml [gateway.http]` (spec: platform-adapters, Shared HTTP
+/// listener for webhook-style platforms).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayHttp {
+    /// Where every webhook-style adapter is served, at
+    /// `/p/<profile>/<platform>/`.
+    pub listen: String,
+    /// Allow a non-loopback `listen` address (logged at WARN on every
+    /// start).
+    pub public: bool,
+}
+
+impl Default for GatewayHttp {
+    fn default() -> Self {
+        Self {
+            listen: "127.0.0.1:8644".to_owned(),
+            public: false,
+        }
+    }
+}
+
+impl GatewayHttp {
+    /// The parsed listen address.
+    ///
+    /// # Errors
+    ///
+    /// The validation message for a malformed address, or a non-loopback
+    /// one without `public = true`.
+    pub fn listen_addr(&self) -> Result<std::net::SocketAddr, String> {
+        let addr: std::net::SocketAddr = self.listen.parse().map_err(|_| {
+            format!(
+                "gateway.http.listen: '{}' is not an address such as 127.0.0.1:8644",
+                self.listen
+            )
+        })?;
+        if addr.ip().is_loopback() || self.public {
+            Ok(addr)
+        } else {
+            Err(format!(
+                "gateway.http.listen: '{}' is not a loopback address; set gateway.http.public = true to expose the webhook listener",
+                self.listen
+            ))
+        }
+    }
+}
+
+/// `gateway.on_all_adapters_down`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AllAdaptersDown {
+    /// Keep running (the daemon also serves local clients and schedulers).
+    #[default]
+    StayAlive,
+    /// Stop with exit 78.
+    Exit,
 }
 
 /// The `[daemon]` section (spec: workspace-architecture, One daemon per
@@ -245,6 +348,7 @@ fn default_nofile_soft_limit() -> u64 {
 
 /// The `[update]` section (spec: distribution-and-update). The release
 /// channel is not here: it belongs to the install receipt.
+#[allow(clippy::struct_excessive_bools)] // independent update switches
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UpdateConfig {
@@ -270,6 +374,8 @@ pub struct UpdateConfig {
     pub mirror_fallback: bool,
     /// What to save before the binary is swapped.
     pub pre_update_backup: PreUpdateBackup,
+    /// Let gateway admins run `/update` from a chat.
+    pub allow_from_chat: bool,
 }
 
 impl Default for UpdateConfig {
@@ -282,6 +388,7 @@ impl Default for UpdateConfig {
             mirror_url: None,
             mirror_fallback: false,
             pre_update_backup: PreUpdateBackup::State,
+            allow_from_chat: false,
         }
     }
 }
@@ -323,6 +430,16 @@ impl DaemonConfig {
             .daemon
             .rpc
             .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .gateway
+            .relay
+            .validate()
+            .map_err(|message| parse_error(&message))?;
+        config
+            .gateway
+            .http
+            .listen_addr()
             .map_err(|message| parse_error(&message))?;
         if let Some(unknown) = config
             .runtimes

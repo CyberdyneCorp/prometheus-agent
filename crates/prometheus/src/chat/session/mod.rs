@@ -80,6 +80,10 @@ pub struct Clients {
     pub events: Arc<dyn EventSink>,
     /// Asks the session's clients for a skill's missing secret.
     pub secrets: Arc<dyn SecretPrompt>,
+    /// Where the terminal reports finished `notify_on_complete` background
+    /// processes (a gateway session's chat).
+    pub completions:
+        Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Completion>>,
 }
 
 /// What every session of this process shares.
@@ -106,6 +110,8 @@ pub struct Factory {
     /// The browser tools every session shares, set up by the first
     /// session (`None`: they could not be, see the WARN).
     browser: OnceLock<Option<browser::Shared>>,
+    /// The gateway's `send_message` ports (daemon sessions only).
+    messaging: Option<Arc<dyn pmt_agent::tools::MessagingPorts>>,
     /// The profile's configuration as it is now: `scope` until a daemon
     /// reload replaces it (shared tools read their `live` keys from it).
     current: SharedScope,
@@ -201,6 +207,7 @@ impl Factory {
             maintained: std::sync::atomic::AtomicBool::new(false),
             install_asks: None,
             browser: OnceLock::new(),
+            messaging: None,
         })
     }
 
@@ -372,14 +379,18 @@ impl Factory {
         )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
-        let live_config = SharedScope::new(scope.clone());
-        let environment = self.environment(id, target, &capabilities, &live_config)?;
-        if let Some(terminal) = &environment.terminal {
-            terminal.set_secret_source(skills.secret_source());
-        }
+        let current = SharedScope::new(scope.clone());
+        let environment = self.environment(
+            id,
+            target,
+            &capabilities,
+            &current,
+            &skills,
+            clients.as_ref(),
+        )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
-        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer)?;
+        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
         let gate = self.gate()?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let session_tools = tools::session_tools(&SurfaceInputsOwned {
@@ -407,12 +418,7 @@ impl Factory {
             Arc::clone(&tool_port) as _,
             prompt,
         );
-        let mut events = trajectory
-            .clone()
-            .map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
-        if let Some(clients) = clients {
-            events = Arc::new(progress::Both(events, clients.events));
-        }
+        let events = events_to(trajectory.clone(), clients.map(|c| c.events));
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
         setup.events = Arc::new(tee);
@@ -438,7 +444,7 @@ impl Factory {
             selection: Mutex::new(selection),
             notices,
             progress,
-            config: live_config,
+            config: current,
             record: Arc::clone(&self.record),
             agent_tools,
             capabilities,
@@ -476,15 +482,18 @@ impl Factory {
         .map(Arc::new))
     }
 
-    /// Attaches the session's execution environment.
+    /// Attaches the session's execution environment (its terminal reports
+    /// finished background processes to the `clients`' sender).
     fn environment(
         &self,
         id: SessionId,
         target: &pmt_providers::resolve::Target,
         capabilities: &CapabilitySet,
         config: &SharedScope,
+        skills: &Arc<SkillsSession>,
+        clients: Option<&Clients>,
     ) -> Result<env::Attached, Error> {
-        env::attach(&env::EnvInputs {
+        let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
             session_id: &id.to_string(),
@@ -494,7 +503,13 @@ impl Factory {
             redactor: self.redactor.clone(),
             browser: self.browser(),
             image_input: self.image_input(target),
-        })
+            completions: clients.and_then(|c| c.completions.clone()),
+        })?;
+        // Skills pass their declared secrets to the terminal.
+        if let Some(terminal) = &environment.terminal {
+            terminal.set_secret_source(skills.secret_source());
+        }
+        Ok(environment)
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -514,6 +529,7 @@ impl Factory {
         id: SessionId,
         memory: &Arc<MemorySession>,
         summarizer: &Arc<summarize::RouteSummarizer>,
+        capabilities: &CapabilitySet,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -530,7 +546,34 @@ impl Factory {
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
         .with_memory(Arc::clone(memory) as _);
+        let tools = match &self.messaging {
+            Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
+            None => tools,
+        };
         Ok((Arc::new(tools), clarify))
+    }
+
+    /// Whether the session may read a path: its effective capabilities
+    /// with the placeholders of its working directory and the user's home.
+    fn read_check(&self, capabilities: &CapabilitySet) -> pmt_agent::tools::ReadCheck {
+        let capabilities = capabilities.clone();
+        let places = pmt_core::capability::Places {
+            user_home: self.launch.user_home().cloned().unwrap_or_default(),
+            workspace: self.options.cwd.clone(),
+            scratch: Vec::new(),
+            toolchain: Vec::new(),
+        };
+        Arc::new(move |path| {
+            capabilities.allows_path(pmt_core::capability::Access::Read, path, &places)
+        })
+    }
+
+    /// Sends `send_message` calls of this factory's sessions through
+    /// `ports` (the daemon's gateway).
+    #[must_use]
+    pub fn with_messaging(mut self, ports: Arc<dyn pmt_agent::tools::MessagingPorts>) -> Self {
+        self.messaging = Some(ports);
+        self
     }
 
     /// The skills' view of the session: the CLI surface and its tools,
@@ -681,6 +724,19 @@ impl Factory {
 
 /// Announces each borrowed login's first use in the session (spec:
 /// model-providers, Borrowed CLI logins).
+/// Where a session's events go: its trajectory (when on) and its daemon
+/// clients (when attached).
+fn events_to(
+    trajectory: Option<Arc<TrajectoryWriter>>,
+    clients: Option<Arc<dyn EventSink>>,
+) -> Arc<dyn EventSink> {
+    let events = trajectory.map_or_else(|| Arc::new(NoEvents) as Arc<dyn EventSink>, |t| t as _);
+    match clients {
+        Some(clients) => Arc::new(progress::Both(events, clients)),
+        None => events,
+    }
+}
+
 fn borrowed_watch(notices: progress::Notices) -> pmt_agent::turn::model::CredentialWatch {
     let announced = Mutex::new(pmt_providers::auth::borrowed::Announcements::default());
     Arc::new(move |credential| {
@@ -765,6 +821,24 @@ impl Live {
     /// closes the trajectory.
     pub async fn close(self, store: &Store, reason: EndReason) {
         self.end(store, reason).await;
+        let trajectory = self.trajectory;
+        drop(self.agent);
+        if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
+            && let Err(err) = writer.finish()
+        {
+            tracing::warn!(error = %err, "could not close the trajectory");
+        }
+    }
+
+    /// Unloads the session without ending it (the messaging gateway's
+    /// agent cache): the record stays open and its next turn rebuilds the
+    /// agent from the store with the same frozen prompt. Built-in memory
+    /// is written to the session's own profile store at every call, so
+    /// nothing is left to flush.
+    pub async fn unload(self) {
+        if let Some(browser) = &self.browser {
+            browser.close_session(&self.id.to_string()).await;
+        }
         let trajectory = self.trajectory;
         drop(self.agent);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())

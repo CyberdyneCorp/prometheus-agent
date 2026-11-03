@@ -32,7 +32,10 @@ use super::turn::{SecretsToClients, ToClients, approvals, clarify};
 
 mod commands;
 mod discovery;
+mod gateway;
+mod notify;
 mod reload;
+mod send_tool;
 mod setup;
 mod turns;
 
@@ -101,13 +104,18 @@ struct Profile {
 pub(super) struct DaemonHost {
     /// Shared with the tasks that run turns (a one-shot session is closed
     /// by its task).
-    profiles: BTreeMap<String, Arc<Profile>>,
+    /// Grows when `gateway reload` serves a profile created since start.
+    profiles: std::sync::RwLock<BTreeMap<String, Arc<Profile>>>,
     launch: LaunchEnv,
     /// The daemon's `--set` overrides, kept for reloads.
     set: Vec<String>,
     /// The profile that sees the launch environment's secrets.
     launch_profile: String,
     turns: Arc<AtomicUsize>,
+    /// `gateway.limits.max_concurrent_sessions`: turns beyond it wait.
+    slots: pmt_gateway::slots::Slots,
+    /// The messaging gateway, for the `send_message` tool.
+    gateway: send_tool::GatewayCell,
 }
 
 fn session_id(text: &str) -> Result<SessionId, Error> {
@@ -129,6 +137,20 @@ fn busy(id: SessionId) -> Error {
 }
 
 impl Profile {
+    /// Opens the profile's store.
+    fn open(scope: ProfileScope) -> Result<Arc<Self>, Error> {
+        let store = Arc::new(Store::open(&scope)?);
+        let state = reload::State::new(&scope);
+        Ok(Arc::new(Self {
+            current: SharedScope::new(scope),
+            config: Mutex::new(state),
+            store,
+            factories: Mutex::default(),
+            setups: Mutex::default(),
+            loaded: tokio::sync::Mutex::default(),
+        }))
+    }
+
     /// The configuration new sessions start with.
     fn scope(&self) -> ProfileScope {
         self.current.get()
@@ -149,36 +171,50 @@ impl DaemonHost {
     ) -> Result<Self, Error> {
         let mut profiles = BTreeMap::new();
         for scope in scopes {
-            let store = Arc::new(Store::open(&scope)?);
-            let state = reload::State::new(&scope);
-            profiles.insert(
-                scope.name().to_string(),
-                Arc::new(Profile {
-                    current: SharedScope::new(scope),
-                    config: Mutex::new(state),
-                    store,
-                    factories: Mutex::default(),
-                    setups: Mutex::default(),
-                    loaded: tokio::sync::Mutex::default(),
-                }),
-            );
+            profiles.insert(scope.name().to_string(), Profile::open(scope)?);
         }
         Ok(Self {
-            profiles,
+            profiles: std::sync::RwLock::new(profiles),
             launch,
             set,
             launch_profile,
             turns: Arc::default(),
+            slots: pmt_gateway::slots::Slots::new(0),
+            gateway: Arc::default(),
         })
+    }
+
+    /// Bounds the turns running at once (`gateway.limits.max_concurrent_sessions`).
+    pub(super) fn with_turn_cap(mut self, max: u32) -> Self {
+        self.slots = pmt_gateway::slots::Slots::new(max);
+        self
+    }
+
+    /// Hands sessions the started messaging gateway (`send_message`).
+    pub(super) fn set_gateway(&self, gateway: pmt_gateway::messaging::Gateway) {
+        let _ = self.gateway.set(gateway);
     }
 
     /// The served profile names.
     pub(super) fn names(&self) -> Vec<String> {
-        self.profiles.keys().cloned().collect()
+        self.served().keys().cloned().collect()
     }
 
-    fn profile(&self, name: &str) -> Result<&Arc<Profile>, Error> {
-        self.profiles.get(name).ok_or_else(|| {
+    /// The served profiles now.
+    fn served(&self) -> std::sync::RwLockReadGuard<'_, BTreeMap<String, Arc<Profile>>> {
+        self.profiles.read().expect("profiles poisoned")
+    }
+
+    /// Every served profile, by name (a snapshot).
+    fn all_profiles(&self) -> Vec<(String, Arc<Profile>)> {
+        self.served()
+            .iter()
+            .map(|(n, p)| (n.clone(), Arc::clone(p)))
+            .collect()
+    }
+
+    fn profile(&self, name: &str) -> Result<Arc<Profile>, Error> {
+        self.served().get(name).cloned().ok_or_else(|| {
             Error::new(
                 &codes::PROFILE_NOT_FOUND,
                 format!("profile '{name}' is not served"),
@@ -219,15 +255,25 @@ impl DaemonHost {
             .lock()
             .expect("setups poisoned")
             .remove(&id)
+            .or_else(|| frozen_policy(profile, &row))
             .unwrap_or_default();
         let factory = self.factory(profile, cwd, &setup)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
+        // A chat's session tells the chat when its background processes end.
+        let completions = matches!(row.origin, pmt_store::Origin::Gateway { .. }).then(|| {
+            notify::completions(
+                Arc::clone(&self.gateway),
+                profile.scope().name().to_string(),
+                id.to_string(),
+            )
+        });
         let clients = Clients {
             events: Arc::new(ToClients { link: link.clone() }),
             secrets: Arc::new(SecretsToClients {
                 link: link.clone(),
                 runtime: tokio::runtime::Handle::current(),
             }),
+            completions,
         };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {
@@ -343,7 +389,7 @@ impl Host for DaemonHost {
         params: SessionCreateParams,
     ) -> HostFuture<'a, SessionRef> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let cwd = Self::cwd_of(profile, params.cwd.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
             let setup = params.setup.clone();
@@ -375,7 +421,7 @@ impl Host for DaemonHost {
         params: SessionListParams,
     ) -> HostFuture<'a, SessionList> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let options = pmt_store::ListOptions {
                 limit: Some(params.limit.unwrap_or(50)),
                 ..pmt_store::ListOptions::default()
@@ -407,7 +453,7 @@ impl Host for DaemonHost {
         let span = session_span(profile, link.session_id());
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 let id = session_id(link.session_id())?;
                 if let Some(setup) = setup {
                     Self::set_up(profile, id, setup).await?;
@@ -427,7 +473,7 @@ impl Host for DaemonHost {
         let span = session_span(profile, &params.session_id);
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 self.dispatch_command(profile, params, link).await
             }
             .instrument(span),
@@ -440,7 +486,7 @@ impl Host for DaemonHost {
         session_id: &'a str,
     ) -> HostFuture<'a, Transcript> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let id = self::session_id(session_id)?;
             let messages = profile
                 .store
@@ -462,7 +508,7 @@ impl Host for DaemonHost {
         session_id: &'a str,
     ) -> HostFuture<'a, ContextUsage> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let id = self::session_id(session_id)?;
             let chars: usize = profile
                 .store
@@ -492,7 +538,7 @@ impl Host for DaemonHost {
 
     fn compact<'a>(&'a self, profile: &'a str, params: CompactParams) -> HostFuture<'a, Compacted> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let id = session_id(&params.session_id)?;
             let loaded = profile.loaded.lock().await.get(&id).cloned();
             let Some(session) = loaded else {
@@ -531,7 +577,7 @@ impl Host for DaemonHost {
         let span = session_span(profile, &params.session_id);
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 self.submit_turn(profile, params, author, link).await
             }
             .instrument(span),
@@ -545,7 +591,7 @@ impl Host for DaemonHost {
         client: ClientKind,
     ) -> HostFuture<'a, CommandCatalog> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             self.commands_of(profile, session_id, client).await
         })
     }
@@ -564,23 +610,30 @@ impl Host for DaemonHost {
         session_id: &'a str,
     ) -> HostFuture<'a, ModelOptions> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             self.models_of(profile, session_id).await
         })
     }
 
     fn banner<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, BannerInfo> {
-        Box::pin(async move { Self::banner_of(self.profile(profile)?, session_id).await })
+        Box::pin(async move { Self::banner_of(&*self.profile(profile)?, session_id).await })
     }
 
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {
-        Box::pin(async move { Self::config_value(self.profile(profile)?, key) })
+        Box::pin(async move { Self::config_value(&*self.profile(profile)?, key) })
+    }
+
+    fn unload_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            Ok(Self::unload(profile, self::session_id(session_id)?).await)
+        })
     }
 
     fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
         Box::pin(
             async move {
-                let profile = self.profile(profile)?;
+                let profile = &self.profile(profile)?;
                 Ok(Self::close_unused(profile, self::session_id(session_id)?).await)
             }
             .instrument(session_span(profile, session_id)),
@@ -589,7 +642,7 @@ impl Host for DaemonHost {
 
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let id = self::session_id(session_id)?;
             if let Some(session) = profile.loaded.lock().await.get(&id).cloned() {
                 session.stop();
@@ -604,7 +657,7 @@ impl Host for DaemonHost {
         params: ResolveParams,
     ) -> HostFuture<'a, SessionRef> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let request = match params.kind {
                 ResolveKind::Resume => resume::Request::Resume(&params.reference),
                 ResolveKind::Continue => resume::Request::Continue(&params.reference),
@@ -630,7 +683,7 @@ impl Host for DaemonHost {
 
     fn fork<'a>(&'a self, profile: &'a str, params: ForkParams) -> HostFuture<'a, SessionRef> {
         Box::pin(async move {
-            let profile = self.profile(profile)?;
+            let profile = &self.profile(profile)?;
             let id = session_id(&params.session_id)?;
             let at = params
                 .at_message_id
@@ -652,9 +705,9 @@ impl Host for DaemonHost {
 
     fn load(&self) -> (usize, usize) {
         let loaded = self
-            .profiles
-            .values()
-            .map(|p| p.loaded.try_lock().map_or(0, |l| l.len()))
+            .all_profiles()
+            .iter()
+            .map(|(_, p)| p.loaded.try_lock().map_or(0, |l| l.len()))
             .sum();
         (loaded, self.turns.load(Ordering::Acquire))
     }
@@ -668,9 +721,23 @@ impl Host for DaemonHost {
             while self.turns.load(Ordering::Acquire) > 0 && tokio::time::Instant::now() < until {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            for (name, profile) in &self.profiles {
-                Self::close_all(name, profile).await;
+            for (name, profile) in self.all_profiles() {
+                Self::close_all(&name, &profile).await;
             }
         })
     }
+}
+
+/// The setup of the chat policy frozen with a gateway session, which keeps
+/// shaping it after a daemon restart (spec: messaging-gateway, Per-chat
+/// policies).
+fn frozen_policy(profile: &Profile, row: &pmt_store::Session) -> Option<SessionSetup> {
+    let pmt_store::Origin::Gateway { platform, .. } = &row.origin else {
+        return None;
+    };
+    let text = profile.store.session_policy(row.id).ok().flatten()?;
+    let policy: pmt_config::schema::ChatPolicy = serde_json::from_str(&text).ok()?;
+    Some(pmt_gateway::messaging::policy::session_setup(
+        &policy, platform,
+    ))
 }

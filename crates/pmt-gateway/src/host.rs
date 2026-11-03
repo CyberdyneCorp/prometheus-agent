@@ -149,6 +149,13 @@ pub trait Host: Send + Sync + 'static {
     /// input is queued; `true` when it was closed (or was not loaded).
     fn close_idle<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, bool>;
 
+    /// Unloads a session no client is attached to without ending it (it
+    /// is resumed from storage when reopened), unless a turn runs or an
+    /// input is queued; `true` when it was unloaded (or was not loaded).
+    fn unload_idle<'a>(&'a self, _profile: &'a str, _session_id: &'a str) -> HostFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
+    }
+
     /// Each served profile's configuration state, for `daemon status`.
     fn config(&self) -> Vec<pmt_rpc::control::ProfileConfig> {
         Vec::new()
@@ -166,21 +173,43 @@ pub trait Host: Send + Sync + 'static {
 /// (spec: tui, Turn authors are stamped by the gateway).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Author {
-    /// The client kind from `rpc.hello`.
-    pub client_kind: ClientKind,
+    /// The client kind from `rpc.hello` (`cli`, `tui`, ...), or `gateway`
+    /// for a messaging platform user.
+    pub client_kind: String,
     /// The client's id within the daemon.
     pub client_id: String,
     /// Whose authority it acts with: the profile its ticket grants.
     pub principal: String,
+    /// When a messaging user sent it (RFC 3339), kept with the message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sent_at: Option<String>,
+    /// The send time the model sees in front of the text, in a session
+    /// created with message timestamps; never stored in the text.
+    #[serde(skip)]
+    pub prefix: Option<String>,
 }
 
+/// Receives a turn's answer text as it streams.
+pub type Deltas = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// A session's way to its attached clients.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Link {
     hub: Arc<Hub>,
     session_id: String,
     request_timeout: Duration,
     approval_timeout: Duration,
+    /// Streamed answer text (a messaging conversation that streams).
+    deltas: Option<Deltas>,
+}
+
+impl std::fmt::Debug for Link {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Link")
+            .field("session_id", &self.session_id)
+            .field("streams", &self.deltas.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Link {
@@ -195,6 +224,27 @@ impl Link {
             session_id,
             request_timeout,
             approval_timeout,
+            deltas: None,
+        }
+    }
+
+    /// This link with `deltas` receiving the answer text a turn streams.
+    #[must_use]
+    pub fn with_deltas(mut self, deltas: Deltas) -> Self {
+        self.deltas = Some(deltas);
+        self
+    }
+
+    /// Whether someone receives streamed answer text.
+    #[must_use]
+    pub fn streams(&self) -> bool {
+        self.deltas.is_some()
+    }
+
+    /// Streamed answer text (dropped when nobody streams).
+    pub fn delta(&self, text: &str) {
+        if let Some(deltas) = &self.deltas {
+            deltas(text);
         }
     }
 

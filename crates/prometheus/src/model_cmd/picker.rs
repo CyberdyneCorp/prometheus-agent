@@ -118,6 +118,22 @@ pub(crate) fn pick(
     Ok(Some(Picked::Model(format!("{}/{model}", provider.id()))))
 }
 
+/// The connected providers and their picker models, for a chat's model
+/// picker (spec: messaging-gateway, Interactive model picker): only
+/// providers that can answer now, each with at least one model.
+pub(crate) fn chat_choices(models: &Models) -> Vec<pmt_gateway::messaging::ModelChoice> {
+    models
+        .registry
+        .iter()
+        .filter(|p| !p.descriptor().hidden && p.enabled() && connected(models, p))
+        .map(|p| pmt_gateway::messaging::ModelChoice {
+            provider: p.id().to_owned(),
+            models: models.catalog.picker_models(p),
+        })
+        .filter(|c| !c.models.is_empty())
+        .collect()
+}
+
 /// Whether `provider` needs no key, one of its secrets is stored or it
 /// has a usable sign-in.
 fn connected(models: &Models, provider: &Provider) -> bool {

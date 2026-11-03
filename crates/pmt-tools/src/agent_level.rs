@@ -39,7 +39,37 @@ pub fn tools() -> Vec<RegisteredTool> {
         RegisteredTool::agent_loop(todo()),
         RegisteredTool::agent_loop(clarify()),
         RegisteredTool::agent_loop(session_search()),
+        RegisteredTool::agent_loop(send_message()),
     ]
+}
+
+/// `send_message` (spec: agent-interop, `send_message` tool): one message or
+/// reaction to a messaging chat, through the gateway's outbox. Only
+/// sessions whose toolsets name `messaging` see it.
+fn send_message() -> ToolDescriptor {
+    let mut d = ToolDescriptor::new(
+        "send_message",
+        "messaging",
+        "Send a message to a messaging chat, list the chats you may reach, or react to a \
+         message. Targets: `platform` (its home channel), `platform:chat_id`, \
+         `platform:chat_id:thread_id` or `platform:#channel-name`. Only the home channel, \
+         allowed chats and chats with an existing session are reachable. A line \
+         `MEDIA:<path>` attaches a file you can read.",
+        json!({
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["send", "list", "react", "unreact"], "description": "Default send."},
+                "target": {"type": "string", "description": "Where (see the description); for list, an optional platform."},
+                "message": {"type": "string", "description": "The text to send."},
+                "emoji": {"type": "string", "description": "The reaction (react, unreact)."},
+                "message_id": {"type": "string", "description": "The message to react to (default: the newest one received in that chat)."}
+            },
+            "additionalProperties": false
+        }),
+    );
+    d.effect = Effect::External;
+    d.claims = Some(ResourceClaims::none());
+    d
 }
 
 fn todo() -> ToolDescriptor {

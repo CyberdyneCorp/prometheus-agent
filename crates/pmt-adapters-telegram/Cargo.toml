@@ -1,0 +1,40 @@
+[package]
+name = "pmt-adapters-telegram"
+description = "Prometheus first-party Telegram adapter: Bot API long polling, inline-keyboard cards, media download and upload"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[features]
+# The mock platform server the conformance kit runs this adapter against
+# (`pub mod mock`, `prometheus plugins test-adapter`).
+kit = ["dep:bytes", "dep:http-body-util", "dep:hyper", "dep:hyper-util"]
+
+[dependencies]
+# The mock platform server (feature `kit`).
+bytes = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
+futures-util.workspace = true
+jiff.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+pmt-gateway.workspace = true
+pmt-net.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# The tests run the adapter against its mock.
+pmt-adapters-telegram = { path = ".", features = ["kit"] }
+pmt-store.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

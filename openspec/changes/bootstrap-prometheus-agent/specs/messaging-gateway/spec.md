@@ -273,7 +273,7 @@ For an unauthorized DM the gateway SHALL apply `gateway.platforms.<name>.unautho
 - **THEN** no log line, trajectory or telemetry event SHALL contain the plaintext code
 
 ### Requirement: Per-user rate limiting (upgrade)
-The gateway SHALL apply per-sender token buckets keyed by profile and canonical sender (or linked person) with `gateway.rate_limit.messages_per_minute` (default 20, burst `gateway.rate_limit.burst` default 10) and `gateway.rate_limit.turns_per_hour` (default 120), plus an optional `gateway.rate_limit.daily_cost_usd` (default unset) measured from the cost ledger; an over-limit event SHALL be dropped (not queued) with admission result `rate_limited`, the sender SHALL receive at most one "Slow down: rate limit reached, try again in <n>s." reply per window, admins and local clients SHALL be exempt, and every limit SHALL be overridable under `gateway.platforms.<name>.rate_limit`.
+The gateway SHALL apply per-sender token buckets keyed by profile and canonical sender (or linked person) with `gateway.rate_limit.messages_per_minute` (default 20, burst `gateway.rate_limit.burst` default 10) and `gateway.rate_limit.turns_per_hour` (default 120), plus an optional `gateway.rate_limit.daily_cost_usd` (default unset) measured from the cost ledger by the turns each sender sent (in a session shared by several senders each turn's calls, its subagents' included, count against the sender of that turn), refusing the turn when the spend cannot be read; an over-limit event SHALL be dropped (not queued) with admission result `rate_limited`, the sender SHALL receive at most one "Slow down: rate limit reached, try again in <n>s." reply per window, admins and local clients SHALL be exempt, and every limit SHALL be overridable under `gateway.platforms.<name>.rate_limit`.
 **Milestone:** M2
 
 #### Scenario: Burst exceeded
@@ -285,6 +285,11 @@ The gateway SHALL apply per-sender token buckets keyed by profile and canonical 
 - **GIVEN** `daily_cost_usd = 2.0` and a user whose turns today cost 2.05 USD
 - **WHEN** the user sends a message
 - **THEN** the system SHALL not start a turn and SHALL reply that the daily budget resets at local midnight
+
+#### Scenario: Shared thread spend is per sender
+- **GIVEN** `daily_cost_usd = 2.0` and a thread session shared by users A and B in which B's turns cost 2.05 USD today
+- **WHEN** A and then B send a message in the thread
+- **THEN** A's turn SHALL start and B's message SHALL be refused with the daily-budget reply
 
 ### Requirement: Per-chat policies (upgrade)
 The gateway SHALL apply `[[gateway.chat_policies]]` entries matched by `platform` plus `chat_id`, `chat_type` or `user_id` (most specific match wins; ties fail validation), each able to set `model`, `toolsets`, `skills`, `system_prompt_append`, `busy`, `rate_limit` and `max_cost_usd_per_turn`; `toolsets` and `skills` SHALL only narrow the profile's enabled set (a name outside it or unknown fails validation), a policy SHALL be resolved once when a session is created and frozen for that session, and changes SHALL apply to new sessions only unless an admin runs `/policy apply --now`, which starts a new session with `reset_reason = "policy"`.

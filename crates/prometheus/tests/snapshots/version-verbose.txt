@@ -6,7 +6,7 @@ tier: <TIER>
 channel: stable
 rpc_protocol: 1.0
 config_schema_version: 1
-store_schema_version: 14
+store_schema_version: 18
 trajectory_grammar: 1
 runtime_index_sha256: <RUNTIME_INDEX>
 surfaces:

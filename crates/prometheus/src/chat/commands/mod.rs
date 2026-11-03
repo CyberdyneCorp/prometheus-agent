@@ -5,6 +5,7 @@
 //! client drives. What only changes a client's display or which session
 //! it drives stays with that client.
 
+mod background;
 pub mod info;
 pub(crate) mod quick;
 mod refine;
@@ -75,6 +76,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "sessions" => info::sessions(ctx, args),
         "history" => info::history(ctx, args),
         "status" => info::status(ctx),
+        "platforms" => info::platforms(ctx).await,
         "version" => Ok(format!("prometheus {}", crate::build_info::identity())),
         "toolsets" => {
             crate::tools_cmd::slash_toolsets(&ctx.factory.registry, &ctx.live.selection())
@@ -86,6 +88,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "reload-secrets" => crate::slash_handlers::reload_secrets(ctx.scope),
         "reload-skills" => Ok(pmt_skills::reload::reload(&ctx.live.skills).render()),
         "refine" => refine::refine(ctx, args).await,
+        "background" => background::background(ctx, args).await,
         "profile" => Ok(format!(
             "profile {} ({})",
             ctx.scope.name(),

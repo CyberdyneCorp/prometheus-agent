@@ -42,6 +42,9 @@
   memory  (1 tool)
     Long-term memory
     tools: memory
+  messaging  (1 tool)
+    Send messages and reactions to messaging chats (needs the gateway daemon)
+    tools: send_message
   process  (1 tool)
     Background process management
     tools: process
@@ -78,6 +81,9 @@
   web  (2 tools)
     Web search and page extraction
     tools: web_search, web_extract
+  webhook-safe  (4 tools)
+    Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes
+    tools: web_search, web_extract, vision_analyze, clarify
   x_search  (1 tool)  [default-off]
     Search posts on X
     tools: x_search

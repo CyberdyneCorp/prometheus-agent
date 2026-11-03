@@ -94,7 +94,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
 | `model.options` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`ModelOptions`](#modeloptions) |
-| `pairing.approve` | `messaging-gateway` | 1.0 | not served yet | |
+| `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
 | `prompt.submit` | `workspace-architecture` | 1.0 | [`SubmitParams`](#submitparams) | [`Submitted`](#submitted) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
@@ -146,7 +146,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Name | Owner | Since | Payload |
 |---|---|---|---|
 | `achievement.unlocked` | `pets` | 1.0 | not served yet |
-| `adapter.state` | `messaging-gateway` | 1.0 | not served yet |
+| `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | not served yet |
 | `health.changed` | `observability` | 1.0 | not served yet |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
@@ -169,6 +169,19 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `ok` | boolean | yes | Always true. |
+
+### `AdapterStatePayload`
+
+`adapter.state` payload: one messaging adapter changed state (spec: platform-adapters, Adapter state reporting and reconnect).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `attention` | boolean | no | Outside `connected` longer than `gateway.reconnect_attention_secs` (set once per outage, cleared on reconnect). |
+| `code` | string or null | no | Error code of a `degraded`, `retrying` or `fatal` adapter. |
+| `message` | string or null | no | What happened. |
+| `platform` | string | yes | Platform name. |
+| `profile` | string | yes | The owning profile. |
+| `state` | string | yes | `disabled`, `connecting`, `connected`, `degraded`, `retrying` or `fatal`. |
 
 ### `Admission`
 
@@ -580,6 +593,26 @@ A server-to-client request still waiting for an answer.
 | `id` | string | yes | `srq-<12 hex>`. |
 | `method` | string | yes | The request name (`approval.request`, ...). |
 | `params` | any | yes | Its params. |
+
+### `PairingApproveParams`
+
+`pairing.approve` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `code` | string | yes | The code (spaces, dashes and case are ignored). |
+| `platform` | string | yes | The platform the code was issued on. |
+| `profile` | string or null | no | The profile; required when the connection is granted several. |
+
+### `PairingApproved`
+
+`pairing.approve` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `platform` | string | yes | The platform. |
+| `sender_id` | string | yes | The approved sender's platform id. |
+| `sender_name` | string or null | no | The sender's display name, when known. |
 
 ### `PlatformSupport`
 

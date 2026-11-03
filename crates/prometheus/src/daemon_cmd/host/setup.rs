@@ -82,8 +82,13 @@ impl DaemonHost {
             })
             .transpose()?;
         let scope = self.session_scope(profile, &profile.scope(), setup)?;
+        let ports = super::send_tool::GatewayPorts {
+            gateway: Arc::clone(&self.gateway),
+            profile: profile.scope().name().as_str().to_owned(),
+        };
         let factory = Factory::new(scope, &self.launch, &flags(setup), ad_hoc, options)?
-            .with_current(profile.current.clone());
+            .with_current(profile.current.clone())
+            .with_messaging(Arc::new(ports));
         let factory = Arc::new(factory);
         factories.insert(key, Arc::clone(&factory));
         Ok(factory)

@@ -234,6 +234,15 @@ pub struct External {
     pub source: Source,
 }
 
+/// Every built-in name and alias: a quick command may not take one.
+#[must_use]
+pub fn reserved_names() -> Vec<&'static str> {
+    builtins::BUILTINS
+        .iter()
+        .flat_map(|c| std::iter::once(c.name).chain(c.aliases.iter().copied()))
+        .collect()
+}
+
 /// The commands of one session: the built-ins and what registered.
 #[derive(Debug, Clone)]
 pub struct Registry {

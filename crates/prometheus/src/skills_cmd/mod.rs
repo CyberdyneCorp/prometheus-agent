@@ -54,6 +54,30 @@ impl Env {
     }
 }
 
+/// The lookup behind the chat-policy skill check (spec: messaging-gateway,
+/// Per-chat policies): a policy's skill names resolve against the
+/// profile's catalog without the project tier, as a gateway session's
+/// preloaded skills do, so an unknown name fails config validation instead
+/// of the first session in that chat.
+#[must_use]
+pub fn policy_skill_resolver(
+    user_home: Option<PathBuf>,
+) -> pmt_config::gateway_check::SkillResolver {
+    Box::new(move |config, profile_dir, names| {
+        let catalog = eject::profile_catalog_at(
+            &config.skills,
+            profile_dir,
+            None,
+            user_home.as_deref(),
+            Bundled::builtin(),
+        );
+        names
+            .iter()
+            .find(|name| catalog.lookup(name).is_err())
+            .cloned()
+    })
+}
+
 /// Runs one `skills` subcommand and returns its exit code.
 ///
 /// # Errors

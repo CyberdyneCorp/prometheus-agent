@@ -19,6 +19,7 @@ use pmt_tools::environments::{Attachment, Environments, SessionEnv};
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
+use pmt_tools::terminal::process::Completion;
 use pmt_tools::terminal::shell::Shell;
 use pmt_tools::terminal::{LocalSetup, LocalTerminal, spill};
 use pmt_tools::web::{FullTextStore, WebSession};
@@ -46,6 +47,8 @@ pub struct EnvInputs<'a> {
     pub browser: Option<&'a Shared>,
     /// The session's model accepts images (browser screenshots).
     pub image_input: bool,
+    /// Where finished `notify_on_complete` background processes go.
+    pub completions: Option<tokio::sync::mpsc::UnboundedSender<Completion>>,
 }
 
 /// An attached environment.
@@ -220,7 +223,7 @@ fn terminal(
         hooks: Vec::new(),
         guards: GuardChain::default(),
         notices: Vec::new(),
-        notify: None,
+        notify: inputs.completions.clone(),
         clock: None,
     })
     .map_err(|e| {

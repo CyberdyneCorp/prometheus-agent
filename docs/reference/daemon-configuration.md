@@ -15,12 +15,23 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.rpc.max_frame_bytes` | integer | `16777216` | ≥ 1024 | `restart` | Largest accepted frame; a larger one closes the connection with 4413. |
 | `daemon.rpc.request_timeout_secs` | integer | `600` | ≥ 1 | `restart` | Deadline of server-to-client requests other than approvals (which use the profile's `approvals.timeout_secs`). |
 | `daemon.rpc.workers` | integer | `8` | 1 to 256 | `restart` | Requests run concurrently per connection; `rpc.ping` never waits for one. |
+| `gateway.http.listen` | string | `"127.0.0.1:8644"` | any | `restart` | Where every webhook-style adapter is served, at `/p/<profile>/<platform>/`. |
+| `gateway.http.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
+| `gateway.limits.max_concurrent_sessions` | integer | `0` | ≥ 0 | `restart` | Sessions with a running turn at once, across every profile and surface; further turns wait first in, first out ("Waiting for a free slot"). `0`: unbounded. |
+| `gateway.limits.max_live_client_sessions` | integer | `16` | ≥ 0 | `restart` | Detached TUI, desktop and dashboard sessions kept loaded; the least recently active beyond it are unloaded (never one running a turn or with a client attached) and resumed from storage when reopened. `0`: no cap. |
+| `gateway.on_all_adapters_down` | one of "stay_alive", "exit" | `"stay_alive"` | `"stay_alive"`, `"exit"` | `restart` | What the daemon does once every messaging adapter failed for good: keep serving local clients and schedulers, or exit 78. |
+| `gateway.relay.allow_direct_platforms` | array of string | `[]` | any | `restart` | Platforms the relay fronts whose direct adapters still connect. |
+| `gateway.relay.gateway_id` | string | unset | any | `restart` | This gateway's id at the connector. |
+| `gateway.relay.token_secret` | string | `"PMT_RELAY_TOKEN"` | a secret name | `restart` | The secret holding the gateway credential `prometheus gateway enroll` obtained (never the value). |
+| `gateway.relay.url` | string | unset | any | `restart` | The connector's WebSocket URL (`wss://`; `ws://` only to a loopback host). Unset: no relay. |
+| `gateway.relay.wake_url` | string | unset | any | `restart` | An `https://` URL the connector calls to wake a scaled-to-zero host. |
 | `process.nofile_soft_limit` | integer | `4096` | ≥ 0 | `restart` | Open-file soft limit every process raises itself to at startup on POSIX hosts, capped by the hard limit and never lowering a higher limit; children inherit it. `0` disables the raise. |
 | `runtimes.allow_lazy_install` | boolean | `true` | any | `restart` | Install a missing pinned runtime the first time a tool needs it (asking first on an interactive terminal). `false` makes the tool fail with a `prometheus runtimes install <name>` hint instead. |
 | `runtimes.exclude` | array of string | `[]` | any | `restart` | Runtimes nothing may install: not lazily, not `prometheus runtimes install`, not the pin refresh after an update. `install.sh --without <name>` records names here. |
 | `runtimes.mirrors.npm` | string | unset | any | `restart` | Node package registry (used by Node-based plugins, milestone M2). |
 | `runtimes.mirrors.pypi` | string | unset | any | `restart` | Python package index for the Python bridge's packages (used by the bridge, milestone M2). |
 | `runtimes.mirrors.runtimes` | string | unset | any | `restart` | Runtime archives: `<url>/<name>/<version>/<archive file name>`. |
+| `update.allow_from_chat` | boolean | `false` | any | `restart` | Let gateway admins run `/update` from a chat. |
 | `update.auto_apply` | boolean | `false` | any | `restart` | Install a release found by the background check without asking. |
 | `update.check_interval_secs` | integer | `86400` | ≥ 0 | `restart` | Seconds between background checks for a newer release; `0` disables them. A check sends only the version and target (in the user agent). |
 | `update.mirror_fallback` | boolean | `false` | any | `restart` | When a mirror (`update.mirror_url`, `runtimes.mirrors.runtimes`) still fails after the retry budget, download from the default origin instead of failing. |

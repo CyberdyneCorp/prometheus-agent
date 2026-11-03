@@ -118,3 +118,30 @@ async fn config(record: &DaemonRecord) -> Vec<Check> {
     }
     checks
 }
+
+/// Supervisor units left by an earlier layout or an imported Hermes
+/// gateway (spec: messaging-gateway, Per-OS service installation without
+/// elevation): reported with the command that replaces each, never removed.
+#[cfg(feature = "gateway")]
+pub(super) fn legacy_units(
+    ctx: &crate::context::Context<'_>,
+    home: &std::path::Path,
+) -> Vec<Check> {
+    crate::daemon_cmd::service::legacy_units(ctx, home)
+        .into_iter()
+        .map(|unit| {
+            Check::new(
+                "daemon",
+                "legacy_unit",
+                Status::Warn,
+                format!("{} left a supervisor unit: {}", unit.origin, unit.location),
+            )
+            .with_hint(unit.replace)
+        })
+        .collect()
+}
+
+#[cfg(not(feature = "gateway"))]
+pub(super) fn legacy_units(_: &crate::context::Context<'_>, _: &std::path::Path) -> Vec<Check> {
+    Vec::new()
+}

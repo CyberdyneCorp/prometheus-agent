@@ -105,6 +105,8 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         ("session_search", strings(&["session_search"])),
         ("connections", strings(&["manage_connections"])),
         ("clarify", strings(&["clarify"])),
+        // agent-interop, send_message tool.
+        ("messaging", strings(&["send_message"])),
         ("code_execution", strings(&["execute_code"])),
         ("delegation", strings(&["delegate_task"])),
         ("kanban", Vec::new()),
@@ -118,6 +120,10 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
             .into_iter()
             .map(str::to_owned)
             .collect(),
+        ),
+        (
+            "webhook-safe",
+            strings(&["web_search", "web_extract", "vision_analyze", "clarify"]),
         ),
         (
             "safe",
@@ -171,6 +177,27 @@ fn default_off_and_posture_flags() {
     let all = resolve(&["all"], &[]);
     for name in ["x_search", "video_analyze", "video_generate"] {
         assert!(!all.contains(name), "{name}");
+    }
+}
+
+/// Spec: messaging-gateway, Webhook route delivery and safe default
+/// toolset: the default of webhook runs can neither execute nor write.
+#[tokio::test]
+async fn webhook_safe_is_read_only() {
+    let surface = surface(&["webhook-safe"], &[]).await;
+    let names: Vec<&str> = surface.names().collect();
+    assert_eq!(
+        names,
+        ["web_search", "web_extract", "vision_analyze", "clarify"]
+    );
+    for forbidden in [
+        "terminal",
+        "write_file",
+        "patch",
+        "execute_code",
+        "browser_navigate",
+    ] {
+        assert!(!names.contains(&forbidden), "{forbidden}");
     }
 }
 

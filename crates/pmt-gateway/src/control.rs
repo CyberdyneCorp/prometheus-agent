@@ -120,7 +120,7 @@ pub(crate) fn answer(
                 purpose,
                 pid,
             };
-            match server.tickets.issue(grant, server.profiles()) {
+            match server.tickets.issue(grant, &server.profiles()) {
                 Ok(ticket) => ControlResponse {
                     ticket: Some(ticket),
                     ..ControlResponse::default()
@@ -132,10 +132,121 @@ pub(crate) fn answer(
             status: Some(server.status()),
             ..ControlResponse::default()
         },
+        ControlRequest::GatewayReload => {
+            if let Some(messaging) = server.messaging() {
+                messaging.reload();
+            }
+            ControlResponse {
+                status: Some(server.status()),
+                ..ControlResponse::default()
+            }
+        }
         ControlRequest::Stop { restart } => {
             server.request_stop(restart);
             ControlResponse::default()
         }
+        // Answered by `handle`, which can wait for the adapter.
+        ControlRequest::GatewaySend { .. }
+        | ControlRequest::GatewayHandoff { .. }
+        | ControlRequest::GatewayPlatform { .. }
+        | ControlRequest::ResolveRole { .. } => failure(&Error::new(
+            &codes::RPC_INVALID_REQUEST,
+            "this request is answered asynchronously",
+        )),
+    }
+}
+
+/// `gateway send` through the running daemon's outbox.
+async fn send(
+    server: &Server,
+    profile: &str,
+    target: String,
+    text: String,
+    attachments: Vec<pmt_rpc::control::SendAttachment>,
+) -> ControlResponse {
+    let Some(messaging) = server.messaging() else {
+        return failure(&Error::new(
+            &codes::GATEWAY_DAEMON_REQUIRED,
+            "the daemon runs no messaging gateway",
+        ));
+    };
+    let request = crate::messaging::SendRequest {
+        target,
+        text,
+        attachments: attachments
+            .into_iter()
+            .map(|a| pmt_store::gateway::outbox::OutboundAttachment {
+                path: a.path,
+                as_document: a.as_document,
+                as_voice: false,
+            })
+            .collect(),
+        warning: false,
+    };
+    match messaging.send(profile, &request).await {
+        Ok(entry) => {
+            let destination = crate::messaging::target::Resolved {
+                platform: entry.platform.clone(),
+                chat_id: entry.chat_id.clone(),
+                thread_id: entry.thread_id.clone(),
+            }
+            .label();
+            ControlResponse {
+                queued: Some(pmt_rpc::control::Queued {
+                    entry: entry.id,
+                    destination,
+                }),
+                ..ControlResponse::default()
+            }
+        }
+        Err(err) => failure(&err),
+    }
+}
+
+/// `/handoff` through the running daemon's gateway.
+async fn handoff(server: &Server, profile: &str, session: &str, target: &str) -> ControlResponse {
+    let Some(messaging) = server.messaging() else {
+        return failure(&Error::new(
+            &codes::GATEWAY_DAEMON_REQUIRED,
+            "the daemon runs no messaging gateway",
+        ));
+    };
+    match messaging.handoff(profile, session, target).await {
+        Ok(done) => ControlResponse {
+            handoff: Some(pmt_rpc::control::HandedOff {
+                platform: done.platform,
+                destination: done.destination,
+            }),
+            ..ControlResponse::default()
+        },
+        Err(err) => failure(&err),
+    }
+}
+
+/// `gateway pause|resume <platform>` through the running daemon.
+async fn platform_op(
+    server: &Server,
+    profile: &str,
+    platform: &str,
+    pause: bool,
+) -> ControlResponse {
+    let Some(messaging) = server.messaging() else {
+        return failure(&Error::new(
+            &codes::GATEWAY_DAEMON_REQUIRED,
+            "the daemon runs no messaging gateway",
+        ));
+    };
+    let done = if pause {
+        messaging.pause_platform(profile, platform, "cli").map(drop)
+    } else {
+        messaging.resume_platform(profile, platform).await.map(drop)
+    };
+    match done {
+        Ok(()) => ControlResponse {
+            status: Some(server.status()),
+            ..ControlResponse::default()
+        },
+        Err(err) => failure(&err),
     }
 }
 
@@ -162,6 +273,33 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
         return;
     }
     let response = match serde_json::from_str::<ControlRequest>(&line) {
+        Ok(ControlRequest::GatewaySend {
+            profile,
+            target,
+            text,
+            attachments,
+        }) => send(&server, &profile, target, text, attachments).await,
+        Ok(ControlRequest::GatewayPlatform {
+            profile,
+            platform,
+            pause,
+        }) => platform_op(&server, &profile, &platform, pause).await,
+        Ok(ControlRequest::GatewayHandoff {
+            profile,
+            session,
+            target,
+        }) => handoff(&server, &profile, &session, &target).await,
+        Ok(ControlRequest::ResolveRole {
+            profile,
+            platform,
+            name,
+        }) => ControlResponse {
+            resolved: match server.messaging() {
+                Some(messaging) => messaging.resolve_role(&profile, &platform, &name).await,
+                None => None,
+            },
+            ..ControlResponse::default()
+        },
         Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,

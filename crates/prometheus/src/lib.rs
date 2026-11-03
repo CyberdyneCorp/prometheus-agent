@@ -28,6 +28,8 @@ pub mod memory_cmd;
 pub mod model_cmd;
 pub mod model_slash;
 pub mod output;
+pub mod pause_cmd;
+pub mod plugins_cmd;
 pub mod profile_cmd;
 pub mod prompt;
 pub mod prompt_cmd;

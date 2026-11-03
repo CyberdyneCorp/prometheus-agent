@@ -44,6 +44,8 @@ pub struct FakeHost {
     pub config_reads: Mutex<Vec<String>>,
     /// Sessions closed as idle.
     pub closed: Mutex<Vec<String>>,
+    /// Sessions unloaded without being ended, in order.
+    pub unloaded: Mutex<Vec<String>>,
     /// Each session's turn answers, kept as its transcript.
     answers: Answers,
 }
@@ -388,6 +390,11 @@ impl Host for FakeHost {
         Box::pin(async { Ok(true) })
     }
 
+    fn unload_idle<'a>(&'a self, _: &'a str, session_id: &'a str) -> HostFuture<'a, bool> {
+        self.unloaded.lock().unwrap().push(session_id.to_owned());
+        Box::pin(async { Ok(true) })
+    }
+
     fn load(&self) -> (usize, usize) {
         (
             self.sessions.lock().unwrap().len(),
@@ -447,7 +454,7 @@ impl Daemon {
         let server = Server::new(options, Arc::clone(&host) as Arc<dyn Host>).unwrap();
         let (stop, stopped) = oneshot::channel::<()>();
         let path: PathBuf = home.path().to_owned();
-        let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles().to_vec()).unwrap();
+        let lock = WriterLock::acquire(&path, Role::Daemon, server.profiles()).unwrap();
         let task = {
             let server = Arc::clone(&server);
             tokio::spawn(async move {
