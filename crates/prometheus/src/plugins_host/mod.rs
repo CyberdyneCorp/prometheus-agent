@@ -99,6 +99,24 @@ impl ProfilePlugins {
         ))
     }
 
+    /// [`ProfilePlugins::tool_hooks`] behind the first-party
+    /// `security-guidance` plugin when `config` enables it.
+    #[must_use]
+    pub fn tool_hooks_with_guidance(
+        &self,
+        call: CallInfo,
+        config: &pmt_config::schema::PluginsConfig,
+    ) -> Arc<dyn ToolHooks> {
+        let hooks = self.tool_hooks(call);
+        let id = pmt_tools::guidance::PLUGIN_ID;
+        let enabled =
+            config.enabled.iter().any(|p| p == id) && !config.disabled.iter().any(|p| p == id);
+        if !enabled {
+            return hooks;
+        }
+        pmt_tools::guidance::GuidanceHooks::wrap(config.security_guidance.mode, hooks)
+    }
+
     /// The provider caller's `transform_api_error_classification` seam.
     #[must_use]
     pub fn error_classifier(

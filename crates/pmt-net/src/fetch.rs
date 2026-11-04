@@ -19,7 +19,7 @@ use pmt_core::error::{Error, codes};
 use reqwest::{Response, Url, header, redirect};
 
 use crate::destination::{DestinationPolicy, Refusal};
-use crate::egress::{Denial, HostPolicy, Observer};
+use crate::egress::{Denial, HostPolicy, Observer, Reason};
 use crate::http::{OutboundPolicy, base_builder, build};
 use crate::resolve::{Lookup, OutboundResolver, SystemLookup};
 
@@ -248,6 +248,15 @@ impl Fetcher {
                 requester: session.requester.clone(),
                 reason,
             });
+        }
+        if reason == Reason::Denylist {
+            return Err(Error::new(
+                &codes::NET_DESTINATION_BLOCKED,
+                format!("Blocked: {bare} is blocked by policy"),
+            )
+            .with_hint(
+                "security.egress.deny, its deny_files and /egress deny list blocked hosts",
+            ));
         }
         Err(Error::new(
             &codes::NET_DESTINATION_BLOCKED,

@@ -695,6 +695,9 @@ error_codes! {
     /// `approvals test` was given a command line it cannot read.
     APPROVALS_UNPARSABLE = ("approvals.unparsable", Usage,
         "`prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting.");
+    /// `doctor --ack` named an advisory the catalog does not have.
+    ADVISORY_UNKNOWN = ("advisory.unknown", NotFound,
+        "`prometheus doctor --ack` named an advisory id that is not in the supply-chain advisory catalog; `prometheus doctor security` lists the advisories that match this install.");
     /// `approvals suggest --apply` named a proposal that is not listed.
     APPROVALS_NO_SUCH_PROPOSAL = ("approvals.no_such_proposal", Usage,
         "`prometheus approvals suggest --apply` named a proposal number that is not in the list; run it without `--apply` to see the numbered proposals. Nothing was changed.");

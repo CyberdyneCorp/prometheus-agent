@@ -176,6 +176,19 @@ pub struct TelemetryConfig {
     pub endpoint: Option<String>,
 }
 
+/// The `[privacy]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct PrivacyConfig {
+    /// Replace phone numbers, other people's email addresses and messaging
+    /// user ids (with a stable `user_<hash>`) in what reaches model
+    /// providers, logs, trajectories and telemetry.
+    pub redact_pii: bool,
+    /// The profile owner's email addresses, which `redact_pii` keeps.
+    pub owner_emails: Vec<String>,
+}
+
 /// The `[secrets]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -183,6 +196,35 @@ pub struct TelemetryConfig {
 pub struct SecretsConfig {
     /// Where this profile's secrets are stored.
     pub backend: SecretsBackend,
+    /// A helper command printing `NAME=VALUE` lines (POSIX only).
+    pub command: SecretCommandConfig,
+}
+
+/// The `[secrets.command]` section: a helper run once per process start,
+/// without a shell, whose stdout lines `NAME=VALUE` become secrets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SecretCommandConfig {
+    /// Run the helper (off by default; unsupported on Windows).
+    pub enabled: bool,
+    /// The helper's program and arguments (no shell).
+    pub argv: Vec<String>,
+    /// Seconds before the helper's process group is killed.
+    #[schemars(range(min = 1, max = 300))]
+    pub timeout_secs: u64,
+    /// Let helper values win over the secrets store and the environment.
+    pub override_existing: bool,
+}
+
+impl Default for SecretCommandConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            argv: Vec::new(),
+            timeout_secs: 3,
+            override_existing: false,
+        }
+    }
 }
 
 /// Secrets store backends.
@@ -217,6 +259,9 @@ pub struct SecurityConfig {
     /// Extra instruction-file basename globs (case-insensitive), e.g.
     /// `"*.mdc"`; writes to matches need human approval in every mode.
     pub protected_instruction_extra_patterns: Vec<String>,
+    /// Supply-chain advisory ids whose startup warning is silenced
+    /// (`prometheus doctor --ack <id>`); `doctor security` still shows them.
+    pub acked_advisories: Vec<String>,
 }
 
 impl Default for SecurityConfig {
@@ -228,6 +273,7 @@ impl Default for SecurityConfig {
             egress: EgressConfig::default(),
             protected_instruction_files: true,
             protected_instruction_extra_patterns: Vec::new(),
+            acked_advisories: Vec::new(),
         }
     }
 }
@@ -346,6 +392,12 @@ pub struct EgressConfig {
     pub allow_private: bool,
     /// CIDR ranges a local TUN proxy answers with (treated as public).
     pub fake_ip_ranges: Vec<String>,
+    /// Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g.
+    /// `*.casino.example`); a session can add to them, never remove.
+    pub deny: Vec<String>,
+    /// Absolute paths of shared blocklist files: one pattern per line, `#`
+    /// comments; re-read when a file changes.
+    pub deny_files: Vec<String>,
 }
 
 /// The `[network]` section.

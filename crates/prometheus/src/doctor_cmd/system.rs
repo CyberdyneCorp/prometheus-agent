@@ -201,6 +201,7 @@ pub(super) fn security(inputs: &Inputs<'_>) -> Vec<Check> {
         egress_line(&config.egress),
     ));
     checks.extend(posture(inputs));
+    checks.extend(advisories(inputs));
     checks.push(if config.redact_secrets {
         Check::new("security", "redaction", Status::Ok, "secret redaction on")
     } else {
@@ -213,6 +214,46 @@ pub(super) fn security(inputs: &Inputs<'_>) -> Vec<Check> {
         .with_hint("prometheus config set security.redact_secrets true")
     });
     checks
+}
+
+/// Supply-chain advisories matching this install, acknowledged ones
+/// included (an acknowledgement silences the startup warning only).
+fn advisories(inputs: &Inputs<'_>) -> Vec<Check> {
+    let acked = &inputs.scope.config().security.acked_advisories;
+    let found = crate::advisories::matches(inputs.scope);
+    if found.is_empty() {
+        return vec![Check::new(
+            "security",
+            "advisories",
+            Status::Ok,
+            "no installed package matches a supply-chain advisory",
+        )];
+    }
+    found
+        .iter()
+        .map(|m| {
+            let advisory = &m.advisory;
+            let note = if acked.iter().any(|a| a.eq_ignore_ascii_case(&advisory.id)) {
+                " (acknowledged)"
+            } else {
+                ""
+            };
+            Check::new(
+                "security",
+                "advisory",
+                Status::Warn,
+                format!(
+                    "advisory {}{note}: {} {} ({}) is compromised: {}",
+                    advisory.id,
+                    m.installed.name,
+                    m.installed.version,
+                    m.installed.location,
+                    advisory.summary
+                ),
+            )
+            .with_hint(advisory.remediation.clone())
+        })
+        .collect()
 }
 
 /// The posture findings beyond the sandbox: unsigned plugins, surfaces

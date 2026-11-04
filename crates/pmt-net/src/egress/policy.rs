@@ -8,7 +8,9 @@
 //! prompt or the tool array.
 
 use std::fmt;
-use std::sync::{PoisonError, RwLock};
+use std::sync::{Arc, PoisonError, RwLock};
+
+use super::denylist::Denylist;
 
 /// One host pattern: a host (`*.suffix` for subdomains, `*` for every
 /// host) and an optional port.
@@ -109,8 +111,8 @@ pub enum Reason {
     ModeNone,
     /// `allowlist` mode and no allow pattern names the host.
     NotAllowlisted,
-    /// A session deny pattern names the host.
-    DeniedBySession,
+    /// The profile's blocklist or a session deny pattern names the host.
+    Denylist,
     /// The requester's own grants do not name the host.
     NotGranted,
     /// A cloud metadata endpoint.
@@ -130,7 +132,7 @@ impl Reason {
         match self {
             Self::ModeNone => "mode_none",
             Self::NotAllowlisted => "not_allowlisted",
-            Self::DeniedBySession => "denied_by_session",
+            Self::Denylist => "denylist",
             Self::NotGranted => "not_granted",
             Self::Metadata => "metadata",
             Self::PrivateRange => "private_range",
@@ -182,10 +184,12 @@ pub struct State {
     pub deny: Vec<Allowed>,
 }
 
-/// A session's egress mode and patterns, shared and changeable.
+/// A session's egress mode and patterns, shared and changeable, over the
+/// profile's blocklist (which no session change lifts).
 #[derive(Debug, Default)]
 pub struct HostPolicy {
     state: RwLock<State>,
+    denylist: Option<Arc<Denylist>>,
 }
 
 impl HostPolicy {
@@ -198,7 +202,21 @@ impl HostPolicy {
                 allow,
                 deny: Vec::new(),
             }),
+            denylist: None,
         }
+    }
+
+    /// Refuses what `denylist` names in every mode.
+    #[must_use]
+    pub fn with_denylist(mut self, denylist: Arc<Denylist>) -> Self {
+        self.denylist = (!denylist.is_empty()).then_some(denylist);
+        self
+    }
+
+    /// The profile's blocklist, when it has one.
+    #[must_use]
+    pub fn denylist(&self) -> Option<&Arc<Denylist>> {
+        self.denylist.as_ref()
     }
 
     /// Checks `host:port` (case and a trailing dot are ignored).
@@ -208,12 +226,19 @@ impl HostPolicy {
     /// Why the host may not be reached.
     pub fn check(&self, host: &str, port: u16) -> Result<(), Reason> {
         let host = host.trim_end_matches('.').to_ascii_lowercase();
+        if self
+            .denylist
+            .as_ref()
+            .is_some_and(|d| d.matching(&host, port).is_some())
+        {
+            return Err(Reason::Denylist);
+        }
         let state = self.state();
         if state.mode == Mode::None {
             return Err(Reason::ModeNone);
         }
         if state.deny.iter().any(|d| d.admits(&host, port)) {
-            return Err(Reason::DeniedBySession);
+            return Err(Reason::Denylist);
         }
         if state.mode == Mode::Allowlist && !state.allow.iter().any(|a| a.admits(&host, port)) {
             return Err(Reason::NotAllowlisted);
@@ -287,10 +312,33 @@ mod tests {
         policy.allow(Allowed::parse("pypi.org"));
         assert_eq!(policy.check("pypi.org", 443), Ok(()));
         policy.deny(Allowed::parse("pypi.org"));
-        assert_eq!(policy.check("pypi.org", 443), Err(Reason::DeniedBySession));
+        assert_eq!(policy.check("pypi.org", 443), Err(Reason::Denylist));
         policy.set_mode(Mode::Public);
-        assert_eq!(policy.check("pypi.org", 443), Err(Reason::DeniedBySession));
+        assert_eq!(policy.check("pypi.org", 443), Err(Reason::Denylist));
         assert_eq!(policy.check("example.com", 443), Ok(()));
+    }
+
+    #[test]
+    fn a_session_cannot_lift_the_profile_blocklist() {
+        let list = Arc::new(Denylist::new(&["*.casino.example".into()], &[]));
+        let policy = HostPolicy::new(Mode::Public, Vec::new()).with_denylist(list);
+        assert_eq!(
+            policy.check("play.casino.example", 443),
+            Err(Reason::Denylist)
+        );
+        policy.allow(Allowed::parse("play.casino.example"));
+        policy.set_mode(Mode::Allowlist);
+        assert_eq!(
+            policy.check("play.casino.example", 443),
+            Err(Reason::Denylist)
+        );
+        assert_eq!(
+            policy
+                .check("play.casino.example", 443)
+                .unwrap_err()
+                .as_str(),
+            "denylist"
+        );
     }
 
     #[test]

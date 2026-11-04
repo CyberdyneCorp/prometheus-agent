@@ -2951,6 +2951,7 @@ version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
  "dbus-secret-service-keyring-store",
+ "getrandom 0.4.3",
  "glob",
  "jiff",
  "keyring-core",
@@ -2980,6 +2981,7 @@ dependencies = [
  "jiff",
  "nix 0.31.3",
  "proptest",
+ "regex",
  "serde",
  "serde_json",
  "sha2 0.11.1",

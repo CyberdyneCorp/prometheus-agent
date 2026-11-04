@@ -1,0 +1,38 @@
+{
+  "schema": "prometheus.advisories.v1",
+  "generated": "2026-11-01",
+  "advisories": [
+    {
+      "id": "PMT-ADV-2018-0001",
+      "ecosystem": "npm",
+      "package": "event-stream",
+      "versions": ["3.3.6"],
+      "summary": "event-stream 3.3.6 pulled in flatmap-stream 0.1.1, which carried a payload stealing cryptocurrency wallets.",
+      "remediation": "Pin event-stream to 3.3.5 or 4.0.1 and remove flatmap-stream."
+    },
+    {
+      "id": "PMT-ADV-2021-0001",
+      "ecosystem": "npm",
+      "package": "ua-parser-js",
+      "versions": ["0.7.29", "0.8.0", "1.0.0"],
+      "summary": "Hijacked ua-parser-js releases installed a cryptominer and a password stealer.",
+      "remediation": "Use 0.7.30, 0.8.1 or 1.0.1 or later and rotate credentials of machines that installed it."
+    },
+    {
+      "id": "PMT-ADV-2024-0001",
+      "ecosystem": "npm",
+      "package": "@solana/web3.js",
+      "versions": ["1.95.6", "1.95.7"],
+      "summary": "Compromised @solana/web3.js releases exfiltrated private keys.",
+      "remediation": "Use 1.95.8 or later and rotate any key the package could read."
+    },
+    {
+      "id": "PMT-ADV-2024-0002",
+      "ecosystem": "pypi",
+      "package": "ultralytics",
+      "versions": ["8.3.41", "8.3.42", "8.3.45", "8.3.46"],
+      "summary": "ultralytics releases published through a compromised build pipeline and token installed a cryptominer.",
+      "remediation": "Move to a release not listed here and rebuild the environment."
+    }
+  ]
+}

@@ -62,6 +62,31 @@ pub struct PluginsConfig {
     /// Each plugin's own settings, `plugins.entries.<id>.<key>`, read and
     /// written by the plugin through its `config` host interface.
     pub entries: BTreeMap<String, BTreeMap<String, serde_json::Value>>,
+    /// The first-party `security-guidance` plugin (enable it with
+    /// `plugins.enabled = ["security-guidance"]`).
+    pub security_guidance: SecurityGuidanceConfig,
+}
+
+/// `[plugins.security_guidance]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SecurityGuidanceConfig {
+    /// `warn` (write, then report the matched rules), `block` (refuse the
+    /// write with the guidance) or `off`.
+    pub mode: GuidanceMode,
+}
+
+/// What a security guidance finding does to a write.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GuidanceMode {
+    /// The write proceeds; its result lists the findings.
+    #[default]
+    Warn,
+    /// The write is refused with the guidance as the reason.
+    Block,
+    /// No matching.
+    Off,
 }
 
 impl Default for PluginsConfig {
@@ -81,6 +106,7 @@ impl Default for PluginsConfig {
             approval_transport_fallback: TransportFallback::Deny,
             wasm: PluginsWasmConfig::default(),
             entries: BTreeMap::new(),
+            security_guidance: SecurityGuidanceConfig::default(),
         }
     }
 }

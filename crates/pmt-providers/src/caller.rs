@@ -263,6 +263,14 @@ impl ModelCaller {
         self
     }
 
+    /// Replaces PII in every request (`privacy.redact_pii`), the mock's
+    /// included, before it is sent.
+    #[must_use]
+    pub fn with_pii(mut self, pii: Arc<pmt_core::pii::Pii>) -> Self {
+        self.sender = self.sender.with_pii(pii);
+        self
+    }
+
     /// Serves routes of the built-in `mock` provider from `mock` (the
     /// session's script; without one they echo).
     #[must_use]

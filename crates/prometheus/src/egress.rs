@@ -16,7 +16,7 @@ use pmt_config::schema::{EgressConfig, EgressMode};
 use pmt_core::audit::{AuditLog, Event, Kind};
 use pmt_core::error::{Error, codes};
 use pmt_net::DestinationPolicy;
-use pmt_net::egress::{Allowed, Denial, HostPolicy, Mode, Observer};
+use pmt_net::egress::{Allowed, Denial, Denylist, HostPolicy, Mode, Observer};
 
 /// The pmt-net mode of a configured mode.
 #[must_use]
@@ -37,7 +37,8 @@ pub struct Overrides {
     pub allow: Vec<String>,
 }
 
-/// The host policy `config` describes, with `overrides`.
+/// The host policy `config` describes, with `overrides`, over the
+/// profile's blocklist (`deny`, `deny_files`).
 #[must_use]
 pub fn host_policy(config: &EgressConfig, overrides: &Overrides) -> HostPolicy {
     let allow = config
@@ -46,7 +47,9 @@ pub fn host_policy(config: &EgressConfig, overrides: &Overrides) -> HostPolicy {
         .chain(&overrides.allow)
         .map(|p| Allowed::parse(p))
         .collect();
+    let files: Vec<std::path::PathBuf> = config.deny_files.iter().map(Into::into).collect();
     HostPolicy::new(mode(overrides.mode.unwrap_or(config.mode)), allow)
+        .with_denylist(Arc::new(Denylist::new(&config.deny, &files)))
 }
 
 /// The address policy of `config`.

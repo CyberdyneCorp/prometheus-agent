@@ -190,6 +190,26 @@ pub struct Request {
 }
 
 impl Request {
+    /// This request with PII replaced in everything the provider reads:
+    /// system blocks, texts, tool calls and tool results (spec:
+    /// security-boundaries, Optional PII redaction).
+    #[must_use]
+    pub fn redacted(&self, pii: &pmt_core::pii::Pii) -> Self {
+        let mut out = self.clone();
+        for block in &mut out.system {
+            block.text = pii.redact(&block.text);
+        }
+        for part in out.messages.iter_mut().flat_map(|m| m.parts.iter_mut()) {
+            match part {
+                Part::Text { text } => *text = pii.redact(text),
+                Part::ToolResult { content, .. } => *content = pii.redact(content),
+                Part::ToolCall { arguments, .. } => *arguments = pii.redact(arguments),
+                Part::Image { .. } => {}
+            }
+        }
+        out
+    }
+
     /// Whether any message carries an image.
     #[must_use]
     pub fn has_images(&self) -> bool {

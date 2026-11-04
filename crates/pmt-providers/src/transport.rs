@@ -85,6 +85,7 @@ pub(crate) struct Sender {
     client: reqwest::Client,
     mock: Arc<Mock>,
     hooks: Option<Arc<dyn RequestHooks>>,
+    pii: Option<Arc<pmt_core::pii::Pii>>,
 }
 
 impl std::fmt::Debug for Sender {
@@ -100,7 +101,14 @@ impl Sender {
             client,
             mock: Arc::new(Mock::echo()),
             hooks: None,
+            pii: None,
         }
+    }
+
+    /// Replaces PII in every request before it leaves the process.
+    pub(crate) fn with_pii(mut self, pii: Arc<pmt_core::pii::Pii>) -> Self {
+        self.pii = Some(pii);
+        self
     }
 
     /// Runs plugin request hooks of the providers they handle.
@@ -126,6 +134,8 @@ impl Sender {
         route: &Route,
         request: &Request,
     ) -> Result<ModelStream, ProviderError> {
+        let redacted = self.pii.as_deref().map(|pii| request.redacted(pii));
+        let request = redacted.as_ref().unwrap_or(request);
         if mock::serves(route) {
             let feed = self.mock.reply(route, request)?;
             return ModelStream::start(Source::Mock(feed), Limits::of(route)).await;

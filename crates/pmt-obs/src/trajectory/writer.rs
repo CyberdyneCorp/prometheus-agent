@@ -62,11 +62,7 @@ pub fn open_for_session(
     if !settings.enabled {
         return Ok(None);
     }
-    let redactor = if config.security.redact_secrets {
-        Some(scope.secrets().redactor()?)
-    } else {
-        None
-    };
+    let redactor = crate::redaction::profile_redactor(scope)?;
     TrajectoryWriter::open(WriterOptions {
         dir: scope.path(files::DIR),
         session_id: session_id.to_owned(),

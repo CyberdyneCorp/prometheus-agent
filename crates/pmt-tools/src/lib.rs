@@ -32,6 +32,7 @@ pub mod dispatch;
 pub mod environments;
 pub mod files;
 pub mod grants;
+pub mod guidance;
 pub mod probe;
 pub mod protected;
 pub mod provenance;

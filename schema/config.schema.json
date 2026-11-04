@@ -1422,6 +1422,22 @@
           "description": "Allow private destinations without a session grant.",
           "type": "boolean"
         },
+        "deny": {
+          "default": [],
+          "description": "Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g.\n`*.casino.example`); a session can add to them, never remove.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny_files": {
+          "default": [],
+          "description": "Absolute paths of shared blocklist files: one pattern per line, `#`\ncomments; re-read when a file changes.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "fake_ip_ranges": {
           "default": [],
           "description": "CIDR ranges a local TUN proxy answers with (treated as public).",
@@ -2305,6 +2321,26 @@
         "idempotent_no_progress"
       ],
       "type": "object"
+    },
+    "GuidanceMode": {
+      "description": "What a security guidance finding does to a write.",
+      "oneOf": [
+        {
+          "const": "warn",
+          "description": "The write proceeds; its result lists the findings.",
+          "type": "string"
+        },
+        {
+          "const": "block",
+          "description": "The write is refused with the guidance as the reason.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No matching.",
+          "type": "string"
+        }
+      ]
     },
     "HomeChannel": {
       "additionalProperties": false,
@@ -4346,6 +4382,13 @@
           "description": "Statically scan every plugin install and update for threats\n(reverse shells, credential exfiltration, destructive commands,\npersistence, obfuscated execution, prompt injection); `false` skips\nthe scan and the install record says so.",
           "type": "boolean"
         },
+        "security_guidance": {
+          "$ref": "#/$defs/SecurityGuidanceConfig",
+          "default": {
+            "mode": "warn"
+          },
+          "description": "The first-party `security-guidance` plugin (enable it with\n`plugins.enabled = [\"security-guidance\"]`)."
+        },
         "signature_policy": {
           "$ref": "#/$defs/SignaturePolicy",
           "default": "require",
@@ -4458,6 +4501,27 @@
           "type": "string"
         }
       ]
+    },
+    "PrivacyConfig": {
+      "additionalProperties": false,
+      "description": "The `[privacy]` section.",
+      "properties": {
+        "owner_emails": {
+          "default": [],
+          "description": "The profile owner's email addresses, which `redact_pii` keeps.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "redact_pii": {
+          "default": false,
+          "description": "Replace phone numbers, other people's email addresses and messaging\nuser ids (with a stable `user_<hash>`) in what reaches model\nproviders, logs, trajectories and telemetry.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ProfileRoute": {
       "additionalProperties": false,
@@ -5204,6 +5268,39 @@
       "minimum": 0,
       "type": "integer"
     },
+    "SecretCommandConfig": {
+      "additionalProperties": false,
+      "description": "The `[secrets.command]` section: a helper run once per process start,\nwithout a shell, whose stdout lines `NAME=VALUE` become secrets.",
+      "properties": {
+        "argv": {
+          "default": [],
+          "description": "The helper's program and arguments (no shell).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Run the helper (off by default; unsupported on Windows).",
+          "type": "boolean"
+        },
+        "override_existing": {
+          "default": false,
+          "description": "Let helper values win over the secrets store and the environment.",
+          "type": "boolean"
+        },
+        "timeout_secs": {
+          "default": 3,
+          "description": "Seconds before the helper's process group is killed.",
+          "format": "uint64",
+          "maximum": 300,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "SecretName": {
       "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
       "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
@@ -5233,6 +5330,16 @@
           "$ref": "#/$defs/SecretsBackend",
           "default": "file",
           "description": "Where this profile's secrets are stored."
+        },
+        "command": {
+          "$ref": "#/$defs/SecretCommandConfig",
+          "default": {
+            "argv": [],
+            "enabled": false,
+            "override_existing": false,
+            "timeout_secs": 3
+          },
+          "description": "A helper command printing `NAME=VALUE` lines (POSIX only)."
         }
       },
       "type": "object",
@@ -5242,6 +5349,14 @@
       "additionalProperties": false,
       "description": "The `[security]` section.",
       "properties": {
+        "acked_advisories": {
+          "default": [],
+          "description": "Supply-chain advisory ids whose startup warning is silenced\n(`prometheus doctor --ack <id>`); `doctor security` still shows them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "capabilities": {
           "description": "Profile capability baseline; unset uses the built-in baseline\n(workspace read/write, toolchain read, `process.spawn:*`, egress\npolicy, `llm.call`).",
           "items": {
@@ -5257,6 +5372,8 @@
           "default": {
             "allow": [],
             "allow_private": false,
+            "deny": [],
+            "deny_files": [],
             "fake_ip_ranges": [],
             "mode": "public"
           },
@@ -5291,6 +5408,18 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "SecurityGuidanceConfig": {
+      "additionalProperties": false,
+      "description": "`[plugins.security_guidance]`.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/GuidanceMode",
+          "default": "warn",
+          "description": "`warn` (write, then report the matched rules), `block` (refuse the\nwrite with the guidance) or `off`."
+        }
+      },
+      "type": "object"
     },
     "SessionsConfig": {
       "additionalProperties": false,
@@ -7453,6 +7582,9 @@
         "load_timeout_ms": 10000,
         "safe_mode": false,
         "scan_on_install": true,
+        "security_guidance": {
+          "mode": "warn"
+        },
         "signature_policy": "require",
         "trusted_project_dirs": [],
         "wasm": {
@@ -7461,6 +7593,14 @@
         }
       },
       "description": "Plugin enablement, hook bounds and WASM limits."
+    },
+    "privacy": {
+      "$ref": "#/$defs/PrivacyConfig",
+      "default": {
+        "owner_emails": [],
+        "redact_pii": false
+      },
+      "description": "PII redaction."
     },
     "prompt": {
       "$ref": "#/$defs/PromptConfig",
@@ -7522,16 +7662,25 @@
     "secrets": {
       "$ref": "#/$defs/SecretsConfig",
       "default": {
-        "backend": "file"
+        "backend": "file",
+        "command": {
+          "argv": [],
+          "enabled": false,
+          "override_existing": false,
+          "timeout_secs": 3
+        }
       },
       "description": "Secrets store backend."
     },
     "security": {
       "$ref": "#/$defs/SecurityConfig",
       "default": {
+        "acked_advisories": [],
         "egress": {
           "allow": [],
           "allow_private": false,
+          "deny": [],
+          "deny_files": [],
           "fake_ip_ranges": [],
           "mode": "public"
         },

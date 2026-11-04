@@ -82,6 +82,14 @@ impl AuxCaller {
         self
     }
 
+    /// Replaces PII in every request (`privacy.redact_pii`), the mock's
+    /// included, before it is sent.
+    #[must_use]
+    pub fn with_pii(mut self, pii: Arc<pmt_core::pii::Pii>) -> Self {
+        self.sender = self.sender.with_pii(pii);
+        self
+    }
+
     /// Serves `mock` provider routes from the session's script, as the
     /// main caller does.
     #[must_use]

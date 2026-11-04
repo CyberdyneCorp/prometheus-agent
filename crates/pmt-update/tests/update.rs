@@ -183,3 +183,52 @@ fn installer_rejects_an_unknown_channel_before_downloading() {
         "install.sh: --channel must be stable or canary, not main"
     );
 }
+
+/// Supply-chain advisory catalog: the update check refreshes the signed
+/// catalog; the kept copy is verified at every load, so an edited copy
+/// falls back to the embedded catalog.
+#[tokio::test]
+async fn the_update_check_refreshes_the_signed_advisory_catalog() {
+    use pmt_update::advisories::{Catalog, kept_path};
+
+    let dir = temp();
+    let install = install(dir.path());
+    let server = server_with_stable("v1.4.1").await;
+    let catalog = serde_json::json!({
+        "schema": "prometheus.advisories.v1",
+        "generated": "2999-01-01",
+        "advisories": [{"id": "PMT-ADV-2999-0001", "ecosystem": "npm", "package": "left-pad",
+            "versions": ["9.9.9"], "summary": "test", "remediation": "remove it"}]
+    })
+    .to_string();
+    Mock::given(method("GET"))
+        .and(path("/channels/advisories.json.minisig"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(sign(catalog.as_bytes())))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/channels/advisories.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(catalog))
+        .mount(&server)
+        .await;
+    let releases = releases(&server);
+    let quiet = |_: &str| {};
+    let config = UpdateConfig::default();
+    let session = pmt_update::flow::Session {
+        install: &install,
+        config: &config,
+        releases: &releases,
+        progress: &quiet,
+    };
+    pmt_update::flow::check(&session, None).await.unwrap();
+    let home = install.home.root();
+    let current = Catalog::current(home, &TrustRoot::embedded());
+    assert!(current.get("PMT-ADV-2999-0001").is_some(), "{current:?}");
+    let kept = kept_path(home);
+    let edited = std::fs::read_to_string(&kept)
+        .unwrap()
+        .replace("9.9.9", "9.9.8");
+    std::fs::write(&kept, edited).unwrap();
+    let current = Catalog::current(home, &TrustRoot::embedded());
+    assert_eq!(current, Catalog::embedded());
+}

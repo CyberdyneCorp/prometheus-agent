@@ -6,6 +6,7 @@
 //! the exact parser the binary uses, and so tests can drive each step.
 
 pub mod accounts;
+pub mod advisories;
 pub mod approvals_cmd;
 pub mod auth_cmd;
 pub mod backup_cmd;

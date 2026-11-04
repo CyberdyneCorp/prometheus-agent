@@ -37,6 +37,7 @@ mod parse;
 pub mod passthrough;
 mod platform_options;
 pub mod platforms;
+pub mod privacy;
 pub mod profile_id;
 pub mod profiles;
 pub mod provider_urls;

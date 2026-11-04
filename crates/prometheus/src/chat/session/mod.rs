@@ -423,9 +423,7 @@ impl Factory {
             self.models.port(target).await?,
         ));
         self.maintain();
-        let session = self.store.session(id)?;
-        self.record.session(id, session.root_session_id, target);
-        self.record_launch_flags(id)?;
+        let session = self.session_row(id, target)?;
         self.discover_mcp().await;
         let (registry, selection, session_surface) = self.session_selection(&session)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
@@ -738,6 +736,27 @@ impl Factory {
         })
     }
 
+    /// The stored row of session `id`, recorded for `--usage-file` with
+    /// the launch flags; a gateway session's platform user id is hashed in
+    /// every model request when PII is redacted (spec:
+    /// security-boundaries, Optional PII redaction).
+    fn session_row(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+    ) -> Result<pmt_store::Session, Error> {
+        let session = self.store.session(id)?;
+        if let pmt_store::Origin::Gateway {
+            user: Some(user), ..
+        } = &session.origin
+        {
+            self.models.register_user_id(user);
+        }
+        self.record.session(id, session.root_session_id, target);
+        self.record_launch_flags(id)?;
+        Ok(session)
+    }
+
     /// Marks this factory's sessions as hosted by `daemon`: their gates
     /// block commands that would stop it (spec: tool-system,
     /// Self-termination guard).
@@ -826,7 +845,9 @@ impl Factory {
             gate: Arc::clone(gate),
             agent: Arc::clone(agent),
             redactor: self.redactor.clone(),
-            hooks: self.plugins.tool_hooks(self.plugin_call(id)),
+            hooks: self
+                .plugins
+                .tool_hooks_with_guidance(self.plugin_call(id), &self.scope.config().plugins),
             model: Arc::clone(model),
         };
         let built = tools::session_tools(&inputs.surface(&registry, &selection, &route)).await?;
@@ -961,7 +982,9 @@ impl Factory {
             agent: None,
             redactor: &self.redactor,
             context_window: None,
-            hooks: self.plugins.tool_hooks(self.plugin_call(child)),
+            hooks: self
+                .plugins
+                .tool_hooks_with_guidance(self.plugin_call(child), &self.scope.config().plugins),
             route: &route,
         })
         .await

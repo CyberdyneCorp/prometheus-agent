@@ -75,11 +75,13 @@ pub use models::{
 };
 pub use operations::{
     BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
-    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode,
-    SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
+    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
+    TelemetryConfig, TrajectoriesConfig,
 };
 pub use plugins::{
-    DEFAULT_CATALOG_URL, PluginsConfig, PluginsWasmConfig, SignaturePolicy, TransportFallback,
+    DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
+    SignaturePolicy, TransportFallback,
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use state::{
@@ -168,6 +170,8 @@ pub struct Config {
     pub python_bridge: PythonBridgeConfig,
     /// Provider prompt caching.
     pub prompt_cache: PromptCacheConfig,
+    /// PII redaction.
+    pub privacy: PrivacyConfig,
     /// Per-provider overrides, keyed by provider id.
     #[schemars(extend("x-apply" = "next_session"))]
     pub providers: std::collections::BTreeMap<String, ProviderConfig>,
@@ -239,6 +243,7 @@ impl Default for Config {
             prompt: PromptConfig::default(),
             python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
+            privacy: PrivacyConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),
             secrets: SecretsConfig::default(),

@@ -18,6 +18,8 @@ serde.workspace = true
 serde_json.workspace = true
 # Process start times for runtime records (pid reuse detection), on every OS.
 sysinfo.workspace = true
+# Phone, email and attribution patterns of PII redaction.
+regex.workspace = true
 # Registry entry names: a hash of the home path.
 sha2.workspace = true
 # Panic isolation spawns tasks; cancellation is a tokio-util token tree.

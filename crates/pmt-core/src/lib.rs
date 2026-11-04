@@ -19,6 +19,7 @@ pub mod inventory;
 pub mod nofile;
 pub mod panic;
 pub mod pause;
+pub mod pii;
 pub mod private_fs;
 pub mod protocol;
 pub mod provenance;

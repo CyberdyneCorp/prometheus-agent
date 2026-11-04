@@ -243,6 +243,16 @@ pub(super) fn approval_required(json: bool, id: &str, command: &str) -> u8 {
 /// `prometheus plugins enable <id> [--grant ...]`.
 pub(super) fn enable(ctx: &Context<'_>, id: &str, grant: Option<&str>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
+    if id == pmt_tools::guidance::PLUGIN_ID {
+        // First-party and native: it asks for no capability.
+        set_lists(&scope, id, true)?;
+        eprintln!(
+            "enabled '{id}' in profile '{}' (plugins.security_guidance.mode = {}); it applies to sessions started from now on",
+            scope.name(),
+            mode_name(scope.config().plugins.security_guidance.mode)
+        );
+        return Ok(0);
+    }
     let target = target(&scope, id)?;
     check_blocked(&scope, &target)?;
     match decide(&scope, &target, grant)? {
@@ -281,9 +291,21 @@ fn ask(target: &Target) -> Result<Option<bool>, Error> {
 }
 
 /// `prometheus plugins disable <id>`.
+fn mode_name(mode: pmt_config::schema::GuidanceMode) -> &'static str {
+    match mode {
+        pmt_config::schema::GuidanceMode::Warn => "warn",
+        pmt_config::schema::GuidanceMode::Block => "block",
+        pmt_config::schema::GuidanceMode::Off => "off",
+    }
+}
+
 pub(super) fn disable(ctx: &Context<'_>, id: &str) -> Result<u8, Error> {
     let scope = ctx.scope()?;
+    let first_party = id == pmt_tools::guidance::PLUGIN_ID;
     target(&scope, id).map(|_| ()).or_else(|err| {
+        if first_party {
+            return Ok(());
+        }
         // A broken plugin can still be disabled.
         if err.code() == &codes::PLUGINS_NOT_FOUND {
             Err(err)

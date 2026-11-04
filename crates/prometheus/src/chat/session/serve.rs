@@ -82,7 +82,9 @@ impl Factory {
             agent: None,
             redactor: &self.redactor,
             context_window: None,
-            hooks: self.plugins.tool_hooks(self.plugin_call(id)),
+            hooks: self
+                .plugins
+                .tool_hooks_with_guidance(self.plugin_call(id), &self.scope.config().plugins),
             route: &route,
         })
         .await?;

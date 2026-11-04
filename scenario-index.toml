@@ -2390,3 +2390,20 @@ capabilities = [
 
 [tool-system."Approval suggestions mined from history"]
 "Repeated approvals proposed" = ["crates/prometheus/tests/approvals_cli.rs::repeated_approvals_are_proposed_without_changing_grants", "crates/pmt-tools/src/approval/suggest.rs::approvals_generalize_to_the_program_and_subcommand"]
+
+# Group 34.6 (website blocklist, supply-chain advisories, command secret
+# source, PII redaction, security guidance)
+[security-boundaries."Website blocklist"]
+"Shared list file" = ["crates/prometheus/tests/website_blocklist.rs::web_extract_of_a_host_in_a_shared_list_file_is_blocked", "crates/prometheus/tests/website_blocklist.rs::a_sandboxed_child_cannot_reach_a_blocklisted_host", "crates/pmt-net/src/egress/denylist.rs::a_list_file_is_reread_when_it_changes", "crates/pmt-net/src/egress/policy.rs::a_session_cannot_lift_the_profile_blocklist", "crates/pmt-tools/src/browser/safety.rs::a_blocklisted_navigation_is_refused_naming_the_host"]
+
+[security-boundaries."Supply-chain advisory catalog"]
+"Compromised MCP package" = ["crates/prometheus/tests/advisories.rs::a_pinned_compromised_mcp_package_is_warned_about_until_acknowledged", "crates/prometheus/tests/advisories.rs::acknowledging_an_unknown_advisory_exits_66", "crates/pmt-update/tests/update.rs::the_update_check_refreshes_the_signed_advisory_catalog", "crates/prometheus/src/advisories.rs::pinned_mcp_packages_are_read_from_their_command"]
+
+[security-boundaries."Command secret source"]
+"Helper times out" = ["crates/prometheus/tests/secrets_command.rs::a_helper_waiting_for_a_pin_is_killed_and_startup_continues", "crates/pmt-config/src/secrets/tests.rs::a_helper_waiting_for_a_pin_is_killed_at_the_timeout", "crates/pmt-config/src/secrets/tests.rs::command_values_rank_after_the_store_unless_they_override"]
+
+[security-boundaries."Optional PII redaction"]
+"Group chat" = ["crates/prometheus/tests/pii_redaction.rs::a_group_message_reaches_the_provider_pseudonymized_and_the_reply_reaches_the_chat", "crates/pmt-core/src/pii.rs::phones_and_other_peoples_emails_are_replaced", "crates/pmt-core/src/pii.rs::user_ids_get_a_stable_keyed_hash"]
+
+[security-boundaries."Security guidance on written code"]
+"Warn mode" = ["crates/prometheus/tests/security_guidance.rs::warn_mode_writes_the_file_and_reports_the_rule", "crates/prometheus/tests/security_guidance.rs::block_mode_refuses_the_write_with_the_guidance", "crates/pmt-tools/src/guidance/mod.rs::each_class_is_found_in_typical_code"]

@@ -451,6 +451,9 @@ Options:
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
+      --ack <ADVISORY_ID>
+          Silence the startup warning of a supply-chain advisory (added to `security.acked_advisories`); `doctor security` still shows it
+
   -v, --verbose...
           More detail; repeatable
 

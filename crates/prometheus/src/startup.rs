@@ -102,7 +102,8 @@ pub fn bind_profile(scope: &pmt_config::ProfileScope) {
 
 /// What logging needs of every profile a process serves (the daemon calls
 /// it for each one): its stored secrets are redacted from its records
-/// (unless `security.redact_secrets = false`), and a disabled
+/// (unless `security.redact_secrets = false`), unacknowledged supply-chain
+/// advisories matching the install are logged at WARN, and a disabled
 /// `security.redact_secrets` or `security.protected_instruction_files` and
 /// a refused telemetry endpoint are logged at WARN, on every start, as
 /// records of that profile.
@@ -117,15 +118,16 @@ pub fn register_profile(scope: &pmt_config::ProfileScope) {
         tracing::warn!("{REDACTION_DISABLED_WARNING}");
     }
     if let Some(handle) = pmt_obs::logs::handle() {
-        match scope.secrets().redactor() {
-            Ok(redactor) if redact => handle.register_profile(&name, redactor),
-            Ok(_) => {}
+        match pmt_obs::redaction::profile_redactor(scope) {
+            Ok(Some(redactor)) => handle.register_profile(&name, redactor),
+            Ok(None) => {}
             Err(err) => tracing::warn!("log redaction without the secret store: {err}"),
         }
     }
     // Logs a refused telemetry endpoint on every start; telemetry is off
     // (no client exists) unless enabled with an acceptable endpoint.
     let _ = pmt_obs::telemetry::Telemetry::resolve(&scope.config().telemetry);
+    crate::advisories::warn_unacked(scope);
 }
 
 /// The launch environment's secrets, named (`PMT_SECRET_X` is `X`).

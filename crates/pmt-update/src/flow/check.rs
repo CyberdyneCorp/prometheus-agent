@@ -65,8 +65,8 @@ impl Checked {
     }
 }
 
-/// `prometheus update --check [--channel c]`: fetches only the signed
-/// channel index.
+/// `prometheus update --check [--channel c]`: fetches the signed channel
+/// index and the signed advisory catalog.
 ///
 /// # Errors
 ///
@@ -79,6 +79,15 @@ pub async fn check(session: &Session<'_>, channel: Option<Channel>) -> Result<Ch
     let mut writer = begin(install, Kind::Check, channel)?;
     let result = async {
         let index = session.releases.channel_index(channel).await?;
+        // The advisory catalog is refreshed with the signed index; a
+        // catalog that cannot be fetched or verified never fails the check.
+        if let Err(err) = crate::advisories::refresh(session.releases, install.home.root()).await {
+            tracing::warn!(
+                component = "update",
+                "advisory catalog not refreshed: {}",
+                err.message()
+            );
+        }
         let checked = Checked::compare(install.version, channel, index.version);
         writer.update(|r| {
             r.to = Some(index.version.to_string());

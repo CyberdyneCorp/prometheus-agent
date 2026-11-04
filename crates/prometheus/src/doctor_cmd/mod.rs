@@ -67,6 +67,13 @@ struct Report<'a> {
 ///
 /// `doctor.unknown_group` (2); home errors.
 pub fn run(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    if let Some(id) = &args.ack {
+        let id = crate::advisories::ack(&ctx.scope()?, id)?;
+        eprintln!(
+            "acknowledged {id}: its startup warning is silenced; prometheus doctor security still shows it"
+        );
+        return Ok(0);
+    }
     if let Some(group) = &args.group
         && !GROUPS.contains(&group.as_str())
     {

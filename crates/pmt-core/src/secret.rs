@@ -75,6 +75,8 @@ pub struct Redactor {
     /// `(value, marker)`, longest value first, so a secret containing
     /// another is replaced whole.
     values: Vec<(SecretString, String)>,
+    /// PII redaction applied after the secrets (`privacy.redact_pii`).
+    pii: Option<std::sync::Arc<crate::pii::Pii>>,
 }
 
 impl Redactor {
@@ -122,30 +124,46 @@ impl Redactor {
                 .then_with(|| a.1.cmp(&b.1))
         });
         values.dedup_by(|a, b| a.0 == b.0);
-        Self { values }
+        Self { values, pii: None }
+    }
+
+    /// This redactor, also replacing PII with `pii` (spec:
+    /// security-boundaries, Optional PII redaction).
+    #[must_use]
+    pub fn with_pii(mut self, pii: std::sync::Arc<crate::pii::Pii>) -> Self {
+        self.pii = Some(pii);
+        self
     }
 
     /// This redactor plus every value of `other` (for example the launch
     /// environment's values plus a profile's store).
     #[must_use]
     pub fn merged(&self, other: &Self) -> Self {
-        Self::from_forms(self.values.iter().chain(&other.values).cloned())
+        let mut merged = Self::from_forms(self.values.iter().chain(&other.values).cloned());
+        merged.pii = self.pii.clone().or_else(|| other.pii.clone());
+        merged
     }
 
-    /// Whether no value is known (pattern redaction still applies).
+    /// Whether no value is known and no PII is redacted (pattern
+    /// redaction still applies).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+        self.values.is_empty() && self.pii.is_none()
     }
 
     /// `text` with every known secret value replaced.
     #[must_use]
     pub fn redact(&self, text: &str) -> String {
-        self.values
+        let out = self
+            .values
             .iter()
             .fold(text.to_owned(), |acc, (secret, marker)| {
                 acc.replace(secret.expose(), marker)
-            })
+            });
+        match &self.pii {
+            Some(pii) => pii.redact(&out),
+            None => out,
+        }
     }
 
     /// `text` with known values and every credential-shaped token (a

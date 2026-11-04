@@ -18,6 +18,7 @@
 //! Each proxy runs on its own thread with its own runtime, so its owner
 //! needs no async context; dropping the [`Proxy`] stops it.
 
+mod denylist;
 mod policy;
 
 use std::io;
@@ -30,6 +31,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::oneshot;
 
+pub use self::denylist::{Denylist, HostGlob};
 pub use self::policy::{Allowed, Denial, HostPolicy, Mode, Reason, State};
 use crate::destination::DestinationPolicy;
 use crate::resolve::{Lookup, SystemLookup};

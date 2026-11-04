@@ -7,6 +7,7 @@
 //! pre-update backups, and rollback; plus the managed runtime store
 //! ([`runtimes`]) and downloads under the retry budget ([`download`]).
 
+pub mod advisories;
 pub mod archive;
 pub mod download;
 pub mod fetch;

@@ -135,6 +135,18 @@ impl Releases {
     ///
     /// `update.failed` (download), `update.signature` (77).
     pub async fn verified(&self, path: &str) -> Result<Vec<u8>, Error> {
+        self.verified_with_signature(path)
+            .await
+            .map(|(data, _)| data)
+    }
+
+    /// As [`Releases::verified`], also answering the signature text (to
+    /// keep beside a file that is verified again at each load).
+    ///
+    /// # Errors
+    ///
+    /// As [`Releases::verified`].
+    pub async fn verified_with_signature(&self, path: &str) -> Result<(Vec<u8>, String), Error> {
         let file = path.rsplit('/').next().unwrap_or(path);
         let signature = self.get(&format!("{path}{SIGNATURE_SUFFIX}")).await;
         let data = self.get(path).await?;
@@ -149,7 +161,7 @@ impl Releases {
                 "update.require_transparency_log = true, but this build cannot verify transparency-log signatures; set it to false to rely on the embedded keys",
             ));
         }
-        Ok(data)
+        Ok((data, signature))
     }
 
     async fn json<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {

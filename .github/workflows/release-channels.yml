@@ -2,7 +2,8 @@
 # release is published, points its channel at it by replacing
 # `<channel>.json` and its signature in the rolling `channels` release,
 # which is where `prometheus update` and the installers read the channel
-# index (`<origin>/channels/<channel>.json`).
+# index (`<origin>/channels/<channel>.json`), with the signed supply-chain
+# advisory catalog (`<origin>/channels/advisories.json`).
 
 name: Release channels
 
@@ -37,6 +38,8 @@ jobs:
             cp "$index" "upload/$channel.json"
             cp "$index.minisig" "upload/$channel.json.minisig"
           done
+          # The signed advisory catalog (channels/advisories.json).
+          cp dist/advisories.json dist/advisories.json.minisig upload/
           if ! gh release view channels -R "$REPO" >/dev/null 2>&1; then
             gh release create channels -R "$REPO" --prerelease --title "Release channels" \
               --notes "Signed channel indexes read by prometheus update and the installers."

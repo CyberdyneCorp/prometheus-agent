@@ -42,6 +42,8 @@ pub struct Models {
     /// Auxiliary calls (image descriptions) on the same client, mock,
     /// usage recorder and credentials as the main route.
     aux: Arc<AuxCaller>,
+    /// `privacy.redact_pii`: what every request is redacted with.
+    pii: Option<Arc<pmt_core::pii::Pii>>,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -144,6 +146,16 @@ impl Models {
             .with_mock(mock)
             .with_recorder(recorder)
             .with_credentials(Arc::clone(&accounts) as _);
+        // `privacy.redact_pii`: every model request of the profile, main and
+        // auxiliary, leaves the process redacted.
+        let pii = pmt_config::privacy::pii(scope.dir(), &config.privacy)?;
+        let (aux, caller) = match &pii {
+            Some(pii) => (
+                aux.with_pii(Arc::clone(pii)),
+                caller.with_pii(Arc::clone(pii)),
+            ),
+            None => (aux, caller),
+        };
         Ok(Self {
             setup: Arc::new(ProviderSetupParts {
                 config: Arc::new(config.clone()),
@@ -155,7 +167,16 @@ impl Models {
             }),
             caller,
             aux: Arc::new(aux),
+            pii,
         })
+    }
+
+    /// Hashes messaging user `id` in every later request (a gateway
+    /// session's platform user), when PII is redacted.
+    pub fn register_user_id(&self, id: &str) {
+        if let Some(pii) = &self.pii {
+            pii.register_id(id);
+        }
     }
 
     /// Adds the model providers the profile's plugins registered (spec:

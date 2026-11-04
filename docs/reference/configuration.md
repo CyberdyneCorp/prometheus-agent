@@ -386,10 +386,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `plugins.load_timeout_ms` | integer | `10000` | 1 to 600000 | `next_session` | Bound on instantiating and registering one plugin; a plugin that overruns is skipped with `load timed out` while the others load. |
 | `plugins.safe_mode` | boolean | `false` | any | `next_session` | Skip every non-embedded plugin, MCP server and python-bridge sidecar (as `prometheus --safe-mode` does, without its other effects). |
 | `plugins.scan_on_install` | boolean | `true` | any | `next_session` | Statically scan every plugin install and update for threats (reverse shells, credential exfiltration, destructive commands, persistence, obfuscated execution, prompt injection); `false` skips the scan and the install record says so. |
+| `plugins.security_guidance.mode` | one of "warn", "block", "off" | `"warn"` | `"warn"`, `"block"`, `"off"` | `next_session` | `warn` (write, then report the matched rules), `block` (refuse the write with the guidance) or `off`. |
 | `plugins.signature_policy` | one of "require", "warn", "off" | `"require"` | `"require"`, `"warn"`, `"off"` | `next_session` | What installing an unsigned local `.pmtpkg` needs: `require` (only with `--allow-unsigned`), `warn` or `off`. Catalog installs always need a valid signature unless `--allow-unsigned` is given. |
 | `plugins.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Project roots whose `.prometheus/plugins/` directory is scanned; any other project's plugins are never read. |
 | `plugins.wasm.call_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | CPU bound of one call into a plugin (fuel and epoch interruption); an overrun fails the call with `plugin '<id>' exceeded call timeout`. |
 | `plugins.wasm.max_memory_bytes` | integer | `268435456` | ≥ 65536 | `next_session` | Linear memory cap of one plugin instance. |
+| `privacy.owner_emails` | array of string | `[]` | any | `next_session` | The profile owner's email addresses, which `redact_pii` keeps. |
+| `privacy.redact_pii` | boolean | `false` | any | `next_session` | Replace phone numbers, other people's email addresses and messaging user ids (with a stable `user_<hash>`) in what reaches model providers, logs, trajectories and telemetry. |
 | `prompt.context_file_max_chars` | integer | `0` | ≥ 0 | `next_session` | Character cap per context file; `0` derives it from the model's context window. |
 | `prompt.context_file_read_timeout_secs` | integer | `5` | ≥ 0 | `next_session` | Time allowed to read each context file. |
 | `prompt.include_session_id` | boolean | `false` | any | `next_session` | Add `Session ID: ses_<ULID>` to the session tier. |
@@ -441,9 +444,16 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
+| `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |
+| `secrets.command.enabled` | boolean | `false` | any | `restart` | Run the helper (off by default; unsupported on Windows). |
+| `secrets.command.override_existing` | boolean | `false` | any | `restart` | Let helper values win over the secrets store and the environment. |
+| `secrets.command.timeout_secs` | integer | `3` | 1 to 300 | `restart` | Seconds before the helper's process group is killed. |
+| `security.acked_advisories` | array of string | `[]` | any | `next_session` | Supply-chain advisory ids whose startup warning is silenced (`prometheus doctor --ack <id>`); `doctor security` still shows them. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
 | `security.egress.allow` | array of string | `[]` | any | `next_session` | Host patterns `allowlist` admits: `host`, `host:port` or `*.suffix` (subdomains of `suffix`). |
 | `security.egress.allow_private` | boolean | `false` | any | `next_session` | Allow private destinations without a session grant. |
+| `security.egress.deny` | array of string | `[]` | any | `next_session` | Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g. `*.casino.example`); a session can add to them, never remove. |
+| `security.egress.deny_files` | array of string | `[]` | any | `next_session` | Absolute paths of shared blocklist files: one pattern per line, `#` comments; re-read when a file changes. |
 | `security.egress.fake_ip_ranges` | array of string | `[]` | any | `next_session` | CIDR ranges a local TUN proxy answers with (treated as public). |
 | `security.egress.mode` | one of "public", "allowlist", "none" | `"public"` | `"public"`, `"allowlist"`, `"none"` | `next_session` | Which hosts tools, sandboxed children, plugins and browsers may reach: any public address (`public`), only the `allow` patterns (`allowlist`) or nothing (`none`). A session can narrow or extend it (`chat --egress`, `/egress`, `egress.set`). |
 | `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
