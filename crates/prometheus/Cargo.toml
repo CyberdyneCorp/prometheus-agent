@@ -89,6 +89,7 @@ pmt-store.workspace = true
 pmt-tools.workspace = true
 pmt-tui = { workspace = true, optional = true }
 pmt-update.workspace = true
+pmt-vault.workspace = true
 pulldown-cmark.workspace = true
 ratatui = { workspace = true, optional = true }
 # The terminal size for the line interface's bottom status line too.

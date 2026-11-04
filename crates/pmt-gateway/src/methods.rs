@@ -53,6 +53,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     crate::discovery::register(router, catalog)?;
+    crate::vault::register(router, catalog)?;
     crate::messaging::methods::register(router, catalog)?;
     // `rpc.hello` runs in the read loop (it must come first), but it is
     // registered so its contract is checked like every other result.

@@ -25,6 +25,8 @@ use crate::terminal::env::ChildEnv;
 
 /// The helper module every call starts with.
 const PRELUDE: &str = include_str!("prelude.py");
+/// What a value `browser_vault` filled becomes in later output.
+pub const VAULT_MARKER: &str = "[REDACTED:vault]";
 /// `timeout_secs` default.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 300;
 /// `timeout_secs` bounds.
@@ -61,6 +63,9 @@ pub struct ExecArgs {
 /// `browser_exec` of one session.
 pub struct BrowserExec {
     setup: ExecSetup,
+    /// Values `browser_vault` put into pages: redacted from every later
+    /// output of this session (`[REDACTED:vault]`).
+    filled: std::sync::Mutex<Vec<pmt_core::secret::SecretString>>,
 }
 
 /// What one run produced.
@@ -75,7 +80,43 @@ impl BrowserExec {
     /// The tool over `setup`.
     #[must_use]
     pub fn new(setup: ExecSetup) -> Self {
-        Self { setup }
+        Self {
+            setup,
+            filled: std::sync::Mutex::default(),
+        }
+    }
+
+    /// The browser of `key` (`<session id>/<name>`), started when needed.
+    ///
+    /// # Errors
+    ///
+    /// Why the browser cannot be started or reached.
+    pub async fn browser(&self, key: &str) -> Result<Arc<BrowserSession>, String> {
+        self.setup.manager.session(key).await
+    }
+
+    /// Redacts `values` from this session's later outputs.
+    pub fn redact_filled(&self, values: &[&str]) {
+        let mut filled = self
+            .filled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for value in values.iter().filter(|v| !v.is_empty()) {
+            if !filled.iter().any(|f| f.expose() == *value) {
+                filled.push(pmt_core::secret::SecretString::new(*value));
+            }
+        }
+    }
+
+    /// `text` with every filled value replaced.
+    fn redacted(&self, text: &str) -> String {
+        let filled = self
+            .filled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        filled.iter().fold(text.to_owned(), |out, value| {
+            out.replace(value.expose(), VAULT_MARKER)
+        })
     }
 
     /// Closes the browsers of session `session_id` (its end); other
@@ -203,8 +244,8 @@ impl BrowserExec {
             .map(|p| p.display().to_string())
             .collect();
         let mut body = json!({
-            "output": run.output,
-            "error": run.error,
+            "output": self.redacted(&run.output),
+            "error": run.error.as_deref().map(|e| self.redacted(e)),
             "session": name,
             "workspace": workspace.display().to_string(),
             "screenshots": shots,

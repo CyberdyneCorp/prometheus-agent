@@ -176,6 +176,46 @@ pub struct TelemetryConfig {
     pub endpoint: Option<String>,
 }
 
+/// The `[vault]` section: the credential vault.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct VaultConfig {
+    /// Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`)
+    /// or `keychain` (the OS keychain; the file when none is reachable).
+    /// `prometheus vault key migrate --to` moves an existing key.
+    pub key_storage: VaultKeyStorage,
+    /// The 1Password CLI as a read-only login source.
+    pub onepassword: VaultSourceConfig,
+    /// The Bitwarden CLI as a read-only login source.
+    pub bitwarden: VaultSourceConfig,
+}
+
+/// Where the vault key is kept.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultKeyStorage {
+    /// `<profile>/vault/vault.key` (0600).
+    #[default]
+    File,
+    /// The OS keychain.
+    Keychain,
+}
+
+/// A password-manager login source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct VaultSourceConfig {
+    /// Offer its logins when its CLI is installed and signed in.
+    pub enabled: bool,
+}
+
+impl Default for VaultSourceConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 /// The `[privacy]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]

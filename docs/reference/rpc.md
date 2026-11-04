@@ -121,10 +121,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `tools.list` | `tool-system` | 1.0 | not served yet | |
 | `ui.prefs.get` | `desktop-app` | 1.0 | not served yet | |
 | `ui.prefs.patch` | `desktop-app` | 1.0 | not served yet | |
-| `vault.add` | `security-boundaries` | 1.0 | not served yet | |
-| `vault.list` | `security-boundaries` | 1.0 | not served yet | |
-| `vault.remove` | `security-boundaries` | 1.0 | not served yet | |
-| `vault.sources` | `security-boundaries` | 1.0 | not served yet | |
+| `vault.add` | `security-boundaries` | 1.0 | [`VaultAddParams`](#vaultaddparams) | [`VaultItem`](#vaultitem) |
+| `vault.list` | `security-boundaries` | 1.0 | [`VaultListParams`](#vaultlistparams) | [`VaultItems`](#vaultitems) |
+| `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
+| `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
 | `voice.client_config` | `voice-mode` | 1.0 | not served yet | |
 | `wake.feed` | `voice-mode` | 1.0 | not served yet | |
 | `worktree.list` | `git-worktrees` | 1.0 | not served yet | |
@@ -902,6 +902,120 @@ Why a turn ended in error.
 | `report` | any | no | The turn's `--usage-file` report (session, lineage root, route, billing source, tokens, cost and cost status of its model calls). |
 | `turn_id` | string | yes | The turn. |
 | `usage` | any | no | The turn's token and cost totals, as the turn loop reports them. |
+
+### `VaultAddParams`
+
+`vault.add` params: exactly one of `login`, `card`, `address`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `address` | [`VaultAddressInput`](#vaultaddressinput) or null | no | An address. |
+| `card` | [`VaultCardInput`](#vaultcardinput) or null | no | A payment card. |
+| `label` | string | yes | A name for the item. |
+| `login` | [`VaultLoginInput`](#vaultlogininput) or null | no | A login. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `VaultAddressInput`
+
+An address to add.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `city` | string | yes | City. |
+| `country` | string | yes | Country. |
+| `line1` | string | yes | Street line. |
+| `line2` | string | no | Second line. |
+| `name` | string | yes | Full name. |
+| `postal_code` | string | yes | Postal code. |
+| `region` | string | no | State or region. |
+
+### `VaultCardInput`
+
+A payment card to add.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cvc` | string | yes | Security code. |
+| `expiry` | string | yes | `MM/YY`. |
+| `holder` | string | yes | Cardholder name. |
+| `number` | string | yes | Card number. |
+
+### `VaultItem`
+
+One vault item's metadata (never a secret value; spec: security-boundaries, Vault management CLI).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `handle` | string | yes | `login_...`, `card_...` or `address_...`. |
+| `identifier` | string or null | no | A login's identifier. |
+| `kind` | string | yes | `login`, `card` or `address`. |
+| `label` | string | yes | The label. |
+| `origins` | array of string | yes | A login's origins. |
+| `totp` | boolean | yes | Whether a login has a TOTP seed. |
+
+### `VaultItems`
+
+`vault.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of [`VaultItem`](#vaultitem) | yes | Every item's metadata. |
+
+### `VaultListParams`
+
+`vault.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `VaultLoginInput`
+
+A login to add.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `identifier` | string | yes | User name or email. |
+| `origins` | array of string | yes | Origins it fills on (`https://host`). |
+| `password` | string | yes | The password. |
+| `totp` | string or null | no | A base32 TOTP seed. |
+
+### `VaultRemoveParams`
+
+`vault.remove` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `handle` | string | yes | The item's handle. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `VaultSource`
+
+One password-manager source.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `available` | boolean | yes | Whether this build can read it. |
+| `enabled` | boolean | yes | `vault.<name>.enabled`. |
+| `name` | string | yes | `onepassword` or `bitwarden`. |
+
+### `VaultSourceList`
+
+`vault.sources` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sources` | array of [`VaultSource`](#vaultsource) | yes | The sources after the change. |
+
+### `VaultSourcesParams`
+
+`vault.sources` params: reads, or enables or disables one source.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `disable` | string or null | no | `onepassword` or `bitwarden` to disable. |
+| `enable` | string or null | no | `onepassword` or `bitwarden` to enable. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `Version`
 

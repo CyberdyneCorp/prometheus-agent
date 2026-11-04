@@ -12,6 +12,7 @@
 
 mod cleanup;
 mod support;
+mod vault;
 mod warm;
 
 use std::collections::BTreeMap;

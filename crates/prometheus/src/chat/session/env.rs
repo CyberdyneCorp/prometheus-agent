@@ -61,6 +61,29 @@ pub struct EnvInputs<'a> {
     pub egress: &'a crate::egress::SessionEgress,
     /// Where its egress refusals are reported.
     pub denials: &'a Denials,
+    /// Where `browser_vault` asks the person for a hidden value.
+    pub vault_prompt: Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>>,
+}
+
+/// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
+/// hidden line, or `secret.request` to a daemon session's clients).
+pub struct VaultPrompt(pub Arc<dyn pmt_skills::secrets::SecretPrompt>);
+
+impl pmt_tools::browser::vault::MaskedPrompt for VaultPrompt {
+    fn ask<'a>(
+        &'a self,
+        name: &'a str,
+        question: &'a str,
+    ) -> pmt_tools::dispatch::SeamFuture<'a, Option<pmt_core::secret::SecretString>> {
+        let prompt = Arc::clone(&self.0);
+        let (name, question) = (name.to_owned(), question.to_owned());
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || prompt.ask("browser_vault", &name, Some(&question)))
+                .await
+                .ok()
+                .flatten()
+        })
+    }
 }
 
 /// Where a session's egress refusals go once its event sink exists. The
@@ -182,6 +205,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         terminal: terminal.clone(),
         web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
         vision: None,
+        vault: browser.as_ref().map(|browser| vault(inputs, browser)),
         browser: browser.clone(),
     };
     Ok(Attached {
@@ -192,6 +216,22 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
         previewer,
+    })
+}
+
+/// `browser_vault` of a session with a browser: the profile's vault (its
+/// key in the OS keychain only where `vault.keyref` or
+/// `vault.key_storage` says so).
+fn vault(
+    inputs: &EnvInputs<'_>,
+    browser: &Arc<BrowserExec>,
+) -> Arc<pmt_tools::browser::vault::VaultSession> {
+    let keychain = Arc::new(pmt_config::secrets::OsKeychain);
+    Arc::new(pmt_tools::browser::vault::VaultSession {
+        vault: Arc::new(pmt_vault::Vault::of(inputs.scope.dir(), keychain)),
+        storage: inputs.scope.config().vault.key_storage,
+        browser: Arc::clone(browser),
+        prompt: inputs.vault_prompt.clone(),
     })
 }
 

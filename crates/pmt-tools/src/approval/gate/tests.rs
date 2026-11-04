@@ -103,6 +103,7 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
         RegisteredTool::new(patch, Owner::Builtin, counting(runs)),
         RegisteredTool::new(render, Owner::Builtin, counting(runs)).with_guard(over_budget),
         crate::connectors::manage::registered(),
+        crate::browser::vault::tool(&Arc::new(crate::environments::Environments::default())),
     ]
 }
 
@@ -741,3 +742,4 @@ async fn cron_cannot_install_mcp_servers() {
 
 mod guarded;
 mod selfterm;
+mod vault;

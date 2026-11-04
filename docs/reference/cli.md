@@ -20,6 +20,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
@@ -4169,6 +4170,470 @@ Usage: prometheus grants help revoke
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus grants help help
+```
+
+## `prometheus vault`
+
+```text
+The credential vault: logins, cards and addresses the browser fills by handle
+
+Usage: prometheus vault [OPTIONS] <COMMAND>
+
+Commands:
+  list     List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+  add      Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+  rm       Delete an item after confirmation
+  sources  Show password-manager login sources, or enable or disable one
+  key      Show where the vault key lives and whether a keychain is reachable
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault list`
+
+```text
+List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+
+Usage: prometheus vault list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault add`
+
+```text
+Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+
+Usage: prometheus vault add [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --login
+          Add a login (default)
+
+      --card
+          Add a payment card
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --address
+          Add a postal address
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --label <LABEL>
+          A name for the item
+
+      --origin <ORIGINS>
+          A login's site, `https://host` (repeatable)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --identifier <IDENTIFIER>
+          A login's user name or email
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --with-totp
+          Ask for a TOTP seed too (a login)
+
+      --holder <HOLDER>
+          A card's holder name
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --expiry <EXPIRY>
+          A card's expiry, `MM/YY`
+
+      --name <NAME>
+          An address's full name
+
+      --line1 <LINE1>
+          An address's street line
+
+      --line2 <LINE2>
+          An address's second line
+
+      --city <CITY>
+          An address's city
+
+      --region <REGION>
+          An address's state or region
+
+      --postal-code <POSTAL_CODE>
+          An address's postal code
+
+      --country <COUNTRY>
+          An address's country
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault rm`
+
+```text
+Delete an item after confirmation
+
+Usage: prometheus vault rm [OPTIONS] <HANDLE>
+
+Arguments:
+  <HANDLE>
+          The item's handle (`prometheus vault list`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault sources`
+
+```text
+Show password-manager login sources, or enable or disable one
+
+Usage: prometheus vault sources [OPTIONS]
+
+Options:
+      --enable <ENABLE>
+          Enable a source
+
+          Possible values:
+          - onepassword: 1Password (`op`)
+          - bitwarden:   Bitwarden (`bw`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --disable <DISABLE>
+          Disable a source
+
+          Possible values:
+          - onepassword: 1Password (`op`)
+          - bitwarden:   Bitwarden (`bw`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus vault key`
+
+```text
+Show where the vault key lives and whether a keychain is reachable
+
+Usage: prometheus vault key [OPTIONS] [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault key migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus vault key migrate [OPTIONS] --to <TO>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          Where the key goes
+
+          Possible values:
+          - keychain: The OS keychain
+          - file:     `<profile>/vault/vault.key`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus vault key help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault key help [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus vault key help migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus vault key help migrate
+```
+
+## `prometheus vault key help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault key help help
+```
+
+## `prometheus vault help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault help [COMMAND]
+
+Commands:
+  list     List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+  add      Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+  rm       Delete an item after confirmation
+  sources  Show password-manager login sources, or enable or disable one
+  key      Show where the vault key lives and whether a keychain is reachable
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus vault help list`
+
+```text
+List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+
+Usage: prometheus vault help list
+```
+
+## `prometheus vault help add`
+
+```text
+Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+
+Usage: prometheus vault help add
+```
+
+## `prometheus vault help rm`
+
+```text
+Delete an item after confirmation
+
+Usage: prometheus vault help rm
+```
+
+## `prometheus vault help sources`
+
+```text
+Show password-manager login sources, or enable or disable one
+
+Usage: prometheus vault help sources
+```
+
+## `prometheus vault help key`
+
+```text
+Show where the vault key lives and whether a keychain is reachable
+
+Usage: prometheus vault help key [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+```
+
+## `prometheus vault help key migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus vault help key migrate
+```
+
+## `prometheus vault help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault help help
 ```
 
 ## `prometheus security`
@@ -14972,6 +15437,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
@@ -15629,6 +16095,72 @@ Usage: prometheus help grants list
 Remove a grant; running sessions lose it at their next tool call
 
 Usage: prometheus help grants revoke
+```
+
+## `prometheus help vault`
+
+```text
+The credential vault: logins, cards and addresses the browser fills by handle
+
+Usage: prometheus help vault [COMMAND]
+
+Commands:
+  list     List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+  add      Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+  rm       Delete an item after confirmation
+  sources  Show password-manager login sources, or enable or disable one
+  key      Show where the vault key lives and whether a keychain is reachable
+```
+
+## `prometheus help vault list`
+
+```text
+List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+
+Usage: prometheus help vault list
+```
+
+## `prometheus help vault add`
+
+```text
+Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+
+Usage: prometheus help vault add
+```
+
+## `prometheus help vault rm`
+
+```text
+Delete an item after confirmation
+
+Usage: prometheus help vault rm
+```
+
+## `prometheus help vault sources`
+
+```text
+Show password-manager login sources, or enable or disable one
+
+Usage: prometheus help vault sources
+```
+
+## `prometheus help vault key`
+
+```text
+Show where the vault key lives and whether a keychain is reachable
+
+Usage: prometheus help vault key [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+```
+
+## `prometheus help vault key migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus help vault key migrate
 ```
 
 ## `prometheus help security`
@@ -17413,6 +17945,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
 | `prometheus.approvals_suggest.v1` | `prometheus approvals suggest` |
+| `prometheus.vault_list.v1` | `prometheus vault list` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |

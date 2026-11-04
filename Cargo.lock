@@ -3022,6 +3022,7 @@ dependencies = [
  "pmt-net",
  "pmt-rpc",
  "pmt-store",
+ "pmt-vault",
  "regex",
  "reqwest",
  "serde",
@@ -3314,6 +3315,7 @@ dependencies = [
  "pmt-core",
  "pmt-net",
  "pmt-sandbox",
+ "pmt-vault",
  "regex",
  "reqwest",
  "resvg",
@@ -3380,6 +3382,24 @@ dependencies = [
  "ulid",
  "wiremock",
  "zip",
+]
+
+[[package]]
+name = "pmt-vault"
+version = "0.1.0"
+dependencies = [
+ "chacha20poly1305",
+ "data-encoding",
+ "getrandom 0.4.3",
+ "pmt-config",
+ "pmt-core",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2 0.11.1",
+ "tempfile",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -3509,6 +3529,7 @@ dependencies = [
  "pmt-tools",
  "pmt-tui",
  "pmt-update",
+ "pmt-vault",
  "pulldown-cmark",
  "qrcode",
  "ratatui",

@@ -230,6 +230,11 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `toolset.cycle` | `config` | 78 | Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected. |
 | `toolset.unknown` | `usage` | 2 | A command named a toolset that does not exist (`unknown toolset '<name>' (did you mean ...?)`); `prometheus toolsets list` shows them. In configuration the same mistake is `registry.unknown_name` (exit 78). |
 | `approvals.unparsable` | `usage` | 2 | `prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting. |
+| `vault.key_not_found` | `not_found` | 66 | The vault's key is in neither `<profile>/vault/vault.key` nor the keychain entry `vault.keyref` names (`vault key not found; restore it or delete vault.enc to start over`). The vault is never re-keyed silently. |
+| `vault.corrupt` | `invalid_input` | 65 | `vault.enc` cannot be decrypted with the vault key: the key belongs to another vault or the file is damaged. Restore both from a backup. |
+| `vault.io` | `io` | 74 | A file under `<profile>/vault/` could not be read or written. |
+| `vault.not_found` | `not_found` | 66 | No vault item has that handle; `prometheus vault list` shows them. |
+| `vault.secret_on_argv` | `usage` | 2 | `prometheus vault add` reads passwords, card numbers, security codes and TOTP seeds only from a masked prompt, never from the command line (where shell history and process lists would keep them). |
 | `advisory.unknown` | `not_found` | 66 | `prometheus doctor --ack` named an advisory id that is not in the supply-chain advisory catalog; `prometheus doctor security` lists the advisories that match this install. |
 | `approvals.no_such_proposal` | `usage` | 2 | `prometheus approvals suggest --apply` named a proposal number that is not in the list; run it without `--apply` to see the numbered proposals. Nothing was changed. |
 | `skill.not_found` | `not_found` | 66 | No skill of that name resolves in the profile (`Skill '<name>' not found in profile '<profile>'.`); the message names another profile of the home that has it. |

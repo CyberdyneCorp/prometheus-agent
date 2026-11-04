@@ -695,6 +695,21 @@ error_codes! {
     /// `approvals test` was given a command line it cannot read.
     APPROVALS_UNPARSABLE = ("approvals.unparsable", Usage,
         "`prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting.");
+    /// The vault's key is missing.
+    VAULT_KEY_NOT_FOUND = ("vault.key_not_found", NotFound,
+        "The vault's key is in neither `<profile>/vault/vault.key` nor the keychain entry `vault.keyref` names (`vault key not found; restore it or delete vault.enc to start over`). The vault is never re-keyed silently.");
+    /// `vault.enc` does not decrypt.
+    VAULT_CORRUPT = ("vault.corrupt", InvalidInput,
+        "`vault.enc` cannot be decrypted with the vault key: the key belongs to another vault or the file is damaged. Restore both from a backup.");
+    /// A vault file could not be read or written.
+    VAULT_IO = ("vault.io", Io,
+        "A file under `<profile>/vault/` could not be read or written.");
+    /// No vault item has that handle.
+    VAULT_NOT_FOUND = ("vault.not_found", NotFound,
+        "No vault item has that handle; `prometheus vault list` shows them.");
+    /// A secret value was given on the command line.
+    VAULT_SECRET_ON_ARGV = ("vault.secret_on_argv", Usage,
+        "`prometheus vault add` reads passwords, card numbers, security codes and TOTP seeds only from a masked prompt, never from the command line (where shell history and process lists would keep them).");
     /// `doctor --ack` named an advisory the catalog does not have.
     ADVISORY_UNKNOWN = ("advisory.unknown", NotFound,
         "`prometheus doctor --ack` named an advisory id that is not in the supply-chain advisory catalog; `prometheus doctor security` lists the advisories that match this install.");

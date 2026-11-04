@@ -109,3 +109,60 @@ JavaScript dialogs follow `browser.dialog_policy`: `must_respond`
 listed in the result's `dialogs`. A dropped DevTools connection is
 re-established; after 5 failures in a row the session is replaced on the
 next call.
+
+## Saved logins, cards and addresses
+
+[`browser_vault`](../reference/tools.md#browser_vault) lets the model use
+the credential vault without ever seeing a secret. It lists items by
+handle (label, kind, origins and identifier only) and fills one into the
+current page of the session's browser; the result is just
+`{"filled_fields": 1, "origin": "https://github.com"}`.
+
+- A login fills only on a page whose origin is exactly one of its saved
+  origins: a `https://github.com` login is refused on
+  `https://github.com.evil.example` and nothing is typed.
+- Every payment-card fill asks you, each time and in every approval mode
+  (yolo included); cron, webhook, API and single-query runs refuse it.
+  Addresses fill without asking.
+- `enter_code` types the current TOTP code of a login with a seed (on its
+  origins only); without a seed it asks you for `Verification code for
+  <origin>` with the input hidden. For passkeys or app approvals the model
+  is told to ask you to finish on your device.
+- `save_login` asks you for the password with the input hidden (the model
+  supplies only the identifier); runs with nobody to ask answer
+  `prompt_unavailable`.
+- Every value filled is replaced by `[REDACTED:vault]` in the session's
+  later [`browser_exec`](../reference/tools.md#browser_exec) output, so reading the field back shows nothing.
+
+Manage the vault from the command line (or the desktop and dashboard
+settings, over the `vault.*` RPC methods):
+
+```console
+$ prometheus vault list
+the vault is empty; add an item with prometheus vault add
+$ prometheus vault add --login --password hunter2 # exits 2
+$ prometheus vault sources
+```
+
+`prometheus vault add --login --origin https://github.com --identifier
+octocat [--with-totp]`, `--card --holder <name> --expiry MM/YY` and
+`--address --name ... --line1 ... --city ... --postal-code ... --country
+...` ask for every secret (password, TOTP seed, card number, security
+code) with the input hidden, or read them one per line from stdin when it
+is not a terminal; a secret given as a flag exits 2. `vault rm <handle>`
+asks you to type the handle (or `--yes`). `vault sources [--enable|
+--disable onepassword|bitwarden]` shows and toggles the password-manager
+login sources (`vault.onepassword.enabled`, `vault.bitwarden.enabled`),
+which this build does not read yet.
+
+The vault is `<profile>/vault/vault.enc` (XChaCha20-Poly1305, 0600). Its key
+is `<profile>/vault/vault.key` (0600) with `vault.key_storage = "file"`
+(default), or an OS keychain entry named in `vault.keyref` with
+`"keychain"` (a new vault falls back to the file, with a warning, when no
+keychain answers). `prometheus vault key` shows where the key is;
+`prometheus vault key migrate --to keychain|file` writes it to the
+target, checks that it opens the vault and only then removes the old copy,
+so an interrupted move leaves a vault that still opens and running it
+again finishes it. A vault whose key is gone fails with `vault key not
+found; restore it or delete vault.enc to start over`: it is never re-keyed
+behind your back.

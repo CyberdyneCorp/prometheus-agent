@@ -750,6 +750,124 @@ export interface TurnFinished {
   usage?: unknown;
 }
 
+/** `vault.add` params: exactly one of `login`, `card`, `address`. */
+export interface VaultAddParams {
+  /** An address. */
+  address?: VaultAddressInput | null;
+  /** A payment card. */
+  card?: VaultCardInput | null;
+  /** A name for the item. */
+  label: string;
+  /** A login. */
+  login?: VaultLoginInput | null;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** An address to add. */
+export interface VaultAddressInput {
+  /** City. */
+  city: string;
+  /** Country. */
+  country: string;
+  /** Street line. */
+  line1: string;
+  /** Second line. */
+  line2?: string;
+  /** Full name. */
+  name: string;
+  /** Postal code. */
+  postal_code: string;
+  /** State or region. */
+  region?: string;
+}
+
+/** A payment card to add. */
+export interface VaultCardInput {
+  /** Security code. */
+  cvc: string;
+  /** `MM/YY`. */
+  expiry: string;
+  /** Cardholder name. */
+  holder: string;
+  /** Card number. */
+  number: string;
+}
+
+/** One vault item's metadata (never a secret value; spec: security-boundaries, Vault management CLI). */
+export interface VaultItem {
+  /** `login_...`, `card_...` or `address_...`. */
+  handle: string;
+  /** A login's identifier. */
+  identifier?: string | null;
+  /** `login`, `card` or `address`. */
+  kind: string;
+  /** The label. */
+  label: string;
+  /** A login's origins. */
+  origins: Array<string>;
+  /** Whether a login has a TOTP seed. */
+  totp: boolean;
+}
+
+/** `vault.list` result. */
+export interface VaultItems {
+  /** Every item's metadata. */
+  items: Array<VaultItem>;
+}
+
+/** `vault.list` params. */
+export interface VaultListParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** A login to add. */
+export interface VaultLoginInput {
+  /** User name or email. */
+  identifier: string;
+  /** Origins it fills on (`https://host`). */
+  origins: Array<string>;
+  /** The password. */
+  password: string;
+  /** A base32 TOTP seed. */
+  totp?: string | null;
+}
+
+/** `vault.remove` params. */
+export interface VaultRemoveParams {
+  /** The item's handle. */
+  handle: string;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
+/** One password-manager source. */
+export interface VaultSource {
+  /** Whether this build can read it. */
+  available: boolean;
+  /** `vault.<name>.enabled`. */
+  enabled: boolean;
+  /** `onepassword` or `bitwarden`. */
+  name: string;
+}
+
+/** `vault.sources` result. */
+export interface VaultSourceList {
+  /** The sources after the change. */
+  sources: Array<VaultSource>;
+}
+
+/** `vault.sources` params: reads, or enables or disables one source. */
+export interface VaultSourcesParams {
+  /** `onepassword` or `bitwarden` to disable. */
+  disable?: string | null;
+  /** `onepassword` or `bitwarden` to enable. */
+  enable?: string | null;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** A `<major>.<minor>` protocol version on the wire. */
 export interface Version {
   /** Incompatible revisions. */
@@ -785,6 +903,10 @@ export interface Methods {
   "session.resume": { params: ResumeParams; result: Attached };
   "session.transcript": { params: SessionRef; result: Transcript };
   "subagent.list": { params: SessionRef; result: SubagentList };
+  "vault.add": { params: VaultAddParams; result: VaultItem };
+  "vault.list": { params: VaultListParams; result: VaultItems };
+  "vault.remove": { params: VaultRemoveParams; result: VaultItem };
+  "vault.sources": { params: VaultSourcesParams; result: VaultSourceList };
 }
 
 export interface ServerRequests {
@@ -852,10 +974,6 @@ export const UNDECLARED = [
   "tools.list",
   "ui.prefs.get",
   "ui.prefs.patch",
-  "vault.add",
-  "vault.list",
-  "vault.remove",
-  "vault.sources",
   "voice.client_config",
   "wake.feed",
   "worktree.list",

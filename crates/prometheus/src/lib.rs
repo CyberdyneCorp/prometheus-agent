@@ -63,6 +63,7 @@ pub mod trajectory_cmd;
 pub mod tui_cmd;
 pub mod update_cmd;
 pub mod usage_cmd;
+pub mod vault_cmd;
 pub mod version;
 
 pub use cli::{

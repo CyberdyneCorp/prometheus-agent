@@ -132,6 +132,13 @@ pub enum Command {
         #[command(subcommand)]
         command: GrantsCommand,
     },
+    /// The credential vault: logins, cards and addresses the browser fills
+    /// by handle.
+    Vault {
+        /// The vault subcommand.
+        #[command(subcommand)]
+        command: crate::vault_cmd::VaultCommand,
+    },
     /// Security records of the profile: verify the tamper-evident audit log.
     Security {
         /// The security subcommand.

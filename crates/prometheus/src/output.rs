@@ -228,6 +228,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "approvals suggest",
     },
     JsonShape {
+        schema: "prometheus.vault_list.v1",
+        command: "vault list",
+    },
+    JsonShape {
         schema: "prometheus.daemon_status.v1",
         command: "daemon status",
     },

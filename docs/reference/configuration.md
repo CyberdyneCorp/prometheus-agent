@@ -569,6 +569,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `ui.tui.keys.submit` | string | unset | any | `next_session` | Send the composer (default `Enter`). |
 | `ui.tui.reduced_motion` | boolean | `false` | any | `next_session` | No spinners or animation: a static busy glyph. |
 | `ui.tui.theme` | one of "auto", "dark", "light" | `"auto"` | `"auto"`, `"dark"`, `"light"` | `next_session` | Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer to a background-colour query, else dark), `dark` or `light`; `NO_COLOR` turns colours off whatever it says. |
+| `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
+| `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
+| `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |

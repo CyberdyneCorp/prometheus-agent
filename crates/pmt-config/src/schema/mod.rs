@@ -77,7 +77,7 @@ pub use operations::{
     BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
     LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
     SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig,
+    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -204,6 +204,8 @@ pub struct Config {
     pub toolsets: ToolsetsConfig,
     /// Interactive interface selection.
     pub ui: UiConfig,
+    /// The credential vault.
+    pub vault: VaultConfig,
     /// Image input routing.
     pub vision: VisionConfig,
     /// Web tools.
@@ -259,6 +261,7 @@ impl Default for Config {
             tools: ToolsConfig::default(),
             toolsets: ToolsetsConfig::default(),
             ui: UiConfig::default(),
+            vault: VaultConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
         }

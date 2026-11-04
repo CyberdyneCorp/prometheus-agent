@@ -25,6 +25,8 @@ pmt-net.workspace = true
 pmt-rpc.workspace = true
 # Conversation routes, pairing and the outbox live in each profile's state.db.
 pmt-store.workspace = true
+# vault.* methods.
+pmt-vault.workspace = true
 # Group mention patterns (`gateway.groups.mention_patterns`).
 regex.workspace = true
 # Adapters build their HTTP clients through the gateway's proxy rules.

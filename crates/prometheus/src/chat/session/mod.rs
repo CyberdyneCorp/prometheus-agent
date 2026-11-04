@@ -663,6 +663,7 @@ impl Factory {
             plugin_call: self.plugin_call(id),
             egress: &self.egress(id, &denials),
             denials: &denials,
+            vault_prompt: self.vault_prompt(clients),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -670,6 +671,22 @@ impl Factory {
             terminal.set_path_source(python::path_source(&self.scope, skills));
         }
         Ok(environment)
+    }
+
+    /// Where `browser_vault` asks for a password or code: the session's
+    /// clients (a daemon session) or the local terminal (an interactive
+    /// chat); nobody in cron, webhook, API and single-query runs.
+    fn vault_prompt(
+        &self,
+        clients: Option<&Clients>,
+    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
+        if !self.options.interactive {
+            return None;
+        }
+        let secrets = clients
+            .map(|c| Arc::clone(&c.secrets))
+            .or_else(|| self.secret_prompt.clone())?;
+        Some(Arc::new(env::VaultPrompt(secrets)))
     }
 
     /// The baseline and granted capabilities, plus reads of the session's

@@ -34,6 +34,8 @@ pub struct SessionEnv {
     pub vision: Option<Arc<VisionSession>>,
     /// `browser_exec`'s browsers and interpreter.
     pub browser: Option<Arc<BrowserExec>>,
+    /// `browser_vault`'s vault, browser and prompt.
+    pub vault: Option<Arc<crate::browser::vault::VaultSession>>,
 }
 
 /// Read grants for the files the session's own tools point the model at

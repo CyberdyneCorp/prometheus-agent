@@ -66,6 +66,10 @@ toml_edit = "0.25"
 trybuild = "1.0"
 tracing = "0.1"
 sha2 = "0.11"
+# TOTP codes of vault logins (HMAC-SHA1, RFC 6238).
+sha1 = "0.11"
+# Base32 TOTP seeds.
+data-encoding = "2.11"
 # Terminal QR codes for `gateway whatsapp pair` (no image rendering).
 qrcode = { version = "0.14", default-features = false }
 reqwest = { version = "0.13", default-features = false }
@@ -122,6 +126,7 @@ zstd = { version = "0.14", default-features = false }
 # builds of Node and uv); deflate through the flate2 backend above.
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
 pmt-backup = { path = "crates/pmt-backup" }
+pmt-vault = { path = "crates/pmt-vault" }
 # Property tests (store transaction atomicity).
 proptest = { version = "1.9", default-features = false, features = ["std"] }
 # Test-only capture of log events; 7.3 installs the real subscriber.

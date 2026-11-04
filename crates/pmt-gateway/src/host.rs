@@ -109,6 +109,20 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// The credential vault of `profile` and its scope (`vault.*`). Hosts
+    /// without profiles on disk refuse.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; profile errors.
+    fn vault(&self, profile: &str) -> Result<crate::vault::VaultAccess, Error> {
+        let _ = profile;
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host has no credential vault",
+        ))
+    }
+
     /// Stops the session's running turn at its next safe point; a no-op
     /// when none runs.
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;

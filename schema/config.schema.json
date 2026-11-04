@@ -6738,6 +6738,60 @@
         }
       ]
     },
+    "VaultConfig": {
+      "additionalProperties": false,
+      "description": "The `[vault]` section: the credential vault.",
+      "properties": {
+        "bitwarden": {
+          "$ref": "#/$defs/VaultSourceConfig",
+          "default": {
+            "enabled": true
+          },
+          "description": "The Bitwarden CLI as a read-only login source."
+        },
+        "key_storage": {
+          "$ref": "#/$defs/VaultKeyStorage",
+          "default": "file",
+          "description": "Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`)\nor `keychain` (the OS keychain; the file when none is reachable).\n`prometheus vault key migrate --to` moves an existing key."
+        },
+        "onepassword": {
+          "$ref": "#/$defs/VaultSourceConfig",
+          "default": {
+            "enabled": true
+          },
+          "description": "The 1Password CLI as a read-only login source."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "VaultKeyStorage": {
+      "description": "Where the vault key is kept.",
+      "oneOf": [
+        {
+          "const": "file",
+          "description": "`<profile>/vault/vault.key` (0600).",
+          "type": "string"
+        },
+        {
+          "const": "keychain",
+          "description": "The OS keychain.",
+          "type": "string"
+        }
+      ]
+    },
+    "VaultSourceConfig": {
+      "additionalProperties": false,
+      "description": "A password-manager login source.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Offer its logins when its CLI is installed and signed in.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "VisionConfig": {
       "additionalProperties": false,
       "description": "The `[vision]` section.",
@@ -7877,6 +7931,19 @@
         }
       },
       "description": "Interactive interface selection."
+    },
+    "vault": {
+      "$ref": "#/$defs/VaultConfig",
+      "default": {
+        "bitwarden": {
+          "enabled": true
+        },
+        "key_storage": "file",
+        "onepassword": {
+          "enabled": true
+        }
+      },
+      "description": "The credential vault."
     },
     "vision": {
       "$ref": "#/$defs/VisionConfig",

@@ -2407,3 +2407,18 @@ capabilities = [
 
 [security-boundaries."Security guidance on written code"]
 "Warn mode" = ["crates/prometheus/tests/security_guidance.rs::warn_mode_writes_the_file_and_reports_the_rule", "crates/prometheus/tests/security_guidance.rs::block_mode_refuses_the_write_with_the_guidance", "crates/pmt-tools/src/guidance/mod.rs::each_class_is_found_in_typical_code"]
+
+# Group 34.5 (credential vault storage, browser_vault, codes/cards/addresses,
+# vault management CLI)
+[security-boundaries."Credential vault storage"]
+"Interrupted key migration" = ["crates/pmt-vault/tests/vault.rs::an_interrupted_migration_opens_with_the_file_key_and_completes_on_rerun", "crates/pmt-vault/tests/vault.rs::a_vault_whose_key_is_missing_fails_and_is_never_rekeyed"]
+
+[security-boundaries."browser_vault fills by handle"]
+"Origin mismatch" = ["crates/pmt-tools/tests/browser/vault.rs::a_fill_on_another_origin_is_refused_and_types_nothing", "crates/pmt-vault/src/origin.rs::origins_match_exactly"]
+"Result shape" = ["crates/pmt-tools/tests/browser/vault.rs::a_login_fills_by_handle_and_returns_only_the_count_and_origin"]
+
+[security-boundaries."Vault codes, cards and addresses"]
+"Card fill from a webhook session" = ["crates/pmt-tools/src/approval/gate/tests/vault.rs::a_card_fill_from_a_webhook_session_is_refused_before_anything_runs", "crates/pmt-tools/src/browser/vault.rs::only_card_fills_escalate_and_never_are_remembered"]
+
+[security-boundaries."Vault management CLI"]
+"Password on the command line" = ["crates/prometheus/tests/vault_cli.rs::a_password_on_the_command_line_exits_2"]

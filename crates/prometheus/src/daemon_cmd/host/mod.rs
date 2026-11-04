@@ -555,6 +555,14 @@ impl Host for DaemonHost {
         })
     }
 
+    fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(pmt_gateway::vault::VaultAccess {
+            vault: crate::vault_cmd::open(&scope),
+            scope,
+        })
+    }
+
     fn compact<'a>(&'a self, profile: &'a str, params: CompactParams) -> HostFuture<'a, Compacted> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
