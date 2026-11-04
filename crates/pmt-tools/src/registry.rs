@@ -174,6 +174,21 @@ impl ToolRegistry {
             .or_else(|| self.builtins.toolsets.get(name))
     }
 
+    /// The toolset a name means: the toolset of that name, else the
+    /// toolset `mcp-<name>` of MCP server `name` (its bare name is an
+    /// alias; a built-in or plugin toolset of the same name wins). Aliases
+    /// are never listed as toolsets of their own.
+    #[must_use]
+    pub fn canonical_toolset(&self, name: &str) -> Option<String> {
+        if self.toolset(name).is_some() {
+            return Some(name.to_owned());
+        }
+        let aliased = format!("mcp-{name}");
+        self.toolset(&aliased)
+            .filter(|t| t.owner == Owner::Mcp(name.to_owned()))
+            .map(|_| aliased)
+    }
+
     /// Every toolset of this profile, by name.
     pub fn toolsets(&self) -> impl Iterator<Item = &Toolset> {
         let mut all: BTreeMap<&str, &Toolset> = self

@@ -61,8 +61,9 @@ pub use interface::{
     ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
 };
 pub use mcp::{
-    McpCapabilities, McpConfig, McpServerConfig, McpServerModeConfig, McpToolFilter, McpTransport,
-    McpTrust,
+    McpAuth, McpCapabilities, McpConfig, McpElicitationConfig, McpOAuthConfig, McpOAuthFlow,
+    McpRedirectHost, McpSamplingConfig, McpServerConfig, McpServerModeConfig, McpToolFilter,
+    McpTransport, McpTrust,
 };
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,

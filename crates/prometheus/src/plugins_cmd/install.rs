@@ -258,7 +258,7 @@ pub(super) fn from_git(
 
 /// `git clone` then a detached checkout of `commit`; the `.git` directory
 /// is dropped so only the plugin's files remain.
-fn git_checkout(url: &str, commit: &str, dir: &Path) -> Result<(), Error> {
+pub(crate) fn git_checkout(url: &str, commit: &str, dir: &Path) -> Result<(), Error> {
     let git = |args: &[&str]| -> Result<String, Error> {
         let out = std::process::Command::new("git")
             .args(args)
@@ -322,8 +322,8 @@ pub(super) fn check_kill_list(
 ) -> Result<(), Error> {
     let id = &fetched.staged.manifest.id;
     let catalog = Catalog {
-        entries: Vec::new(),
         removed: plugins_host::catalog::kill_list(scope),
+        ..Catalog::default()
     };
     match catalog.blocked(id, fetched.repo.as_deref()) {
         Some(removed) if !args.allow_removed => Err(removed.refusal(id)),

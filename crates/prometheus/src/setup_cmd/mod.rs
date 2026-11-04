@@ -37,6 +37,11 @@ impl Wizard<'_> {
         }
     }
 
+    /// Whether answers come from a terminal.
+    pub(crate) fn is_tty(&self) -> bool {
+        self.tty
+    }
+
     /// Writes one line.
     pub(crate) fn say(&mut self, text: &str) -> Result<(), Error> {
         writeln!(self.out, "{text}").map_err(|e| io_error(&e))

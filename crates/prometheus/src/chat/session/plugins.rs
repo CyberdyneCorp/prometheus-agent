@@ -56,7 +56,7 @@ impl PluginTools {
         calls: &SessionCalls,
     ) -> Result<Self, Error> {
         let generation = (plugins.generation(), mcp.generation());
-        let mut registry = crate::tools_cmd::registry(scope)?;
+        let mut registry = crate::tools_cmd::base_registry(scope)?;
         // Listing the tools runs for no session.
         let mut toolsets = plugins
             .current()
@@ -113,11 +113,23 @@ impl Factory {
     }
 
     /// Starts the profile's MCP servers a session starting now needs (each
-    /// at most once per restart backoff); a server that does not start is
-    /// left out of the session with a WARN and shows in `mcp status`.
+    /// at most once per restart backoff), waiting at most
+    /// `mcp.discovery_wait_ms` (`mcp.single_query_discovery_wait_ms` for a
+    /// one-shot run); a server that does not start in time is left out of
+    /// the session with a WARN (one still connecting joins later
+    /// sessions) and shows in `mcp status`.
     pub(super) async fn discover_mcp(&self) {
-        let mcp = crate::mcp_host::manager(&self.plugin_scope.get());
-        for (server, outcome) in mcp.discover().await {
+        let scope = self.plugin_scope.get();
+        let mcp = crate::mcp_host::manager(&scope);
+        let config = &scope.config().mcp;
+        let one_shot = self.options.source_tag.as_deref() == Some(pmt_store::ONESHOT_TAG);
+        let wait = if one_shot {
+            config.single_query_discovery_wait_ms
+        } else {
+            config.discovery_wait_ms
+        };
+        let wait = std::time::Duration::from_millis(wait);
+        for (server, outcome) in mcp.discover_within(Some(wait)).await {
             if let Err(reason) = outcome {
                 tracing::warn!(server = %server, "MCP server unavailable: {reason}");
             }
@@ -188,12 +200,20 @@ impl Factory {
         id: SessionId,
         model: &Arc<SwitchableModel>,
     ) -> llm::Registration {
-        let session = PluginLlm {
+        llm::register(&id.to_string(), self.session_llm(id, model))
+    }
+
+    /// The session's model as plugins and MCP sampling call it.
+    pub(super) fn session_llm(
+        &self,
+        id: SessionId,
+        model: &Arc<SwitchableModel>,
+    ) -> Arc<PluginLlm> {
+        Arc::new(PluginLlm {
             session: id,
             model: Arc::clone(model),
             maker: self.models.maker(),
-        };
-        llm::register(&id.to_string(), Arc::new(session))
+        })
     }
 
     /// `/plugins reload --now`: the session's tools and system-prompt
@@ -234,17 +254,23 @@ impl Factory {
     }
 }
 
-/// A session's model as its plugins call it.
-struct PluginLlm {
-    session: SessionId,
-    model: Arc<SwitchableModel>,
-    maker: PortMaker,
+/// A session's model as its plugins (and MCP servers' sampling) call it.
+pub(super) struct PluginLlm {
+    pub(super) session: SessionId,
+    pub(super) model: Arc<SwitchableModel>,
+    pub(super) maker: PortMaker,
 }
 
 impl PluginLlm {
     async fn run(&self, call: LlmCall) -> Result<String, String> {
+        let purpose = format!("plugin.{}", call.plugin);
+        self.run_as(&purpose, call).await
+    }
+
+    /// Runs `call`, charged to the session's ledger as `purpose`.
+    pub(super) async fn run_as(&self, purpose: &str, call: LlmCall) -> Result<String, String> {
         let request = request(&call);
-        let context = CallContext::new(self.session, &format!("plugin.{}", call.plugin));
+        let context = CallContext::new(self.session, purpose);
         let reply = if call.model.is_some() || call.provider.is_some() {
             let current = self.model.target();
             let target = Target {

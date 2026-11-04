@@ -13,13 +13,21 @@
 //! ([`runtime`]), so it outlives the runtime of the command or session
 //! that started it.
 
+pub mod cache;
 pub mod connection;
+pub mod costs;
+pub mod handler;
+pub mod host;
 pub mod manager;
 pub mod naming;
+pub mod requests;
+pub mod result;
 pub mod runtime;
+pub mod sanitize;
 pub mod serve;
 pub mod server;
 pub mod tool;
+pub mod utility;
 
 #[cfg(feature = "fixture")]
 pub mod fixture;
@@ -27,5 +35,6 @@ pub mod fixture;
 pub mod testkit;
 
 pub use connection::Launch;
+pub use host::{ClientHost, NoHost};
 pub use manager::{Manager, ServerEntry, ServerStatus};
 pub use server::{Server, Settings};

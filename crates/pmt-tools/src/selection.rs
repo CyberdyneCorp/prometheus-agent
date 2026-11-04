@@ -8,7 +8,9 @@
 //! the closest known toolsets; it is never ignored.
 //!
 //! `all` expands to every toolset except surface-gated and default-off
-//! ones: default-off toolsets are exposed only when named explicitly.
+//! ones: default-off toolsets are exposed only when named explicitly. An
+//! MCP server's bare name stands for its `mcp-<server>` toolset unless a
+//! toolset has that name (spec: tool-system, Registry toolset aliases).
 //!
 //! Disabling a toolset built on `core` (a platform bundle, `gateway`,
 //! `api_server`) removes only its members outside `core` (spec:
@@ -181,8 +183,8 @@ fn names(registry: &ToolRegistry, requested: &[String]) -> Result<Vec<String>, E
                 .filter(|t| !t.surface_gated && !t.default_off)
                 .map(|t| t.name.clone())
                 .collect()
-        } else if registry.toolset(name).is_some() {
-            vec![name.clone()]
+        } else if let Some(canonical) = registry.canonical_toolset(name) {
+            vec![canonical]
         } else {
             return Err(registry.unknown_toolset(name));
         };

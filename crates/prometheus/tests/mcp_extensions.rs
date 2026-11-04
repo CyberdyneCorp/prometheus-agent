@@ -1,0 +1,701 @@
+//! The M2 MCP client end to end (spec: plugin-system, MCP OAuth for HTTP
+//! servers; MCP mTLS and identity header; mcp CLI; MCP catalog entries;
+//! MCP sampling; MCP elicitation; MCP tool costs and spend limits;
+//! tool-system, Registry toolset aliases): presets, tool checklists,
+//! OAuth logins and parked servers against a mock authorization server,
+//! per-profile identity headers, catalog installs, and sampling,
+//! elicitation and spend limits in unattended sessions.
+
+mod common;
+
+use std::io::{BufRead as _, BufReader, Write as _};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Stdio};
+
+use self::common::{
+    append_config, command, mock_home, newest_session, ok, run, session_messages, stderr,
+};
+use serde_json::json;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+const TEST_KEY: &str = include_str!("../../pmt-update/tests/fixtures/test.key");
+
+fn fixture() -> String {
+    pmt_mcp::testkit::fixture().to_string_lossy().into_owned()
+}
+
+/// The fixture serving streamable HTTP (killed on drop).
+struct HttpFixture {
+    child: Child,
+    url: String,
+}
+
+impl Drop for HttpFixture {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn http_fixture(log: &Path, bearer: Option<&str>) -> HttpFixture {
+    let mut args = vec![
+        "--http".to_owned(),
+        "127.0.0.1:0".to_owned(),
+        "--log".to_owned(),
+        log.to_string_lossy().into_owned(),
+    ];
+    if let Some(token) = bearer {
+        args.extend(["--bearer".to_owned(), token.to_owned()]);
+    }
+    let mut child = std::process::Command::new(fixture())
+        .args(&args)
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    let addr = line.trim().strip_prefix("listening ").unwrap().to_owned();
+    HttpFixture {
+        child,
+        url: format!("http://{addr}/mcp"),
+    }
+}
+
+fn script(home: &Path, body: &str) -> String {
+    let path = home.join("script.toml");
+    std::fs::write(&path, body).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+fn one_shot(home: &Path, profile: Option<&str>, script: &str) -> String {
+    let mut cmd = command(home);
+    if let Some(profile) = profile {
+        cmd.args(["--profile", profile]);
+    }
+    let out = cmd
+        .args(["-z", "go", "--mock-script", script])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn tool_results(home: &Path) -> Vec<String> {
+    session_messages(home, &newest_session(home))
+        .into_iter()
+        .filter(|m| m["role"] == "tool")
+        .map(|m| m["content"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+fn config(home: &Path) -> String {
+    std::fs::read_to_string(home.join("profiles/default/config.toml")).unwrap()
+}
+
+/// One call of `tool` and a final answer.
+fn call_script(home: &Path, tool: &str, arguments: &str) -> String {
+    script(
+        home,
+        &format!(
+            r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "{tool}"
+arguments = {arguments}
+
+[[rule]]
+user = "question 0"
+text = "sampled answer"
+
+[[rule]]
+text = "finished"
+"#
+        ),
+    )
+}
+
+#[test]
+fn preset_fills_transport() {
+    let home = mock_home();
+    let out = run(
+        home.path(),
+        &["mcp", "add", "my-codex", "--preset", "codex"],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = config(home.path());
+    assert!(text.contains("[mcp.servers.my-codex]"), "{text}");
+    assert!(text.contains("transport = \"stdio\""), "{text}");
+    assert!(text.contains("command = \"codex\""), "{text}");
+    assert!(text.contains("args = [\"mcp-server\"]"), "{text}");
+    // Explicit flags win over the preset.
+    ok(&run(
+        home.path(),
+        &[
+            "mcp",
+            "add",
+            "mine",
+            "--preset",
+            "codex",
+            "--command",
+            "/opt/codex",
+            "--args",
+            "serve",
+        ],
+    ));
+    let text = config(home.path());
+    assert!(text.contains("command = \"/opt/codex\""), "{text}");
+    assert!(text.contains("args = [\"serve\"]"), "{text}");
+}
+
+#[test]
+fn the_tool_checklist_writes_include_only_for_a_partial_selection() {
+    let home = mock_home();
+    let fixture = fixture();
+    ok(&run(
+        home.path(),
+        &["mcp", "add", "fx", "--command", &fixture],
+    ));
+    // Toggle tool 2 (`add`) off.
+    let out = common::run_with_stdin(home.path(), &["mcp", "tools", "fx"], "2\n\n");
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = config(home.path());
+    assert!(text.contains("include = ["), "{text}");
+    assert!(!text.contains("\"add\""), "{text}");
+    assert!(text.contains("\"echo\""), "{text}");
+    // Everything selected again removes the list.
+    ok(&common::run_with_stdin(
+        home.path(),
+        &["mcp", "tools", "fx"],
+        "all\n\n",
+    ));
+    assert!(!config(home.path()).contains("include ="));
+}
+
+#[test]
+fn bare_server_name_selects_its_toolset() {
+    let home = mock_home();
+    let fixture = fixture();
+    ok(&run(
+        home.path(),
+        &[
+            "mcp",
+            "add",
+            "github",
+            "--command",
+            &fixture,
+            "--trust",
+            "full",
+        ],
+    ));
+    ok(&run(
+        home.path(),
+        &[
+            "config",
+            "set",
+            "tools.enabled_toolsets",
+            "[\"core\", \"github\"]",
+        ],
+    ));
+    let script = call_script(home.path(), "mcp__github__echo", "{ text = \"via alias\" }");
+    assert_eq!(one_shot(home.path(), None, &script), "finished\n");
+    assert!(
+        tool_results(home.path())
+            .iter()
+            .any(|r| r.contains("via alias"))
+    );
+    let listed = ok(&run(home.path(), &["toolsets", "list"]));
+    assert!(listed.contains("mcp-github"), "{listed}");
+    assert!(
+        !listed
+            .lines()
+            .any(|l| l.trim_start_matches(['*', ' ']).starts_with("github ")),
+        "{listed}"
+    );
+}
+
+#[test]
+fn colliding_server_name_selects_the_builtin_and_doctor_warns() {
+    let home = mock_home();
+    let fixture = fixture();
+    ok(&run(
+        home.path(),
+        &["mcp", "add", "memory", "--command", &fixture],
+    ));
+    let doctor = run(home.path(), &["doctor", "plugins"]);
+    let text = format!("{}{}", common::stdout(&doctor), stderr(&doctor));
+    assert!(
+        text.contains("MCP server 'memory' has the name of built-in toolset 'memory'"),
+        "{text}"
+    );
+    assert!(text.contains("mcp-memory"), "{text}");
+}
+
+#[test]
+fn profile_identity_per_profile() {
+    let home = mock_home();
+    let log = home.path().join("fixture.log");
+    let server = http_fixture(&log, None);
+    for profile in ["alice", "bob"] {
+        ok(&run(home.path(), &["profile", "create", profile]));
+        let config = home
+            .path()
+            .join("profiles")
+            .join(profile)
+            .join("config.toml");
+        let before = std::fs::read_to_string(&config).unwrap_or_default();
+        let text = before
+            + &format!(
+                "\n[model]\nprovider = \"mock\"\ndefault = \"mock\"\n\n[mcp.servers.team_api]\ntransport = \"http\"\nurl = \"{}\"\ntrust = \"full\"\nidentity_header = {{ name = \"X-User-Id\", value_from = \"profile\" }}\n",
+                server.url
+            );
+        std::fs::write(&config, text).unwrap();
+        let script = call_script(home.path(), "mcp__team_api__echo", "{ text = \"hi\" }");
+        assert_eq!(one_shot(home.path(), Some(profile), &script), "finished\n");
+    }
+    let seen = std::fs::read_to_string(&log).unwrap();
+    assert!(seen.contains("header x-user-id: alice"), "{seen}");
+    assert!(seen.contains("header x-user-id: bob"), "{seen}");
+}
+
+#[test]
+fn a_missing_client_certificate_fails_naming_it() {
+    let home = mock_home();
+    append_config(
+        home.path(),
+        "\n[mcp.servers.tls]\ntransport = \"http\"\nurl = \"https://127.0.0.1:9/mcp\"\nclient_cert = \"/nonexistent/client.pem\"\n",
+    );
+    let out = run(home.path(), &["mcp", "test", "tls"]);
+    assert_eq!(out.status.code(), Some(69));
+    assert!(
+        stderr(&out)
+            .contains("MCP server 'tls': client certificate not found: /nonexistent/client.pem"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+/// A mock OAuth authorization server for MCP server `url`.
+struct AuthServer {
+    runtime: tokio::runtime::Runtime,
+    server: MockServer,
+}
+
+impl AuthServer {
+    fn start(registration: bool) -> Self {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let server = runtime.block_on(MockServer::start());
+        let issuer = server.uri();
+        let mut metadata = json!({
+            "issuer": issuer,
+            "authorization_endpoint": format!("{issuer}/authorize"),
+            "token_endpoint": format!("{issuer}/token"),
+            "authorization_response_iss_parameter_supported": true,
+        });
+        if registration {
+            metadata["registration_endpoint"] = json!(format!("{issuer}/register"));
+        }
+        let auth = Self { runtime, server };
+        auth.json("/.well-known/oauth-authorization-server", 200, &metadata);
+        auth.json("/register", 201, &json!({"client_id": "dyn-client"}));
+        auth
+    }
+
+    fn json(&self, at: &str, status: u16, body: &serde_json::Value) {
+        self.runtime.block_on(
+            Mock::given(path(at))
+                .respond_with(ResponseTemplate::new(status).set_body_json(body))
+                .mount(&self.server),
+        );
+    }
+
+    fn token(&self, status: u16, body: &serde_json::Value) {
+        self.runtime.block_on(
+            Mock::given(method("POST"))
+                .and(path("/token"))
+                .respond_with(ResponseTemplate::new(status).set_body_json(body))
+                .mount(&self.server),
+        );
+    }
+}
+
+fn oauth_server(home: &Path, name: &str, url: &str) {
+    append_config(
+        home,
+        &format!(
+            "\n[mcp.servers.{name}]\ntransport = \"http\"\nurl = \"{url}\"\nauth = \"oauth\"\ntrust = \"full\"\n"
+        ),
+    );
+}
+
+#[test]
+fn dcr_less_server_without_client() {
+    let home = mock_home();
+    let auth = AuthServer::start(false);
+    let url = format!("{}/mcp", auth.server.uri());
+    oauth_server(home.path(), "drive", &url);
+    let out = run(home.path(), &["mcp", "login", "drive"]);
+    assert_eq!(out.status.code(), Some(78), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("MCP server 'drive' needs a pre-registered OAuth client"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(stderr(&out).contains("mcp.servers.drive.oauth.client_id"));
+}
+
+#[test]
+fn a_login_takes_a_pasted_redirect_and_the_server_then_answers() {
+    let home = mock_home();
+    let log = home.path().join("fixture.log");
+    let server = http_fixture(&log, Some("at-1"));
+    let auth = AuthServer::start(true);
+    auth.token(
+        200,
+        &json!({"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600}),
+    );
+    // Discovery runs against the authorization server's origin (no
+    // protected resource metadata there: the origin is the issuer); the
+    // token is then used against the fixture, which requires it.
+    let mcp_url = format!("{}/mcp", auth.server.uri());
+    oauth_server(home.path(), "linear", &mcp_url);
+    let mut child = command(home.path())
+        .args(["mcp", "login", "linear"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut authorize = String::new();
+    while !authorize.trim_start().starts_with("http") {
+        authorize.clear();
+        assert!(
+            stdout.read_line(&mut authorize).unwrap() > 0,
+            "no URL printed"
+        );
+    }
+    let url = reqwest::Url::parse(authorize.trim()).unwrap();
+    let query: std::collections::HashMap<String, String> = url.query_pairs().into_owned().collect();
+    assert_eq!(query["client_id"], "dyn-client");
+    assert_eq!(query["code_challenge_method"], "S256");
+    let redirect = format!(
+        "{}?code=c-1&state={}&iss={}",
+        query["redirect_uri"],
+        query["state"],
+        auth.server.uri()
+    );
+    writeln!(child.stdin.take().unwrap(), "{redirect}").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let secrets = ok(&run(home.path(), &["secrets", "list"]));
+    assert!(secrets.contains("MCP_OAUTH_LINEAR_ACCESS"), "{secrets}");
+    assert!(secrets.contains("MCP_OAUTH_LINEAR_REFRESH"), "{secrets}");
+    // The token now authenticates against a server requiring it.
+    let config_path = home.path().join("profiles/default/config.toml");
+    let text = std::fs::read_to_string(&config_path).unwrap();
+    std::fs::write(&config_path, text.replace(&mcp_url, &server.url)).unwrap();
+    let tested = run(home.path(), &["mcp", "test", "linear"]);
+    assert!(tested.status.success(), "{}", stderr(&tested));
+}
+
+#[test]
+fn a_redirect_naming_another_issuer_is_refused() {
+    let home = mock_home();
+    let auth = AuthServer::start(true);
+    oauth_server(home.path(), "linear", &format!("{}/mcp", auth.server.uri()));
+    let mut child = command(home.path())
+        .args(["mcp", "login", "linear"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut authorize = String::new();
+    while !authorize.trim_start().starts_with("http") {
+        authorize.clear();
+        assert!(stdout.read_line(&mut authorize).unwrap() > 0);
+    }
+    let url = reqwest::Url::parse(authorize.trim()).unwrap();
+    let query: std::collections::HashMap<String, String> = url.query_pairs().into_owned().collect();
+    let redirect = format!(
+        "{}?code=c-1&state={}&iss=https://evil.example",
+        query["redirect_uri"], query["state"]
+    );
+    writeln!(child.stdin.take().unwrap(), "{redirect}").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(78));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("RFC 9207"));
+}
+
+#[test]
+fn dead_refresh_token_parks_the_server() {
+    let home = mock_home();
+    let auth = AuthServer::start(true);
+    auth.token(400, &json!({"error": "invalid_grant"}));
+    let url = format!("{}/mcp", auth.server.uri());
+    oauth_server(home.path(), "linear", &url);
+    // A sign-in whose access token has expired.
+    let state = home.path().join("profiles/default/state/mcp-oauth");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(
+        state.join("linear.json"),
+        json!({
+            "issuer": auth.server.uri(),
+            "token_endpoint": format!("{}/token", auth.server.uri()),
+            "client_id": "dyn-client",
+            "expires_at": 1,
+            "resource": url,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    for (name, value) in [
+        ("MCP_OAUTH_LINEAR_ACCESS", "old"),
+        ("MCP_OAUTH_LINEAR_REFRESH", "revoked"),
+    ] {
+        ok(&common::run_with_stdin(
+            home.path(),
+            &["secrets", "set", name],
+            &format!("{value}\n"),
+        ));
+    }
+    let status = ok(&run(home.path(), &["--json", "mcp", "status"]));
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let row = &status["servers"][0];
+    assert_eq!(row["state"], "unavailable", "{status}");
+    assert_eq!(
+        row["reason"],
+        "needs re-authorization: prometheus mcp login linear"
+    );
+    let record = std::fs::read_to_string(state.join("linear.json")).unwrap();
+    assert!(record.contains("parked"), "{record}");
+    let secrets = ok(&run(home.path(), &["secrets", "list"]));
+    assert!(
+        !secrets.contains("MCP_OAUTH_LINEAR_REFRESH"),
+        "the dead token is dropped"
+    );
+    // Later starts stay parked without asking the server again.
+    let calls = auth
+        .runtime
+        .block_on(auth.server.received_requests())
+        .unwrap();
+    let token_calls = calls.iter().filter(|r| r.url.path() == "/token").count();
+    ok(&run(home.path(), &["mcp", "status"]));
+    let after = auth
+        .runtime
+        .block_on(auth.server.received_requests())
+        .unwrap();
+    assert_eq!(
+        after.iter().filter(|r| r.url.path() == "/token").count(),
+        token_calls
+    );
+    let doctor = run(home.path(), &["doctor", "plugins"]);
+    let text = format!("{}{}", common::stdout(&doctor), stderr(&doctor));
+    assert!(text.contains("prometheus mcp login linear"), "{text}");
+}
+
+fn sign(data: &[u8]) -> String {
+    let key = minisign::SecretKeyBox::from_string(TEST_KEY)
+        .unwrap()
+        .into_unencrypted_secret_key()
+        .unwrap();
+    minisign::sign(None, &key, data, None, None)
+        .unwrap()
+        .into_string()
+}
+
+/// Serves `catalog` (signed) as the profile's live catalog.
+fn serve_catalog(
+    home: &Path,
+    catalog: &serde_json::Value,
+) -> (tokio::runtime::Runtime, MockServer) {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let server = runtime.block_on(MockServer::start());
+    let bytes = serde_json::to_vec(catalog).unwrap();
+    let signature = sign(&bytes);
+    runtime.block_on(async {
+        Mock::given(path("/catalog.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(bytes))
+            .mount(&server)
+            .await;
+        Mock::given(path("/catalog.json.minisig"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(signature))
+            .mount(&server)
+            .await;
+    });
+    ok(&run(
+        home,
+        &[
+            "config",
+            "set",
+            "plugins.catalog_url",
+            &format!("{}/catalog.json", server.uri()),
+        ],
+    ));
+    (runtime, server)
+}
+
+#[test]
+fn large_surface_uses_an_exclude_list() {
+    let home = mock_home();
+    let fixture = fixture();
+    let catalog = json!({
+        "schema": "prometheus.plugin_catalog.v1",
+        "plugins": [],
+        "mcp": [
+            {
+                "id": "bigsurface", "manifest_version": 1, "transport": "stdio",
+                "command": fixture, "args": ["--log", "${logFile}"],
+                "description": "Many tools",
+                "setup": [{"name": "logFile", "prompt": "Log file"}, {"name": "BIG_TOKEN", "prompt": "Token", "secret": true}],
+                "tools": {"default_excluded": ["*_delete*"]},
+                "post_install": "Remember to enable it."
+            },
+            {"id": "future", "manifest_version": 9, "transport": "stdio", "command": "x", "description": "From the future"}
+        ],
+        "removed": []
+    });
+    let _served = serve_catalog(home.path(), &catalog);
+    let listed = ok(&run(home.path(), &["mcp", "catalog"]));
+    assert!(listed.contains("bigsurface  stdio"), "{listed}");
+    assert!(
+        listed.contains("future") && listed.contains("requires a newer Prometheus"),
+        "{listed}"
+    );
+    let log = home.path().join("big.log");
+    let field = format!("logFile={}", log.display());
+    let out = run(
+        home.path(),
+        &[
+            "mcp",
+            "install",
+            "bigsurface",
+            "--field",
+            &field,
+            "--field",
+            "BIG_TOKEN=s3cret",
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    let printed = common::stdout(&out);
+    assert!(
+        !printed.contains("toggle a tool"),
+        "no checklist: {printed}"
+    );
+    assert!(printed.contains("Remember to enable it."));
+    let text = config(home.path());
+    assert!(text.contains("exclude = [\"*_delete*\"]"), "{text}");
+    assert!(text.contains("enabled = false"), "{text}");
+    assert!(
+        text.contains(&log.display().to_string()),
+        "non-secret values are written: {text}"
+    );
+    assert!(
+        !text.contains("s3cret"),
+        "secrets stay in the store: {text}"
+    );
+    assert!(ok(&run(home.path(), &["secrets", "list"])).contains("BIG_TOKEN"));
+    let newer = run(home.path(), &["mcp", "install", "future"]);
+    assert_eq!(newer.status.code(), Some(78));
+    assert!(stderr(&newer).contains("requires a newer Prometheus"));
+}
+
+fn fx_with(home: &Path, extra: &str) -> PathBuf {
+    let log = home.join("fx.log");
+    append_config(
+        home,
+        &format!(
+            "\n[mcp.servers.fx]\ncommand = \"{}\"\nargs = [\"--extras\", \"--log\", \"{}\"]\ntrust = \"full\"\n{extra}",
+            fixture().replace('\\', "\\\\"),
+            log.display().to_string().replace('\\', "\\\\")
+        ),
+    );
+    log
+}
+
+#[test]
+fn unattended_elicitation_declined() {
+    let home = mock_home();
+    fx_with(home.path(), "");
+    let script = call_script(home.path(), "mcp__fx__ask", "{}");
+    assert_eq!(one_shot(home.path(), None, &script), "finished\n");
+    let results = tool_results(home.path());
+    assert!(
+        results.iter().any(|r| r.contains("\"action\":\"decline\"")),
+        "{results:?}"
+    );
+}
+
+#[test]
+fn sampling_runs_on_the_session_route() {
+    let home = mock_home();
+    fx_with(home.path(), "");
+    let script = call_script(home.path(), "mcp__fx__sample", "{ n = 1 }");
+    assert_eq!(one_shot(home.path(), None, &script), "finished\n");
+    let results = tool_results(home.path());
+    assert!(
+        results
+            .iter()
+            .any(|r| r.contains("ok ") && r.contains("sampled answer")),
+        "{results:?}"
+    );
+}
+
+#[test]
+fn a_costed_call_crossing_the_limit_is_refused_where_no_one_can_answer() {
+    let home = mock_home();
+    let log = fx_with(
+        home.path(),
+        "spend_limit = 10\n[mcp.servers.fx.tool_costs]\nrender = 20\n",
+    );
+    let script = call_script(home.path(), "mcp__fx__render", "{ prompt = \"cat\" }");
+    // A one-shot run cannot ask: the call is refused and the run ends
+    // saying an approval was needed.
+    let out = command(home.path())
+        .args(["-z", "go", "--mock-script", &script])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(4), "{}", stderr(&out));
+    let results = tool_results(home.path());
+    let refused = results
+        .iter()
+        .find(|r| r.contains("about 20 credits"))
+        .unwrap_or_else(|| panic!("no refusal in {results:?}"));
+    assert!(
+        refused.contains("0 credits used in this conversation (limit 10)"),
+        "{refused}"
+    );
+    assert!(refused.contains("do NOT re-run"), "{refused}");
+    let calls = std::fs::read_to_string(log).unwrap_or_default();
+    assert!(!calls.contains("call render"), "{calls}");
+}
+
+#[test]
+fn a_malformed_cost_skips_the_server_naming_the_key() {
+    let home = mock_home();
+    fx_with(
+        home.path(),
+        "[mcp.servers.fx.tool_costs]\nrender = \"ten\"\n",
+    );
+    let status = ok(&run(home.path(), &["--json", "mcp", "status"]));
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    assert_eq!(status["servers"][0]["state"], "error");
+    assert!(
+        status["servers"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .starts_with("mcp.servers.fx.tool_costs.render:"),
+        "{status}"
+    );
+}

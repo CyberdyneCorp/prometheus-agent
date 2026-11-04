@@ -174,7 +174,11 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "terminal" => system::terminal(inputs),
         "distribution" => groups::distribution(inputs),
         "runtimes" => groups::runtimes(inputs),
-        "plugins" => groups::plugins(inputs),
+        "plugins" => {
+            let mut checks = groups::plugins(inputs);
+            checks.extend(groups::mcp(inputs));
+            checks
+        }
         "observability" => groups::observability(inputs),
         "network" => system::network(inputs).await,
         "providers" => groups::providers(inputs).await?,

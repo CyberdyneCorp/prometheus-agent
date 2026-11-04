@@ -17,7 +17,8 @@
 //!   [`tool_surface`] the tool surface each session froze, and
 //!   [`compression_state`] each session's automatic-compaction guards,
 //!   and [`memory`] the built-in memory entries and staged changes, and
-//!   [`gateway`] the messaging gateway's routes, pairing and outbox.
+//!   [`gateway`] the messaging gateway's routes, pairing and outbox, and
+//!   [`mcp_spend`] what conversations spent on costed MCP tools.
 
 pub mod blobs;
 pub mod compaction;
@@ -35,6 +36,7 @@ pub mod integrity;
 pub mod leases;
 pub mod listing;
 pub mod location;
+pub mod mcp_spend;
 pub mod memory;
 pub mod messages;
 mod migrate;
@@ -89,7 +91,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 18;
+pub const SCHEMA_VERSION: u32 = 19;
 
 #[cfg(test)]
 mod tests {

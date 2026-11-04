@@ -142,10 +142,9 @@ impl ToolHooks for PluginToolHooks {
                 PreTool::Continue => PreDecision::Continue,
                 PreTool::Modify(fields) => PreDecision::Modify(fields),
                 PreTool::Block(message) => PreDecision::Block(message),
-                PreTool::Approve { message, rule_key } => PreDecision::Escalate(Escalation {
-                    rule_key,
-                    reason: message,
-                }),
+                PreTool::Approve { message, rule_key } => {
+                    PreDecision::Escalate(Escalation::new(rule_key, message))
+                }
             }
         })
     }

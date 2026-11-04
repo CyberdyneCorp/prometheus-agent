@@ -208,7 +208,9 @@ impl CommandGate {
         escalation: &Escalation,
     ) -> GateVerdict {
         let key = format!("{PLUGIN_RULE_PREFIX}{}", escalation.rule_key);
-        if self.bypassing() || self.allow_rules().contains(&key) {
+        // A once-only rule (a spend limit) asks whatever the mode, YOLO or
+        // earlier approvals say, and is never remembered.
+        if !escalation.once_only && (self.bypassing() || self.allow_rules().contains(&key)) {
             return GateVerdict::Allow;
         }
         self.decide(ApprovalRequest {
@@ -220,7 +222,7 @@ impl CommandGate {
                 reason: escalation.reason.clone(),
                 fragment: request.tool.name().to_owned(),
             }],
-            remember: Some(key),
+            remember: (!escalation.once_only).then_some(key),
         })
         .await
     }
@@ -319,9 +321,16 @@ impl CommandGate {
             self.unobtainable.fetch_add(1, Ordering::Relaxed);
         }
         match (request.remember.is_some(), mode) {
-            (false, _) => (
+            (false, _) if request.findings.iter().any(|f| f.detector == PROTECTED) => (
                 GateVerdict::Denied(format!(
                     "BLOCKED: {summary}. Protected instruction files need a human approval, which {context} runs cannot give."
+                )),
+                "deny",
+                "policy",
+            ),
+            (false, _) => (
+                GateVerdict::Denied(format!(
+                    "BLOCKED: {summary}. This call needs a human approval, which {context} runs cannot give. {STOP}"
                 )),
                 "deny",
                 "policy",
@@ -458,6 +467,7 @@ impl ApprovalGate for CommandGate {
             let rules = request
                 .escalation
                 .into_iter()
+                .chain(request.guarded)
                 .chain(request.tool.descriptor.approval.as_ref());
             for escalation in rules {
                 let verdict = self.check_escalation(&request, escalation).await;

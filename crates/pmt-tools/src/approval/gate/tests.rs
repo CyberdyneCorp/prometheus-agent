@@ -81,10 +81,27 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
         PathClaim::Argument("/path".into()),
         PathClaim::PatchText("/patch".into()),
     ]));
+    // `read_file` (a `core` member) stands for a costed MCP tool.
+    let render = ToolDescriptor::new(
+        "read_file",
+        "file",
+        "Renders (costs credits).",
+        schema("prompt"),
+    );
+    let over_budget: crate::descriptor::CallGuard = Arc::new(|_: &str, _: &Value| {
+        Some(Escalation {
+            rule_key: "mcp:renders:render:spend".into(),
+            reason:
+                "render costs about 20 credits; 90 credits used in this conversation (limit 100)"
+                    .into(),
+            once_only: true,
+        })
+    });
     vec![
         RegisteredTool::new(terminal, Owner::Builtin, counting(runs)),
         RegisteredTool::new(write, Owner::Builtin, counting(runs)),
         RegisteredTool::new(patch, Owner::Builtin, counting(runs)),
+        RegisteredTool::new(render, Owner::Builtin, counting(runs)).with_guard(over_budget),
     ]
 }
 
@@ -94,10 +111,10 @@ struct Escalating;
 impl ToolHooks for Escalating {
     fn pre_tool_call<'a>(&'a self, call: HookCall<'a>) -> SeamFuture<'a, PreDecision> {
         let decision = if call.tool == "write_file" {
-            PreDecision::Escalate(Escalation {
-                rule_key: "no-writes".into(),
-                reason: "the audit plugin reviews every write".into(),
-            })
+            PreDecision::Escalate(Escalation::new(
+                "no-writes",
+                "the audit plugin reviews every write",
+            ))
         } else {
             PreDecision::Continue
         };
@@ -482,6 +499,45 @@ async fn headless_plugin_escalation_is_denied_naming_the_rule() {
         GrantsFile::of(&fx.profile).load().unwrap().allow,
         ["plugin_rule:no-writes"]
     );
+}
+
+#[tokio::test]
+async fn a_once_only_rule_asks_under_yolo_every_time_and_is_refused_unattended() {
+    let fx = fixture();
+    let (channel, mut prompts) = attached();
+    let options = Options {
+        yolo: true,
+        ..Options::default()
+    };
+    let session = session(&fx, channel, options).await;
+    for _ in 0..2 {
+        let pending = run(&session, "read_file", json!({"prompt": "cat"}));
+        let asked = answer(&mut prompts, Decision::Always).await;
+        assert_eq!(asked.remember, None, "never remembered");
+        assert!(asked.summary().contains("about 20 credits"));
+        assert_eq!(pending.await.unwrap().status, Status::Ok);
+    }
+    assert!(GrantsFile::of(&fx.profile).load().unwrap().allow.is_empty());
+    let options = Options {
+        yolo: true,
+        context: Context::Cron,
+        approvals: ApprovalsConfig {
+            cron_mode: UnattendedApproval::Approve,
+            ..ApprovalsConfig::default()
+        },
+        ..Options::default()
+    };
+    let unattended = self::session(&fx, Channel::unattended(), options).await;
+    let result = run(&unattended, "read_file", json!({"prompt": "cat"}))
+        .await
+        .unwrap();
+    assert_eq!(result.status, Status::Denied);
+    assert!(
+        result.text_content().ends_with(STOP),
+        "{}",
+        result.text_content()
+    );
+    assert_eq!(fx.runs.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

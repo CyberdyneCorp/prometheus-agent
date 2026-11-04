@@ -38,7 +38,7 @@ prometheus mcp status          # start every enabled server and show its state
 
 ```console
 $ prometheus mcp add docs --url https://docs.example.com/mcp --auth-secret DOCS_TOKEN
-added MCP server 'docs'; its tools join sessions started from now (check it with: prometheus mcp test docs)
+added MCP server 'docs'; its tools join sessions started from now
 $ prometheus mcp list
 docs  http  https://docs.example.com/mcp  trust untrusted
 $ prometheus mcp test nope   # exits 66
@@ -47,8 +47,86 @@ $ prometheus mcp remove docs
 removed MCP server 'docs'; sessions started from now no longer get its tools
 ```
 
-`enabled = false` keeps
-a server configured without connecting it.
+`mcp add` probes the new server and, on a terminal, offers its tool
+checklist (`prometheus mcp tools <name>` re-opens it; `tools.include` is
+written only when not every tool is selected). `--preset codex` fills in
+`command = "codex"`, `args = ["mcp-server"]` (explicit flags win).
+`prometheus mcp` alone, on a terminal, is a picker over the configured
+servers. `enabled = false` keeps a server configured without connecting it.
+
+`${NAME}` in a server's command, arguments, `env` values, URL or `headers`
+is filled at each start from the context variables `${userHome}`,
+`${workspaceFolder}`, `${workspaceFolderBasename}` and `${pathSeparator}`,
+else from the secrets store (never from the environment).
+
+### Signing in (OAuth)
+
+An `http` server with `auth = "oauth"` signs in with OAuth 2.1 and PKCE:
+
+```sh
+prometheus mcp add linear --url https://mcp.linear.app/mcp --auth oauth
+prometheus mcp login linear          # --flow device for a device code
+prometheus mcp reauth linear         # forget the sign-in and sign in again
+```
+
+The login discovers the authorization server (protected resource metadata,
+then RFC 8414 metadata whose issuer must match), identifies with
+`oauth.client_id` (and `oauth.client_secret_name`) when set, else with
+Prometheus' client metadata document where the server accepts one, else by
+registering a client dynamically. A server that does none of these needs a
+pre-registered client: the login exits 78 saying so. It prints the
+authorization URL (and opens a browser only from a foreground terminal that
+is not an SSH session); paste the URL the browser was redirected to when it
+cannot reach `127.0.0.1` (`oauth.redirect_host = "localhost"`,
+`redirect_port`, `redirect_uri` adjust the redirect). The redirect's `state`
+must match and its `iss`, when present or promised, must name the issuer.
+
+Tokens live only in the secrets store (`MCP_OAUTH_<SERVER>_ACCESS`,
+`_REFRESH`); the access token is refreshed under the profile's refresh lock
+shortly before it expires. A refresh token that is refused (or an
+authorization server that changed) parks the server: its tools are
+unavailable, nothing opens a browser, and `prometheus mcp status` and
+`prometheus doctor` show `needs re-authorization: prometheus mcp login
+<server>`.
+
+### Client certificates and identity headers
+
+```toml
+[mcp.servers.team_api]
+transport = "http"
+url = "https://api.internal/mcp"
+client_cert = "/etc/pki/me.pem"           # certificate (and key, unless client_key)
+client_key = "/etc/pki/me.key"
+client_key_password_secret = "ME_KEY_PASS" # for an encrypted PKCS#8 key
+identity_header = { name = "X-User-Id", value_from = "profile" }   # or "static" with value
+[mcp.servers.team_api.headers]
+X-Team = "ops"
+```
+
+A missing certificate file fails the start with `MCP server '<name>':
+client certificate not found: <path>`. The identity header carries the
+active profile's name (or the static `value`) and never replaces a
+same-named `headers` entry; an invalid block, or one on a `stdio` server, is
+warned about and ignored.
+
+### The catalog
+
+```sh
+prometheus mcp catalog                   # MCP servers of the plugin catalog
+prometheus mcp install linear --field TEAM=ops
+```
+
+Catalog entries are signed with the plugin catalog. An install writes the
+server disabled (enable it with `prometheus config set
+mcp.servers.<name>.enabled true`), asks the entry's setup fields (secret ones
+hidden and stored in the secrets store, kept as `${NAME}` placeholders),
+checks out a pinned git `source` under `<profile>/mcp/<name>` (`${installDir}`)
+and runs its `bootstrap` commands in the sandbox. An entry declaring
+`tools.default_excluded` writes `tools.exclude` without a checklist;
+otherwise the checklist pre-checks your earlier selection, else
+`tools.default_enabled`, else everything. An install succeeds even when the
+probe fails, and is never updated behind your back. An entry needing a newer
+Prometheus is listed with `requires a newer Prometheus` and not installed.
 
 ### Tools
 
@@ -78,6 +156,40 @@ server's circuit opens for 60 s: calls answer `MCP server '<name>' is
 unreachable after 3 consecutive failures; retry in ~<n>s` without contacting
 it, then one call is let through to probe it.
 
+Session start waits for servers still connecting at most
+`mcp.discovery_wait_ms` (1,500) interactively and
+`mcp.single_query_discovery_wait_ms` (15,000) for one-shot runs; a server
+that misses the window joins later sessions. A `lazy = true` server
+registers its tools from the cached tool list and starts on its first call.
+A `stdio` server with `idle_timeout_secs` or `max_lifetime_secs` is stopped
+after that idle time or age and restarted on its next call; its tools stay.
+
+The daemon follows `mcp.servers` edits within a minute
+(`mcp.auto_reload_on_config_change`, on by default): removed and disabled
+servers stop, unchanged ones keep their connection, added ones start (a
+failed first start is retried after 30 s, doubling to 10 minutes). Running
+sessions keep their tools.
+
+When a server announces that its tools changed, its tool list is fetched
+again (a burst of announcements costs at most two fetches); running
+sessions keep their tool array and show a one-line notice, and a call to a
+tool the server dropped answers `tool '<name>' is no longer offered by MCP
+server '<server>'`. A server advertising resources or prompts also gets
+`mcp__<server>__list_resources`/`read_resource` or
+`mcp__<server>__list_prompts`/`get_prompt` (under the same filter).
+
+Results are cleaned before the model reads them: invisible Unicode TAG
+characters are removed (from tool descriptions, resources and prompts too,
+keeping flag emoji), and a result's `_meta` reaches the model as `meta`
+without protocol-reserved keys. Images and audio are stored in the
+profile's blob store and reported as `MEDIA:<path> (<mime>)` (an image is
+also attached when the model takes images); a block over 50 MiB fails the
+call naming it.
+
+A server's bare name works as its toolset name (`tools.enabled_toolsets =
+["core", "github"]`) unless a built-in toolset has that name; `prometheus
+doctor` warns then to write `mcp-<server>`.
+
 `/mcp` in a chat shows the servers; `/mcp reload` rebuilds them from
 `config.toml` and their tools reach sessions started afterwards, or this
 one at once with `/mcp reload --now` (which rebuilds the tool array, so the
@@ -99,6 +211,32 @@ such as a provider key, reaches it.
 tool that does not declare `readOnlyHint`; in runs nobody can answer (one-shot
 `-z`, cron) the approval mode of that run decides. `trust = "full"` treats the
 server's tools like built-in ones.
+
+### What servers may ask
+
+**Sampling** (`sampling/createMessage`) is answered only for `trust = "full"`
+servers unless `[mcp.servers.<name>.sampling] enabled` says otherwise, on the
+session's route (or `model`, which must be in `allowed_models` when that list
+is set), capped at `max_tokens_cap` (4,096) tokens, within `timeout_secs`
+(30), `max_rpm` (10 per sliding minute) and `max_tool_rounds` (5); every call
+is charged to the session as `mcp:<server>` and counts toward its budget. A
+request over a limit gets an error naming it and no model call is made.
+
+**Elicitation** (`elicitation/create`, form mode; `elicitation.enabled`,
+default on) asks the person through the session's clarify prompt (answer
+once or decline), whatever the approval mode or YOLO says; it is declined
+after `elicitation.timeout_secs` (300), at once where no one can answer
+(cron, one-shot runs), and always for URL-mode requests.
+
+**Costs**: `tool_costs` (a number, or `{ credits = [min, max], note }`, per
+tool), `spend_limit` (per conversation; 0 is none) and `cost_unit`
+(`credits`). The approval prompt of a costed tool states its cost and the
+conversation's running total (which follows the conversation across
+compression and branches); a call that would cross `spend_limit` asks a
+one-time approval even on a trusted server or under YOLO, and where no one
+can answer it is refused telling the model not to retry. A malformed
+`tool_costs` entry skips the server with an error naming it (`mcp status`
+shows `error`).
 
 ## Tool search
 

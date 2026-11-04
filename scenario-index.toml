@@ -2193,3 +2193,47 @@ capabilities = [
 [tool-system."Tool search listing, ranking and limits"]
 "Oversized server collapses alone" = ["crates/pmt-tools/src/search/manifest.rs::an_oversized_server_collapses_alone"]
 "Limit clamp" = ["crates/pmt-tools/tests/tool_search.rs::limit_clamp"]
+
+# Group 31: MCP client and server (tasks 31.5-31.7).
+
+[plugin-system."MCP OAuth for HTTP servers"]
+"Dead refresh token parks the server" = ["crates/prometheus/tests/mcp_extensions.rs::dead_refresh_token_parks_the_server"]
+"DCR-less server without client" = ["crates/prometheus/tests/mcp_extensions.rs::dcr_less_server_without_client"]
+
+[plugin-system."MCP mTLS and identity header"]
+"Profile identity per profile" = ["crates/prometheus/tests/mcp_extensions.rs::profile_identity_per_profile"]
+
+[plugin-system."MCP config watch, recycling and discovery wait"]
+"Recycled server restarts on demand" = ["crates/pmt-mcp/tests/extensions.rs::recycled_server_restarts_on_demand"]
+
+[plugin-system."mcp CLI"]
+"Preset fills transport" = ["crates/prometheus/tests/mcp_extensions.rs::preset_fills_transport"]
+
+[plugin-system."MCP catalog entries"]
+"Large surface uses an exclude list" = ["crates/prometheus/tests/mcp_extensions.rs::large_surface_uses_an_exclude_list"]
+
+[plugin-system."MCP sampling"]
+"Rate limit enforced" = ["crates/pmt-mcp/tests/extensions.rs::rate_limit_enforced"]
+
+[plugin-system."MCP elicitation"]
+"Unattended elicitation declined" = ["crates/prometheus/tests/mcp_extensions.rs::unattended_elicitation_declined", "crates/pmt-mcp/tests/extensions.rs::unattended_elicitation_declined"]
+
+[plugin-system."MCP tool costs and spend limits"]
+"Budget crossing asks even when trusted" = ["crates/pmt-mcp/tests/extensions.rs::budget_crossing_asks_even_when_trusted", "crates/pmt-tools/src/approval/gate/tests.rs::a_once_only_rule_asks_under_yolo_every_time_and_is_refused_unattended"]
+
+[tool-system."Registry toolset aliases"]
+"Bare server name" = ["crates/pmt-tools/src/registry/tests.rs::bare_server_name", "crates/prometheus/tests/mcp_extensions.rs::bare_server_name_selects_its_toolset"]
+"Colliding server name" = ["crates/pmt-tools/src/registry/tests.rs::colliding_server_name", "crates/prometheus/tests/mcp_extensions.rs::colliding_server_name_selects_the_builtin_and_doctor_warns"]
+
+[tool-system."MCP resource and prompt utility tools"]
+"Tools-only server" = ["crates/pmt-mcp/tests/extensions.rs::tools_only_server_gets_no_utility_tools"]
+
+[tool-system."MCP tool list changes respect the frozen surface"]
+"Burst of notifications" = ["crates/pmt-mcp/tests/extensions.rs::burst_of_notifications"]
+
+[tool-system."MCP result sanitization"]
+"Smuggled instructions removed" = ["crates/pmt-mcp/tests/extensions.rs::smuggled_instructions_removed_and_reserved_meta_dropped", "crates/pmt-mcp/src/sanitize.rs::smuggled_instructions_are_removed_and_the_visible_text_kept"]
+"Reserved meta dropped" = ["crates/pmt-mcp/src/sanitize.rs::reserved_meta_dropped"]
+
+[tool-system."MCP media results"]
+"Screenshot from an MCP server" = ["crates/pmt-mcp/tests/extensions.rs::screenshot_from_an_mcp_server"]

@@ -14,6 +14,7 @@ pub mod host;
 pub mod install;
 pub mod load;
 pub mod manifest;
+pub mod mcp_catalog;
 pub mod package;
 pub mod providers;
 pub mod record;

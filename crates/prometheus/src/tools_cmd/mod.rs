@@ -69,12 +69,25 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
 }
 
 /// The registry of profile `scope`: this binary's built-in tools, the
-/// shipped toolsets and a bundle per platform of an adapter plugin.
+/// shipped toolsets, a bundle per platform of an adapter plugin and the
+/// profile's MCP toolsets (with the tools their servers listed last; no
+/// server is started).
 ///
 /// # Errors
 ///
 /// A built-in tool or toolset that does not load (a programming error).
 pub fn registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
+    let mut registry = base_registry(scope)?;
+    crate::mcp_host::manager(scope).register(&mut registry);
+    Ok(registry)
+}
+
+/// [`registry`] without the MCP toolsets (sessions add their own).
+///
+/// # Errors
+///
+/// As [`registry`].
+pub fn base_registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
     let plugin_platforms = pmt_config::platforms::plugin_platforms();
     Ok(ToolRegistry::new(
         scope.name().as_str(),

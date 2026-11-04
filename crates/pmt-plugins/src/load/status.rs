@@ -115,8 +115,8 @@ fn provenance(plugin: &Discovered, inputs: &LoadInputs<'_>) -> Option<(State, St
         .map(|r| r.location.as_str());
     let allowed = record.as_ref().is_some_and(|r| r.flags.allow_removed);
     let catalog = crate::catalog::Catalog {
-        entries: Vec::new(),
         removed: inputs.blocked.to_vec(),
+        ..crate::catalog::Catalog::default()
     };
     match catalog.blocked(&plugin.id, repo) {
         Some(removed) if !allowed => Some((

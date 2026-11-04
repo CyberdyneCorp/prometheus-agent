@@ -10,14 +10,20 @@
 //! `USERPROFILE`), `TMPDIR` (the scratch directory), its `env` values and
 //! its `env_secrets` from the secrets store, so no other secret (a
 //! provider key) reaches it. An `http` server is reached through the
-//! profile's outbound HTTP client, with `auth_secret` as bearer token.
+//! profile's outbound HTTP client (presenting `client_cert` when set),
+//! with its `headers`, its identity header and, by `auth`, the
+//! `auth_secret` bearer token or the OAuth access token. `${NAME}`
+//! placeholders in the command, arguments, environment, URL and headers
+//! are filled at each start from the secrets store and the context
+//! variables (spec: plugin-system, MCP mTLS and identity header; MCP
+//! catalog entries).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pmt_config::ProfileScope;
 use pmt_config::grants::baseline;
-use pmt_config::schema::{McpServerConfig, McpTransport};
+use pmt_config::schema::{McpAuth, McpServerConfig, McpTransport};
 use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_mcp::Launch;
 use pmt_mcp::server::Launcher;
@@ -39,7 +45,7 @@ pub(super) fn launcher(scope: &ProfileScope, name: &str, server: &McpServerConfi
     let (scope, name, server) = (scope.clone(), name.to_owned(), server.clone());
     Arc::new(move || match server.transport {
         McpTransport::Stdio => stdio(&scope, &name, &server),
-        McpTransport::Http => http(&scope, &server),
+        McpTransport::Http => http(&scope, &name, &server),
     })
 }
 
@@ -53,7 +59,9 @@ fn stdio(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<L
     let scratch = scratch(scope, name);
     std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
     let workspace = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
-    let program = program(&server.command);
+    let fill = |text: &str| super::placeholders::fill(scope, &workspace, text);
+    let command_text = fill(&server.command)?;
+    let program = program(&command_text);
     let capabilities = baseline(&config.security).union(&declared(server, program.as_deref())?);
     let paths = Paths {
         user_home: std::env::var_os("HOME").map(Into::into).unwrap_or_default(),
@@ -67,19 +75,23 @@ fn stdio(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<L
     )
     .map_err(|e| e.message().to_owned())?;
     let mut command = sandbox
-        .command(program.as_deref().unwrap_or(Path::new(&server.command)))
+        .command(program.as_deref().unwrap_or(Path::new(&command_text)))
         .map_err(|e| e.message().to_owned())?;
-    command
-        .args(&server.args)
-        .current_dir(&workspace)
-        .env_clear();
+    let args = server
+        .args
+        .iter()
+        .map(|a| fill(a))
+        .collect::<Result<Vec<_>, _>>()?;
+    command.args(&args).current_dir(&workspace).env_clear();
     for var in INHERITED {
         if let Some(value) = std::env::var_os(var) {
             command.env(var, value);
         }
     }
     command.env("TMPDIR", &scratch);
-    command.envs(&server.env);
+    for (key, value) in &server.env {
+        command.env(key, fill(value)?);
+    }
     for secret in &server.env_secrets {
         let value = scope
             .secrets()
@@ -132,26 +144,43 @@ fn declared(server: &McpServerConfig, program: Option<&Path>) -> Result<Capabili
         .collect()
 }
 
-fn http(scope: &ProfileScope, server: &McpServerConfig) -> Result<Launch, String> {
+fn http(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<Launch, String> {
     let network = &scope.config().network;
     let policy = OutboundPolicy {
         force_ipv4: network.force_ipv4,
         extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
         proxy: network.proxy.clone(),
     };
-    let client = pmt_net::client(&policy).map_err(|e| e.message().to_owned())?;
-    let bearer = if server.auth_secret.is_empty() {
-        None
-    } else {
-        let token = scope
-            .secrets()
-            .resolve(&server.auth_secret)
-            .map_err(|e| e.message().to_owned())?;
-        Some(token.expose().to_owned())
+    let client = match super::tls::identity(scope, name, server)? {
+        Some(identity) => pmt_net::client_with_identity(&policy, identity),
+        None => pmt_net::client(&policy),
+    }
+    .map_err(|e| e.message().to_owned())?;
+    let workspace = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    let fill = |text: &str| super::placeholders::fill(scope, &workspace, text);
+    let mut headers = server
+        .headers
+        .iter()
+        .map(|(k, v)| Ok((k.clone(), fill(v)?)))
+        .collect::<Result<Vec<_>, String>>()?;
+    if let Some(identity) = super::tls::identity_header(scope, name, server) {
+        headers.push(identity);
+    }
+    let bearer = match server.auth {
+        Some(McpAuth::Oauth) => Some(super::oauth::bearer(scope, name, server)?),
+        _ if server.auth_secret.is_empty() => None,
+        _ => {
+            let token = scope
+                .secrets()
+                .resolve(&server.auth_secret)
+                .map_err(|e| e.message().to_owned())?;
+            Some(token.expose().to_owned())
+        }
     };
     Ok(Launch::Http {
-        url: server.url.clone(),
+        url: fill(&server.url)?,
         client,
         bearer,
+        headers,
     })
 }

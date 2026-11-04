@@ -981,6 +981,13 @@ error_codes! {
     /// An MCP server could not be started or reached.
     MCP_UNREACHABLE = ("mcp.unreachable", Unavailable,
         "The MCP server did not start, did not complete the initialize handshake or the tool listing within its connect timeout, or refused the connection; the message says why.");
+    /// `mcp login` of a server whose authorization server registers no
+    /// clients dynamically, without a configured client.
+    MCP_OAUTH_CLIENT_REQUIRED = ("mcp.oauth_client_required", Config,
+        "The MCP server's authorization server does not register OAuth clients dynamically (and accepts no client metadata document); register a client with its provider and set `mcp.servers.<name>.oauth.client_id` (and `oauth.client_secret_name`).");
+    /// `mcp login` failed.
+    MCP_LOGIN_FAILED = ("mcp.login_failed", Auth,
+        "The MCP server's OAuth login did not complete: discovery, registration, the authorization response (state or issuer mismatch, refusal) or the token exchange failed, or no one answered in time; the message says which.");
     /// `mcp serve --http` on an address that is not loopback.
     MCP_REMOTE_REFUSED = ("mcp.remote_refused", PermissionDenied,
         "`prometheus mcp serve --http` binds only loopback addresses unless `mcp_server.allow_remote = true` is set in the profile's config.toml.");

@@ -292,25 +292,58 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `mcp.auto_reload_on_config_change` | boolean | `true` | any | `next_session` | The daemon applies `mcp.servers` edits within a minute (new sessions only). |
 | `mcp.call_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Bound on one tool call of a server that sets no `timeout_secs`. |
 | `mcp.connect_timeout_secs` | integer | `60` | 1 to 3600 | `next_session` | Bound on starting and initializing a server that sets no `connect_timeout_secs`. |
 | `mcp.discovery_concurrency` | integer | `4` | 1 to 64 | `next_session` | Servers connected at once when a session needs them. |
+| `mcp.discovery_wait_ms` | integer | `1500` | 0 to 600000 | `next_session` | How long an interactive session start waits for servers still connecting; later ones join later sessions. |
 | `mcp.servers.<name>.args` | array of string | `[]` | any | `next_session` | Its arguments. |
+| `mcp.servers.<name>.auth` | one of "header", "oauth" | unset | `"header"`, `"oauth"` | `next_session` | How an `http` server authenticates: `header` (the `auth_secret` bearer token) or `oauth` (OAuth 2.1 with PKCE, `prometheus mcp login`). |
 | `mcp.servers.<name>.auth_secret` | string | `""` | any | `next_session` | Secrets-store name of the bearer token sent to an `http` server. |
 | `mcp.servers.<name>.capabilities.fs_read` | array of string | `[]` | any | `next_session` | Paths it may read: absolute, or under `$workspace`. |
 | `mcp.servers.<name>.capabilities.fs_write` | array of string | `[]` | any | `next_session` | Paths it may write: absolute, or under `$workspace`. |
 | `mcp.servers.<name>.capabilities.network` | array of string | `[]` | any | `next_session` | Hosts it may connect to (`api.github.com`, `*.example.com`). |
+| `mcp.servers.<name>.client_cert` | string | `""` | any | `next_session` | A PEM file holding the client certificate (and its key unless `client_key` is set) presented to an `https` server. |
+| `mcp.servers.<name>.client_key` | string | `""` | any | `next_session` | The PEM file of the client certificate's private key. |
+| `mcp.servers.<name>.client_key_password_secret` | string | `""` | any | `next_session` | Secrets-store name of the password of an encrypted `client_key`. |
 | `mcp.servers.<name>.command` | string | `""` | any | `next_session` | The program of a `stdio` server (a bare name is looked up on `PATH`). |
 | `mcp.servers.<name>.connect_timeout_secs` | integer | unset | 1 to 3600 | `next_session` | Overrides `mcp.connect_timeout_secs` for this server. |
+| `mcp.servers.<name>.cost_unit` | string | `"credits"` | any | `next_session` | The unit of `tool_costs` and `spend_limit`. |
+| `mcp.servers.<name>.elicitation.enabled` | boolean | `true` | any | `next_session` | Route the server's form requests to the person. |
+| `mcp.servers.<name>.elicitation.timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Declined when unanswered this long. |
 | `mcp.servers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` skips the server without connecting. |
 | `mcp.servers.<name>.env` | table | `{}` | any | `next_session` | Environment variables of a `stdio` server, literal values. A `stdio` server gets only these, `env_secrets` and `PATH`, `HOME`, `LANG`, `SYSTEMROOT` and `TMPDIR`. |
 | `mcp.servers.<name>.env_secrets` | array of string | `[]` | any | `next_session` | Secrets-store names passed to a `stdio` server as environment variables of the same name. |
+| `mcp.servers.<name>.headers` | table | `{}` | any | `next_session` | Headers sent with every request to an `http` server (`${NAME}` placeholders come from the secrets store). |
+| `mcp.servers.<name>.identity_header` | object | unset | any | `next_session` | `{ name, value_from = "static" \| "profile", value }`: a header sent with every request naming the caller (the literal `value` or the profile name); never overrides a same-named `headers` entry. An invalid block, or one on a `stdio` server, is warned and ignored. |
+| `mcp.servers.<name>.idle_timeout_secs` | integer | `0` | ≥ 0 | `next_session` | Stop a `stdio` server after this many idle seconds (0: never); it restarts on its next call. |
+| `mcp.servers.<name>.lazy` | boolean | `false` | any | `next_session` | Register the tools from the schema cache and start the server on its first call. |
+| `mcp.servers.<name>.max_lifetime_secs` | integer | `0` | ≥ 0 | `next_session` | Stop a `stdio` server this many seconds after it started (0: never); it restarts on its next call. |
+| `mcp.servers.<name>.oauth.client_id` | string | `""` | any | `next_session` | A client registered with the authorization server beforehand (for servers without dynamic client registration). |
+| `mcp.servers.<name>.oauth.client_name` | string | `""` | any | `next_session` | The client name sent at dynamic registration. |
+| `mcp.servers.<name>.oauth.client_secret_name` | string | `""` | any | `next_session` | Secrets-store name of that client's secret. |
+| `mcp.servers.<name>.oauth.flow` | one of "browser", "device" | `"browser"` | `"browser"`, `"device"` | `next_session` | `browser` (authorization code) or `device` (device code). |
+| `mcp.servers.<name>.oauth.redirect_host` | one of "127.0.0.1", "localhost" | `"127.0.0.1"` | `"127.0.0.1"`, `"localhost"` | `next_session` | The redirect host: `127.0.0.1` or `localhost`. |
+| `mcp.servers.<name>.oauth.redirect_port` | integer | `0` | 0 to 65535 | `next_session` | A fixed callback port (0: any free port). |
+| `mcp.servers.<name>.oauth.redirect_uri` | string | `""` | any | `next_session` | A full redirect URI registered with the client (overrides host and port). |
+| `mcp.servers.<name>.oauth.scopes` | array of string | `[]` | any | `next_session` | Requested scopes (default: what the server advertises). |
+| `mcp.servers.<name>.oauth.timeout_secs` | integer | `300` | 10 to 3600 | `next_session` | How long a login waits for the person. |
+| `mcp.servers.<name>.sampling.allowed_models` | array of string | `[]` | any | `next_session` | When not empty, `model` must be one of these. |
+| `mcp.servers.<name>.sampling.enabled` | boolean | unset | any | `next_session` | Default: on for `trust = "full"` servers, off for `untrusted` ones. |
+| `mcp.servers.<name>.sampling.max_rpm` | integer | `10` | ≥ 1 | `next_session` | Requests per sliding minute. |
+| `mcp.servers.<name>.sampling.max_tokens_cap` | integer | `4096` | ≥ 1 | `next_session` | Requested answer sizes are capped at this. |
+| `mcp.servers.<name>.sampling.max_tool_rounds` | integer | `5` | ≥ 0 | `next_session` | Tool rounds of one sampling exchange. |
+| `mcp.servers.<name>.sampling.model` | string | unset | any | `next_session` | The model answering instead of the session's. |
+| `mcp.servers.<name>.sampling.timeout_secs` | integer | `30` | 1 to 3600 | `next_session` | Bound on one sampling call. |
+| `mcp.servers.<name>.spend_limit` | number | `0.0` | ≥ 0.0 | `next_session` | The most one conversation may spend on this server's tools before each further costed call asks (0: no limit). |
 | `mcp.servers.<name>.timeout_secs` | integer | unset | 1 to 86400 | `next_session` | Overrides `mcp.call_timeout_secs` for this server. |
+| `mcp.servers.<name>.tool_costs` | table | `{}` | any | `next_session` | What the server's tools cost: a number, or `{ credits = [min, max], note = "..." }`, per tool name. A malformed entry skips the server. |
 | `mcp.servers.<name>.tools.exclude` | array of string | `[]` | any | `next_session` | Tool names (exact or globs) never registered. |
 | `mcp.servers.<name>.tools.include` | array | unset | any | `next_session` | Whitelist of the server's tool names (exact or case-sensitive globs); wins over `exclude`, and an empty list registers nothing. |
 | `mcp.servers.<name>.transport` | one of "stdio", "http" | `"stdio"` | `"stdio"`, `"http"` | `next_session` | How the server is reached. |
 | `mcp.servers.<name>.trust` | one of "full", "untrusted" | `"untrusted"` | `"full"`, `"untrusted"` | `next_session` | `untrusted` servers' tools need approval unless they declare `readOnlyHint`; `full` trusts them like built-in tools. |
 | `mcp.servers.<name>.url` | string | `""` | any | `next_session` | The endpoint of an `http` (streamable HTTP) server. |
+| `mcp.single_query_discovery_wait_ms` | integer | `15000` | 0 to 600000 | `next_session` | The same wait for one-shot `-q` runs. |
 | `mcp_server.allow_remote` | boolean | `false` | any | `restart` | Let `--http` bind an address that is not loopback. |
 | `mcp_server.expose_toolsets` | array of string | `["skills"]` | any | `restart` | Toolsets exposed as MCP tools; `skills` exposes only the read-only skill tools. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |

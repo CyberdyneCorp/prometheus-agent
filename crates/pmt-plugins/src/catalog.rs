@@ -99,6 +99,8 @@ impl Removed {
 pub struct Catalog {
     /// Its entries.
     pub entries: Vec<Entry>,
+    /// Its MCP server entries.
+    pub mcp: Vec<crate::mcp_catalog::McpEntry>,
     /// Its kill list.
     pub removed: Vec<Removed>,
 }
@@ -111,6 +113,8 @@ pub type Verify<'a> = &'a dyn Fn(&[u8], &str) -> Result<String, String>;
 struct RawCatalog {
     #[serde(default)]
     plugins: Vec<Value>,
+    #[serde(default)]
+    mcp: Vec<Value>,
     #[serde(default)]
     removed: Vec<Value>,
 }
@@ -135,6 +139,12 @@ impl Catalog {
                 Err(why) => tracing::warn!("plugin catalog entry skipped: {why}"),
             }
         }
+        for value in raw.mcp {
+            match crate::mcp_catalog::McpEntry::parse(&value) {
+                Ok(entry) => catalog.mcp.push(entry),
+                Err(why) => tracing::warn!("MCP catalog entry skipped: {why}"),
+            }
+        }
         for value in raw.removed {
             match removed(&value) {
                 Ok(removed) => catalog.removed.push(removed),
@@ -152,6 +162,12 @@ impl Catalog {
     #[must_use]
     pub fn embedded() -> Self {
         Self::parse(EMBEDDED).expect("the embedded plugin catalog parses")
+    }
+
+    /// The MCP entry of `id`.
+    #[must_use]
+    pub fn find_mcp(&self, id: &str) -> Option<&crate::mcp_catalog::McpEntry> {
+        self.mcp.iter().find(|e| e.id == id)
     }
 
     /// The entry of `id`.
@@ -203,6 +219,7 @@ impl Catalog {
         }
         Self {
             entries: live.entries,
+            mcp: live.mcp,
             removed,
         }
     }

@@ -57,11 +57,23 @@ fn check_server(key: &str, server: &McpServerConfig) -> Result<(), Error> {
         }
         _ => {}
     }
+    check_http_only(key, server)?;
+    let named = [
+        ("auth_secret", server.auth_secret.as_str()),
+        (
+            "client_key_password_secret",
+            server.client_key_password_secret.as_str(),
+        ),
+        (
+            "oauth.client_secret_name",
+            server.oauth.client_secret_name.as_str(),
+        ),
+    ];
     let secrets = server
         .env_secrets
         .iter()
         .map(|s| ("env_secrets", s.as_str()))
-        .chain((!server.auth_secret.is_empty()).then_some(("auth_secret", &*server.auth_secret)));
+        .chain(named.into_iter().filter(|(_, name)| !name.is_empty()));
     for (field, name) in secrets {
         crate::secrets::check_name(name)
             .map_err(|e| invalid(format!("{key}.{field}: {}", e.message())))?;
@@ -96,6 +108,34 @@ fn check_server(key: &str, server: &McpServerConfig) -> Result<(), Error> {
     for (field, pattern) in globs {
         glob::Pattern::new(pattern)
             .map_err(|e| invalid(format!("{key}.tools.{field}: '{pattern}': {e}")))?;
+    }
+    Ok(())
+}
+
+/// OAuth and client certificates belong to `http` servers; a spend limit
+/// is a number of 0 or more.
+fn check_http_only(key: &str, server: &McpServerConfig) -> Result<(), Error> {
+    let stdio = server.transport == McpTransport::Stdio;
+    if stdio && server.auth == Some(crate::schema::McpAuth::Oauth) {
+        return Err(invalid(format!(
+            "{key}.auth: OAuth applies to http servers only"
+        )));
+    }
+    if stdio && !server.client_cert.is_empty() {
+        return Err(invalid(format!(
+            "{key}.client_cert: client certificates apply to http servers only"
+        )));
+    }
+    let redirect = &server.oauth.redirect_uri;
+    if !redirect.is_empty() && !is_http_url(redirect) {
+        return Err(invalid(format!(
+            "{key}.oauth.redirect_uri: expected an http:// or https:// URL"
+        )));
+    }
+    if !server.spend_limit.is_finite() || server.spend_limit < 0.0 {
+        return Err(invalid(format!(
+            "{key}.spend_limit: expected 0 (no limit) or more"
+        )));
     }
     Ok(())
 }
@@ -146,8 +186,15 @@ mod tests {
         let mut glob = stdio.clone();
         glob.tools.exclude = vec!["[".into()];
         assert!(check(&with("s", glob)).is_err());
-        let mut secret = stdio;
+        let mut secret = stdio.clone();
         secret.env_secrets = vec!["lower".into()];
         assert!(check(&with("s", secret)).is_err());
+        let mut oauth = stdio;
+        oauth.auth = Some(crate::schema::McpAuth::Oauth);
+        let err = check(&with("s", oauth)).unwrap_err();
+        assert_eq!(
+            err.message(),
+            "mcp.servers.s.auth: OAuth applies to http servers only"
+        );
     }
 }

@@ -154,8 +154,8 @@ pub(super) fn check_blocked(scope: &ProfileScope, target: &Target) -> Result<(),
         .filter(|r| matches!(r.source, Origin::Git | Origin::Catalog))
         .map(|r| r.location.as_str());
     let catalog = pmt_plugins::catalog::Catalog {
-        entries: Vec::new(),
         removed: plugins_host::catalog::kill_list(scope),
+        ..pmt_plugins::catalog::Catalog::default()
     };
     match catalog.blocked(&target.manifest.id, repo) {
         Some(removed) => Err(removed.refusal(&target.manifest.id)),

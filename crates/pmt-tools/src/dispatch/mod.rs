@@ -259,12 +259,17 @@ impl Dispatcher {
             let err = pmt_core::capability::not_granted(missing);
             return Err(ToolResult::text(Status::Denied, err.message()));
         }
+        let guarded = tool
+            .guard
+            .as_ref()
+            .and_then(|guard| guard(&setup.session_id, arguments));
         let request = GateRequest {
             session_id: &setup.session_id,
             call_id: &call.call_id,
             tool,
             arguments,
             escalation: escalation.as_ref(),
+            guarded: guarded.as_ref(),
         };
         match setup.gate.check(request).await {
             GateVerdict::Allow => Ok(()),

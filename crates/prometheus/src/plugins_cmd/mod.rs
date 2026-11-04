@@ -11,7 +11,7 @@ mod adapter;
 mod catalog_cmd;
 pub mod hooks_cmd;
 mod inspect;
-mod install;
+pub(crate) mod install;
 mod manage;
 mod package_cmd;
 mod reload;

@@ -66,6 +66,13 @@ impl AgentTools {
         self
     }
 
+    /// The session's human-input channel (also asked for MCP server
+    /// elicitations).
+    #[must_use]
+    pub fn clarifier(&self) -> &Clarifier {
+        &self.clarify
+    }
+
     /// Sends `send_message` calls through `port` (the daemon's gateway).
     #[must_use]
     pub fn with_messaging(mut self, port: Arc<dyn MessagingPort>) -> Self {

@@ -244,13 +244,15 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::PairingCommand,
     },
-    /// MCP servers: add, list, remove and test the profile's servers, show
-    /// their state, and serve Prometheus tools and skills to MCP clients.
+    /// MCP servers: add (from a preset or the catalog), list, remove, test
+    /// and sign in to the profile's servers, pick their tools, show their
+    /// state, and serve Prometheus tools and skills to MCP clients. With no
+    /// subcommand on a terminal, an interactive picker.
     #[cfg(feature = "mcp")]
     Mcp {
         /// The mcp subcommand.
         #[command(subcommand)]
-        command: crate::mcp_cmd::McpCommand,
+        command: Option<crate::mcp_cmd::McpCommand>,
     },
     /// Plugins: list, enable and disable them, manage their capability
     /// grants, and run the adapter conformance kit (`plugins test-adapter`).

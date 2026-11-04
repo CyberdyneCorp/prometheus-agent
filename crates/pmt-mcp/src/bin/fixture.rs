@@ -1,8 +1,9 @@
 //! `pmt-mcp-fixture`: the tests' reference MCP server (see
 //! `pmt_mcp::fixture`).
 //!
-//! `[--log <file>] [--mode normal|crash-on-start|hang] [--http <addr>
-//! [--bearer <token>]]`: stdio by default; `--http` serves streamable HTTP
+//! `[--log <file>] [--mode normal|crash-on-start|hang] [--extras]
+//! [--offers resources,prompts] [--http <addr> [--bearer <token>]]`:
+//! stdio by default; `--http` serves streamable HTTP
 //! and prints `listening <addr>`; `crash-on-start` exits at once and
 //! `hang` never answers `initialize`.
 
@@ -20,8 +21,13 @@ async fn main() {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
+    let offers = value("--offers").unwrap_or_default();
     let fixture = Fixture {
         log: value("--log").map(Into::into),
+        extras: args.iter().any(|a| a == "--extras"),
+        resources: offers.split(',').any(|o| o == "resources"),
+        prompts: offers.split(',').any(|o| o == "prompts"),
+        ..Fixture::default()
     };
     match value("--mode").as_deref() {
         Some("crash-on-start") => std::process::exit(2),

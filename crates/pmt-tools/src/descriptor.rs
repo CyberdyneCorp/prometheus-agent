@@ -329,7 +329,15 @@ pub struct RegisteredTool {
     pub parameters: Option<ParametersRewriter>,
     /// Picks the advertised schema variant for the session's route.
     pub variants: Option<VariantPicker>,
+    /// A per-call approval rule (an MCP tool's cost against its spend
+    /// limit), checked by the approval gate after the hooks'.
+    pub guard: Option<CallGuard>,
 }
+
+/// Decides, per call (session id, validated arguments), whether a human
+/// must approve it.
+pub type CallGuard =
+    Arc<dyn Fn(&str, &serde_json::Value) -> Option<crate::dispatch::Escalation> + Send + Sync>;
 
 /// What a session advertises for one tool: its variant, the description
 /// before rewriting and the argument schema.
@@ -355,6 +363,7 @@ impl RegisteredTool {
             rewriter: None,
             parameters: None,
             variants: None,
+            guard: None,
         }
     }
 
@@ -369,6 +378,7 @@ impl RegisteredTool {
             rewriter: None,
             parameters: None,
             variants: None,
+            guard: None,
         }
     }
 
@@ -390,6 +400,13 @@ impl RegisteredTool {
     #[must_use]
     pub fn with_parameters(mut self, rewriter: ParametersRewriter) -> Self {
         self.parameters = Some(rewriter);
+        self
+    }
+
+    /// Adds a per-call approval rule.
+    #[must_use]
+    pub fn with_guard(mut self, guard: CallGuard) -> Self {
+        self.guard = Some(guard);
         self
     }
 

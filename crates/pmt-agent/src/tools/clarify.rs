@@ -138,6 +138,28 @@ impl Clarifier {
         }
     }
 
+    /// Asks `questions` for someone other than the model (an MCP server's
+    /// elicitation), waiting at most `timeout`; the answers come back as
+    /// given.
+    ///
+    /// # Errors
+    ///
+    /// [`Unanswered`]: no one can answer, timed out, dismissed.
+    pub async fn ask(
+        &self,
+        questions: Vec<Question>,
+        timeout: Duration,
+    ) -> Result<ClarifyAnswer, Unanswered> {
+        let request = ClarifyRequest {
+            questions,
+            allow_other: true,
+        };
+        match tokio::time::timeout(timeout, self.channel.ask(request)).await {
+            Ok(outcome) => outcome,
+            Err(_) => Err(Unanswered::TimedOut(timeout)),
+        }
+    }
+
     /// Runs one `clarify` call.
     pub async fn call(&self, arguments: Value) -> ToolResult {
         let questions = match validated(arguments) {

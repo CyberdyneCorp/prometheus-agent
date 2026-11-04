@@ -24,6 +24,7 @@ fn settings(trust: McpTrust, filter: &McpToolFilter) -> Settings {
         filter: Filter::of(filter),
         call_timeout: Duration::from_secs(20),
         connect_timeout: Duration::from_secs(20),
+        ..Settings::default()
     }
 }
 
@@ -142,6 +143,7 @@ async fn a_streamable_http_server_needs_its_bearer_token() {
                 url: url.clone(),
                 client: pmt_net::client(&pmt_net::OutboundPolicy::default()).unwrap(),
                 bearer: bearer.clone(),
+                headers: Vec::new(),
             })
         })
     };

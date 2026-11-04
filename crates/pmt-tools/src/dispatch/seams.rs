@@ -58,6 +58,22 @@ pub struct Escalation {
     pub rule_key: String,
     /// Why the rule wants a human to look.
     pub reason: String,
+    /// Ask every time, in every approval mode and under YOLO, offering
+    /// only a one-time approval (an MCP spend limit).
+    pub once_only: bool,
+}
+
+impl Escalation {
+    /// A rule `rule_key` asking because of `reason`, remembered like any
+    /// approval.
+    #[must_use]
+    pub fn new(rule_key: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            rule_key: rule_key.into(),
+            reason: reason.into(),
+            once_only: false,
+        }
+    }
 }
 
 /// Tool-call hooks (`pre_tool_call`, `post_tool_call`,
@@ -112,6 +128,8 @@ pub struct GateRequest<'a> {
     pub arguments: &'a Value,
     /// A `pre_tool_call` hook's escalation, when one asked for approval.
     pub escalation: Option<&'a Escalation>,
+    /// The tool's own per-call rule ([`crate::RegisteredTool::guard`]).
+    pub guarded: Option<&'a Escalation>,
 }
 
 /// The approval gate's answer.

@@ -65,9 +65,17 @@ pub(crate) fn base_builder(
     policy: &OutboundPolicy,
     resolver: OutboundResolver,
 ) -> Result<reqwest::ClientBuilder, Error> {
+    builder_with_identity(policy, resolver, None)
+}
+
+fn builder_with_identity(
+    policy: &OutboundPolicy,
+    resolver: OutboundResolver,
+    identity: Option<crate::identity::ClientIdentity>,
+) -> Result<reqwest::ClientBuilder, Error> {
     CLIENTS_BUILT.fetch_add(1, Ordering::Relaxed);
     tracing::debug!(component = "net", "outbound HTTP client configured");
-    let tls = crate::tls::client_config(policy.extra_ca_file.as_deref())?;
+    let tls = crate::tls::client_config_with(policy.extra_ca_file.as_deref(), identity)?;
     let mut builder = reqwest::Client::builder()
         .user_agent(concat!("prometheus/", env!("CARGO_PKG_VERSION")))
         .tls_backend_preconfigured(tls)
@@ -98,6 +106,24 @@ pub(crate) fn base_builder(
 /// `net.extra_ca` for a bad `network.extra_ca_file`.
 pub fn client(policy: &OutboundPolicy) -> Result<reqwest::Client, Error> {
     build(client_builder(policy)?)
+}
+
+/// A ready client presenting `identity` to servers that ask for a client
+/// certificate (mutual TLS).
+///
+/// # Errors
+///
+/// As [`client`].
+pub fn client_with_identity(
+    policy: &OutboundPolicy,
+    identity: crate::identity::ClientIdentity,
+) -> Result<reqwest::Client, Error> {
+    let resolver = OutboundResolver {
+        lookup: Arc::new(SystemLookup),
+        force_ipv4: policy.force_ipv4,
+        destinations: None,
+    };
+    build(builder_with_identity(policy, resolver, Some(identity))?)
 }
 
 /// Builds `builder`, mapping failure to `net.client_init`.

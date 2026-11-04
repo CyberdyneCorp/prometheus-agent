@@ -40,7 +40,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  mcp          MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
+  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
@@ -10415,18 +10415,23 @@ Usage: prometheus pairing help help
 ## `prometheus mcp`
 
 ```text
-MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
+MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
 
-Usage: prometheus mcp [OPTIONS] <COMMAND>
+Usage: prometheus mcp [OPTIONS] [COMMAND]
 
 Commands:
-  add     Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
-  list    Every configured server: transport, command or URL, trust and whether it is enabled
-  remove  Remove a server [alias: rm]
-  test    Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
-  status  Start every enabled server and show its state, tool count and why it is unavailable
-  serve   Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
-  help    Print this message or the help of the given subcommand(s)
+  add      Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+  list     Every configured server: transport, command or URL, trust and whether it is enabled
+  remove   Remove a server [alias: rm]
+  test     Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  tools    Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+  login    Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+  reauth   Forget a server's sign-in and sign in again
+  catalog  The MCP servers of the plugin catalog
+  install  Install an MCP server from the catalog (disabled until you enable it)
+  status   Start every enabled server and show its state, tool count and why it is unavailable
+  serve    Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -10463,7 +10468,7 @@ Options:
 ## `prometheus mcp add`
 
 ```text
-Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
 
 Usage: prometheus mcp add [OPTIONS] <NAME>
 
@@ -10490,26 +10495,45 @@ Options:
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
 
-      --env <KEY=VALUE>
-          An environment variable of a stdio server (`KEY=value`; repeat)
-
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
-      --env-secret <NAME>
-          A secrets-store name passed to a stdio server as a variable of the same name (repeat)
+      --preset <PRESET>
+          A transport preset (`codex`: `codex mcp-server`); explicit flags win over it
+
+          Possible values:
+          - codex: OpenAI Codex as an MCP server: `codex mcp-server`
+
+      --env <KEY=VALUE>
+          An environment variable of a stdio server (`KEY=value`; repeat)
 
   -v, --verbose...
           More detail; repeatable
 
-      --auth-secret <NAME>
-          The secrets-store name of an HTTP server's bearer token
+      --env-secret <NAME>
+          A secrets-store name passed to a stdio server as a variable of the same name (repeat)
 
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
 
+      --auth <AUTH>
+          How an HTTP server authenticates: `header` (the `--auth-secret` bearer token) or `oauth` (sign in with `prometheus mcp login`)
+
+          Possible values:
+          - header: The `--auth-secret` bearer token
+          - oauth:  OAuth 2.1 (sign in with `prometheus mcp login <name>`)
+
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --auth-secret <NAME>
+          The secrets-store name of an HTTP server's bearer token
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
       --trust <TRUST>
           `untrusted` (default): tools that are not read-only need approval
@@ -10517,12 +10541,6 @@ Options:
           Possible values:
           - full:      Trusted like built-in tools
           - untrusted: Tools that are not read-only need approval
-
-      --safe-mode
-          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
-
-      --accept-hooks
-          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -10653,6 +10671,237 @@ Options:
           Print help
 ```
 
+## `prometheus mcp tools`
+
+```text
+Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+
+Usage: prometheus mcp tools [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp login`
+
+```text
+Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+
+Usage: prometheus mcp login [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --flow <FLOW>
+          `browser` (default) or `device`
+
+          Possible values:
+          - browser: Authorization code with PKCE in a browser
+          - device:  Device code
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus mcp reauth`
+
+```text
+Forget a server's sign-in and sign in again
+
+Usage: prometheus mcp reauth [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --flow <FLOW>
+          `browser` (default) or `device`
+
+          Possible values:
+          - browser: Authorization code with PKCE in a browser
+          - device:  Device code
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus mcp catalog`
+
+```text
+The MCP servers of the plugin catalog
+
+Usage: prometheus mcp catalog [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp install`
+
+```text
+Install an MCP server from the catalog (disabled until you enable it)
+
+Usage: prometheus mcp install [OPTIONS] <ENTRY>
+
+Arguments:
+  <ENTRY>
+          The catalog entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The server name (default: the entry id)
+
+      --field <NAME=VALUE>
+          A setup field's value (`NAME=VALUE`; repeat)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus mcp status`
 
 ```text
@@ -10745,19 +10994,24 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus mcp help [COMMAND]
 
 Commands:
-  add     Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
-  list    Every configured server: transport, command or URL, trust and whether it is enabled
-  remove  Remove a server
-  test    Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
-  status  Start every enabled server and show its state, tool count and why it is unavailable
-  serve   Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
-  help    Print this message or the help of the given subcommand(s)
+  add      Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+  list     Every configured server: transport, command or URL, trust and whether it is enabled
+  remove   Remove a server
+  test     Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  tools    Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+  login    Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+  reauth   Forget a server's sign-in and sign in again
+  catalog  The MCP servers of the plugin catalog
+  install  Install an MCP server from the catalog (disabled until you enable it)
+  status   Start every enabled server and show its state, tool count and why it is unavailable
+  serve    Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  help     Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus mcp help add`
 
 ```text
-Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
 
 Usage: prometheus mcp help add
 ```
@@ -10784,6 +11038,46 @@ Usage: prometheus mcp help remove
 Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
 
 Usage: prometheus mcp help test
+```
+
+## `prometheus mcp help tools`
+
+```text
+Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+
+Usage: prometheus mcp help tools
+```
+
+## `prometheus mcp help login`
+
+```text
+Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+
+Usage: prometheus mcp help login
+```
+
+## `prometheus mcp help reauth`
+
+```text
+Forget a server's sign-in and sign in again
+
+Usage: prometheus mcp help reauth
+```
+
+## `prometheus mcp help catalog`
+
+```text
+The MCP servers of the plugin catalog
+
+Usage: prometheus mcp help catalog
+```
+
+## `prometheus mcp help install`
+
+```text
+Install an MCP server from the catalog (disabled until you enable it)
+
+Usage: prometheus mcp help install
 ```
 
 ## `prometheus mcp help status`
@@ -13738,7 +14032,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  mcp          MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
+  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
@@ -15374,23 +15668,28 @@ Usage: prometheus help pairing revoke
 ## `prometheus help mcp`
 
 ```text
-MCP servers: add, list, remove and test the profile's servers, show their state, and serve Prometheus tools and skills to MCP clients
+MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
 
 Usage: prometheus help mcp [COMMAND]
 
 Commands:
-  add     Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
-  list    Every configured server: transport, command or URL, trust and whether it is enabled
-  remove  Remove a server
-  test    Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
-  status  Start every enabled server and show its state, tool count and why it is unavailable
-  serve   Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  add      Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+  list     Every configured server: transport, command or URL, trust and whether it is enabled
+  remove   Remove a server
+  test     Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  tools    Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+  login    Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+  reauth   Forget a server's sign-in and sign in again
+  catalog  The MCP servers of the plugin catalog
+  install  Install an MCP server from the catalog (disabled until you enable it)
+  status   Start every enabled server and show its state, tool count and why it is unavailable
+  serve    Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
 ```
 
 ## `prometheus help mcp add`
 
 ```text
-Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, or `--url <url>` for a streamable HTTP server. Its tools join sessions started afterwards
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
 
 Usage: prometheus help mcp add
 ```
@@ -15417,6 +15716,46 @@ Usage: prometheus help mcp remove
 Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
 
 Usage: prometheus help mcp test
+```
+
+## `prometheus help mcp tools`
+
+```text
+Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+
+Usage: prometheus help mcp tools
+```
+
+## `prometheus help mcp login`
+
+```text
+Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+
+Usage: prometheus help mcp login
+```
+
+## `prometheus help mcp reauth`
+
+```text
+Forget a server's sign-in and sign in again
+
+Usage: prometheus help mcp reauth
+```
+
+## `prometheus help mcp catalog`
+
+```text
+The MCP servers of the plugin catalog
+
+Usage: prometheus help mcp catalog
+```
+
+## `prometheus help mcp install`
+
+```text
+Install an MCP server from the catalog (disabled until you enable it)
+
+Usage: prometheus help mcp install
 ```
 
 ## `prometheus help mcp status`

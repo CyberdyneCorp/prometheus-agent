@@ -31,6 +31,19 @@ pub const CHILD_CA_ENV: [&str; 4] = [
 /// `net.extra_ca` when `extra_ca_file` cannot be read or holds no
 /// certificate; `net.client_init` when the platform verifier cannot start.
 pub fn client_config(extra_ca_file: Option<&Path>) -> Result<ClientConfig, Error> {
+    client_config_with(extra_ca_file, None)
+}
+
+/// [`client_config`] presenting `identity` when the server asks for a
+/// client certificate (mutual TLS).
+///
+/// # Errors
+///
+/// As [`client_config`]; `net.client_init` for a key rustls refuses.
+pub fn client_config_with(
+    extra_ca_file: Option<&Path>,
+    identity: Option<crate::identity::ClientIdentity>,
+) -> Result<ClientConfig, Error> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let extra = extra_ca_file.map(read_pem_certs).transpose()?;
     let verifier = platform_verifier(extra, provider.clone()).map_err(|e| {
@@ -44,9 +57,13 @@ pub fn client_config(extra_ca_file: Option<&Path>) -> Result<ClientConfig, Error
         // A custom verifier is rustls' way to plug in the platform one;
         // it verifies, nothing is skipped.
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(verifier))
-        .with_no_client_auth();
-    Ok(config)
+        .with_custom_certificate_verifier(Arc::new(verifier));
+    match identity {
+        None => Ok(config.with_no_client_auth()),
+        Some(identity) => config
+            .with_client_auth_cert(identity.certs, identity.key)
+            .map_err(|e| init_error(&format!("the client certificate was refused: {e}"))),
+    }
 }
 
 #[cfg(not(target_os = "android"))]

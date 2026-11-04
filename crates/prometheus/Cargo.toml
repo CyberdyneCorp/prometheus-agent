@@ -95,6 +95,8 @@ crossterm.workspace = true
 # `/copy` in the TUI: the OSC 52 clipboard sequence carries base64.
 base64.workspace = true
 reqwest.workspace = true
+# Form bodies of MCP OAuth token requests.
+url.workspace = true
 # Shell hook and webhook matchers.
 regex.workspace = true
 # Webhook signatures (HMAC-SHA256).

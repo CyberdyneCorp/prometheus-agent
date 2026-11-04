@@ -7,6 +7,7 @@
 
 pub mod browser;
 pub mod env;
+mod mcp;
 pub mod model;
 mod plugins;
 pub mod progress;
@@ -137,6 +138,8 @@ pub struct Live {
     pub id: SessionId,
     /// The turn loop.
     pub agent: Agent,
+    /// Keeps the session reachable by the profile's MCP servers.
+    _mcp: crate::mcp_host::sessions::Registration,
     /// The model port.
     pub model: Arc<SwitchableModel>,
     /// The tool port.
@@ -291,7 +294,7 @@ impl Factory {
     }
 
     /// Whether the model of `target` accepts images.
-    fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
+    pub(super) fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
         target.model.as_deref().is_some_and(|model| {
             self.models
                 .catalog()
@@ -455,6 +458,7 @@ impl Factory {
         let events = events_to(trajectory.clone(), clients.map(|c| c.events));
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
+        let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
         setup.events = Arc::new(tee);
         setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(&memory) as _);
@@ -466,6 +470,7 @@ impl Factory {
             id,
             agent,
             _plugin_llm: self.plugin_llm(id, &model),
+            _mcp: mcp,
             model,
             tools: tool_port,
             gate: gate.gate,

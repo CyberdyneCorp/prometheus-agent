@@ -1,13 +1,19 @@
 //! `prometheus mcp ...` (spec: plugin-system, MCP client servers; MCP
-//! server mode; mcp CLI).
+//! server mode; mcp CLI; MCP OAuth for HTTP servers; MCP catalog entries).
 //!
-//! `add`, `list`, `remove` (alias `rm`), `test` and `status` manage the
+//! `add` (with transport presets, probing the server and offering its
+//! tool checklist), `list`, `remove` (alias `rm`), `test`, `tools`,
+//! `login`, `reauth`, `catalog`, `install` and `status` manage the
 //! profile's `[mcp.servers.<name>]` entries; `serve` offers Prometheus
-//! tools and skills to MCP clients. The interactive picker, transport
-//! presets, OAuth logins, tool checklists and the catalog arrive with the
-//! rest of the `mcp` CLI.
+//! tools and skills to MCP clients; with no subcommand on a terminal, an
+//! interactive picker.
 
+mod add;
+mod catalog;
+mod login;
+mod picker;
 pub mod serve;
+mod tools;
 
 use std::fmt::Write as _;
 use std::time::{Duration, Instant};
@@ -23,8 +29,10 @@ use crate::context::Context;
 #[derive(Debug, Subcommand)]
 pub enum McpCommand {
     /// Add a server: `--command <program> [--args ...]` for a local
-    /// (stdio) server run in the sandbox, or `--url <url>` for a
-    /// streamable HTTP server. Its tools join sessions started afterwards.
+    /// (stdio) server run in the sandbox, `--url <url>` for a streamable
+    /// HTTP server, or `--preset <name>`; the server is probed and, on a
+    /// terminal, its tool checklist offered. Its tools join sessions
+    /// started afterwards.
     Add(AddArgs),
     /// Every configured server: transport, command or URL, trust and
     /// whether it is enabled.
@@ -41,6 +49,35 @@ pub enum McpCommand {
         /// The server's name.
         name: String,
     },
+    /// Re-open a server's tool checklist; writes `tools.include` only when
+    /// not every tool is selected.
+    Tools {
+        /// The server's name.
+        name: String,
+    },
+    /// Sign in to an `auth = "oauth"` server (prints the authorization
+    /// URL; paste the redirect URL when the browser cannot reach this
+    /// machine).
+    Login {
+        /// The server's name.
+        name: String,
+        /// `browser` (default) or `device`.
+        #[arg(long, value_enum)]
+        flow: Option<Flow>,
+    },
+    /// Forget a server's sign-in and sign in again.
+    Reauth {
+        /// The server's name.
+        name: String,
+        /// `browser` (default) or `device`.
+        #[arg(long, value_enum)]
+        flow: Option<Flow>,
+    },
+    /// The MCP servers of the plugin catalog.
+    Catalog,
+    /// Install an MCP server from the catalog (disabled until you enable
+    /// it).
+    Install(catalog::InstallArgs),
     /// Start every enabled server and show its state, tool count and why
     /// it is unavailable.
     Status,
@@ -50,6 +87,15 @@ pub enum McpCommand {
     Serve(serve::ServeArgs),
 }
 
+/// `--flow`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Flow {
+    /// Authorization code with PKCE in a browser.
+    Browser,
+    /// Device code.
+    Device,
+}
+
 /// `mcp add` flags.
 #[derive(Debug, Args)]
 pub struct AddArgs {
@@ -57,21 +103,29 @@ pub struct AddArgs {
     /// named `mcp__<name>__<tool>`.
     pub name: String,
     /// The streamable HTTP endpoint.
-    #[arg(long, conflicts_with = "command", required_unless_present = "command")]
+    #[arg(long, conflicts_with_all = ["command", "preset"], required_unless_present_any = ["command", "preset"])]
     pub url: Option<String>,
     /// The program of a local (stdio) server.
     #[arg(long)]
     pub command: Option<String>,
     /// The program's arguments.
-    #[arg(long, num_args = 1.., allow_hyphen_values = true, requires = "command")]
+    #[arg(long, num_args = 1.., allow_hyphen_values = true)]
     pub args: Vec<String>,
+    /// A transport preset (`codex`: `codex mcp-server`); explicit flags
+    /// win over it.
+    #[arg(long, value_enum)]
+    pub preset: Option<add::Preset>,
     /// An environment variable of a stdio server (`KEY=value`; repeat).
-    #[arg(long = "env", value_name = "KEY=VALUE", requires = "command")]
+    #[arg(long = "env", value_name = "KEY=VALUE")]
     pub env: Vec<String>,
     /// A secrets-store name passed to a stdio server as a variable of the
     /// same name (repeat).
-    #[arg(long = "env-secret", value_name = "NAME", requires = "command")]
+    #[arg(long = "env-secret", value_name = "NAME")]
     pub env_secrets: Vec<String>,
+    /// How an HTTP server authenticates: `header` (the `--auth-secret`
+    /// bearer token) or `oauth` (sign in with `prometheus mcp login`).
+    #[arg(long, value_enum, requires = "url")]
+    pub auth: Option<add::Auth>,
     /// The secrets-store name of an HTTP server's bearer token.
     #[arg(long, value_name = "NAME", requires = "url")]
     pub auth_secret: Option<String>,
@@ -94,87 +148,23 @@ pub enum Trust {
 /// # Errors
 ///
 /// Configuration, secret and server errors.
-pub fn run(command: &McpCommand, ctx: &Context<'_>) -> Result<u8, Error> {
+pub fn run(command: Option<&McpCommand>, ctx: &Context<'_>) -> Result<u8, Error> {
+    let Some(command) = command else {
+        return picker::run(ctx);
+    };
     match command {
-        McpCommand::Add(args) => add(ctx, args),
+        McpCommand::Add(args) => add::add(ctx, args),
         McpCommand::List => Ok(list(&ctx.scope()?, ctx.json)),
         McpCommand::Remove { name } => remove(ctx, name),
         McpCommand::Test { name } => test(&ctx.scope()?, name),
+        McpCommand::Tools { name } => tools::run(ctx, name),
+        McpCommand::Login { name, flow } => login::login(ctx, name, *flow, false),
+        McpCommand::Reauth { name, flow } => login::login(ctx, name, *flow, true),
+        McpCommand::Catalog => catalog::list(ctx),
+        McpCommand::Install(args) => catalog::install(ctx, args),
         McpCommand::Status => status(&ctx.scope()?, ctx.json),
         McpCommand::Serve(args) => serve::run(args, ctx),
     }
-}
-
-fn add(ctx: &Context<'_>, args: &AddArgs) -> Result<u8, Error> {
-    let scope = ctx.scope()?;
-    if !pmt_config::mcp_check::is_server_name(&args.name) {
-        return Err(Error::new(
-            &codes::CLI_USAGE,
-            format!(
-                "invalid MCP server name '{}': use 1-64 letters, digits, '_' or '-'",
-                args.name
-            ),
-        ));
-    }
-    if scope.config().mcp.servers.contains_key(&args.name) {
-        return Err(exists(&args.name));
-    }
-    let pairs = pairs(args)?;
-    let borrowed: Vec<(&str, &str)> = pairs
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    scope.profile().config_file().set_all(&borrowed)?;
-    println!(
-        "added MCP server '{}'; its tools join sessions started from now (check it with: prometheus mcp test {})",
-        args.name, args.name
-    );
-    Ok(0)
-}
-
-/// The `config.toml` keys `mcp add` writes.
-fn pairs(args: &AddArgs) -> Result<Vec<(String, String)>, Error> {
-    let key = |field: &str| format!("mcp.servers.{}.{field}", args.name);
-    let mut pairs = Vec::new();
-    match (&args.url, &args.command) {
-        (Some(url), _) => {
-            pairs.push((key("transport"), "\"http\"".to_owned()));
-            pairs.push((key("url"), json(url)));
-            if let Some(secret) = &args.auth_secret {
-                pairs.push((key("auth_secret"), json(secret)));
-            }
-        }
-        (None, Some(command)) => {
-            pairs.push((key("transport"), "\"stdio\"".to_owned()));
-            pairs.push((key("command"), json(command)));
-            if !args.args.is_empty() {
-                pairs.push((key("args"), json(&args.args)));
-            }
-            for pair in &args.env {
-                let Some((name, value)) = pair.split_once('=') else {
-                    return Err(Error::new(
-                        &codes::CLI_USAGE,
-                        format!("--env {pair}: expected KEY=VALUE"),
-                    ));
-                };
-                pairs.push((key(&format!("env.{name}")), json(&value)));
-            }
-            if !args.env_secrets.is_empty() {
-                pairs.push((key("env_secrets"), json(&args.env_secrets)));
-            }
-        }
-        (None, None) => {
-            return Err(Error::new(&codes::CLI_USAGE, "give --command or --url"));
-        }
-    }
-    if let Some(trust) = args.trust {
-        let value = match trust {
-            Trust::Full => "\"full\"",
-            Trust::Untrusted => "\"untrusted\"",
-        };
-        pairs.push((key("trust"), value.to_owned()));
-    }
-    Ok(pairs)
 }
 
 /// `value` as JSON text, which is also its TOML value (a string or a
@@ -183,7 +173,7 @@ fn json(value: &impl serde::Serialize) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
-fn exists(name: &str) -> Error {
+pub(super) fn exists(name: &str) -> Error {
     Error::new(
         &codes::MCP_EXISTS,
         format!("MCP server '{name}' is already configured"),
@@ -191,7 +181,7 @@ fn exists(name: &str) -> Error {
     .with_hint(format!("remove it first: prometheus mcp remove {name}"))
 }
 
-fn not_found(name: &str) -> Error {
+pub(super) fn not_found(name: &str) -> Error {
     Error::new(
         &codes::MCP_NOT_FOUND,
         format!("no MCP server named '{name}' is configured"),
@@ -255,8 +245,9 @@ fn trust(trust: McpTrust) -> &'static str {
     }
 }
 
-fn runtime() -> Result<tokio::runtime::Runtime, Error> {
-    tokio::runtime::Builder::new_current_thread()
+pub(super) fn runtime() -> Result<tokio::runtime::Runtime, Error> {
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
         .enable_all()
         .build()
         .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("no async runtime: {e}")))
@@ -268,14 +259,21 @@ fn test(scope: &ProfileScope, name: &str) -> Result<u8, Error> {
     }
     let manager = crate::mcp_host::reload(scope);
     let Some(server) = manager.server(name).cloned() else {
-        // Configured but disabled (or safe mode).
+        // Configured but disabled, skipped for an error, or safe mode.
+        let why = crate::mcp_host::skipped(scope)
+            .into_iter()
+            .find(|(n, _)| n == name)
+            .map_or_else(
+                || "is disabled".to_owned(),
+                |(_, why)| format!("is skipped: {why}"),
+            );
         return Err(Error::new(
             &codes::MCP_UNREACHABLE,
-            format!("MCP server '{name}' is disabled"),
+            format!("MCP server '{name}' {why}"),
         ));
     };
     let started = Instant::now();
-    let outcome = runtime()?.block_on(server.ensure());
+    let outcome = runtime()?.block_on(server.connect());
     let latency = started.elapsed();
     match outcome {
         Ok(()) => {

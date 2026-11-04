@@ -2473,6 +2473,21 @@
         }
       ]
     },
+    "McpAuth": {
+      "description": "`mcp.servers.<name>.auth`.",
+      "oneOf": [
+        {
+          "const": "header",
+          "description": "The `auth_secret` bearer token.",
+          "type": "string"
+        },
+        {
+          "const": "oauth",
+          "description": "OAuth 2.1 with PKCE.",
+          "type": "string"
+        }
+      ]
+    },
     "McpCapabilities": {
       "additionalProperties": false,
       "description": "`[mcp.servers.<name>.capabilities]`: the sandbox of a `stdio` server,\nin the words of a plugin manifest.",
@@ -2508,6 +2523,11 @@
       "additionalProperties": false,
       "description": "The `[mcp]` section: the external MCP servers the profile's sessions\nconnect to.",
       "properties": {
+        "auto_reload_on_config_change": {
+          "default": true,
+          "description": "The daemon applies `mcp.servers` edits within a minute (new\nsessions only).",
+          "type": "boolean"
+        },
         "call_timeout_secs": {
           "default": 300,
           "description": "Bound on one tool call of a server that sets no `timeout_secs`.",
@@ -2532,6 +2552,14 @@
           "minimum": 1,
           "type": "integer"
         },
+        "discovery_wait_ms": {
+          "default": 1500,
+          "description": "How long an interactive session start waits for servers still\nconnecting; later ones join later sessions.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 0,
+          "type": "integer"
+        },
         "servers": {
           "additionalProperties": {
             "$ref": "#/$defs/McpServerConfig"
@@ -2539,10 +2567,38 @@
           "default": {},
           "description": "Servers by name; their tools register as `mcp__<name>__<tool>` in\ntoolset `mcp-<name>`.",
           "type": "object"
+        },
+        "single_query_discovery_wait_ms": {
+          "default": 15000,
+          "description": "The same wait for one-shot `-q` runs.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "McpElicitationConfig": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.elicitation]`.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Route the server's form requests to the person.",
+          "type": "boolean"
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "Declined when unanswered this long.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "McpEvents": {
       "additionalProperties": false,
@@ -2552,6 +2608,157 @@
           "default": false,
           "description": "Admit notifications of configured MCP servers that declare an\n`events` webhook route as signed internal events on that route\n(same delivery and toolset rules as a webhook request).",
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "McpOAuthConfig": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.oauth]`.",
+      "properties": {
+        "client_id": {
+          "default": "",
+          "description": "A client registered with the authorization server beforehand (for\nservers without dynamic client registration).",
+          "type": "string"
+        },
+        "client_name": {
+          "default": "",
+          "description": "The client name sent at dynamic registration.",
+          "type": "string"
+        },
+        "client_secret_name": {
+          "default": "",
+          "description": "Secrets-store name of that client's secret.",
+          "type": "string"
+        },
+        "flow": {
+          "$ref": "#/$defs/McpOAuthFlow",
+          "default": "browser",
+          "description": "`browser` (authorization code) or `device` (device code)."
+        },
+        "redirect_host": {
+          "$ref": "#/$defs/McpRedirectHost",
+          "default": "127.0.0.1",
+          "description": "The redirect host: `127.0.0.1` or `localhost`."
+        },
+        "redirect_port": {
+          "default": 0,
+          "description": "A fixed callback port (0: any free port).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "redirect_uri": {
+          "default": "",
+          "description": "A full redirect URI registered with the client (overrides host and\nport).",
+          "type": "string"
+        },
+        "scopes": {
+          "default": [],
+          "description": "Requested scopes (default: what the server advertises).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "How long a login waits for the person.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 10,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "McpOAuthFlow": {
+      "description": "`mcp.servers.<name>.oauth.flow`.",
+      "oneOf": [
+        {
+          "const": "browser",
+          "description": "Authorization code with PKCE and a loopback (or pasted) redirect.",
+          "type": "string"
+        },
+        {
+          "const": "device",
+          "description": "Device code.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpRedirectHost": {
+      "description": "`mcp.servers.<name>.oauth.redirect_host`.",
+      "oneOf": [
+        {
+          "const": "127.0.0.1",
+          "description": "`127.0.0.1`.",
+          "type": "string"
+        },
+        {
+          "const": "localhost",
+          "description": "`localhost`.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpSamplingConfig": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.sampling]`.",
+      "properties": {
+        "allowed_models": {
+          "default": [],
+          "description": "When not empty, `model` must be one of these.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": null,
+          "description": "Default: on for `trust = \"full\"` servers, off for `untrusted`\nones.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_rpm": {
+          "default": 10,
+          "description": "Requests per sliding minute.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tokens_cap": {
+          "default": 4096,
+          "description": "Requested answer sizes are capped at this.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tool_rounds": {
+          "default": 5,
+          "description": "Tool rounds of one sampling exchange.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "default": null,
+          "description": "The model answering instead of the session's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 30,
+          "description": "Bound on one sampling call.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -2568,6 +2775,18 @@
           },
           "type": "array"
         },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How an `http` server authenticates: `header` (the `auth_secret`\nbearer token) or `oauth` (OAuth 2.1 with PKCE, `prometheus mcp\nlogin`)."
+        },
         "auth_secret": {
           "default": "",
           "description": "Secrets-store name of the bearer token sent to an `http` server.",
@@ -2581,6 +2800,21 @@
             "network": []
           },
           "description": "What a `stdio` server's sandbox lets it reach, like a plugin grant."
+        },
+        "client_cert": {
+          "default": "",
+          "description": "A PEM file holding the client certificate (and its key unless\n`client_key` is set) presented to an `https` server.",
+          "type": "string"
+        },
+        "client_key": {
+          "default": "",
+          "description": "The PEM file of the client certificate's private key.",
+          "type": "string"
+        },
+        "client_key_password_secret": {
+          "default": "",
+          "description": "Secrets-store name of the password of an encrypted `client_key`.",
+          "type": "string"
         },
         "command": {
           "default": "",
@@ -2597,6 +2831,19 @@
             "integer",
             "null"
           ]
+        },
+        "cost_unit": {
+          "default": "credits",
+          "description": "The unit of `tool_costs` and `spend_limit`.",
+          "type": "string"
+        },
+        "elicitation": {
+          "$ref": "#/$defs/McpElicitationConfig",
+          "default": {
+            "enabled": true,
+            "timeout_secs": 300
+          },
+          "description": "`elicitation/create` answers."
         },
         "enabled": {
           "default": true,
@@ -2619,6 +2866,77 @@
           },
           "type": "array"
         },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Headers sent with every request to an `http` server (`${NAME}`\nplaceholders come from the secrets store).",
+          "type": "object"
+        },
+        "identity_header": {
+          "additionalProperties": true,
+          "default": null,
+          "description": "`{ name, value_from = \"static\" | \"profile\", value }`: a header sent\nwith every request naming the caller (the literal `value` or the\nprofile name); never overrides a same-named `headers` entry. An\ninvalid block, or one on a `stdio` server, is warned and ignored.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "idle_timeout_secs": {
+          "default": 0,
+          "description": "Stop a `stdio` server after this many idle seconds (0: never); it\nrestarts on its next call.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lazy": {
+          "default": false,
+          "description": "Register the tools from the schema cache and start the server on\nits first call.",
+          "type": "boolean"
+        },
+        "max_lifetime_secs": {
+          "default": 0,
+          "description": "Stop a `stdio` server this many seconds after it started (0:\nnever); it restarts on its next call.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "oauth": {
+          "$ref": "#/$defs/McpOAuthConfig",
+          "default": {
+            "client_id": "",
+            "client_name": "",
+            "client_secret_name": "",
+            "flow": "browser",
+            "redirect_host": "127.0.0.1",
+            "redirect_port": 0,
+            "redirect_uri": "",
+            "scopes": [],
+            "timeout_secs": 300
+          },
+          "description": "The OAuth client of an `auth = \"oauth\"` server."
+        },
+        "sampling": {
+          "$ref": "#/$defs/McpSamplingConfig",
+          "default": {
+            "allowed_models": [],
+            "enabled": null,
+            "max_rpm": 10,
+            "max_tokens_cap": 4096,
+            "max_tool_rounds": 5,
+            "model": null,
+            "timeout_secs": 30
+          },
+          "description": "`sampling/createMessage` answers."
+        },
+        "spend_limit": {
+          "default": 0.0,
+          "description": "The most one conversation may spend on this server's tools before\neach further costed call asks (0: no limit).",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
         "timeout_secs": {
           "default": null,
           "description": "Overrides `mcp.call_timeout_secs` for this server.",
@@ -2629,6 +2947,12 @@
             "integer",
             "null"
           ]
+        },
+        "tool_costs": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "What the server's tools cost: a number, or `{ credits = [min, max],\nnote = \"...\" }`, per tool name. A malformed entry skips the server.",
+          "type": "object"
         },
         "tools": {
           "$ref": "#/$defs/McpToolFilter",
@@ -6885,10 +7209,13 @@
     "mcp": {
       "$ref": "#/$defs/McpConfig",
       "default": {
+        "auto_reload_on_config_change": true,
         "call_timeout_secs": 300,
         "connect_timeout_secs": 60,
         "discovery_concurrency": 4,
-        "servers": {}
+        "discovery_wait_ms": 1500,
+        "servers": {},
+        "single_query_discovery_wait_ms": 15000
       },
       "description": "External MCP servers."
     },

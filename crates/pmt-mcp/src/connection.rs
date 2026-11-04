@@ -12,12 +12,18 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use rmcp::ServiceExt as _;
-use rmcp::model::{CallToolRequestParams, CallToolResult, JsonObject, Tool};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, GetPromptRequestParams, JsonObject,
+    ReadResourceRequestParams, Tool,
+};
 use rmcp::service::{RoleClient, RunningService, ServiceError};
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
+use serde_json::Value;
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 use tokio::process::{Child, Command};
+
+use crate::handler::Handler;
 
 /// How a server is reached.
 pub enum Launch {
@@ -31,6 +37,8 @@ pub enum Launch {
         client: reqwest::Client,
         /// Sent as `Authorization: Bearer <token>`.
         bearer: Option<String>,
+        /// Sent with every request (`headers`, the identity header).
+        headers: Vec<(String, String)>,
     },
 }
 
@@ -60,10 +68,21 @@ pub enum CallError {
     Failed(String),
 }
 
+/// What a server offers besides tools (spec: tool-system, MCP resource
+/// and prompt utility tools).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Offers {
+    /// It advertised `resources`.
+    pub resources: bool,
+    /// It advertised `prompts`.
+    pub prompts: bool,
+}
+
 /// One live connection.
 pub struct Connection {
-    service: RunningService<RoleClient, ()>,
+    service: RunningService<RoleClient, Handler>,
     tools: Vec<Tool>,
+    offers: Offers,
     /// The server's process; killed when the connection is dropped.
     _child: Option<Child>,
 }
@@ -84,33 +103,42 @@ impl Connection {
     ///
     /// Why the server could not be started or did not complete the
     /// handshake or the tool listing in time.
-    pub async fn open(launch: Launch, timeout: Duration) -> Result<Self, String> {
-        match tokio::time::timeout(timeout, Self::open_now(launch)).await {
+    pub async fn open(launch: Launch, handler: Handler, timeout: Duration) -> Result<Self, String> {
+        match tokio::time::timeout(timeout, Self::open_now(launch, handler)).await {
             Ok(result) => result,
             Err(_) => Err(format!("no answer to initialize within {}", span(timeout))),
         }
     }
 
-    async fn open_now(launch: Launch) -> Result<Self, String> {
+    async fn open_now(launch: Launch, handler: Handler) -> Result<Self, String> {
         let (service, child) = match launch {
             Launch::Stdio(command) => {
-                let (service, child) = stdio(command).await?;
+                let (service, child) = stdio(command, handler).await?;
                 (service, Some(child))
             }
             Launch::Http {
                 url,
                 client,
                 bearer,
+                headers,
             } => {
-                let mut config = StreamableHttpClientTransportConfig::with_uri(url);
+                let mut config = StreamableHttpClientTransportConfig::with_uri(url)
+                    .custom_headers(header_map(&headers)?);
                 if let Some(token) = bearer {
                     config = config.auth_header(token);
                 }
                 let transport = StreamableHttpClientTransport::with_client(client, config);
-                let service = ().serve(transport).await.map_err(|e| e.to_string())?;
+                let service = handler.serve(transport).await.map_err(|e| e.to_string())?;
                 (service, None)
             }
         };
+        let offers = service
+            .peer_info()
+            .map(|info| Offers {
+                resources: info.capabilities.resources.is_some(),
+                prompts: info.capabilities.prompts.is_some(),
+            })
+            .unwrap_or_default();
         let tools = service
             .peer()
             .list_all_tools()
@@ -119,8 +147,101 @@ impl Connection {
         Ok(Self {
             service,
             tools,
+            offers,
             _child: child,
         })
+    }
+
+    /// What it offers besides tools.
+    #[must_use]
+    pub fn offers(&self) -> Offers {
+        self.offers
+    }
+
+    /// Lists the server's tools again (after `tools/list_changed`).
+    ///
+    /// # Errors
+    ///
+    /// The request failed.
+    pub async fn list_tools(&self, timeout: Duration) -> Result<Vec<Tool>, CallError> {
+        self.bounded(timeout, self.service.peer().list_all_tools())
+            .await
+    }
+
+    /// `resources/list`, as JSON.
+    ///
+    /// # Errors
+    ///
+    /// [`CallError`].
+    pub async fn list_resources(&self, timeout: Duration) -> Result<Value, CallError> {
+        let resources = self
+            .bounded(timeout, self.service.peer().list_all_resources())
+            .await?;
+        Ok(serde_json::to_value(resources).unwrap_or_default())
+    }
+
+    /// `resources/read` of `uri`, as JSON.
+    ///
+    /// # Errors
+    ///
+    /// [`CallError`].
+    pub async fn read_resource(&self, uri: &str, timeout: Duration) -> Result<Value, CallError> {
+        let params = ReadResourceRequestParams::new(uri.to_owned());
+        let read = self
+            .bounded(timeout, self.service.read_resource(params))
+            .await?;
+        Ok(serde_json::to_value(read).unwrap_or_default())
+    }
+
+    /// `prompts/list`, as JSON.
+    ///
+    /// # Errors
+    ///
+    /// [`CallError`].
+    pub async fn list_prompts(&self, timeout: Duration) -> Result<Value, CallError> {
+        let prompts = self
+            .bounded(timeout, self.service.peer().list_all_prompts())
+            .await?;
+        Ok(serde_json::to_value(prompts).unwrap_or_default())
+    }
+
+    /// `prompts/get` of `name`, as JSON.
+    ///
+    /// # Errors
+    ///
+    /// [`CallError`].
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Option<JsonObject>,
+        timeout: Duration,
+    ) -> Result<Value, CallError> {
+        let mut params = GetPromptRequestParams::new(name.to_owned());
+        params.arguments = arguments;
+        let prompt = self
+            .bounded(timeout, self.service.get_prompt(params))
+            .await?;
+        Ok(serde_json::to_value(prompt).unwrap_or_default())
+    }
+
+    async fn bounded<T>(
+        &self,
+        timeout: Duration,
+        request: impl Future<Output = Result<T, ServiceError>>,
+    ) -> Result<T, CallError> {
+        match tokio::time::timeout(timeout, request).await {
+            Err(_) => Err(CallError::TimedOut(timeout)),
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(err)) => Err(self.classify(err)),
+        }
+    }
+
+    fn classify(&self, err: ServiceError) -> CallError {
+        match err {
+            ServiceError::TransportClosed | ServiceError::TransportSend(_) => CallError::Closed,
+            _ if self.is_closed() => CallError::Closed,
+            err => CallError::Failed(err.to_string()),
+        }
     }
 
     /// The server's tools as it listed them at connect.
@@ -147,21 +268,16 @@ impl Connection {
         timeout: Duration,
     ) -> Result<CallToolResult, CallError> {
         let params = CallToolRequestParams::new(name.to_owned()).with_arguments(arguments);
-        match tokio::time::timeout(timeout, self.service.call_tool(params)).await {
-            Err(_) => Err(CallError::TimedOut(timeout)),
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(ServiceError::TransportClosed | ServiceError::TransportSend(_))) => {
-                Err(CallError::Closed)
-            }
-            Ok(Err(_)) if self.is_closed() => Err(CallError::Closed),
-            Ok(Err(err)) => Err(CallError::Failed(err.to_string())),
-        }
+        self.bounded(timeout, self.service.call_tool(params)).await
     }
 }
 
 /// Spawns `command` with piped stdio and serves the client over its
 /// pipes; its stderr lines go to the log at DEBUG.
-async fn stdio(mut command: Command) -> Result<(RunningService<RoleClient, ()>, Child), String> {
+async fn stdio(
+    mut command: Command,
+    handler: Handler,
+) -> Result<(RunningService<RoleClient, Handler>, Child), String> {
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -186,7 +302,7 @@ async fn stdio(mut command: Command) -> Result<(RunningService<RoleClient, ()>, 
             }
         });
     }
-    match ().serve((stdout, stdin)).await {
+    match handler.serve((stdout, stdin)).await {
         Ok(service) => Ok((service, child)),
         Err(err) => {
             let status = child.try_wait().ok().flatten();
@@ -196,6 +312,25 @@ async fn stdio(mut command: Command) -> Result<(RunningService<RoleClient, ()>, 
             })
         }
     }
+}
+
+/// `headers` as a header map.
+fn header_map(
+    headers: &[(String, String)],
+) -> Result<
+    std::collections::HashMap<reqwest::header::HeaderName, reqwest::header::HeaderValue>,
+    String,
+> {
+    headers
+        .iter()
+        .map(|(name, value)| {
+            let name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                .map_err(|e| format!("header name '{name}': {e}"))?;
+            let value = reqwest::header::HeaderValue::from_str(value)
+                .map_err(|e| format!("header '{name}': {e}"))?;
+            Ok((name, value))
+        })
+        .collect()
 }
 
 /// `250 ms`, `60 s`.

@@ -322,6 +322,56 @@ pub(super) fn plugins(inputs: &Inputs<'_>) -> Vec<Check> {
     checks
 }
 
+/// MCP servers in the `plugins` group: a name that is also a built-in
+/// toolset (its bare name then means the built-in, spec: tool-system,
+/// Registry toolset aliases), an entry skipped for a configuration error
+/// and a parked OAuth sign-in.
+pub(super) fn mcp(inputs: &Inputs<'_>) -> Vec<Check> {
+    let scope = inputs.scope;
+    let servers = &scope.config().mcp.servers;
+    let mut checks = Vec::new();
+    if let Ok(registry) = crate::tools_cmd::registry(scope) {
+        for name in servers.keys() {
+            let builtin = registry
+                .toolset(name)
+                .is_some_and(|t| t.owner == pmt_tools::descriptor::Owner::Builtin);
+            if builtin {
+                checks.push(
+                    Check::new(
+                        "plugins",
+                        "mcp",
+                        Status::Warn,
+                        format!("MCP server '{name}' has the name of built-in toolset '{name}', which that name selects"),
+                    )
+                    .with_hint(format!("reference the server's tools as 'mcp-{name}'")),
+                );
+            }
+        }
+    }
+    for (name, why) in crate::mcp_host::skipped(scope) {
+        checks.push(Check::new(
+            "plugins",
+            "mcp",
+            Status::Fail,
+            format!("MCP server '{name}' skipped: {why}"),
+        ));
+    }
+    for name in servers.keys() {
+        if crate::mcp_host::oauth::record(scope, name).is_some_and(|r| r.parked.is_some()) {
+            checks.push(Check::new(
+                "plugins",
+                "mcp",
+                Status::Warn,
+                format!(
+                    "MCP server '{name}' {}",
+                    crate::mcp_host::oauth::needs_login(name)
+                ),
+            ));
+        }
+    }
+    checks
+}
+
 /// `observability`: exporters (none can be enabled in this build).
 pub(super) fn observability(inputs: &Inputs<'_>) -> Vec<Check> {
     let trajectories = inputs.scope.config().observability.trajectories.enabled;

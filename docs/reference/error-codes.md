@@ -325,6 +325,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `mcp.not_found` | `not_found` | 66 | No `[mcp.servers.<name>]` entry has this name in the profile's config.toml; `prometheus mcp list` shows the configured servers. |
 | `mcp.exists` | `invalid_input` | 65 | An MCP server with this name is already configured; remove it first with `prometheus mcp remove <name>` or pick another name. |
 | `mcp.unreachable` | `unavailable` | 69 | The MCP server did not start, did not complete the initialize handshake or the tool listing within its connect timeout, or refused the connection; the message says why. |
+| `mcp.oauth_client_required` | `config` | 78 | The MCP server's authorization server does not register OAuth clients dynamically (and accepts no client metadata document); register a client with its provider and set `mcp.servers.<name>.oauth.client_id` (and `oauth.client_secret_name`). |
+| `mcp.login_failed` | `auth` | 78 | The MCP server's OAuth login did not complete: discovery, registration, the authorization response (state or issuer mismatch, refusal) or the token exchange failed, or no one answered in time; the message says which. |
 | `mcp.remote_refused` | `permission_denied` | 77 | `prometheus mcp serve --http` binds only loopback addresses unless `mcp_server.allow_remote = true` is set in the profile's config.toml. |
 | `service.needs_root` | `permission_denied` | 77 | `prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation. |
 | `service.manager` | `unavailable` | 69 | The OS service manager (systemd, launchd or Task Scheduler) refused the operation or is not available; the message carries its output. |

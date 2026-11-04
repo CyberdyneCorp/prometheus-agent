@@ -141,6 +141,14 @@ impl DaemonHost {
             );
         }
         profile.current.replace(new.clone());
+        if found
+            .iter()
+            .any(|c| c.key == "mcp" || c.key.starts_with("mcp."))
+        {
+            // MCP servers follow `mcp.servers` (spec: plugin-system, MCP
+            // config watch, recycling and discovery wait).
+            crate::mcp_host::config_changed(&new);
+        }
         // New sessions are built from the new snapshot.
         profile
             .factories
