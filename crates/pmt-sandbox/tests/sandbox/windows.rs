@@ -186,65 +186,50 @@ fn a_proxied_child_reaches_only_the_proxy() {
     );
 }
 
-/// TEMPORARY CI diagnosis of proxied children on ARM64 (removed after).
+/// Sandboxes that start and end at the same time (concurrent sessions, or
+/// the commands of several daemons) share the directories above their
+/// workspaces, whose DACLs each one rewrites to add and later drop its
+/// listing entry. Every container keeps its entry while it lives (a lost
+/// entry denies its PowerShell `Set-Location` into the workspace, seen as
+/// "Access is denied" on the ARM64 runners), and none is left behind.
 #[test]
-fn diag_proxied_child_location() {
-    let fixture = Fixture::new();
-    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = proxy.local_addr().unwrap().port();
-    let work = fixture.work.display().to_string();
-    let parent = fixture.work.parent().unwrap().display().to_string();
-    let probe = format!(
-        "foreach ($s in @({{ [IO.Directory]::GetFiles('{work}').Count }}, {{ [IO.Directory]::GetDirectories('{parent}').Count }}, {{ [IO.Directory]::SetCurrentDirectory('{work}'); 'cwd set' }}, {{ Import-Module Microsoft.PowerShell.Management; Set-Location -LiteralPath '{work}' -ErrorAction Stop; 'set-location ok' }})) {{ try {{ & $s }} catch {{ 'ERR ' + $_.Exception.GetBaseException().GetType().FullName + ': ' + $_.Exception.GetBaseException().Message }} }}"
-    );
-    let show = |label: &str, sandbox: &Sandbox, explicit_env: bool| {
-        let mut command = sandbox.command("powershell.exe").unwrap();
-        command.current_dir(&fixture.work);
-        if explicit_env {
-            command.env_clear().envs(std::env::vars_os());
-        }
-        let output = command
-            .args(["-NoProfile", "-NonInteractive", "-Command", &probe])
-            .output()
-            .unwrap();
-        eprintln!(
-            "DIAG {label}: status {:?}\nstdout:\n{}\nstderr:\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let output = sandbox
-            .command("cmd.exe")
-            .unwrap()
-            .current_dir(&fixture.work)
-            .args(["/C", "cd & dir /b"])
-            .output()
-            .unwrap();
-        eprintln!(
-            "DIAG {label} cmd: {:?}\n{}\n{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+fn concurrent_sandboxes_keep_their_entries_on_shared_ancestors() {
+    const SANDBOXES: usize = 8;
+    let root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let shared = std::fs::canonicalize(root.path()).unwrap().join("shared");
+    let containers = |listing: &str| listing.matches("S-1-15-2-").count();
+    for round in 0..3 {
+        let workspaces: Vec<_> = (0..SANDBOXES)
+            .map(|i| shared.join(format!("w{round}-{i}")))
+            .collect();
+        let sandboxes: Vec<Sandbox> = std::thread::scope(|scope| {
+            let started: Vec<_> = workspaces
+                .iter()
+                .map(|work| scope.spawn(move || confine(workspace_policy(work))))
+                .collect();
+            started.into_iter().map(|t| t.join().unwrap()).collect()
+        });
+        let during = acl(&shared);
+        assert_eq!(containers(&during), SANDBOXES, "round {round}: {during}");
+        std::thread::scope(|scope| {
+            for sandbox in sandboxes {
+                scope.spawn(move || drop(sandbox));
+            }
+        });
+        let after = acl(&shared);
+        assert_eq!(containers(&after), 0, "round {round}: {after}");
+    }
+}
+
+/// The baseline policy of a session whose home and workspace is `work`.
+fn workspace_policy(work: &Path) -> pmt_sandbox::Policy {
+    let home = work.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let paths = pmt_sandbox::Paths {
+        user_home: home.clone(),
+        prometheus_home: home.join(".prometheus"),
+        workspace: work.to_path_buf(),
+        scratch: Vec::new(),
     };
-    let plain = confine(fixture.policy(&[]));
-    show("plain", &plain, false);
-    show("plain+env", &plain, true);
-    for dir in fixture.work.ancestors().take(6) {
-        eprintln!("DIAG acl (plain) {}", acl(dir));
-    }
-    drop(plain);
-    let proxied = confine(
-        fixture
-            .policy(&[])
-            .through_proxy(port, pmt_sandbox::Relay::new(|_| {})),
-    );
-    show("proxied", &proxied, false);
-    for dir in fixture.work.ancestors().take(6) {
-        eprintln!("DIAG acl (proxied) {}", acl(dir));
-    }
-    eprintln!("DIAG acl launcher {}", acl(&crate::common::launcher()));
-    show("proxied again", &proxied, false);
-    drop(proxied);
-    drop(proxy);
+    pmt_sandbox::Policy::from_capabilities(pmt_core::capability::BASELINE, &paths).unwrap()
 }

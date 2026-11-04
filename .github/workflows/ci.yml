@@ -169,20 +169,9 @@ jobs:
       # (execution-environments, Windows local shell — Sandboxed session on
       # Windows): commands run confined in PowerShell, move around the
       # workspace, run a script, and cannot write outside it.
-      - name: DIAG proxied child
-        if: runner.os == 'Windows'
-        continue-on-error: true
-        run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::diag" --nocapture
-
       - name: Windows sandboxed terminal tests
         if: runner.os == 'Windows'
-        continue-on-error: true
         run: cargo test -p prometheus --test terminal_windows --locked --target "${{ matrix.target }}"
-
-      - name: DIAG terminal tests serial
-        if: runner.os == 'Windows'
-        continue-on-error: true
-        run: cargo test -p prometheus --test terminal_windows --locked --target "${{ matrix.target }}" -- --test-threads=1
 
       # The AppContainer backend itself (security-boundaries, OS sandbox per
       # platform; Egress enforcement for child processes): confinement,
