@@ -135,7 +135,7 @@ fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
 
     let connect = |host: &str, port: u16| {
         let line = format!(
-            "try {{ (New-Object Net.Sockets.TcpClient).Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().Message }}"
+            "try {{ [Net.Sockets.TcpClient]::new().Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().GetType().Name + ' ' + $_.Exception.GetBaseException().Message }}"
         );
         let output = sandbox
             .command("powershell.exe")
@@ -145,7 +145,12 @@ fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
             .output()
             .unwrap();
         let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        (text.starts_with("connected"), format!("{text} {output:?}"))
+        // Only a socket error counts as refused, not a broken command line.
+        assert!(
+            text == "connected" || text.starts_with("refused: SocketException"),
+            "{output:?}"
+        );
+        (text == "connected", format!("{text} {output:?}"))
     };
     // github.com: a public host every CI runner reaches. The gate is asked
     // at every start, both ways.

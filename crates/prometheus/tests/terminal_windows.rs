@@ -219,7 +219,7 @@ fn session_children_reach_only_what_the_egress_policy_admits() {
     let port = listener.local_addr().unwrap().port();
     let connect = |host: &str, port: u16| {
         format!(
-            "try {{ (New-Object Net.Sockets.TcpClient).Connect('{host}', {port}); 'connected' }} catch {{ 'refused' }}"
+            "try {{ [Net.Sockets.TcpClient]::new().Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().GetType().Name }}"
         )
     };
     let commands = [
@@ -235,10 +235,15 @@ fn session_children_reach_only_what_the_egress_policy_admits() {
     );
     for (results, internet) in [(&public, true), (&allowlisted, false)] {
         let output = |i: usize| results[i]["output"].as_str().unwrap_or_default().to_owned();
-        let public = if internet { "connected" } else { "refused" };
+        // Only a socket error counts as refused, not a broken command.
+        let public = if internet {
+            "connected"
+        } else {
+            "refused: SocketException"
+        };
         assert_eq!(output(0).trim(), public, "{results:#?}");
         assert_eq!(output(1).trim(), "proxy=[]", "{results:#?}");
-        assert_eq!(output(2).trim(), "refused", "{results:#?}");
+        assert_eq!(output(2).trim(), "refused: SocketException", "{results:#?}");
     }
     assert!(
         listener.accept().is_err(),
