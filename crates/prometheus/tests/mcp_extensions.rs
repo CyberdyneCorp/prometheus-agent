@@ -747,16 +747,16 @@ fn a_costed_call_crossing_the_limit_is_refused_where_no_one_can_answer() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(4), "{}", stderr(&out));
-    let results = tool_results(home.path());
-    let refused = results
-        .iter()
-        .find(|r| r.contains("about 20 credits"))
-        .unwrap_or_else(|| panic!("no refusal in {results:?}"));
     assert!(
-        refused.contains("0 credits used in this conversation (limit 10)"),
-        "{refused}"
+        stderr(&out).contains("a tool call needed an approval"),
+        "{}",
+        stderr(&out)
     );
-    assert!(refused.contains("do NOT re-run"), "{refused}");
+    // The one-shot run stops its turn as soon as the gate refuses, so
+    // whether the refused call's result row is stored first is a race;
+    // the refusal text is pinned where it is built (pmt-mcp
+    // `budget_crossing_asks_even_when_trusted`, the gate's once-only
+    // test). What must hold here: the server never ran the call.
     let calls = std::fs::read_to_string(log).unwrap_or_default();
     assert!(!calls.contains("call render"), "{calls}");
 }

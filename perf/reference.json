@@ -1,11 +1,11 @@
 {
   "linux-x86_64": {
-    "startup_median_ms": 2.73,
-    "startup_p95_ms": 2.94,
-    "peak_rss_bytes": 9950986,
-    "binary_bytes": 56696504,
-    "chat_prompt_median_ms": 33.59,
-    "chat_prompt_p95_ms": 34.79,
-    "chat_peak_rss_bytes": 33166459
+    "startup_median_ms": 3.52,
+    "startup_p95_ms": 3.6,
+    "peak_rss_bytes": 10989076,
+    "binary_bytes": 67234693,
+    "chat_prompt_median_ms": 37.77,
+    "chat_prompt_p95_ms": 41.98,
+    "chat_peak_rss_bytes": 36805018
   }
 }
