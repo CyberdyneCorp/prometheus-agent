@@ -458,15 +458,23 @@ impl Supervisor {
     }
 
     /// Pings the sidecar of `generation` and stops it when idle.
+    ///
+    /// Pings keep a fixed cadence: each ping waits for its answer only
+    /// until the next one is due, so a stalled sidecar is killed after
+    /// `pings_missed` periods of unanswered pings, not twice that.
     fn watch(&self, generation: u64) {
         let me = self.me.clone();
         let every = self.settings.ping_every;
         std::thread::spawn(move || {
             let mut missed = 0;
+            let mut due = Instant::now() + every;
             loop {
-                std::thread::sleep(every);
+                std::thread::sleep(due.saturating_duration_since(Instant::now()));
+                // Measured from the wake-up, so a tick that overran (a lock
+                // wait) delays the cadence instead of shortening a ping.
+                due = Instant::now() + every;
                 let Some(me) = me.upgrade() else { return };
-                if !me.tick(generation, &mut missed) {
+                if !me.tick(generation, &mut missed, due) {
                     return;
                 }
             }
@@ -474,8 +482,9 @@ impl Supervisor {
     }
 
     /// One ping period of the sidecar of `generation`: stop it when idle,
-    /// kill it after the missed pings; `false` ends the watch.
-    fn tick(&self, generation: u64, missed: &mut u32) -> bool {
+    /// kill it after the missed pings; the ping counts as unanswered when
+    /// no answer arrives before `next` ping is due. `false` ends the watch.
+    fn tick(&self, generation: u64, missed: &mut u32, next: Instant) -> bool {
         let Some(sidecar) = self.current(generation) else {
             return false;
         };
@@ -483,7 +492,7 @@ impl Supervisor {
             self.stop_as(State::Idle);
             return false;
         }
-        if sidecar.ping(self.settings.ping_every) {
+        if sidecar.ping(next.saturating_duration_since(Instant::now())) {
             *missed = 0;
             self.publish(&self.lock());
             return true;

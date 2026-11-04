@@ -2314,7 +2314,7 @@ capabilities = [
 "Process tree is reaped" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::shutdown_reaps_the_process_tree_within_seven_seconds"]
 
 [python-bridge."Call timeouts and stall detection"]
-"GIL stall is recovered" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_gil_stall_is_killed_after_three_missed_pings_and_restarted"]
+"GIL stall is recovered" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_gil_stall_is_killed_after_three_missed_pings_and_restarted", "crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_stall_is_killed_after_three_ping_periods_not_more"]
 
 [python-bridge."Crash isolation and restart policy"]
 "Crash loop is contained" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_crash_loop_marks_the_plugin_failed_and_spares_the_rest", "crates/prometheus/tests/python_bridge.rs::a_crashing_plugin_does_not_affect_the_agent"]
@@ -2324,7 +2324,7 @@ capabilities = [
 "A child outside the process group is reaped" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_child_that_left_the_process_group_is_reaped_with_the_sidecar"]
 
 [python-bridge."Registrations follow plugin-system reload rules"]
-"Restart does not mutate a live session" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_restart_that_drops_a_tool_answers_by_name"]
+"Restart does not mutate a live session" = ["crates/prometheus/tests/python_bridge.rs::a_sidecar_restart_does_not_mutate_a_live_sessions_tools_or_prompt", "crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_restart_that_drops_a_tool_answers_by_name"]
 
 [python-bridge."Python skill scripts"]
 "Skill script has no access to plugin environments" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]

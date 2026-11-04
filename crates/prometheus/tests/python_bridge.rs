@@ -645,3 +645,146 @@ text = "bounded"
         "{results:?}"
     );
 }
+
+/// A Chat Completions server for the restart test: each request's raw body
+/// is sent to the test, `answer(n)` runs before the n-th reply (0-based) and
+/// returns its SSE body.
+fn chat_server(
+    answer: impl Fn(usize) -> String + Send + 'static,
+) -> (String, std::sync::mpsc::Receiver<String>) {
+    use std::io::{BufReader, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for (n, mut stream) in listener.incoming().flatten().enumerate() {
+            let body = common::read_http_request(&mut BufReader::new(stream.try_clone().unwrap()));
+            let _ = tx.send(String::from_utf8_lossy(&body).into_owned());
+            let sse = answer(n);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{sse}",
+                sse.len()
+            );
+        }
+    });
+    (format!("http://{addr}/v1"), rx)
+}
+
+const DONE: &str = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
+
+fn tool_call_sse(name: &str) -> String {
+    let call = serde_json::json!({"choices": [{"index": 0, "delta": {"tool_calls": [{
+        "index": 0, "id": format!("call_{name}"), "type": "function",
+        "function": {"name": name, "arguments": "{}"}}]}, "finish_reason": null}]});
+    let end =
+        serde_json::json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]});
+    format!("data: {call}\n\ndata: {end}\n\ndata: [DONE]\n\n")
+}
+
+/// Waits until the echo sidecar of `profile` runs after `restarts` restarts.
+fn running_after(profile: &Path, restarts: u32) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        let rows = pmt_pybridge::supervisor::published(profile);
+        if rows.iter().any(|r| {
+            r.plugin == "echo"
+                && r.restarts >= restarts
+                && r.state == pmt_pybridge::supervisor::State::Running
+        }) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    false
+}
+
+/// The JSON value starting at `text[0]` (an object or array), as sent.
+fn balanced(text: &str) -> &str {
+    let (mut depth, mut quoted, mut escaped) = (0, false, false);
+    for (i, c) in text.char_indices() {
+        match c {
+            _ if escaped => escaped = false,
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            '{' | '[' if !quoted => depth += 1,
+            '}' | ']' if !quoted => {
+                depth -= 1;
+                if depth == 0 {
+                    return &text[..=i];
+                }
+            }
+            _ => {}
+        }
+    }
+    text
+}
+
+/// The raw bytes of a Chat Completions request's tools array and of its
+/// first message (the system prompt): the prefix the provider caches.
+fn cached_prefix(raw: &str) -> (String, String) {
+    let tools = raw
+        .find("\"tools\":[")
+        .map_or("", |i| balanced(&raw[i + 8..]));
+    let first = raw
+        .find("\"messages\":[{")
+        .map_or("", |i| balanced(&raw[i + 12..]));
+    (tools.to_owned(), first.to_owned())
+}
+
+#[test]
+fn a_sidecar_restart_does_not_mutate_a_live_sessions_tools_or_prompt() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "echo", "echo", "all");
+    let profile = home.path().join("profiles/default");
+    let data = profile.join("plugin-data/echo");
+    let watched = profile.clone();
+    // 1st reply: the sidecar will re-register without `whoami`, then `crash`
+    // kills it. 2nd: once the restarted sidecar runs, call `whoami`. 3rd: done.
+    let (url, bodies) = chat_server(move |n| match n {
+        0 => {
+            std::fs::create_dir_all(&data).unwrap();
+            std::fs::write(data.join("drop_tool"), "whoami").unwrap();
+            tool_call_sse("crash")
+        }
+        1 => {
+            assert!(running_after(&watched, 1), "the sidecar restarted");
+            tool_call_sse("whoami")
+        }
+        _ => DONE.to_owned(),
+    });
+    common::append_config(
+        home.path(),
+        &format!(
+            "\n[providers.acme]\nbase_url = \"{url}\"\nwire_format = \"chat_completions\"\nauth = \"none\"\n"
+        ),
+    );
+    ok(&run(
+        home.path(),
+        &["config", "set", "budgets.allow_unpriced", "true"],
+    ));
+    let out = run(
+        home.path(),
+        &["-z", "go", "--provider", "acme", "--model", "r1"],
+    );
+    assert_eq!(stdout(&out), "done\n", "{}", stderr(&out));
+    let bodies: Vec<String> = bodies.try_iter().collect();
+    assert_eq!(bodies.len(), 3, "{bodies:?}");
+    let first = cached_prefix(&bodies[0]);
+    assert!(first.0.contains("\"name\":\"whoami\""), "{}", first.0);
+    assert!(
+        first.1.contains("\"role\":\"system\"") && first.1.contains("Echo plugin rules."),
+        "{}",
+        first.1
+    );
+    for body in &bodies[1..] {
+        assert_eq!(cached_prefix(body), first, "the cached prefix changed");
+    }
+    // The restart did drop the tool: the session's call answers by name.
+    assert!(
+        bodies[2].contains("tool 'whoami' is no longer provided by plugin 'echo'"),
+        "{}",
+        bodies[2]
+    );
+}

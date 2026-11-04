@@ -50,6 +50,35 @@ fn a_gil_stall_is_killed_after_three_missed_pings_and_restarted() {
 }
 
 #[test]
+fn a_stall_is_killed_after_three_ping_periods_not_more() {
+    // Pings keep their cadence while the sidecar is stalled: the first
+    // unanswered ping goes out within one period of the stall, and the kill
+    // follows three periods later. A ping that waits a full period before the
+    // next sleep would take twice as long (6 to 8 periods).
+    let every = Duration::from_secs(1);
+    let mut settings = quick();
+    settings.ping_every = every;
+    let rig = rig("echo", settings);
+    rig.supervisor.ensure().unwrap();
+    let started = Instant::now();
+    let err = rig
+        .supervisor
+        .tool("stall", &json!({"seconds": 60}), &json!({}))
+        .unwrap_err();
+    let elapsed = started.elapsed();
+    assert!(
+        err.message().contains("unresponsive: 3 pings unanswered"),
+        "{}",
+        err.message()
+    );
+    assert!(
+        elapsed + Duration::from_millis(100) >= every * 3,
+        "{elapsed:?}"
+    );
+    assert!(elapsed < every * 5, "{elapsed:?}");
+}
+
+#[test]
 fn a_crash_loop_marks_the_plugin_failed_and_spares_the_rest() {
     let rig = rig("echo", quick());
     for _ in 0..5 {
