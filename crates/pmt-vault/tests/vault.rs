@@ -154,3 +154,21 @@ fn a_new_keychain_vault_without_a_keychain_keeps_its_key_in_the_file() {
     assert!(in_keychain.dir().join(KEYREF_FILE).exists());
     assert!(!in_keychain.dir().join(KEY_FILE).exists());
 }
+
+/// Removing from a profile that has no vault creates nothing, so a later
+/// first `add` with keychain storage really puts the key in the keychain.
+#[test]
+fn removing_from_a_missing_vault_creates_no_key() {
+    let profile = temp();
+    let keychain = Arc::new(MemoryKeychain::default());
+    let vault = Vault::of(profile.path(), Arc::clone(&keychain) as _);
+    let err = vault.remove("login_missing").unwrap_err();
+    assert_eq!(err.code().code, "vault.not_found", "{err:?}");
+    assert!(!vault.dir().join(KEY_FILE).exists());
+    assert!(!vault.exists());
+    vault
+        .add(login("GitHub", "pw"), VaultKeyStorage::Keychain)
+        .unwrap();
+    assert!(vault.dir().join(KEYREF_FILE).exists());
+    assert!(!vault.dir().join(KEY_FILE).exists());
+}

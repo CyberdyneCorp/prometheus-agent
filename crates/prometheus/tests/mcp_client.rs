@@ -71,7 +71,11 @@ fn servers_are_added_listed_tested_and_removed() {
     );
     let failed = run(home.path(), &["mcp", "test", "broken"]);
     assert_eq!(failed.status.code(), Some(69), "{}", stderr(&failed));
-    assert!(stderr(&failed).contains("the server process exited"));
+    assert!(
+        stderr(&failed).contains("the server process exited"),
+        "{}",
+        stderr(&failed)
+    );
     let status = ok(&run(home.path(), &["--json", "mcp", "status"]));
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
     assert_eq!(status["servers"][0]["name"], "broken");

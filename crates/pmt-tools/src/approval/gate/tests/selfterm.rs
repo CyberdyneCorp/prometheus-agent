@@ -15,6 +15,7 @@ fn hosted(own: Vec<u32>) -> Options {
             Daemon {
                 pids: vec![std::process::id()],
                 executables: vec!["prometheus".into()],
+                command_lines: vec!["/usr/local/bin/prometheus daemon run".into()],
                 services: vec!["prometheus-daemon.service".into()],
             },
             own,
@@ -30,6 +31,11 @@ async fn pkill_under_yolo_is_blocked_in_a_daemon_session() {
     let session = session(&fx, channel, hosted(Vec::new())).await;
     for line in [
         "pkill -f prometheus",
+        "pkill -f 'prometheus daemon'",
+        "pkill -f bin/prometheus",
+        "pkill -f 'daemon run'",
+        "killall -r prom",
+        "kill $(pgrep -f prometheus)",
         &format!("kill -9 {}", std::process::id()),
         "prometheus daemon restart",
         "systemctl --user stop prometheus-daemon",

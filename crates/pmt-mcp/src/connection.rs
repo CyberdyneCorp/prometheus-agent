@@ -305,7 +305,12 @@ async fn stdio(
     match handler.serve((stdout, stdin)).await {
         Ok(service) => Ok((service, child)),
         Err(err) => {
-            let status = child.try_wait().ok().flatten();
+            // `serve` fails on stdout EOF, which can come before the
+            // crashed child is reaped: give it a moment to report its exit.
+            let status = tokio::time::timeout(EXIT_GRACE, child.wait())
+                .await
+                .ok()
+                .and_then(Result::ok);
             Err(match status {
                 Some(status) => format!("the server process exited ({status})"),
                 None => format!("initialize failed: {err}"),
@@ -313,6 +318,10 @@ async fn stdio(
         }
     }
 }
+
+/// How long a server that failed the handshake gets to exit, so a crash
+/// is reported as one rather than as a protocol error.
+const EXIT_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// `headers` as a header map.
 fn header_map(
@@ -340,5 +349,31 @@ pub fn span(duration: Duration) -> String {
         format!("{} ms", duration.as_millis())
     } else {
         format!("{} s", duration.as_secs())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::sync::Weak;
+
+    use tokio::process::Command;
+
+    use super::stdio;
+    use crate::handler::Handler;
+
+    /// A server that closes stdout and exits a moment later is reported
+    /// as an exited process, not as a protocol error: the handshake sees
+    /// EOF before the child has been reaped.
+    #[tokio::test]
+    async fn a_server_crashing_after_closing_stdout_is_reported_as_exited() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "exec 1>&-; sleep 0.2; exit 4"]);
+        let Err(message) = stdio(command, Handler::new(Weak::new(), false, false)).await else {
+            panic!("the handshake cannot succeed");
+        };
+        assert!(
+            message.starts_with("the server process exited"),
+            "{message}"
+        );
     }
 }

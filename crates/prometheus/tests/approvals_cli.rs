@@ -157,6 +157,16 @@ fn testing_a_self_termination_command() {
             .starts_with("blocked: BLOCKED (self-termination): "),
         "{doc}"
     );
+    for line in [
+        ["pkill", "-f", "prometheus daemon"],
+        ["pkill", "-f", "bin/prometheus"],
+        ["killall", "-r", "prom"],
+    ] {
+        let mut args = vec!["--mode", "off", "--"];
+        args.extend(line);
+        let doc = test_json(home.path(), &args);
+        assert_eq!(doc["verdict"], "self-termination", "{line:?}: {doc}");
+    }
     let doc = test_json(home.path(), &["--mode", "off", "--", "kill", "4242"]);
     assert_eq!(doc["verdict"], "bypass", "{doc}");
 }

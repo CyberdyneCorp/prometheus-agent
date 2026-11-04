@@ -10,10 +10,18 @@
 //! `taskkill` aimed at the Prometheus executable by name or at the
 //! daemon's pid. Kills of the session's own background processes and of
 //! other explicit pids are left to the rest of the gate.
+//!
+//! Name patterns are read the way the tools read them: `pkill` and
+//! `pgrep` take a regular expression over process names or, with `-f`,
+//! over whole command lines; `killall -r`/`-m` takes a regular expression
+//! too. Over-reading is harmless (a false match only blocks), so a
+//! pattern that mentions an executable name is blocked even when no
+//! command line is known to match it, and `kill $(pgrep ...)` is judged
+//! by the pattern inside the substitution.
 
 use regex::RegexBuilder;
 
-use super::shell::{Script, Segment, basename};
+use super::shell::{Script, Segment, basename, parse};
 
 /// What identifies the hosting daemon.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -22,6 +30,9 @@ pub struct Daemon {
     pub pids: Vec<u32>,
     /// Executable base names without extension, lower case (`prometheus`).
     pub executables: Vec<String>,
+    /// Full command lines the daemon runs under (what `pkill -f` matches),
+    /// e.g. `/usr/local/bin/prometheus daemon run`.
+    pub command_lines: Vec<String>,
     /// Service unit, launchd label and scheduled task names.
     pub services: Vec<String>,
 }
@@ -52,7 +63,7 @@ fn segment_reason(segment: &Segment, guarded: Guarded<'_>) -> Option<String> {
         "systemctl" => service_stop(args, &["stop", "restart", "kill"], daemon),
         "launchctl" => service_stop(args, &["bootout", "kill"], daemon),
         "schtasks" => scheduled_task_end(args, daemon),
-        "kill" => kill_pids(args, guarded),
+        "kill" => kill_pids(args, guarded).or_else(|| kill_found(args, daemon)),
         "pkill" | "killall" => kill_by_name(&program, args, daemon),
         "taskkill" => taskkill(args, guarded),
         name if daemon.executables.iter().any(|e| e == name) => own_cli(&program, args),
@@ -115,25 +126,110 @@ fn kill_pids(args: &[String], guarded: Guarded<'_>) -> Option<String> {
 }
 
 /// `pkill [-f] <pattern>` (a regular expression over process names or,
-/// with `-f`, command lines) and `killall <name>`.
+/// with `-f`, command lines) and `killall [-r|-m] <name>...`.
 fn kill_by_name(program: &str, args: &[String], daemon: &Daemon) -> Option<String> {
-    let pattern = args.iter().rev().find(|a| !a.starts_with('-'))?;
-    let hits = |name: &str| {
-        if program == "killall" {
-            return basename(pattern).eq_ignore_ascii_case(name);
-        }
-        RegexBuilder::new(pattern)
-            .case_insensitive(true)
-            .build()
-            .map_or_else(
-                |_| name.contains(&pattern.to_ascii_lowercase()),
-                |re| re.is_match(name),
-            )
-    };
-    let name = daemon.executables.iter().find(|name| hits(name))?;
+    let how = Matching::of(program, args)?;
+    let (pattern, target) = args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .find_map(|pattern| Some((pattern, how.target(pattern, daemon)?)))?;
     Some(format!(
-        "`{program} {pattern}` matches the {name} executable of the daemon hosting this session"
+        "`{program} {pattern}` matches {target} of the daemon hosting this session"
     ))
+}
+
+/// `kill $(pgrep <pattern>)` / `` kill `pidof prometheus` ``: the pids come
+/// from a lookup by name, so the name decides.
+fn kill_found(args: &[String], daemon: &Daemon) -> Option<String> {
+    args.iter()
+        .filter_map(|a| substitution_body(a))
+        .find_map(|body| {
+            let script = parse(body).ok()?;
+            script.segments.iter().find_map(|segment| {
+                let (program, args) = segment.program()?;
+                kill_by_name(&program.to_ascii_lowercase(), args, daemon)
+            })
+        })
+}
+
+fn substitution_body(word: &str) -> Option<&str> {
+    let start = word
+        .find("$(")
+        .map(|at| at + 2)
+        .or_else(|| word.find('`').map(|at| at + 1))?;
+    let rest = &word[start..];
+    let end = rest.rfind([')', '`']).unwrap_or(rest.len());
+    Some(&rest[..end])
+}
+
+/// How a process-by-name tool reads its pattern.
+struct Matching {
+    /// A regular expression rather than an exact name.
+    regex: bool,
+    /// Against whole command lines rather than executable names.
+    full: bool,
+}
+
+impl Matching {
+    fn of(program: &str, args: &[String]) -> Option<Self> {
+        let short = |flag: char| {
+            args.iter()
+                .any(|a| !a.starts_with("--") && a.starts_with('-') && a.contains(flag))
+        };
+        let long = |flag: &str| args.iter().any(|a| a == flag);
+        match program {
+            "pkill" | "pgrep" => Some(Self {
+                regex: true,
+                full: short('f') || long("--full"),
+            }),
+            "killall" => Some(Self {
+                // psmisc `-r`/`--regexp`, BSD/macOS `-m`.
+                regex: args
+                    .iter()
+                    .any(|a| matches!(a.as_str(), "-r" | "-m" | "--regexp")),
+                full: false,
+            }),
+            "pidof" => Some(Self {
+                regex: false,
+                full: false,
+            }),
+            _ => None,
+        }
+    }
+
+    /// What of the daemon `pattern` reaches, described for the reason.
+    fn target(&self, pattern: &str, daemon: &Daemon) -> Option<String> {
+        if !self.regex {
+            let name = basename(pattern).to_ascii_lowercase();
+            let name = name.strip_suffix(".exe").unwrap_or(&name);
+            return daemon
+                .executables
+                .iter()
+                .find(|e| *e == name)
+                .map(|e| format!("the {e} executable"));
+        }
+        let lower = pattern.to_ascii_lowercase();
+        let hits = |text: &str| {
+            RegexBuilder::new(pattern)
+                .case_insensitive(true)
+                .build()
+                .map_or_else(
+                    |_| text.to_ascii_lowercase().contains(&lower),
+                    |re| re.is_match(text),
+                )
+        };
+        if let Some(e) = daemon
+            .executables
+            .iter()
+            .find(|e| hits(e) || lower.contains(e.as_str()))
+        {
+            return Some(format!("the {e} executable"));
+        }
+        self.full
+            .then(|| daemon.command_lines.iter().find(|line| hits(line)))
+            .flatten()
+            .map(|line| format!("the command line `{line}`"))
+    }
 }
 
 /// `taskkill /IM prometheus.exe` or `taskkill /PID <daemon pid>`.
@@ -169,6 +265,7 @@ mod tests {
         Daemon {
             pids: vec![777],
             executables: vec!["prometheus".into()],
+            command_lines: vec!["/opt/pm/bin/pmt-host daemon run --profile work".into()],
             services: vec![
                 "prometheus-daemon.service".into(),
                 "ai.prometheus.daemon".into(),
@@ -214,6 +311,28 @@ mod tests {
         }
     }
 
+    /// `pkill -f` reads whole command lines and `killall -r`/`-m` reads a
+    /// regular expression: a pattern reaching the daemon either way stops it.
+    #[test]
+    fn name_patterns_are_read_as_the_tools_read_them() {
+        for line in [
+            "pkill -f 'prometheus daemon'",
+            "pkill -f bin/prometheus",
+            "pkill --full 'PROMETHEUS.*run'",
+            "pkill -f 'daemon run'",
+            "pkill -9 -f pmt-host",
+            "pkill -f 'bin/pmt.*work'",
+            "killall -r prom",
+            "killall -m 'pro.*eus'",
+            "killall --regexp '^prom'",
+            "kill $(pgrep -f 'daemon run')",
+            "kill -9 `pidof prometheus`",
+            "kill $(pgrep prom)",
+        ] {
+            assert!(blocked(line, &[]).is_some(), "{line} should be blocked");
+        }
+    }
+
     #[test]
     fn unrelated_and_own_processes_pass() {
         for line in [
@@ -228,6 +347,12 @@ mod tests {
             "launchctl list",
             "taskkill /IM node.exe",
             "echo prometheus daemon stop is dangerous",
+            "pkill -f webpack",
+            "pkill -f 'node server.js'",
+            "killall -r '^node'",
+            "killall prom",
+            "kill $(pgrep node)",
+            "pgrep -f prometheus",
         ] {
             assert_eq!(blocked(line, &[4242]), None, "{line} should pass");
         }

@@ -199,13 +199,18 @@ impl Vault {
         })?;
         let file = self.file();
         let _lock = private_fs::lock_beside(&file).map_err(|e| io_error(&file, &e))?;
-        let (key, mut items) = if self.exists() {
-            (self.key()?, self.items()?)
+        let sealed = if self.exists() {
+            let (key, mut items) = (self.key()?, self.items()?);
+            change(&mut items)?;
+            seal(&key, &items)
         } else {
-            (self.new_key(storage)?, Vec::new())
+            // The change runs first so one that fails (removing from an
+            // empty vault) creates no key: a key left behind would be
+            // reused later even when `storage` asks for the keychain.
+            let mut items = Vec::new();
+            change(&mut items)?;
+            seal(&self.new_key(storage)?, &items)
         };
-        change(&mut items)?;
-        let sealed = seal(&key, &items);
         private_fs::write_atomic(&file, &sealed).map_err(|e| io_error(&file, &e))
     }
 

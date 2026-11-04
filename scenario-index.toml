@@ -2385,7 +2385,7 @@ capabilities = [
 
 # Group 34.7 (self-termination guard, approval suggestions)
 [tool-system."Self-termination guard"]
-"pkill under yolo" = ["crates/prometheus/tests/self_termination.rs::pkill_under_yolo_is_blocked_and_the_daemon_keeps_running", "crates/pmt-tools/src/approval/gate/tests/selfterm.rs::pkill_under_yolo_is_blocked_in_a_daemon_session", "crates/pmt-tools/src/approval/selfterm.rs::commands_that_stop_the_daemon_are_named"]
+"pkill under yolo" = ["crates/prometheus/tests/self_termination.rs::pkill_under_yolo_is_blocked_and_the_daemon_keeps_running", "crates/pmt-tools/src/approval/gate/tests/selfterm.rs::pkill_under_yolo_is_blocked_in_a_daemon_session", "crates/pmt-tools/src/approval/selfterm.rs::commands_that_stop_the_daemon_are_named", "crates/pmt-tools/src/approval/selfterm.rs::name_patterns_are_read_as_the_tools_read_them"]
 "Own background process" = ["crates/pmt-tools/src/approval/gate/tests/selfterm.rs::own_background_process_is_left_to_the_normal_gate", "crates/pmt-tools/src/approval/selfterm.rs::unrelated_and_own_processes_pass"]
 
 [tool-system."Approval suggestions mined from history"]
