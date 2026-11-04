@@ -151,6 +151,42 @@ pub fn observer(
     })
 }
 
+/// Names the session a refusal belongs to, if any: the caller of a
+/// shared child (an MCP stdio server, a python sidecar) or plugin call.
+pub type Caller = Arc<dyn Fn() -> Option<String> + Send + Sync>;
+
+/// An observer for connections made on behalf of whichever session
+/// `caller` names when the refusal happens: a running session's refusal
+/// goes to that session's own observer (audit record with its id and an
+/// `egress.denied` event in its trajectory); otherwise it is recorded in
+/// the profile's audit log, with the session id when there is one.
+#[must_use]
+pub fn attributed(scope: &ProfileScope, caller: Caller) -> Observer {
+    let scope = scope.clone();
+    Arc::new(move |denial: Denial| {
+        let session = caller();
+        if let Some((_, observer)) = session.as_deref().and_then(session_policy) {
+            return observer(denial);
+        }
+        observer(&scope, session, None)(denial);
+    })
+}
+
+/// The host policy a connection for `session` obeys: the running
+/// session's own (with its `/egress` changes), else the profile's.
+#[must_use]
+pub fn hosts_for(scope: &ProfileScope, session: Option<&str>) -> Arc<HostPolicy> {
+    session.and_then(session_policy).map_or_else(
+        || {
+            Arc::new(host_policy(
+                &scope.config().security.egress,
+                &Overrides::default(),
+            ))
+        },
+        |(hosts, _)| hosts,
+    )
+}
+
 /// A session's egress: its policy and where refusals go.
 #[derive(Clone)]
 pub struct SessionEgress {
@@ -207,6 +243,21 @@ pub fn child_proxy(
             format!("the egress proxy of {requester} did not start: {e}"),
         )
     })
+}
+
+/// The policy of a child whose network goes through `proxy` (see
+/// [`pmt_sandbox::Policy::through_proxy`]): on Linux the child's private
+/// listener is served by `proxy`.
+#[must_use]
+pub fn through(policy: pmt_sandbox::Policy, proxy: &pmt_net::egress::Proxy) -> pmt_sandbox::Policy {
+    #[cfg(unix)]
+    let relay = {
+        let attacher = proxy.attacher();
+        pmt_sandbox::Relay::new(move |attached| attacher.serve(attached.listener, attached.alive))
+    };
+    #[cfg(not(unix))]
+    let relay = pmt_sandbox::Relay::new(|_| {});
+    policy.through_proxy(proxy.addr().port(), relay)
 }
 
 /// One `/egress` (or `egress.set`) change.
@@ -341,4 +392,60 @@ pub async fn send(
         .await
         .map(|_| ())
         .map_err(|e| pmt_rpc::client::error_of(&e))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Every denied connection produces an `egress.denied` event of the
+    //! session it was made for (spec: security-boundaries, Per-session
+    //! network egress policy), including connections of children shared
+    //! by sessions (MCP stdio servers, python sidecars).
+
+    use pmt_config::{Home, Launch, Overrides as ScopeOverrides, ProfileName};
+    use pmt_net::egress::Reason;
+
+    use super::*;
+
+    fn scope(root: &std::path::Path) -> ProfileScope {
+        let home = Home::open(root).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        ProfileScope::open(profile, &ScopeOverrides::default(), Launch::Other).unwrap()
+    }
+
+    fn denial(host: &str) -> Denial {
+        Denial {
+            host: host.to_owned(),
+            port: 443,
+            requester: "mcp:files".to_owned(),
+            reason: Reason::NotAllowlisted,
+        }
+    }
+
+    #[test]
+    fn a_shared_childs_refusal_goes_to_the_calling_session() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = scope(root.path());
+        let seen: Arc<Mutex<Vec<Denial>>> = Arc::default();
+        let sink = Arc::clone(&seen);
+        let session = SessionEgress {
+            hosts: Arc::new(HostPolicy::new(Mode::Allowlist, Vec::new())),
+            observer: Arc::new(move |d| sink.lock().unwrap().push(d)),
+        };
+        let _running = Running::new("ses_calling", &session, None);
+        let current: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(Some("ses_calling".into())));
+        let now = Arc::clone(&current);
+        let observer = attributed(&scope, Arc::new(move || now.lock().unwrap().clone()));
+        observer(denial("exfil.example"));
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            1,
+            "the calling session's observer"
+        );
+        *current.lock().unwrap() = None;
+        observer(denial("idle.example"));
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        let audit = std::fs::read_to_string(scope.dir().join(pmt_core::audit::FILE)).unwrap();
+        assert!(audit.contains("idle.example:443"), "{audit}");
+        assert!(audit.contains("mcp:files (not_allowlisted)"), "{audit}");
+    }
 }

@@ -92,16 +92,17 @@ impl Approval {
     }
 }
 
-/// Whether `manifest` may hold surface-only secret `name`: only a
-/// platform-adapter plugin, and only a secret of a plugin platform (a
-/// first-party surface's credentials are read by host code alone).
+/// Whether `manifest` may hold surface-only secret `name`: only the
+/// adapter plugin of the platform that owns it (a first-party surface's
+/// credentials are read by host code alone, and one plugin platform's
+/// adapter never reads another's).
 fn may_hold(manifest: &Manifest, only: &SurfaceOnly, name: &str) -> bool {
-    !only.contains(name)
-        || (only.plugin_owner(name).is_some()
-            && manifest
-                .worlds
-                .iter()
-                .any(|(world, _)| world.name == "platform-adapter"))
+    if !only.contains(name) {
+        return true;
+    }
+    let provided = manifest.adapter_platform();
+    only.plugin_owner(name)
+        .is_some_and(|owner| provided.as_deref() == Some(owner))
 }
 
 /// Refuses `capabilities` when one reads a surface-only secret `manifest`
@@ -362,5 +363,44 @@ mod tests {
         };
         assert_eq!(granted.to_strings(), vec!["secrets.read:A"]);
         assert_eq!(pending, vec![Capability::parse("secrets.read:B").unwrap()]);
+    }
+
+    /// Gateway-owned secrets are never delegable: one plugin platform's
+    /// adapter cannot hold another plugin platform's token, only its own.
+    #[test]
+    fn an_adapter_plugin_holds_only_its_own_platform_token() {
+        let mut config = pmt_config::schema::Config::default();
+        for (platform, token) in [("acme", "ACME_TOKEN"), ("zulu", "ZULU_TOKEN")] {
+            let table = pmt_config::schema::PlatformConfig {
+                token_secret: Some(pmt_config::schema::SecretName(token.into())),
+                ..Default::default()
+            };
+            config.gateway.platforms.insert(platform.into(), table);
+        }
+        let only = SurfaceOnly::of(&config);
+        let adapter = |id: &str| {
+            let text = format!(
+                "manifest_version = 1\nid = \"{id}\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
+                 description = \"Adapter\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
+                 worlds = [\"platform-adapter@1.0\"]\n"
+            );
+            Manifest::parse(&text, &semver::Version::new(0, 1, 0)).unwrap()
+        };
+        let (acme, zulu) = (adapter("acme"), adapter("zulu"));
+        assert!(check_surface_only(&acme, &only, &caps(&["secrets.read:ACME_TOKEN"])).is_ok());
+        let refused =
+            check_surface_only(&zulu, &only, &caps(&["secrets.read:ACME_TOKEN"])).unwrap_err();
+        assert_eq!(refused.message(), "secret 'ACME_TOKEN' is surface-only");
+        let kept = withhold_surface_only(
+            &zulu,
+            &only,
+            &caps(&["secrets.read:ACME_TOKEN", "secrets.read:ZULU_TOKEN"]),
+        );
+        assert_eq!(kept, caps(&["secrets.read:ZULU_TOKEN"]));
+        let builtin = check_surface_only(&acme, &only, &caps(&["secrets.read:TELEGRAM_BOT_TOKEN"]));
+        assert!(
+            builtin.is_err(),
+            "a first-party surface's token stays host-only"
+        );
     }
 }

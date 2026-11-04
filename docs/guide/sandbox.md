@@ -47,10 +47,15 @@ capabilities = [
   store (for example `fs.read:~/.aws/config`) is honoured.
 - Without `process.spawn`, a child cannot start further processes.
 - The OS filters ports, not host names, so a session's children reach the
-  network only through its loopback egress proxy: the sandbox admits the
-  proxy's port alone (on macOS only on loopback; on Linux Landlock filters
-  the port, not the address) and the proxy filters hosts (see
-  [Network egress](security.md#network-egress)). A child given its own
+  network only through its loopback egress proxy, which filters hosts (see
+  [Network egress](security.md#network-egress)). On macOS the Seatbelt
+  profile admits the proxy's port on loopback alone. On Linux Landlock
+  filters the port, not the address, so a proxied child runs in a network
+  namespace of its own whose only way out is a listener on the proxy's
+  port, served by the proxy; this needs unprivileged user namespaces
+  (Ubuntu 24.04 restricts them through AppArmor:
+  `sysctl kernel.apparmor_restrict_unprivileged_userns=0`). Without them
+  `net` is `partial` (`landlock_net`) and the downgrade rule applies. A child given its own
   `net.connect:<host>` grant without the proxy reports `net` `partial`. UDP
   sockets are refused only when outbound connections are restricted. `/proc` is not
   readable on Linux (other processes' environments hold secrets).

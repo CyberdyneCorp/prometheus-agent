@@ -62,7 +62,7 @@ fn start(executable: PathBuf, timeout: Duration) {
         runtime.block_on(async {
             let fixture = Fixture::new();
             let profiles = fixture.browser_cache().join("profiles");
-            match launch(&executable, &profiles, &fixture.env(), timeout).await {
+            match launch(&executable, &profiles, &fixture.env(), timeout, None).await {
                 Ok(launched) => launched.terminate().await,
                 Err(why) => eprintln!("browser warm-up: {why}"),
             }

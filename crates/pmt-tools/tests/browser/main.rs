@@ -2,7 +2,8 @@
 //! a local test page (spec: execution-environments, Browser session
 //! resolution; Browser URL safety; Browser supervision, dialogs and
 //! cleanup; `browser_exec` tool; distribution-and-update, Lazy runtime
-//! installation policy). The browser comes from this host (Chrome,
+//! installation policy; security-boundaries, Per-session network egress
+//! policy). The browser comes from this host (Chrome,
 //! Chromium, Brave, Edge, or Playwright's download).
 //!
 //! Unix only: on Windows the interpreter runs under the AppContainer
@@ -126,6 +127,79 @@ async fn refused_navigations_and_closing_the_browser() {
     // The browser is still there.
     let (result, _) = run(&exec, "ensure_real_tab()").await;
     assert_eq!(result.status, Status::Ok);
+    manager.shutdown().await;
+}
+
+/// Per-session network egress policy covers every connection a browser
+/// makes: a page's subresource on a host the session does not allow is
+/// refused at the browser's egress proxy, never reaches that host and is
+/// reported as an `egress.denied` refusal of the session.
+#[tokio::test]
+async fn a_page_subresource_to_a_host_the_session_refuses_is_denied() {
+    use pmt_net::egress::{Allowed, Denial, HostPolicy, Mode, Observer};
+    use wiremock::matchers::path;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let elsewhere = MockServer::start().await;
+    Mock::given(path("/pixel.png"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&elsewhere)
+        .await;
+    let page = MockServer::start().await;
+    let html = format!(
+        "<!doctype html><title>Embeds</title><img src='http://localhost:{}/pixel.png'>",
+        elsewhere.address().port()
+    );
+    Mock::given(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(html, "text/html"))
+        .mount(&page)
+        .await;
+    let hosts = Arc::new(HostPolicy::new(
+        Mode::Allowlist,
+        vec![Allowed::parse("127.0.0.1")],
+    ));
+    let denials: Arc<std::sync::Mutex<Vec<Denial>>> = Arc::default();
+    let seen = Arc::clone(&denials);
+    let observer: Observer = Arc::new(move |denial| seen.lock().unwrap().push(denial));
+    let fixture = Fixture::new();
+    let manager = fixture.manager_with_egress(Arc::new(move |id| {
+        (id == "ses_b").then(|| (Arc::clone(&hosts), Arc::clone(&observer)))
+    }));
+    let exec = fixture.exec(&manager, false);
+    let (result, body) = run(
+        &exec,
+        &format!(
+            "new_tab('{}/'); wait_for_load(); print(page_info()['title'])",
+            page.uri()
+        ),
+    )
+    .await;
+    assert_eq!(result.status, Status::Ok, "{body}");
+    assert!(
+        body["output"].as_str().unwrap().contains("Embeds"),
+        "{body}"
+    );
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let refused = loop {
+        let found = denials
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|d| d.host == "localhost")
+            .cloned();
+        if let Some(denial) = found {
+            break denial;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no denial: {denials:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert_eq!(refused.requester, "browser");
+    assert_eq!(refused.reason.as_str(), "not_allowlisted");
+    assert!(elsewhere.received_requests().await.unwrap().is_empty());
     manager.shutdown().await;
 }
 
@@ -314,14 +388,24 @@ async fn an_explicit_endpoint_is_used_and_rebinding_replaces_the_session() {
     let env = fixture.env();
     let executable = support::browsers()[0].clone();
     let profiles = fixture.home.join("external");
-    let a =
-        pmt_tools::browser::launch::launch(&executable, &profiles, &env, Duration::from_secs(30))
-            .await
-            .unwrap();
-    let b =
-        pmt_tools::browser::launch::launch(&executable, &profiles, &env, Duration::from_secs(30))
-            .await
-            .unwrap();
+    let a = pmt_tools::browser::launch::launch(
+        &executable,
+        &profiles,
+        &env,
+        Duration::from_secs(30),
+        None,
+    )
+    .await
+    .unwrap();
+    let b = pmt_tools::browser::launch::launch(
+        &executable,
+        &profiles,
+        &env,
+        Duration::from_secs(30),
+        None,
+    )
+    .await
+    .unwrap();
     fixture.config.lock().unwrap().cdp_url = Some(a.endpoint.clone());
     let manager = fixture.manager();
     let first = manager.session("ses_b/default").await.unwrap();
@@ -348,6 +432,7 @@ async fn a_crashed_owners_browser_is_reaped_by_the_next_process() {
         &cache.join("profiles"),
         &fixture.env(),
         Duration::from_secs(30),
+        None,
     )
     .await
     .unwrap();
@@ -393,6 +478,7 @@ async fn a_failed_start_reports_what_the_browser_said() {
         &fixture.home.join("profiles"),
         &fixture.env(),
         Duration::from_secs(10),
+        None,
     )
     .await
     .err()

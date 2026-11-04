@@ -139,7 +139,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         Arc::clone(&inputs.egress.observer),
     )?;
     let child_policy = match &proxy {
-        Some(proxy) => policy.as_ref().clone().through_proxy(proxy.addr().port()),
+        Some(proxy) => crate::egress::through(policy.as_ref().clone(), proxy),
         None => policy.as_ref().clone(),
     };
     let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())

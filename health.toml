@@ -16,6 +16,9 @@ parser_modules = []
 unsafe_modules = [
     # pre_exec hook applying Landlock and seccomp between fork and exec.
     "crates/pmt-sandbox/src/linux/exec.rs",
+    # pre_exec hook entering a proxied child's network namespace and
+    # passing its listener to the parent (SCM_RIGHTS).
+    "crates/pmt-sandbox/src/linux/netns.rs",
     # AppContainer profiles, file ACLs, CreateProcessW and Job Objects.
     "crates/pmt-sandbox/src/windows/acl.rs",
     "crates/pmt-sandbox/src/windows/container.rs",

@@ -22,6 +22,13 @@ pub struct HttpRequest {
     pub headers: Vec<(String, String)>,
     /// Body bytes.
     pub body: Option<Vec<u8>>,
+    /// The plugin sending it (the egress policy names it as the requester).
+    pub plugin: String,
+    /// The session the call runs for, if any (where a refusal is reported).
+    pub session_id: Option<String>,
+    /// The `host[:port]` patterns of the plugin's `network` grant other
+    /// than `*`: only a host named there may be a private address.
+    pub granted_hosts: Vec<String>,
 }
 
 /// Its answer.

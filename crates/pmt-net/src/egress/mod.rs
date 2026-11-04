@@ -135,6 +135,11 @@ pub struct Proxy {
     addr: SocketAddr,
     denied: Arc<AtomicU64>,
     stop: Option<oneshot::Sender<()>>,
+    /// For [`Proxy::attacher`] (Unix only).
+    #[cfg_attr(not(unix), allow(dead_code))]
+    runtime: tokio::runtime::Handle,
+    #[cfg_attr(not(unix), allow(dead_code))]
+    rules: Arc<Rules>,
 }
 
 impl Proxy {
@@ -153,6 +158,9 @@ impl Proxy {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
+        let handle = runtime.handle().clone();
+        let rules = Arc::new(rules);
+        let served = Arc::clone(&rules);
         std::thread::Builder::new()
             .name("egress-proxy".into())
             .spawn(move || {
@@ -160,9 +168,8 @@ impl Proxy {
                     let Ok(listener) = TcpListener::from_std(listener) else {
                         return;
                     };
-                    let rules = Arc::new(rules);
                     tokio::select! {
-                        () = accept(listener, rules, counter) => {}
+                        () = accept(listener, served, counter) => {}
                         _ = stopped => {}
                     }
                 });
@@ -171,7 +178,22 @@ impl Proxy {
             addr,
             denied,
             stop: Some(stop),
+            runtime: handle,
+            rules,
         })
+    }
+
+    /// Serves listeners other than its own with the same rules: the
+    /// private listener of a child confined to its own network namespace
+    /// (`pmt_sandbox::relay`).
+    #[cfg(unix)]
+    #[must_use]
+    pub fn attacher(&self) -> Attacher {
+        Attacher {
+            runtime: self.runtime.clone(),
+            rules: Arc::clone(&self.rules),
+            denied: Arc::clone(&self.denied),
+        }
     }
 
     /// The listening address.
@@ -199,6 +221,47 @@ impl Drop for Proxy {
             let _ = stop.send(());
         }
     }
+}
+
+/// Hands extra listeners to a running [`Proxy`]; they stop with it.
+#[cfg(unix)]
+#[derive(Debug, Clone)]
+pub struct Attacher {
+    runtime: tokio::runtime::Handle,
+    rules: Arc<Rules>,
+    denied: Arc<AtomicU64>,
+}
+
+#[cfg(unix)]
+impl Attacher {
+    /// Serves `listener` until `alive` reads end-of-file (every process
+    /// holding its peer has exited) or the proxy stops.
+    pub fn serve(&self, listener: std::net::TcpListener, alive: std::os::unix::net::UnixStream) {
+        let (rules, denied) = (Arc::clone(&self.rules), Arc::clone(&self.denied));
+        drop(self.runtime.spawn(async move {
+            let ready = listener
+                .set_nonblocking(true)
+                .and(alive.set_nonblocking(true));
+            let (Ok(()), Ok(listener), Ok(alive)) = (
+                ready,
+                TcpListener::from_std(listener),
+                tokio::net::UnixStream::from_std(alive),
+            ) else {
+                return;
+            };
+            tokio::select! {
+                () = accept(listener, rules, denied) => {}
+                () = closed(alive) => {}
+            }
+        }));
+    }
+}
+
+/// Returns once `alive` reads end-of-file.
+#[cfg(unix)]
+async fn closed(mut alive: tokio::net::UnixStream) {
+    let mut byte = [0u8; 1];
+    while matches!(alive.read(&mut byte).await, Ok(n) if n > 0) {}
 }
 
 async fn accept(listener: TcpListener, rules: Arc<Rules>, denied: Arc<AtomicU64>) {

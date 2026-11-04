@@ -35,6 +35,7 @@ async fn launch_fake(fixture: &Fixture) -> Launched {
         &fixture.browser_cache().join("profiles"),
         &fixture.env(),
         Duration::from_secs(10),
+        None,
     )
     .await
     .unwrap()

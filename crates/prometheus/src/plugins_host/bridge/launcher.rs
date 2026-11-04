@@ -7,7 +7,8 @@
 //! write only its data directory and private temporary directory, plus the
 //! `fs_read`/`fs_write` paths it was granted. With a `network` grant it may
 //! connect only to its own loopback egress proxy, which admits the granted
-//! hosts; without one it has no network. It starts children only with
+//! hosts (on Linux from a network namespace of its own); without one it
+//! has no network. It starts children only with
 //! `subprocess` granted. Each start gets a fresh proxy, kept until the
 //! next start. The sandbox also bounds the tree's resources where the OS
 //! can (spec: python-bridge, Resource limits; see `pmt_pybridge::limits`).
@@ -48,6 +49,9 @@ pub(super) struct Sandboxed {
     pub layout: Layout,
     pub grants: Arc<PluginGrants>,
     pub proxy: Mutex<Option<Proxy>>,
+    /// The session of the sidecar's call in flight: its egress refusals
+    /// belong to that session.
+    pub caller: crate::egress::Caller,
 }
 
 fn canonical(path: &std::path::Path) -> PathBuf {
@@ -124,7 +128,7 @@ impl Sandboxed {
             &crate::egress::Overrides::default(),
         ));
         let requester = self.grants.subject().to_string();
-        let observer = crate::egress::observer(&self.scope, None, None);
+        let observer = crate::egress::attributed(&self.scope, Arc::clone(&self.caller));
         Proxy::start(
             Rules::new(hosts, policy, &requester)
                 .granted(allowed)
@@ -174,10 +178,11 @@ impl Launcher for Sandboxed {
             memory_bytes: bridge.max_memory_bytes,
             processes: bridge.max_processes,
         };
-        let sandbox = Sandbox::new(
-            Policy::from_set(&capabilities, &paths).with_limits(limits),
-            &self.scope.config().security.sandbox,
-        )?;
+        let mut policy = Policy::from_set(&capabilities, &paths).with_limits(limits);
+        if let Some(proxy) = &proxy {
+            policy = crate::egress::through(policy, proxy);
+        }
+        let sandbox = Sandbox::new(policy, &self.scope.config().security.sandbox)?;
         let mut command = sandbox.command(&layout.env.python)?;
         command.current_dir(&layout.data);
         let env = LaunchEnv {

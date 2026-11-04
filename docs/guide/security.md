@@ -92,9 +92,10 @@ messaging bot tokens (`TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`,
 webhook route secrets). A plugin asking for one cannot be approved, an MCP
 server cannot receive one in `env_secrets`, `auth_secret` or a `${NAME}`
 placeholder, and a skill declaring one is unavailable; each refusal says
-`secret '<NAME>' is surface-only`. The one exception is a
-`platform-adapter` plugin reading the credential of a plugin platform it
-serves.
+`secret '<NAME>' is surface-only`. The one exception is the
+`platform-adapter` plugin of a plugin platform reading that platform's own
+credentials: the adapter plugin `acme` may hold the secrets of
+`[gateway.platforms.acme]`, never those of another platform.
 
 ## Network egress
 
@@ -116,13 +117,22 @@ denied: none
 <mode>` switches the mode; clients use the `egress.set` RPC method. The
 session's terminal commands, browser interpreter and MCP stdio servers
 reach the network only through a loopback egress proxy: the OS sandbox lets
-them connect to the proxy's port alone (on loopback on macOS), and the
-proxy resolves each name itself, checks every address and connects to the
-address it checked, so DNS rebinding cannot slip past. Plugins' sidecars
-get a proxy that also requires their own `network` grants, and the browser
-tools refuse a navigation to a host the session's policy does not admit. Every refused
-connection becomes an `egress.denied` trajectory event naming the host,
-port, requester and reason, and a record in the security audit log.
+them connect to the proxy alone (on macOS its port on loopback; on Linux
+they run in a network namespace of their own, see
+[Sandbox](sandbox.md)), and the proxy resolves each name itself, checks
+every address and connects to the address it checked, so DNS rebinding
+cannot slip past. Plugins' sidecars get a proxy that also requires their
+own `network` grants. A local browser sends every connection (pages,
+subresources, redirects, scripts, loopback included) through a proxy under
+the session's policy, and the browser tools also refuse a navigation the
+policy does not admit. WASM plugins' HTTP requests obey the calling
+session's policy (the profile's outside a session) besides their `network`
+grant; a private address needs `allow_private` or a grant naming the host,
+and metadata endpoints are always refused. Every refused connection becomes
+an `egress.denied` trajectory event naming the host, port, requester and
+reason, and a record in the security audit log; a refusal of a child shared
+by sessions (an MCP stdio server, a python sidecar) belongs to the session
+whose call was in flight.
 
 ## Security audit log
 

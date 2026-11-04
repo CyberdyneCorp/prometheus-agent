@@ -188,11 +188,31 @@ impl http::Host for HostState {
             port: Some(port),
         };
         self.require_as(&wanted, &format!("network {host}"))?;
+        let granted_hosts = self
+            .ctx
+            .grants
+            .current()
+            .iter()
+            .filter_map(|c| match c {
+                Capability::NetConnect { host, port } if host != "*" => {
+                    let host = if host.contains(':') {
+                        format!("[{host}]")
+                    } else {
+                        host.clone()
+                    };
+                    Some(port.map_or_else(|| host.clone(), |port| format!("{host}:{port}")))
+                }
+                _ => None,
+            })
+            .collect();
         let port_request = HttpRequest {
             method: request.method,
             url: request.url,
             headers: request.headers,
             body: request.body,
+            plugin: self.ctx.plugin.clone(),
+            session_id: self.call.session_id.clone(),
+            granted_hosts,
         };
         let http = Arc::clone(&self.ports().http);
         let response = block_on(http.send(port_request))?.map_err(HostError::Failed)?;

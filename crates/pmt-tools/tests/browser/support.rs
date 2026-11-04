@@ -12,6 +12,7 @@ use pmt_core::secret::{Redactor, SecretString};
 use pmt_net::DestinationPolicy;
 use pmt_net::resolve::SystemLookup;
 use pmt_sandbox::{Options, Paths, Policy, Sandbox};
+use pmt_tools::browser::safety::EgressLookup;
 use pmt_tools::browser::{
     BrowserExec, BrowserManager, BrowserSetup, CloudProvider, ExecArgs, ExecSetup, NoRuntimes,
     RuntimePolicy, UrlSafety,
@@ -93,6 +94,20 @@ impl Fixture {
         runtime: RuntimePolicy,
         providers: BTreeMap<String, Arc<dyn CloudProvider>>,
     ) -> Arc<BrowserManager> {
+        self.manager_over(runtime, providers, None)
+    }
+
+    /// A manager whose sessions' egress policies come from `egress`.
+    pub(crate) fn manager_with_egress(&self, egress: EgressLookup) -> Arc<BrowserManager> {
+        self.manager_over(Self::chromium(), BTreeMap::new(), Some(egress))
+    }
+
+    fn manager_over(
+        &self,
+        runtime: RuntimePolicy,
+        providers: BTreeMap<String, Arc<dyn CloudProvider>>,
+        egress: Option<EgressLookup>,
+    ) -> Arc<BrowserManager> {
         let config = Arc::clone(&self.config);
         BrowserManager::new(BrowserSetup {
             config: Arc::new(move || config.lock().unwrap().clone()),
@@ -103,7 +118,7 @@ impl Fixture {
                 destinations: DestinationPolicy::new(true, &[]).unwrap(),
                 lookup: Arc::new(SystemLookup),
                 secrets: Redactor::new([&SecretString::new(KNOWN_SECRET)]),
-                egress: None,
+                egress,
                 session: None,
             },
             providers,

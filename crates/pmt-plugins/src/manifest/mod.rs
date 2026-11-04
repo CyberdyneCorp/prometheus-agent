@@ -145,6 +145,19 @@ impl Manifest {
         Self::read(dir, running)
     }
 
+    /// The messaging platform this plugin's adapter provides, when it
+    /// implements the `platform-adapter` world: the plugin id, lower case
+    /// (catalog adapters are named after their platform, `mattermost`
+    /// provides `[gateway.platforms.mattermost]`). It decides which
+    /// surface-only secrets the plugin may hold.
+    #[must_use]
+    pub fn adapter_platform(&self) -> Option<String> {
+        self.worlds
+            .iter()
+            .any(|(world, _)| world.name == "platform-adapter")
+            .then(|| self.id.to_lowercase())
+    }
+
     /// Parses manifest text.
     ///
     /// # Errors

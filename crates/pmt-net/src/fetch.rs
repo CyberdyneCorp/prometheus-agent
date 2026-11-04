@@ -111,7 +111,7 @@ impl Fetcher {
                 .get(url.clone())
                 .send()
                 .await
-                .map_err(|e| transport_error(&url, &e))?;
+                .map_err(|e| transport_error("GET", &url, &e))?;
             match redirect_target(&url, &response)? {
                 Some(next) => url = next,
                 None => return Ok(response),
@@ -124,6 +124,28 @@ impl Fetcher {
                 display(&url)
             ),
         ))
+    }
+
+    /// Sends one `method` request to `url` after the same checks as a
+    /// [`Fetcher::get`] hop; `build` adds headers, body and timeout. A
+    /// redirect comes back as the response: the caller decides whether its
+    /// target is fetched (through these checks again).
+    ///
+    /// # Errors
+    ///
+    /// As [`Fetcher::get`], except `net.too_many_redirects`.
+    pub async fn send(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        build: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
+    ) -> Result<Response, Error> {
+        let url = parse_url(url)?;
+        self.preflight(&url).await?;
+        build(self.client.request(method.clone(), url.clone()))
+            .send()
+            .await
+            .map_err(|e| transport_error(method.as_str(), &url, &e))
     }
 
     /// Runs the destination checks of the first hop of `url` without
@@ -143,22 +165,70 @@ impl Fetcher {
         let host = url.host_str().unwrap_or_default();
         let port = url.port_or_known_default();
         self.check_session(host, port.unwrap_or_default())?;
+        match self.check_destination(host, port).await {
+            Ok(()) => Ok(()),
+            Err(Blocked::Refused(refusal)) => {
+                self.report(&refusal, port.unwrap_or_default());
+                Err(refusal.into())
+            }
+            Err(Blocked::Failed(error)) => Err(error),
+        }
+    }
+
+    /// The address checks of one hop.
+    async fn check_destination(&self, host: &str, port: Option<u16>) -> Result<(), Blocked> {
         let literal = host.trim_start_matches('[').trim_end_matches(']');
         if let Ok(ip) = literal.parse::<IpAddr>() {
-            return Ok(self.policy.check_addr(None, ip, port)?);
+            return self
+                .policy
+                .check_addr(None, ip, port)
+                .map_err(Blocked::Refused);
         }
-        self.policy.check_host(host)?;
+        self.policy.check_host(host).map_err(Blocked::Refused)?;
         let addrs = self.resolver.resolve_checked(host).await.map_err(|e| {
             refusal_of(&e).map_or_else(
-                || Error::new(&codes::NET_REQUEST, e.to_string()),
-                Error::from,
+                || Blocked::Failed(Error::new(&codes::NET_REQUEST, e.to_string())),
+                Blocked::Refused,
             )
         })?;
         for ip in addrs {
-            self.policy.check_addr(Some(host), ip, port)?;
+            self.policy
+                .check_addr(Some(host), ip, port)
+                .map_err(Blocked::Refused)?;
         }
         Ok(())
     }
+
+    /// Tells the session's observer about an address refusal, as the
+    /// egress proxy does (spec: security-boundaries, every denied
+    /// connection produces an `egress.denied` event).
+    fn report(&self, refusal: &Refusal, port: u16) {
+        if let Some(SessionHosts {
+            requester,
+            observer: Some(observer),
+            ..
+        }) = &self.hosts
+        {
+            observer(Denial {
+                host: refusal
+                    .host
+                    .trim_start_matches('[')
+                    .trim_end_matches(']')
+                    .to_owned(),
+                port,
+                requester: requester.clone(),
+                reason: refusal.reason.into(),
+            });
+        }
+    }
+}
+
+/// Why a hop may not be fetched.
+enum Blocked {
+    /// The destination policy refused it.
+    Refused(Refusal),
+    /// The check itself failed.
+    Failed(Error),
 }
 
 impl Fetcher {
@@ -248,11 +318,11 @@ fn refusal_of(error: &(dyn std::error::Error + 'static)) -> Option<Refusal> {
     None
 }
 
-fn transport_error(url: &Url, error: &reqwest::Error) -> Error {
+fn transport_error(method: &str, url: &Url, error: &reqwest::Error) -> Error {
     if let Some(refusal) = refusal_of(error) {
         return refusal.into();
     }
-    let mut message = format!("GET {}: {error}", display(url));
+    let mut message = format!("{method} {}: {error}", display(url));
     let mut source = error.source();
     while let Some(e) = source {
         let _ = write!(message, ": {e}");

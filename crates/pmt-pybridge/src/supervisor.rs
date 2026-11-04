@@ -180,6 +180,8 @@ struct Inner {
     last_used: Instant,
     started_at: Option<u64>,
     problem: Option<String>,
+    /// The sessions of the calls in flight, oldest first.
+    callers: Vec<String>,
 }
 
 /// A plugin's sidecar supervisor.
@@ -197,6 +199,15 @@ impl std::fmt::Debug for Supervisor {
             .field("plugin", &self.spec.id)
             .finish_non_exhaustive()
     }
+}
+
+/// The session a call runs for: every bridged call carries the shim's
+/// `context` (`crate::bridged::context`), a model-provider call its `args`.
+fn session_of(params: &Value) -> Option<String> {
+    [&params["context"], &params["args"]["context"]]
+        .into_iter()
+        .find_map(|context| context["session_id"].as_str())
+        .map(str::to_owned)
 }
 
 /// `plugin '<id>' is failed; see prometheus bridge logs <id>`.
@@ -225,6 +236,7 @@ impl Supervisor {
                 retry_at: None,
                 generation: 0,
                 last_used: Instant::now(),
+                callers: Vec::new(),
                 started_at: None,
                 problem: None,
             }),
@@ -535,9 +547,24 @@ impl Supervisor {
         timeout: Duration,
     ) -> Result<Value, CallError> {
         let sidecar = self.ensure()?;
+        let session = session_of(params);
+        if let Some(session) = &session {
+            self.lock().callers.push(session.clone());
+        }
         let answer = sidecar.call(method, params, timeout);
-        self.lock().last_used = Instant::now();
+        let mut inner = self.lock();
+        if let Some(at) = session.and_then(|s| inner.callers.iter().rposition(|c| *c == s)) {
+            inner.callers.remove(at);
+        }
+        inner.last_used = Instant::now();
         answer
+    }
+
+    /// The session of the newest call in flight, if any: what the
+    /// sidecar does now (an outbound connection) is done for it.
+    #[must_use]
+    pub fn caller(&self) -> Option<String> {
+        self.lock().callers.last().cloned()
     }
 
     /// Runs tool `name`.
@@ -699,4 +726,23 @@ pub fn live(profile_dir: &std::path::Path) -> Vec<Status> {
             system.process(pid).is_some()
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::session_of;
+
+    /// A sidecar's egress refusal belongs to the session of the call in
+    /// flight: every bridged call names it in the shim's context.
+    #[test]
+    fn a_call_names_its_session() {
+        let tool = json!({"name": "t", "args": {}, "context": {"session_id": "ses_a"}});
+        let headers = json!({"kind": "model", "args": {"context": {"session_id": "ses_b"}}});
+        let load = json!({"profile": "default"});
+        assert_eq!(session_of(&tool).as_deref(), Some("ses_a"));
+        assert_eq!(session_of(&headers).as_deref(), Some("ses_b"));
+        assert_eq!(session_of(&load), None);
+    }
 }

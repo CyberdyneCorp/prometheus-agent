@@ -5,7 +5,7 @@
 //! host side of its `host.call` requests and its log.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
@@ -29,6 +29,8 @@ pub struct Prepared {
     pub key: String,
     spec: PluginSpec,
     settings: Settings,
+    /// Where the launcher finds the supervisor's in-flight caller.
+    supervised: Arc<OnceLock<Weak<Supervisor>>>,
     /// Its host side (`plugins run` attaches the terminal).
     pub host: Arc<BridgeHost>,
     /// Its environment.
@@ -41,7 +43,9 @@ impl Prepared {
     /// A supervisor over it (nothing started).
     #[must_use]
     pub fn supervisor(self) -> Arc<Supervisor> {
-        Supervisor::new(self.spec, self.settings)
+        let supervisor = Supervisor::new(self.spec, self.settings);
+        let _ = self.supervised.set(Arc::downgrade(&supervisor));
+        supervisor
     }
 }
 
@@ -176,6 +180,8 @@ pub fn prepare(scope: &ProfileScope, plugin: &BridgedPlugin) -> Result<Prepared,
         manifest: serde_json::json!({"name": id, "version": plugin.manifest.version.to_string()}),
     }
     .to_json();
+    let supervised: Arc<OnceLock<Weak<Supervisor>>> = Arc::default();
+    let slot = Arc::clone(&supervised);
     let launcher = Arc::new(Sandboxed {
         scope: scope.clone(),
         layout: Layout {
@@ -188,6 +194,7 @@ pub fn prepare(scope: &ProfileScope, plugin: &BridgedPlugin) -> Result<Prepared,
         },
         grants: Arc::clone(&plugin.grants),
         proxy: Mutex::new(None),
+        caller: Arc::new(move || slot.get()?.upgrade()?.caller()),
     });
     let host = Arc::new(BridgeHost::new(
         &id,
@@ -213,6 +220,7 @@ pub fn prepare(scope: &ProfileScope, plugin: &BridgedPlugin) -> Result<Prepared,
         key,
         spec,
         settings: Settings::from_config(&config.python_bridge, &config.plugins),
+        supervised,
         host,
         env,
         python,

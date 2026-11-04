@@ -19,6 +19,7 @@ use pmt_core::capability::{BASELINE, Capability, CapabilitySet};
 use pmt_core::error::Error;
 
 use crate::locations;
+use crate::relay::Relay;
 
 /// The directories a session's capabilities are written against.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +89,8 @@ pub struct Policy {
     pub(crate) host_patterns: bool,
     /// Outbound connections only to loopback (the egress proxy).
     pub(crate) loopback_connect: bool,
+    /// Serves a proxied child's private listener (Linux).
+    pub(crate) relay: Option<Relay>,
     pub(crate) spawn: bool,
     pub(crate) unrepresentable: Vec<String>,
     pub(crate) limits: Option<ResourceLimits>,
@@ -118,6 +121,7 @@ impl Policy {
             bind: Ports::none(),
             host_patterns: false,
             loopback_connect: false,
+            relay: None,
             spawn: false,
             unrepresentable: Vec::new(),
             limits: None,
@@ -225,17 +229,35 @@ impl Policy {
 
     /// Routes the child's network through the loopback egress proxy on
     /// `port`: when the child may connect anywhere at all, it may connect
-    /// only to that port (on loopback where the OS can express it) and
-    /// the proxy enforces the host policy. A child without network stays
-    /// without.
+    /// only to that port on loopback and the proxy enforces the host
+    /// policy. macOS expresses "loopback only" in the Seatbelt profile;
+    /// Linux gives the child its own network namespace whose listener
+    /// `relay` hands to the proxy (see [`crate::relay`]). A child without
+    /// network stays without.
     #[must_use]
-    pub fn through_proxy(mut self, port: u16) -> Self {
+    pub fn through_proxy(mut self, port: u16, relay: Relay) -> Self {
         if self.connects() {
             self.connect = Ports::Only(std::iter::once(port).collect());
             self.host_patterns = false;
             self.loopback_connect = true;
+            self.relay = Some(relay);
         }
         self
+    }
+
+    /// The relay of a proxied child.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub(crate) fn relay(&self) -> Option<&Relay> {
+        self.relay.as_ref()
+    }
+
+    /// The egress proxy's port, when the child goes through one.
+    #[must_use]
+    pub fn proxy_port(&self) -> Option<u16> {
+        match &self.connect {
+            Ports::Only(ports) if self.loopback_connect => ports.first().copied(),
+            _ => None,
+        }
     }
 
     /// Whether the child may open any outbound connection.

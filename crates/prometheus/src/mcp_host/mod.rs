@@ -17,7 +17,7 @@ mod tls;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 use std::time::Duration;
 
 use pmt_config::ProfileScope;
@@ -195,12 +195,7 @@ fn build(scope: &ProfileScope, fingerprint: String, old: Option<&Entry>) -> Entr
             }
             match settings(scope, name, server) {
                 Ok(settings) => {
-                    servers.push(Arc::new(pmt_mcp::Server::new(
-                        name,
-                        settings,
-                        launch::launcher(scope, name, server),
-                        Arc::clone(&host),
-                    )));
+                    servers.push(new_server(scope, name, server, settings, &host));
                     fingerprints.insert(name.clone(), print);
                 }
                 Err(why) => {
@@ -220,6 +215,28 @@ fn build(scope: &ProfileScope, fingerprint: String, old: Option<&Entry>) -> Entr
 }
 
 /// How server `name` is used.
+/// Server `name`, whose launcher attributes its egress refusals to the
+/// session of the call in flight (known once the server exists).
+fn new_server(
+    scope: &ProfileScope,
+    name: &str,
+    server: &McpServerConfig,
+    settings: Settings,
+    host: &Arc<dyn pmt_mcp::ClientHost>,
+) -> Arc<pmt_mcp::Server> {
+    let made: Arc<OnceLock<Weak<pmt_mcp::Server>>> = Arc::default();
+    let slot = Arc::clone(&made);
+    let caller: crate::egress::Caller = Arc::new(move || slot.get()?.upgrade()?.caller());
+    let created = Arc::new(pmt_mcp::Server::new(
+        name,
+        settings,
+        launch::launcher(scope, name, server, caller),
+        Arc::clone(host),
+    ));
+    let _ = made.set(Arc::downgrade(&created));
+    created
+}
+
 fn settings(
     scope: &ProfileScope,
     name: &str,

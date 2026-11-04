@@ -350,8 +350,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 34. M2 Security hardening for extensions
 
-- [ ] 34.1 Implement the loopback egress proxy that resolves DNS itself and the per-session egress policy for child processes; verify that a sandboxed child can reach only allowed hosts (spec: security-boundaries)
-- [ ] 34.2 Ensure gateway-owned secrets can never be delegated to tools, children, skills or plugins, and implement plugin/sidecar isolation checks; verify with grant tests (spec: security-boundaries)
+- [x] 34.1 Implement the loopback egress proxy that resolves DNS itself and the per-session egress policy for child processes; verify that a sandboxed child can reach only allowed hosts (spec: security-boundaries)
+- [x] 34.2 Ensure gateway-owned secrets can never be delegated to tools, children, skills or plugins, and implement plugin/sidecar isolation checks; verify with grant tests (spec: security-boundaries)
 - [x] 34.3 Implement the tamper-evident security audit log (`security audit verify`) and the security posture check; verify that editing a record breaks verification (spec: security-boundaries)
 - [x] 34.4 Implement tool result provenance tagging, approval explain/dry-run and smart approvals with a denial breaker; verify with approval tests (spec: tool-system)
 - [ ] 34.5 Implement the credential vault storage (encrypted at rest, recoverable interrupted key migration), `browser_vault` fills by handle (origin match, values never in results), vault codes, cards and addresses (card fills refused from webhook sessions) and the vault management CLI (no passwords on the command line); verify with vault tests (spec: security-boundaries)

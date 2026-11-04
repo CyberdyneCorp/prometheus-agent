@@ -44,12 +44,18 @@ const INHERITED: &[&str] = &[
 ];
 
 /// The launcher of server `name`. A `stdio` server's egress proxy lives
-/// until its next start.
-pub(super) fn launcher(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Launcher {
+/// until its next start; its refusals belong to the session whose call is
+/// in flight (`caller`).
+pub(super) fn launcher(
+    scope: &ProfileScope,
+    name: &str,
+    server: &McpServerConfig,
+    caller: crate::egress::Caller,
+) -> Launcher {
     let (scope, name, server) = (scope.clone(), name.to_owned(), server.clone());
     let proxy = Mutex::new(None);
     Arc::new(move || match server.transport {
-        McpTransport::Stdio => stdio(&scope, &name, &server, &proxy),
+        McpTransport::Stdio => stdio(&scope, &name, &server, &proxy, &caller),
         McpTransport::Http => http(&scope, &name, &server),
     })
 }
@@ -64,6 +70,7 @@ fn stdio(
     name: &str,
     server: &McpServerConfig,
     proxy_slot: &Mutex<Option<Proxy>>,
+    caller: &crate::egress::Caller,
 ) -> Result<Launch, String> {
     let config = scope.config();
     let scratch = scratch(scope, name);
@@ -87,12 +94,12 @@ fn stdio(
         &crate::egress::Overrides::default(),
     ));
     let requester = format!("mcp:{name}");
-    let observer = crate::egress::observer(scope, None, None);
+    let observer = crate::egress::attributed(scope, Arc::clone(caller));
     let proxy = crate::egress::child_proxy(scope, &capabilities, hosts, &requester, observer)
         .map_err(|e| e.message().to_owned())?;
     let mut policy = Policy::from_set(&capabilities, &paths);
     if let Some(proxy) = &proxy {
-        policy = policy.through_proxy(proxy.addr().port());
+        policy = crate::egress::through(policy, proxy);
     }
     let sandbox =
         Sandbox::new(policy, &config.security.sandbox).map_err(|e| e.message().to_owned())?;
