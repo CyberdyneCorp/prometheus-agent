@@ -102,6 +102,7 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
         RegisteredTool::new(write, Owner::Builtin, counting(runs)),
         RegisteredTool::new(patch, Owner::Builtin, counting(runs)),
         RegisteredTool::new(render, Owner::Builtin, counting(runs)).with_guard(over_budget),
+        crate::connectors::manage::registered(),
     ]
 }
 
@@ -697,4 +698,32 @@ async fn device_namespace_writes_are_refused_by_the_gate_before_any_resolution()
         );
     }
     assert_eq!(fx.runs.load(Ordering::SeqCst), 0, "no handler ran");
+}
+
+/// connectors, Connection flows require the user: Cron cannot install MCP
+/// servers (the action never reaches the tool, so nothing is written).
+#[tokio::test]
+async fn cron_cannot_install_mcp_servers() {
+    let fx = fixture();
+    let options = Options {
+        context: Context::Cron,
+        approvals: ApprovalsConfig {
+            cron_mode: UnattendedApproval::Approve,
+            ..ApprovalsConfig::default()
+        },
+        ..Options::default()
+    };
+    let session = session(&fx, Channel::unattended(), options).await;
+    let install = json!({"action": "install", "connectors": [{"name": "linear", "mcp": true}]});
+    let result = run(&session, "manage_connections", install).await.unwrap();
+    assert_eq!(result.status, Status::Denied, "{}", result.text_content());
+    assert_eq!(result.status.as_str(), "denied");
+    // A status check is no change: it passes the gate (to the turn loop).
+    let status = run(&session, "manage_connections", json!({"action": "status"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        status.text_content(),
+        "manage_connections must be handled by the agent loop"
+    );
 }

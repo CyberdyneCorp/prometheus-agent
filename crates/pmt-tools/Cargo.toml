@@ -39,6 +39,11 @@ tree-sitter-python.workspace = true
 tree-sitter-rust.workspace = true
 tree-sitter-typescript.workspace = true
 ulid.workspace = true
+wiremock = { workspace = true, optional = true }
+
+[features]
+# A stateful fake of the Nous connector gateway for tests (`connectors::fake`).
+connectors-fake = ["dep:wiremock"]
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["signal", "process"] }
@@ -50,3 +55,7 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "connectors"
+required-features = ["connectors-fake"]

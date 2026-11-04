@@ -9,11 +9,18 @@
 //! set, so a `tool_call` runs through the full dispatch pipeline under the
 //! real name; anything outside that set is an unknown tool. The decision
 //! and the `tool_search` listing are made once, when the surface freezes.
+//!
+//! A [`Remote`] (hosted connectors) adds tools that never enter the array
+//! nor the listing: `tool_search` asks it on every call and ranks its hits
+//! together with the local entries, `tool_describe` asks it for the
+//! schemas of its names, and `tool_call` gets its tools from it.
 
 mod manifest;
 mod rank;
 
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use pmt_config::schema::{ToolListing, ToolSearchConfig, ToolSearchMode};
@@ -84,12 +91,39 @@ impl Entry {
     }
 }
 
+/// What a [`Remote`] answers.
+pub type RemoteFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// Tools reached only through the bridge, never registered locally
+/// (hosted connectors).
+pub trait Remote: Send + Sync {
+    /// Its hits for `queries`; empty when it cannot answer (a slow or
+    /// unreachable remote degrades to local results, never to an error).
+    fn search<'a>(&'a self, queries: &'a [String]) -> RemoteFuture<'a, Vec<Entry>>;
+    /// The entries of those `names` it knows.
+    fn describe<'a>(&'a self, names: &'a [String]) -> RemoteFuture<'a, Vec<Entry>>;
+    /// Whether `name` is in its namespace.
+    fn owns(&self, name: &str) -> bool;
+    /// The tool `tool_call` runs for `name`.
+    fn tool(&self, name: &str) -> Option<Arc<RegisteredTool>>;
+}
+
 /// The deferred tools of one frozen surface.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Catalog {
     entries: Vec<Entry>,
     default_limit: usize,
     max_limit: usize,
+    remote: Option<Arc<dyn Remote>>,
+}
+
+impl std::fmt::Debug for Catalog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Catalog")
+            .field("entries", &self.entries.len())
+            .field("remote", &self.remote.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Catalog {
@@ -105,31 +139,54 @@ impl Catalog {
         &self.entries
     }
 
-    /// `tool_search`: each query ranked on its own, at most `limit`
-    /// (clamped to `max_search_limit`) names per query, plus one shared
-    /// map of every matched tool's description and required parameters.
+    /// The remote tools, when the session has some.
+    #[must_use]
+    pub fn remote(&self) -> Option<&Arc<dyn Remote>> {
+        self.remote.as_ref()
+    }
+
+    /// `tool_search` over the local entries only.
     #[must_use]
     pub fn search(&self, queries: &[String], limit: Option<u64>) -> Value {
+        self.search_with(queries, limit, Vec::new())
+    }
+
+    /// `tool_search`: each query ranked on its own over the local entries
+    /// and `extra` (remote hits) in one pass, at most `limit` (clamped to
+    /// `max_search_limit`) names per query, plus one shared map of every
+    /// matched tool's description and required parameters (and `source`
+    /// for remote ones).
+    #[must_use]
+    pub fn search_with(&self, queries: &[String], limit: Option<u64>, extra: Vec<Entry>) -> Value {
+        let mut entries = self.entries.clone();
+        for entry in extra {
+            if entries.iter().all(|e| e.name != entry.name) {
+                entries.push(entry);
+            }
+        }
+        let local = self.entries.len();
         let limit = limit
             .map_or(self.default_limit, |l| {
                 usize::try_from(l).unwrap_or(usize::MAX)
             })
             .clamp(1, self.max_limit);
-        let index = rank::Index::new(&self.entries);
+        let index = rank::Index::new(&entries);
         let mut matched: BTreeMap<&str, Value> = BTreeMap::new();
         let groups: Vec<Value> = queries
             .iter()
             .map(|query| {
                 let hits = index.rank(query, limit);
-                let names: Vec<&str> = hits
-                    .iter()
-                    .map(|&i| self.entries[i].name.as_str())
-                    .collect();
+                let names: Vec<&str> = hits.iter().map(|&i| entries[i].name.as_str()).collect();
                 for &i in &hits {
-                    let entry = &self.entries[i];
-                    matched.entry(&entry.name).or_insert_with(
-                        || json!({"description": entry.description, "required": entry.required()}),
-                    );
+                    let entry = &entries[i];
+                    matched.entry(&entry.name).or_insert_with(|| {
+                        let mut found =
+                            json!({"description": entry.description, "required": entry.required()});
+                        if i >= local {
+                            found["source"] = Value::String(entry.source.clone());
+                        }
+                        found
+                    });
                 }
                 let mut group = json!({"query": query, "tools": names});
                 if names.is_empty() {
@@ -145,10 +202,19 @@ impl Catalog {
     /// in `not_found`.
     #[must_use]
     pub fn describe(&self, names: &[String]) -> Value {
+        self.describe_with(names, &[])
+    }
+
+    /// `tool_describe` over the local entries and `remote` ones.
+    #[must_use]
+    pub fn describe_with(&self, names: &[String], remote: &[Entry]) -> Value {
         let mut tools = Map::new();
         let mut not_found = Vec::new();
         for name in names {
-            match self.get(name) {
+            match self
+                .get(name)
+                .or_else(|| remote.iter().find(|e| &e.name == name))
+            {
                 Some(entry) => {
                     tools.insert(
                         name.clone(),
@@ -267,6 +333,15 @@ pub(crate) fn bridge(
             source: tool.descriptor.toolset.clone(),
         })
         .collect();
+    bridge_over(entries, config, None)
+}
+
+/// The bridge over `entries` (the local deferred tools) and `remote`.
+pub(crate) fn bridge_over(
+    entries: Vec<Entry>,
+    config: &ToolSearchConfig,
+    remote: Option<Arc<dyn Remote>>,
+) -> (Arc<Catalog>, Vec<RegisteredTool>) {
     let max_limit = usize::try_from(config.max_search_limit)
         .unwrap_or(25)
         .max(1);
@@ -276,6 +351,7 @@ pub(crate) fn bridge(
             .clamp(1, max_limit),
         max_limit,
         entries,
+        remote,
     });
     let listing = match config.listing {
         ToolListing::Off => None,
@@ -294,6 +370,9 @@ pub(crate) fn bridge(
 
 fn search_tool(catalog: &Arc<Catalog>, listing: Option<&str>) -> RegisteredTool {
     let mut description = "Search the tools that are not listed directly (MCP servers, plugins and rarely used tools) by keywords. Returns matching tool names per query with their descriptions and required parameters; get a schema with tool_describe and run a tool with tool_call.".to_owned();
+    if catalog.remote.is_some() {
+        description.push_str(" Hosted app connectors (e-mail, documents, issue trackers...) are searched too; their tools are named connectors__<app>__<tool>.");
+    }
     if let Some(listing) = listing.filter(|l| !l.is_empty()) {
         description.push_str("\n\nSearchable tools:\n");
         description.push_str(listing);
@@ -316,12 +395,12 @@ fn search_tool(catalog: &Arc<Catalog>, listing: Option<&str>) -> RegisteredTool 
         },
         "required": ["queries"]
     });
-    let catalog = Arc::clone(catalog);
-    bridge_tool(TOOL_SEARCH, description, parameters, move |args| {
-        let queries = strings(args, "queries");
-        let limit = args.get("limit").and_then(Value::as_u64);
-        catalog.search(&queries, limit)
-    })
+    bridge_tool(
+        TOOL_SEARCH,
+        description,
+        parameters,
+        Arc::new(Search(Arc::clone(catalog))),
+    )
 }
 
 fn describe_tool(catalog: &Arc<Catalog>) -> RegisteredTool {
@@ -337,12 +416,11 @@ fn describe_tool(catalog: &Arc<Catalog>) -> RegisteredTool {
         },
         "required": ["names"]
     });
-    let catalog = Arc::clone(catalog);
     bridge_tool(
         TOOL_DESCRIBE,
         "Show the full description and argument schema of tools found with tool_search.".to_owned(),
         parameters,
-        move |args| catalog.describe(&strings(args, "names")),
+        Arc::new(Describe(Arc::clone(catalog))),
     )
 }
 
@@ -389,17 +467,62 @@ fn bridge_tool(
     name: &str,
     description: String,
     parameters: Value,
-    answer: impl Fn(&Value) -> Value + Send + Sync + 'static,
+    handler: Arc<dyn ToolHandler>,
 ) -> RegisteredTool {
     let mut descriptor = ToolDescriptor::new(name, TOOLSET, description, parameters);
     descriptor.effect = Effect::None;
     descriptor.idempotent = true;
     descriptor.claims = Some(crate::descriptor::ResourceClaims::none());
-    RegisteredTool::new(
-        descriptor,
-        Owner::Builtin,
-        Arc::new(Answer(Arc::new(answer))),
-    )
+    RegisteredTool::new(descriptor, Owner::Builtin, handler)
+}
+
+/// `tool_search`: the remote's hits (when there is one) ranked with the
+/// local entries.
+struct Search(Arc<Catalog>);
+
+impl ToolHandler for Search {
+    fn call<'a>(&'a self, _: &'a CallContext, arguments: Value) -> HandlerFuture<'a> {
+        Box::pin(async move {
+            let queries = strings(&arguments, "queries");
+            let limit = arguments.get("limit").and_then(Value::as_u64);
+            let extra = match &self.0.remote {
+                Some(remote) => remote.search(&queries).await,
+                None => Vec::new(),
+            };
+            Ok(ToolResult::ok(
+                self.0.search_with(&queries, limit, extra).to_string(),
+            ))
+        })
+    }
+}
+
+/// `tool_describe`: local schemas, and the remote's for its names.
+struct Describe(Arc<Catalog>);
+
+impl ToolHandler for Describe {
+    fn call<'a>(&'a self, _: &'a CallContext, arguments: Value) -> HandlerFuture<'a> {
+        Box::pin(async move {
+            let names = strings(&arguments, "names");
+            let remote = match &self.0.remote {
+                Some(remote) => {
+                    let theirs: Vec<String> = names
+                        .iter()
+                        .filter(|n| self.0.get(n).is_none() && remote.owns(n))
+                        .cloned()
+                        .collect();
+                    if theirs.is_empty() {
+                        Vec::new()
+                    } else {
+                        remote.describe(&theirs).await
+                    }
+                }
+                None => Vec::new(),
+            };
+            Ok(ToolResult::ok(
+                self.0.describe_with(&names, &remote).to_string(),
+            ))
+        })
+    }
 }
 
 /// A handler answering JSON computed from the arguments.

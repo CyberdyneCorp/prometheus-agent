@@ -17,6 +17,7 @@
 //! the whole file validates in one place.
 
 mod agent;
+mod connectors;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
@@ -42,6 +43,7 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
+pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -122,6 +124,8 @@ pub struct Config {
     pub cli: CliConfig,
     /// Context compression.
     pub compression: CompressionConfig,
+    /// Hosted app connectors (Gmail, Notion...) through the Nous gateway.
+    pub connectors: ConnectorsConfig,
     /// Context engine selection.
     pub context: ContextConfig,
     /// Profile time zone (scheduler keys arrive with M2).
@@ -211,6 +215,7 @@ impl Default for Config {
             busy: BusyConfig::default(),
             cli: CliConfig::default(),
             compression: CompressionConfig::default(),
+            connectors: ConnectorsConfig::default(),
             context: ContextConfig::default(),
             cron: CronConfig::default(),
             display: DisplayConfig::default(),

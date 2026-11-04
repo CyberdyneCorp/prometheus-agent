@@ -14,6 +14,8 @@ pub mod chat;
 pub mod cli;
 pub mod completions;
 pub mod config_cmd;
+pub mod connectors_cmd;
+pub mod connectors_host;
 pub mod context;
 pub mod daemon_client;
 #[cfg(feature = "gateway")]

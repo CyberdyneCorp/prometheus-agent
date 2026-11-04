@@ -1024,6 +1024,32 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ConnectorsConfig": {
+      "additionalProperties": false,
+      "description": "The `[connectors]` section: hosted app integrations (Gmail, Notion,\nLinear...) whose tools run on the Nous connector gateway.",
+      "properties": {
+        "connect_timeout_secs": {
+          "default": 300,
+          "description": "How long a connection card or `connectors connect` waits for the\nuser to finish signing in.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Offer hosted connectors when the profile has a Nous sign-in.",
+          "type": "boolean"
+        },
+        "gateway_url": {
+          "default": "https://connector-gateway.nousresearch.com",
+          "description": "The connector gateway's origin (a self-hosted gateway, or a test\nserver); `https` except on loopback.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ContainerConfig": {
       "additionalProperties": false,
       "description": "The `[terminal.container]` section.",
@@ -7048,6 +7074,15 @@
         "threshold_tokens": 0
       },
       "description": "Context compression."
+    },
+    "connectors": {
+      "$ref": "#/$defs/ConnectorsConfig",
+      "default": {
+        "connect_timeout_secs": 300,
+        "enabled": true,
+        "gateway_url": "https://connector-gateway.nousresearch.com"
+      },
+      "description": "Hosted app connectors (Gmail, Notion...) through the Nous gateway."
     },
     "context": {
       "$ref": "#/$defs/ContextConfig",

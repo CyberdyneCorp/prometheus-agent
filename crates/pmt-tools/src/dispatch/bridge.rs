@@ -6,8 +6,9 @@
 //! (exposed or deferred) and dispatched through the full pipeline under its
 //! real name, with its own call id (`<call id>#<n>`), so hooks, capability
 //! checks, the approval gate, timeouts and the result budget apply to it
-//! as to a direct call. A name outside the set is an unknown tool and is
-//! never dispatched.
+//! as to a direct call. A name outside the set (and outside the remote
+//! connector namespace, whose tools exist only here) is an unknown tool and
+//! is never dispatched.
 
 use std::sync::Arc;
 
@@ -80,16 +81,14 @@ impl Dispatcher {
                     "tool_call cannot run {}; call it directly",
                     entry.name
                 ))
-            } else if self.setup.surface.resolve(&entry.name).is_none() {
-                ToolResult::error(format!("unknown tool: {}", entry.name))
-            } else {
+            } else if let Some(tool) = self.tool(&entry.name) {
                 let inner = ToolCall {
                     call_id: format!("{}#{}", call.call_id, i + 1),
                     name: entry.name.clone(),
                     arguments: entry.arguments.to_string(),
                     turn_id: call.turn_id.clone(),
                 };
-                let done = self.execute(&inner, cancel, agent).await;
+                let done = self.execute_tool(&inner, Some(tool), cancel, agent).await;
                 self.setup.observer.tool_result(
                     &inner.call_id,
                     &inner.name,
@@ -97,6 +96,8 @@ impl Dispatcher {
                     done.duration_ms,
                 );
                 done.result
+            } else {
+                ToolResult::error(format!("unknown tool: {}", entry.name))
             };
             results.push(result);
         }
@@ -106,6 +107,18 @@ impl Dispatcher {
                 .unwrap_or_else(|| ToolResult::error("no result"));
         }
         combined(&entries, results)
+    }
+}
+
+impl Dispatcher {
+    /// An entry's tool: in the session's resolved set, else a remote
+    /// (connector) tool.
+    fn tool(&self, name: &str) -> Option<Arc<crate::descriptor::RegisteredTool>> {
+        let surface = &self.setup.surface;
+        surface
+            .resolve(name)
+            .cloned()
+            .or_else(|| surface.remote_tool(name))
     }
 }
 

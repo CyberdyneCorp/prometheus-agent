@@ -991,6 +991,27 @@ error_codes! {
     /// `mcp serve --http` on an address that is not loopback.
     MCP_REMOTE_REFUSED = ("mcp.remote_refused", PermissionDenied,
         "`prometheus mcp serve --http` binds only loopback addresses unless `mcp_server.allow_remote = true` is set in the profile's config.toml.");
+    /// Connectors without a Nous sign-in.
+    CONNECTORS_SIGNIN_REQUIRED = ("connectors.signin_required", Config,
+        "Hosted connectors run on the Nous connector gateway and need a Nous Portal sign-in in this profile: run `prometheus auth login nous`. No identity is ever created without that step.");
+    /// Connectors switched off.
+    CONNECTORS_DISABLED = ("connectors.disabled", Config,
+        "`connectors.enabled = false` in the profile's config.toml; set it to true to use hosted connectors.");
+    /// An account alias outside the alias pattern.
+    CONNECTORS_INVALID_ALIAS = ("connectors.invalid_alias", Usage,
+        "A connector account alias must match `^[a-z0-9][a-z0-9-]{0,31}$` (lower-case letters, digits and dashes, at most 32 characters, not starting with a dash).");
+    /// No such connector or account.
+    CONNECTORS_NOT_FOUND = ("connectors.not_found", NotFound,
+        "The connector gateway knows no connector or account by this name; `prometheus connectors list` and `prometheus connectors accounts` show what exists.");
+    /// The gateway refused or could not be reached.
+    CONNECTORS_GATEWAY = ("connectors.gateway", Unavailable,
+        "The Nous connector gateway could not be reached, answered an error or does not serve connectors for this account; the message carries its answer.");
+    /// A connection the user did not finish in time.
+    CONNECTORS_NOT_CONNECTED = ("connectors.not_connected", Unavailable,
+        "`prometheus connectors connect` waited `connectors.connect_timeout_secs` and the account was still not connected; open the link again or rerun the command.");
+    /// A disconnect nobody confirmed.
+    CONNECTORS_CONFIRMATION = ("connectors.confirmation", PermissionDenied,
+        "`prometheus connectors disconnect` removes an account and asks for confirmation: run it on a terminal or pass `--yes`; nothing was removed (the command exits 4).");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

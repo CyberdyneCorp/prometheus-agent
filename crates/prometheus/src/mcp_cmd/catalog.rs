@@ -130,6 +130,76 @@ pub(super) fn install(ctx: &Context<'_>, args: &InstallArgs) -> Result<u8, Error
     Ok(0)
 }
 
+/// Installs catalog entry `id` for the agent (`manage_connections`
+/// action `install`, after the user approved it): no prompts, so every
+/// setup field needs a default (a secret one must already be in the
+/// secrets store); tools get the entry's defaults. Disabled until enabled.
+///
+/// # Errors
+///
+/// No such entry, a newer manifest, a missing field, checkout or config
+/// write failures.
+pub(crate) fn install_unattended(scope: &ProfileScope, id: &str) -> Result<String, Error> {
+    let catalog = crate::plugins_host::catalog::current(scope, false);
+    let Some(entry) = catalog.find_mcp(id).cloned() else {
+        return Err(Error::new(
+            &codes::MCP_NOT_FOUND,
+            format!("the catalog has no MCP server '{id}'"),
+        ));
+    };
+    if entry.needs_newer() {
+        return Err(Error::new(
+            &codes::CONFIG_INVALID,
+            format!("MCP catalog entry '{id}' requires a newer Prometheus"),
+        ));
+    }
+    let mut values = BTreeMap::new();
+    for field in &entry.setup {
+        let present = field.secret && scope.secrets().resolve(&field.name).is_ok();
+        match (&field.default, present) {
+            (_, true) => {}
+            (Some(default), false) if !field.secret => {
+                values.insert(field.name.clone(), default.clone());
+            }
+            _ => {
+                return Err(Error::new(
+                    &codes::CONFIG_INVALID,
+                    format!("MCP catalog entry '{id}' needs {}", field.name),
+                )
+                .with_hint(format!(
+                    "the user installs it with: prometheus mcp install {id}"
+                )));
+            }
+        }
+    }
+    let install_dir = scope.dir().join("mcp").join(&entry.id);
+    if let Some(source) = &entry.source {
+        checkout(scope, source, &install_dir)?;
+    }
+    values.insert(
+        "installDir".to_owned(),
+        install_dir.to_string_lossy().into_owned(),
+    );
+    write_entry(scope, &entry.id, &entry, &values)?;
+    if entry.tools.default_excluded.is_none()
+        && let Some(include) = &entry.tools.default_enabled
+    {
+        scope.profile().config_file().set_all(&[(
+            &format!("mcp.servers.{}.tools.include", entry.id),
+            &json(include),
+        )])?;
+    }
+    let mut message = format!(
+        "installed MCP server '{}' (disabled until enabled with action \"enable\")",
+        entry.id
+    );
+    if !entry.post_install.is_empty() {
+        message.push_str(". ");
+        message.push_str(&entry.post_install);
+    }
+    Ok(message)
+}
+
 /// The setup values that are written into the entry (secret ones go to
 /// the secrets store).
 fn setup(

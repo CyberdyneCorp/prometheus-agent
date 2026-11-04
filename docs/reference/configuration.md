@@ -113,6 +113,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `compression.target_ratio` | number | `0.2` | 0.1 to 0.8 | `next_session` | Target size after compaction as a fraction of the input budget. |
 | `compression.threshold` | number | `0.5` | > 0.0, < 1.0 | `next_session` | Fraction of the input budget at which compaction triggers. |
 | `compression.threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Lower absolute trigger in tokens; `0` is off. |
+| `connectors.connect_timeout_secs` | integer | `300` | 1 to 3600 | `next_session` | How long a connection card or `connectors connect` waits for the user to finish signing in. |
+| `connectors.enabled` | boolean | `true` | any | `next_session` | Offer hosted connectors when the profile has a Nous sign-in. |
+| `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |

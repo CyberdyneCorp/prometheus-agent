@@ -335,9 +335,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 32. M2 Connectors
 
-- [ ] 32.1 Implement connector availability (feature-gated, never creating identities silently), remote connector tools reached only through the tool-search bridge (absent from the tool array, slow gateway handled) and connector calls through the dispatch pipeline (unlinked account error); verify with a mock connector gateway (spec: connectors)
-- [ ] 32.2 Implement multiple accounts per connector (ambiguous account refused), the `manage_connections` tool, connection flows that always require the user (links in gateway chats, never from cron), and reconnect and rename semantics that keep history; verify with tool tests (spec: connectors)
-- [ ] 32.3 Implement `prometheus connectors list|accounts|connect|rename|disconnect` (disconnect needs confirmation, Ctrl-C while waiting exits 130) and document connectors; verify with CLI tests (spec: connectors)
+- [x] 32.1 Implement connector availability (feature-gated, never creating identities silently), remote connector tools reached only through the tool-search bridge (absent from the tool array, slow gateway handled) and connector calls through the dispatch pipeline (unlinked account error); verify with a mock connector gateway (spec: connectors)
+- [x] 32.2 Implement multiple accounts per connector (ambiguous account refused), the `manage_connections` tool, connection flows that always require the user (links in gateway chats, never from cron), and reconnect and rename semantics that keep history; verify with tool tests (spec: connectors)
+- [x] 32.3 Implement `prometheus connectors list|accounts|connect|rename|disconnect` (disconnect needs confirmation, Ctrl-C while waiting exits 130) and document connectors; verify with CLI tests (spec: connectors)
 
 ## 33. M2 Python bridge
 

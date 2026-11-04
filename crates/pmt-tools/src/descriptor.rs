@@ -332,6 +332,9 @@ pub struct RegisteredTool {
     /// A per-call approval rule (an MCP tool's cost against its spend
     /// limit), checked by the approval gate after the hooks'.
     pub guard: Option<CallGuard>,
+    /// Where its results come from (`{source, trust}`), attached to every
+    /// result's metadata as `provenance`.
+    pub provenance: Option<serde_json::Value>,
 }
 
 /// Decides, per call (session id, validated arguments), whether a human
@@ -364,6 +367,7 @@ impl RegisteredTool {
             parameters: None,
             variants: None,
             guard: None,
+            provenance: None,
         }
     }
 
@@ -379,6 +383,7 @@ impl RegisteredTool {
             parameters: None,
             variants: None,
             guard: None,
+            provenance: None,
         }
     }
 
@@ -407,6 +412,13 @@ impl RegisteredTool {
     #[must_use]
     pub fn with_guard(mut self, guard: CallGuard) -> Self {
         self.guard = Some(guard);
+        self
+    }
+
+    /// Tags every result with `provenance`.
+    #[must_use]
+    pub fn with_provenance(mut self, provenance: serde_json::Value) -> Self {
+        self.provenance = Some(provenance);
         self
     }
 

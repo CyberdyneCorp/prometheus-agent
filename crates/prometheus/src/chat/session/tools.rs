@@ -209,6 +209,25 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
     )))
 }
 
+/// `surface` with the hosted connector tools behind its tool-search bridge
+/// (spec: connectors, Remote connector tools through the search bridge),
+/// for a turn-loop session whose selection has `manage_connections` and a
+/// profile with connectors on and a Nous sign-in.
+fn with_connectors(inputs: &SurfaceInputsOwned<'_>, surface: ToolSurface) -> ToolSurface {
+    let selected = inputs
+        .selection
+        .tools
+        .iter()
+        .any(|t| t == pmt_tools::connectors::manage::NAME);
+    if inputs.agent.is_none() || !selected {
+        return surface;
+    }
+    match crate::connectors_host::remote(inputs.scope) {
+        Some(remote) => surface.with_remote(remote, &inputs.scope.config().tools.tool_search),
+        None => surface,
+    }
+}
+
 /// The session's dispatcher over its surface (recorded for `tools list
 /// --session`) and the timings it reports to.
 ///
@@ -228,6 +247,7 @@ pub async fn dispatcher(
         route: inputs.route,
     })
     .await;
+    let surface = with_connectors(inputs, surface);
     crate::tools_cmd::record_session_surface(
         inputs.store,
         inputs.session,

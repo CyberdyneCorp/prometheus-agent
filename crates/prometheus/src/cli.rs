@@ -244,6 +244,14 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::PairingCommand,
     },
+    /// Hosted app connectors (Gmail, Notion, Linear...) on the Nous
+    /// connector gateway: list them, list and rename accounts, connect and
+    /// disconnect accounts.
+    Connectors {
+        /// The connectors subcommand.
+        #[command(subcommand)]
+        command: crate::connectors_cmd::ConnectorsCommand,
+    },
     /// MCP servers: add (from a preset or the catalog), list, remove, test
     /// and sign in to the profile's servers, pick their tools, show their
     /// state, and serve Prometheus tools and skills to MCP clients. With no

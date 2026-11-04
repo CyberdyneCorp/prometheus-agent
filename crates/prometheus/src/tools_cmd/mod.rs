@@ -65,6 +65,7 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
         &pmt_skills::SkillSessions::process(),
     ));
     tools.push(pmt_memory::tool::registered());
+    tools.push(crate::connectors_host::registered_tool());
     tools
 }
 

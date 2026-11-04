@@ -438,7 +438,9 @@ impl Factory {
         )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
-        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
+        let cards = shows_cards(interactive, &session_surface);
+        let (agent_tools, clarify) =
+            self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
         let gate = self.gate(id)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
@@ -618,13 +620,15 @@ impl Factory {
     }
 
     /// The loop's own tools; `clarify` asks the person on an interactive
-    /// session.
+    /// session, where `cards` also lets `manage_connections` show its
+    /// connection card (else it hands out links).
     fn agent_tools(
         &self,
         id: SessionId,
         memory: &Arc<MemorySession>,
         summarizer: &Arc<summarize::RouteSummarizer>,
         capabilities: &CapabilitySet,
+        cards: bool,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -644,7 +648,8 @@ impl Factory {
             SessionSearch::new(Arc::clone(&self.store), id)
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
-        .with_memory(Arc::clone(memory) as _);
+        .with_memory(Arc::clone(memory) as _)
+        .with_connections(crate::connectors_host::manager(&self.scope, cards));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
@@ -876,6 +881,14 @@ impl Factory {
         })
         .await
     }
+}
+
+/// Whether a session shows connection cards: an interactive terminal,
+/// the TUI or the desktop (messaging chats, one-shot runs and cron get
+/// links instead).
+fn shows_cards(interactive: bool, surface: &pmt_tools::SessionSurface) -> bool {
+    use pmt_tools::SessionSurface::{Cli, Desktop, Tui};
+    interactive && matches!(surface, Cli | Tui | Desktop)
 }
 
 /// Announces each borrowed login's first use in the session (spec:

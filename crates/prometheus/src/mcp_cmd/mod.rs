@@ -9,7 +9,7 @@
 //! interactive picker.
 
 mod add;
-mod catalog;
+pub(crate) mod catalog;
 mod login;
 mod picker;
 pub mod serve;

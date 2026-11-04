@@ -40,6 +40,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
@@ -10412,6 +10413,352 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus pairing help help
 ```
 
+## `prometheus connectors`
+
+```text
+Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+
+Usage: prometheus connectors [OPTIONS] <COMMAND>
+
+Commands:
+  list        The connectors this account may use, with their connected state
+  accounts    Connector accounts with their names and states
+  connect     Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+  rename      Rename an account (by its name or label)
+  disconnect  Remove an account (asks for confirmation unless --yes)
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors list`
+
+```text
+The connectors this account may use, with their connected state
+
+Usage: prometheus connectors list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors accounts`
+
+```text
+Connector accounts with their names and states
+
+Usage: prometheus connectors accounts [OPTIONS] [APP]
+
+Arguments:
+  [APP]
+          Only this connector's accounts
+
+Options:
+      --all
+          Include retired accounts (replaced by a reconnect)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors connect`
+
+```text
+Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+
+Usage: prometheus connectors connect [OPTIONS] <APP>
+
+Arguments:
+  <APP>
+          The connector (`gmail`, `notion`...)
+
+Options:
+      --alias <ALIAS>
+          Name the account
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reconnect
+          Repair an account that is not connected (expired, failed, revoked)
+
+      --force
+          With --reconnect: also replace a connected account
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors rename`
+
+```text
+Rename an account (by its name or label)
+
+Usage: prometheus connectors rename [OPTIONS] --to <TO> <APP> <ACCOUNT>
+
+Arguments:
+  <APP>
+          The connector
+
+  <ACCOUNT>
+          The account's current name or label
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          The new name
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors disconnect`
+
+```text
+Remove an account (asks for confirmation unless --yes)
+
+Usage: prometheus connectors disconnect [OPTIONS] <APP>
+
+Arguments:
+  <APP>
+          The connector
+
+Options:
+      --alias <ALIAS>
+          The account's name (needed when the connector has several)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask for confirmation
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus connectors help [COMMAND]
+
+Commands:
+  list        The connectors this account may use, with their connected state
+  accounts    Connector accounts with their names and states
+  connect     Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+  rename      Rename an account (by its name or label)
+  disconnect  Remove an account (asks for confirmation unless --yes)
+  help        Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus connectors help list`
+
+```text
+The connectors this account may use, with their connected state
+
+Usage: prometheus connectors help list
+```
+
+## `prometheus connectors help accounts`
+
+```text
+Connector accounts with their names and states
+
+Usage: prometheus connectors help accounts
+```
+
+## `prometheus connectors help connect`
+
+```text
+Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+
+Usage: prometheus connectors help connect
+```
+
+## `prometheus connectors help rename`
+
+```text
+Rename an account (by its name or label)
+
+Usage: prometheus connectors help rename
+```
+
+## `prometheus connectors help disconnect`
+
+```text
+Remove an account (asks for confirmation unless --yes)
+
+Usage: prometheus connectors help disconnect
+```
+
+## `prometheus connectors help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus connectors help help
+```
+
 ## `prometheus mcp`
 
 ```text
@@ -14032,6 +14379,7 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
@@ -15663,6 +16011,61 @@ Usage: prometheus help pairing deny
 Remove an approved sender
 
 Usage: prometheus help pairing revoke
+```
+
+## `prometheus help connectors`
+
+```text
+Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+
+Usage: prometheus help connectors [COMMAND]
+
+Commands:
+  list        The connectors this account may use, with their connected state
+  accounts    Connector accounts with their names and states
+  connect     Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+  rename      Rename an account (by its name or label)
+  disconnect  Remove an account (asks for confirmation unless --yes)
+```
+
+## `prometheus help connectors list`
+
+```text
+The connectors this account may use, with their connected state
+
+Usage: prometheus help connectors list
+```
+
+## `prometheus help connectors accounts`
+
+```text
+Connector accounts with their names and states
+
+Usage: prometheus help connectors accounts
+```
+
+## `prometheus help connectors connect`
+
+```text
+Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+
+Usage: prometheus help connectors connect
+```
+
+## `prometheus help connectors rename`
+
+```text
+Rename an account (by its name or label)
+
+Usage: prometheus help connectors rename
+```
+
+## `prometheus help connectors disconnect`
+
+```text
+Remove an account (asks for confirmation unless --yes)
+
+Usage: prometheus help connectors disconnect
 ```
 
 ## `prometheus help mcp`

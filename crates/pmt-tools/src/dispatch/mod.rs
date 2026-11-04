@@ -151,11 +151,25 @@ impl Dispatcher {
             // Boxed: each bridged call runs through `execute` again.
             return Box::pin(self.bridge(call, cancel, agent)).await;
         }
+        let tool = setup.surface.resolve(&call.name).cloned();
+        self.execute_tool(call, tool, cancel, agent).await
+    }
+
+    /// Runs `call` of `tool` (resolved by the caller; `None`: unknown)
+    /// through the pipeline up to the per-result budget, then tags the
+    /// result with the tool's provenance.
+    async fn execute_tool(
+        &self,
+        call: &ToolCall,
+        tool: Option<Arc<RegisteredTool>>,
+        cancel: &CancelToken,
+        agent: Option<&Arc<dyn AgentLoopCalls>>,
+    ) -> Executed {
+        let setup = &self.setup;
         setup
             .observer
             .tool_call(&call.call_id, &call.name, &call.arguments);
         let started = Instant::now();
-        let tool = setup.surface.resolve(&call.name).cloned();
         let (arguments, result) = tokio::select! {
             biased;
             () = cancel.cancelled() => (raw(call), cancelled(&call.name)),
@@ -181,6 +195,9 @@ impl Dispatcher {
         setup
             .budget
             .apply(&call.call_id, tool.as_deref(), &mut result);
+        if let Some(provenance) = tool.as_ref().and_then(|t| t.provenance.clone()) {
+            result.metadata.insert("provenance".to_owned(), provenance);
+        }
         Executed {
             tool,
             result,

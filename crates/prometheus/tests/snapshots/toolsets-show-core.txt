@@ -26,4 +26,4 @@ execute_code        unregistered
 delegate_task       unregistered
 cronjob             unregistered
 computer_use        unregistered
-manage_connections  unregistered
+manage_connections  exposed

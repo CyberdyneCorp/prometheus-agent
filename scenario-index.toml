@@ -2237,3 +2237,31 @@ capabilities = [
 
 [tool-system."MCP media results"]
 "Screenshot from an MCP server" = ["crates/pmt-mcp/tests/extensions.rs::screenshot_from_an_mcp_server"]
+
+# Group 32 (connectors)
+[connectors."Connector availability"]
+"Disabled feature is invisible" = ["crates/prometheus/tests/connectors_cli.rs::a_disabled_feature_is_invisible"]
+"No silent identity creation" = ["crates/prometheus/tests/connectors_cli.rs::no_identity_is_created_and_nothing_is_sent_without_a_sign_in", "crates/pmt-tools/tests/connectors.rs::without_a_sign_in_hosted_actions_point_to_the_user_and_send_nothing"]
+
+[connectors."Remote connector tools through the search bridge"]
+"Gateway slow" = ["crates/pmt-tools/tests/connectors.rs::a_slow_gateway_degrades_to_local_results_without_an_error"]
+"Connector tool absent from the tool array" = ["crates/pmt-tools/tests/connectors.rs::connector_tools_never_enter_the_tool_array", "crates/prometheus/tests/connectors_cli.rs::a_signed_in_session_reaches_connectors_only_through_the_bridge"]
+
+[connectors."Connector calls run through the dispatch pipeline"]
+"Unlinked account" = ["crates/pmt-tools/tests/connectors.rs::an_unlinked_account_is_connection_required_through_the_whole_pipeline", "crates/prometheus/tests/connectors_cli.rs::a_signed_in_session_reaches_connectors_only_through_the_bridge"]
+
+[connectors."Multiple accounts per connector"]
+"Ambiguous account refused" = ["crates/pmt-tools/tests/connectors.rs::several_named_accounts_need_an_alias_and_results_name_the_account"]
+
+[connectors."manage_connections tool"]
+"Wrong target kind" = ["crates/pmt-tools/tests/connectors.rs::wrong_target_kinds_and_removals_are_refused_without_a_request", "crates/pmt-tools/src/connectors/manage/args.rs::install_of_a_hosted_connector_names_the_call_that_works"]
+
+[connectors."Connection flows require the user"]
+"Gateway chat gets a link" = ["crates/pmt-tools/tests/connectors.rs::a_chat_without_a_card_gets_a_link_and_nothing_is_awaited", "crates/prometheus/tests/connectors_cli.rs::a_run_without_a_card_gets_a_connect_link"]
+"Cron cannot install MCP servers" = ["crates/pmt-tools/src/approval/gate/tests.rs::cron_cannot_install_mcp_servers"]
+
+[connectors."Reconnect and rename semantics"]
+"Reconnect keeps history" = ["crates/pmt-tools/tests/connectors.rs::reconnect_repairs_only_broken_accounts_and_keeps_history", "crates/prometheus/tests/connectors_cli.rs::list_accounts_rename_and_connect"]
+
+[connectors."Connector account management CLI"]
+"Disconnect needs confirmation" = ["crates/prometheus/tests/connectors_cli.rs::disconnect_needs_confirmation"]

@@ -231,6 +231,59 @@ impl ToolSurface {
         self.catalog.as_ref()
     }
 
+    /// Adds `remote`'s tools behind the tool-search bridge (spec:
+    /// connectors, Remote connector tools through the search bridge): the
+    /// bridge tools are rebuilt over the same local entries (or appear,
+    /// with none, when nothing was deferred) and nothing of `remote` enters
+    /// the array. The bridge is offered whatever `tools.tool_search.mode`
+    /// says, as remote tools have no other way in.
+    #[must_use]
+    pub fn with_remote(
+        mut self,
+        remote: Arc<dyn search::Remote>,
+        config: &pmt_config::schema::ToolSearchConfig,
+    ) -> Self {
+        let entries = match self.catalog.take() {
+            Some(catalog) => {
+                let bridge = [
+                    search::TOOL_SEARCH,
+                    search::TOOL_DESCRIBE,
+                    search::TOOL_CALL,
+                ];
+                self.tools.retain(|t| !bridge.contains(&t.name()));
+                self.definitions
+                    .retain(|d| !bridge.contains(&d.name.as_str()));
+                catalog.entries().to_vec()
+            }
+            None => Vec::new(),
+        };
+        let (catalog, bridge) = search::bridge_over(entries, config, Some(remote));
+        for tool in bridge {
+            self.definitions.push(ToolDefinition {
+                name: tool.name().to_owned(),
+                description: tool.descriptor.description.clone(),
+                parameters: tool.descriptor.parameters.clone(),
+            });
+            self.tools.push(Arc::new(tool));
+        }
+        self.serialized = serde_json::to_string(&self.definitions)
+            .unwrap_or_else(|_| "[]".to_owned())
+            .into();
+        self.catalog = Some(catalog);
+        self
+    }
+
+    /// The remote tool `tool_call` runs for `name`, when a remote owns it.
+    #[must_use]
+    pub fn remote_tool(&self, name: &str) -> Option<Arc<RegisteredTool>> {
+        let remote = self.catalog.as_ref()?.remote()?;
+        if remote.owns(name) {
+            remote.tool(name)
+        } else {
+            None
+        }
+    }
+
     /// Exposed tool names, in model order.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.tools.iter().map(|t| t.name())

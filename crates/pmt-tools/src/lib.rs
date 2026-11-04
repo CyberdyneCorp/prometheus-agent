@@ -26,6 +26,7 @@ pub mod approval;
 pub mod args;
 pub mod browser;
 pub mod budget;
+pub mod connectors;
 pub mod descriptor;
 pub mod dispatch;
 pub mod environments;
