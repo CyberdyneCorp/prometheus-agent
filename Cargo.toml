@@ -227,6 +227,15 @@ opt-level = 3
 [profile.dev.package.wasmparser]
 opt-level = 3
 
+# Shell completion runs on every TAB and must answer within 200 ms on a store
+# of 10000 sessions (spec: cli); its test times the dev binary, where an
+# unoptimized clap (building the whole command tree with its debug checks)
+# and SQLite took most of that on loaded Intel macOS runners.
+[profile.dev.package.clap_builder]
+opt-level = 3
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
 [profile.release]
 # Fat LTO: one optimization unit across every crate drops what thin LTO
 # keeps per crate (duplicate generic instantiations, unused paths); the

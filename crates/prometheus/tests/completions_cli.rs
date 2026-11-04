@@ -118,14 +118,21 @@ fn session_completion_is_fast_on_ten_thousand_sessions_and_writes_nothing() {
     tx.commit().unwrap();
     drop(conn);
     let before = common::files_under(home.path());
+    let complete = || {
+        Command::new(common::BIN)
+            .args(["__complete", "zsh", "--", "prometheus", "-r", "title 999"])
+            .env_clear()
+            .env("PROMETHEUS_HOME", home.path())
+            .env("HOME", common::user_home(home.path()))
+            .output()
+            .unwrap()
+    };
+    // The bound is per TAB press. The first run of the completion path in
+    // a freshly linked binary also pays one-time costs (paging its code
+    // in, the macOS executable scan) that no later TAB pays.
+    ok(&complete());
     let started = Instant::now();
-    let out = Command::new(common::BIN)
-        .args(["__complete", "zsh", "--", "prometheus", "-r", "title 999"])
-        .env_clear()
-        .env("PROMETHEUS_HOME", home.path())
-        .env("HOME", common::user_home(home.path()))
-        .output()
-        .unwrap();
+    let out = complete();
     let elapsed = started.elapsed();
     let text = ok(&out);
     assert!(text.contains("title 9999:ses_"), "{text}");
