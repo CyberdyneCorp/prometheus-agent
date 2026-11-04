@@ -20,6 +20,7 @@ fn verdict(line: &str, bypass: bool, deny: &[&str], allow: &[&str]) -> Verdict {
         deny: &deny,
         allow: &allow,
         floors: &floors,
+        daemon: None,
     };
     evaluate(line, &policy).unwrap()
 }
@@ -188,6 +189,7 @@ fn unreadable_commands_are_parse_errors() {
         deny: &[],
         allow: &[],
         floors: &floors,
+        daemon: None,
     };
     assert!(evaluate("echo 'oops", &policy).is_err());
 }

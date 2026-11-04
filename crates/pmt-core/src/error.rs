@@ -695,6 +695,9 @@ error_codes! {
     /// `approvals test` was given a command line it cannot read.
     APPROVALS_UNPARSABLE = ("approvals.unparsable", Usage,
         "`prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting.");
+    /// `approvals suggest --apply` named a proposal that is not listed.
+    APPROVALS_NO_SUCH_PROPOSAL = ("approvals.no_such_proposal", Usage,
+        "`prometheus approvals suggest --apply` named a proposal number that is not in the list; run it without `--apply` to see the numbered proposals. Nothing was changed.");
     /// No skill of that name resolves in the profile.
     SKILL_NOT_FOUND = ("skill.not_found", NotFound,
         "No skill of that name resolves in the profile (`Skill '<name>' not found in profile '<profile>'.`); the message names another profile of the home that has it.");

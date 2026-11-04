@@ -62,6 +62,12 @@ pub struct GateInputs<'a> {
     pub guardian: Option<Arc<dyn pmt_tools::approval::guardian::Guardian>>,
     /// Runs approval `explain` previews.
     pub previewer: Option<pmt_tools::approval::explain::Previewer>,
+    /// In a daemon-hosted session: the daemon and the session's own
+    /// background processes (the self-termination guard).
+    pub hosted: Option<(
+        pmt_tools::approval::selfterm::Daemon,
+        pmt_tools::approval::OwnProcesses,
+    )>,
 }
 
 /// The approval gate: prompts go to the person on an interactive
@@ -104,6 +110,10 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
     };
     let gate = match &inputs.previewer {
         Some(previewer) => gate.with_previewer(previewer.clone()),
+        None => gate,
+    };
+    let gate = match &inputs.hosted {
+        Some((daemon, own)) => gate.hosted_by(daemon.clone(), Arc::clone(own)),
         None => gate,
     };
     Ok(Gate {

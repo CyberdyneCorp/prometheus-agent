@@ -263,19 +263,28 @@ approval gate first, always in this order:
    writes to raw disks, fork bombs, `kill -1`, shutdown and reboot, and
    deleting Prometheus itself or its home. The model gets
    `BLOCKED (hardline): <reason>`.
-2. **Your deny rules are blocked** the same way: `approvals.deny` holds
+2. **Stopping the daemon is blocked** in sessions the gateway daemon hosts
+   (messaging chats, attached TUI and desktop sessions), in every mode
+   including yolo: `prometheus daemon|gateway stop|restart`, `systemctl
+   stop|restart|kill` of `prometheus-daemon.service`, `launchctl
+   bootout|kill` of `ai.prometheus.daemon`, `schtasks /End` of
+   `Prometheus Daemon`, and `kill`, `pkill`, `killall` or `taskkill` aimed
+   at the `prometheus` executable or the daemon's pid. The model gets
+   `BLOCKED (self-termination): <reason>`. Killing the session's own
+   background processes, or any other pid, goes on through the gate.
+3. **Your deny rules are blocked** the same way: `approvals.deny` holds
    command globs (`*` any text, `?` one character) matched against the
    whole command and each command in it (`BLOCKED (deny rule '<rule>')`).
-3. **`approvals.mode = "off"`** (or `--yolo`, or `/yolo` for one session)
+4. **`approvals.mode = "off"`** (or `--yolo`, or `/yolo` for one session)
    runs everything else without asking; the status line shows `YOLO`.
-4. **Allow rules** in `grants.toml` (`[approvals] allow = [...]`) run
+5. **Allow rules** in `grants.toml` (`[approvals] allow = [...]`) run
    without asking; a command line is allowed when every command in it,
    nested `$(...)` ones included, matches a rule. A command is matched
    with its output redirections, so `echo hi` never covers
    `echo hi > ~/.bashrc`, and `git status*` never covers
    `git status; curl x | sh`. A rule without wildcards (an `always`
    answer) also covers exactly the line it was given for.
-5. **Dangerous commands ask**: recursive deletes, `git reset --hard`,
+6. **Dangerous commands ask**: recursive deletes, `git reset --hard`,
    force pushes, `chmod -R`, `sudo`, a download piped into a shell,
    destructive SQL and similar, plus two content checks: a `curl`/`wget`
    request body or upload that sends a secret-named variable (`$..._KEY`,
@@ -329,9 +338,35 @@ nothing was executed
 $ prometheus approvals test --context cron -- git reset --hard
 ```
 
-The verdict is one of `hardline`, `deny rule`, `bypass`, `allowlisted`,
-`would prompt` or `allowed`; the command always exits 0, or 2 when the
-command line cannot be read (an unterminated quote).
+The verdict is one of `hardline`, `self-termination` (as a daemon-hosted
+session would see it), `deny rule`, `bypass`, `allowlisted`, `would
+prompt` or `allowed`; the command always exits 0, or 2 when the command
+line cannot be read (an unterminated quote).
+
+Turn what you keep approving into allow rules:
+
+```console
+$ prometheus approvals suggest
+no proposals: no command was approved often enough in the last 90 days
+```
+
+After you have approved `cargo test -p core` a few times it lists:
+
+```text
+1. cargo test *  (5 approvals; e.g. cargo test -p core)
+nothing changed; add proposals with --apply <n,...>
+```
+
+It reads the approvals (`once`, `session`, `always`, by you, a plugin
+transport or the smart guardian) recorded in the security audit log over
+the last `--days` (90) days, generalizes each command to its program and
+subcommand (`cargo test -p core` becomes `cargo test *`; pipelines,
+`&&` chains and redirections stay exact), and lists up to `--limit` (20)
+patterns approved at least `--min-count` (2) times, leaving out hardline
+commands, patterns covering a command you denied and patterns you already
+allow. Nothing changes without `--apply <n,...>`, which merges the chosen
+proposals into `[approvals].allow` like an `always` answer; an unknown
+number exits 2.
 
 ## Where results come from
 

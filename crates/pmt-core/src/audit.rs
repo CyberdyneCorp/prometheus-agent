@@ -221,6 +221,51 @@ impl AuditLog {
     }
 }
 
+/// One record as read back (what `approvals suggest` mines).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recorded {
+    /// When it was written (RFC 3339).
+    pub ts: String,
+    /// What it is about.
+    pub kind: Kind,
+    /// The session, if any.
+    pub session: Option<String>,
+    /// The command, path or grant.
+    pub subject: String,
+    /// The decision.
+    pub decision: String,
+    /// Free text (for approvals: `by <who>: <findings>`).
+    pub detail: Option<String>,
+}
+
+impl AuditLog {
+    /// Every record that parses, oldest first; lines that are not records
+    /// are skipped (`verify` is what reports them).
+    ///
+    /// # Errors
+    ///
+    /// I/O errors other than a missing log (which has no records).
+    pub fn entries(&self) -> io::Result<Vec<Recorded>> {
+        let text = match private_fs::read_no_follow(&self.path) {
+            Ok(text) => text,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(err) => return Err(err),
+        };
+        Ok(text
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Record>(line).ok())
+            .map(|r| Recorded {
+                ts: r.ts,
+                kind: r.kind,
+                session: r.session,
+                subject: r.subject,
+                decision: r.decision,
+                detail: r.detail,
+            })
+            .collect())
+    }
+}
+
 /// The answer of [`AuditLog::verify`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {

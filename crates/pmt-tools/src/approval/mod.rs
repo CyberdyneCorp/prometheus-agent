@@ -8,13 +8,15 @@
 //! order, [`evaluate`]:
 //!
 //! 1. hardline commands ([`hardline`]) are blocked, always;
-//! 2. user deny rules (`approvals.deny`) are blocked, always;
-//! 3. bypass (`approvals.mode = "off"`, `--yolo`, `/yolo`) allows;
-//! 4. allow rules (`[approvals].allow` in `grants.toml`, session
+//! 2. in a daemon-hosted session, commands that would stop the daemon
+//!    ([`selfterm`]) are blocked, always;
+//! 3. user deny rules (`approvals.deny`) are blocked, always;
+//! 4. bypass (`approvals.mode = "off"`, `--yolo`, `/yolo`) allows;
+//! 5. allow rules (`[approvals].allow` in `grants.toml`, session
 //!    approvals) allow;
-//! 5. dangerous patterns ([`dangerous`]) and content detectors
+//! 6. dangerous patterns ([`dangerous`]) and content detectors
 //!    ([`detectors`]) need a decision;
-//! 6. anything else is allowed.
+//! 7. anything else is allowed.
 //!
 //! [`CommandGate`] applies the decision step: an interactive session asks
 //! the human (`once`, `session`, `always`, `deny`; no answer, a detached
@@ -24,9 +26,8 @@
 //! for plugin escalations (`plugin_rule:<key>`). `prometheus approvals
 //! test` runs [`evaluate`] without executing or persisting anything.
 //!
-//! Self-termination guards (daemon-hosted sessions) and the smart guardian
-//! are M2: in M1 `smart` asks the human exactly like `manual`, which is
-//! what the guardian does when it cannot decide.
+//! In `smart` mode the guardian ([`guardian`]) decides rememberable
+//! requests first and escalates to the human when it cannot decide.
 
 pub mod dangerous;
 pub mod detectors;
@@ -38,14 +39,16 @@ pub mod hooks;
 pub mod paths;
 mod printable;
 pub mod rules;
+pub mod selfterm;
 pub mod shell;
+pub mod suggest;
 
 use std::fmt;
 use std::path::Path;
 
 use serde::Serialize;
 
-pub use gate::{ApprovalRequest, CommandGate, Decision, GateSetup, STOP};
+pub use gate::{ApprovalRequest, CommandGate, Decision, GateSetup, OwnProcesses, STOP};
 pub use printable::printable;
 pub use shell::ParseError;
 
@@ -160,6 +163,9 @@ impl fmt::Display for Finding {
 pub enum Verdict {
     /// Always blocked: the hardline reason.
     Hardline(String),
+    /// Always blocked in a daemon-hosted session: why the command would
+    /// stop the daemon.
+    SelfTermination(String),
     /// Always blocked: the deny rule.
     DenyRule(String),
     /// Allowed by `off` / yolo.
@@ -178,6 +184,7 @@ impl Verdict {
     pub fn label(&self) -> &'static str {
         match self {
             Self::Hardline(_) => "hardline",
+            Self::SelfTermination(_) => "self-termination",
             Self::DenyRule(_) => "deny rule",
             Self::Bypass => "bypass",
             Self::Allowlisted(_) => "allowlisted",
@@ -191,6 +198,7 @@ impl Verdict {
     pub fn blocked_message(&self) -> Option<String> {
         match self {
             Self::Hardline(reason) => Some(format!("BLOCKED (hardline): {reason}")),
+            Self::SelfTermination(reason) => Some(format!("BLOCKED (self-termination): {reason}")),
             Self::DenyRule(rule) => Some(format!("BLOCKED (deny rule '{rule}')")),
             _ => None,
         }
@@ -208,6 +216,8 @@ pub struct Policy<'a> {
     pub allow: &'a [String],
     /// Protected paths and the working directory.
     pub floors: &'a Floors,
+    /// The hosting daemon, in a daemon-hosted session.
+    pub daemon: Option<selfterm::Guarded<'a>>,
 }
 
 /// Runs `line` through the gate order without executing anything.
@@ -219,6 +229,9 @@ pub fn evaluate(line: &str, policy: &Policy<'_>) -> Result<Verdict, ParseError> 
     let script = shell::parse(line)?;
     if let Some(reason) = hardline::check(line, &script, policy.floors) {
         return Ok(Verdict::Hardline(reason));
+    }
+    if let Some(reason) = policy.daemon.and_then(|d| selfterm::check(&script, d)) {
+        return Ok(Verdict::SelfTermination(reason));
     }
     if let Some(rule) = rules::denied(policy.deny, line, &script) {
         return Ok(Verdict::DenyRule(rule.to_owned()));

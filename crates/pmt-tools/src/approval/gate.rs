@@ -16,6 +16,7 @@ use super::explain::Previewer;
 use super::guardian::{Breaker, Guardian, GuardianVerdict};
 use super::hooks::{ApprovalHooks, TransportOutcome, TransportRequest, choice_name};
 use super::rules::{PLUGIN_RULE_PREFIX, literal};
+use super::selfterm::{Daemon, Guarded};
 use super::{Context, Finding, Floors, Policy, Verdict, evaluate};
 use crate::descriptor::{PathClaim, RegisteredTool};
 use crate::dispatch::{ApprovalGate, Escalation, GateRequest, GateVerdict, SeamFuture};
@@ -89,6 +90,25 @@ pub struct GateSetup {
     pub hooks: Option<Arc<dyn ApprovalHooks>>,
 }
 
+/// The pids of the background processes a session started, asked at
+/// every check (they change while the session runs).
+pub type OwnProcesses = Arc<dyn Fn() -> Vec<u32> + Send + Sync>;
+
+/// The daemon a session is hosted by and the session's own processes.
+#[derive(Clone)]
+struct Hosted {
+    daemon: Daemon,
+    own: OwnProcesses,
+}
+
+impl std::fmt::Debug for Hosted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Hosted")
+            .field("daemon", &self.daemon)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The approval gate of one session.
 #[derive(Debug)]
 pub struct CommandGate {
@@ -107,6 +127,8 @@ pub struct CommandGate {
     previewer: Option<Previewer>,
     /// Consecutive guardian denials.
     breaker: Breaker,
+    /// The hosting daemon, in a daemon-hosted session.
+    hosted: Option<Hosted>,
 }
 
 impl CommandGate {
@@ -124,7 +146,17 @@ impl CommandGate {
             guardian: None,
             breaker: Breaker::default(),
             previewer: None,
+            hosted: None,
         }
+    }
+
+    /// Blocks commands that would stop `daemon`, the process hosting this
+    /// session, under every mode; kills of `own` processes are left to the
+    /// rest of the gate.
+    #[must_use]
+    pub fn hosted_by(mut self, daemon: Daemon, own: OwnProcesses) -> Self {
+        self.hosted = Some(Hosted { daemon, own });
+        self
     }
 
     /// Runs the previews of `explain` with `previewer`.
@@ -216,11 +248,16 @@ impl CommandGate {
     pub async fn check_command(&self, tool: &str, call_id: &str, line: &str) -> GateVerdict {
         let allow = self.allow_rules();
         let deny = self.approvals().deny.clone();
+        let own = self.hosted.as_ref().map(|h| (h.own)()).unwrap_or_default();
         let policy = Policy {
             bypass: self.bypassing(),
             deny: &deny,
             allow: &allow,
             floors: &self.setup.floors,
+            daemon: self.hosted.as_ref().map(|h| Guarded {
+                daemon: &h.daemon,
+                own: &own,
+            }),
         };
         let verdict = match evaluate(line, &policy) {
             Ok(verdict) => verdict,

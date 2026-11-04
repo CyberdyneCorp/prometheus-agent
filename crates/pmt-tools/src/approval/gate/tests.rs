@@ -130,6 +130,7 @@ struct Options {
     security: SecurityConfig,
     hooks: Arc<dyn ToolHooks>,
     guardian: Option<Arc<dyn crate::approval::guardian::Guardian>>,
+    hosted: Option<(crate::approval::selfterm::Daemon, Vec<u32>)>,
 }
 
 impl Default for Options {
@@ -141,6 +142,7 @@ impl Default for Options {
             security: SecurityConfig::default(),
             hooks: Arc::new(crate::dispatch::NoHooks),
             guardian: None,
+            hosted: None,
         }
     }
 }
@@ -175,6 +177,9 @@ async fn session(
     });
     if let Some(guardian) = options.guardian {
         gate = gate.with_guardian(guardian);
+    }
+    if let Some((daemon, own)) = options.hosted {
+        gate = gate.hosted_by(daemon, Arc::new(move || own.clone()));
     }
     let gate = Arc::new(gate);
     let registry = ToolRegistry::new(
@@ -735,3 +740,4 @@ async fn cron_cannot_install_mcp_servers() {
 }
 
 mod guarded;
+mod selfterm;

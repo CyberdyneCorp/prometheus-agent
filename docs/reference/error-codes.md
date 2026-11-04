@@ -230,6 +230,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `toolset.cycle` | `config` | 78 | Toolsets include each other in a cycle (`toolset include cycle: a -> b -> a`); every toolset of the batch that declared it is rejected. |
 | `toolset.unknown` | `usage` | 2 | A command named a toolset that does not exist (`unknown toolset '<name>' (did you mean ...?)`); `prometheus toolsets list` shows them. In configuration the same mistake is `registry.unknown_name` (exit 78). |
 | `approvals.unparsable` | `usage` | 2 | `prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting. |
+| `approvals.no_such_proposal` | `usage` | 2 | `prometheus approvals suggest --apply` named a proposal number that is not in the list; run it without `--apply` to see the numbered proposals. Nothing was changed. |
 | `skill.not_found` | `not_found` | 66 | No skill of that name resolves in the profile (`Skill '<name>' not found in profile '<profile>'.`); the message names another profile of the home that has it. |
 | `skill.ambiguous` | `invalid_input` | 65 | Two different skills share a name within one search tier (`Ambiguous skill name '<name>'` with both paths); rename or remove one of them. |
 | `skill.invalid` | `invalid_input` | 65 | A `SKILL.md` or a skill write is malformed: frontmatter that is not valid YAML or lacks `name`/`description`, a name outside `^[a-z0-9][a-z0-9._-]*$`, an empty body or an oversized file. |

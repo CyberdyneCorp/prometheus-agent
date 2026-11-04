@@ -420,6 +420,17 @@ impl ProcessRegistry {
         describe(entry)
     }
 
+    /// OS pids of processes still running (the session may kill them even
+    /// where the self-termination guard applies).
+    #[must_use]
+    pub fn running_pids(&self) -> Vec<u32> {
+        self.lock()
+            .iter()
+            .filter(|e| e.state() == State::Running)
+            .filter_map(|e| e.pid)
+            .collect()
+    }
+
     /// Ids of processes still running.
     #[must_use]
     pub fn running(&self) -> Vec<String> {

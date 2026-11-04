@@ -2,6 +2,9 @@
 //! command): a command line through the real gate order without running
 //! it, asking anyone, calling a guardian or writing anything. Every
 //! verdict exits 0; a command line that cannot be read exits 2.
+//! `approvals suggest` is in [`suggest`].
+
+mod suggest;
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -9,6 +12,7 @@ use std::path::PathBuf;
 use pmt_config::grants::GrantsFile;
 use pmt_config::schema::{ApprovalMode, ApprovalsConfig, UnattendedApproval};
 use pmt_core::error::{Error, codes};
+use pmt_tools::approval::selfterm::Guarded;
 use pmt_tools::approval::{Context as GateContext, Finding, Floors, Policy, Verdict, evaluate};
 use serde::Serialize;
 
@@ -24,6 +28,7 @@ use crate::output::{document, print_raw};
 pub fn run(command: &ApprovalsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
         ApprovalsCommand::Test(args) => test(args, ctx),
+        ApprovalsCommand::Suggest(args) => suggest::run(args, ctx),
     }
 }
 
@@ -32,8 +37,8 @@ pub fn run(command: &ApprovalsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
 pub struct Report {
     /// The command line tested.
     pub command: String,
-    /// `hardline`, `deny rule`, `bypass`, `allowlisted`, `would prompt` or
-    /// `allowed`.
+    /// `hardline`, `self-termination`, `deny rule`, `bypass`,
+    /// `allowlisted`, `would prompt` or `allowed`.
     pub verdict: &'static str,
     /// The matching hardline reason, deny rule or allow rule.
     pub rule: Option<String>,
@@ -64,11 +69,18 @@ fn test(args: &ApprovalsTestArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         .user_home(ctx.launch.user_home().map(PathBuf::as_path))
         .prometheus_home(scope.home())
         .binary(binary.as_deref());
+    // As a daemon-hosted session would see it: the guard is part of the
+    // order even though this process is not the daemon.
+    let daemon = crate::daemon_cmd::self_guard::daemon(scope.home(), false);
     let policy = Policy {
         bypass: mode == ApprovalMode::Off,
         deny: &config.approvals.deny,
         allow: &allow,
         floors: &floors,
+        daemon: Some(Guarded {
+            daemon: &daemon,
+            own: &[],
+        }),
     };
     let verdict = evaluate(&line, &policy).map_err(|err| {
         Error::new(
@@ -81,9 +93,10 @@ fn test(args: &ApprovalsTestArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         command: line,
         verdict: verdict.label(),
         rule: match &verdict {
-            Verdict::Hardline(rule) | Verdict::DenyRule(rule) | Verdict::Allowlisted(rule) => {
-                Some(rule.clone())
-            }
+            Verdict::Hardline(rule)
+            | Verdict::SelfTermination(rule)
+            | Verdict::DenyRule(rule)
+            | Verdict::Allowlisted(rule) => Some(rule.clone()),
             _ => None,
         },
         findings: match verdict {

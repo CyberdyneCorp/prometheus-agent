@@ -8510,8 +8510,9 @@ Check how the approval gate treats a command, without running it
 Usage: prometheus approvals [OPTIONS] <COMMAND>
 
 Commands:
-  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
-  help  Print this message or the help of the given subcommand(s)
+  test     Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  suggest  Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -8548,7 +8549,7 @@ Options:
 ## `prometheus approvals test`
 
 ```text
-Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
 
 Usage: prometheus approvals test [OPTIONS] <COMMAND>...
 
@@ -8568,7 +8569,7 @@ Options:
 
           Possible values:
           - manual: Ask for every dangerous call
-          - smart:  Pre-screen with the guardian model (asks like manual in M1)
+          - smart:  Pre-screen with the guardian model, asking a human when it cannot decide
           - off:    Bypass prompts; hardline and deny rules still block
 
   -p, --profile <NAME>
@@ -8610,6 +8611,63 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus approvals suggest`
+
+```text
+Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+
+Usage: prometheus approvals suggest [OPTIONS]
+
+Options:
+      --days <N>
+          Look at approvals from the last N days
+
+          [default: 90]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --min-count <N>
+          Propose only patterns approved at least N times
+
+          [default: 2]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --limit <N>
+          Show at most N proposals
+
+          [default: 20]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --apply <N,...>
+          Add the numbered proposals to `[approvals].allow` in `grants.toml`
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus approvals help`
 
 ```text
@@ -8618,16 +8676,25 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus approvals help [COMMAND]
 
 Commands:
-  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
-  help  Print this message or the help of the given subcommand(s)
+  test     Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  suggest  Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+  help     Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus approvals help test`
 
 ```text
-Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
 
 Usage: prometheus approvals help test
+```
+
+## `prometheus approvals help suggest`
+
+```text
+Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+
+Usage: prometheus approvals help suggest
 ```
 
 ## `prometheus approvals help help`
@@ -16255,15 +16322,24 @@ Check how the approval gate treats a command, without running it
 Usage: prometheus help approvals [COMMAND]
 
 Commands:
-  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  test     Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  suggest  Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
 ```
 
 ## `prometheus help approvals test`
 
 ```text
-Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
 
 Usage: prometheus help approvals test
+```
+
+## `prometheus help approvals suggest`
+
+```text
+Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+
+Usage: prometheus help approvals suggest
 ```
 
 ## `prometheus help update`
@@ -17333,6 +17409,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.toolsets.v1` | `prometheus toolsets list` |
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
+| `prometheus.approvals_suggest.v1` | `prometheus approvals suggest` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |

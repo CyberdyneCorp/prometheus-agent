@@ -123,6 +123,8 @@ pub struct Factory {
     browser: OnceLock<Option<browser::Shared>>,
     /// The gateway's `send_message` ports (daemon sessions only).
     messaging: Option<Arc<dyn pmt_agent::tools::MessagingPorts>>,
+    /// The daemon hosting this factory's sessions (daemon sessions only).
+    daemon: Option<pmt_tools::approval::selfterm::Daemon>,
     /// The profile's configuration as it is now: `scope` until a daemon
     /// reload replaces it (shared tools read their `live` keys from it).
     current: SharedScope,
@@ -260,6 +262,7 @@ impl Factory {
             install_asks: None,
             browser: OnceLock::new(),
             messaging: None,
+            daemon: None,
             plugins,
             reread: None,
         })
@@ -448,7 +451,7 @@ impl Factory {
         let cards = shows_cards(interactive, &session_surface);
         let (agent_tools, clarify) =
             self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
-        let gate = self.gate(id, Some(&model), environment.previewer.clone())?;
+        let gate = self.gate(id, Some(&model), Some(&environment))?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
@@ -558,8 +561,10 @@ impl Factory {
         &self,
         id: SessionId,
         model: Option<&Arc<SwitchableModel>>,
-        previewer: Option<pmt_tools::approval::explain::Previewer>,
+        environment: Option<&env::Attached>,
     ) -> Result<tools::Gate, Error> {
+        let previewer = environment.and_then(|e| e.previewer.clone());
+        let terminal = environment.and_then(|e| e.terminal.as_ref());
         let guardian = model.map(|model| self.models.guardian(model, id));
         let hooks = crate::plugins_host::approvals::PluginApprovals::new(
             self.plugins.clone(),
@@ -578,6 +583,10 @@ impl Factory {
             session_id: id.to_string(),
             guardian: guardian.map(|g| g as _),
             previewer,
+            hosted: self
+                .daemon
+                .clone()
+                .map(|daemon| (daemon, own_processes(terminal))),
         })
     }
 
@@ -727,6 +736,15 @@ impl Factory {
         Arc::new(move |path| {
             capabilities.allows_path(pmt_core::capability::Access::Read, path, &places)
         })
+    }
+
+    /// Marks this factory's sessions as hosted by `daemon`: their gates
+    /// block commands that would stop it (spec: tool-system,
+    /// Self-termination guard).
+    #[must_use]
+    pub fn hosted_by(mut self, daemon: pmt_tools::approval::selfterm::Daemon) -> Self {
+        self.daemon = Some(daemon);
+        self
     }
 
     /// Sends `send_message` calls of this factory's sessions through
@@ -1138,4 +1156,19 @@ impl Live {
             browser.close_session(&self.id.to_string()).await;
         }
     }
+}
+
+/// The running background processes of a session's terminal (none when
+/// the session has no local terminal).
+fn own_processes(
+    terminal: Option<&Arc<pmt_tools::terminal::LocalTerminal>>,
+) -> pmt_tools::approval::OwnProcesses {
+    let terminal = terminal.map(Arc::downgrade);
+    Arc::new(move || {
+        terminal
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .map(|t| t.processes().running_pids())
+            .unwrap_or_default()
+    })
 }

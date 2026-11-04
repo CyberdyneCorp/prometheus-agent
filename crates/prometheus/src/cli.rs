@@ -436,10 +436,31 @@ pub enum DebugCommand {
 /// `prometheus approvals` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ApprovalsCommand {
-    /// Run a command line through the approval gate order (hardline, deny
-    /// rules, bypass, allowlist, dangerous-pattern and content detectors)
-    /// without executing it, asking anyone or saving anything.
+    /// Run a command line through the approval gate order (hardline,
+    /// self-termination, deny rules, bypass, allowlist, dangerous-pattern
+    /// and content detectors) without executing it, asking anyone or saving
+    /// anything.
     Test(ApprovalsTestArgs),
+    /// Propose allow patterns from the commands you approved recently;
+    /// nothing changes without `--apply`.
+    Suggest(ApprovalsSuggestArgs),
+}
+
+/// Arguments of `approvals suggest`.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ApprovalsSuggestArgs {
+    /// Look at approvals from the last N days.
+    #[arg(long, value_name = "N", default_value_t = 90)]
+    pub days: u32,
+    /// Propose only patterns approved at least N times.
+    #[arg(long, value_name = "N", default_value_t = 2)]
+    pub min_count: usize,
+    /// Show at most N proposals.
+    #[arg(long, value_name = "N", default_value_t = 20)]
+    pub limit: usize,
+    /// Add the numbered proposals to `[approvals].allow` in `grants.toml`.
+    #[arg(long, value_name = "N,...", value_delimiter = ',')]
+    pub apply: Vec<usize>,
 }
 
 /// Arguments of `approvals test`.
@@ -465,7 +486,8 @@ pub struct ApprovalsTestArgs {
 pub enum ApprovalModeArg {
     /// Ask for every dangerous call.
     Manual,
-    /// Pre-screen with the guardian model (asks like manual in M1).
+    /// Pre-screen with the guardian model, asking a human when it cannot
+    /// decide.
     Smart,
     /// Bypass prompts; hardline and deny rules still block.
     Off,
