@@ -84,10 +84,25 @@ nothing else.
 
 A Hermes model-provider plugin becomes a provider: its API mode picks the
 wire format, `env_vars` the secret names and its base URL the key hosts.
-Prometheus sends and streams every request itself; the profile's header,
-body and model-listing hooks run in the sidecar. A hook that crashes or
-times out fails the call and the fallback chain applies. Replacing a
-built-in provider id needs the `providers_override` grant.
+`providers.base.ProviderProfile` mirrors Hermes field for field (with
+`LazyHeaders`, `OMIT_TEMPERATURE` and `hermes_cli.version_info.hermes_user_agent`),
+so the plugins Hermes ships, such as `nvidia`, `gmi` or `xiaomi`, load
+unchanged. Prometheus sends and streams every request itself; the
+profile's hooks run in the sidecar: headers (`client_headers` or
+`default_headers`, `request_headers`, `extra_headers` extras), the body
+(`prepare_messages`, `default_max_tokens` / `get_max_tokens` when the
+request sets no cap, `fixed_temperature`, `build_extra_body`,
+`build_api_kwargs_extras`), model listing and error classification. A hook
+that crashes or times out fails the call and the fallback chain applies.
+Replacing a built-in provider id needs the `providers_override` grant; the
+replacement keeps the built-in's aliases.
+
+A memory provider's `cli.py` `register_cli(subparser)` becomes the command
+named after the plugin (`prometheus plugins run <id> <id> ...`). It is
+available only while that provider is the active `memory.provider`; until
+external memory providers arrive every profile runs the built-in store,
+so it is refused with `command '<id>' of memory provider '<id>' is
+available only while '<id>' is the active memory.provider (now 'builtin')`.
 
 ## Lifecycle and limits
 
@@ -97,8 +112,17 @@ use and stops after `python_bridge.idle_shutdown_secs` (600) without calls.
 Each call is bounded by `python_bridge.call_timeout_ms` (hooks by
 `plugins.hook_timeout_ms`): `bridge call timed out after <n> ms`. The host
 pings every sidecar every 15 seconds and kills one that misses three pings
-(a GIL stall). A sidecar above `python_bridge.max_memory_bytes` or
-`python_bridge.max_processes` is killed with `resource limit exceeded`.
+(a GIL stall). A sidecar whose tree goes above `python_bridge.max_memory_bytes`
+or `python_bridge.max_processes` is killed with `resource limit exceeded
+(<limit>)`. The OS enforces what it can: on Linux each sidecar process has a
+data-segment rlimit of `max_memory_bytes` and the sidecar is the subreaper
+of its descendants; on Windows the sandbox's Job Object caps the tree's
+committed memory and process count. macOS has no usable equivalent, so
+there the host's sampler (twice a second) is the bound and usage can
+overshoot for one sample. On every OS the sampler checks the tree's
+totals and remembers its members, so a child that left the sidecar's
+process group still dies with it. `prometheus doctor plugins` names the
+mechanism and how strongly direct sockets are denied.
 After a crash, calls in flight fail with `bridge_crashed: plugin '<id>'
 exited (<status>)` and the sidecar restarts after 1 s, doubling to 60 s;
 five crashes within ten minutes mark the plugin `failed` until

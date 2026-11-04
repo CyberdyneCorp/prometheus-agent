@@ -5,4 +5,5 @@ mod environments;
 mod hermes;
 mod lifecycle;
 mod protocol;
+mod providers;
 mod rig;

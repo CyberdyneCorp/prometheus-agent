@@ -21,6 +21,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../python/hermes_api/agent/__init__.py"),
     ),
     (
+        "hermes_api/agent/account_usage.py",
+        include_str!("../python/hermes_api/agent/account_usage.py"),
+    ),
+    (
         "hermes_api/agent/context_engine.py",
         include_str!("../python/hermes_api/agent/context_engine.py"),
     ),
@@ -67,6 +71,14 @@ pub const FILES: &[(&str, &str)] = &[
     (
         "hermes_api/agent/web_search_provider.py",
         include_str!("../python/hermes_api/agent/web_search_provider.py"),
+    ),
+    (
+        "hermes_api/hermes_cli/__init__.py",
+        include_str!("../python/hermes_api/hermes_cli/__init__.py"),
+    ),
+    (
+        "hermes_api/hermes_cli/version_info.py",
+        include_str!("../python/hermes_api/hermes_cli/version_info.py"),
     ),
     (
         "hermes_api/providers/__init__.py",

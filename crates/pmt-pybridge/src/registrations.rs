@@ -85,6 +85,10 @@ pub struct CliCommand {
     /// Longer description.
     #[serde(default)]
     pub description: String,
+    /// A memory provider's `cli.py` command, available only while that
+    /// provider is the active `memory.provider`.
+    #[serde(default)]
+    pub memory_provider: bool,
 }
 
 /// Everything one load registered.

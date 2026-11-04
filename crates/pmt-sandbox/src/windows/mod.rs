@@ -154,6 +154,7 @@ impl Prepared {
             self.container.name(),
             internet,
             policy.may_spawn(),
+            policy.limits(),
             program,
         ));
         Ok(command)

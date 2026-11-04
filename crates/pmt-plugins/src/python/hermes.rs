@@ -266,6 +266,10 @@ fn declared(
     if kind == "model-provider" && providers.is_empty() {
         providers.push(id.to_owned());
     }
+    let mut cli_commands: Vec<String> = inferred.cli_commands.iter().cloned().collect();
+    if inferred.memory_cli && !cli_commands.iter().any(|c| c == id) {
+        cli_commands.push(id.to_owned());
+    }
     // A profile reusing a built-in id replaces it, which needs its own grant.
     let builtin = crate::surfaces::builtin_names();
     let providers_override = providers
@@ -285,7 +289,7 @@ fn declared(
             .prompt_section
             .then_some(pmt_core::capability::MAX_PROMPT_SECTION_CHARS),
         commands: inferred.commands.iter().cloned().collect(),
-        cli_commands: inferred.cli_commands.iter().cloned().collect(),
+        cli_commands,
         providers,
         providers_override,
         approval_transport: inferred.approval_transport,

@@ -344,7 +344,31 @@ fn a_profile_naming_a_missing_bridged_provider_fails_closed() {
         home.path(),
         &["-z", "hi", "--provider", "copilot", "--model", "gpt-4.1"],
     );
+    let err = stderr(&out);
+    assert_eq!(out.status.code(), Some(78), "{err}");
+    assert!(
+        err.contains("hint: prometheus plugins install github-copilot"),
+        "{err}"
+    );
+    let out = run(
+        home.path(),
+        &[
+            "--json",
+            "-z",
+            "hi",
+            "--provider",
+            "copilot",
+            "--model",
+            "gpt-4.1",
+        ],
+    );
     assert_eq!(out.status.code(), Some(78), "{}", stderr(&out));
+    let doc: serde_json::Value = serde_json::from_str(stderr(&out).trim()).unwrap();
+    assert_eq!(doc["error"]["code"], "provider.plugin_unavailable", "{doc}");
+    assert_eq!(
+        doc["error"]["hint"], "prometheus plugins install github-copilot",
+        "{doc}"
+    );
 }
 
 #[test]
@@ -522,4 +546,102 @@ fn a_shared_process_runs_one_sidecar_per_profile() {
         (Some("default"), Some("b"))
     );
     prometheus::plugins_host::bridge::shutdown_all();
+}
+
+/// A one-shot session on the web toolset with `web.search_backend =
+/// backend`, whose model calls `web_search` and answers once the result
+/// contains `expected`.
+fn web_search_session(home: &Path, backend: &str, expected: &str) -> std::process::Output {
+    common::append_config(home, &format!("\n[web]\nsearch_backend = \"{backend}\"\n"));
+    let script = home.join("web.toml");
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "web_search"
+arguments = {{ query = "modal jazz", limit = 2 }}
+
+[[rule]]
+tool_result = "{expected}"
+text = "searched"
+"#
+        ),
+    )
+    .unwrap();
+    command(home)
+        .args(["-z", "go", "-t", "web", "--mock-script"])
+        .arg(&script)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn a_bridged_web_search_provider_serves_web_search_in_a_session() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "echo", "echo", "all");
+    let out = web_search_session(home.path(), "echo-search", "modal jazz 1");
+    assert_eq!(stdout(&out), "searched\n", "{}", stderr(&out));
+    let results = tool_results(home.path());
+    assert!(
+        results
+            .iter()
+            .any(|r| r.contains("modal jazz 0") && r.contains("https://example.com/1")),
+        "{results:?}"
+    );
+}
+
+#[test]
+fn an_unregistered_web_search_provider_fails_closed_in_a_session() {
+    let home = mock_home();
+    let out = web_search_session(home.path(), "nowhere", "not installed");
+    assert_eq!(stdout(&out), "searched\n", "{}", stderr(&out));
+    let results = tool_results(home.path());
+    assert!(
+        results
+            .iter()
+            .any(|r| r.contains("web_search provider 'nowhere' is not installed or not enabled")),
+        "{results:?}"
+    );
+}
+
+/// The sandbox bounds each sidecar process's data segment: one allocation
+/// past `max_memory_bytes` is refused by the kernel at once, before any
+/// sample could see it (its pages are never touched).
+#[cfg(target_os = "linux")]
+#[test]
+fn the_os_refuses_an_allocation_past_the_memory_limit() {
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    install(home.path(), "echo", "echo", "all");
+    common::append_config(
+        home.path(),
+        "\n[python_bridge]\nmax_memory_bytes = 268435456\n",
+    );
+    let out = chat(
+        home.path(),
+        r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "alloc"
+arguments = { bytes = 536870912 }
+
+[[rule]]
+tool_result = "resource limit exceeded"
+text = "bounded"
+"#,
+    );
+    assert_eq!(stdout(&out), "bounded\n", "{}", stderr(&out));
+    let results = tool_results(home.path());
+    assert!(
+        results
+            .iter()
+            .any(|r| r.contains("resource limit exceeded (max_memory_bytes 256 MiB)")),
+        "{results:?}"
+    );
 }

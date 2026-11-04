@@ -386,13 +386,21 @@ mod gateway {
                 .cloned()
                 .collect::<Vec<_>>()
         };
+        let first_step = |docs: &[serde_json::Value]| {
+            named(docs, "post_llm_call").iter().any(|s| {
+                s["extra"]["iteration"] == 1
+                    && s["extra"]["tool_names"] == serde_json::json!(["read_file"])
+            })
+        };
+        // Handlers run detached, so each one's output lands on its own time.
         wait(
-            "the agent:end and startup handlers",
+            "the agent:step, agent:end and startup handlers",
             Duration::from_mins(1),
             || {
                 let docs = received(home);
                 !named(&docs, "on_turn_end").is_empty()
                     && !named(&docs, "on_gateway_startup").is_empty()
+                    && first_step(&docs)
             },
         );
         let docs = received(home);
@@ -400,12 +408,6 @@ mod gateway {
         assert_eq!(
             startup[0]["extra"]["platforms"],
             serde_json::json!(["test"])
-        );
-        let steps = named(&docs, "post_llm_call");
-        assert!(
-            steps.iter().any(|s| s["extra"]["iteration"] == 1
-                && s["extra"]["tool_names"] == serde_json::json!(["read_file"])),
-            "{steps:?}"
         );
         let end = &named(&docs, "on_turn_end")[0];
         assert_eq!(end["extra"]["response"], "y".repeat(500));

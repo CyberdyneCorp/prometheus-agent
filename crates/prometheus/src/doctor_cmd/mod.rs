@@ -8,6 +8,7 @@
 //! the network.
 
 pub mod args;
+mod bridge;
 mod daemon;
 mod fix;
 mod groups;
@@ -176,6 +177,7 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "runtimes" => groups::runtimes(inputs),
         "plugins" => {
             let mut checks = groups::plugins(inputs);
+            checks.extend(bridge::checks(inputs));
             checks.extend(groups::mcp(inputs));
             checks
         }

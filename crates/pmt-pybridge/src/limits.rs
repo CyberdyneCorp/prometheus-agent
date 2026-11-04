@@ -1,7 +1,17 @@
 //! Resource limits of a sidecar's process tree (spec: python-bridge,
-//! Resource limits): resident memory and process count, sampled twice a
-//! second across the sidecar and every descendant. Exceeding a limit
-//! terminates the tree as a crash whose status names the limit.
+//! Resource limits).
+//!
+//! The OS bounds what it can: on Linux the sandbox gives the sidecar a
+//! data-segment rlimit of `max_memory_bytes` and makes it the subreaper
+//! of its descendants, on Windows the sandbox's Job Object caps the whole
+//! tree's committed memory and its process count. An allocation the OS
+//! refuses ends the sidecar with [`MEMORY_EXIT`]. macOS accepts no usable
+//! memory or per-tree process rlimit, so there the bound is this module's
+//! sampler alone. On every OS the sampler also checks the tree as a whole
+//! (resident memory summed over the sidecar and every descendant, and the
+//! process count) twice a second, and remembers the tree's members so a
+//! descendant that left the process group is still terminated with it.
+//! Exceeding a limit terminates the tree as a crash whose status names it.
 
 use std::collections::HashSet;
 use std::time::Duration;
@@ -10,6 +20,10 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 /// How often the tree is sampled.
 pub const SAMPLE_EVERY: Duration = Duration::from_millis(500);
+
+/// The exit code of a sidecar whose allocation the OS refused (the shim
+/// exits with it on `MemoryError`).
+pub const MEMORY_EXIT: i32 = 86;
 
 /// The bounds of one sidecar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,9 +43,28 @@ pub struct Usage {
     pub processes: u32,
 }
 
+/// A process of a tree: its pid and start time, so a recycled pid is
+/// never mistaken for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Member {
+    /// Process id.
+    pub pid: u32,
+    /// Start time (seconds since the epoch).
+    pub start: u64,
+}
+
+/// One sample: the usage and every member but the root.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Tree {
+    /// What the tree uses.
+    pub usage: Usage,
+    /// The descendants of the root.
+    pub descendants: Vec<Member>,
+}
+
 /// Samples the tree rooted at `pid` (`None` when the root is gone).
 #[must_use]
-pub fn sample(system: &mut System, pid: u32) -> Option<Usage> {
+pub fn sample(system: &mut System, pid: u32) -> Option<Tree> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::All,
         true,
@@ -52,26 +85,59 @@ pub fn sample(system: &mut System, pid: u32) -> Option<Usage> {
             break;
         }
     }
-    let memory = tree
-        .iter()
-        .filter_map(|p| system.process(*p))
-        .map(sysinfo::Process::memory)
-        .sum();
-    Some(Usage {
-        memory,
-        processes: u32::try_from(tree.len()).unwrap_or(u32::MAX),
+    let processes = || tree.iter().filter_map(|p| system.process(*p));
+    let memory = processes().map(sysinfo::Process::memory).sum();
+    let descendants = processes()
+        .filter(|p| p.pid() != root)
+        .map(|p| Member {
+            pid: p.pid().as_u32(),
+            start: p.start_time(),
+        })
+        .collect();
+    Some(Tree {
+        usage: Usage {
+            memory,
+            processes: u32::try_from(tree.len()).unwrap_or(u32::MAX),
+        },
+        descendants,
     })
 }
 
+/// Kills every member still running under the same start time.
+pub fn kill_members(system: &mut System, members: &[Member]) {
+    if members.is_empty() {
+        return;
+    }
+    let pids: Vec<Pid> = members.iter().map(|m| Pid::from_u32(m.pid)).collect();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&pids),
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+    for member in members {
+        if let Some(process) = system.process(Pid::from_u32(member.pid))
+            && process.start_time() == member.start
+        {
+            process.kill();
+        }
+    }
+}
+
 impl Limits {
+    /// The status of a tree over its memory limit.
+    #[must_use]
+    pub fn memory_exceeded(&self) -> String {
+        format!(
+            "resource limit exceeded (max_memory_bytes {} MiB)",
+            self.max_memory_bytes / (1024 * 1024)
+        )
+    }
+
     /// The limit `usage` exceeds, as the crash status names it.
     #[must_use]
     pub fn exceeded(&self, usage: Usage) -> Option<String> {
         if usage.memory > self.max_memory_bytes {
-            return Some(format!(
-                "resource limit exceeded (max_memory_bytes {} MiB)",
-                self.max_memory_bytes / (1024 * 1024)
-            ));
+            return Some(self.memory_exceeded());
         }
         (usage.processes > self.max_processes).then(|| {
             format!(
@@ -122,7 +188,7 @@ mod tests {
     #[test]
     fn this_process_can_be_sampled() {
         let mut system = System::new();
-        let usage = sample(&mut system, std::process::id()).unwrap();
-        assert!(usage.memory > 0 && usage.processes >= 1);
+        let tree = sample(&mut system, std::process::id()).unwrap();
+        assert!(tree.usage.memory > 0 && tree.usage.processes >= 1);
     }
 }

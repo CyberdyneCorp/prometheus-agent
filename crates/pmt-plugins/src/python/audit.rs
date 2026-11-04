@@ -103,6 +103,9 @@ pub struct Inferred {
     pub subprocess: bool,
     /// Calls the model.
     pub llm: bool,
+    /// A memory provider whose `cli.py` defines `register_cli(subparser)`:
+    /// its command is named after the plugin.
+    pub memory_cli: bool,
 }
 
 /// The audit of one plugin.
@@ -156,6 +159,7 @@ pub fn audit(dir: &Path, extra_hooks: &[String]) -> Result<Report, Error> {
         let file_reach = &reachable[index];
         scan(file, source, file_reach, &mut findings, &mut inferred);
     }
+    inferred.memory_cli = memory_cli(&read);
     for hook in extra_hooks {
         inferred.hooks.insert(hook.clone());
         if pmt_core::hooks::check(hook).is_err() {
@@ -180,6 +184,17 @@ pub fn audit(dir: &Path, extra_hooks: &[String]) -> Result<Report, Error> {
         findings,
         inferred,
     })
+}
+
+/// Whether a memory-provider plugin has a top-level `cli.py` defining
+/// `register_cli`, the Hermes memory-provider command.
+fn memory_cli(files: &[(String, Source)]) -> bool {
+    let has =
+        |file: &(String, Source), needle: &str| file.1.code.iter().any(|l| l.contains(needle));
+    files
+        .iter()
+        .any(|f| f.0 == "cli.py" && has(f, "def register_cli("))
+        && files.iter().any(|f| has(f, "register_memory_provider("))
 }
 
 /// Every `.py` file under `dir` (caches and virtual environments skipped).

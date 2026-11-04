@@ -64,6 +64,19 @@ impl Ports {
     }
 }
 
+/// Resource bounds of a confined process tree, enforced where the OS can:
+/// on Linux a data-segment rlimit per process (and the child becomes the
+/// subreaper of its descendants, so none leaves its tree), on Windows the
+/// Job Object's committed-memory and active-process limits for the whole
+/// tree. macOS has no usable equivalent; callers sample there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResourceLimits {
+    /// Memory bound in bytes.
+    pub memory_bytes: u64,
+    /// Most processes in the tree.
+    pub processes: u32,
+}
+
 /// What the OS sandbox enforces for one child.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
@@ -75,6 +88,7 @@ pub struct Policy {
     pub(crate) host_patterns: bool,
     pub(crate) spawn: bool,
     pub(crate) unrepresentable: Vec<String>,
+    pub(crate) limits: Option<ResourceLimits>,
 }
 
 impl Policy {
@@ -103,6 +117,7 @@ impl Policy {
             host_patterns: false,
             spawn: false,
             unrepresentable: Vec::new(),
+            limits: None,
         };
         for capability in capabilities {
             policy.apply(capability, paths);
@@ -209,6 +224,19 @@ impl Policy {
     #[must_use]
     pub fn may_spawn(&self) -> bool {
         self.spawn
+    }
+
+    /// The policy with `limits` on the child's tree.
+    #[must_use]
+    pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
+        self.limits = Some(limits);
+        self
+    }
+
+    /// The resource bounds, if any.
+    #[must_use]
+    pub fn limits(&self) -> Option<ResourceLimits> {
+        self.limits
     }
 
     /// Patterns dropped because the OS cannot express them.

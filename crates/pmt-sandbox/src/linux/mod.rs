@@ -127,7 +127,7 @@ impl Prepared {
             .transpose()
             .map_err(setup_error)?;
         let mut command = Command::new(program);
-        exec::confine(&mut command, ruleset, self.filters.clone());
+        exec::confine(&mut command, ruleset, self.filters.clone(), policy.limits());
         Ok(command)
     }
 }

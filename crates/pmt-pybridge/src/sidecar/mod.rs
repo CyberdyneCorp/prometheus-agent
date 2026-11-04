@@ -137,6 +137,9 @@ struct Inner {
     stopping: AtomicBool,
     log: Arc<Log>,
     memory: AtomicU64,
+    limits: Limits,
+    /// The descendants the last sample saw.
+    members: Mutex<Vec<limits::Member>>,
 }
 
 /// A running sidecar (cheap to clone).
@@ -198,6 +201,8 @@ impl Sidecar {
             stopping: AtomicBool::new(false),
             log: Arc::clone(&log),
             memory: AtomicU64::new(0),
+            limits,
+            members: Mutex::new(Vec::new()),
         });
         log.note(&format!("started (pid {})", inner.pid));
         if let Some(stderr) = stderr {
@@ -213,7 +218,7 @@ impl Sidecar {
             std::thread::spawn(move || read_loop(&reader, stdout, &host, &on_exit));
         }
         let monitor = Arc::clone(&inner);
-        std::thread::spawn(move || watch(&monitor, limits));
+        std::thread::spawn(move || watch(&monitor));
         let sidecar = Self { inner };
         sidecar.hello(compat_level)?;
         Ok(sidecar)
@@ -347,7 +352,12 @@ impl Sidecar {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .get_or_insert_with(|| reason.to_owned());
+        let mut system = sysinfo::System::new();
+        if let Some(tree) = limits::sample(&mut system, self.inner.pid) {
+            *self.inner.lock_members() = tree.descendants;
+        }
         terminate_tree(self.inner.pid, true);
+        limits::kill_members(&mut system, &self.inner.lock_members());
         let _ = self
             .inner
             .child
@@ -438,12 +448,15 @@ fn read_loop(
     }
     let status = {
         let mut child = inner.child.lock().unwrap_or_else(PoisonError::into_inner);
-        child
-            .wait()
-            .map_or_else(|e| e.to_string(), |s| exit_text(&s))
+        match child.wait() {
+            Ok(s) if s.code() == Some(limits::MEMORY_EXIT) => inner.limits.memory_exceeded(),
+            Ok(s) => exit_text(&s),
+            Err(e) => e.to_string(),
+        }
     };
-    // Children it left behind die with it.
+    // Children it left behind die with it, in its group or not.
     terminate_tree(inner.pid, true);
+    limits::kill_members(&mut sysinfo::System::new(), &inner.lock_members());
     let reason = inner
         .kill_reason
         .lock()
@@ -526,8 +539,15 @@ fn dispatch(inner: &Arc<Inner>, message: Value, host: &Arc<dyn HostHandler>) {
     let _ = sender.send(reply);
 }
 
+impl Inner {
+    fn lock_members(&self) -> std::sync::MutexGuard<'_, Vec<limits::Member>> {
+        self.members.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 /// Samples the tree until the process ends; kills it over a limit.
-fn watch(inner: &Arc<Inner>, limits: Limits) {
+fn watch(inner: &Arc<Inner>) {
+    let limits = inner.limits;
     let mut system = sysinfo::System::new();
     loop {
         if inner
@@ -538,8 +558,10 @@ fn watch(inner: &Arc<Inner>, limits: Limits) {
         {
             return;
         }
-        if let Some(usage) = limits::sample(&mut system, inner.pid) {
-            inner.memory.store(usage.memory, Ordering::Relaxed);
+        if let Some(tree) = limits::sample(&mut system, inner.pid) {
+            inner.memory.store(tree.usage.memory, Ordering::Relaxed);
+            let usage = tree.usage;
+            *inner.lock_members() = tree.descendants;
             if let Some(reason) = limits.exceeded(usage) {
                 inner.log.note(&reason);
                 Sidecar {

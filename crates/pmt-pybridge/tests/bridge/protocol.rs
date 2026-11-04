@@ -187,3 +187,28 @@ fn emitted_events_go_to_the_host_and_subscriptions_receive_deliveries() {
         r#"{"name": "other:pinged", "payload": {"n": 2}}"#
     );
 }
+
+#[test]
+fn a_memory_providers_cli_module_is_its_command() {
+    let rig = rig("memcli", quick());
+    let registrations = rig.supervisor.start_now().unwrap();
+    let command = &registrations.cli_commands[0];
+    assert_eq!(command.name, "memcli");
+    assert!(command.memory_provider);
+    let params = json!({"kind": "cli", "name": "memcli", "argv": ["status"]});
+    let answer = rig
+        .supervisor
+        .call("command.invoke", &params, Duration::from_secs(20))
+        .unwrap();
+    assert_eq!(answer, json!({"code": 0}));
+    let writes: Vec<String> = rig
+        .host
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(m, _)| m == "console.write")
+        .map(|(_, a)| a["text"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(writes.concat(), "memcli status: ok\n");
+}

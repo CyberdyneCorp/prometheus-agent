@@ -92,6 +92,7 @@ pub const OTHER_REASON: &str = "it is not part of the documented plugin API the 
 
 /// The documented Hermes modules the shim provides.
 pub const SHIM_MODULES: &[&str] = &[
+    "agent.account_usage",
     "agent.memory_provider",
     "agent.context_engine",
     "agent.context_references",
@@ -106,6 +107,7 @@ pub const SHIM_MODULES: &[&str] = &[
     "agent.secret_scope",
     "providers",
     "providers.base",
+    "hermes_cli.version_info",
 ];
 
 /// Top-level Hermes packages whose other modules are refused.

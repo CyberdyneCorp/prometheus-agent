@@ -13,6 +13,9 @@ import traceback
 from . import PROTOCOL_VERSION, cli, context, hooks, imports, state, typed
 from .wire import FrameTooLarge, Wire
 
+# pmt_pybridge::limits::MEMORY_EXIT
+MEMORY_EXIT = 86
+
 UNKNOWN_METHOD = -32601
 INVALID_PARAMS = -32602
 PLUGIN_ERROR = -32000
@@ -118,6 +121,10 @@ class Sidecar:
             self.respond(call_id, failure=failure)
         except context.UnsupportedPluginApi as err:
             self.respond(call_id, failure=Failure(UNSUPPORTED, str(err), {"code": "unsupported_api"}))
+        except MemoryError:
+            # The OS refused an allocation (the sandbox's memory limit): the host reports
+            # `resource limit exceeded (max_memory_bytes ...)` for this exit code.
+            os._exit(MEMORY_EXIT)
         except typed.Unserializable as err:
             self.respond(call_id, failure=Failure(UNSERIALIZABLE, str(err), {"code": "unserializable"}))
         except Exception as err:  # noqa: BLE001 - a plugin error is the call's answer
@@ -168,7 +175,30 @@ def _load(sidecar, params):
     register = getattr(module, "register", None)
     if callable(register):
         register(sidecar.ctx)
+    _memory_cli(module_name, directory, params.get("manifest", {}))
     return registrations()
+
+
+def _memory_cli(package, directory, manifest):
+    """A memory provider's ``cli.py`` ``register_cli(subparser)`` becomes the CLI command named
+    after the plugin, as Hermes exposes it (``hermes <provider> ...``); its handler is the
+    module's ``<name>_command`` or the parsed namespace's ``func``."""
+    name = state.PLUGIN_ID
+    reg = state.REGISTRY
+    if not reg["memory_providers"] or name in reg["cli_commands"]:
+        return
+    if not os.path.isfile(os.path.join(directory, "cli.py")):
+        return
+    cli_module = importlib.import_module(package + ".cli")
+    register_cli = getattr(cli_module, "register_cli", None)
+    if not callable(register_cli):
+        return
+    description = manifest.get("description") or ""
+    reg["cli_commands"][name] = {
+        "help": description or f"Manage {name} memory plugin", "description": description,
+        "setup_fn": register_cli, "handler_fn": getattr(cli_module, f"{name.replace('-', '_')}_command", None),
+        "memory_provider": True,
+    }
 
 
 def registrations():
@@ -184,7 +214,8 @@ def registrations():
         "sections": sections,
         "commands": [{"name": n, "description": c["description"], "args_hint": c["args_hint"]}
                      for n, c in reg["commands"].items()],
-        "cli_commands": [{"name": n, "help": c["help"], "description": c["description"]}
+        "cli_commands": [{"name": n, "help": c["help"], "description": c["description"],
+                          "memory_provider": c.get("memory_provider", False)}
                          for n, c in reg["cli_commands"].items()],
         "providers": [_profile(p) for p in reg["providers"].values()],
         "provider_objects": _objects(reg["provider_objects"]),
@@ -297,25 +328,51 @@ def _provider(_, params):
 def _model_hook(profile, method, args):
     context_ = dict(args.get("context") or {})
     if method == "headers":
-        headers = dict(profile.default_headers or {})
-        headers.update((profile.build_client_kwargs_extras(**context_) or {}).get("default_headers") or {})
-        _, top = profile.build_api_kwargs_extras(**context_) or ({}, {})
-        headers.update((top or {}).get("extra_headers") or {})
-        return {str(k): str(v) for k, v in headers.items()}
+        return _model_headers(profile, context_)
     if method == "prepare_request":
-        body = dict(args.get("body") or {})
-        if isinstance(body.get("messages"), list):
-            body["messages"] = profile.prepare_messages(body["messages"])
-        body.update(profile.build_extra_body(**context_) or {})
-        extra, top = profile.build_api_kwargs_extras(**context_) or ({}, {})
-        body.update(extra or {})
-        body.update({k: v for k, v in (top or {}).items() if k != "extra_headers"})
-        return typed.to_wire(body, f"{profile.name}.prepare_request")
+        return _prepared(profile, dict(args.get("body") or {}), context_)
     if method == "list_models":
         return typed.to_wire(profile.fetch_models() or [], f"{profile.name}.fetch_models")
     if method == "classify_error":
         return _jsonable(profile.classify_api_error(**args))
     raise Failure(INVALID_PARAMS, f"unknown provider hook '{method}'")
+
+
+def _model_headers(profile, context_):
+    """Client headers as Hermes builds them: the endpoint's ``client_headers`` (else the static
+    ``default_headers``), client kwargs extras, per-request headers and ``extra_headers`` extras.
+    The host sends to the profile's own endpoint, so that is the ``base_url`` the hooks see."""
+    base_url = profile.base_url or ""
+    headers = profile.client_headers(base_url=base_url)
+    headers = dict(profile.default_headers or {}) if headers is None else dict(headers)
+    headers.update((profile.build_client_kwargs_extras(**context_) or {}).get("default_headers") or {})
+    headers.update(profile.request_headers(base_url=base_url, model=context_.get("model") or "") or {})
+    _, top = profile.build_api_kwargs_extras(**context_) or ({}, {})
+    headers.update((top or {}).get("extra_headers") or {})
+    return {str(k): str(v) for k, v in headers.items()}
+
+
+def _prepared(profile, body, context_):
+    """The request body after the profile's request-level quirks: message preprocessing, the
+    output cap when the caller set none, the fixed temperature and the extra_body/top-level extras."""
+    from providers.base import OMIT_TEMPERATURE
+
+    if isinstance(body.get("messages"), list):
+        body["messages"] = profile.prepare_messages(body["messages"])
+    if "max_tokens" not in body and "max_completion_tokens" not in body:
+        cap = profile.get_max_tokens(context_.get("model"))
+        if cap is not None:
+            body[profile.max_tokens_param(base_url=profile.base_url or "", model=context_.get("model") or "")
+                 or "max_tokens"] = cap
+    if profile.fixed_temperature is OMIT_TEMPERATURE:
+        body.pop("temperature", None)
+    elif profile.fixed_temperature is not None:
+        body["temperature"] = profile.fixed_temperature
+    body.update(profile.build_extra_body(**context_) or {})
+    extra, top = profile.build_api_kwargs_extras(**context_) or ({}, {})
+    body.update(extra or {})
+    body.update({k: v for k, v in (top or {}).items() if k != "extra_headers"})
+    return typed.to_wire(body, f"{profile.name}.prepare_request")
 
 
 def _event(_, params):

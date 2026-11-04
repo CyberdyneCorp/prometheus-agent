@@ -49,6 +49,18 @@ def _hog(args, **_):
         time.sleep(0.01)
 
 
+def _alloc(args, **_):
+    """One allocation of ``bytes``; the OS memory limit refuses it with MemoryError."""
+    block = bytearray(int(args.get("bytes", 0)))
+    return str(len(block))
+
+
+def _escape(args, **_):
+    """A child in its own session, outside the sidecar's process group."""
+    child = subprocess.Popen(["sleep", "600"], start_new_session=True)
+    return str(child.pid)
+
+
 def _whoami(args, **_):
     return json.dumps({
         "env": sorted(os.environ),
@@ -106,7 +118,7 @@ def _unsupported(args, **_):
 TOOLS = {
     "echo": _echo, "big": _big, "slow": _slow, "stall": _stall, "crash": _crash, "spawn": _spawn,
     "hog": _hog, "whoami": _whoami, "secret": _secret, "read": _read, "inject": _inject, "fetch": _fetch,
-    "unsupported": _unsupported, "emit": _emit,
+    "unsupported": _unsupported, "emit": _emit, "alloc": _alloc, "escape": _escape,
 }
 
 

@@ -7,7 +7,8 @@
 //! to the child. The child is created suspended, put in a job that kills it
 //! when the launcher dies (`KILL_ON_JOB_CLOSE`), may not reach the desktop,
 //! clipboard or global atoms, and, without `process.spawn`, may not start
-//! other processes; then it is resumed.
+//! other processes; with resource limits the job caps the tree's committed
+//! memory and its active processes. Then the child is resumed.
 
 #![allow(unsafe_code)]
 
@@ -27,8 +28,9 @@ use windows_sys::Win32::System::Console::{
 };
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_ACTIVE_PROCESS,
-    JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    JOB_OBJECT_UILIMIT_DESKTOP, JOB_OBJECT_UILIMIT_DISPLAYSETTINGS, JOB_OBJECT_UILIMIT_EXITWINDOWS,
+    JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION, JOB_OBJECT_LIMIT_JOB_MEMORY,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_UILIMIT_DESKTOP,
+    JOB_OBJECT_UILIMIT_DISPLAYSETTINGS, JOB_OBJECT_UILIMIT_EXITWINDOWS,
     JOB_OBJECT_UILIMIT_GLOBALATOMS, JOB_OBJECT_UILIMIT_HANDLES, JOB_OBJECT_UILIMIT_READCLIPBOARD,
     JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS, JOB_OBJECT_UILIMIT_WRITECLIPBOARD,
     JOBOBJECT_BASIC_UI_RESTRICTIONS, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
@@ -44,6 +46,7 @@ use windows_sys::Win32::System::Threading::{
 
 use super::args::{LaunchSpec, command_line};
 use super::container::wide;
+use crate::policy::ResourceLimits;
 
 /// `SE_GROUP_ENABLED` (winnt.h), the attribute of an enabled capability.
 const SE_GROUP_ENABLED: u32 = 4;
@@ -86,7 +89,7 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
             size_of::<HANDLE>() * handles.len(),
         )?;
     }
-    let job = Job::new(spec.spawn)?;
+    let job = Job::new(spec.spawn, spec.limits)?;
     let child = create(spec, &handles, &mut attributes)?;
     job.assign(child.process)?;
     // SAFETY: a valid thread handle of the suspended child.
@@ -205,7 +208,7 @@ impl Drop for Attributes {
 struct Job(HANDLE);
 
 impl Job {
-    fn new(spawn: bool) -> Result<Self, String> {
+    fn new(spawn: bool, bounds: Option<ResourceLimits>) -> Result<Self, String> {
         // SAFETY: an anonymous job with default security.
         let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
         if handle.is_null() {
@@ -218,6 +221,14 @@ impl Job {
         if !spawn {
             limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
             limits.BasicLimitInformation.ActiveProcessLimit = 1;
+        }
+        if let Some(bounds) = bounds {
+            limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_JOB_MEMORY;
+            limits.JobMemoryLimit = usize::try_from(bounds.memory_bytes).unwrap_or(usize::MAX);
+            if spawn {
+                limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+                limits.BasicLimitInformation.ActiveProcessLimit = bounds.processes;
+            }
         }
         job.set(
             JobObjectExtendedLimitInformation,

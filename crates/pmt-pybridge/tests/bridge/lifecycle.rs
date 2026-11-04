@@ -237,3 +237,41 @@ fn the_environment_holds_only_the_allowed_variables_and_granted_secrets() {
         "{refused}"
     );
 }
+
+#[test]
+fn an_allocation_the_os_refuses_is_a_memory_limit_crash() {
+    let mut settings = quick();
+    settings.limits.max_memory_bytes = 128 * 1024 * 1024;
+    let rig = rig("echo", settings);
+    // Far beyond any machine: the allocator refuses it at once, as the
+    // OS memory limit does for a smaller one.
+    let err = rig
+        .supervisor
+        .tool("alloc", &json!({"bytes": 1_u64 << 62}), &json!({}))
+        .unwrap_err();
+    assert!(
+        err.message()
+            .contains("resource limit exceeded (max_memory_bytes 128 MiB)"),
+        "{}",
+        err.message()
+    );
+}
+
+#[test]
+fn a_child_that_left_the_process_group_is_reaped_with_the_sidecar() {
+    let rig = rig("echo", quick());
+    let child: u32 = rig
+        .supervisor
+        .tool("escape", &json!({}), &json!({}))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(alive(child));
+    // Once a sample has seen it, it is a member of the tree.
+    std::thread::sleep(pmt_pybridge::limits::SAMPLE_EVERY * 3);
+    rig.supervisor.stop();
+    assert!(
+        eventually(Duration::from_secs(2), || !alive(child)),
+        "pid {child} outlived its sidecar"
+    );
+}

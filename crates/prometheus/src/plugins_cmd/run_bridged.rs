@@ -67,6 +67,13 @@ impl Console for Streams {
     }
 }
 
+/// The profile's active external memory provider. Until the external
+/// memory-provider contract adds `memory.provider` (memory spec, task 44.9)
+/// every profile runs the built-in store, so no memory provider is active.
+fn active_memory_provider(_scope: &ProfileScope) -> &'static str {
+    "builtin"
+}
+
 /// Runs (or lists) a python plugin's CLI commands.
 ///
 /// # Errors
@@ -88,9 +95,12 @@ pub(super) fn run(
     });
     let supervisor = prepared.supervisor();
     let registrations = supervisor.start_now()?;
+    let active = active_memory_provider(scope);
+    let available =
+        |c: &&pmt_pybridge::registrations::CliCommand| !c.memory_provider || id == active;
     let Some(name) = name else {
         let mut text = String::new();
-        for command in &registrations.cli_commands {
+        for command in registrations.cli_commands.iter().filter(available) {
             let _ = writeln!(text, "{}  {}", command.name, command.help);
         }
         if text.is_empty() {
@@ -99,6 +109,20 @@ pub(super) fn run(
         supervisor.stop();
         return print_raw(&text);
     };
+    if let Some(command) = registrations
+        .cli_commands
+        .iter()
+        .find(|c| c.name == name && !available(c))
+    {
+        supervisor.stop();
+        return Err(Error::new(
+            &codes::PLUGINS_NOT_FOUND,
+            format!(
+                "command '{}' of memory provider '{id}' is available only while '{id}' is the active memory.provider (now '{active}')",
+                command.name
+            ),
+        ));
+    }
     if !registrations.cli_commands.iter().any(|c| c.name == name) {
         supervisor.stop();
         return Err(Error::new(

@@ -532,6 +532,9 @@ capabilities = [
 "Batched sub-procedure" = ["crates/pmt-tools/tests/browser/main.rs::a_batched_sub_procedure_keeps_its_tab_for_the_next_call"]
 "No terminal toolset" = ["crates/pmt-tools/tests/toolsets.rs::browser_exec_needs_the_terminal_toolset"]
 
+[model-providers."Hermes model-provider plugins hosted by the Python bridge"]
+"Profile references a missing bridged provider" = ["crates/prometheus/tests/python_bridge.rs::a_profile_naming_a_missing_bridged_provider_fails_closed"]
+
 [model-providers."Typed profile-scoped provider registry"]
 "Plugin provider is invisible to another profile" = ["crates/pmt-providers/src/registry.rs::plugin_provider_is_invisible_to_another_profile"]
 "Alias resolves to canonical id" = ["crates/pmt-providers/src/registry.rs::alias_resolves_to_the_canonical_id"]
@@ -2317,7 +2320,8 @@ capabilities = [
 "Crash loop is contained" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_crash_loop_marks_the_plugin_failed_and_spares_the_rest", "crates/prometheus/tests/python_bridge.rs::a_crashing_plugin_does_not_affect_the_agent"]
 
 [python-bridge."Resource limits"]
-"Memory leak is bounded" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_memory_leak_is_terminated_naming_the_limit"]
+"Memory leak is bounded" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_memory_leak_is_terminated_naming_the_limit", "crates/pmt-pybridge/tests/bridge/lifecycle.rs::an_allocation_the_os_refuses_is_a_memory_limit_crash"]
+"A child outside the process group is reaped" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_child_that_left_the_process_group_is_reaped_with_the_sidecar"]
 
 [python-bridge."Registrations follow plugin-system reload rules"]
 "Restart does not mutate a live session" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_restart_that_drops_a_tool_answers_by_name"]
@@ -2332,7 +2336,7 @@ capabilities = [
 "Incompatible plugin is imported disabled" = ["crates/prometheus/src/plugins_host/bridge/migrate.rs::an_incompatible_plugin_is_imported_disabled_and_cited"]
 
 [python-bridge."Model-provider plugins through the bridge"]
-"Copilot provider plugin works unchanged" = ["crates/prometheus/tests/python_bridge.rs::a_copilot_provider_plugin_works_unchanged"]
+"Copilot provider plugin works unchanged" = ["crates/prometheus/tests/python_bridge.rs::a_copilot_provider_plugin_works_unchanged", "crates/prometheus/tests/python_bridge_hermes.rs::the_hermes_nvidia_provider_plugin_serves_a_session"]
 "Sidecar crash fails the call, not the agent" = ["crates/prometheus/tests/python_bridge.rs::a_sidecar_crash_fails_the_call_and_the_fallback_chain_answers"]
 
 [python-bridge."Plugin CLI commands through the bridge"]

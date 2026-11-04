@@ -9,7 +9,8 @@
 //! connect only to its own loopback egress proxy, which admits the granted
 //! hosts; without one it has no network. It starts children only with
 //! `subprocess` granted. Each start gets a fresh proxy, kept until the
-//! next start.
+//! next start. The sandbox also bounds the tree's resources where the OS
+//! can (spec: python-bridge, Resource limits; see `pmt_pybridge::limits`).
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,7 +25,7 @@ use pmt_net::egress::{Allowed, Proxy, Rules};
 use pmt_plugins::grants::PluginGrants;
 use pmt_pybridge::launch::{self, LaunchEnv};
 use pmt_pybridge::supervisor::Launcher;
-use pmt_sandbox::{Paths, Policy, Sandbox};
+use pmt_sandbox::{Paths, Policy, ResourceLimits, Sandbox};
 
 /// Where one plugin's sidecar runs from.
 pub(super) struct Layout {
@@ -160,8 +161,13 @@ impl Launcher for Sandboxed {
             workspace: layout.data.clone(),
             scratch: vec![canonical(&layout.data), canonical(&layout.tmp)],
         };
+        let bridge = &self.scope.config().python_bridge;
+        let limits = ResourceLimits {
+            memory_bytes: bridge.max_memory_bytes,
+            processes: bridge.max_processes,
+        };
         let sandbox = Sandbox::new(
-            Policy::from_set(&capabilities, &paths),
+            Policy::from_set(&capabilities, &paths).with_limits(limits),
             &self.scope.config().security.sandbox,
         )?;
         let mut command = sandbox.command(&layout.env.python)?;

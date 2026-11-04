@@ -188,7 +188,16 @@ impl Surfaces {
                 "model provider '{id}' is a built-in provider; replacing it needs the providers_override grant, so the built-in '{id}' stays active"
             ));
         }
-        if let Some(name) = names.iter().find(|n| builtin.contains(n) && **n != &id) {
+        // A replacement keeps the names of the provider it replaces.
+        let replaced = if replaces_builtin {
+            builtin_aliases(&id)
+        } else {
+            Vec::new()
+        };
+        if let Some(name) = names
+            .iter()
+            .find(|n| builtin.contains(n) && **n != &id && !replaced.contains(n))
+        {
             return Err(format!(
                 "model provider '{id}': alias '{name}' is a built-in provider name"
             ));
@@ -329,6 +338,15 @@ pub fn builtin_names() -> Vec<String> {
         .into_iter()
         .flat_map(|d| std::iter::once(d.id).chain(d.aliases))
         .collect()
+}
+
+/// The aliases of built-in provider `id`.
+fn builtin_aliases(id: &str) -> Vec<String> {
+    pmt_providers::builtin::descriptors()
+        .into_iter()
+        .find(|d| d.id == id)
+        .map(|d| d.aliases)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -1,11 +1,17 @@
 //! The launcher's argument protocol and Windows command-line quoting.
 //!
-//! `<launcher> __pmt-sandbox-launch <container> <i|n> <s|-> -- <program> [args...]`:
+//! `<launcher> __pmt-sandbox-launch <container> <i|n> <s|-> <limits|-> -- <program> [args...]`:
 //! the `AppContainer` profile name, whether the child gets the
-//! `internetClient` capability, and whether it may start processes.
+//! `internetClient` capability, whether it may start processes, and the
+//! Job Object's resource limits as `<processes>:<memory bytes>`.
 
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::OsStrExt;
+
+use crate::policy::ResourceLimits;
+
+const USAGE: &str =
+    "usage: __pmt-sandbox-launch <container> <i|n> <s|-> <limits|-> -- <program> [args...]";
 
 /// What the launcher starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +19,7 @@ pub(crate) struct LaunchSpec {
     pub(crate) container: String,
     pub(crate) internet: bool,
     pub(crate) spawn: bool,
+    pub(crate) limits: Option<ResourceLimits>,
     pub(crate) program: OsString,
     pub(crate) args: Vec<OsString>,
 }
@@ -23,13 +30,19 @@ impl LaunchSpec {
         container: &str,
         internet: bool,
         spawn: bool,
+        limits: Option<ResourceLimits>,
         program: &OsStr,
     ) -> Vec<OsString> {
+        let limits = limits.map_or_else(
+            || "-".to_owned(),
+            |l| format!("{}:{}", l.processes, l.memory_bytes),
+        );
         vec![
             OsString::from(crate::LAUNCH_ARG),
             OsString::from(container),
             OsString::from(if internet { "i" } else { "n" }),
             OsString::from(if spawn { "s" } else { "-" }),
+            OsString::from(limits),
             OsString::from("--"),
             program.to_os_string(),
         ]
@@ -38,21 +51,26 @@ impl LaunchSpec {
     /// Parses the arguments after the launch marker.
     pub(crate) fn parse(args: &[OsString]) -> Result<Self, String> {
         let text = |i: usize| args.get(i).and_then(|a| a.to_str());
-        let (Some(container), Some(net), Some(spawn), Some("--")) =
-            (text(0), text(1), text(2), text(3))
+        let (Some(container), Some(net), Some(spawn), Some(limits), Some("--")) =
+            (text(0), text(1), text(2), text(3), text(4))
         else {
-            return Err(
-                "usage: __pmt-sandbox-launch <container> <i|n> <s|-> -- <program> [args...]"
-                    .to_owned(),
-            );
+            return Err(USAGE.to_owned());
         };
-        let program = args.get(4).ok_or("missing program")?.clone();
+        let limits = match limits.split_once(':') {
+            None => None,
+            Some((processes, memory)) => Some(ResourceLimits {
+                processes: processes.parse().map_err(|_| USAGE.to_owned())?,
+                memory_bytes: memory.parse().map_err(|_| USAGE.to_owned())?,
+            }),
+        };
+        let program = args.get(5).ok_or("missing program")?.clone();
         Ok(Self {
             container: container.to_owned(),
             internet: net == "i",
             spawn: spawn == "s",
+            limits,
             program,
-            args: args[5..].to_vec(),
+            args: args[6..].to_vec(),
         })
     }
 }
@@ -122,11 +140,16 @@ mod tests {
 
     #[test]
     fn spec_round_trips() {
-        let head = LaunchSpec::head("c1", true, false, OsStr::new("cmd.exe"));
+        let limits = ResourceLimits {
+            memory_bytes: 1 << 30,
+            processes: 16,
+        };
+        let head = LaunchSpec::head("c1", true, false, Some(limits), OsStr::new("cmd.exe"));
         let mut args: Vec<OsString> = head[1..].to_vec();
         args.push(OsString::from("/C"));
         let spec = LaunchSpec::parse(&args).unwrap();
         assert!(spec.internet && !spec.spawn);
+        assert_eq!(spec.limits, Some(limits));
         assert_eq!(spec.program, "cmd.exe");
         assert_eq!(spec.args, [OsString::from("/C")]);
     }
