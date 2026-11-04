@@ -414,6 +414,7 @@ fn delete(
     }
     let deleted = store.delete_session(id, with_lineage)?;
     let ids = |list: &[SessionId]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
+    crate::plugins_host::sessions_deleted(&ctx.scope()?, &ids(&deleted.sessions));
     if ctx.json {
         return print_json(&json!({
             "deleted": ids(&deleted.sessions),
@@ -461,6 +462,7 @@ fn prune(
         return Ok(code);
     }
     let pruned = store.prune(older_than, false)?;
+    crate::plugins_host::sessions_deleted(&ctx.scope()?, &ids(&pruned));
     if ctx.json {
         return document(
             "sessions prune",

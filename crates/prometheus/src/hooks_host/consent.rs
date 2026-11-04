@@ -2,11 +2,13 @@
 //! plugin-system, Shell hooks with first-use consent; Gateway hook
 //! directories).
 //!
-//! A shell hook is approved as `(event, command, sha256 of its program)`
-//! and a hook directory as `(name, sha256 of its handler)`, recorded in the
-//! profile's `grants.toml`. Editing the program or handler changes the
-//! digest, so the hook is skipped (with a warning naming the profile) until
-//! it is approved again. Only a foreground interactive chat asks; every
+//! A shell hook is approved as `(event, command, sha256 of the files it
+//! runs)` and a hook directory as `(name, sha256 of its handler)`, recorded
+//! in the profile's `grants.toml`. The files a shell hook runs are its
+//! program and every argument naming a file (`python3 hooks/guard.py`
+//! digests the interpreter and `guard.py`), so editing the script changes
+//! the digest and the hook is skipped (with a warning naming the profile)
+//! until it is approved again. Only a foreground interactive chat asks; every
 //! other context runs approved hooks only, unless `hooks.auto_accept` (or
 //! `--accept-hooks`) accepts the rest.
 
@@ -26,11 +28,15 @@ pub struct ShellEntry {
     pub event: String,
     /// The entry.
     pub hook: ShellHook,
-    /// The command split into words.
+    /// The command split into words, with every argument that names a
+    /// script made absolute (so the hook runs the files approved, whatever
+    /// the session's working directory).
     pub words: Vec<String>,
     /// The program the first word resolves to.
     pub program: Option<PathBuf>,
-    /// `sha256:<hex>` of the program file.
+    /// The files the arguments name, in argument order.
+    pub scripts: Vec<PathBuf>,
+    /// `sha256:<hex>` over the program and the scripts, in that order.
     pub digest: Option<String>,
 }
 
@@ -87,25 +93,68 @@ pub fn program(scope: &ProfileScope, first: &str) -> Option<PathBuf> {
     })
 }
 
+/// The file an argument names: absolute, or relative to the profile home
+/// (like a relative program). Options never name files.
+fn script(scope: &ProfileScope, word: &str) -> Option<PathBuf> {
+    if word.starts_with('-') {
+        return None;
+    }
+    let path = Path::new(word);
+    let full = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        scope.dir().join(path)
+    };
+    full.is_file().then_some(full)
+}
+
+/// `sha256:<hex>` over the bytes of `files`, in order.
+fn files_digest(files: &[&Path]) -> Option<String> {
+    let contents: Vec<Vec<u8>> = files
+        .iter()
+        .map(|f| std::fs::read(f).ok())
+        .collect::<Option<_>>()?;
+    let parts: Vec<&[u8]> = contents.iter().map(Vec::as_slice).collect();
+    Some(pmt_plugins::digest::of_bytes(&parts))
+}
+
+/// One `[[hooks.<event>]]` entry resolved against the profile.
+fn shell_entry(scope: &ProfileScope, event: &str, hook: &ShellHook) -> ShellEntry {
+    let mut words = shell_words(&hook.command).unwrap_or_default();
+    let program = words.first().and_then(|first| program(scope, first));
+    let mut scripts = Vec::new();
+    for word in words.iter_mut().skip(1) {
+        if let Some(file) = script(scope, word) {
+            *word = file.display().to_string();
+            scripts.push(file);
+        }
+    }
+    let digest = program.as_deref().and_then(|program| {
+        let files: Vec<&Path> = std::iter::once(program)
+            .chain(scripts.iter().map(PathBuf::as_path))
+            .collect();
+        files_digest(&files)
+    });
+    ShellEntry {
+        event: event.to_owned(),
+        hook: hook.clone(),
+        words,
+        program,
+        scripts,
+        digest,
+    }
+}
+
 /// Every `[[hooks.<event>]]` entry of the profile, in config order.
 #[must_use]
 pub fn shell_entries(scope: &ProfileScope) -> Vec<ShellEntry> {
-    let mut entries = Vec::new();
-    for (event, hooks) in &scope.config().hooks.events {
-        for hook in hooks {
-            let words = shell_words(&hook.command).unwrap_or_default();
-            let program = words.first().and_then(|first| program(scope, first));
-            let digest = program.as_deref().and_then(file_digest);
-            entries.push(ShellEntry {
-                event: event.clone(),
-                hook: hook.clone(),
-                words,
-                program,
-                digest,
-            });
-        }
-    }
-    entries
+    let config = scope.config();
+    config
+        .hooks
+        .events
+        .iter()
+        .flat_map(|(event, hooks)| hooks.iter().map(|hook| shell_entry(scope, event, hook)))
+        .collect()
 }
 
 /// Where `entry` stands in `grants`.
@@ -189,8 +238,11 @@ pub fn ask_pending(scope: &ProfileScope) -> Result<(), Error> {
         if let Some(program) = &entry.program {
             let _ = write!(question, "\n  program {}", program.display());
         }
+        for script in &entry.scripts {
+            let _ = write!(question, "\n  script {}", script.display());
+        }
         if consent == Consent::Changed {
-            question.push_str("\n  (its program changed since you approved it)");
+            question.push_str("\n  (its program or script changed since you approved it)");
         }
         question.push_str("\nRun it in this profile's sessions?");
         if crate::prompt::confirm(&question)? {

@@ -127,7 +127,8 @@ pub fn lock_digest(text: &str) -> String {
 
 /// Resolves `requirements` into `<lock_dir>/bridge.lock` with exact
 /// versions and hashes for `python` (network access). Returns the lock's
-/// path.
+/// path. Only wheels are admitted: no third-party build code runs at
+/// install time, and a requirement without a wheel fails naming it.
 ///
 /// # Errors
 ///
@@ -152,6 +153,9 @@ pub fn lock(
         .args([
             "pip",
             "compile",
+            // Wheels only: an sdist would run its build backend (setup.py,
+            // PEP 517 hooks) as the user, outside the plugin's sandbox.
+            "--no-build",
             "--generate-hashes",
             "--no-header",
             "--quiet",
@@ -253,9 +257,16 @@ pub fn ensure(
         .arg(&env.dir);
     run(&mut venv, "create the environment")?;
     let mut sync = uv.command();
-    sync.args(["pip", "sync", "--quiet", "--require-hashes", "--python"])
-        .arg(&env.python)
-        .arg(lock);
+    sync.args([
+        "pip",
+        "sync",
+        "--quiet",
+        "--no-build",
+        "--require-hashes",
+        "--python",
+    ])
+    .arg(&env.python)
+    .arg(lock);
     if offline {
         sync.arg("--offline");
     }

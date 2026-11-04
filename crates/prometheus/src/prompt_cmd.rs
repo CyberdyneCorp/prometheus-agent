@@ -86,7 +86,7 @@ async fn measure<'a>(
     let (provider, model, route) = route(args, config)?;
     let (meta, _) = Catalog::new(config, None).metadata(&provider, &model);
     let mut selection = if args.toolsets.is_empty() {
-        Selection::for_surface(inventory.registry, surface, &config.tools, &config.toolsets)?
+        inventory.selection_for(surface)?
     } else {
         Selection::resolve(
             inventory.registry,

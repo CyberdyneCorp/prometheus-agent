@@ -25,9 +25,9 @@ use pmt_sandbox::{Paths, Policy, Sandbox};
 use self::consent::Consent;
 
 /// A command for `program` under the profile's process sandbox: the
-/// capability baseline plus reading the program's own directory, with the
-/// session's working directory (`cwd`, else the profile home) as the
-/// workspace.
+/// capability baseline plus reading the directories of the program and of
+/// the `scripts` its arguments name, with the session's working directory
+/// (`cwd`, else the profile home) as the workspace.
 ///
 /// # Errors
 ///
@@ -35,6 +35,7 @@ use self::consent::Consent;
 pub fn sandboxed(
     scope: &ProfileScope,
     program: &Path,
+    scripts: &[std::path::PathBuf],
     cwd: Option<&str>,
 ) -> Result<Command, Error> {
     let config = scope.config();
@@ -48,7 +49,8 @@ pub fn sandboxed(
         scratch: vec![scratch.clone()],
     };
     let mut extra = vec![Capability::ProcessSpawn("*".to_owned())];
-    if let Some(dir) = program.parent() {
+    let files = std::iter::once(program).chain(scripts.iter().map(std::path::PathBuf::as_path));
+    for dir in files.filter_map(Path::parent) {
         extra.push(Capability::FsRead(format!("{}/**", dir.display())));
     }
     let capabilities = baseline(&config.security).union(&extra.into_iter().collect());
@@ -109,8 +111,7 @@ fn add_shell(scope: &ProfileScope, grants: &pmt_config::grants::Grants, hooks: &
             continue;
         };
         let event = entry.event.clone();
-        let runner =
-            shell::ShellRunner::new(scope.clone(), &event, entry.hook, entry.words, program);
+        let runner = shell::ShellRunner::new(scope.clone(), &entry, program);
         if let Err(err) = hooks.add_external(&event, shell::external(runner)) {
             tracing::warn!(profile, "shell hook skipped: {}", err.message());
         }
@@ -146,6 +147,8 @@ fn add_dirs(scope: &ProfileScope, grants: &pmt_config::grants::Grants, hooks: &m
 pub fn fingerprint(scope: &ProfileScope) -> String {
     let mut text = format!("{:?}|", scope.config().hooks);
     for entry in consent::shell_entries(scope) {
+        // The digest covers the program and every script argument, so
+        // editing `guard.py` of `python3 guard.py` reloads the set.
         let _ = write!(text, "{}={:?};", entry.hook.command, entry.digest);
     }
     for dir in dirs::scan(scope) {

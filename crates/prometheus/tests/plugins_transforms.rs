@@ -285,6 +285,167 @@ fn disabling_a_skill_tells_on_skill_lifecycle() {
     assert!(last.contains("\"action\":\"disable\""), "{last}");
 }
 
+/// The hook names `id` saw, in order.
+fn seen(home: &Path, id: &str) -> Vec<String> {
+    plugin_state(home, id, "seen")
+        .split(';')
+        .filter(|h| !h.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// A CLI session fires the lifecycle hooks a gateway turn fires
+/// (`on_session_start`, `on_turn_start`, `post_llm_call` per iteration,
+/// `on_turn_end` with the reply) and the API hooks around each model call.
+#[test]
+fn a_cli_session_fires_its_lifecycle_and_api_hooks() {
+    let home = mock_home();
+    let names = "on_session_start,on_turn_start,post_llm_call,on_turn_end,pre_api_request,post_api_request,on_session_end";
+    let hooks: Vec<String> = names.split(',').map(|h| format!("\"{h}\"")).collect();
+    hooks_plugin(
+        home.path(),
+        "life",
+        &format!("hooks = [{}]", hooks.join(", ")),
+        &[("hooks", &format!("\"{names}\""))],
+    );
+    let rules = r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "echo hi" }
+
+[[rule]]
+tool_result = "hi"
+text = "all done"
+"#;
+    let script = script(home.path(), rules);
+    let out = one_shot(
+        home.path(),
+        &[
+            "-z",
+            "go",
+            "--yolo",
+            "--mock-script",
+            script.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    let seen = seen(home.path(), "life");
+    let expected = [
+        "on_session_start",
+        "on_turn_start",
+        "pre_api_request",
+        "post_api_request",
+        "post_llm_call",
+        "pre_api_request",
+        "post_api_request",
+        "post_llm_call",
+        "on_turn_end",
+        "on_session_end",
+    ];
+    assert_eq!(seen, expected);
+    let step = plugin_state(home.path(), "life", "last_post_llm_call");
+    assert!(step.contains("\"iteration\""), "{step}");
+    let end = plugin_state(home.path(), "life", "last_on_turn_end");
+    assert!(end.contains("\"response\":\"all done\""), "{end}");
+    let api = plugin_state(home.path(), "life", "last_post_api_request");
+    assert!(api.contains("\"provider\":\"mock\""), "{api}");
+}
+
+/// A failed model call fires `api_request_error`.
+#[test]
+fn a_failed_model_call_fires_api_request_error() {
+    let home = mock_home();
+    hooks_plugin(
+        home.path(),
+        "errors",
+        "hooks = [\"api_request_error\"]",
+        &[("hooks", "\"api_request_error\"")],
+    );
+    let script = script(
+        home.path(),
+        "[[rule]]\nuser = \"go\"\nfault = \"auth_error\"\n",
+    );
+    let out = one_shot(
+        home.path(),
+        &["-z", "go", "--mock-script", script.to_str().unwrap()],
+    );
+    assert!(!out.status.success());
+    let last = plugin_state(home.path(), "errors", "last_api_request_error");
+    assert!(last.contains("\"error\""), "{last}");
+}
+
+/// Spec: execution-environments, Foreground result shaping (output passes
+/// through `transform_terminal_output` hooks before redaction).
+#[test]
+fn terminal_output_passes_through_transform_terminal_output() {
+    let home = mock_home();
+    hooks_plugin(
+        home.path(),
+        "shout",
+        "hooks = [\"transform_terminal_output\"]",
+        &[
+            ("hooks", "\"transform_terminal_output\""),
+            ("mode", "\"upper:output\""),
+        ],
+    );
+    let rules = r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "echo quiet words" }
+
+[[rule]]
+tool_result = "QUIET WORDS"
+text = "it was shouted"
+"#;
+    let script = script(home.path(), rules);
+    let out = one_shot(
+        home.path(),
+        &[
+            "-z",
+            "go",
+            "--yolo",
+            "--mock-script",
+            script.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(stdout(&out), "it was shouted\n");
+}
+
+/// `sessions delete` fires `on_session_delete`; a loaded plugin set fires
+/// `on_plugin_loaded`; `plugins doctor` names a hook that never fires.
+#[test]
+fn delete_load_and_unfired_hooks_are_reported() {
+    let home = mock_home();
+    let names = "on_session_delete,on_plugin_loaded,pre_auxiliary_call";
+    hooks_plugin(
+        home.path(),
+        "audit",
+        "hooks = [\"on_session_delete\", \"on_plugin_loaded\", \"pre_auxiliary_call\"]",
+        &[("hooks", &format!("\"{names}\""))],
+    );
+    let out = one_shot(home.path(), &["-z", "hi"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let loaded = plugin_state(home.path(), "audit", "last_on_plugin_loaded");
+    assert!(loaded.contains("\"plugin_id\":\"audit\""), "{loaded}");
+    let session = newest_session(home.path());
+    ok(&run(
+        home.path(),
+        &["sessions", "delete", &session, "--yes"],
+    ));
+    let deleted = plugin_state(home.path(), "audit", "last_on_session_delete");
+    assert!(deleted.contains(&session), "{deleted}");
+    let doctor = ok(&run(home.path(), &["plugins", "doctor"]));
+    assert!(
+        doctor.contains("warn  audit: hook 'pre_auxiliary_call' never fires in this build"),
+        "{doctor}"
+    );
+}
+
 #[cfg(all(unix, feature = "gateway"))]
 mod gateway {
     use super::common::gateway::{Daemon, gateway_home_with, send, sent, wait_said};

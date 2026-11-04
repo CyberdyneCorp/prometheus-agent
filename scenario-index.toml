@@ -2130,7 +2130,7 @@ capabilities = [
 
 [plugin-system."Shell hooks with first-use consent"]
 "Exit 2 blocks a tool call" = ["crates/prometheus/tests/plugins_hooks.rs::exit_2_blocks_a_tool_call_once_the_hook_is_approved", "crates/prometheus/src/hooks_host/shell.rs::exit_two_blocks_with_stdout_then_stderr_then_the_default"]
-"Edited script needs re-approval" = ["crates/prometheus/tests/plugins_hooks.rs::an_edited_script_needs_approval_again"]
+"Edited script needs re-approval" = ["crates/prometheus/tests/plugins_hooks.rs::an_edited_script_needs_approval_again", "crates/prometheus/tests/plugins_hooks.rs::an_edited_interpreted_script_needs_approval_again"]
 
 [plugin-system."Hooks CLI"]
 "Test shows fail-closed outcome" = ["crates/prometheus/tests/plugins_hooks.rs::hooks_test_shows_the_fail_closed_outcome"]
@@ -2270,6 +2270,12 @@ capabilities = [
 "Disconnect needs confirmation" = ["crates/prometheus/tests/connectors_cli.rs::disconnect_needs_confirmation"]
 
 # Group 33 (python bridge)
+[python-bridge."Scope of hosted code"]
+"Memory provider runs in a sidecar" = { deferred = "needs the memory.provider contract (44.9)" }
+
+[plugin-system."Python plugins route through the bridge"]
+"Hermes plugin is hosted out-of-process" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_tool_plugin_works_unchanged"]
+
 [python-bridge."Managed CPython runtime"]
 "Offline first use fails clearly" = ["crates/prometheus/tests/python_bridge.rs::offline_first_use_fails_clearly_and_the_session_starts", "crates/pmt-pybridge/src/runtime.rs::a_missing_runtime_names_the_install_command"]
 

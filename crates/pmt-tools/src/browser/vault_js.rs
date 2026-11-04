@@ -1,8 +1,15 @@
 //! The page scripts `browser_vault` runs to put vault values into form
 //! fields. Each is one expression called with its values as JSON
 //! arguments; it sets a field only when its value differs (so a page that
-//! already holds the identifier counts only the password) and answers the
-//! number of fields it filled. Values go into the page and nowhere else.
+//! already holds the identifier counts only the password). Values go into
+//! the page and nowhere else.
+//!
+//! The origin check runs inside the same script as the fill: a separate
+//! `location.href` read before it would leave a window in which the page
+//! navigates elsewhere and receives the values. A script answers
+//! `{href, filled}`, where `filled` is the number of fields it set, or
+//! `null` when the document is not on a web origin or not on one of the
+//! `allowed` origins (then nothing was touched).
 
 /// Shared helpers: visible fields and a value setter that React-style
 /// controlled inputs notice.
@@ -26,10 +33,14 @@ const pick = (list, auto, pattern) =>
   list.find((el) => pattern.test(hint(el)));
 ";
 
+/// Where a script may fill: `None` admits any web origin.
+pub(super) type Allowed<'a> = Option<&'a [String]>;
+
 /// `(identifier, password)`: the password field and the identifier field
 /// before it.
-pub(super) fn login(identifier: &str, password: &str) -> String {
+pub(super) fn login(allowed: Allowed<'_>, identifier: &str, password: &str) -> String {
     call(
+        allowed,
         r"(id, pw) => {
   const all = fields().filter((el) => el.tagName === 'INPUT');
   const pass = all.find((el) => el.type === 'password');
@@ -47,6 +58,7 @@ pub(super) fn login(identifier: &str, password: &str) -> String {
 /// like them); `MM/YY` also fills separate month and year fields.
 pub(super) fn card(holder: &str, number: &str, expiry: &str, cvc: &str) -> String {
     call(
+        None,
         r"(holder, number, expiry, cvc) => {
   const all = fields();
   const [month, year] = expiry.split('/');
@@ -68,6 +80,7 @@ pub(super) fn card(holder: &str, number: &str, expiry: &str, cvc: &str) -> Strin
 /// fields.
 pub(super) fn address(values: &[&str; 7]) -> String {
     call(
+        None,
         r"(name, line1, line2, city, region, postal, country) => {
   const all = fields();
   return put(pick(all, 'name', /full.?name|^\s*name\b/), name) +
@@ -84,8 +97,9 @@ pub(super) fn address(values: &[&str; 7]) -> String {
 
 /// A one-time code into the code field (`one-time-code`, or a field named
 /// like one, or the only text field on the page).
-pub(super) fn code(code: &str) -> String {
+pub(super) fn code(allowed: Allowed<'_>, code: &str) -> String {
     call(
+        allowed,
         r"(code) => {
   const all = fields().filter((el) => el.tagName === 'INPUT');
   const texts = all.filter((el) => ['text', 'tel', 'number', ''].includes(el.type));
@@ -97,13 +111,17 @@ pub(super) fn code(code: &str) -> String {
     )
 }
 
-fn call(function: &str, args: &[&str]) -> String {
+fn call(allowed: Allowed<'_>, function: &str, args: &[&str]) -> String {
     let args: Vec<String> = args
         .iter()
         .map(|a| serde_json::Value::String((*a).to_owned()).to_string())
         .collect();
+    let allowed = serde_json::to_string(&allowed).unwrap_or_else(|_| "[]".to_owned());
     format!(
-        "(() => {{ {PRELUDE}\nreturn ({function})({}); }})()",
+        "(() => {{ {PRELUDE}\nconst href = location.href; const allowed = {allowed};\n\
+         if (!['http:', 'https:'].includes(location.protocol) ||\n\
+           (allowed !== null && !allowed.includes(location.origin))) return {{ href, filled: null }};\n\
+         return {{ href, filled: ({function})({}) }}; }})()",
         args.join(", ")
     )
 }

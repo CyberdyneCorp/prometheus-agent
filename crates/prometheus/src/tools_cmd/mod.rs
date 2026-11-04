@@ -27,10 +27,14 @@ use pmt_config::{Config, ProfileScope};
 use pmt_core::capability::CapabilitySet;
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
+use pmt_plugins::host::CallInfo;
+use pmt_plugins::tools::SessionCalls;
 use pmt_store::Store;
 use pmt_store::tool_surface::RecordedSurface;
 use pmt_tools::probe::ProbeCache;
-use pmt_tools::{Builtins, RegisteredTool, Selection, SurfaceInputs, ToolRegistry, ToolSurface};
+use pmt_tools::{
+    Builtins, RegisteredTool, Selection, SessionSurface, SurfaceInputs, ToolRegistry, ToolSurface,
+};
 
 pub use render::{
     Explanation, ToolAvailability, ToolRow, ToolsetRow, ToolsetShow, explain, list, render_explain,
@@ -69,21 +73,77 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
     tools
 }
 
-/// The registry of profile `scope`: this binary's built-in tools, the
-/// shipped toolsets, a bundle per platform of an adapter plugin and the
-/// profile's MCP toolsets (with the tools their servers listed last; no
-/// server is started).
+/// The registry of profile `scope` as a session started now in this
+/// process's working directory gets it ([`extended_registry`] over the
+/// profile's current plugin set and MCP servers; no server is started).
 ///
 /// # Errors
 ///
 /// A built-in tool or toolset that does not load (a programming error).
 pub fn registry(scope: &ProfileScope) -> Result<ToolRegistry, Error> {
-    let mut registry = base_registry(scope)?;
-    crate::mcp_host::manager(scope).register(&mut registry);
-    Ok(registry)
+    profile_registry(scope).map(|(registry, _)| registry)
 }
 
-/// [`registry`] without the MCP toolsets (sessions add their own).
+/// [`registry`] and the plugin and MCP toolsets a session opts in.
+///
+/// # Errors
+///
+/// As [`registry`].
+pub fn profile_registry(scope: &ProfileScope) -> Result<(ToolRegistry, Vec<String>), Error> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let plugins = crate::plugins_host::for_session(scope, &cwd);
+    let mcp = crate::mcp_host::manager(scope);
+    let at = cwd.to_string_lossy().into_owned();
+    // No tool runs from a listing; a call would report the CLI surface.
+    let calls: SessionCalls = Arc::new(move |session: &str| CallInfo {
+        session_id: (!session.is_empty()).then(|| session.to_owned()),
+        surface: "cli".to_owned(),
+        cwd: Some(at.clone()),
+    });
+    extended_registry(scope, &plugins, &mcp, &calls)
+}
+
+/// The one way a registry with extensions is built, for sessions and the
+/// listings alike: this binary's built-in tools, the shipped toolsets, a
+/// bundle per platform of an adapter plugin, the tools of `plugins`'
+/// current set and those `mcp`'s servers listed last. Also answers the
+/// plugin and MCP toolsets (see [`opt_in`]). `calls` resolves what each
+/// plugin tool call reports as its session.
+///
+/// # Errors
+///
+/// As [`registry`].
+pub fn extended_registry(
+    scope: &ProfileScope,
+    plugins: &crate::plugins_host::ProfilePlugins,
+    mcp: &pmt_mcp::Manager,
+    calls: &SessionCalls,
+) -> Result<(ToolRegistry, Vec<String>), Error> {
+    let mut registry = base_registry(scope)?;
+    // Listing the tools runs for no session.
+    let mut toolsets = plugins
+        .current()
+        .register_tools(&mut registry, &calls(""), calls);
+    toolsets.extend(mcp.register(&mut registry));
+    Ok((registry, toolsets))
+}
+
+/// Adds the plugin and MCP toolsets `extensions` to `enabled` as a session
+/// on `surface` does: enabling a plugin or configuring a server opts its
+/// tools in, except for webhook-triggered runs; a platform bundle never
+/// opts in.
+pub fn opt_in(enabled: &mut Vec<String>, extensions: &[String], surface: &SessionSurface) {
+    if surface.is_webhook() {
+        return;
+    }
+    for toolset in extensions {
+        if !enabled.contains(toolset) && !pmt_config::platforms::is_known(toolset) {
+            enabled.push(toolset.clone());
+        }
+    }
+}
+
+/// [`registry`] without plugin or MCP tools.
 ///
 /// # Errors
 ///
@@ -128,6 +188,8 @@ pub fn expand_toolsets(names: &[String]) -> Result<std::collections::BTreeSet<St
 pub struct Inventory<'a> {
     /// The profile's registry.
     pub registry: &'a ToolRegistry,
+    /// The plugin and MCP toolsets a session opts in ([`opt_in`]).
+    pub extensions: &'a [String],
     /// The profile's configuration.
     pub config: &'a Config,
     /// A session's effective capabilities (baseline plus grants).
@@ -137,6 +199,30 @@ pub struct Inventory<'a> {
 }
 
 impl Inventory<'_> {
+    /// `enabled` with the plugin and MCP toolsets a session on `surface`
+    /// opts in.
+    #[must_use]
+    pub fn opted_in(&self, mut enabled: Vec<String>, surface: &SessionSurface) -> Vec<String> {
+        opt_in(&mut enabled, self.extensions, surface);
+        enabled
+    }
+
+    /// The selection a new session on `surface` starts with (before
+    /// dropping interactive tools on unattended surfaces).
+    ///
+    /// # Errors
+    ///
+    /// An unknown toolset name (`registry.unknown_name`, exit 78).
+    pub fn selection_for(&self, surface: &SessionSurface) -> Result<Selection, Error> {
+        let starting =
+            surface.starting_toolsets(self.registry, &self.config.tools, &self.config.toolsets);
+        Selection::resolve(
+            self.registry,
+            &self.opted_in(starting, surface),
+            &self.config.tools.disabled_toolsets,
+        )
+    }
+
     /// The surface a session selecting `enabled` (minus the configured
     /// disabled toolsets) would get.
     ///
@@ -321,15 +407,21 @@ pub fn toolsets(command: &ToolsetsCommand, ctx: &Context<'_>) -> Result<u8, Erro
 fn list_toolsets(args: &ToolsetsListArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let config = scope.config();
-    let registry = registry(&scope)?;
-    let enabled = match &args.surface {
-        Some(surface) => configure::check_surface(surface)?.starting_toolsets(
-            &registry,
-            &config.tools,
-            &config.toolsets,
-        ),
+    let (registry, extensions) = profile_registry(&scope)?;
+    let surface = args
+        .surface
+        .as_deref()
+        .map(configure::check_surface)
+        .transpose()?;
+    let mut enabled = match &surface {
+        Some(surface) => surface.starting_toolsets(&registry, &config.tools, &config.toolsets),
         None => config.tools.enabled_toolsets.clone(),
     };
+    opt_in(
+        &mut enabled,
+        &extensions,
+        surface.as_ref().unwrap_or(&SessionSurface::Cli),
+    );
     let selection = Selection::resolve(&registry, &enabled, &config.tools.disabled_toolsets)?;
     let rows = toolset_rows(
         &registry,
@@ -363,25 +455,33 @@ fn active(selection: &Selection, disabled: &[String]) -> BTreeSet<String> {
 }
 
 /// Builds the inventory of the selected profile and runs `body` on it.
+/// The profile's MCP servers are started first, as for a new session, so
+/// the listings see what a session would be offered.
 pub(crate) fn with_inventory<F>(ctx: &Context<'_>, body: F) -> Result<u8, Error>
 where
     F: AsyncFnOnce(Inventory<'_>) -> Result<u8, Error>,
 {
     let scope = ctx.scope()?;
     let config = scope.config();
-    let secrets = scope.secrets().clone();
-    let registry =
-        registry(&scope)?.with_secret_presence(Arc::new(move |name| secrets.resolve(name).is_ok()));
-    let grants = SessionGrants::new(baseline(&config.security), GrantsFile::of(scope.profile()));
-    let capabilities = grants.capabilities(&Subject::Profile)?;
-    let probes = ProbeCache::new();
-    let inventory = Inventory {
-        registry: &registry,
-        config,
-        capabilities: &capabilities,
-        probes: &probes,
-    };
-    block_on(body(inventory))?
+    block_on(async {
+        crate::mcp_host::discover(&scope, false).await;
+        let secrets = scope.secrets().clone();
+        let (registry, extensions) = profile_registry(&scope)?;
+        let registry =
+            registry.with_secret_presence(Arc::new(move |name| secrets.resolve(name).is_ok()));
+        let grants =
+            SessionGrants::new(baseline(&config.security), GrantsFile::of(scope.profile()));
+        let capabilities = grants.capabilities(&Subject::Profile)?;
+        let probes = ProbeCache::new();
+        let inventory = Inventory {
+            registry: &registry,
+            extensions: &extensions,
+            config,
+            capabilities: &capabilities,
+            probes: &probes,
+        };
+        body(inventory).await
+    })?
 }
 
 /// `toolset.unknown` (exit 2) with the registry's suggestion text.

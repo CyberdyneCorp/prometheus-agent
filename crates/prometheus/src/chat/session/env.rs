@@ -57,6 +57,8 @@ pub struct EnvInputs<'a> {
     pub providers: pmt_plugins::providers::ProviderRegistry,
     /// What the session's plugin calls report through `session.info`.
     pub plugin_call: pmt_plugins::host::CallInfo,
+    /// The profile's plugins (their `transform_terminal_output` hooks).
+    pub plugins: &'a crate::plugins_host::ProfilePlugins,
     /// The session's egress policy.
     pub egress: &'a crate::egress::SessionEgress,
     /// Where its egress refusals are reported.
@@ -343,7 +345,10 @@ fn terminal(
         start_cwd: inputs.cwd.to_path_buf(),
         user_home,
         redactor: inputs.redactor.clone(),
-        hooks: Vec::new(),
+        hooks: vec![crate::plugins_host::terminal::output_hook(
+            inputs.plugins.clone(),
+            inputs.plugin_call.clone(),
+        )],
         guards: GuardChain::default(),
         notices: Vec::new(),
         notify: inputs.completions.clone(),

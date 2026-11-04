@@ -33,8 +33,9 @@ use pmt_net::OutboundPolicy;
 use pmt_net::egress::Proxy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
 
-/// Variables a `stdio` server inherits from this process.
-const INHERITED: &[&str] = &[
+/// Variables a `stdio` server (and a catalog entry's bootstrap command)
+/// inherits from this process.
+pub(crate) const INHERITED: &[&str] = &[
     "PATH",
     "HOME",
     "LANG",

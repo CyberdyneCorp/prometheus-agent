@@ -94,6 +94,7 @@ async fn with<T>(config: &Config, body: impl AsyncFnOnce(&Inventory<'_>) -> T) -
     let caps = no_network();
     let inventory = Inventory {
         registry: &registry,
+        extensions: &[],
         config,
         capabilities: &caps,
         probes: &probes,

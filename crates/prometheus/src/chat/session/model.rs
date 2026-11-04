@@ -377,6 +377,8 @@ pub struct SwitchableModel {
     /// The route a `/model --once` switch replaced, put back when the turn
     /// that used the switch ends.
     restore: std::sync::Mutex<Option<Restore>>,
+    /// The session's `*_api_request` hooks.
+    api_hooks: std::sync::OnceLock<super::api_hooks::ApiHooks>,
 }
 
 /// The route to go back to after a `--once` turn.
@@ -396,7 +398,13 @@ impl SwitchableModel {
             session: std::sync::Mutex::default(),
             watch: std::sync::Mutex::default(),
             restore: std::sync::Mutex::default(),
+            api_hooks: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Fires `hooks` around every call from now on.
+    pub fn observe_api(&self, hooks: super::api_hooks::ApiHooks) {
+        let _ = self.api_hooks.set(hooks);
     }
 
     /// Calls `watch` with the credential of every route this port sends on,
@@ -517,6 +525,17 @@ impl ModelPort for SwitchableModel {
         deltas: &'a dyn DeltaSink,
     ) -> BoxFuture<'a, Result<ModelReply, ModelFailure>> {
         let model = self.model();
-        Box::pin(async move { model.call(request, ctx, deltas).await })
+        let target = self.target();
+        Box::pin(async move {
+            let hooks = self.api_hooks.get();
+            if let Some(hooks) = hooks {
+                hooks.before(&target, request).await;
+            }
+            let result = model.call(request, ctx, deltas).await;
+            if let Some(hooks) = hooks {
+                hooks.after(&target, &result).await;
+            }
+            result
+        })
     }
 }

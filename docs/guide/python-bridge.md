@@ -54,8 +54,11 @@ Requirements (`requirements.txt`, `pyproject.toml`
 true`. `plugins install` and `plugins update` resolve them into
 `python/locks/<id>/bridge.lock` with exact versions and hashes, and build
 the plugin's environment `python/envs/<id>-<digest>/`; this is the only
-time the bridge uses the network. A session reuses the environment, or
-rebuilds it offline from the package cache.
+time the bridge uses the network. Packages install from wheels only: a
+requirement published only as a source distribution is refused by name,
+because building it would run its `setup.py` outside the plugin's sandbox.
+A session reuses the environment, or rebuilds it offline from the package
+cache.
 
 `prometheus plugins show <id>` prints the Hermes API level the shim
 implements, the interpreter and the environment.

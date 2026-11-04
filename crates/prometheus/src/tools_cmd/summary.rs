@@ -10,9 +10,9 @@ use std::fmt::Write as _;
 
 use pmt_config::Config;
 use pmt_core::error::Error;
+use pmt_tools::SessionSurface;
 use pmt_tools::surface::Exclusion;
 use pmt_tools::web::Capability;
-use pmt_tools::{Selection, SessionSurface};
 use serde::Serialize;
 
 use super::Inventory;
@@ -128,8 +128,7 @@ pub async fn summarize(
     let config = inv.config;
     let mut out = Vec::new();
     for surface in surfaces(config) {
-        let mut selection =
-            Selection::for_surface(inv.registry, &surface, &config.tools, &config.toolsets)?;
+        let mut selection = inv.selection_for(&surface)?;
         if !attended(&surface) {
             selection = selection.without_interactive(inv.registry);
         }

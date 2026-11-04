@@ -612,3 +612,65 @@ text = "fast done"
         daemon.stop(home);
     }
 }
+
+/// The `--json` document of `args`.
+fn json_of(home: &Path, args: &[&str]) -> serde_json::Value {
+    let mut command = vec!["--json"];
+    command.extend_from_slice(args);
+    serde_json::from_str(&ok(&run(home, &command))).unwrap()
+}
+
+/// Spec: agent-turn-loop, Offline prompt size report ("the tool array
+/// exactly as a new session would"); tool-system, Tool introspection
+/// commands: an enabled plugin's and a configured MCP server's toolsets
+/// are opted in by the listings as a session opts them in.
+#[test]
+fn listings_show_the_plugin_and_mcp_tools_a_session_gets() {
+    let home = mock_home();
+    place(home.path(), "probe", "testing-probe", "\"tool@1.0\"", "");
+    ok(&run(
+        home.path(),
+        &["plugins", "enable", "probe", "--grant", "all"],
+    ));
+    let fixture = pmt_mcp::testkit::fixture();
+    ok(&run(
+        home.path(),
+        &[
+            "mcp",
+            "add",
+            "ref",
+            "--command",
+            fixture.to_str().unwrap(),
+            "--trust",
+            "full",
+        ],
+    ));
+    // A session starts the server, whose tool list the listings then use.
+    one_shot(home.path(), &["-z", "hi"]);
+    for tool in ["mcp__ref__echo", "llm"] {
+        let explained = json_of(home.path(), &["tools", "explain", tool]);
+        assert_eq!(explained["exposure"], "exposed", "{tool}: {explained}");
+    }
+    let listed = json_of(home.path(), &["tools", "list"]);
+    let row = |name: &str| {
+        listed["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == name)
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert_eq!(row("mcp__ref__echo")["exposure"], "exposed", "{listed}");
+    let size = json_of(home.path(), &["prompt", "size"]);
+    let toolsets: Vec<&str> = size["toolsets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["toolset"].as_str().unwrap())
+        .collect();
+    assert!(
+        toolsets.contains(&"mcp-ref") && toolsets.contains(&"probe"),
+        "{toolsets:?}"
+    );
+}

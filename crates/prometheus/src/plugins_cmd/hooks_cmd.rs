@@ -199,15 +199,9 @@ async fn fire(
     let started = Instant::now();
     let ran = match &entry.program {
         Some(program) => {
-            ShellRunner::new(
-                scope.clone(),
-                &entry.event,
-                entry.hook.clone(),
-                entry.words.clone(),
-                program.clone(),
-            )
-            .run(&stdin, call.cwd.as_deref())
-            .await
+            ShellRunner::new(scope.clone(), entry, program.clone())
+                .run(&stdin, call.cwd.as_deref())
+                .await
         }
         None => Ran::NotStarted(format!(
             "program `{}` not found",

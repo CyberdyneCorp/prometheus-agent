@@ -39,6 +39,38 @@ pub use external::{ExternalHook, HookFuture};
 pub use payload::{Payload, SCHEMA_VERSION};
 pub use turn::{Observers, Rewrite, continuation};
 
+/// Hooks of the closed registry that nothing in this build fires yet: a
+/// callback registered for one loads but never runs, so registration warns
+/// and `plugins doctor` names it. The owner of a firing point removes the
+/// name when it lands (subagents: delegation; `pre_transcription`: speech;
+/// room activity: group rooms; kanban: the kanban dispatcher).
+pub const NOT_FIRED: &[&str] = &[
+    "pre_auxiliary_call",
+    "post_auxiliary_call",
+    "on_session_finalize",
+    "subagent_start",
+    "subagent_stop",
+    "on_room_member_activity",
+    "pre_transcription",
+    "kanban_task_claimed",
+    "kanban_task_completed",
+    "kanban_task_blocked",
+    "on_kanban_worker_spawned",
+    "on_kanban_worker_exited",
+    "on_kanban_worker_stale_claim",
+    "on_kanban_task_updated",
+    "on_kanban_dispatch_tick",
+];
+
+fn warn_unfired(plugin: &str, hook: &str) {
+    if NOT_FIRED.contains(&hook) {
+        tracing::warn!(
+            plugin,
+            "hook '{hook}' is registered but never fires in this build"
+        );
+    }
+}
+
 use crate::host::hook_world::{HookEvent, Reply};
 use crate::host::{CallInfo, Instance};
 
@@ -130,6 +162,7 @@ impl Hooks {
     ) -> Result<(), Error> {
         pmt_core::hooks::check(hook)
             .map_err(|_| Error::new(&codes::PLUGINS_MANIFEST, format!("unknown hook '{hook}'")))?;
+        warn_unfired(callback.label(), hook);
         self.callbacks
             .entry(hook.to_owned())
             .or_default()
@@ -138,6 +171,21 @@ impl Hooks {
                 target: Target::External(callback),
             });
         Ok(())
+    }
+
+    /// Every `(plugin, hook)` registered for a hook this build never
+    /// fires ([`NOT_FIRED`]), for `plugins doctor`.
+    #[must_use]
+    pub fn unfired(&self) -> Vec<(String, String)> {
+        NOT_FIRED
+            .iter()
+            .filter_map(|hook| self.callbacks.get(*hook).map(|c| (*hook, c)))
+            .flat_map(|(hook, callbacks)| {
+                callbacks
+                    .iter()
+                    .map(move |c| (c.plugin.clone(), hook.to_owned()))
+            })
+            .collect()
     }
 
     /// Marks `plugin`'s `transform_llm_output` as holding the stream
@@ -223,6 +271,7 @@ impl Hooks {
                 );
                 continue;
             }
+            warn_unfired(instance.id(), &name);
             self.callbacks
                 .entry(name.clone())
                 .or_default()

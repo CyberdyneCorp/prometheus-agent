@@ -56,12 +56,7 @@ impl PluginTools {
         calls: &SessionCalls,
     ) -> Result<Self, Error> {
         let generation = (plugins.generation(), mcp.generation());
-        let mut registry = crate::tools_cmd::base_registry(scope)?;
-        // Listing the tools runs for no session.
-        let mut toolsets = plugins
-            .current()
-            .register_tools(&mut registry, &calls(""), calls);
-        toolsets.extend(mcp.register(&mut registry));
+        let (registry, toolsets) = crate::tools_cmd::extended_registry(scope, plugins, mcp, calls)?;
         Ok(Self {
             generation,
             registry: Arc::new(registry),
@@ -112,28 +107,12 @@ impl Factory {
         self.registries.current()
     }
 
-    /// Starts the profile's MCP servers a session starting now needs (each
-    /// at most once per restart backoff), waiting at most
-    /// `mcp.discovery_wait_ms` (`mcp.single_query_discovery_wait_ms` for a
-    /// one-shot run); a server that does not start in time is left out of
-    /// the session with a WARN (one still connecting joins later
-    /// sessions) and shows in `mcp status`.
+    /// Starts the profile's MCP servers a session starting now needs
+    /// ([`crate::mcp_host::discover`]).
     pub(super) async fn discover_mcp(&self) {
         let scope = self.plugin_scope.get();
-        let mcp = crate::mcp_host::manager(&scope);
-        let config = &scope.config().mcp;
         let one_shot = self.options.source_tag.as_deref() == Some(pmt_store::ONESHOT_TAG);
-        let wait = if one_shot {
-            config.single_query_discovery_wait_ms
-        } else {
-            config.discovery_wait_ms
-        };
-        let wait = std::time::Duration::from_millis(wait);
-        for (server, outcome) in mcp.discover_within(Some(wait)).await {
-            if let Err(reason) = outcome {
-                tracing::warn!(server = %server, "MCP server unavailable: {reason}");
-            }
-        }
+        crate::mcp_host::discover(&scope, one_shot).await;
     }
 
     /// Makes `/plugins reload` re-read the profile's `config.toml` (with

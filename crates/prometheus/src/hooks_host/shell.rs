@@ -188,37 +188,34 @@ pub struct ShellRunner {
     matcher: Option<regex::Regex>,
     words: Vec<String>,
     program: PathBuf,
+    scripts: Vec<PathBuf>,
     scope: ProfileScope,
 }
 
 impl ShellRunner {
-    /// A runner of `hook` on `event` whose program resolved to `program`.
+    /// A runner of `entry` whose program resolved to `program`.
     #[must_use]
-    pub fn new(
-        scope: ProfileScope,
-        event: &str,
-        hook: ShellHook,
-        words: Vec<String>,
-        program: PathBuf,
-    ) -> Self {
+    pub fn new(scope: ProfileScope, entry: &super::consent::ShellEntry, program: PathBuf) -> Self {
+        let hook = entry.hook.clone();
         let matcher = hook
             .matcher
             .as_deref()
             .and_then(|m| regex::Regex::new(m).ok());
         Self {
             label: format!("shell:{}", hook.command),
-            event: event.to_owned(),
+            event: entry.event.clone(),
             hook,
             matcher,
-            words,
+            words: entry.words.clone(),
             program,
+            scripts: entry.scripts.clone(),
             scope,
         }
     }
 
     /// Runs the hook once on `stdin`.
     pub async fn run(&self, stdin: &Value, cwd: Option<&str>) -> Ran {
-        let mut command = match super::sandboxed(&self.scope, &self.program, cwd) {
+        let mut command = match super::sandboxed(&self.scope, &self.program, &self.scripts, cwd) {
             Ok(command) => tokio::process::Command::from(command),
             Err(err) => return Ran::NotStarted(err.message().to_owned()),
         };

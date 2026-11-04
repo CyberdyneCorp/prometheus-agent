@@ -145,14 +145,7 @@ pub fn selection(
     surface: &SessionSurface,
 ) -> Result<Selection, Error> {
     let mut enabled = surface.starting_toolsets(registry, &config.tools, &config.toolsets);
-    if !surface.is_webhook() {
-        let opted_in: Vec<String> = plugins
-            .iter()
-            .filter(|p| !enabled.contains(p) && !pmt_config::platforms::is_known(p))
-            .cloned()
-            .collect();
-        enabled.extend(opted_in);
-    }
+    crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
     let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
         selection

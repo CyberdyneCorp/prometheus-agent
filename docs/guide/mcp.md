@@ -123,7 +123,10 @@ server disabled (enable it with `prometheus config set
 mcp.servers.<name>.enabled true`), asks the entry's setup fields (secret ones
 hidden and stored in the secrets store, kept as `${NAME}` placeholders),
 checks out a pinned git `source` under `<profile>/mcp/<name>` (`${installDir}`)
-and runs its `bootstrap` commands in the sandbox. An entry declaring
+and runs its `bootstrap` commands in the sandbox, with only `PATH`, `HOME`,
+`LANG` (and on Windows `SYSTEMROOT`, `PATHEXT`, `USERPROFILE`) from your
+environment, so no exported API key reaches them, and with network access
+only through the egress proxy under `security.egress`. An entry declaring
 `tools.default_excluded` writes `tools.exclude` without a checklist;
 otherwise the checklist pre-checks your earlier selection, else
 `tools.default_enabled`, else everything. An install succeeds even when the

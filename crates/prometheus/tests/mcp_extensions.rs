@@ -863,3 +863,79 @@ fn exposed(home: &Path, id: &str) -> Vec<String> {
         .filter_map(|l| l.split_whitespace().next().map(str::to_owned))
         .collect()
 }
+
+/// A local git repository with one commit; answers its `file://` URL and
+/// the commit SHA.
+fn local_repo(home: &Path) -> (String, String) {
+    let repo = home.join("server-src");
+    std::fs::create_dir_all(&repo).unwrap();
+    std::fs::write(repo.join("README"), "server").unwrap();
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.org"])
+            .args(args)
+            .current_dir(&repo)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", stderr(&out));
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", "v1"]);
+    (
+        format!("file://{}", repo.display()),
+        git(&["rev-parse", "HEAD"]),
+    )
+}
+
+/// A catalog entry's bootstrap command runs third-party code: it sees none
+/// of the exported environment (an API key) and reaches the network only
+/// through the egress proxy, which `security.egress.mode = "none"` closes.
+#[cfg(unix)]
+#[test]
+fn a_bootstrap_command_gets_no_exported_secret_and_obeys_egress() {
+    let home = mock_home();
+    append_config(home.path(), "\n[security.egress]\nmode = \"none\"\n");
+    let (repo, sha) = local_repo(home.path());
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let catalog = json!({
+        "schema": "prometheus.plugin_catalog.v1",
+        "plugins": [],
+        "mcp": [{
+            "id": "boot", "manifest_version": 1, "transport": "stdio",
+            "command": fixture(), "description": "Bootstrapped",
+            "source": {"repo": repo, "ref": sha, "bootstrap": [
+                "printf '%s' \"$PMT_TEST_API_KEY\" > key.txt",
+                "printf '%s' \"$HTTP_PROXY\" > proxy.txt",
+                format!("curl -sS --max-time 5 http://127.0.0.1:{port}/ > curl.txt 2>&1 || true"),
+            ]}
+        }],
+        "removed": []
+    });
+    let _served = serve_catalog(home.path(), &catalog);
+    let out = command(home.path())
+        .args(["mcp", "install", "boot"])
+        .env("PMT_TEST_API_KEY", "sk-leaked")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    let dir = home.path().join("profiles/default/mcp/boot");
+    assert_eq!(std::fs::read_to_string(dir.join("key.txt")).unwrap(), "");
+    let proxy = std::fs::read_to_string(dir.join("proxy.txt")).unwrap();
+    assert!(proxy.starts_with("http://127.0.0.1:"), "{proxy}");
+    let curl = std::fs::read_to_string(dir.join("curl.txt")).unwrap_or_default();
+    assert!(listener.accept().is_err(), "the server was reached: {curl}");
+    let audit = std::fs::read_to_string(
+        home.path()
+            .join("profiles/default/logs/security-audit.jsonl"),
+    )
+    .unwrap_or_default();
+    assert!(
+        audit.contains("egress_denied") && audit.contains("mcp-bootstrap:boot"),
+        "{audit}\n{curl}"
+    );
+}

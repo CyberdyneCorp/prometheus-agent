@@ -487,11 +487,13 @@ impl LocalTerminal {
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
         };
         let (status, capture) = self.wait_foreground(spawned, timeout_secs).await;
-        let shaped = capture.finish(
-            (self.setup.max_chars)(),
-            &self.setup.hooks,
-            &self.setup.redactor,
-        );
+        let shaped = capture
+            .finish(
+                (self.setup.max_chars)(),
+                &self.setup.hooks,
+                &self.setup.redactor,
+            )
+            .await;
         let mut result = TerminalResult::new(Status::Ok);
         result.output = shaped.output;
         result.truncated = shaped.truncated;

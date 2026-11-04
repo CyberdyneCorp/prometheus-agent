@@ -153,6 +153,40 @@ fn an_edited_script_needs_approval_again() {
     assert!(listed.contains("approved"), "{listed}");
 }
 
+/// Spec scenario "Edited script needs re-approval" with the script run by
+/// an interpreter: consent covers the script, not only `sh`.
+#[cfg(unix)]
+#[test]
+fn an_edited_interpreted_script_needs_approval_again() {
+    let home = mock_home();
+    let profile = home.path().join("profiles/default");
+    let script = profile.join("hook.sh");
+    std::fs::write(
+        &script,
+        "cat > /dev/null\necho 'policy violation' >&2\nexit 2\n",
+    )
+    .unwrap();
+    append_config(
+        home.path(),
+        "\n[[hooks.pre_tool_call]]\ncommand = \"sh ./hook.sh\"\nmatcher = \"terminal\"\n",
+    );
+    ok(&run(
+        home.path(),
+        &["plugins", "hooks", "allow", "pre_tool_call", "sh ./hook.sh"],
+    ));
+    // The approved script runs from the profile home, whatever the cwd.
+    assert_eq!(run_terminal_turn(home.path()), "the hook blocked it\n");
+    std::fs::write(&script, "cat > /dev/null\necho 'edited' >&2\nexit 2\n").unwrap();
+    let listed = ok(&run(home.path(), &["plugins", "hooks", "list"]));
+    assert!(listed.contains("changed since approval"), "{listed}");
+    assert_eq!(run_terminal_turn(home.path()), "the tool ran\n");
+    let log = std::fs::read_to_string(profile.join("logs/prometheus.log")).unwrap_or_default();
+    assert!(
+        log.contains("`sh ./hook.sh` skipped: changed since approval"),
+        "{log}"
+    );
+}
+
 #[test]
 fn hooks_test_shows_the_fail_closed_outcome() {
     // Spec scenario "Test shows fail-closed outcome".

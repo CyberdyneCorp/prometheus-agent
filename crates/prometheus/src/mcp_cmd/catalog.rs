@@ -16,6 +16,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use clap::Args;
 use pmt_config::ProfileScope;
@@ -359,6 +360,11 @@ fn checkout(
     Ok(())
 }
 
+/// Runs one bootstrap command of a catalog entry in its checkout `dir`,
+/// sandboxed like a `stdio` server: its environment holds only the
+/// inherited basics (no exported secret reaches third-party build
+/// scripts) and its network goes through an egress proxy under the
+/// profile's `security.egress` policy.
 fn bootstrap(scope: &ProfileScope, dir: &Path, command: &str) -> Result<(), Error> {
     use pmt_core::capability::{Capability, CapabilitySet};
     let config = scope.config();
@@ -378,23 +384,43 @@ fn bootstrap(scope: &ProfileScope, dir: &Path, command: &str) -> Result<(), Erro
         workspace: dir.to_path_buf(),
         scratch: vec![dir.to_path_buf()],
     };
-    let sandbox = pmt_sandbox::Sandbox::new(
-        pmt_sandbox::Policy::from_set(&capabilities, &paths),
-        &config.security.sandbox,
-    )?;
+    let hosts = Arc::new(crate::egress::host_policy(
+        &config.security.egress,
+        &crate::egress::Overrides::default(),
+    ));
+    let requester = format!("mcp-bootstrap:{}", dir_name(dir));
+    let observer = crate::egress::observer(scope, None, None);
+    let proxy = crate::egress::child_proxy(scope, &capabilities, hosts, &requester, observer)?;
+    let mut policy = pmt_sandbox::Policy::from_set(&capabilities, &paths);
+    if let Some(proxy) = &proxy {
+        policy = crate::egress::through(policy, proxy);
+    }
+    let sandbox = pmt_sandbox::Sandbox::new(policy, &config.security.sandbox)?;
     let (shell, flag) = if cfg!(windows) {
         ("cmd", "/C")
     } else {
         ("sh", "-c")
     };
     let mut process = sandbox.command(shell)?;
-    process.arg(flag).arg(command).current_dir(dir);
+    process.arg(flag).arg(command).current_dir(dir).env_clear();
+    for var in crate::mcp_host::INHERITED {
+        if let Some(value) = std::env::var_os(var) {
+            process.env(var, value);
+        }
+    }
+    process.env("TMPDIR", dir);
+    if let Some(url) = proxy.as_ref().map(pmt_net::egress::Proxy::url) {
+        for var in pmt_net::egress::PROXY_VARS {
+            process.env(var, &url);
+        }
+    }
     let output = process.output().map_err(|e| {
         Error::new(
             &codes::PLUGINS_CATALOG,
             format!("bootstrap '{command}': {e}"),
         )
     })?;
+    drop(proxy);
     if !output.status.success() {
         return Err(Error::new(
             &codes::PLUGINS_CATALOG,
@@ -406,4 +432,10 @@ fn bootstrap(scope: &ProfileScope, dir: &Path, command: &str) -> Result<(), Erro
     }
     println!("bootstrap: {command}");
     Ok(())
+}
+
+/// The catalog entry a checkout directory belongs to (its last component).
+fn dir_name(dir: &Path) -> String {
+    dir.file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
 }

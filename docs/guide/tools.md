@@ -132,7 +132,10 @@ each `exposed` or with the reason it would not be. `tools list` prints every
 registered tool with its toolset and the same verdict, and `tools explain
 <name>` its schema, owner, capabilities, `effect`, `idempotent`, resource
 claims, timeout, result budget, the active approval mode and the approval
-rules that apply to its calls. `tools list --session <id>` prints the
+rules that apply to its calls. Like a new session, these listings (and
+`prometheus prompt size`) include the tools of enabled plugins and of
+configured MCP servers (as their servers last listed them), with those
+toolsets selected. `tools list --session <id>` prints the
 surface that session froze when it built it (its id, an id prefix or its
 title), so later config, grant or runtime changes do not hide what the
 session was given; a session that never built a surface exits 66

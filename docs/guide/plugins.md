@@ -245,6 +245,19 @@ retry and fallback. Observers (`on_stream_start|delta|end`,
 `on_human_input_request|resolved`, `post_gateway_admission` and the other
 gateway events) cannot change anything: their answers are discarded.
 
+Every session fires `on_session_start`, `on_turn_start`, `post_llm_call`
+(after each loop iteration), `post_compaction`, `on_turn_end` (with the
+first 500 characters of the reply) and `on_session_end`, and
+`pre_api_request`, `post_api_request` or `api_request_error` around each
+model call. `transform_terminal_output`'s first answer replaces a
+foreground command's output before ANSI stripping, redaction and
+truncation. `sessions delete|prune` fire `on_session_delete`, and loading a
+plugin set fires `on_plugin_loaded` for each plugin. A few registry names
+have no firing point in this build yet (`pre_auxiliary_call`,
+`post_auxiliary_call`, `on_session_finalize`, `subagent_start|stop`,
+`on_room_member_activity`, `pre_transcription` and the kanban hooks):
+registering one logs a warning and `prometheus plugins doctor` names it.
+
 ## Shell hooks
 
 `[[hooks.<event>]]` tables in `config.toml` run programs on hook events:
@@ -268,7 +281,10 @@ hook is `fail_closed`. Hooks run sandboxed, after every plugin hook, and
 only once approved: a foreground `prometheus chat` asks the first time,
 everything else skips an unapproved hook with a warning unless
 `--accept-hooks` or `hooks.auto_accept = true`. The approval is bound to the
-program's content: editing the script needs a new approval.
+content of the program and of every argument naming a file (relative to
+the profile home, or absolute; such arguments are passed as absolute
+paths): editing `guard.py` of `python3 hooks/guard.py` needs a new
+approval.
 `transform_api_error_classification` is for plugins only.
 
 ```sh

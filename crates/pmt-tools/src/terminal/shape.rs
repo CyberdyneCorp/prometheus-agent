@@ -7,8 +7,24 @@
 
 use pmt_core::secret::Redactor;
 
-/// A `transform_terminal_output` hook: receives and returns the output.
-pub type OutputHook = std::sync::Arc<dyn Fn(String) -> String + Send + Sync>;
+/// A `transform_terminal_output` hook: receives the raw output and
+/// answers it, rewritten or unchanged. Async because plugin hooks are.
+pub trait TransformOutput: Send + Sync {
+    /// The output after this hook.
+    fn transform(&self, output: String) -> crate::dispatch::SeamFuture<'_, String>;
+}
+
+/// One registered `transform_terminal_output` hook.
+pub type OutputHook = std::sync::Arc<dyn TransformOutput>;
+
+/// `raw` after every hook, in order.
+pub async fn run_hooks(raw: String, hooks: &[OutputHook]) -> String {
+    let mut text = raw;
+    for hook in hooks {
+        text = hook.transform(text).await;
+    }
+    text
+}
 
 /// Removes ANSI escape sequences (CSI, OSC, two-byte escapes) and bare
 /// carriage returns that only redraw a line.
@@ -56,9 +72,8 @@ fn skip_csi(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
 }
 
 /// Runs the hooks, strips ANSI and redacts secrets.
-#[must_use]
-pub fn clean(raw: &str, hooks: &[OutputHook], redactor: &Redactor) -> String {
-    let hooked = hooks.iter().fold(raw.to_owned(), |text, hook| hook(text));
+pub async fn clean(raw: &str, hooks: &[OutputHook], redactor: &Redactor) -> String {
+    let hooked = run_hooks(raw.to_owned(), hooks).await;
     redactor.redact_all(&strip_ansi(&hooked))
 }
 

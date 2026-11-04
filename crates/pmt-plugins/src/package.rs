@@ -102,11 +102,40 @@ fn collect(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Error>
 /// `plugins.catalog` for a package that is not a valid archive, holds a
 /// link, an absolute path or `..`, or expands past 512 MiB.
 pub fn unpack(bytes: &[u8], dest: &Path) -> Result<(), Error> {
-    let tar = zstd::decode_all(bytes).map_err(|e| failed(format!("not a plugin package: {e}")))?;
-    let mut archive = tar::Archive::new(tar.as_slice());
+    unpack_capped(bytes, dest, MAX_UNPACKED)
+}
+
+/// Unpacks while decompressing, so a package never expands in memory: the
+/// file contents may total `limit` bytes, and the tar stream (contents
+/// plus headers and padding) is cut a quarter past that.
+fn unpack_capped(bytes: &[u8], dest: &Path, limit: u64) -> Result<(), Error> {
+    let decoder = zstd::stream::read::Decoder::new(bytes)
+        .map_err(|e| failed(format!("not a plugin package: {e}")))?;
+    let mut archive = tar::Archive::new(decoder.take(limit + limit / 4));
+    let extracted = extract(&mut archive, dest, limit);
+    // A cut on a block boundary reads as a clean end of the archive, so
+    // reaching the cut refuses whatever the extraction answered.
+    if archive.into_inner().limit() == 0 {
+        return Err(too_large());
+    }
+    extracted
+}
+
+fn too_large() -> Error {
+    failed("the package expands past 512 MiB")
+}
+
+fn extract<R: std::io::Read>(
+    archive: &mut tar::Archive<R>,
+    dest: &Path,
+    limit: u64,
+) -> Result<(), Error> {
     let mut total = 0u64;
-    for entry in archive.entries().map_err(failed)? {
-        let mut entry = entry.map_err(failed)?;
+    for entry in archive
+        .entries()
+        .map_err(|e| failed(format!("not a plugin package: {e}")))?
+    {
+        let mut entry = entry.map_err(|e| failed(format!("not a plugin package: {e}")))?;
         let kind = entry.header().entry_type();
         let path = entry.path().map_err(failed)?.into_owned();
         if kind.is_dir() {
@@ -125,18 +154,17 @@ pub fn unpack(bytes: &[u8], dest: &Path) -> Result<(), Error> {
             continue;
         }
         total += entry.size();
-        if total > MAX_UNPACKED {
-            return Err(failed("the package expands past 512 MiB"));
+        if total > limit {
+            return Err(too_large());
         }
         let target = dest.join(&path);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| Error::io(&codes::PLUGINS_CATALOG, parent, &e))?;
         }
-        let mut contents = Vec::new();
-        entry.read_to_end(&mut contents).map_err(failed)?;
-        std::fs::write(&target, contents)
+        let mut file = std::fs::File::create(&target)
             .map_err(|e| Error::io(&codes::PLUGINS_CATALOG, &target, &e))?;
+        std::io::copy(&mut entry, &mut file).map_err(failed)?;
     }
     Ok(())
 }
@@ -215,6 +243,38 @@ mod tests {
         );
         assert!(!out.path().join(INSTALL_RECORD).exists());
         assert!(unpack(b"not a package", out.path()).is_err());
+    }
+
+    fn refused_at(dir: &Path, limit: u64) -> String {
+        let out = tempfile::tempdir().unwrap();
+        unpack_capped(&pack(dir).unwrap(), out.path(), limit)
+            .unwrap_err()
+            .message()
+            .to_owned()
+    }
+
+    #[test]
+    fn a_package_whose_files_expand_past_the_cap_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("big.bin"), vec![0u8; 64 * 1024]).unwrap();
+        assert_eq!(
+            refused_at(dir.path(), 16 * 1024),
+            "the package expands past 512 MiB"
+        );
+    }
+
+    /// Headers and padding count too: the decompressed stream is cut, so
+    /// an archive of countless empty entries never inflates in full.
+    #[test]
+    fn a_package_whose_tar_stream_runs_past_the_cap_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        for n in 0..200 {
+            std::fs::write(dir.path().join(format!("empty-{n}")), b"").unwrap();
+        }
+        assert_eq!(
+            refused_at(dir.path(), 16 * 1024),
+            "the package expands past 512 MiB"
+        );
     }
 
     #[test]

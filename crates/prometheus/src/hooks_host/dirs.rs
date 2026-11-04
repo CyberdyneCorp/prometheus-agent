@@ -312,7 +312,7 @@ impl ExternalHook for DirRunner {
             let Some(handler) = handler else {
                 return;
             };
-            let command = match super::sandboxed(&scope, &handler, cwd.as_deref()) {
+            let command = match super::sandboxed(&scope, &handler, &[], cwd.as_deref()) {
                 Ok(command) => command,
                 Err(err) => {
                     tracing::warn!(hook = %label, event, "hook handler not started: {}", err.message());

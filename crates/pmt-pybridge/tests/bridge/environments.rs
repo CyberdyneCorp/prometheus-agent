@@ -148,3 +148,66 @@ fn doctor_finds_a_package_that_no_longer_matches_the_lock() {
     assert_eq!(mismatches[0].package, "pinned");
     assert_eq!(mismatches[0].installed.as_deref(), Some("1.1.0"));
 }
+
+/// Writes an sdist-only package `name` 1.0.0 to the index at `root`: its
+/// in-tree build backend writes `marker` the moment it is imported.
+#[cfg(unix)]
+fn sdist_only(root: &Path, name: &str, marker: &Path) {
+    let source = root.join("src").join(format!("{name}-1.0.0"));
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(
+        source.join("pyproject.toml"),
+        "[build-system]\nrequires = []\nbuild-backend = \"backend\"\nbackend-path = [\".\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        source.join("backend.py"),
+        format!(
+            "import pathlib\npathlib.Path({:?}).write_text('built')\n",
+            marker.display().to_string()
+        ),
+    )
+    .unwrap();
+    let files = root.join("files");
+    std::fs::create_dir_all(&files).unwrap();
+    let archive = format!("{name}-1.0.0.tar.gz");
+    let status = Command::new("tar")
+        .arg("-czf")
+        .arg(files.join(&archive))
+        .arg("-C")
+        .arg(root.join("src"))
+        .arg(format!("{name}-1.0.0"))
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let page = root.join(name);
+    std::fs::create_dir_all(&page).unwrap();
+    std::fs::write(
+        page.join("index.html"),
+        format!("<!DOCTYPE html><html><body>\n<a href=\"../files/{archive}\">{archive}</a>\n</body></html>\n"),
+    )
+    .unwrap();
+}
+
+/// Requirements install from wheels only: a package published only as an
+/// sdist is refused by name and its build code never runs.
+#[cfg(unix)]
+#[test]
+fn a_requirement_without_a_wheel_is_refused_and_never_built() {
+    let home = tempfile::tempdir().unwrap();
+    testkit::seed(home.path());
+    let index = home.path().join("index");
+    let marker = home.path().join("backend-ran");
+    sdist_only(&index, "buildsome", &marker);
+    let url = testkit::file_url(&index);
+    let python = runtime::require(home.path(), testkit::VERSION).unwrap();
+    let err = env::lock(
+        &uv_with(home.path(), &url),
+        &python,
+        &["buildsome==1.0.0".to_owned()],
+        &home.path().join("lock"),
+    )
+    .unwrap_err();
+    assert!(err.message().contains("buildsome"), "{}", err.message());
+    assert!(!marker.exists(), "the sdist's build backend ran");
+}

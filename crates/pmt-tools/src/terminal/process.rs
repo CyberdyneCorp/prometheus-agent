@@ -369,7 +369,8 @@ impl ProcessRegistry {
     }
 
     fn shaped(&self, text: &str) -> String {
-        let clean = shape::clean(text, &[], &self.options.redactor);
+        // Background output is not a foreground result: no hooks run.
+        let clean = self.options.redactor.redact_all(&shape::strip_ansi(text));
         shape::truncate(&clean, (self.options.max_chars)()).0
     }
 

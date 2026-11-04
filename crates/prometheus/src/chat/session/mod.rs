@@ -5,9 +5,11 @@
 //! [`Factory::open`] builds one [`Live`] session over a new or resumed
 //! session row.
 
+pub mod api_hooks;
 pub mod browser;
 pub mod env;
 mod guardian;
+mod lifecycle;
 mod mcp;
 pub mod model;
 mod plugins;
@@ -470,8 +472,9 @@ impl Factory {
         );
         let events = events_to(trajectory.clone(), clients.map(|c| c.events));
         let _ = environment.denials.set(Arc::downgrade(&events));
+        let events = self.with_lifecycle_hooks(id, &session, events);
         let (tee, progress) = progress::Tee::new(events, interactive);
-        model.watch_credentials(borrowed_watch(tee.notices()));
+        self.observe_model(&model, id, tee.notices());
         let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
         setup.events = Arc::new(tee);
         self.memory_and_refresh(&mut setup, summarizer, &skills, &memory, &plugin_sections);
@@ -511,6 +514,34 @@ impl Factory {
         };
         live.emit_start(&session, target).await;
         Ok(live)
+    }
+
+    /// Announces borrowed logins on `notices` and fires the API hooks
+    /// around every call of the session's `model`.
+    fn observe_model(&self, model: &SwitchableModel, id: SessionId, notices: progress::Notices) {
+        model.watch_credentials(borrowed_watch(notices));
+        model.observe_api(api_hooks::ApiHooks::new(
+            self.plugins.clone(),
+            self.plugin_call(id),
+        ));
+    }
+
+    /// `events` with the session's lifecycle hooks fired from them; the
+    /// gateway fires its own turns' lifecycle hooks.
+    fn with_lifecycle_hooks(
+        &self,
+        id: SessionId,
+        session: &pmt_store::Session,
+        events: Arc<dyn EventSink>,
+    ) -> Arc<dyn EventSink> {
+        if session.source.as_str() == "gateway" {
+            return events;
+        }
+        Arc::new(lifecycle::LifecycleHooks::new(
+            events,
+            self.plugins.clone(),
+            self.plugin_call(id),
+        ))
     }
 
     /// The registry of a session of `session`'s row, its toolset selection
@@ -661,6 +692,7 @@ impl Factory {
             completions: clients.and_then(|c| c.completions.clone()),
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
+            plugins: &self.plugins,
             egress: &self.egress(id, &denials),
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
@@ -1115,6 +1147,17 @@ impl Live {
             parent_session_id: session.parent_session_id.map(|p| p.to_string()),
         }))
         .await;
+        // The gateway fires its own sessions' start through its hooks.
+        if self.surface() != "gateway" {
+            let fields = lifecycle::session_start(&self.id.to_string(), self.surface());
+            self.plugins
+                .fire_observer(
+                    &self.plugin_call(self.surface()),
+                    "on_session_start",
+                    fields,
+                )
+                .await;
+        }
     }
 
     /// Emits `event` outside any turn.

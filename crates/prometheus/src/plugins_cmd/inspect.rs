@@ -250,6 +250,12 @@ pub(super) fn doctor(ctx: &Context<'_>) -> Result<u8, Error> {
             );
         }
     }
+    for (plugin, hook) in loaded.hooks.unfired() {
+        let _ = writeln!(
+            text,
+            "warn  {plugin}: hook '{hook}' never fires in this build"
+        );
+    }
     if text.is_empty() {
         text.push_str("ok    no plugin problems\n");
     }

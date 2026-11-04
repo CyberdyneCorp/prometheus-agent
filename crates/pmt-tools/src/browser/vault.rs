@@ -133,14 +133,19 @@ impl Call<'_> {
             .map_err(|err| ToolResult::error(err.message()))
     }
 
-    /// The current page's URL and origin.
-    async fn page(&self) -> Result<(Arc<super::BrowserSession>, String), ToolResult> {
-        let browser = self
-            .session
+    /// The session's browser.
+    async fn browser(&self) -> Result<Arc<super::BrowserSession>, ToolResult> {
+        self.session
             .browser
             .browser(&self.key)
             .await
-            .map_err(|why| ToolResult::error(format!("browser_vault: {why}")))?;
+            .map_err(|why| ToolResult::error(format!("browser_vault: {why}")))
+    }
+
+    /// The current page's URL (for questions and the TOTP check; a fill
+    /// script checks the origin again where it types).
+    async fn page(&self) -> Result<(Arc<super::BrowserSession>, String), ToolResult> {
+        let browser = self.browser().await?;
         let url = browser
             .evaluate("location.href")
             .await
@@ -153,24 +158,16 @@ impl Call<'_> {
             Ok(item) => item,
             Err(refused) => return refused,
         };
-        let (browser, url) = match self.page().await {
-            Ok(page) => page,
+        let browser = match self.browser().await {
+            Ok(browser) => browser,
             Err(failed) => return failed,
         };
-        let Some(origin) = pmt_vault::origin::of(&url) else {
-            return refused(&format!("the current page ({url}) has no web origin"));
-        };
         let script = match &item.secret {
-            Secret::Login(login) => {
-                if !pmt_vault::origin::admits(&login.origins, &url) {
-                    return refused(&format!(
-                        "{} is saved for {}, not {origin}; nothing was typed",
-                        item.handle,
-                        login.origins.join(", ")
-                    ));
-                }
-                vault_js::login(&login.identifier, &login.password)
-            }
+            Secret::Login(login) => vault_js::login(
+                Some(&web_origins(&login.origins)),
+                &login.identifier,
+                &login.password,
+            ),
             Secret::Card(card) => {
                 vault_js::card(&card.holder, &card.number, &card.expiry, &card.cvc)
             }
@@ -185,26 +182,48 @@ impl Call<'_> {
             ]),
         };
         self.session.browser.redact_filled(&item.secret_values());
-        self.type_into(&browser, &script, &origin).await
+        let mismatch = |origin: &str| {
+            let saved = match &item.secret {
+                Secret::Login(login) => login.origins.join(", "),
+                _ => String::new(),
+            };
+            format!(
+                "{} is saved for {saved}, not {origin}; nothing was typed",
+                item.handle
+            )
+        };
+        self.type_into(&browser, &script, mismatch).await
     }
 
-    /// Runs a fill script; the result is `{filled_fields, origin}`.
+    /// Runs a fill script, which checks the page's origin itself; the
+    /// result is `{filled_fields, origin}`, or a refusal naming the origin
+    /// (`mismatch`) when the page is not where the values may go.
     async fn type_into(
         &self,
         browser: &super::BrowserSession,
         script: &str,
-        origin: &str,
+        mismatch: impl Fn(&str) -> String,
     ) -> ToolResult {
-        match browser.evaluate(script).await {
-            Ok(filled) => json_result(&json!({
-                "filled_fields": filled.as_u64().unwrap_or(0),
-                "origin": origin,
-            })),
+        let reply = match browser.evaluate(script).await {
+            Ok(reply) => reply,
             // A page exception never carries the values: they are
             // arguments, not part of the message.
             Err(why) => {
-                ToolResult::error(format!("browser_vault: the page refused the fill: {why}"))
+                return ToolResult::error(format!(
+                    "browser_vault: the page refused the fill: {why}"
+                ));
             }
+        };
+        let href = reply["href"].as_str().unwrap_or_default();
+        let Some(origin) = pmt_vault::origin::of(href) else {
+            return refused(&format!("the current page ({href}) has no web origin"));
+        };
+        match reply["filled"].as_u64() {
+            Some(filled) => json_result(&json!({
+                "filled_fields": filled,
+                "origin": origin,
+            })),
+            None => refused(&mismatch(&origin)),
         }
     }
 
@@ -276,9 +295,21 @@ impl Call<'_> {
             Ok(code) => code,
             Err(stopped) => return stopped,
         };
+        // A seeded code goes only to the item's origins; a typed one only
+        // to the origin the person was asked about.
+        let allowed = if login.totp.is_some() {
+            web_origins(&login.origins)
+        } else {
+            vec![origin.clone()]
+        };
         self.session.browser.redact_filled(&[code.expose()]);
-        self.type_into(&browser, &vault_js::code(code.expose()), &origin)
-            .await
+        let script = vault_js::code(Some(&allowed), code.expose());
+        let mismatch = |now: &str| {
+            format!(
+                "the page moved from {origin} to {now} before the code was typed; no code was typed"
+            )
+        };
+        self.type_into(&browser, &script, mismatch).await
     }
 }
 
@@ -326,6 +357,14 @@ fn unlock(arguments: &Value) -> ToolResult {
         "status": "unavailable_in_this_session",
         "message": "password manager sources are not available in this build; use the Prometheus vault",
     }))
+}
+
+/// Saved origins in the browser's serialization (`https://github.com`).
+fn web_origins(saved: &[String]) -> Vec<String> {
+    saved
+        .iter()
+        .filter_map(|o| pmt_vault::origin::of(o))
+        .collect()
 }
 
 fn json_result(value: &Value) -> ToolResult {

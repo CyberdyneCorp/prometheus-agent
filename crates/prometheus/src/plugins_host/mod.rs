@@ -20,9 +20,11 @@ pub mod gateway;
 pub mod llm;
 #[cfg(feature = "gateway")]
 pub mod messaging;
+mod outside;
 mod ports;
 pub mod providers;
 pub mod reload;
+pub mod terminal;
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -252,32 +254,20 @@ pub fn skill_fields(skill: &str, action: &str) -> Map<String, Value> {
 pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
     let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
     let plugins = for_session(scope, &cwd);
-    let hooks = plugins.handle.hooks();
-    if !hooks.handles("on_skill_lifecycle") {
-        return;
-    }
-    let call = CallInfo {
-        session_id: None,
-        surface: "cli".to_owned(),
-        cwd: Some(cwd.display().to_string()),
-    };
-    let fields = skill_fields(skill, action);
-    let fire = async move {
-        hooks
-            .fire("on_skill_lifecycle", &Payload::new(fields), &call)
-            .await;
-    };
-    std::thread::scope(|scope| {
-        scope.spawn(|| {
-            match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(runtime) => runtime.block_on(fire),
-                Err(err) => tracing::warn!("on_skill_lifecycle not fired: {err}"),
-            }
-        });
-    });
+    let each = vec![skill_fields(skill, action)];
+    outside::fire_blocking(&plugins.handle.hooks(), "on_skill_lifecycle", each, &cwd);
+}
+
+/// Fires `on_session_delete` for every session a command deleted and
+/// waits for the callbacks.
+pub fn sessions_deleted(scope: &ProfileScope, sessions: &[String]) {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    let plugins = for_session(scope, &cwd);
+    let each = sessions
+        .iter()
+        .map(|id| object(json!({ "session_id": id })))
+        .collect();
+    outside::fire_blocking(&plugins.handle.hooks(), "on_session_delete", each, &cwd);
 }
 
 fn object(value: Value) -> Map<String, Value> {
@@ -398,9 +388,10 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
         *current = Arc::new(Generation {
             number: current.number + 1,
             fingerprint,
-            loaded,
+            loaded: Arc::clone(&loaded),
         });
     }
+    outside::plugins_loaded(&loaded, cwd);
     ProfilePlugins { handle }
 }
 

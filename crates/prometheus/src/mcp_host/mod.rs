@@ -10,6 +10,7 @@
 //! Safe mode starts none.
 
 mod launch;
+pub(crate) use launch::INHERITED;
 pub mod oauth;
 mod placeholders;
 pub mod sessions;
@@ -340,6 +341,28 @@ pub fn target(server: &McpServerConfig) -> String {
             let mut words = vec![server.command.clone()];
             words.extend(server.args.iter().cloned());
             words.join(" ")
+        }
+    }
+}
+
+/// Starts the profile's MCP servers a session starting now needs (each at
+/// most once per restart backoff), waiting at most `mcp.discovery_wait_ms`
+/// (`mcp.single_query_discovery_wait_ms` when `one_shot`); a server that
+/// does not start in time is left out with a WARN (one still connecting
+/// joins later sessions) and shows in `mcp status`. Sessions and the tool
+/// listings both start from here, so they offer the same tools.
+pub async fn discover(scope: &ProfileScope, one_shot: bool) {
+    let mcp = manager(scope);
+    let config = &scope.config().mcp;
+    let wait = if one_shot {
+        config.single_query_discovery_wait_ms
+    } else {
+        config.discovery_wait_ms
+    };
+    let wait = std::time::Duration::from_millis(wait);
+    for (server, outcome) in mcp.discover_within(Some(wait)).await {
+        if let Err(reason) = outcome {
+            tracing::warn!(server = %server, "MCP server unavailable: {reason}");
         }
     }
 }

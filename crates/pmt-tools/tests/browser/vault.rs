@@ -288,3 +288,54 @@ async fn a_card_fills_the_checkout_fields() {
     );
     s.manager.shutdown().await;
 }
+
+/// Moves the page to `to` while the person is typing the code, then
+/// answers it: the check before the prompt saw the old origin.
+struct NavigatingHuman {
+    exec: Arc<pmt_tools::browser::BrowserExec>,
+    to: String,
+}
+
+impl MaskedPrompt for NavigatingHuman {
+    fn ask<'a>(&'a self, _: &'a str, _: &'a str) -> SeamFuture<'a, Option<SecretString>> {
+        Box::pin(async move {
+            let (result, body) = run(
+                &self.exec,
+                &format!("goto_url('{}'); wait_for_load()", self.to),
+            )
+            .await;
+            assert_eq!(result.status, Status::Ok, "{body}");
+            Some(SecretString::new("424242"))
+        })
+    }
+}
+
+/// Scenario: Origin mismatch, when the page navigates to another origin
+/// between the origin check and the fill: nothing is typed there.
+#[tokio::test]
+async fn a_page_that_moves_to_another_origin_before_the_fill_gets_nothing() {
+    let s = setup();
+    let site = pages().await;
+    let origin = site.uri();
+    let handle = s.login(&origin, None);
+    s.open(&format!("{origin}/otp")).await;
+    // Another port is another origin.
+    let other = pages().await;
+    let elsewhere = format!("{}/otp", other.uri());
+    let human: Arc<dyn MaskedPrompt> = Arc::new(NavigatingHuman {
+        exec: Arc::clone(&s.exec),
+        to: elsewhere,
+    });
+    let result = s
+        .session(Some(human))
+        .call("ses_b", &json!({"action": "enter_code", "handle": handle}))
+        .await;
+    assert_eq!(result.status, Status::Blocked, "{}", result.text_content());
+    assert!(result.text_content().contains("no code was typed"));
+    assert_eq!(s.print("location.origin").await, other.uri());
+    assert_eq!(
+        s.print("document.querySelector('#otp').value.length").await,
+        "0"
+    );
+    s.manager.shutdown().await;
+}
