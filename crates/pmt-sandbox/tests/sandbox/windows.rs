@@ -114,8 +114,8 @@ fn entries(listing: &str) -> String {
 /// enforcement for child processes): an `AppContainer` cannot reach the
 /// loopback proxy, so the child runs (net `partial`, the platform's
 /// maximum, not a refused downgrade), reaches no loopback address, and
-/// holds `internetClient` only while its relay admits every public host,
-/// asked again at every start.
+/// reaches public addresses (`internetClient`) only while its relay admits
+/// every public host, asked again at every start.
 #[test]
 fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
     use std::sync::Arc;
@@ -133,29 +133,23 @@ fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
     assert_eq!((net.feature, net.level), (Feature::Net, Level::Partial));
     assert!(net.gap.is_none(), "{net:?}");
 
-    let internet_client = || {
-        let output = cmd(&sandbox, &fixture.work, &["whoami", "/groups"]);
-        assert!(output.status.success(), "{output:?}");
-        String::from_utf8_lossy(&output.stdout)
-            .split_whitespace()
-            .any(|w| w == "S-1-15-3-1")
+    let connect = |host: &str, port: u16| {
+        let line = format!(
+            "try {{ (New-Object Net.Sockets.TcpClient).Connect('{host}', {port}); 'connected' }} catch {{ 'refused' }}"
+        );
+        let output = sandbox
+            .command("powershell.exe")
+            .unwrap()
+            .current_dir(&fixture.work)
+            .args(["-NoProfile", "-NonInteractive", "-Command", &line])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
     };
-    // S-1-15-3-1 is the internetClient capability.
-    assert!(!internet_client());
+    // github.com: a public host every CI runner reaches.
+    assert_eq!(connect("github.com", 443), "refused");
     public.store(true, Ordering::SeqCst);
-    assert!(internet_client());
-
-    let connect = format!(
-        "try {{ (New-Object Net.Sockets.TcpClient).Connect('127.0.0.1', {port}); 'connected' }} catch {{ 'refused' }}"
-    );
-    let output = sandbox
-        .command("powershell.exe")
-        .unwrap()
-        .current_dir(&fixture.work)
-        .args(["-NoProfile", "-NonInteractive", "-Command", &connect])
-        .output()
-        .unwrap();
-    let text = String::from_utf8_lossy(&output.stdout);
-    assert!(text.contains("refused"), "{output:?}");
+    assert_eq!(connect("github.com", 443), "connected");
+    assert_eq!(connect("127.0.0.1", port), "refused");
     assert!(listener.accept().is_err(), "the child reached loopback");
 }

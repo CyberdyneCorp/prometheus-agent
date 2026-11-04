@@ -96,7 +96,7 @@ impl Fixture {
             .into_iter()
             .filter(|m| m["role"] == "tool")
             .map(|m| {
-                let content = m["content"].as_str().unwrap_or_default();
+                let content = untrusted_body(m["content"].as_str().unwrap_or_default());
                 serde_json::from_str(content).unwrap_or_else(|_| Value::from(content))
             })
             .collect();
@@ -144,6 +144,16 @@ impl Fixture {
         assert_eq!(exit["exit_code"], 3, "{exit:#}");
         results
     }
+}
+
+/// The result inside its provenance block (`<untrusted-content ...>` …
+/// `</untrusted-content>`, spec: tool-system, Tool result provenance).
+fn untrusted_body(content: &str) -> &str {
+    content
+        .strip_prefix("<untrusted-content")
+        .and_then(|rest| rest.split_once('\n'))
+        .and_then(|(_, body)| body.rsplit_once("\n</untrusted-content>"))
+        .map_or(content, |(body, _)| body)
 }
 
 /// The directory a result reports, in canonical form.
@@ -197,35 +207,36 @@ fn explicit_git_bash_under_the_sandbox_is_unavailable() {
 /// Egress of the session terminal (spec: security-boundaries, Egress
 /// enforcement for child processes). The `AppContainer` cannot reach the
 /// loopback egress proxy, so no proxy variables point there; a child
-/// connects directly to public addresses (`internetClient`, S-1-15-3-1)
-/// only under the default `public` policy, an allowlisted session's child
-/// gets no network at all, and neither reaches loopback.
+/// connects directly to public addresses (`internetClient`) only under the
+/// default `public` policy (github.com, which every CI runner reaches), an
+/// allowlisted session's child reaches no host outside its allowlist (it
+/// gets no network at all), and neither reaches loopback.
 #[test]
 fn session_children_reach_only_what_the_egress_policy_admits() {
     let fixture = Fixture::new();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
-    let commands = [
-        "whoami /groups".to_owned(),
-        "Write-Output \"proxy=[$env:HTTPS_PROXY]\"".to_owned(),
+    let connect = |host: &str, port: u16| {
         format!(
-            "try {{ (New-Object Net.Sockets.TcpClient).Connect('127.0.0.1', {port}); 'connected' }} catch {{ 'refused' }}"
-        ),
+            "try {{ (New-Object Net.Sockets.TcpClient).Connect('{host}', {port}); 'connected' }} catch {{ 'refused' }}"
+        )
+    };
+    let commands = [
+        connect("github.com", 443),
+        "Write-Output \"proxy=[$env:HTTPS_PROXY]\"".to_owned(),
+        connect("127.0.0.1", port),
     ];
     let public = fixture.session("powershell", &[], &commands);
     let allowlisted = fixture.session(
         "powershell",
-        &["--egress", "allowlist", "--allow-host", "127.0.0.1"],
+        &["--egress", "allowlist", "--allow-host", "example.org"],
         &commands,
     );
     for (results, internet) in [(&public, true), (&allowlisted, false)] {
         let output = |i: usize| results[i]["output"].as_str().unwrap_or_default().to_owned();
-        assert_eq!(
-            output(0).split_whitespace().any(|w| w == "S-1-15-3-1"),
-            internet,
-            "{results:#?}"
-        );
+        let public = if internet { "connected" } else { "refused" };
+        assert_eq!(output(0).trim(), public, "{results:#?}");
         assert_eq!(output(1).trim(), "proxy=[]", "{results:#?}");
         assert_eq!(output(2).trim(), "refused", "{results:#?}");
     }
