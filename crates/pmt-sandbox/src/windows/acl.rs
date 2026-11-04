@@ -19,6 +19,13 @@
 //! Windows ARM runners), Windows writes the inherited entries back as
 //! explicit copies however the DACL is set: the same principals keep the
 //! same rights, but later changes to the parent no longer flow down.
+//!
+//! Every change is a read-modify-write of a whole DACL, and concurrent
+//! sandboxes (threads of one daemon, or several processes) rewrite the same
+//! directories above their workspaces. Each change therefore holds
+//! [`Lock`], a named mutex of the logon session, from the read to the
+//! write; without it one sandbox's write drops the entry another just
+//! added, and that container may no longer enter its workspace.
 
 #![allow(unsafe_code)]
 
@@ -27,7 +34,10 @@ use std::mem::size_of;
 use std::path::Path;
 use std::ptr;
 
-use windows_sys::Win32::Foundation::{ERROR_INVALID_ACL, ERROR_SUCCESS, GetLastError, LocalFree};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, ERROR_INVALID_ACL, ERROR_SUCCESS, GetLastError, HANDLE, LocalFree, WAIT_ABANDONED,
+    WAIT_OBJECT_0,
+};
 use windows_sys::Win32::Security::Authorization::{
     GetNamedSecurityInfoW, SE_FILE_OBJECT, SetNamedSecurityInfoW,
 };
@@ -40,6 +50,9 @@ use windows_sys::Win32::Security::{
     SE_DACL_AUTO_INHERITED, SE_DACL_PROTECTED, SECURITY_DESCRIPTOR, SECURITY_DESCRIPTOR_CONTROL,
     SetFileSecurityW, SetSecurityDescriptorControl, SetSecurityDescriptorDacl,
     UNPROTECTED_DACL_SECURITY_INFORMATION,
+};
+use windows_sys::Win32::System::Threading::{
+    CreateMutexW, INFINITE, ReleaseMutex, WaitForSingleObject,
 };
 
 use super::container::wide;
@@ -83,6 +96,7 @@ pub(super) fn revoke(path: &Path, sid: PSID) {
 }
 
 fn update(path: &Path, sid: PSID, grant: Option<(u32, ACE_FLAGS)>) -> Result<(), u32> {
+    let _lock = Lock::acquire()?;
     let wide_path = wide(path.as_os_str());
     let descriptor = Descriptor::of(&wide_path)?;
     let kept = entries(descriptor.dacl, sid, false)?;
@@ -278,6 +292,7 @@ fn strip(path: &Path, sid: PSID) -> Result<bool, u32> {
 /// Rewrites `path`'s DACL in place without `sid`'s entries, plus `grant`;
 /// returns whether a dropped entry was inheritable.
 fn rewrite(path: &Path, sid: PSID, grant: Option<(u32, ACE_FLAGS)>) -> Result<bool, u32> {
+    let _lock = Lock::acquire()?;
     let wide_path = wide(path.as_os_str());
     let descriptor = FileDescriptor::of(&wide_path)?;
     let kept = entries(descriptor.dacl, sid, true)?;
@@ -368,6 +383,46 @@ impl FileDescriptor {
             dacl,
             control,
         })
+    }
+}
+
+/// The mutex serializing DACL changes across the processes of this logon
+/// session, held until dropped.
+struct Lock(HANDLE);
+
+impl Lock {
+    const NAME: &str = r"Local\prometheus-sandbox-acl";
+
+    fn acquire() -> Result<Self, u32> {
+        let name = wide(std::ffi::OsStr::new(Self::NAME));
+        // SAFETY: NUL-terminated name, default security; the handle is
+        // closed in Drop, or below when the wait fails.
+        let handle = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
+        if handle.is_null() {
+            return Err(last_error());
+        }
+        // SAFETY: a valid mutex handle. An abandoned mutex (its holder
+        // died) is acquired too: each DACL write is atomic, so there is
+        // no half-made change to recover from.
+        let waited = unsafe { WaitForSingleObject(handle, INFINITE) };
+        if waited == WAIT_OBJECT_0 || waited == WAIT_ABANDONED {
+            return Ok(Self(handle));
+        }
+        let code = last_error();
+        // SAFETY: not held, so only closed, once.
+        unsafe { CloseHandle(handle) };
+        Err(code)
+    }
+}
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        // SAFETY: this thread owns the mutex (acquire succeeded); the
+        // handle is closed once.
+        unsafe {
+            ReleaseMutex(self.0);
+            CloseHandle(self.0);
+        }
     }
 }
 
