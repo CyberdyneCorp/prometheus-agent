@@ -115,7 +115,10 @@ fn entries(listing: &str) -> String {
 /// capability and reaches the loopback proxy only through the relay in its
 /// own container, at the address its proxy variables are rewritten to;
 /// connecting to the proxy directly or to a public host is refused, and
-/// `net` is reported `enforced`.
+/// `net` is reported `enforced`. (Diagnosed on ARM64: the relay, its pipe
+/// and the rewritten environment work there; the "Access is denied" once
+/// seen from proxied terminal commands was a lost ACL entry, see
+/// `concurrent_sandboxes_keep_their_entries_on_shared_ancestors`.)
 #[test]
 fn a_proxied_child_reaches_only_the_proxy() {
     use std::io::Write as _;

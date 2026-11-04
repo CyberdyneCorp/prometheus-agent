@@ -77,7 +77,10 @@ granted (a link such as `~/.ssh -> ~/dotfiles/ssh` would otherwise expose
 its target); a link whose target lies in a granted directory still works. On
 Windows, listening sockets are never granted (loopback needs a
 per-container exemption), and the session adds then revokes ACL entries for
-its container on the granted directories. Below a directory whose ACL is not
+its container on the granted directories (and listing entries on the
+directories above them). Sessions that start or end at the same time take
+turns on these ACL changes (a named mutex of the logon session), so one
+session's change never drops another's entry. Below a directory whose ACL is not
 marked auto-inherited (uncommon; seen on some CI images), Windows keeps the
 other entries' rights but stores them as explicit entries after the
 revocation, so later permission changes on the parent no longer flow down.
