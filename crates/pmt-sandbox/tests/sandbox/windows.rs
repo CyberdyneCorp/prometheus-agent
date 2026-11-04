@@ -135,7 +135,7 @@ fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
 
     let connect = |host: &str, port: u16| {
         let line = format!(
-            "try {{ (New-Object Net.Sockets.TcpClient).Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.InnerException.Message }}"
+            "try {{ (New-Object Net.Sockets.TcpClient).Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().Message }}"
         );
         let output = sandbox
             .command("powershell.exe")
@@ -149,15 +149,14 @@ fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
     };
     // github.com: a public host every CI runner reaches. The gate is asked
     // at every start, both ways.
-    let (reached, why) = connect("github.com", 443);
-    assert!(!reached, "{why}");
-    public.store(true, Ordering::SeqCst);
-    let (reached, why) = connect("github.com", 443);
-    assert!(reached, "{why}");
+    let mut seen = Vec::new();
+    for admitted in [true, false, true] {
+        public.store(admitted, Ordering::SeqCst);
+        let (reached, why) = connect("github.com", 443);
+        seen.push((admitted, reached, why));
+    }
+    assert!(seen.iter().all(|(a, r, _)| a == r), "{seen:#?}");
     let (reached, why) = connect("127.0.0.1", port);
-    assert!(!reached, "{why}");
-    public.store(false, Ordering::SeqCst);
-    let (reached, why) = connect("github.com", 443);
     assert!(!reached, "{why}");
     assert!(listener.accept().is_err(), "the child reached loopback");
 }
