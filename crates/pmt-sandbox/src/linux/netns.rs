@@ -195,12 +195,12 @@ fn loopback_up() -> io::Result<()> {
     // SAFETY: SIOCGIFFLAGS/SIOCSIFFLAGS read and write `request`, a live
     // ifreq naming `lo`; ifru_flags is the union member these use.
     let result = unsafe {
-        let mut result = libc::ioctl(fd, libc::SIOCGIFFLAGS as _, &raw mut request);
+        let mut result = libc::ioctl(fd, GET_FLAGS, &raw mut request);
         if result == 0 {
             #[allow(clippy::cast_possible_truncation)]
             let up = libc::IFF_UP as libc::c_short;
             request.ifr_ifru.ifru_flags |= up;
-            result = libc::ioctl(fd, libc::SIOCSIFFLAGS as _, &raw const request);
+            result = libc::ioctl(fd, SET_FLAGS, &raw const request);
         }
         result
     };
@@ -290,7 +290,7 @@ fn recv_fd(channel: &UnixStream) -> io::Result<Option<TcpListener>> {
         message.msg_iov = &raw mut iov;
         message.msg_iovlen = 1;
         message.msg_control = control.0.as_mut_ptr().cast();
-        message.msg_controllen = control.0.len() as _;
+        message.msg_controllen = libc::CMSG_SPACE(fd_size()) as _;
         let received = libc::recvmsg(
             channel.as_raw_fd(),
             &raw mut message,
@@ -318,6 +318,13 @@ fn inherit(channel: RawFd) -> io::Result<()> {
     // SAFETY: fcntl(2) F_SETFD on an open descriptor.
     check(unsafe { libc::fcntl(channel, libc::F_SETFD, 0) }).map(|_| ())
 }
+
+// glibc's ioctl(2) takes an unsigned long request and musl's an int; the
+// SIOC* numbers (0x89xx) fit both, so the cast never truncates.
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+const GET_FLAGS: libc::Ioctl = libc::SIOCGIFFLAGS as libc::Ioctl;
+#[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+const SET_FLAGS: libc::Ioctl = libc::SIOCSIFFLAGS as libc::Ioctl;
 
 #[allow(clippy::cast_possible_truncation)]
 const fn fd_size() -> libc::c_uint {

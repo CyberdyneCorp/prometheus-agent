@@ -51,6 +51,11 @@ impl Fixture {
     /// `terminal.windows_shell = shell` and the default (enforcing) sandbox;
     /// returns each call's result.
     fn terminal(&self, shell: &str, commands: &[String]) -> Vec<Value> {
+        self.session(shell, &[], commands)
+    }
+
+    /// As [`Fixture::terminal`], with extra `chat` arguments.
+    fn session(&self, shell: &str, chat: &[&str], commands: &[String]) -> Vec<Value> {
         let mut script = String::new();
         for (step, command) in commands.iter().enumerate() {
             // A JSON string is also a TOML basic string.
@@ -71,7 +76,9 @@ impl Fixture {
         std::fs::write(&path, script).unwrap();
         let out = common::command(self.home.path())
             .args(["--set", &format!("terminal.windows_shell={shell}")])
-            .args(["chat", "-z", "go", "--yolo", "--mock-script"])
+            .args(["chat", "-z", "go", "--yolo"])
+            .args(chat)
+            .arg("--mock-script")
             .arg(&path)
             .arg("--cwd")
             .arg(&self.work)
@@ -184,5 +191,46 @@ fn explicit_git_bash_under_the_sandbox_is_unavailable() {
     assert!(
         text.contains("git-bash cannot run inside the Windows sandbox (AppContainer)"),
         "{text}"
+    );
+}
+
+/// Egress of the session terminal (spec: security-boundaries, Egress
+/// enforcement for child processes). The `AppContainer` cannot reach the
+/// loopback egress proxy, so no proxy variables point there; a child
+/// connects directly to public addresses (`internetClient`, S-1-15-3-1)
+/// only under the default `public` policy, an allowlisted session's child
+/// gets no network at all, and neither reaches loopback.
+#[test]
+fn session_children_reach_only_what_the_egress_policy_admits() {
+    let fixture = Fixture::new();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let commands = [
+        "whoami /groups".to_owned(),
+        "Write-Output \"proxy=[$env:HTTPS_PROXY]\"".to_owned(),
+        format!(
+            "try {{ (New-Object Net.Sockets.TcpClient).Connect('127.0.0.1', {port}); 'connected' }} catch {{ 'refused' }}"
+        ),
+    ];
+    let public = fixture.session("powershell", &[], &commands);
+    let allowlisted = fixture.session(
+        "powershell",
+        &["--egress", "allowlist", "--allow-host", "127.0.0.1"],
+        &commands,
+    );
+    for (results, internet) in [(&public, true), (&allowlisted, false)] {
+        let output = |i: usize| results[i]["output"].as_str().unwrap_or_default().to_owned();
+        assert_eq!(
+            output(0).split_whitespace().any(|w| w == "S-1-15-3-1"),
+            internet,
+            "{results:#?}"
+        );
+        assert_eq!(output(1).trim(), "proxy=[]", "{results:#?}");
+        assert_eq!(output(2).trim(), "refused", "{results:#?}");
+    }
+    assert!(
+        listener.accept().is_err(),
+        "a session child reached loopback"
     );
 }

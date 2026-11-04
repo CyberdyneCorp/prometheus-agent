@@ -247,7 +247,9 @@ pub fn child_proxy(
 
 /// The policy of a child whose network goes through `proxy` (see
 /// [`pmt_sandbox::Policy::through_proxy`]): on Linux the child's private
-/// listener is served by `proxy`.
+/// listener is served by `proxy`; on Windows, whose `AppContainer` cannot
+/// reach the proxy, the child connects directly to public addresses only
+/// while `proxy`'s rules admit every public host (see [`child_proxy_url`]).
 #[must_use]
 pub fn through(policy: pmt_sandbox::Policy, proxy: &pmt_net::egress::Proxy) -> pmt_sandbox::Policy {
     #[cfg(unix)]
@@ -256,8 +258,20 @@ pub fn through(policy: pmt_sandbox::Policy, proxy: &pmt_net::egress::Proxy) -> p
         pmt_sandbox::Relay::new(move |attached| attacher.serve(attached.listener, attached.alive))
     };
     #[cfg(not(unix))]
-    let relay = pmt_sandbox::Relay::new(|_| {});
+    let relay = {
+        let rules = proxy.rules();
+        pmt_sandbox::Relay::new(|_| {}).with_direct(move || rules.admits_every_public_host())
+    };
     policy.through_proxy(proxy.addr().port(), relay)
+}
+
+/// The proxy URL a proxied child's `HTTP_PROXY`/`HTTPS_PROXY` name; `None`
+/// on Windows, where a confined child cannot reach loopback and would
+/// only fail through the variables (it connects directly, see
+/// [`through`]).
+#[must_use]
+pub fn child_proxy_url(proxy: &pmt_net::egress::Proxy) -> Option<String> {
+    (!cfg!(windows)).then(|| proxy.url())
 }
 
 /// One `/egress` (or `egress.set`) change.

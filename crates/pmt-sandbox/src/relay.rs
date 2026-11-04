@@ -9,6 +9,13 @@
 //! listener to the parent before `exec`; the parent passes it to the
 //! [`Relay`], which serves it with the proxy's rules until every process
 //! holding the child's end of the channel has exited.
+//!
+//! A Windows `AppContainer` cannot reach loopback at all (only an
+//! administrator can exempt a container), so there the proxy is out of
+//! reach: the relay instead answers, at every start, whether the policy
+//! admits every public host ([`Relay::admits_direct`]); only then does the
+//! child get `internetClient` (public addresses, never loopback or the
+//! private network), otherwise it gets no network.
 
 use std::sync::Arc;
 
@@ -23,19 +30,42 @@ pub struct Attached {
     pub alive: std::os::unix::net::UnixStream,
 }
 
+type Gate = Arc<dyn Fn() -> bool + Send + Sync>;
+
 /// Hands each [`Attached`] listener to the egress proxy.
 #[derive(Clone)]
-pub struct Relay(Arc<dyn Fn(Attached) + Send + Sync>);
+pub struct Relay {
+    serve: Arc<dyn Fn(Attached) + Send + Sync>,
+    direct: Option<Gate>,
+}
 
 impl Relay {
     /// A relay calling `serve` with each child's listener.
     pub fn new(serve: impl Fn(Attached) + Send + Sync + 'static) -> Self {
-        Self(Arc::new(serve))
+        Self {
+            serve: Arc::new(serve),
+            direct: None,
+        }
+    }
+
+    /// Asking `admits` whether a child that cannot reach the proxy may
+    /// connect directly to public addresses (see the module docs).
+    #[must_use]
+    pub fn with_direct(mut self, admits: impl Fn() -> bool + Send + Sync + 'static) -> Self {
+        self.direct = Some(Arc::new(admits));
+        self
     }
 
     /// Serves `attached`.
     pub fn serve(&self, attached: Attached) {
-        (self.0)(attached);
+        (self.serve)(attached);
+    }
+
+    /// Whether the policy admits every public host now; `false` without a
+    /// gate.
+    #[must_use]
+    pub fn admits_direct(&self) -> bool {
+        self.direct.as_ref().is_some_and(|admits| admits())
     }
 }
 
@@ -48,7 +78,7 @@ impl std::fmt::Debug for Relay {
 /// Two policies are equal when they hand children to the same relay.
 impl PartialEq for Relay {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.serve, &other.serve)
     }
 }
 

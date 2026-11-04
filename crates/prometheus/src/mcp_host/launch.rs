@@ -118,9 +118,9 @@ fn stdio(
         }
     }
     command.env("TMPDIR", &scratch);
-    if let Some(proxy) = &proxy {
+    if let Some(url) = proxy.as_ref().and_then(crate::egress::child_proxy_url) {
         for var in pmt_net::egress::PROXY_VARS {
-            command.env(var, proxy.url());
+            command.env(var, &url);
         }
     }
     *proxy_slot.lock().unwrap_or_else(PoisonError::into_inner) = proxy;

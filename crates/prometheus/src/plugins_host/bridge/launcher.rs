@@ -190,7 +190,7 @@ impl Launcher for Sandboxed {
             tmp: layout.tmp.clone(),
             path: vec![layout.env.bin.clone()],
             secrets: self.secrets(&granted),
-            proxy: proxy.as_ref().map(Proxy::url),
+            proxy: proxy.as_ref().and_then(crate::egress::child_proxy_url),
         };
         launch::configure(&mut command, &layout.shim, &env);
         *self.proxy.lock().unwrap_or_else(PoisonError::into_inner) = proxy;

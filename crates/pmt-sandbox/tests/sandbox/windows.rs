@@ -109,3 +109,53 @@ fn acl_entries_are_revoked_when_the_sandbox_ends() {
 fn entries(listing: &str) -> String {
     listing.replace("(I)", "")
 }
+
+/// Egress for a proxied child (spec: security-boundaries, Egress
+/// enforcement for child processes): an `AppContainer` cannot reach the
+/// loopback proxy, so the child runs (net `partial`, the platform's
+/// maximum, not a refused downgrade), reaches no loopback address, and
+/// holds `internetClient` only while its relay admits every public host,
+/// asked again at every start.
+#[test]
+fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let fixture = Fixture::new();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let public = Arc::new(AtomicBool::new(false));
+    let gate = Arc::clone(&public);
+    let relay = pmt_sandbox::Relay::new(|_| {}).with_direct(move || gate.load(Ordering::SeqCst));
+    let sandbox = confine(fixture.policy(&[]).through_proxy(port, relay));
+    let net = &sandbox.report().features[1];
+    assert_eq!((net.feature, net.level), (Feature::Net, Level::Partial));
+    assert!(net.gap.is_none(), "{net:?}");
+
+    let internet_client = || {
+        let output = cmd(&sandbox, &fixture.work, &["whoami", "/groups"]);
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8_lossy(&output.stdout)
+            .split_whitespace()
+            .any(|w| w == "S-1-15-3-1")
+    };
+    // S-1-15-3-1 is the internetClient capability.
+    assert!(!internet_client());
+    public.store(true, Ordering::SeqCst);
+    assert!(internet_client());
+
+    let connect = format!(
+        "try {{ (New-Object Net.Sockets.TcpClient).Connect('127.0.0.1', {port}); 'connected' }} catch {{ 'refused' }}"
+    );
+    let output = sandbox
+        .command("powershell.exe")
+        .unwrap()
+        .current_dir(&fixture.work)
+        .args(["-NoProfile", "-NonInteractive", "-Command", &connect])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("refused"), "{output:?}");
+    assert!(listener.accept().is_err(), "the child reached loopback");
+}

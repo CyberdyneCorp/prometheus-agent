@@ -9,7 +9,7 @@ boundary; approvals and scanners are heuristics on top of it.
 |---|---|---|---|---|---|
 | Linux | Landlock + seccomp | enforced (Landlock) | enforced (Landlock TCP rules, ABI 4 / Linux 6.7, plus seccomp for non-TCP IP sockets) | enforced (seccomp; signal scoping on Linux 6.12+) | enforced (seccomp) |
 | macOS | Seatbelt (`sandbox-exec`) | enforced | enforced | enforced | partial (platform maximum) |
-| Windows | AppContainer + Job Object | enforced (ACL entries for the container SID) | enforced (`internetClient` capability or none) | enforced (Job Object) | partial (platform maximum) |
+| Windows | AppContainer + Job Object | enforced (ACL entries for the container SID) | enforced (`internetClient` capability or none); partial for a child under the egress policy (below) | enforced (Job Object) | partial (platform maximum) |
 
 `partial` at the platform maximum is not a downgrade. Other platforms
 (Android, the BSDs) have no backend: every feature is `unavailable`.
@@ -55,7 +55,19 @@ capabilities = [
   port, served by the proxy; this needs unprivileged user namespaces
   (Ubuntu 24.04 restricts them through AppArmor:
   `sysctl kernel.apparmor_restrict_unprivileged_userns=0`). Without them
-  `net` is `partial` (`landlock_net`) and the downgrade rule applies. A child given its own
+  `net` is `partial` (`landlock_net`) and the downgrade rule applies. On
+  Windows an AppContainer reaches no loopback address (only an
+  administrator can exempt one), so the proxy is out of reach and no proxy
+  variables are set: a child under the egress policy gets the
+  `internetClient` capability (public addresses only; the container still
+  blocks loopback and the local private network) while the policy admits
+  every public host (`public` mode, no `/egress deny` pattern, no host
+  grant narrower than `*`, checked at each start), and no network at all
+  otherwise, so an `allowlist` session's commands cannot connect even to
+  allowed hosts. Host rules (metadata endpoints, private ranges beyond the
+  local subnet) are not checked for those direct connections, so `net` is
+  `partial`; that is the platform's maximum, not a downgrade, and needs no
+  `allow_degraded` entry. A child given its own
   `net.connect:<host>` grant without the proxy reports `net` `partial`. UDP
   sockets are refused only when outbound connections are restricted. `/proc` is not
   readable on Linux (other processes' environments hold secrets).

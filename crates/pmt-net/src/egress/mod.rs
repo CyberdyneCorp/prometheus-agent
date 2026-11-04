@@ -107,6 +107,21 @@ impl Rules {
         self
     }
 
+    /// Whether these rules admit every public host on every port right
+    /// now: `public` mode, no session deny pattern, and no grant narrower
+    /// than `*`. A child the OS can connect only to the public internet
+    /// (a Windows `AppContainer` with `internetClient`) may then connect
+    /// directly without escaping the policy's host rules.
+    #[must_use]
+    pub fn admits_every_public_host(&self) -> bool {
+        let state = self.hosts.state();
+        let granted_anywhere = self
+            .granted
+            .as_ref()
+            .is_none_or(|granted| granted.iter().any(|a| a.host == "*" && a.port.is_none()));
+        granted_anywhere && state.mode == Mode::Public && state.deny.is_empty()
+    }
+
     /// Whether the session policy and the grants admit `host:port`.
     fn admits(&self, host: &str, port: u16) -> Result<(), Reason> {
         let host = host.trim_end_matches('.').to_ascii_lowercase();
@@ -138,7 +153,6 @@ pub struct Proxy {
     /// For [`Proxy::attacher`] (Unix only).
     #[cfg_attr(not(unix), allow(dead_code))]
     runtime: tokio::runtime::Handle,
-    #[cfg_attr(not(unix), allow(dead_code))]
     rules: Arc<Rules>,
 }
 
@@ -194,6 +208,12 @@ impl Proxy {
             rules: Arc::clone(&self.rules),
             denied: Arc::clone(&self.denied),
         }
+    }
+
+    /// The rules it applies (shared: session policy changes show).
+    #[must_use]
+    pub fn rules(&self) -> Arc<Rules> {
+        Arc::clone(&self.rules)
     }
 
     /// The listening address.
@@ -504,6 +524,33 @@ mod tests {
         let sink = Arc::clone(&seen);
         let observer: Observer = Arc::new(move |d| sink.lock().unwrap().push(d));
         (observer, seen)
+    }
+
+    #[test]
+    fn only_an_unrestricted_public_policy_admits_every_public_host() {
+        let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()));
+        let rules = Rules::new(Arc::clone(&hosts), DestinationPolicy::default(), "terminal");
+        assert!(rules.admits_every_public_host());
+        assert!(
+            !rules
+                .clone()
+                .granted(vec![Allowed::parse("api.example.com")])
+                .admits_every_public_host()
+        );
+        assert!(
+            rules
+                .clone()
+                .granted(vec![Allowed::parse("*")])
+                .admits_every_public_host()
+        );
+        // Session changes show at once: a deny pattern, then another mode.
+        hosts.deny(Allowed::parse("example.com"));
+        assert!(!rules.admits_every_public_host());
+        let hosts = Arc::new(HostPolicy::new(Mode::Allowlist, vec![Allowed::parse("*")]));
+        let rules = Rules::new(Arc::clone(&hosts), DestinationPolicy::default(), "terminal");
+        assert!(!rules.admits_every_public_host());
+        hosts.set_mode(Mode::None);
+        assert!(!rules.admits_every_public_host());
     }
 
     #[test]

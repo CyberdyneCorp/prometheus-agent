@@ -11,6 +11,16 @@
 //! (`internetClient`) or none; capabilities cannot filter ports or hosts, so
 //! a port or host list is `partial`. Listening is never granted (loopback
 //! needs a per-container exemption), which is narrower than any grant.
+//!
+//! A child routed through the egress proxy ([`Policy::through_proxy`])
+//! cannot reach it: an `AppContainer` reaches no loopback address unless an
+//! administrator exempts it. Such a child gets `internetClient` only while
+//! its relay says the policy admits every public host (`public` egress, no
+//! deny pattern, no host grant), and no network otherwise; host rules are
+//! never applied to its connections, so `net` is `partial`. That is the
+//! platform's maximum for a proxied policy, so not a downgrade: refusing it
+//! would leave every default Windows session without a terminal, while
+//! the container still blocks loopback and the private network.
 
 mod acl;
 mod args;
@@ -45,6 +55,9 @@ pub(crate) struct Prepared {
 
 pub(crate) fn probe(policy: &Policy) -> StrengthReport {
     let net = match policy.connect() {
+        _ if policy.relay().is_some() => {
+            FeatureReport::full(Feature::Net, Level::Partial, PLATFORM)
+        }
         Ports::All if !policy.has_host_patterns() => {
             FeatureReport::full(Feature::Net, Level::Enforced, PLATFORM)
         }
@@ -149,7 +162,10 @@ impl Prepared {
     )]
     pub(crate) fn command(&self, policy: &Policy, program: &OsStr) -> Result<Command, Error> {
         let mut command = Command::new(&self.launcher);
-        let internet = policy.connect().is_all();
+        let internet = policy.connect().is_all()
+            || policy
+                .relay()
+                .is_some_and(crate::relay::Relay::admits_direct);
         command.args(LaunchSpec::head(
             self.container.name(),
             internet,

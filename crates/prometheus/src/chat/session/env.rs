@@ -273,8 +273,8 @@ fn processes(
         },
     );
     env.set_temp_dir(scratch);
-    if let Some(proxy) = proxy {
-        env.set_proxy(&proxy.url());
+    if let Some(url) = proxy.and_then(crate::egress::child_proxy_url) {
+        env.set_proxy(&url);
     }
     let bundle = scratch.join("ca-bundle.pem");
     let extra_ca = config.network.extra_ca_file.as_deref().map(Path::new);
