@@ -230,7 +230,10 @@ pub fn evaluate(line: &str, policy: &Policy<'_>) -> Result<Verdict, ParseError> 
     if let Some(reason) = hardline::check(line, &script, policy.floors) {
         return Ok(Verdict::Hardline(reason));
     }
-    if let Some(reason) = policy.daemon.and_then(|d| selfterm::check(&script, d)) {
+    if let Some(reason) = policy
+        .daemon
+        .and_then(|d| selfterm::check(line, &script, d))
+    {
         return Ok(Verdict::SelfTermination(reason));
     }
     if let Some(rule) = rules::denied(policy.deny, line, &script) {

@@ -269,7 +269,13 @@ approval gate first, always in this order:
    stop|restart|kill` of `prometheus-daemon.service`, `launchctl
    bootout|kill` of `ai.prometheus.daemon`, `schtasks /End` of
    `Prometheus Daemon`, and `kill`, `pkill`, `killall` or `taskkill` aimed
-   at the `prometheus` executable or the daemon's pid. The model gets
+   at the `prometheus` executable or the daemon's pid. Indirect routes
+   count too: pids from `pgrep`/`pidof`/`grep` lookups or from the
+   daemon's `run/` records reaching `kill` through `$(...)`, a variable
+   or `xargs`, and code
+   ([`execute_code`](../reference/tools.md#execute_code), `python3 -c`)
+   whose strings are such commands or that calls `os.kill` on the
+   daemon's pid or the parent process. The model gets
    `BLOCKED (self-termination): <reason>`. Killing the session's own
    background processes, or any other pid, goes on through the gate.
 3. **Your deny rules are blocked** the same way: `approvals.deny` holds

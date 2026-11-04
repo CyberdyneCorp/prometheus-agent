@@ -71,7 +71,11 @@ fn test(args: &ApprovalsTestArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         .binary(binary.as_deref());
     // As a daemon-hosted session would see it: the guard is part of the
     // order even though this process is not the daemon.
-    let daemon = crate::daemon_cmd::self_guard::daemon(scope.home(), false);
+    let daemon = crate::daemon_cmd::self_guard::daemon(
+        scope.home(),
+        ctx.launch.user_home().map(PathBuf::as_path),
+        false,
+    );
     let policy = Policy {
         bypass: mode == ApprovalMode::Off,
         deny: &config.approvals.deny,

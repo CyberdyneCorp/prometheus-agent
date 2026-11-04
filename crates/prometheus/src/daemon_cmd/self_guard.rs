@@ -1,12 +1,13 @@
 //! What identifies the daemon to the self-termination guard (spec:
 //! tool-system, Self-termination guard): its pids (this process inside
 //! the daemon, plus the one `run/gateway.json` names), their command
-//! lines (what `pkill -f` matches), the executable's name and the
-//! supervisor's service names.
+//! lines (what `pkill -f` matches), the executable's name, the
+//! supervisor's service names and the spellings of its `run/` directory
+//! (where its pid record lives).
 
 use std::path::Path;
 
-use pmt_core::runtime::{Role, live_record, process_command_line};
+use pmt_core::runtime::{Role, live_record, process_command_line, run_dir};
 use pmt_tools::approval::selfterm::Daemon;
 
 use super::service::SERVICE_NAMES;
@@ -14,10 +15,20 @@ use super::service::SERVICE_NAMES;
 /// The base name every Prometheus executable has.
 const EXECUTABLE: &str = "prometheus";
 
+/// Spellings of a run directory that do not depend on where the home is:
+/// through the home variable, and the default home's (`~/.prometheus`),
+/// which a model reaches for first.
+const RUN_SPELLINGS: &[&str] = &[
+    "$PROMETHEUS_HOME/run",
+    "${PROMETHEUS_HOME}/run",
+    ".prometheus/run",
+];
+
 /// The daemon of `home`; `inside` when this process is that daemon
-/// (`approvals test` looks at it from beside it).
+/// (`approvals test` looks at it from beside it). `user_home` lets the
+/// guard recognise `~/...` spellings of the run directory.
 #[must_use]
-pub(crate) fn daemon(home: &Path, inside: bool) -> Daemon {
+pub(crate) fn daemon(home: &Path, user_home: Option<&Path>, inside: bool) -> Daemon {
     let mut pids = if inside {
         vec![std::process::id()]
     } else {
@@ -50,5 +61,22 @@ pub(crate) fn daemon(home: &Path, inside: bool) -> Daemon {
         executables,
         command_lines,
         services: SERVICE_NAMES.iter().map(|&s| s.to_owned()).collect(),
+        run_dirs: run_dirs(home, user_home),
     }
+}
+
+/// The absolute run directory, its home-relative tail (so `~/<tail>` and
+/// `$HOME/<tail>` match as substrings) and [`RUN_SPELLINGS`].
+fn run_dirs(home: &Path, user_home: Option<&Path>) -> Vec<String> {
+    let run = run_dir(home);
+    let mut dirs = vec![run.display().to_string()];
+    if let Some(tail) = user_home.and_then(|user| run.strip_prefix(user).ok()) {
+        dirs.push(tail.display().to_string());
+    }
+    for spelling in RUN_SPELLINGS {
+        if !dirs.iter().any(|d| d == spelling) {
+            dirs.push((*spelling).to_owned());
+        }
+    }
+    dirs
 }

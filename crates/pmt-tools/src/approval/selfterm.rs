@@ -16,12 +16,22 @@
 //! over whole command lines; `killall -r`/`-m` takes a regular expression
 //! too. Over-reading is harmless (a false match only blocks), so a
 //! pattern that mentions an executable name is blocked even when no
-//! command line is known to match it, and `kill $(pgrep ...)` is judged
-//! by the pattern inside the substitution.
+//! command line is known to match it.
+//!
+//! Pids also reach `kill` indirectly: through a substitution, a variable
+//! or `xargs` fed by a lookup by name (`pgrep`, `pidof`, `grep` over `ps`)
+//! or by a read of the daemon's `run/` records ([`flow`]), and from code
+//! an interpreter runs, whose string literals are command lines and whose
+//! `os.kill`-style calls name pids ([`code`]). The guard looks at the raw
+//! text as well as the parsed shell, so `python3 -c '...'` and
+//! `execute_code` bodies are read the same way.
+
+mod code;
+mod flow;
 
 use regex::RegexBuilder;
 
-use super::shell::{Script, Segment, basename, parse};
+use super::shell::{Script, Segment, basename};
 
 /// What identifies the hosting daemon.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -35,6 +45,24 @@ pub struct Daemon {
     pub command_lines: Vec<String>,
     /// Service unit, launchd label and scheduled task names.
     pub services: Vec<String>,
+    /// Spellings of the daemon's `run/` directory, which holds its pid
+    /// record: the absolute path and home-relative tails such as
+    /// `.prometheus/run` (matched as substrings, so `~/`, `$HOME/` and
+    /// absolute spellings all hit).
+    pub run_dirs: Vec<String>,
+}
+
+impl Daemon {
+    /// Whether `word` names something inside the daemon's `run/` directory.
+    #[must_use]
+    pub fn in_run_dir(&self, word: &str) -> bool {
+        let word = word.replace('\\', "/");
+        self.run_dirs.iter().any(|dir| {
+            let dir = dir.replace('\\', "/");
+            let dir = dir.trim_end_matches('/');
+            !dir.is_empty() && (word.contains(&format!("{dir}/")) || word.ends_with(dir))
+        })
+    }
 }
 
 /// The daemon and the session's own background process ids.
@@ -46,24 +74,40 @@ pub struct Guarded<'a> {
     pub own: &'a [u32],
 }
 
-/// Why `script` would stop the daemon, if it would.
+/// Why `line` (read as `script`) would stop the daemon, if it would.
 #[must_use]
-pub fn check(script: &Script, guarded: Guarded<'_>) -> Option<String> {
+pub fn check(line: &str, script: &Script, guarded: Guarded<'_>) -> Option<String> {
+    structural(script, guarded).or_else(|| code::check(line, guarded))
+}
+
+/// What the parsed shell commands do, indirections included.
+fn structural(script: &Script, guarded: Guarded<'_>) -> Option<String> {
+    let flow = flow::Flow::of(script, guarded.daemon);
     script
         .segments
         .iter()
-        .find_map(|segment| segment_reason(segment, guarded))
+        .enumerate()
+        .find_map(|(at, segment)| {
+            segment_reason(segment, guarded).or_else(|| flow.reason(at, segment, guarded))
+        })
 }
 
 fn segment_reason(segment: &Segment, guarded: Guarded<'_>) -> Option<String> {
     let (program, args) = segment.program()?;
     let program = program.to_ascii_lowercase();
     let daemon = guarded.daemon;
+    if matches!(program.as_str(), "kill" | "pkill" | "killall" | "taskkill")
+        && let Some(arg) = args.iter().find(|a| daemon.in_run_dir(a))
+    {
+        return Some(format!(
+            "`{program} {arg}` reads the pid record of the daemon hosting this session"
+        ));
+    }
     match program.as_str() {
         "systemctl" => service_stop(args, &["stop", "restart", "kill"], daemon),
         "launchctl" => service_stop(args, &["bootout", "kill"], daemon),
         "schtasks" => scheduled_task_end(args, daemon),
-        "kill" => kill_pids(args, guarded).or_else(|| kill_found(args, daemon)),
+        "kill" => kill_pids(args, guarded).or_else(|| flow::substituted(args, daemon)),
         "pkill" | "killall" => kill_by_name(&program, args, daemon),
         "taskkill" => taskkill(args, guarded),
         name if daemon.executables.iter().any(|e| e == name) => own_cli(&program, args),
@@ -138,30 +182,6 @@ fn kill_by_name(program: &str, args: &[String], daemon: &Daemon) -> Option<Strin
     ))
 }
 
-/// `kill $(pgrep <pattern>)` / `` kill `pidof prometheus` ``: the pids come
-/// from a lookup by name, so the name decides.
-fn kill_found(args: &[String], daemon: &Daemon) -> Option<String> {
-    args.iter()
-        .filter_map(|a| substitution_body(a))
-        .find_map(|body| {
-            let script = parse(body).ok()?;
-            script.segments.iter().find_map(|segment| {
-                let (program, args) = segment.program()?;
-                kill_by_name(&program.to_ascii_lowercase(), args, daemon)
-            })
-        })
-}
-
-fn substitution_body(word: &str) -> Option<&str> {
-    let start = word
-        .find("$(")
-        .map(|at| at + 2)
-        .or_else(|| word.find('`').map(|at| at + 1))?;
-    let rest = &word[start..];
-    let end = rest.rfind([')', '`']).unwrap_or(rest.len());
-    Some(&rest[..end])
-}
-
 /// How a process-by-name tool reads its pattern.
 struct Matching {
     /// A regular expression rather than an exact name.
@@ -192,6 +212,11 @@ impl Matching {
             "pidof" => Some(Self {
                 regex: false,
                 full: false,
+            }),
+            // Over `ps` output, whose lines carry whole command lines.
+            "grep" | "egrep" => Some(Self {
+                regex: true,
+                full: true,
             }),
             _ => None,
         }
@@ -271,12 +296,14 @@ mod tests {
                 "ai.prometheus.daemon".into(),
                 "Prometheus Daemon".into(),
             ],
+            run_dirs: vec!["/home/u/.prometheus/run".into(), ".prometheus/run".into()],
         }
     }
 
     fn blocked(line: &str, own: &[u32]) -> Option<String> {
         let daemon = daemon();
         check(
+            line,
             &parse(line).unwrap(),
             Guarded {
                 daemon: &daemon,
@@ -330,6 +357,74 @@ mod tests {
             "kill $(pgrep prom)",
         ] {
             assert!(blocked(line, &[]).is_some(), "{line} should be blocked");
+        }
+    }
+
+    /// Pids reach `kill` through pipelines, variables and reads of the
+    /// daemon's `run/` record.
+    #[test]
+    fn daemon_pids_reaching_kill_indirectly_are_blocked() {
+        for line in [
+            "pgrep prometheus | xargs kill",
+            "pgrep -f 'daemon run' | head -1 | xargs -n1 kill -9",
+            "pidof prometheus | xargs kill",
+            "ps aux | grep prometheus | awk '{print $2}' | xargs kill",
+            "xargs kill < ~/.prometheus/run/daemon.pid",
+            "cat /home/u/.prometheus/run/gateway.json | jq .pid | xargs kill",
+            "kill $(cat ~/.prometheus/run/daemon.pid)",
+            "kill -9 $(jq .pid \"$HOME/.prometheus/run/gateway.json\")",
+            "kill $(< /home/u/.prometheus/run/gateway.json)",
+            "pkill -F /home/u/.prometheus/run/gateway.json",
+            "p=$(pgrep prometheus); kill $p",
+            "export P=`pidof prometheus` && kill -TERM \"${P}\"",
+            "p=$(cat ~/.prometheus/run/gateway.json | jq .pid); q=$p; kill $q",
+            "p=777; kill -9 $p",
+            "pgrep prometheus | while read p; do kill $p; done",
+            "read p < ~/.prometheus/run/daemon.pid; kill $p",
+            "for p in $(pgrep -f prometheus); do kill $p; done",
+        ] {
+            assert!(blocked(line, &[]).is_some(), "{line} should be blocked");
+        }
+    }
+
+    /// Code an interpreter runs: literals are command lines, `kill` calls
+    /// name pids.
+    #[test]
+    fn code_execution_bodies_are_read() {
+        for code in [
+            r#"import os; os.system("pkill -f prometheus")"#,
+            r#"import subprocess; subprocess.run(["pkill", "-f", "prometheus"])"#,
+            "import subprocess\nsubprocess.Popen(['killall', 'prometheus'])",
+            r#"require("child_process").execSync("kill $(pgrep prometheus)")"#,
+            r#"require("child_process").spawn("pkill", ["-f", "prometheus"])"#,
+            "import os, signal\nos.kill(777, signal.SIGTERM)",
+            "import os\nos.kill(os.getppid(), 9)",
+            "import os\nos.killpg(os.getpgid(os.getppid()), 15)",
+            "process.kill(process.ppid)",
+            "import json, os\npid = json.load(open(os.path.expanduser('~/.prometheus/run/gateway.json')))['pid']\nos.kill(pid, 15)",
+            "# don't do this\nimport os; os.system('pkill -f prometheus')",
+            r"python3 -c 'import os; os.kill(os.getppid(), 9)'",
+            r#"bash -c "python3 -c 'import os; os.system(\"pkill prometheus\")'""#,
+        ] {
+            assert!(blocked(code, &[]).is_some(), "{code} should be blocked");
+        }
+    }
+
+    #[test]
+    fn unrelated_code_and_pipelines_pass() {
+        for line in [
+            "pgrep node | xargs kill",
+            "cat ~/.prometheus/run/gateway.json | jq .pid",
+            "p=$(pgrep node); kill $p",
+            "p=4242; kill $p",
+            "for p in $(pgrep webpack); do kill $p; done",
+            r#"import os; os.system("pkill -f webpack")"#,
+            r#"import subprocess; subprocess.run(["kill", "4242"])"#,
+            "import os\nos.kill(4242, 9)",
+            "import os\nos.kill(child.pid, 9)",
+            r#"print("prometheus")"#,
+        ] {
+            assert_eq!(blocked(line, &[4242]), None, "{line} should pass");
         }
     }
 

@@ -88,7 +88,11 @@ impl DaemonHost {
             gateway: Arc::clone(&self.gateway),
             profile: profile.scope().name().as_str().to_owned(),
         };
-        let daemon = crate::daemon_cmd::self_guard::daemon(scope.home(), true);
+        let daemon = crate::daemon_cmd::self_guard::daemon(
+            scope.home(),
+            self.launch.user_home().map(PathBuf::as_path),
+            true,
+        );
         let factory = Factory::new(scope, &self.launch, &flags(setup), ad_hoc, options)?
             .with_current(profile.current.clone())
             .with_messaging(Arc::new(ports))

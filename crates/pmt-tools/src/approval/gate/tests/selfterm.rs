@@ -17,6 +17,7 @@ fn hosted(own: Vec<u32>) -> Options {
                 executables: vec!["prometheus".into()],
                 command_lines: vec!["/usr/local/bin/prometheus daemon run".into()],
                 services: vec!["prometheus-daemon.service".into()],
+                run_dirs: vec!["/srv/pm/run".into()],
             },
             own,
         )),
@@ -51,6 +52,49 @@ async fn pkill_under_yolo_is_blocked_in_a_daemon_session() {
         );
     }
     assert_eq!(fx.runs.load(Ordering::SeqCst), 0);
+    assert!(prompts.try_next().is_none());
+}
+
+/// Indirect kills (pipelines, variables, the daemon's `run/` record) and
+/// `execute_code` bodies are blocked under yolo too.
+#[tokio::test]
+async fn indirect_kills_and_code_under_yolo_are_blocked_in_a_daemon_session() {
+    let fx = fixture();
+    let (channel, mut prompts) = attached();
+    let session = session(&fx, channel, hosted(Vec::new())).await;
+    for line in [
+        "pgrep prometheus | xargs kill",
+        "xargs kill < /srv/pm/run/gateway.json",
+        "kill $(cat /srv/pm/run/gateway.json)",
+        "p=$(pgrep prometheus); kill $p",
+    ] {
+        let result = command(&session, line).await;
+        assert_eq!(result.status, Status::Blocked, "{line}");
+    }
+    let parent = format!("import os\nos.kill({}, 15)", std::process::id());
+    for code in [
+        r#"import os; os.system("pkill -f prometheus")"#,
+        r#"import subprocess; subprocess.run(["pkill", "-f", "prometheus"])"#,
+        "import os\nos.kill(os.getppid(), 9)",
+        &parent,
+    ] {
+        let result = run(&session, "execute_code", json!({ "code": code }))
+            .await
+            .unwrap();
+        assert_eq!(result.status, Status::Blocked, "{code}");
+        assert!(
+            result
+                .text_content()
+                .starts_with("BLOCKED (self-termination): "),
+            "{code}: {}",
+            result.text_content()
+        );
+    }
+    let fine = run(&session, "execute_code", json!({"code": "print('hi')"}))
+        .await
+        .unwrap();
+    assert_eq!(fine.status, Status::Ok);
+    assert_eq!(fx.runs.load(Ordering::SeqCst), 1);
     assert!(prompts.try_next().is_none());
 }
 

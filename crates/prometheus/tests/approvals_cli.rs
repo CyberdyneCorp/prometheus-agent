@@ -171,6 +171,32 @@ fn testing_a_self_termination_command() {
     assert_eq!(doc["verdict"], "bypass", "{doc}");
 }
 
+/// Daemon pids reaching `kill` through code, pipelines, variables or the
+/// daemon's `run/` record are blocked under `off` too.
+#[test]
+fn indirect_and_code_self_termination_commands() {
+    let home = temp_home();
+    let record = home.path().join("run").join("gateway.json");
+    let own_run = format!("kill $(jq .pid '{}')", record.display());
+    for line in [
+        r#"import os; os.system("pkill -f prometheus")"#,
+        r#"import subprocess; subprocess.run(["pkill","-f","prometheus"])"#,
+        "import os; os.kill(os.getppid(), 9)",
+        "pgrep prometheus | xargs kill",
+        "xargs kill < ~/.prometheus/run/daemon.pid",
+        "kill $(cat ~/.prometheus/run/daemon.pid)",
+        "p=$(pgrep prometheus); kill $p",
+        &own_run,
+    ] {
+        let doc = test_json(home.path(), &["--mode", "off", "--", line]);
+        assert_eq!(doc["verdict"], "self-termination", "{line}: {doc}");
+    }
+    for line in ["pgrep node | xargs kill", r#"import os; os.system("ls")"#] {
+        let doc = test_json(home.path(), &["--mode", "off", "--", line]);
+        assert_eq!(doc["verdict"], "bypass", "{line}: {doc}");
+    }
+}
+
 fn record_approvals(home: &Path, command: &str, decision: &str, by: &str, times: usize) {
     let log = pmt_core::audit::AuditLog::of(&home.join("profiles/default"));
     for _ in 0..times {

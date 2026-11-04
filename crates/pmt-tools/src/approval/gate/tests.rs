@@ -66,12 +66,20 @@ fn counting(runs: &Arc<AtomicUsize>) -> Arc<dyn ToolHandler> {
     }))
 }
 
-/// `terminal` (spawns processes) and `write_file` (writes `/path`).
+/// `terminal` and `execute_code` (spawn processes) and `write_file`
+/// (writes `/path`).
 fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
     let schema = |key: &str| json!({"type": "object", "properties": {key: {"type": "string"}}});
     let mut terminal =
         ToolDescriptor::new("terminal", "terminal", "Runs commands.", schema("command"));
     terminal.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
+    let mut code = ToolDescriptor::new(
+        "execute_code",
+        "code_execution",
+        "Runs Python.",
+        schema("code"),
+    );
+    code.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
     let mut write = ToolDescriptor::new("write_file", "file", "Writes files.", schema("path"));
     write.claims = Some(ResourceClaims::writes(vec![PathClaim::Argument(
         "/path".into(),
@@ -99,6 +107,7 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
     });
     vec![
         RegisteredTool::new(terminal, Owner::Builtin, counting(runs)),
+        RegisteredTool::new(code, Owner::Builtin, counting(runs)),
         RegisteredTool::new(write, Owner::Builtin, counting(runs)),
         RegisteredTool::new(patch, Owner::Builtin, counting(runs)),
         RegisteredTool::new(render, Owner::Builtin, counting(runs)).with_guard(over_budget),
