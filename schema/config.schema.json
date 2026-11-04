@@ -230,6 +230,13 @@
           "default": "deny",
           "description": "Decision for approvals in cron jobs."
         },
+        "denial_breaker_threshold": {
+          "default": 3,
+          "description": "In `smart` mode, after this many consecutive denials by the\napproval guardian the denial tells the model to stop trying\nvariations (`0` disables); a human approval resets the count.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "deny": {
           "default": [],
           "description": "Command patterns that are always blocked.",
@@ -7092,6 +7099,7 @@
       "$ref": "#/$defs/ApprovalsConfig",
       "default": {
         "cron_mode": "deny",
+        "denial_breaker_threshold": 3,
         "deny": [],
         "mode": "manual",
         "single_query_mode": "deny",

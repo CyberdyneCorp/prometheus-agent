@@ -47,6 +47,7 @@ fn decision_of(word: &str) -> Option<Decision> {
         "session" => Some(Decision::Session),
         "always" => Some(Decision::Always),
         "deny" => Some(Decision::Deny),
+        "explain" => Some(Decision::Explain),
         _ => None,
     }
 }
@@ -57,6 +58,7 @@ fn outcome_text(decision: Decision) -> &'static str {
         Decision::Session => "Approved for this session",
         Decision::Always => "Approved always",
         Decision::Deny => "Denied",
+        Decision::Explain => "Explaining; the request follows again",
     }
 }
 
@@ -82,6 +84,9 @@ fn card_text(
             .iter()
             .map(|finding| format!("Risk: {}", finding.reason)),
     );
+    if let Some(explanation) = &params.explanation {
+        details.push(explanation.clone());
+    }
     let card = Card {
         title: format!("Approval needed: {}", params.tool),
         details,
@@ -91,7 +96,9 @@ fn card_text(
     let mut text = card.text(now);
     match tier {
         Interactive::Native => {
-            text.push_str("\nReply /approve, /approve session, /approve always or /deny.");
+            text.push_str(
+                "\nReply /approve, /approve session, /approve always, /approve explain or /deny.",
+            );
         }
         other => text.push_str(&cards::instructions(other, id)),
     }

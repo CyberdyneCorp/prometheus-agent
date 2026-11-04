@@ -29,5 +29,5 @@ The system prompt is sent as one block per tier, each ending at a prompt-cache b
 | `project_context` | Project context files under `# Project Context`. |
 | `memory` | The memory and user-profile snapshot taken at session start. |
 | `plugin_sections` | Sections contributed by plugins. |
-| `session_info` | The session start time and, with `prompt.include_session_id`, `Session ID: ses_<ULID>`. |
+| `session_info` | The session's untrusted-content delimiter id (when it has tools), the session start time and, with `prompt.include_session_id`, `Session ID: ses_<ULID>`. |
 | `runtime` | The runtime environment block, always the last text of the prompt. |

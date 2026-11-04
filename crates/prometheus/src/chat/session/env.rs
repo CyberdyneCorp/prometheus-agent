@@ -17,6 +17,7 @@ use pmt_core::secret::Redactor;
 use pmt_net::OutboundPolicy;
 use pmt_net::egress::Proxy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
+use pmt_tools::approval::explain::Previewer;
 use pmt_tools::browser::BrowserExec;
 use pmt_tools::environments::{Attachment, Environments, SessionEnv};
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
@@ -83,6 +84,8 @@ pub struct Attached {
     pub egress: crate::egress::Running,
     /// Where its egress refusals are reported.
     pub denials: Denials,
+    /// Runs approval `explain` previews (read-only, offline).
+    pub previewer: Option<Previewer>,
 }
 
 /// The parts a session runs commands with.
@@ -163,6 +166,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
                 shell,
             })
     });
+    let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
     let terminal = commands
         .clone()
         .and_then(|commands| {
@@ -187,8 +191,37 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         commands,
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
+        previewer,
     })
 }
+
+/// The approval previewer: the session's shell (POSIX shells only: the
+/// previews are `sh -c` lines) under a sandbox that reads the workspace,
+/// scratch and toolchain and may neither write nor connect (spec:
+/// tool-system, Approval explain and dry-run).
+fn previewer(inputs: &EnvInputs<'_>, paths: &Paths, commands: &Commands) -> Option<Previewer> {
+    if !commands.shell.kind.is_posix() {
+        return None;
+    }
+    let policy = Policy::from_capabilities(PREVIEW_CAPABILITIES, paths).ok()?;
+    let sandbox = Sandbox::new(policy, &inputs.scope.config().security.sandbox)
+        .inspect_err(|err| tracing::warn!(error = %err, "approval previews unavailable"))
+        .ok()?;
+    Some(Previewer::new(
+        Arc::new(sandbox),
+        commands.env.clone(),
+        commands.shell.path.clone(),
+    ))
+}
+
+/// What an approval preview may do: read, and start the preview's own
+/// programs; never write or connect.
+const PREVIEW_CAPABILITIES: &[&str] = &[
+    "fs.read:<workspace>/**",
+    "fs.read:<scratch>/**",
+    "fs.read:<toolchain>",
+    "process.spawn:*",
+];
 
 fn files(
     inputs: &EnvInputs<'_>,

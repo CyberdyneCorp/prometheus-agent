@@ -129,6 +129,7 @@ struct Options {
     yolo: bool,
     security: SecurityConfig,
     hooks: Arc<dyn ToolHooks>,
+    guardian: Option<Arc<dyn crate::approval::guardian::Guardian>>,
 }
 
 impl Default for Options {
@@ -139,6 +140,7 @@ impl Default for Options {
             yolo: false,
             security: SecurityConfig::default(),
             hooks: Arc::new(crate::dispatch::NoHooks),
+            guardian: None,
         }
     }
 }
@@ -161,7 +163,7 @@ async fn session(
     let floors = Floors::new(&fx.profile.path().join("work"))
         .user_home(Some(fx.profile.home()))
         .prometheus_home(fx.profile.home());
-    let gate = Arc::new(CommandGate::new(GateSetup {
+    let mut gate = CommandGate::new(GateSetup {
         approvals: options.approvals,
         context: options.context,
         floors,
@@ -170,7 +172,11 @@ async fn session(
         channel,
         yolo: options.yolo,
         hooks: None,
-    }));
+    });
+    if let Some(guardian) = options.guardian {
+        gate = gate.with_guardian(guardian);
+    }
+    let gate = Arc::new(gate);
     let registry = ToolRegistry::new(
         "default",
         Arc::new(Builtins::standard(tools(&fx.runs)).unwrap()),
@@ -727,3 +733,5 @@ async fn cron_cannot_install_mcp_servers() {
         "manage_connections must be handled by the agent loop"
     );
 }
+
+mod guarded;

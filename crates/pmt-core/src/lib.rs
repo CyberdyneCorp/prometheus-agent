@@ -21,6 +21,7 @@ pub mod panic;
 pub mod pause;
 pub mod private_fs;
 pub mod protocol;
+pub mod provenance;
 pub mod registry;
 pub mod runtime;
 pub mod secret;

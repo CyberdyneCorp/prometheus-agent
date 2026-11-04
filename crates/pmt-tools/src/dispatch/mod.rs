@@ -10,7 +10,8 @@
 //! `transform_tool_result` hooks, then the result budget. Each step that
 //! stops the call produces a typed result instead; nothing a handler does
 //! escapes the dispatcher. Error text is sanitized and bounded before the
-//! model sees it. Provenance tagging (M2) attaches after the budget.
+//! model sees it. Provenance (`{source, trust}`, [`crate::provenance`])
+//! attaches after the budget.
 
 mod batch;
 mod bridge;
@@ -195,9 +196,24 @@ impl Dispatcher {
         setup
             .budget
             .apply(&call.call_id, tool.as_deref(), &mut result);
-        if let Some(provenance) = tool.as_ref().and_then(|t| t.provenance.clone()) {
-            result.metadata.insert("provenance".to_owned(), provenance);
-        }
+        // A call stopped before it ran (a hook, a rule, an approval, the
+        // user) holds only Prometheus' own words.
+        let stopped = matches!(
+            result.status,
+            Status::Blocked | Status::Denied | Status::Cancelled
+        );
+        let provenance = match tool.as_deref().filter(|_| !stopped) {
+            Some(tool) => {
+                let workspace = crate::environments::Environments::process()
+                    .session(&setup.session_id)
+                    .and_then(|env| env.files.as_ref().map(|files| files.cwd()));
+                crate::provenance::classify(tool, &arguments, workspace.as_deref())
+            }
+            None => pmt_core::provenance::Provenance::trusted("prometheus"),
+        };
+        result
+            .metadata
+            .insert("provenance".to_owned(), provenance.to_value());
         Executed {
             tool,
             result,

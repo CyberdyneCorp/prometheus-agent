@@ -236,6 +236,10 @@ pub struct ApprovalsConfig {
     pub timeout_secs: u64,
     /// Command patterns that are always blocked.
     pub deny: Vec<String>,
+    /// In `smart` mode, after this many consecutive denials by the
+    /// approval guardian the denial tells the model to stop trying
+    /// variations (`0` disables); a human approval resets the count.
+    pub denial_breaker_threshold: u32,
 }
 
 impl Default for ApprovalsConfig {
@@ -247,6 +251,7 @@ impl Default for ApprovalsConfig {
             unattended_mode: UnattendedApproval::Deny,
             timeout_secs: 300,
             deny: Vec::new(),
+            denial_breaker_threshold: 3,
         }
     }
 }

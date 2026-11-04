@@ -107,6 +107,7 @@ async fn script(text: String, link: Link, turn: String, answers: Answers) {
             findings: Vec::new(),
             remember: None,
             deadline_ms: None,
+            explanation: None,
         };
         let answer = link.ask::<ApprovalAsk>(&params, Some(deadline)).await;
         let approved = answer.is_some_and(|a| a.decision != Decision::Deny);

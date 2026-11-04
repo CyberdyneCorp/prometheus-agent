@@ -58,6 +58,10 @@ pub struct GateInputs<'a> {
     pub hooks: Option<Arc<dyn pmt_tools::approval::hooks::ApprovalHooks>>,
     /// The session id (its decisions go to the security audit log).
     pub session_id: String,
+    /// The smart-mode approval guardian.
+    pub guardian: Option<Arc<dyn pmt_tools::approval::guardian::Guardian>>,
+    /// Runs approval `explain` previews.
+    pub previewer: Option<pmt_tools::approval::explain::Previewer>,
 }
 
 /// The approval gate: prompts go to the person on an interactive
@@ -94,6 +98,14 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         pmt_core::audit::AuditLog::of(inputs.scope.dir()),
         inputs.session_id.clone(),
     );
+    let gate = match &inputs.guardian {
+        Some(guardian) => gate.with_guardian(Arc::clone(guardian)),
+        None => gate,
+    };
+    let gate = match &inputs.previewer {
+        Some(previewer) => gate.with_previewer(previewer.clone()),
+        None => gate,
+    };
     Ok(Gate {
         gate: Arc::new(gate),
         prompts,

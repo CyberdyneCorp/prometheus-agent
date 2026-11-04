@@ -110,6 +110,7 @@ fn decision(answer: Decision) -> pmt_tools::approval::Decision {
         Decision::Session => Gate::Session,
         Decision::Always => Gate::Always,
         Decision::Deny => Gate::Deny,
+        Decision::Explain => Gate::Explain,
     }
 }
 
@@ -130,6 +131,7 @@ fn approval_params(session_id: &str, request: &ApprovalRequest) -> ApprovalReque
             .collect(),
         remember: request.remember.clone(),
         deadline_ms: None,
+        explanation: request.explanation.clone(),
     }
 }
 

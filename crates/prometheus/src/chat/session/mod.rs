@@ -7,6 +7,7 @@
 
 pub mod browser;
 pub mod env;
+mod guardian;
 mod mcp;
 pub mod model;
 mod plugins;
@@ -447,7 +448,7 @@ impl Factory {
         let cards = shows_cards(interactive, &session_surface);
         let (agent_tools, clarify) =
             self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
-        let gate = self.gate(id)?;
+        let gate = self.gate(id, Some(&model), environment.previewer.clone())?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
@@ -551,8 +552,15 @@ impl Factory {
         )
     }
 
-    /// The session's command approval gate.
-    fn gate(&self, id: SessionId) -> Result<tools::Gate, Error> {
+    /// The session's command approval gate; with the session's `model`,
+    /// `smart` mode asks the approval guardian on its auxiliary route.
+    fn gate(
+        &self,
+        id: SessionId,
+        model: Option<&Arc<SwitchableModel>>,
+        previewer: Option<pmt_tools::approval::explain::Previewer>,
+    ) -> Result<tools::Gate, Error> {
+        let guardian = model.map(|model| self.models.guardian(model, id));
         let hooks = crate::plugins_host::approvals::PluginApprovals::new(
             self.plugins.clone(),
             self.plugin_call(id),
@@ -568,6 +576,8 @@ impl Factory {
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
             session_id: id.to_string(),
+            guardian: guardian.map(|g| g as _),
+            previewer,
         })
     }
 

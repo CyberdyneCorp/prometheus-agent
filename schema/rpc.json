@@ -156,6 +156,13 @@
             "null"
           ]
         },
+        "explanation": {
+          "description": "What an `explain` answer produced: the parsed command, the rule,\nthe paths it touches and a dry-run preview (the request is asked\nagain with it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "findings": {
           "description": "Why approval is needed.",
           "items": {
@@ -783,6 +790,11 @@
         {
           "const": "deny",
           "description": "Refuse.",
+          "type": "string"
+        },
+        {
+          "const": "explain",
+          "description": "Show the parsed command, the rule, the paths it touches and a\ndry-run preview, then ask again; never an approval.",
           "type": "string"
         }
       ]

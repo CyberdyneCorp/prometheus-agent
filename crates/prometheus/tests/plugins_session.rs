@@ -586,8 +586,9 @@ user = "probe"
 name = "session"
 arguments = {}
 
+# A plugin's result arrives inside its untrusted-content block.
 [[rule]]
-tool_result_regex = '^default\|gateway\|ses_'
+tool_result_regex = '(?m)^default\|gateway\|ses_'
 text = "probe saw gateway"
 
 [[rule]]

@@ -23,6 +23,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.run_budget_secs` | integer | unset | ≥ 0 | `next_session` | Optional per-turn wall-clock budget; unset means no budget. |
 | `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
 | `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
+| `approvals.denial_breaker_threshold` | integer | `3` | ≥ 0 | `live` | In `smart` mode, after this many consecutive denials by the approval guardian the denial tells the model to stop trying variations (`0` disables); a human approval resets the count. |
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
 | `approvals.mode` | one of "manual", "smart", "off" | `"manual"` | `"manual"`, `"smart"`, `"off"` | `live` | Approval mode of interactive sessions. |
 | `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |

@@ -129,7 +129,9 @@ impl Pending {
     /// The prompt shown while this is pending.
     pub(super) fn prompt(&self) -> String {
         match self {
-            Self::Approval(_) => "approve? [o]nce [s]ession [a]lways [d]eny › ".to_owned(),
+            Self::Approval(_) => {
+                "approve? [o]nce [s]ession [a]lways [d]eny [e]xplain › ".to_owned()
+            }
             Self::Clarify { .. } => "answer › ".to_owned(),
             Self::Memory(_) => "save to memory? [y/n] › ".to_owned(),
             Self::Install(_) => "install? [Y/n] › ".to_owned(),
@@ -159,12 +161,18 @@ pub(super) fn approval_question(request: &ApprovalRequest) -> String {
     // The subject and findings may come from the model: escaped so a
     // control sequence cannot hide part of what is approved.
     let subject = request.subject.as_deref().unwrap_or(&request.tool);
-    format!(
+    let mut text = format!(
         "{} wants to run: {}\n  why: {}",
         printable(&request.tool),
         printable(subject),
         printable(&request.summary())
-    )
+    );
+    if let Some(explanation) = &request.explanation {
+        for line in explanation.lines() {
+            let _ = write!(text, "\n  {}", printable(line));
+        }
+    }
+    text
 }
 
 /// The decision a line gives, if it is one.
@@ -174,6 +182,7 @@ pub(super) fn decision(line: &str) -> Option<Decision> {
         "s" | "session" => Decision::Session,
         "a" | "always" => Decision::Always,
         "d" | "deny" | "n" | "no" => Decision::Deny,
+        "e" | "explain" => Decision::Explain,
         _ => return None,
     })
 }
@@ -265,6 +274,7 @@ mod tests {
             subject: Some("rm -rf ~\u{1b}[2K\rls".into()),
             findings: Vec::new(),
             remember: None,
+            explanation: None,
         };
         let text = approval_question(&request);
         assert!(

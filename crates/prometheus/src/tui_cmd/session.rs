@@ -18,7 +18,7 @@ use super::masked;
 use super::screen::{Asked, Done, Tui};
 
 /// How to answer an approval card.
-const APPROVAL_HINT: &str = "[o]nce  [s]ession  [a]lways  [d]eny";
+const APPROVAL_HINT: &str = "[o]nce  [s]ession  [a]lways  [d]eny  [e]xplain";
 /// How to answer a question card.
 const CLARIFY_HINT: &str = "type a number, your own answer, or nothing to skip; Enter sends";
 
@@ -325,13 +325,18 @@ fn approval_card(p: &Value, within: &str) -> Card {
             )
         })
         .collect();
+    let mut body = findings.join("\n");
+    if let Some(explanation) = p["explanation"].as_str() {
+        body.push('\n');
+        body.push_str(explanation);
+    }
     Card {
         title: format!(
             "approval needed: {} {}",
             p["tool"].as_str().unwrap_or("tool"),
             p["subject"].as_str().unwrap_or_default()
         ),
-        body: findings.join("\n"),
+        body,
         hint: format!("{APPROVAL_HINT}{within}"),
     }
 }

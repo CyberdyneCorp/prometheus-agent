@@ -303,7 +303,7 @@ fn on_line(
 }
 
 /// The approval choices.
-const ALLOW: &str = "allow? [o]nce, [s]ession, [a]lways, [d]eny";
+const ALLOW: &str = "allow? [o]nce, [s]ession, [a]lways, [d]eny, [e]xplain";
 
 fn approval_text(params: &Value) -> String {
     use std::fmt::Write as _;
@@ -323,6 +323,11 @@ fn approval_text(params: &Value) -> String {
             field(&finding["fragment"])
         );
     }
+    if let Some(explanation) = params["explanation"].as_str() {
+        for line in explanation.lines() {
+            let _ = write!(text, "\n  {}", printable(line));
+        }
+    }
     let _ = write!(text, "\n{ALLOW}");
     text
 }
@@ -333,6 +338,7 @@ pub(crate) fn decision(line: &str) -> Option<&'static str> {
         "s" | "session" => Some("session"),
         "a" | "always" => Some("always"),
         "" | "d" | "deny" | "n" | "no" => Some("deny"),
+        "e" | "explain" => Some("explain"),
         _ => None,
     }
 }

@@ -64,7 +64,7 @@ impl Factory {
         // An `mcp serve` session has no trajectory: refusals go to the
         // audit log only.
         let environment = self.environment(id, &target, &capabilities, &current, &skills, None)?;
-        let gate = self.gate(id)?.gate;
+        let gate = self.gate(id, None, None)?.gate;
         // No one can answer a prompt: a call that needs approval is denied.
         let mut approvals = self.scope.config().approvals.clone();
         approvals.single_query_mode = UnattendedApproval::Deny;

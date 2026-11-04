@@ -12,6 +12,8 @@ use pmt_core::human::{Channel, Unanswered};
 use serde::Serialize;
 use serde_json::Value;
 
+use super::explain::Previewer;
+use super::guardian::{Breaker, Guardian, GuardianVerdict};
 use super::hooks::{ApprovalHooks, TransportOutcome, TransportRequest, choice_name};
 use super::rules::{PLUGIN_RULE_PREFIX, literal};
 use super::{Context, Finding, Floors, Policy, Verdict, evaluate};
@@ -25,6 +27,10 @@ use crate::protected::ProtectedFiles;
 /// A human's decision: `once`, `session`, `always` or `deny` (the
 /// `decision` of `approval.respond`; the same choices as grant prompts).
 pub type Decision = GrantAnswer;
+
+/// How many times one prompt may be explained before it counts as a
+/// denial (a client answering `explain` forever must not hold the call).
+const EXPLAINS: usize = 5;
 
 /// What the model is told after any denial.
 pub const STOP: &str = "STOP: do NOT re-run, rephrase, or re-issue this command";
@@ -47,6 +53,9 @@ pub struct ApprovalRequest {
     /// `plugin_rule:<key>`. `None` for protected instruction files, whose
     /// writes ask every time.
     pub remember: Option<String>,
+    /// What `explain` showed, when the request is asked again after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
 }
 
 impl ApprovalRequest {
@@ -92,6 +101,12 @@ pub struct CommandGate {
     unobtainable: AtomicU32,
     /// Where decisions are recorded, with the session id.
     audit: Option<(AuditLog, String)>,
+    /// The smart-mode guardian, when the session has one.
+    guardian: Option<Arc<dyn Guardian>>,
+    /// Runs `explain` previews (read-only, offline).
+    previewer: Option<Previewer>,
+    /// Consecutive guardian denials.
+    breaker: Breaker,
 }
 
 impl CommandGate {
@@ -106,7 +121,24 @@ impl CommandGate {
             session: Mutex::new(Vec::new()),
             unobtainable: AtomicU32::new(0),
             audit: None,
+            guardian: None,
+            breaker: Breaker::default(),
+            previewer: None,
         }
+    }
+
+    /// Runs the previews of `explain` with `previewer`.
+    #[must_use]
+    pub fn with_previewer(mut self, previewer: Previewer) -> Self {
+        self.previewer = Some(previewer);
+        self
+    }
+
+    /// Asks `guardian` first in `smart` mode.
+    #[must_use]
+    pub fn with_guardian(mut self, guardian: Arc<dyn Guardian>) -> Self {
+        self.guardian = Some(guardian);
+        self
     }
 
     /// Records every decision of this gate in the profile's security audit
@@ -210,6 +242,7 @@ impl CommandGate {
             subject: Some(line.to_owned()),
             findings,
             remember: Some(literal(line.trim())),
+            explanation: None,
         })
         .await
     }
@@ -235,6 +268,7 @@ impl CommandGate {
                 fragment: request.tool.name().to_owned(),
             }],
             remember: (!escalation.once_only).then_some(key),
+            explanation: None,
         })
         .await
     }
@@ -272,6 +306,7 @@ impl CommandGate {
                         fragment: path,
                     }],
                     remember: None,
+                    explanation: None,
                 })
                 .await;
             if verdict != GateVerdict::Allow {
@@ -320,6 +355,9 @@ impl CommandGate {
         request: ApprovalRequest,
         hooks: Option<&dyn ApprovalHooks>,
     ) -> (GateVerdict, &'static str, &'static str) {
+        if let Some(decided) = self.guarded(&request).await {
+            return decided;
+        }
         if let Some(hooks) = hooks {
             match self.transport(hooks, &request).await {
                 Some(TransportOutcome::Decided(decision)) => {
@@ -377,6 +415,41 @@ impl CommandGate {
         }
     }
 
+    /// The guardian's verdict in `smart` mode on a call whose approval can
+    /// be remembered (protected files and once-only rules always go to a
+    /// human); `None` when it escalates, fails or does not apply.
+    async fn guarded(
+        &self,
+        request: &ApprovalRequest,
+    ) -> Option<(GateVerdict, &'static str, &'static str)> {
+        let guardian = self.guardian.as_ref()?;
+        if self.approvals().mode != ApprovalMode::Smart || request.remember.is_none() {
+            return None;
+        }
+        match guardian.judge(request).await {
+            Ok(GuardianVerdict::Approve) => {
+                self.breaker.reset();
+                Some((GateVerdict::Allow, "once", "guardian"))
+            }
+            Ok(GuardianVerdict::Deny(reason)) => {
+                let threshold = self.approvals().denial_breaker_threshold;
+                let mut message = format!(
+                    "DENIED: {} (the approval guardian refused it: {reason}). {STOP}",
+                    request.summary()
+                );
+                if let Some(note) = self.breaker.deny(threshold) {
+                    message = format!("{message} {note}");
+                }
+                Some((GateVerdict::Denied(message), "deny", "guardian"))
+            }
+            Ok(GuardianVerdict::Escalate) => None,
+            Err(why) => {
+                tracing::warn!(error = %why, "approval guardian unavailable; asking instead");
+                None
+            }
+        }
+    }
+
     /// Asks the selected transport, bound to a fresh request id and the
     /// request's digest; `None` without a transport.
     async fn transport(
@@ -424,6 +497,9 @@ impl CommandGate {
 
     /// Applies a decision made by a transport (as a human's would be).
     fn apply(&self, request: &ApprovalRequest, decision: Decision) -> GateVerdict {
+        if decision != Decision::Deny {
+            self.breaker.reset();
+        }
         let summary = request.summary();
         match decision {
             Decision::Once => GateVerdict::Allow,
@@ -437,7 +513,7 @@ impl CommandGate {
                 }
                 GateVerdict::Allow
             }
-            Decision::Deny => GateVerdict::Denied(format!(
+            Decision::Deny | Decision::Explain => GateVerdict::Denied(format!(
                 "DENIED: {summary} (denied through the approval transport). {STOP}"
             )),
         }
@@ -447,7 +523,14 @@ impl CommandGate {
         let summary = request.summary();
         let remember = request.remember.clone();
         let denied = |why: &str| GateVerdict::Denied(format!("DENIED: {summary} ({why}). {STOP}"));
-        match self.setup.channel.ask(request).await {
+        let answer = self.ask_explaining(request).await;
+        if matches!(
+            answer,
+            Ok(Decision::Once | Decision::Session | Decision::Always)
+        ) {
+            self.breaker.reset();
+        }
+        match answer {
             Ok(Decision::Once) => (GateVerdict::Allow, "once", "user"),
             Ok(Decision::Session) => {
                 self.lock().extend(remember);
@@ -459,7 +542,9 @@ impl CommandGate {
                 }
                 (GateVerdict::Allow, "always", "user")
             }
-            Ok(Decision::Deny) => (denied("denied by the user"), "deny", "user"),
+            Ok(Decision::Deny | Decision::Explain) => {
+                (denied("denied by the user"), "deny", "user")
+            }
             Err(Unanswered::TimedOut(after)) => (
                 denied(&format!(
                     "no answer within {} s (approvals.timeout_secs)",
@@ -470,6 +555,34 @@ impl CommandGate {
             ),
             Err(other) => (denied(&other.to_string()), "deny", "user"),
         }
+    }
+
+    /// Asks the human; an `explain` answer adds the explanation and asks
+    /// again (the command never runs on it), at most [`EXPLAINS`] times.
+    async fn ask_explaining(&self, mut request: ApprovalRequest) -> Result<Decision, Unanswered> {
+        for _ in 0..EXPLAINS {
+            match self.setup.channel.ask(request.clone()).await {
+                Ok(Decision::Explain) => {
+                    request.explanation = Some(self.explain(&request).await);
+                }
+                other => return other,
+            }
+        }
+        Ok(Decision::Deny)
+    }
+
+    /// The explanation of `request`'s command (or, for a call without
+    /// one, of its findings).
+    async fn explain(&self, request: &ApprovalRequest) -> String {
+        let Some(line) = request
+            .subject
+            .as_deref()
+            .filter(|_| request.remember.is_some())
+        else {
+            return format!("Explanation: {}", request.summary());
+        };
+        let cwd = std::path::PathBuf::from(&self.setup.floors.cwd);
+        super::explain::explain(line, &request.findings, &cwd, self.previewer.as_ref()).await
     }
 
     /// Records an `always` decision in `grants.toml` (merged with the file

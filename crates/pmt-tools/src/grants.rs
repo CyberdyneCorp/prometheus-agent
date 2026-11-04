@@ -40,6 +40,9 @@ pub enum GrantAnswer {
     Always,
     /// Refuse.
     Deny,
+    /// Show what the call would do, then ask again (approval prompts of
+    /// commands; never an approval).
+    Explain,
 }
 
 /// Checks capabilities against a session's grants and asks for the rest.
@@ -112,6 +115,9 @@ impl GrantGate {
                 file.add(subject, &missing, &self.surface).map(drop)
             }
             Ok(GrantAnswer::Deny) => Err(denied(&missing, "denied by the user")),
+            // Explanations belong to command approvals; a grant prompt
+            // answered with one is not granted.
+            Ok(GrantAnswer::Explain) => Err(denied(&missing, "not granted")),
             Err(unanswered) => Err(denied(&missing, &unanswered_reason(unanswered))),
         }
     }

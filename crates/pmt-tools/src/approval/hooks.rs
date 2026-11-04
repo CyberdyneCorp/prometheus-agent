@@ -76,6 +76,7 @@ pub fn choice_name(decision: Decision) -> &'static str {
         Decision::Session => "session",
         Decision::Always => "always",
         Decision::Deny => "deny",
+        Decision::Explain => "explain",
     }
 }
 
@@ -129,6 +130,7 @@ mod tests {
                 subject: Some("AGENTS.md".to_owned()),
                 findings: Vec::new(),
                 remember: None,
+                explanation: None,
             },
             choices,
             timeout: Duration::from_mins(1),

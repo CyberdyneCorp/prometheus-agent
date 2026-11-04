@@ -2369,3 +2369,16 @@ capabilities = [
 
 [security-boundaries."Security posture check"]
 "Strict check in CI" = ["crates/prometheus/tests/security_posture.rs::strict_posture_check_fails_on_an_unsigned_plugin_and_names_it", "crates/prometheus/tests/security_posture.rs::the_posture_names_open_surfaces_and_the_egress_mode"]
+
+# Group 34.4 (tool result provenance, approval explain and dry-run, smart
+# approvals with a denial breaker)
+[tool-system."Tool result provenance tagging (upgrade)"]
+"Web page tries to close the delimiter" = ["crates/prometheus/tests/provenance.rs::a_fetched_page_cannot_close_its_untrusted_block", "crates/pmt-core/src/provenance.rs::a_closing_tag_inside_the_content_cannot_close_the_block"]
+"Provenance is recorded" = ["crates/prometheus/tests/provenance.rs::an_mcp_result_is_stored_untrusted_inside_one_block", "crates/pmt-tools/src/provenance.rs::outside_sources_are_untrusted_and_workspace_files_trusted"]
+
+[tool-system."Approval explain and dry-run (upgrade)"]
+"Explaining a recursive delete" = ["crates/pmt-tools/tests/terminal/preview.rs::explaining_a_recursive_delete_lists_the_matched_paths_and_deletes_nothing", "crates/pmt-tools/src/approval/gate/tests/guarded.rs::explain_asks_again_with_the_explanation_and_runs_nothing_until_approved"]
+"Preview cannot write" = ["crates/pmt-tools/tests/terminal/preview.rs::a_preview_that_writes_is_denied_and_the_denial_is_shown"]
+
+[tool-system."Smart approvals with a denial breaker"]
+"Third denial" = ["crates/prometheus/tests/security_audit.rs::the_third_guardian_denial_carries_the_circuit_breaker", "crates/pmt-tools/src/approval/gate/tests/guarded.rs::the_third_consecutive_guardian_denial_trips_the_breaker"]

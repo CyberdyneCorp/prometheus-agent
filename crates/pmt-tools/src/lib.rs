@@ -34,6 +34,7 @@ pub mod files;
 pub mod grants;
 pub mod probe;
 pub mod protected;
+pub mod provenance;
 pub mod registry;
 pub mod result;
 pub mod sanitize;

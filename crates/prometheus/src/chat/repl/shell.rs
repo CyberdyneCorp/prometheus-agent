@@ -78,7 +78,7 @@ impl Repl {
                     self.say(Role::Notice, &prompts::approval_question(prompt.request()));
                     let ask = self.display.theme.paint(
                         Role::Prompt,
-                        "approve? [o]nce [s]ession [a]lways [d]eny › ",
+                        "approve? [o]nce [s]ession [a]lways [d]eny [e]xplain › ",
                         self.display.color,
                     );
                     self.input.request(&ask);

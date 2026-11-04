@@ -345,8 +345,9 @@ What the gateway does for every adapter:
   directory, the risk reasons and when the request expires (unanswered,
   it is denied). They use buttons where the platform has them (signed
   per daemon start, so a forged button press decides nothing), a
-  numbered list answered with `1`..`4` on `numbered` platforms, and
-  `/approve <id> <choice>` elsewhere. Only the person whose message
+  numbered list answered with `1`..`5` on `numbered` platforms, and
+  `/approve <id> <choice>` elsewhere. `explain` (`5`) posts the card again
+  with what the command would do and a dry-run preview; nothing runs. Only the person whose message
   started the turn, or an admin, may decide; an approval from a turn the
   chat did not start (another client's) takes an admin, or the one person
   of a direct message. Anyone else is told so privately: an alert on the
@@ -480,7 +481,7 @@ and its source, for example "steer (platform override)".
   end answers "page 3 does not exist (2 pages)". Native command menus keep
   built-ins first, then skills by most recent use, up to the platform's
   menu cap.
-- **`/approve [session|always]`, `/deny [all] [reason]`** answer the
+- **`/approve [session|always|explain]`, `/deny [all] [reason]`** answer the
   oldest pending approval of the chat's session by text, with the same
   authorization as card buttons ("No pending approval" when there is
   none).

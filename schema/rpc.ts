@@ -87,6 +87,8 @@ export interface ApprovalRequestParams {
   call_id: string;
   /** Milliseconds until the request settles unanswered (set by the daemon when it sends the request). */
   deadline_ms?: number | null;
+  /** What an `explain` answer produced: the parsed command, the rule, the paths it touches and a dry-run preview (the request is asked again with it). */
+  explanation?: string | null;
   /** Why approval is needed. */
   findings: Array<ApprovalFinding>;
   /** What `session` and `always` record. */
@@ -279,7 +281,7 @@ export interface ContextUsage {
 }
 
 /** An approval answer. */
-export type Decision = "once" | "session" | "always" | "deny";
+export type Decision = "once" | "session" | "always" | "deny" | "explain";
 
 /** `command.dispatch` params: a slash command the client does not handle itself (spec: tui, Slash command flow). */
 export interface DispatchParams {

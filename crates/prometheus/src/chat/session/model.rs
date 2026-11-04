@@ -265,6 +265,20 @@ impl Models {
         })
     }
 
+    /// The session's approval guardian on its `approval` auxiliary route.
+    pub(crate) fn guardian(
+        &self,
+        model: &Arc<SwitchableModel>,
+        session: pmt_core::id::SessionId,
+    ) -> Arc<super::guardian::RouteGuardian> {
+        Arc::new(super::guardian::RouteGuardian {
+            parts: Arc::clone(&self.setup),
+            aux: Arc::clone(&self.aux),
+            model: Arc::clone(model),
+            session,
+        })
+    }
+
     /// The port of `target`, with the profile's fallback chain.
     ///
     /// # Errors

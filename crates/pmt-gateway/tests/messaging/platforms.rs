@@ -135,7 +135,7 @@ async fn a_signal_style_numbered_card_is_answered_by_number() {
     h.dm("signal", "1", "approval").await;
     said(
         &h.adapter("signal"),
-        "1 Once / 2 Session / 3 Always / 4 Deny",
+        "1 Once / 2 Session / 3 Always / 4 Deny / 5 Explain",
     )
     .await;
     let card = h.adapter("signal").all();

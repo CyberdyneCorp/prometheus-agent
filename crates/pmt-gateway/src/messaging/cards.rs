@@ -182,10 +182,10 @@ pub(crate) fn instructions(tier: Interactive, id: &str) -> String {
     match tier {
         Interactive::Native => String::new(),
         Interactive::Numbered => format!(
-            "\n1 Once / 2 Session / 3 Always / 4 Deny\nReply with the number (or the word), optionally followed by {id}."
+            "\n1 Once / 2 Session / 3 Always / 4 Deny / 5 Explain\nReply with the number (or the word), optionally followed by {id}."
         ),
         Interactive::None => format!(
-            "\nReply /approve {id} once, /approve {id} session, /approve {id} always or /deny {id}."
+            "\nReply /approve {id} once, /approve {id} session, /approve {id} always, /approve {id} explain or /deny {id}."
         ),
     }
 }
@@ -204,6 +204,7 @@ pub(crate) fn numbered_reply(text: &str) -> Option<(&'static str, Option<&str>)>
         "2" => "session",
         "3" => "always",
         "4" => "deny",
+        "5" | "explain" => "explain",
         word => CHOICES.into_iter().find(|c| *c == word)?,
     };
     Some((choice, quoted))
@@ -260,7 +261,8 @@ mod tests {
     fn numbered_replies_name_a_choice() {
         assert_eq!(numbered_reply("1"), Some(("once", None)));
         assert_eq!(numbered_reply("deny srq-9"), Some(("deny", Some("srq-9"))));
-        assert_eq!(numbered_reply("5"), None);
+        assert_eq!(numbered_reply("5"), Some(("explain", None)));
+        assert_eq!(numbered_reply("6"), None);
         assert_eq!(numbered_reply("1 is my answer"), None);
     }
 }

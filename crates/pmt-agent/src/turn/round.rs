@@ -128,7 +128,8 @@ impl Turn<'_> {
                 self.edited
                     .extend(super::observe::edited_paths(&call.name, &call.arguments));
             }
-            self.append(&transcript::tool_row(call, &outcome.result))?;
+            let nonce = pmt_core::provenance::nonce(&self.agent.setup.session.to_string());
+            self.append(&transcript::tool_row(call, &outcome.result, &nonce))?;
             self.emit(Event::ToolResult(result_event(call, outcome)))
                 .await;
             steps.push(StepCall {

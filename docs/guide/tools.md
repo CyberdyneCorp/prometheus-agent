@@ -286,7 +286,15 @@ approval gate first, always in this order:
 
 You answer a prompt with `once`, `session` (until the session ends),
 `always` (added to `[approvals].allow` in `grants.toml`; an entry you delete
-by hand is never written back) or `deny`. No answer within
+by hand is never written back) or `deny`, or ask for `explain` first: the
+prompt comes back with the parsed command (programs, arguments,
+redirections, pipelines), the rule that asked, the absolute paths and
+expanded globs it would touch and, for commands with a dry-run form (`rm`
+lists what its operands match, `git clean -n`, `git status --short` and
+`git diff --stat` for `git reset --hard`, `rsync --dry-run`, `terraform
+plan`, `kubectl … --dry-run=server`), that preview's output run under a
+sandbox that may neither write nor connect. Nothing of the command runs
+until you decide. No answer within
 `approvals.timeout_secs` (300 s), a closed interface or a session without
 any way to ask all mean deny, and the model is told not to retry.
 
@@ -295,6 +303,15 @@ from `approvals.cron_mode`, `approvals.single_query_mode` and
 `approvals.unattended_mode` (`deny` by default, or `approve`); a denial
 says which key to set. These are strings: `cron_mode = false` is a
 configuration error (exit 78).
+
+With `approvals.mode = "smart"` the auxiliary `approval` model
+(`[auxiliary.approval]`, else the session's model) judges a flagged call
+first: `approve` runs it, `deny` refuses it, and anything else, an error or
+its timeout asks you as `manual` does. After
+`approvals.denial_breaker_threshold` (3; `0` disables) guardian denials in
+a row the denial adds `CIRCUIT BREAKER: <n> consecutive commands were
+blocked. STOP attempting variations of this operation.`; any approval
+resets the count.
 
 Writes to protected instruction files (`AGENTS.md`, `CLAUDE.md`, ...) ask
 every time, in every mode including `off`, and a plugin rule that escalates
@@ -315,3 +332,16 @@ $ prometheus approvals test --context cron -- git reset --hard
 The verdict is one of `hardline`, `deny rule`, `bypass`, `allowlisted`,
 `would prompt` or `allowed`; the command always exits 0, or 2 when the
 command line cannot be read (an unterminated quote).
+
+## Where results come from
+
+Every tool result carries a provenance record `{source, trust}`, stored
+with the message: results from the web, the browser, command output,
+vision, messaging, MCP servers (`mcp:<server>`), plugins (`plugin:<id>`),
+connectors and files read outside the session's workspace are
+`untrusted`; Prometheus' own tools and files inside the workspace are
+`trusted`. Untrusted text reaches the model inside
+`<untrusted-content source="…" id="<nonce>">…</untrusted-content>`, the
+session's nonce declared once in its system prompt, and any delimiter text
+inside the content is escaped so a page cannot close its block and smuggle
+instructions after it.

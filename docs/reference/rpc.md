@@ -221,6 +221,7 @@ Why a call needs approval.
 |---|---|---|---|
 | `call_id` | string | yes | The model's call id. |
 | `deadline_ms` | integer or null | no | Milliseconds until the request settles unanswered (set by the daemon when it sends the request). |
+| `explanation` | string or null | no | What an `explain` answer produced: the parsed command, the rule, the paths it touches and a dry-run preview (the request is asked again with it). |
 | `findings` | array of [`ApprovalFinding`](#approvalfinding) | yes | Why approval is needed. |
 | `remember` | string or null | no | What `session` and `always` record. |
 | `session_id` | string | yes | The session. |
@@ -440,6 +441,7 @@ An approval answer.
 | `session` | Allow matching calls for the rest of the session. |
 | `always` | Allow matching calls from now on (recorded in `grants.toml`). |
 | `deny` | Refuse. |
+| `explain` | Show the parsed command, the rule, the paths it touches and a dry-run preview, then ask again; never an approval. |
 
 ### `DispatchParams`
 
