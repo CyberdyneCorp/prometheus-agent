@@ -123,7 +123,7 @@ impl ClientHost for SessionsHost {
             .collect();
         for session in open.iter().filter(|s| s.profile_dir() == self.profile_dir) {
             session.notice(format!(
-                "MCP server '{server}' changed its tools; they apply from the next session (or /mcp reload --now)"
+                "MCP server '{server}' changed its tools; they apply from the next session or compaction (or /mcp reload --now)"
             ));
         }
     }

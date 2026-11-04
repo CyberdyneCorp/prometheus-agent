@@ -2229,7 +2229,7 @@ capabilities = [
 "Tools-only server" = ["crates/pmt-mcp/tests/extensions.rs::tools_only_server_gets_no_utility_tools"]
 
 [tool-system."MCP tool list changes respect the frozen surface"]
-"Burst of notifications" = ["crates/pmt-mcp/tests/extensions.rs::burst_of_notifications"]
+"Burst of notifications" = ["crates/pmt-mcp/tests/extensions.rs::burst_of_notifications", "crates/prometheus/tests/mcp_extensions.rs::a_tool_list_change_reaches_the_session_at_its_compaction_boundary"]
 
 [tool-system."MCP result sanitization"]
 "Smuggled instructions removed" = ["crates/pmt-mcp/tests/extensions.rs::smuggled_instructions_removed_and_reserved_meta_dropped", "crates/pmt-mcp/src/sanitize.rs::smuggled_instructions_are_removed_and_the_visible_text_kept"]

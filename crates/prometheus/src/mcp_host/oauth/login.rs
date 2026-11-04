@@ -116,19 +116,7 @@ pub async fn token_request(
     form: Vec<(&str, String)>,
     secret: Option<&SecretString>,
 ) -> Result<Tokens, TokenError> {
-    let mut request = client.post(endpoint).header("Accept", "application/json");
-    if let Some(secret) = secret {
-        let id = form
-            .iter()
-            .find(|(k, _)| *k == "client_id")
-            .map(|(_, v)| v.clone())
-            .unwrap_or_default();
-        request = request.basic_auth(id, Some(secret.expose()));
-    }
-    let body = form_body(&form);
-    let response = request
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(body)
+    let response = form_post(client, endpoint, &form, secret)
         .send()
         .await
         .map_err(|e| TokenError::Failed(e.to_string()))?;
@@ -162,16 +150,30 @@ fn form_body(form: &[(&str, String)]) -> String {
     body.finish()
 }
 
+/// A form POST to an authorization server endpoint. A confidential
+/// client (one with a secret) authenticates with HTTP basic on every
+/// request (RFC 6749 section 2.3.1, RFC 8628 section 3.1), or the server
+/// answers `invalid_client`.
 fn form_post(
     client: &reqwest::Client,
     url: &str,
     form: &[(&str, String)],
+    secret: Option<&SecretString>,
 ) -> reqwest::RequestBuilder {
-    client
+    let mut request = client
         .post(url)
         .header("Accept", "application/json")
         .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(form_body(form))
+        .body(form_body(form));
+    if let Some(secret) = secret {
+        let id = form
+            .iter()
+            .find(|(k, _)| *k == "client_id")
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default();
+        request = request.basic_auth(id, Some(secret.expose()));
+    }
+    request
 }
 
 /// Stores `tokens` and the record of the sign-in.
@@ -238,10 +240,12 @@ pub async fn login(
                 oauth.redirect_uri.clone()
             };
             let client_id = identify(scope, &client, &auth, name, server, &redirect_uri).await?;
+            let secret = client_secret(scope, name, server);
             let browser = Browser {
                 client: &client,
                 auth: &auth,
                 client_id: &client_id,
+                secret: secret.as_ref(),
                 scopes: &scopes,
                 resource: &server.url,
                 redirect_uri: &redirect_uri,
@@ -258,18 +262,24 @@ pub async fn login(
         }
         McpOAuthFlow::Device => {
             let client_id = identify(scope, &client, &auth, name, server, "").await?;
-            tokio::time::timeout(
-                timeout,
-                device(&client, &auth, &client_id, &scopes, &server.url),
-            )
-            .await
-            .map_err(|_| {
-                failed(format!(
-                    "no login within {} s (oauth.timeout_secs)",
-                    timeout.as_secs()
-                ))
-            })??
-            .with_client(client_id)
+            let secret = client_secret(scope, name, server);
+            let device = Device {
+                client: &client,
+                auth: &auth,
+                client_id: &client_id,
+                secret: secret.as_ref(),
+                scopes: &scopes,
+                resource: &server.url,
+            };
+            tokio::time::timeout(timeout, device.run())
+                .await
+                .map_err(|_| {
+                    failed(format!(
+                        "no login within {} s (oauth.timeout_secs)",
+                        timeout.as_secs()
+                    ))
+                })??
+                .with_client(client_id)
         }
     };
     let record = Record {
@@ -364,6 +374,8 @@ struct Browser<'a> {
     client: &'a reqwest::Client,
     auth: &'a AuthServer,
     client_id: &'a str,
+    /// A confidential client's secret.
+    secret: Option<&'a SecretString>,
     scopes: &'a [String],
     resource: &'a str,
     redirect_uri: &'a str,
@@ -412,7 +424,7 @@ impl Browser<'_> {
             ("code_verifier", pkce.verifier.expose().to_owned()),
             ("resource", self.resource.to_owned()),
         ];
-        exchange(self.client, &self.auth.token_endpoint, form).await
+        exchange(self.client, &self.auth.token_endpoint, form, self.secret).await
     }
 
     /// The code of a genuine response.
@@ -455,8 +467,9 @@ async fn exchange(
     client: &reqwest::Client,
     endpoint: &str,
     form: Vec<(&str, String)>,
+    secret: Option<&SecretString>,
 ) -> Result<Tokens, Error> {
-    token_request(client, endpoint, form, None)
+    token_request(client, endpoint, form, secret)
         .await
         .map_err(|e| match e {
             TokenError::Refused(why) | TokenError::Failed(why) => {
@@ -465,73 +478,85 @@ async fn exchange(
         })
 }
 
-/// The device flow (RFC 8628).
-async fn device(
-    client: &reqwest::Client,
-    auth: &AuthServer,
-    client_id: &str,
-    scopes: &[String],
-    resource: &str,
-) -> Result<Tokens, Error> {
-    let endpoint = auth
-        .device_authorization_endpoint
-        .as_deref()
-        .ok_or_else(|| {
-            failed("the authorization server offers no device flow (use the browser flow)")
-        })?;
-    let mut form = vec![
-        ("client_id", client_id.to_owned()),
-        ("resource", resource.to_owned()),
-    ];
-    if !scopes.is_empty() {
-        form.push(("scope", scopes.join(" ")));
-    }
-    let started: Value = form_post(client, endpoint, &form)
-        .send()
-        .await
-        .map_err(|e| failed(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| failed(e.to_string()))?;
-    let field = |k: &str| started[k].as_str().map(str::to_owned);
-    let device_code =
-        field("device_code").ok_or_else(|| failed("the device flow answered no device_code"))?;
-    let page = field("verification_uri_complete")
-        .or_else(|| field("verification_uri"))
-        .unwrap_or_default();
-    println!(
-        "Open {page} and enter the code {}",
-        field("user_code").unwrap_or_default()
-    );
-    let mut interval = Duration::from_secs(started["interval"].as_u64().unwrap_or(5));
-    loop {
-        tokio::time::sleep(interval).await;
-        let form = vec![
-            (
-                "grant_type",
-                "urn:ietf:params:oauth:grant-type:device_code".to_owned(),
-            ),
-            ("device_code", device_code.clone()),
-            ("client_id", client_id.to_owned()),
-            ("resource", resource.to_owned()),
+/// One device login (RFC 8628).
+struct Device<'a> {
+    client: &'a reqwest::Client,
+    auth: &'a AuthServer,
+    client_id: &'a str,
+    /// A confidential client's secret.
+    secret: Option<&'a SecretString>,
+    scopes: &'a [String],
+    resource: &'a str,
+}
+
+impl Device<'_> {
+    async fn run(&self) -> Result<Tokens, Error> {
+        let endpoint = self
+            .auth
+            .device_authorization_endpoint
+            .as_deref()
+            .ok_or_else(|| {
+                failed("the authorization server offers no device flow (use the browser flow)")
+            })?;
+        let mut form = vec![
+            ("client_id", self.client_id.to_owned()),
+            ("resource", self.resource.to_owned()),
         ];
-        let response = form_post(client, &auth.token_endpoint, &form)
+        if !self.scopes.is_empty() {
+            form.push(("scope", self.scopes.join(" ")));
+        }
+        let started: Value = form_post(self.client, endpoint, &form, self.secret)
             .send()
             .await
+            .map_err(|e| failed(e.to_string()))?
+            .json()
+            .await
             .map_err(|e| failed(e.to_string()))?;
-        let ok = response.status().is_success();
-        let value: Value = response.json().await.unwrap_or_default();
-        if ok {
-            return serde_json::from_value(value).map_err(|e| failed(e.to_string()));
-        }
-        match value["error"].as_str() {
-            Some("authorization_pending") => {}
-            Some("slow_down") => interval += Duration::from_secs(5),
-            other => {
-                return Err(failed(format!(
-                    "the device login failed: {}",
-                    other.unwrap_or("unknown error")
-                )));
+        let field = |k: &str| started[k].as_str().map(str::to_owned);
+        let device_code = field("device_code")
+            .ok_or_else(|| failed("the device flow answered no device_code"))?;
+        let page = field("verification_uri_complete")
+            .or_else(|| field("verification_uri"))
+            .unwrap_or_default();
+        println!(
+            "Open {page} and enter the code {}",
+            field("user_code").unwrap_or_default()
+        );
+        let interval = Duration::from_secs(started["interval"].as_u64().unwrap_or(5));
+        self.poll(&device_code, interval).await
+    }
+
+    /// Polls the token endpoint until the person approves or refuses.
+    async fn poll(&self, device_code: &str, mut interval: Duration) -> Result<Tokens, Error> {
+        loop {
+            tokio::time::sleep(interval).await;
+            let form = vec![
+                (
+                    "grant_type",
+                    "urn:ietf:params:oauth:grant-type:device_code".to_owned(),
+                ),
+                ("device_code", device_code.to_owned()),
+                ("client_id", self.client_id.to_owned()),
+                ("resource", self.resource.to_owned()),
+            ];
+            let response = form_post(self.client, &self.auth.token_endpoint, &form, self.secret)
+                .send()
+                .await
+                .map_err(|e| failed(e.to_string()))?;
+            let ok = response.status().is_success();
+            let value: Value = response.json().await.unwrap_or_default();
+            if ok {
+                return serde_json::from_value(value).map_err(|e| failed(e.to_string()));
+            }
+            match value["error"].as_str() {
+                Some("authorization_pending") => {}
+                Some("slow_down") => interval += Duration::from_secs(5),
+                other => {
+                    return Err(failed(format!(
+                        "the device login failed: {}",
+                        other.unwrap_or("unknown error")
+                    )));
+                }
             }
         }
     }

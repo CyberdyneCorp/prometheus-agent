@@ -140,6 +140,12 @@ tracing-subscriber.workspace = true
 url.workspace = true
 zstd.workspace = true
 wiremock.workspace = true
+# The mTLS front of the MCP client tests: certificates, an encrypted
+# PKCS#8 client key and a TLS server requiring a client certificate.
+rcgen.workspace = true
+pkcs8.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
 # SIGINT for the `logs --follow` exit-130 test.

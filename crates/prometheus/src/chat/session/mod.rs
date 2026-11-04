@@ -14,6 +14,7 @@ pub mod progress;
 pub mod serve;
 pub mod skills;
 pub mod summarize;
+mod tool_state;
 pub mod tools;
 
 use std::path::{Path, PathBuf};
@@ -46,6 +47,7 @@ use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
 
 use self::model::{Models, RouteFlags, SwitchableModel};
+use self::tool_state::{Registries, ToolState};
 use self::tools::{GateInputs, SurfaceInputsOwned, SwappableTools};
 
 /// Clarify questions waiting for the person.
@@ -97,9 +99,9 @@ pub struct Factory {
     pub store: Arc<Store>,
     /// The model side.
     pub models: Models,
-    /// The core tools plus those of the plugin set they were built for;
-    /// read through [`Factory::session_registry`].
-    tools: Mutex<plugins::PluginTools>,
+    /// The core tools plus those of the current plugin and MCP server
+    /// sets; read through [`Factory::session_registry`].
+    registries: Arc<Registries>,
     grants: Arc<SessionGrants>,
     launch: LaunchEnv,
     redactor: Redactor,
@@ -156,17 +158,11 @@ pub struct Live {
     pub memory: Arc<MemorySession>,
     /// Counts tool-calling iterations towards a background skill review.
     pub skill_nudge: Mutex<Nudge>,
-    /// The toolset selection the session's tools are built from (`/tools
-    /// --now` replaces it).
-    selection: Mutex<Selection>,
+    /// The registry, selection and main route the session's tools are
+    /// built from, and their rebuild (`--now`, a compaction boundary).
+    tool_state: Arc<ToolState>,
     /// The surface the session's toolsets start from.
     session_surface: pmt_tools::SessionSurface,
-    /// The main route the tool surface's schema variants were picked for:
-    /// frozen with the surface, re-read only by a `--now` rebuild.
-    route: Mutex<pmt_tools::variants::RouteTraits>,
-    /// The tool registry the session's tools come from (`/plugins reload
-    /// --now` replaces it).
-    registry: Mutex<Arc<ToolRegistry>>,
     /// The profile's live plugin set (slash commands, reload).
     pub plugins: crate::plugins_host::ProfilePlugins,
     /// The session's working directory (plugin `session.info`).
@@ -187,7 +183,6 @@ pub struct Live {
     /// and-profiles, Live reload with apply classes). Turns and tools
     /// read it at use.
     pub config: SharedScope,
-    agent_tools: Arc<AgentTools>,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
     browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
@@ -222,12 +217,19 @@ impl Factory {
             &plugins,
             &options.cwd,
         )?;
-        let tools = Mutex::new(plugins::PluginTools::build(
-            &scope,
-            &plugins,
-            &crate::mcp_host::manager(&scope),
-            &plugins::session_calls(&store, &options.cwd),
-        )?);
+        let plugin_scope = SharedScope::new(scope.clone());
+        let registries = Arc::new(Registries::new(
+            scope.clone(),
+            plugin_scope.clone(),
+            Arc::clone(&store),
+            options.cwd.clone(),
+            plugins::PluginTools::build(
+                &scope,
+                &plugins,
+                &crate::mcp_host::manager(&scope),
+                &plugins::session_calls(&store, &options.cwd),
+            )?,
+        ));
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),
             GrantsFile::of(scope.profile()),
@@ -235,11 +237,11 @@ impl Factory {
         let redactor = scope.secrets().redactor().unwrap_or_default();
         Ok(Self {
             current: SharedScope::new(scope.clone()),
-            plugin_scope: SharedScope::new(scope.clone()),
+            plugin_scope,
             scope,
             store,
             models,
-            tools,
+            registries,
             grants,
             launch: launch.clone(),
             redactor,
@@ -439,9 +441,10 @@ impl Factory {
         let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
         let gate = self.gate(id)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
-        let route = tools::route_traits(model.as_ref()).await;
-        let built = (&*registry, &selection, &capabilities, &route);
-        let tool_port = self.tool_port(id, built, &gate.gate, &agent_tools).await?;
+        let ports = (&gate.gate, &agent_tools, &model);
+        let built = (registry, selection, &capabilities);
+        let tool_state = self.tool_state(id, built, ports).await?;
+        let tool_port = tool_state.tools();
         let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
         let (prompt, plugin_sections) = self
@@ -463,6 +466,7 @@ impl Factory {
         setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(&memory) as _);
         setup.refresh_prompt = Some(self.refresher(&skills, &memory, &plugin_sections));
+        setup.compaction_boundary = Some(Arc::clone(&tool_state) as _);
         self.surface_setup(&mut setup, id);
         let agent = Agent::new(setup)?;
         let live = Live {
@@ -479,10 +483,8 @@ impl Factory {
             skills,
             memory,
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
-            selection: Mutex::new(selection),
+            tool_state,
             session_surface,
-            route: Mutex::new(route),
-            registry: Mutex::new(registry),
             plugins: self.plugins.clone(),
             cwd: self.options.cwd.clone(),
             surface: session.source.as_str(),
@@ -491,7 +493,6 @@ impl Factory {
             progress,
             config: current,
             record: Arc::clone(&self.record),
-            agent_tools,
             capabilities,
             trajectory,
             browser: environment.browser,
@@ -724,35 +725,37 @@ impl Factory {
         Ok(setup)
     }
 
-    /// The session's tool port over `registry` and `selection`.
-    async fn tool_port(
+    /// The session's tools, built from `registry` and `selection` for the
+    /// route `model` is on, and the state that rebuilds them.
+    ///
+    /// # Errors
+    ///
+    /// Store errors recording the surface.
+    async fn tool_state(
         &self,
         id: SessionId,
-        (registry, selection, capabilities, route): (
-            &ToolRegistry,
-            &Selection,
-            &CapabilitySet,
-            &pmt_tools::variants::RouteTraits,
-        ),
-        gate: &Arc<CommandGate>,
-        agent: &Arc<AgentTools>,
-    ) -> Result<Arc<SwappableTools>, Error> {
-        let session_tools = tools::session_tools(&SurfaceInputsOwned {
-            scope: &self.scope,
-            store: &self.store,
+        (registry, selection, capabilities): (Arc<ToolRegistry>, Selection, &CapabilitySet),
+        (gate, agent, model): (&Arc<CommandGate>, &Arc<AgentTools>, &Arc<SwitchableModel>),
+    ) -> Result<Arc<ToolState>, Error> {
+        let route = tools::route_traits(model.as_ref()).await;
+        let inputs = tool_state::Inputs {
+            scope: self.scope.clone(),
+            store: Arc::clone(&self.store),
             session: id,
-            registry,
-            selection,
-            capabilities,
-            gate,
-            agent: Some(agent),
-            redactor: &self.redactor,
-            context_window: None,
+            capabilities: capabilities.clone(),
+            gate: Arc::clone(gate),
+            agent: Arc::clone(agent),
+            redactor: self.redactor.clone(),
             hooks: self.plugins.tool_hooks(self.plugin_call(id)),
-            route,
-        })
-        .await?;
-        Ok(Arc::new(SwappableTools::new(session_tools)))
+            model: Arc::clone(model),
+        };
+        let built = tools::session_tools(&inputs.surface(&registry, &selection, &route)).await?;
+        Ok(Arc::new(ToolState::new(
+            Arc::clone(&self.registries),
+            inputs,
+            Arc::new(SwappableTools::new(built)),
+            (registry, selection, route),
+        )))
     }
 
     /// The session's prompt inputs and its plugin sections (kept for
@@ -833,26 +836,9 @@ impl Factory {
         live: &Live,
         selection: &Selection,
     ) -> Result<(), Error> {
-        let registry = live.registry();
-        let route = tools::route_traits(live.model.as_ref()).await;
-        let tools = tools::session_tools(&SurfaceInputsOwned {
-            scope: &self.scope,
-            store: &self.store,
-            session: live.id,
-            registry: &registry,
-            selection,
-            capabilities: &live.capabilities,
-            gate: &live.gate,
-            agent: Some(&live.agent_tools),
-            redactor: &self.redactor,
-            context_window: None,
-            hooks: self.plugins.tool_hooks(self.plugin_call(live.id)),
-            route: &route,
-        })
-        .await?;
-        live.tools.swap(tools);
-        *plugins::lock(&live.route) = route;
-        Ok(())
+        live.tool_state
+            .rebuild(live.registry(), selection.clone())
+            .await
     }
 }
 
@@ -871,7 +857,7 @@ impl Factory {
         child: SessionId,
     ) -> Result<Arc<SessionTools>, Error> {
         let registry = live.registry();
-        let route = plugins::lock(&live.route).clone();
+        let route = live.tool_state.route();
         let selection =
             Selection::resolve(&registry, &[pmt_skills::tools::TOOLSET.to_owned()], &[])?;
         tools::session_tools(&SurfaceInputsOwned {
@@ -969,24 +955,13 @@ impl Live {
     /// The tool registry the session's tools come from.
     #[must_use]
     pub fn registry(&self) -> Arc<ToolRegistry> {
-        Arc::clone(&plugins::lock(&self.registry))
+        self.tool_state.registry()
     }
 
     /// The toolset selection the session's tools are built from.
     #[must_use]
     pub fn selection(&self) -> Selection {
-        self.selection
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-
-    /// Records the selection the session's tools were rebuilt from.
-    pub fn set_selection(&self, selection: Selection) {
-        *self
-            .selection
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = selection;
+        self.tool_state.selection()
     }
 
     /// Records `session.start` for `session` on `target`'s route.

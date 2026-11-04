@@ -16,7 +16,7 @@ use self::common::{
     append_config, command, mock_home, newest_session, ok, run, session_messages, stderr,
 };
 use serde_json::json;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{basic_auth, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const TEST_KEY: &str = include_str!("../../pmt-update/tests/fixtures/test.key");
@@ -294,6 +294,7 @@ impl AuthServer {
             "issuer": issuer,
             "authorization_endpoint": format!("{issuer}/authorize"),
             "token_endpoint": format!("{issuer}/token"),
+            "device_authorization_endpoint": format!("{issuer}/device"),
             "authorization_response_iss_parameter_supported": true,
         });
         if registration {
@@ -332,6 +333,130 @@ fn oauth_server(home: &Path, name: &str, url: &str) {
     );
 }
 
+/// Runs `mcp login <name>` and pastes the redirect of the authorization
+/// URL it prints (code `c-1`, issuer `iss`); the URL's query and the run.
+fn paste_login(
+    home: &Path,
+    name: &str,
+    iss: &str,
+) -> (
+    std::collections::HashMap<String, String>,
+    std::process::Output,
+) {
+    let mut child = command(home)
+        .args(["mcp", "login", name])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut authorize = String::new();
+    while !authorize.trim_start().starts_with("http") {
+        authorize.clear();
+        assert!(
+            stdout.read_line(&mut authorize).unwrap() > 0,
+            "no URL printed"
+        );
+    }
+    let url = reqwest::Url::parse(authorize.trim()).unwrap();
+    let query: std::collections::HashMap<String, String> = url.query_pairs().into_owned().collect();
+    let redirect = format!(
+        "{}?code=c-1&state={}&iss={iss}",
+        query["redirect_uri"], query["state"]
+    );
+    writeln!(child.stdin.take().unwrap(), "{redirect}").unwrap();
+    (query, child.wait_with_output().unwrap())
+}
+
+/// A pre-registered confidential client (`oauth.client_id` and
+/// `oauth.client_secret_name`) at an authorization server whose `path`
+/// endpoint answers `body` only when the client authenticates with its
+/// secret, and `invalid_client` otherwise.
+fn confidential_client(home: &Path, auth: &AuthServer, at: &str, body: &serde_json::Value) {
+    auth.runtime.block_on(async {
+        Mock::given(method("POST"))
+            .and(path(at))
+            .and(basic_auth("pre-client", "client-s3cret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .with_priority(1)
+            .mount(&auth.server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(at))
+            .respond_with(
+                ResponseTemplate::new(401).set_body_json(json!({"error": "invalid_client"})),
+            )
+            .with_priority(2)
+            .mount(&auth.server)
+            .await;
+    });
+    oauth_server(home, "linear", &format!("{}/mcp", auth.server.uri()));
+    append_config(
+        home,
+        "\n[mcp.servers.linear.oauth]\nclient_id = \"pre-client\"\nclient_secret_name = \"LINEAR_CLIENT_SECRET\"\n",
+    );
+    ok(&common::run_with_stdin(
+        home,
+        &["secrets", "set", "LINEAR_CLIENT_SECRET"],
+        "client-s3cret\n",
+    ));
+}
+
+fn tokens() -> serde_json::Value {
+    json!({"access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600})
+}
+
+/// Scenario (plugin-system, MCP OAuth for HTTP servers): a server without
+/// dynamic registration signs in with the configured confidential client,
+/// whose secret authenticates the code exchange.
+#[test]
+fn a_preregistered_confidential_client_signs_in_with_its_secret() {
+    let home = mock_home();
+    let auth = AuthServer::start(false);
+    confidential_client(home.path(), &auth, "/token", &tokens());
+    let (query, out) = paste_login(home.path(), "linear", &auth.server.uri());
+    assert_eq!(query["client_id"], "pre-client");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let secrets = ok(&run(home.path(), &["secrets", "list"]));
+    assert!(secrets.contains("MCP_OAUTH_LINEAR_ACCESS"), "{secrets}");
+}
+
+/// The device flow authenticates a confidential client on the device
+/// authorization request and on every token poll.
+#[test]
+fn a_confidential_client_device_login_sends_its_secret() {
+    let home = mock_home();
+    let auth = AuthServer::start(false);
+    confidential_client(home.path(), &auth, "/token", &tokens());
+    let started = json!({
+        "device_code": "dc-1",
+        "user_code": "ABCD-EFGH",
+        "verification_uri": format!("{}/activate", auth.server.uri()),
+        "interval": 0,
+    });
+    auth.runtime.block_on(
+        Mock::given(method("POST"))
+            .and(path("/device"))
+            .and(basic_auth("pre-client", "client-s3cret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&started))
+            .mount(&auth.server),
+    );
+    let out = run(home.path(), &["mcp", "login", "linear", "--flow", "device"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        common::stdout(&out).contains("ABCD-EFGH"),
+        "{}",
+        common::stdout(&out)
+    );
+    let secrets = ok(&run(home.path(), &["secrets", "list"]));
+    assert!(secrets.contains("MCP_OAUTH_LINEAR_ACCESS"), "{secrets}");
+}
+
 #[test]
 fn dcr_less_server_without_client() {
     let home = mock_home();
@@ -363,34 +488,9 @@ fn a_login_takes_a_pasted_redirect_and_the_server_then_answers() {
     // token is then used against the fixture, which requires it.
     let mcp_url = format!("{}/mcp", auth.server.uri());
     oauth_server(home.path(), "linear", &mcp_url);
-    let mut child = command(home.path())
-        .args(["mcp", "login", "linear"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut stdout = BufReader::new(child.stdout.take().unwrap());
-    let mut authorize = String::new();
-    while !authorize.trim_start().starts_with("http") {
-        authorize.clear();
-        assert!(
-            stdout.read_line(&mut authorize).unwrap() > 0,
-            "no URL printed"
-        );
-    }
-    let url = reqwest::Url::parse(authorize.trim()).unwrap();
-    let query: std::collections::HashMap<String, String> = url.query_pairs().into_owned().collect();
+    let (query, out) = paste_login(home.path(), "linear", &auth.server.uri());
     assert_eq!(query["client_id"], "dyn-client");
     assert_eq!(query["code_challenge_method"], "S256");
-    let redirect = format!(
-        "{}?code=c-1&state={}&iss={}",
-        query["redirect_uri"],
-        query["state"],
-        auth.server.uri()
-    );
-    writeln!(child.stdin.take().unwrap(), "{redirect}").unwrap();
-    let out = child.wait_with_output().unwrap();
     assert!(
         out.status.success(),
         "{}",
@@ -412,27 +512,7 @@ fn a_redirect_naming_another_issuer_is_refused() {
     let home = mock_home();
     let auth = AuthServer::start(true);
     oauth_server(home.path(), "linear", &format!("{}/mcp", auth.server.uri()));
-    let mut child = command(home.path())
-        .args(["mcp", "login", "linear"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut stdout = BufReader::new(child.stdout.take().unwrap());
-    let mut authorize = String::new();
-    while !authorize.trim_start().starts_with("http") {
-        authorize.clear();
-        assert!(stdout.read_line(&mut authorize).unwrap() > 0);
-    }
-    let url = reqwest::Url::parse(authorize.trim()).unwrap();
-    let query: std::collections::HashMap<String, String> = url.query_pairs().into_owned().collect();
-    let redirect = format!(
-        "{}?code=c-1&state={}&iss=https://evil.example",
-        query["redirect_uri"], query["state"]
-    );
-    writeln!(child.stdin.take().unwrap(), "{redirect}").unwrap();
-    let out = child.wait_with_output().unwrap();
+    let (_, out) = paste_login(home.path(), "linear", "https://evil.example");
     assert_eq!(out.status.code(), Some(78));
     assert!(String::from_utf8_lossy(&out.stderr).contains("RFC 9207"));
 }
@@ -698,4 +778,88 @@ fn a_malformed_cost_skips_the_server_naming_the_key() {
             .starts_with("mcp.servers.fx.tool_costs.render:"),
         "{status}"
     );
+}
+
+/// Scenario (tool-system, MCP tool list changes respect the frozen
+/// surface): a server's `list_changed` leaves the running session's tool
+/// array alone until its next compaction boundary, which rebuilds it.
+#[cfg(unix)]
+#[test]
+fn a_tool_list_change_reaches_the_session_at_its_compaction_boundary() {
+    use expectrl::Expect as _;
+
+    use self::common::pty::{exit, prompt, spawn};
+
+    let home = mock_home();
+    fx_with(home.path(), "");
+    let script = script(
+        home.path(),
+        r#"
+[[rule]]
+user = "go"
+[[rule.tool_calls]]
+name = "mcp__fx__change_tools"
+arguments = {}
+
+[[rule]]
+user = "probe"
+tools = "mcp__fx__new_tool"
+text = "NEW TOOL OFFERED"
+repeat = true
+
+[[rule]]
+user = "probe"
+text = "OLD TOOLS ONLY"
+repeat = true
+
+[[rule]]
+text = "fine"
+repeat = true
+"#,
+    );
+    let mut p = spawn(home.path(), &["--mock-script", &script]);
+    prompt(&mut p);
+    p.send_line("go").unwrap();
+    let notice = "MCP server 'fx' changed its tools";
+    let answered = p.expect("fine").unwrap();
+    if !String::from_utf8_lossy(answered.before()).contains(notice) {
+        p.expect(notice).unwrap();
+    }
+    // The registry moved on, the session's array did not.
+    p.send_line("probe").unwrap();
+    p.expect("OLD TOOLS ONLY").unwrap();
+    prompt(&mut p);
+    let id = newest_session(home.path());
+    let tools = exposed(home.path(), &id);
+    assert!(
+        tools.contains(&"mcp__fx__delete_issue".to_owned()),
+        "{tools:?}"
+    );
+    assert!(
+        !tools.contains(&"mcp__fx__new_tool".to_owned()),
+        "{tools:?}"
+    );
+    p.send_line("/compress here 1").unwrap();
+    p.expect("compress: compressed").unwrap();
+    prompt(&mut p);
+    p.send_line("probe").unwrap();
+    p.expect("NEW TOOL OFFERED").unwrap();
+    prompt(&mut p);
+    let tools = exposed(home.path(), &id);
+    assert!(tools.contains(&"mcp__fx__new_tool".to_owned()), "{tools:?}");
+    assert!(
+        !tools.contains(&"mcp__fx__delete_issue".to_owned()),
+        "{tools:?}"
+    );
+    exit(p);
+}
+
+/// The tools `tools list --session` reports exposed for session `id`.
+#[cfg(unix)]
+fn exposed(home: &Path, id: &str) -> Vec<String> {
+    ok(&run(home, &["tools", "list", "--session", id]))
+        .lines()
+        .filter(|l| l.contains(" exposed"))
+        .filter_map(|l| l.split_whitespace().next().map(str::to_owned))
+        .collect()
 }

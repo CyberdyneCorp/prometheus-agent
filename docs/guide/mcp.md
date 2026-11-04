@@ -71,7 +71,9 @@ prometheus mcp reauth linear         # forget the sign-in and sign in again
 
 The login discovers the authorization server (protected resource metadata,
 then RFC 8414 metadata whose issuer must match), identifies with
-`oauth.client_id` (and `oauth.client_secret_name`) when set, else with
+`oauth.client_id` when set (a confidential client also sets
+`oauth.client_secret_name`: its secret authenticates every token and
+device-authorization request with HTTP basic), else with
 Prometheus' client metadata document where the server accepts one, else by
 registering a client dynamically. A server that does none of these needs a
 pre-registered client: the login exits 78 saying so. It prints the
@@ -174,7 +176,9 @@ When a server announces that its tools changed, its tool list is fetched
 again (a burst of announcements costs at most two fetches); running
 sessions keep their tool array and show a one-line notice, and a call to a
 tool the server dropped answers `tool '<name>' is no longer offered by MCP
-server '<server>'`. A server advertising resources or prompts also gets
+server '<server>'`. A session picks the new list up at its next compaction
+(the prompt cache restarts there anyway), keeping the toolsets it runs with
+and the tools it disabled, or at once with `/mcp reload --now`. A server advertising resources or prompts also gets
 `mcp__<server>__list_resources`/`read_resource` or
 `mcp__<server>__list_prompts`/`get_prompt` (under the same filter).
 

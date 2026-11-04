@@ -9,13 +9,18 @@ use pmt_obs::trajectory::payload::PromptRebuilt;
 
 use super::model::RouteInfo;
 use super::run::Turn;
-use crate::prompt::frozen::{self, Frozen};
+use crate::prompt::frozen::{self, Frozen, Rebuild};
 use crate::prompt::{self, PromptInputs};
 
 impl Turn<'_> {
     pub(super) async fn freeze(&mut self, route: &RouteInfo) -> Result<Frozen, Error> {
         let setup = &self.agent.setup;
         let pending = self.agent.take_rebuild();
+        if matches!(pending, Some(Rebuild::Compaction))
+            && let Some(boundary) = &setup.compaction_boundary
+        {
+            boundary.refresh_tools().await;
+        }
         let (why, stored) =
             match frozen::stored(&setup.store, setup.session, &route.provider, &route.model)? {
                 Ok(stored) => match pending {

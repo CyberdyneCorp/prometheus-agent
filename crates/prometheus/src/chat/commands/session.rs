@@ -208,7 +208,6 @@ async fn apply_tools_now(ctx: &Ctx<'_>, toolset: &str, enable: bool) -> Result<(
     };
     let selection = Selection::resolve(&ctx.live.registry(), &enabled, &disabled)?;
     ctx.factory.rebuild_tools(live, &selection).await?;
-    live.set_selection(selection);
     live.agent.rebuild_prompt(Rebuild::Now("tools".to_owned()));
     Ok(())
 }

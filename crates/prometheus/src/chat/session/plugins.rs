@@ -68,6 +68,16 @@ impl PluginTools {
             toolsets,
         })
     }
+
+    /// Whether this was built from `plugins`' and `mcp`'s current sets.
+    pub(super) fn is_of(&self, plugins: &ProfilePlugins, mcp: &pmt_mcp::Manager) -> bool {
+        self.generation == (plugins.generation(), mcp.generation())
+    }
+
+    /// The registry and the plugin and MCP toolsets.
+    pub(super) fn parts(&self) -> (Arc<ToolRegistry>, Vec<String>) {
+        (Arc::clone(&self.registry), self.toolsets.clone())
+    }
 }
 
 /// The surface that created session `id` (its stored source: `cli`,
@@ -97,19 +107,9 @@ pub(super) fn session_calls(store: &Arc<Store>, cwd: &Path) -> SessionCalls {
 
 impl Factory {
     /// The tool registry and plugin and MCP toolsets for a session
-    /// starting now: the profile's plugin set is refreshed first (a change
-    /// since the last session loads anew) and the registry rebuilt when
-    /// the set or an MCP server's tool list changed.
+    /// starting now ([`super::tool_state::Registries::current`]).
     pub(super) fn session_registry(&self) -> Result<(Arc<ToolRegistry>, Vec<String>), Error> {
-        let scope = self.plugin_scope.get();
-        let plugins = crate::plugins_host::for_session(&scope, &self.options.cwd);
-        let mcp = crate::mcp_host::manager(&scope);
-        let mut tools = lock(&self.tools);
-        if tools.generation != (plugins.generation(), mcp.generation()) {
-            let calls = session_calls(&self.store, &self.options.cwd);
-            *tools = PluginTools::build(&self.scope, &plugins, &mcp, &calls)?;
-        }
-        Ok((Arc::clone(&tools.registry), tools.toolsets.clone()))
+        self.registries.current()
     }
 
     /// Starts the profile's MCP servers a session starting now needs (each
@@ -245,9 +245,7 @@ impl Factory {
             &toolsets,
             &live.session_surface,
         )?;
-        *lock(&live.registry) = registry;
-        self.rebuild_tools(live, &selection).await?;
-        live.set_selection(selection);
+        live.tool_state.rebuild(registry, selection).await?;
         *lock(&live.plugin_sections) = self.plugin_sections(live.id).await;
         live.agent.rebuild_prompt(Rebuild::Now(reason.to_owned()));
         Ok(())

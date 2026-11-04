@@ -169,6 +169,23 @@ pub struct AgentSetup {
     pub memory: Option<Arc<dyn crate::tools::MemoryPort>>,
     /// Plugin turn hooks (`pre_llm_call`).
     pub turn_hooks: Option<Arc<dyn TurnHooks>>,
+    /// Refreshes the session's tools at a compaction boundary, before the
+    /// prompt is frozen again: the one point besides session start where
+    /// the tool array may change on its own (spec: tool-system, Tool
+    /// surface frozen per session; MCP tool list changes respect the
+    /// frozen surface).
+    pub compaction_boundary: Option<Arc<dyn CompactionBoundary>>,
+}
+
+/// What a session refreshes when a compaction commits. The prompt cache
+/// breaks there anyway, so a tool array that went stale (an MCP server's
+/// tool list changed, a plugin reloaded) is rebuilt then instead of
+/// waiting for the next session.
+pub trait CompactionBoundary: Send + Sync {
+    /// Rebuilds the tools behind [`AgentSetup::tools`] if they are stale;
+    /// the prompt frozen next reads their definitions. A failure keeps
+    /// the current tools (the implementation reports it).
+    fn refresh_tools(&self) -> model::BoxFuture<'_, ()>;
 }
 
 /// Plugin hooks the turn loop fires (spec: plugin-system, `pre_llm_call`
@@ -299,6 +316,7 @@ impl AgentSetup {
             refresh_prompt: None,
             memory: None,
             turn_hooks: None,
+            compaction_boundary: None,
         }
     }
 }
