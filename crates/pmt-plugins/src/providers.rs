@@ -20,8 +20,9 @@ use pmt_core::error::{Error, codes};
 use pmt_tools::web::backend::{Hit, Page, WebBackend, WebFuture};
 use serde_json::{Value, json};
 
+use crate::backend::Backend;
+use crate::host::CallInfo;
 use crate::host::provider_world::Category as WitCategory;
-use crate::host::{CallInfo, Instance};
 
 /// A provider category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -93,7 +94,7 @@ pub struct PluginProvider {
     pub category: Category,
     /// One line for listings.
     pub description: String,
-    instance: Arc<Instance>,
+    backend: Arc<dyn Backend>,
 }
 
 impl PluginProvider {
@@ -104,7 +105,10 @@ impl PluginProvider {
     ///
     /// The plugin's error text, or the trap or timeout.
     pub fn invoke(&self, call: &CallInfo, request: &str) -> Result<String, String> {
-        match self.instance.invoke_provider(call, &self.id, request) {
+        match self
+            .backend
+            .invoke_provider(call, self.category, &self.id, request)
+        {
             Ok(answer) => answer,
             Err(err) => Err(err.message().to_owned()),
         }
@@ -122,34 +126,50 @@ impl ProviderRegistry {
     /// warnings of refused entries (a name another plugin took first).
     pub fn add(
         &mut self,
-        instance: &Arc<Instance>,
+        backend: &Arc<dyn Backend>,
         specs: Vec<crate::host::provider_world::ProviderSpec>,
     ) -> Vec<String> {
-        let mut warnings = Vec::new();
-        for spec in specs {
-            let category = Category::of(spec.category);
-            let key = (category, spec.id.clone());
-            if let Some(owner) = self.entries.get(&key) {
-                warnings.push(format!(
-                    "{} provider '{}' is already registered by plugin '{}'",
-                    category.as_str(),
+        specs
+            .into_iter()
+            .filter_map(|spec| {
+                self.add_one(
+                    backend,
+                    Category::of(spec.category),
                     spec.id,
-                    owner.plugin
-                ));
-                continue;
-            }
-            self.entries.insert(
-                key,
-                PluginProvider {
-                    plugin: instance.id().to_owned(),
-                    id: spec.id,
-                    category,
-                    description: spec.description,
-                    instance: Arc::clone(instance),
-                },
-            );
+                    spec.description,
+                )
+            })
+            .collect()
+    }
+
+    /// Registers provider `id` of `category` that `backend` serves; the
+    /// warning when another plugin took the name first.
+    pub fn add_one(
+        &mut self,
+        backend: &Arc<dyn Backend>,
+        category: Category,
+        id: String,
+        description: String,
+    ) -> Option<String> {
+        let key = (category, id.clone());
+        if let Some(owner) = self.entries.get(&key) {
+            return Some(format!(
+                "{} provider '{id}' is already registered by plugin '{}'",
+                category.as_str(),
+                owner.plugin
+            ));
         }
-        warnings
+        self.entries.insert(
+            key,
+            PluginProvider {
+                plugin: backend.id().to_owned(),
+                id,
+                category,
+                description,
+                backend: Arc::clone(backend),
+            },
+        );
+        None
     }
 
     /// Every registered provider, by category then name.

@@ -62,18 +62,16 @@ fn runnable(
     inputs: &LoadInputs<'_>,
     grants: &Grants,
 ) -> (State, Option<String>) {
-    if manifest.kind != Kind::Wasm {
-        let host = match manifest.kind {
-            Kind::Mcp => "the MCP client",
-            _ => "the python bridge",
-        };
+    if manifest.kind == Kind::Mcp {
         return (
             State::Error,
-            Some(format!(
-                "{} plugins are hosted by {host}, which is not available yet",
-                manifest.kind.as_str()
-            )),
+            Some("mcp plugins are hosted by the MCP client, which is not available yet".to_owned()),
         );
+    }
+    if manifest.kind == Kind::Python
+        && let Some(problem) = crate::python::PythonLaunch::of(manifest).compat_problem()
+    {
+        return (State::Error, Some(problem));
     }
     let Some(identity) = identity(plugin) else {
         return (State::Error, Some("plugin files unreadable".to_owned()));

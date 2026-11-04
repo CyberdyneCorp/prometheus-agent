@@ -32,7 +32,7 @@ fn invalid(path: &Path, err: &Error) -> Error {
 /// it declares.
 fn check_dir(dir: &Path) -> Result<Manifest, Error> {
     let manifest =
-        Manifest::read(dir, &plugins_host::running_version()).map_err(|e| invalid(dir, &e))?;
+        Manifest::read_any(dir, &plugins_host::running_version()).map_err(|e| invalid(dir, &e))?;
     manifest
         .capabilities
         .requested(&dir.join("plugin-data"))
@@ -67,6 +67,12 @@ fn check_dir(dir: &Path) -> Result<Manifest, Error> {
 /// `validate <path>`.
 pub(super) fn validate(path: &Path) -> Result<u8, Error> {
     let manifest = check_dir(path)?;
+    if manifest.kind == Kind::Python {
+        let report = super::python::audit_dir(path, &manifest)?;
+        print_raw(&super::python::report_text(&manifest.id, &report))?;
+        let incompatible = report.verdict == pmt_plugins::python::audit::Verdict::Incompatible;
+        return Ok(u8::from(incompatible));
+    }
     let worlds: Vec<String> = manifest.worlds.iter().map(|(w, _)| w.to_string()).collect();
     print_raw(&format!(
         "{} {} ({}) is valid; worlds: {}\n",

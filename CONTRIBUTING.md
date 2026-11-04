@@ -26,6 +26,11 @@ from the checked-in bindings; `cargo xtask plugin-samples` builds the
 samples with `cargo component`, which also regenerates each sample's
 `src/bindings.rs` from `wit/` (commit the result when the WIT changes).
 
+The python-bridge tests run real Python sidecars: they need `uv` on `PATH`
+and install CPython 3.12 into `target/pybridge-python` with it on first use
+(once per checkout; CI runs `scripts/ci/install-uv` first, which installs
+the uv the runtime index pins and that interpreter).
+
 `just tools` installs the same pinned versions, and `just` (with no
 arguments) lists shortcuts for building, testing and running the gates; the
 recipes in `justfile` call the same commands as `scripts/check`.

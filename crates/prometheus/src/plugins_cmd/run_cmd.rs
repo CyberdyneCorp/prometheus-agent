@@ -35,6 +35,9 @@ pub(super) fn run(
     args: &[String],
 ) -> Result<u8, Error> {
     let scope = ctx.scope()?;
+    if let Some(plugin) = super::run_bridged::find(&scope, id) {
+        return super::run_bridged::run(&scope, &plugin, command, args);
+    }
     let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
     let plugins = plugins_host::for_session(&scope, &cwd);
     let loaded = plugins.current();
@@ -130,7 +133,7 @@ pub fn help_section(scope: &ProfileScope) -> Option<String> {
     let mut text = String::new();
     for id in &scope.config().plugins.enabled {
         let dir = scope.dir().join("plugins").join(id);
-        let Ok(manifest) = Manifest::read(&dir, &plugins_host::running_version()) else {
+        let Ok(manifest) = Manifest::read_any(&dir, &plugins_host::running_version()) else {
             continue;
         };
         for name in &manifest.capabilities.cli_commands {

@@ -68,6 +68,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "plugins list",
     },
     JsonShape {
+        schema: "prometheus.bridge_status.v1",
+        command: "bridge status",
+    },
+    JsonShape {
         schema: "prometheus.usage.v1",
         command: "usage",
     },

@@ -64,7 +64,7 @@ pub fn list_models(models: &[ModelProvider], id: &str) -> Option<Result<Vec<Stri
         surface: "cli".to_owned(),
         cwd: None,
     };
-    Some(match provider.instance.list_models(&call, id) {
+    Some(match provider.backend.list_models(&call, id) {
         Ok(listed) => listed,
         Err(err) => Err(err.message().to_owned()),
     })

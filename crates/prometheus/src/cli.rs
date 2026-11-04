@@ -252,6 +252,14 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::connectors_cmd::ConnectorsCommand,
     },
+    /// The python bridge: sidecar status, logs and restarts, a doctor for
+    /// the managed runtime and plugin environments, and named side
+    /// environments for skill scripts.
+    Bridge {
+        /// The bridge subcommand.
+        #[command(subcommand)]
+        command: crate::bridge_cmd::BridgeCommand,
+    },
     /// MCP servers: add (from a preset or the catalog), list, remove, test
     /// and sign in to the profile's servers, pick their tools, show their
     /// state, and serve Prometheus tools and skills to MCP clients. With no

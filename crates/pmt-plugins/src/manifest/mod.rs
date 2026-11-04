@@ -65,7 +65,7 @@ const FIELDS: &[&str] = &[
 /// How a plugin runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    /// A WebAssembly component in the host.
+    /// A `WebAssembly` component in the host.
     Wasm,
     /// An MCP server.
     Mcp,
@@ -129,6 +129,20 @@ impl Manifest {
         let text = std::fs::read_to_string(&path)
             .map_err(|e| Error::io(&codes::PLUGINS_DISCOVERY, &path, &e))?;
         Self::parse(&text, running)
+    }
+
+    /// Reads `<dir>/plugin.toml`, or translates a Hermes `plugin.yaml`
+    /// (kind `python`, id = the directory name) when there is no
+    /// `plugin.toml`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Manifest::read`] and [`crate::python::hermes::read`].
+    pub fn read_any(dir: &Path, running: &Version) -> Result<Self, Error> {
+        if !dir.join(MANIFEST_FILE).exists() && dir.join(HERMES_MANIFEST_FILE).exists() {
+            return crate::python::hermes::read(dir);
+        }
+        Self::read(dir, running)
     }
 
     /// Parses manifest text.

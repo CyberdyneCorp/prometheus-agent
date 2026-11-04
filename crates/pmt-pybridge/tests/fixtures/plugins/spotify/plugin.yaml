@@ -1,0 +1,5 @@
+name: spotify
+version: 1.0.0
+description: Plays music (a Hermes tool plugin)
+requires_env:
+  - SPOTIFY_TOKEN

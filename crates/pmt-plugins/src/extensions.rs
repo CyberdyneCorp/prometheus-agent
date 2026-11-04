@@ -17,8 +17,9 @@ use std::sync::Arc;
 use pmt_core::capability::{Capability, CapabilitySet, PluginRight};
 use pmt_core::error::{Error, codes};
 
+use crate::backend::Backend;
+use crate::host::CallInfo;
 use crate::host::extensions_world::Command;
-use crate::host::{CallInfo, Instance};
 
 /// Most characters of one section.
 pub const SECTION_MAX_CHARS: usize = 4000;
@@ -32,7 +33,7 @@ pub struct Section {
     pub plugin: String,
     /// Its id.
     pub id: String,
-    instance: Arc<Instance>,
+    backend: Arc<dyn Backend>,
 }
 
 /// A registered plugin slash command.
@@ -46,7 +47,7 @@ pub struct PluginCommand {
     pub description: String,
     /// Surface names (empty: every surface).
     pub surfaces: Vec<String>,
-    instance: Arc<Instance>,
+    backend: Arc<dyn Backend>,
 }
 
 impl PluginCommand {
@@ -57,7 +58,7 @@ impl PluginCommand {
     ///
     /// `plugins.call` when the plugin traps or times out.
     pub fn run(&self, call: &CallInfo, args: &str) -> Result<Result<String, String>, Error> {
-        self.instance.run_command(call, &self.name, args)
+        self.backend.run_command(call, &self.name, args)
     }
 }
 
@@ -83,7 +84,7 @@ pub fn valid_section_id(id: &str) -> bool {
 }
 
 impl Contributions {
-    /// Registers `ids` of `instance`'s sections; returns the warnings of
+    /// Registers `ids` of `backend`'s sections; returns the warnings of
     /// the ones skipped for a missing grant or an invalid id.
     ///
     /// # Errors
@@ -93,14 +94,14 @@ impl Contributions {
     /// twice (nothing of the plugin's sections registers).
     pub fn add_sections(
         &mut self,
-        instance: &Arc<Instance>,
+        backend: &Arc<dyn Backend>,
         ids: Vec<String>,
         granted: &CapabilitySet,
     ) -> Result<Vec<String>, Error> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let plugin = instance.id();
+        let plugin = backend.id();
         let any_size = Capability::Plugin {
             right: PluginRight::PromptSection,
             target: Some("1".to_owned()),
@@ -136,13 +137,13 @@ impl Contributions {
             self.sections.push(Section {
                 plugin: plugin.to_owned(),
                 id,
-                instance: Arc::clone(instance),
+                backend: Arc::clone(backend),
             });
         }
         Ok(warnings)
     }
 
-    /// Registers `instance`'s commands; returns the warnings of the ones
+    /// Registers `backend`'s commands; returns the warnings of the ones
     /// skipped for a missing grant.
     ///
     /// # Errors
@@ -151,11 +152,11 @@ impl Contributions {
     /// plugin '<other>'`.
     pub fn add_commands(
         &mut self,
-        instance: &Arc<Instance>,
+        backend: &Arc<dyn Backend>,
         commands: Vec<Command>,
         granted: &CapabilitySet,
     ) -> Result<Vec<String>, Error> {
-        let plugin = instance.id();
+        let plugin = backend.id();
         let mut warnings = Vec::new();
         for command in commands {
             let name = command.name.trim_start_matches('/').to_lowercase();
@@ -183,7 +184,7 @@ impl Contributions {
                 name,
                 description: command.description,
                 surfaces: command.surfaces,
-                instance: Arc::clone(instance),
+                backend: Arc::clone(backend),
             });
         }
         Ok(warnings)
@@ -232,7 +233,7 @@ fn render(section: &Section, call: &CallInfo) -> Option<String> {
             section.id
         );
     };
-    let text = match section.instance.render_section(call, &section.id) {
+    let text = match section.backend.render_section(call, &section.id) {
         Ok(Ok(text)) => text,
         Ok(Err(message)) => {
             drop(&message);
@@ -248,7 +249,7 @@ fn render(section: &Section, call: &CallInfo) -> Option<String> {
         right: PluginRight::PromptSection,
         target: Some(size.to_string()),
     };
-    let granted = section.instance.context().grants.current();
+    let granted = section.backend.granted();
     if size > SECTION_MAX_CHARS || !granted.allows(&fits) {
         drop(&format!(
             "{size} characters is more than its grant or {SECTION_MAX_CHARS}"

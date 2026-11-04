@@ -150,6 +150,8 @@ pub struct Loaded {
     pub surfaces: Surfaces,
     /// Their event bus (`None` when nothing was loaded).
     pub bus: Option<Arc<Bus>>,
+    /// Tools of plugins hosted outside this process (python bridge).
+    pub tool_sources: Vec<Arc<dyn crate::backend::ToolSource>>,
 }
 
 impl Loaded {
@@ -164,6 +166,7 @@ impl Loaded {
             providers: ProviderRegistry::default(),
             surfaces: Surfaces::default(),
             bus: None,
+            tool_sources: Vec::new(),
         }
     }
 
@@ -209,6 +212,11 @@ impl Loaded {
                 Err(err) => tracing::warn!(plugin = %plugin.manifest.id, "{}", err.message()),
             }
         }
+        for source in &self.tool_sources {
+            if !source.register_tools(registry, base, calls).is_empty() {
+                toolsets.push(source.plugin().to_owned());
+            }
+        }
         toolsets
     }
 }
@@ -250,9 +258,12 @@ pub fn load(runtime: &Runtime, ports: &Ports, inputs: &LoadInputs<'_>) -> Loaded
         .into_iter()
         .map(|(d, s)| (s.id.clone(), (d, s)))
         .collect();
+    // Python plugins are hosted by the bridge (see [`bridged`]).
     let wanted: BTreeMap<String, Vec<String>> = surveyed
         .iter()
-        .filter(|(_, (_, status))| status.state == State::Loaded)
+        .filter(|(_, (_, status))| {
+            status.state == State::Loaded && status.kind != Some(Kind::Python)
+        })
         .map(|(id, (d, _))| (id.clone(), requirements(d)))
         .collect();
     for step in order::plan(&wanted) {
@@ -272,6 +283,45 @@ pub fn load(runtime: &Runtime, ports: &Ports, inputs: &LoadInputs<'_>) -> Loaded
     done.statuses = surveyed.into_values().map(|(_, s)| s).collect();
     done.bus = (!done.plugins.is_empty()).then_some(bus);
     done
+}
+
+/// An enabled, approved python plugin, for the python bridge to host.
+#[derive(Debug, Clone)]
+pub struct BridgedPlugin {
+    /// Its manifest.
+    pub manifest: Manifest,
+    /// Its identity.
+    pub identity: Identity,
+    /// Its live grant (re-read on change).
+    pub grants: Arc<PluginGrants>,
+    /// Its directory.
+    pub dir: PathBuf,
+}
+
+/// The python plugins of a survey that are to run (state `loaded`, kind
+/// `python`).
+#[must_use]
+pub fn bridged(surveyed: &[(Discovered, Status)], inputs: &LoadInputs<'_>) -> Vec<BridgedPlugin> {
+    surveyed
+        .iter()
+        .filter(|(_, s)| s.state == State::Loaded && s.kind == Some(Kind::Python))
+        .filter_map(|(d, _)| {
+            let manifest = d.manifest.as_ref().ok()?.clone();
+            let identity = identity(d)?;
+            let requested = requested(&manifest, inputs).ok()?;
+            let grants = Arc::new(PluginGrants::new(
+                &identity,
+                requested,
+                GrantsFile::at(inputs.profile_dir.join("grants.toml")),
+            ));
+            Some(BridgedPlugin {
+                manifest,
+                identity,
+                grants,
+                dir: d.dir.clone()?,
+            })
+        })
+        .collect()
 }
 
 /// The plugins `plugin` requires (none when its manifest did not parse).
@@ -330,6 +380,7 @@ impl Loader {
     ) -> Result<Vec<String>, Error> {
         let granted = plugin.grants.current();
         let instance = &plugin.instance;
+        let backend: Arc<dyn crate::backend::Backend> = Arc::clone(instance) as _;
         // Checked before anything registers, so a refusal leaves no part of
         // the plugin behind.
         if let Some(unknown) = registration
@@ -343,18 +394,18 @@ impl Loader {
             ));
         }
         let mut contributions = self.loaded.contributions.clone();
-        let mut warnings = contributions.add_sections(instance, registration.sections, &granted)?;
-        warnings.extend(contributions.add_commands(instance, registration.commands, &granted)?);
+        let mut warnings = contributions.add_sections(&backend, registration.sections, &granted)?;
+        warnings.extend(contributions.add_commands(&backend, registration.commands, &granted)?);
         self.hooks()
             .register_names(instance, registration.hooks, &granted)?;
         warnings.extend(self.hooks().hold(instance.id(), &registration.held));
-        warnings.extend(self.loaded.providers.add(instance, registration.providers));
+        warnings.extend(self.loaded.providers.add(&backend, registration.providers));
         let surfaces = &mut self.loaded.surfaces;
         warnings.extend(surfaces.add_cli(instance, registration.cli, &granted));
-        warnings.extend(surfaces.add_transports(instance, registration.transports, &granted));
+        warnings.extend(surfaces.add_transports(&backend, registration.transports, &granted));
         if !registration.models.is_empty() {
             warnings.extend(surfaces.add_models(
-                instance,
+                &backend,
                 &registration.models,
                 &granted,
                 &builtin_names(),

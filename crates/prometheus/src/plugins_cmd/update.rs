@@ -168,6 +168,9 @@ pub(super) fn update(
                     format!("plugin '{id}' is not installed"),
                 ));
             }
+            // An up-to-date python plugin still gets its lock resolved
+            // and its environment built (the network step of the bridge).
+            super::python::setup(ctx, &scope, id);
             return print_raw(&format!("{id} is up to date\n"));
         }
     }
@@ -183,6 +186,7 @@ pub(super) fn update(
         }
         let args = update_args(&update.record, flags);
         code = code.max(update_one(ctx, &scope, &update, &args, grant)?);
+        super::python::setup(ctx, &scope, &update.id);
     }
     Ok(code)
 }
@@ -375,7 +379,7 @@ fn keep_pending(scope: &ProfileScope, fetched: Fetched) -> Result<(), Error> {
 pub(super) fn diff_grants(ctx: &Context<'_>, id: &str) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let dir = pending_dir(&scope, id);
-    let manifest = Manifest::read(&dir, &plugins_host::running_version()).map_err(|_| {
+    let manifest = Manifest::read_any(&dir, &plugins_host::running_version()).map_err(|_| {
         Error::new(
             &codes::PLUGINS_NOT_FOUND,
             format!("no update of '{id}' is waiting for approval"),

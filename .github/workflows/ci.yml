@@ -103,6 +103,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # The python-bridge tests run real sidecars: the pinned uv and the
+      # CPython it provisions, installed before the tests so none downloads.
+      - name: Install uv and the python-bridge test interpreter
+        run: scripts/ci/install-uv "$RUNNER_TEMP/uv"
+
       - name: scripts/check
         # The budgets apply to the reference runner only; the perf job runs them.
         run: scripts/check --no-perf

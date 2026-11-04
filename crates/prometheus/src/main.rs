@@ -89,7 +89,10 @@ fn main() -> ExitCode {
     startup::warn_ignored_env(&launch);
     startup::raise_nofile(home.map(PathBuf::as_path));
     let reporter = startup::crash_reporter(home, &launch);
-    match panic::catch_main(&reporter, || run(&cli, &launch)) {
+    let outcome = panic::catch_main(&reporter, || run(&cli, &launch));
+    // Python-bridge sidecars and their children end with the process.
+    prometheus::plugins_host::bridge::shutdown_all();
+    match outcome {
         Ok(code) => ExitCode::from(code),
         Err(err) => failure(&err, cli.json),
     }
@@ -150,6 +153,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Mcp { command }) => prometheus::mcp_cmd::run(command.as_ref(), &ctx),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
         Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
+        Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
         Some(Command::Complete { .. }) => Ok(0),

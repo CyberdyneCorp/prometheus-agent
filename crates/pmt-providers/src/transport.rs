@@ -136,13 +136,16 @@ impl Sender {
 }
 
 /// The body and extra headers of a request, through the plugin's hooks.
+/// A hook that fails (a crashed or stalled plugin) fails the call without
+/// retrying the same route, and the fallback chain applies (spec:
+/// python-bridge, Model-provider plugins through the bridge).
 async fn hooked(
     hooks: &dyn RequestHooks,
     route: &Route,
     body: serde_json::Value,
 ) -> Result<(serde_json::Value, Vec<(String, String)>), ProviderError> {
     let failed = |what: &str, why: String| ProviderError {
-        class: crate::classify::ErrorClass::Config,
+        class: crate::classify::ErrorClass::ServerError,
         status: None,
         message: format!(
             "provider plugin of '{}' failed to {what}: {why}",
@@ -152,7 +155,14 @@ async fn hooked(
         reset_at: None,
         refusal: None,
         body: None,
-        verdict: None,
+        verdict: Some(Box::new(crate::classify::Reclassified {
+            reason: "provider_plugin_failed".to_owned(),
+            retryable: Some(false),
+            should_compress: false,
+            should_rotate_credential: false,
+            should_fallback: Some(true),
+            message: None,
+        })),
     };
     let body = hooks
         .prepare(&route.provider, body)

@@ -28,12 +28,46 @@ struct Published {
     payload: String,
 }
 
+/// What receives a plugin's event deliveries: a WASM instance, or an
+/// out-of-process host such as a python-bridge sidecar.
+pub trait EventSink: Send + Sync {
+    /// The plugin id.
+    fn id(&self) -> &str;
+
+    /// Delivers one event (blocking).
+    ///
+    /// # Errors
+    ///
+    /// A host failure; the inner error is the plugin's own.
+    fn on_event(
+        &self,
+        call: &CallInfo,
+        name: &str,
+        payload: &str,
+    ) -> Result<Result<(), String>, pmt_core::error::Error>;
+}
+
+impl EventSink for Instance {
+    fn id(&self) -> &str {
+        Instance::id(self)
+    }
+
+    fn on_event(
+        &self,
+        call: &CallInfo,
+        name: &str,
+        payload: &str,
+    ) -> Result<Result<(), String>, pmt_core::error::Error> {
+        Instance::on_event(self, call, name, payload)
+    }
+}
+
 #[derive(Default)]
 struct Subscribers {
     /// `(plugin, pattern)` in subscription order.
     patterns: Vec<(String, String)>,
-    /// The instances that receive deliveries, once attached.
-    instances: HashMap<String, Weak<Instance>>,
+    /// The sinks that receive deliveries, once attached.
+    instances: HashMap<String, Weak<dyn EventSink>>,
 }
 
 /// A profile's event bus; the [`EventsPort`] its plugins emit through.
@@ -78,9 +112,16 @@ impl Bus {
 
     /// Delivers the subscriptions of `instance` to it from now on.
     pub fn attach(&self, instance: &Arc<Instance>) {
+        let sink: Arc<dyn EventSink> = Arc::clone(instance) as _;
+        self.attach_sink(&sink);
+    }
+
+    /// Delivers the subscriptions of `sink`'s plugin to it from now on (the
+    /// bus keeps it weakly: its owner keeps it alive).
+    pub fn attach_sink(&self, sink: &Arc<dyn EventSink>) {
         lock(&self.subscribers)
             .instances
-            .insert(instance.id().to_owned(), Arc::downgrade(instance));
+            .insert(sink.id().to_owned(), Arc::downgrade(sink));
     }
 
     /// The patterns `plugin` subscribed to.
@@ -152,7 +193,7 @@ fn dispatch(profile: &str, subscribers: &Mutex<Subscribers>, queue: &Receiver<Pu
 
 /// The live, attached instances subscribed to `name`, once each, in
 /// subscription order.
-fn recipients(subscribers: &Mutex<Subscribers>, name: &str) -> Vec<Arc<Instance>> {
+fn recipients(subscribers: &Mutex<Subscribers>, name: &str) -> Vec<Arc<dyn EventSink>> {
     let subscribers = lock(subscribers);
     let mut seen = Vec::new();
     let mut out = Vec::new();

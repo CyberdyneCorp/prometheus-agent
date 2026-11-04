@@ -44,8 +44,15 @@ pub(super) fn install(ctx: &Context<'_>, args: &InstallArgs) -> Result<u8, Error
         from_catalog(&scope, identifier, args)?
     };
     let id = fetched.staged.manifest.id.clone();
+    let verdict =
+        super::python::check_install(&fetched.staged.dir, &fetched.staged.manifest, args.force)?;
     commit(&scope, fetched, args)?;
     eprintln!("installed '{id}' in profile '{}'", scope.name());
+    super::python::setup(ctx, &scope, &id);
+    if verdict == Some(pmt_plugins::python::audit::Verdict::Incompatible) {
+        eprintln!("'{id}' is incompatible with the python bridge and stays disabled");
+        return Ok(0);
+    }
     finish(ctx, &scope, &id, args)
 }
 

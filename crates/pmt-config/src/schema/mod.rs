@@ -30,6 +30,7 @@ mod mcp;
 mod models;
 mod operations;
 mod plugins;
+mod python_bridge;
 mod state;
 mod tools;
 mod webhook;
@@ -80,6 +81,7 @@ pub use operations::{
 pub use plugins::{
     DEFAULT_CATALOG_URL, PluginsConfig, PluginsWasmConfig, SignaturePolicy, TransportFallback,
 };
+pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
     SnapshotsConfig, StorageConfig,
@@ -162,6 +164,8 @@ pub struct Config {
     pub plugins: PluginsConfig,
     /// System prompt assembly.
     pub prompt: PromptConfig,
+    /// The python bridge: managed interpreter and sidecar bounds.
+    pub python_bridge: PythonBridgeConfig,
     /// Provider prompt caching.
     pub prompt_cache: PromptCacheConfig,
     /// Per-provider overrides, keyed by provider id.
@@ -233,6 +237,7 @@ impl Default for Config {
             observability: ObservabilityConfig::default(),
             plugins: PluginsConfig::default(),
             prompt: PromptConfig::default(),
+            python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),

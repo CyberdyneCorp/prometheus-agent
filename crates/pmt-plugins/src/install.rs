@@ -86,7 +86,14 @@ pub fn stage_dir(
         err
     };
     ready.map_err(cleanup)?;
-    let manifest = Manifest::read(&dir, running).map_err(cleanup)?;
+    let manifest = if !dir.join(crate::manifest::MANIFEST_FILE).exists()
+        && dir.join(crate::manifest::HERMES_MANIFEST_FILE).exists()
+    {
+        crate::python::hermes::read_staged(&dir)
+    } else {
+        Manifest::read(&dir, running)
+    }
+    .map_err(cleanup)?;
     let digest = digest::of_dir(&dir).map_err(cleanup)?;
     Ok(Staged {
         dir,

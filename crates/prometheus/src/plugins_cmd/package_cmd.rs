@@ -12,7 +12,7 @@ use crate::plugins_host;
 
 /// `pack <dir> [--out <file>]`: the package and its digest.
 pub(super) fn pack(dir: &Path, out: Option<&Path>) -> Result<u8, Error> {
-    let manifest = Manifest::read(dir, &plugins_host::running_version())?;
+    let manifest = Manifest::read_any(dir, &plugins_host::running_version())?;
     let bytes = package::pack(dir)?;
     let out = out.map_or_else(
         || {

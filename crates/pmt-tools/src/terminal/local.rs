@@ -120,12 +120,17 @@ pub struct LocalTerminal {
     processes: ProcessRegistry,
     runs: AtomicU64,
     secret_source: std::sync::RwLock<Option<SecretSource>>,
+    path_source: std::sync::RwLock<Option<PathSource>>,
 }
 
 /// Secrets added to every command's environment at spawn time (for
 /// example the declared secrets of the skills a session loaded), resolved
 /// per command so a rotated value is used at once.
 pub type SecretSource = Arc<dyn Fn() -> Vec<(String, SecretString)> + Send + Sync>;
+
+/// Directories put first on `PATH` for one command, from its text (the
+/// pinned Python environment of a skill whose script it runs).
+pub type PathSource = Arc<dyn Fn(&str) -> Vec<PathBuf> + Send + Sync>;
 
 /// Things the next result carries once.
 #[derive(Debug, Default)]
@@ -195,6 +200,7 @@ impl LocalTerminal {
             processes,
             runs: AtomicU64::new(0),
             secret_source: std::sync::RwLock::new(None),
+            path_source: std::sync::RwLock::new(None),
             setup,
         })
     }
@@ -207,18 +213,37 @@ impl LocalTerminal {
             .unwrap_or_else(PoisonError::into_inner) = Some(source);
     }
 
-    /// The environment of the next command: the session's plus the secret
-    /// source's.
-    fn command_env(&self) -> std::borrow::Cow<'_, ChildEnv> {
+    /// Puts `source`'s directories first on `PATH` of every later command
+    /// it names them for.
+    pub fn set_path_source(&self, source: PathSource) {
+        *self
+            .path_source
+            .write()
+            .unwrap_or_else(PoisonError::into_inner) = Some(source);
+    }
+
+    /// The environment of `command`: the session's plus the secret
+    /// source's, with the path source's directories first on `PATH`.
+    fn command_env(&self, command: &str) -> std::borrow::Cow<'_, ChildEnv> {
         let source = self
             .secret_source
             .read()
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
-        match source.map(|s| s()).filter(|secrets| !secrets.is_empty()) {
-            None => std::borrow::Cow::Borrowed(&self.setup.env),
-            Some(secrets) => std::borrow::Cow::Owned(self.setup.env.with_secrets(secrets)),
-        }
+        let paths = self
+            .path_source
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .map(|p| p(command))
+            .unwrap_or_default();
+        let mut env = match source.map(|s| s()).filter(|secrets| !secrets.is_empty()) {
+            None if paths.is_empty() => return std::borrow::Cow::Borrowed(&self.setup.env),
+            None => self.setup.env.clone(),
+            Some(secrets) => self.setup.env.with_secrets(secrets),
+        };
+        env.prepend_path(&paths);
+        std::borrow::Cow::Owned(env)
     }
 
     /// The session's current directory.
@@ -446,7 +471,7 @@ impl LocalTerminal {
             snapshot: self.files.snapshot.clone(),
             cwd: self.setup.scratch.join(format!("pmt-shell-cwd-{run}")),
         };
-        let env = self.command_env();
+        let env = self.command_env(command);
         let script = RunScript {
             command,
             cwd,
@@ -564,7 +589,7 @@ impl LocalTerminal {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
         }
-        let env = self.command_env();
+        let env = self.command_env(command);
         let script = RunScript {
             command,
             cwd,

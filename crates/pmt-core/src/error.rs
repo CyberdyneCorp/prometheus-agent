@@ -1012,6 +1012,24 @@ error_codes! {
     /// A disconnect nobody confirmed.
     CONNECTORS_CONFIRMATION = ("connectors.confirmation", PermissionDenied,
         "`prometheus connectors disconnect` removes an account and asks for confirmation: run it on a terminal or pass `--yes`; nothing was removed (the command exits 4).");
+    /// The managed Python a bridged plugin needs is not installed.
+    BRIDGE_RUNTIME_MISSING = ("bridge.runtime_missing", Unavailable,
+        "The managed CPython of `python_bridge.python_version` (or the managed uv that builds plugin environments) is not installed and could not be downloaded; run `prometheus runtimes install python@<version>`. Bridged plugins fail; the rest of Prometheus keeps working.");
+    /// A plugin's requirements are not usable.
+    BRIDGE_REQUIREMENTS = ("bridge.requirements", Config,
+        "A bridged plugin's requirements are refused (a requirement without an upper bound while `python_bridge.allow_unbounded_requirements = false`, or an unreadable `requirements.txt`/`pyproject.toml`), or its environment has no lock yet: run `prometheus plugins update <id>` with network access.");
+    /// Building a plugin environment failed.
+    BRIDGE_ENVIRONMENT = ("bridge.environment", Unavailable,
+        "Resolving or building a pinned Python environment failed (uv reported an error, a package is not in the cache while offline, or the lock does not match); the message carries uv's output.");
+    /// A sidecar broke the wire protocol.
+    BRIDGE_PROTOCOL = ("bridge.protocol", Protocol,
+        "A bridge sidecar sent a frame larger than 16 MiB (`frame_too_large`), malformed JSON-RPC, or a different protocol version (`bridge protocol mismatch`); the sidecar is stopped.");
+    /// A call into a sidecar failed.
+    BRIDGE_CALL = ("bridge.call", Tool,
+        "A call into a bridged Python plugin failed: the plugin raised, timed out (`bridge call timed out after <n> ms`), its sidecar crashed (`bridge_crashed`) or the plugin is `failed` after a crash loop (`prometheus bridge restart <id>`).");
+    /// A plugin is incompatible with the bridge.
+    BRIDGE_INCOMPATIBLE = ("bridge.incompatible", PermissionDenied,
+        "The static compatibility audit classifies the plugin `incompatible` (an unsupported `PluginContext` API is reachable from `register`), or its `requires_hermes` range excludes the bridge's compat level; it installs only with `--force` and stays disabled.");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

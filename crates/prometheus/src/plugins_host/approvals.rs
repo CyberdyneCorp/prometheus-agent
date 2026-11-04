@@ -110,7 +110,7 @@ impl PluginApprovals {
         let bound = request.timeout;
         let answer = tokio::task::spawn_blocking(move || {
             transport
-                .instance
+                .backend
                 .present_approval(&call, &transport.name, &wit, bound)
         })
         .await;

@@ -17,7 +17,7 @@ use pmt_core::error::{Error, codes};
 use semver::Version;
 
 use crate::digest;
-use crate::manifest::{HERMES_MANIFEST_FILE, MANIFEST_FILE, Manifest};
+use crate::manifest::Manifest;
 
 /// A first-party plugin compiled into the binary.
 #[derive(Debug, Clone, Copy)]
@@ -204,14 +204,9 @@ fn scan(dir: &Path, source: Source, running: &Version) -> Discovered {
 }
 
 fn read_manifest(dir: &Path, name: &str, running: &Version) -> Result<Manifest, Error> {
-    if !dir.join(MANIFEST_FILE).exists() && dir.join(HERMES_MANIFEST_FILE).exists() {
-        // The python bridge translates Hermes manifests.
-        return Err(Error::new(
-            &codes::PLUGINS_HOST_UNAVAILABLE,
-            "a Hermes plugin.yaml plugin needs the python bridge, which is not available yet",
-        ));
-    }
-    let manifest = Manifest::read(dir, running)?;
+    // A Hermes plugin.yaml is hosted by the python bridge, named after its
+    // directory.
+    let manifest = Manifest::read_any(dir, running)?;
     if manifest.id != name {
         return Err(Error::new(
             &codes::PLUGINS_DISCOVERY,

@@ -14,6 +14,7 @@ use pmt_providers::descriptor::Descriptor;
 use pmt_providers::descriptor::is_provider_id;
 use serde::Deserialize;
 
+use crate::backend::Backend;
 use crate::host::Instance;
 use crate::host::surfaces_world::CliCommand;
 
@@ -37,8 +38,8 @@ pub struct Transport {
     pub plugin: String,
     /// The transport name.
     pub name: String,
-    /// The instance that presents requests.
-    pub instance: Arc<Instance>,
+    /// What presents requests.
+    pub backend: Arc<dyn Backend>,
 }
 
 /// One model provider a plugin registered.
@@ -51,8 +52,8 @@ pub struct ModelProvider {
     /// It replaces the built-in provider of the same id
     /// (`providers_override` granted).
     pub replaces_builtin: bool,
-    /// The instance its request hooks run in.
-    pub instance: Arc<Instance>,
+    /// What its request hooks run in.
+    pub backend: Arc<dyn Backend>,
 }
 
 /// Every plugin's commands, transports and model providers.
@@ -106,7 +107,7 @@ impl Surfaces {
     /// `approval_transport`.
     pub fn add_transports(
         &mut self,
-        instance: &Arc<Instance>,
+        backend: &Arc<dyn Backend>,
         names: Vec<String>,
         granted: &CapabilitySet,
     ) -> Vec<String> {
@@ -125,9 +126,9 @@ impl Surfaces {
         }
         self.transports
             .extend(names.into_iter().map(|name| Transport {
-                plugin: instance.id().to_owned(),
+                plugin: backend.id().to_owned(),
                 name,
-                instance: Arc::clone(instance),
+                backend: Arc::clone(backend),
             }));
         Vec::new()
     }
@@ -149,14 +150,14 @@ impl Surfaces {
     /// returned as warnings and the built-in stays active.
     pub fn add_models(
         &mut self,
-        instance: &Arc<Instance>,
+        backend: &Arc<dyn Backend>,
         descriptors: &[String],
         granted: &CapabilitySet,
         builtin: &[String],
     ) -> Vec<String> {
         let mut warnings = Vec::new();
         for text in descriptors {
-            match self.model(instance, text, granted, builtin) {
+            match self.model(backend, text, granted, builtin) {
                 Ok(provider) => self.models.push(provider),
                 Err(why) => warnings.push(why),
             }
@@ -166,12 +167,12 @@ impl Surfaces {
 
     fn model(
         &self,
-        instance: &Arc<Instance>,
+        backend: &Arc<dyn Backend>,
         text: &str,
         granted: &CapabilitySet,
         builtin: &[String],
     ) -> Result<ModelProvider, String> {
-        let plugin = instance.id();
+        let plugin = backend.id();
         let descriptor = parse_descriptor(text)
             .map_err(|why| format!("model provider descriptor refused: {why}"))?;
         let id = descriptor.id.clone();
@@ -206,7 +207,7 @@ impl Surfaces {
             plugin: plugin.to_owned(),
             descriptor,
             replaces_builtin,
-            instance: Arc::clone(instance),
+            backend: Arc::clone(backend),
         })
     }
 }
@@ -226,11 +227,11 @@ impl ModelRequestHooks {
         Self { models }
     }
 
-    fn instance(&self, provider: &str) -> Option<Arc<Instance>> {
+    fn backend(&self, provider: &str) -> Option<Arc<dyn Backend>> {
         self.models
             .iter()
             .find(|m| m.descriptor.id == provider)
-            .map(|m| Arc::clone(&m.instance))
+            .map(|m| Arc::clone(&m.backend))
     }
 }
 
@@ -255,9 +256,9 @@ impl pmt_providers::transport::RequestHooks for ModelRequestHooks {
         provider: &'a str,
     ) -> pmt_providers::resolve::BoxFuture<'a, Result<Vec<(String, String)>, String>> {
         Box::pin(async move {
-            let instance = self.instance(provider).ok_or("no plugin provider")?;
+            let backend = self.backend(provider).ok_or("no plugin provider")?;
             let id = provider.to_owned();
-            blocking(move || instance.model_headers(&crate::host::CallInfo::default(), &id)).await
+            blocking(move || backend.model_headers(&crate::host::CallInfo::default(), &id)).await
         })
     }
 
@@ -267,11 +268,11 @@ impl pmt_providers::transport::RequestHooks for ModelRequestHooks {
         body: serde_json::Value,
     ) -> pmt_providers::resolve::BoxFuture<'a, Result<serde_json::Value, String>> {
         Box::pin(async move {
-            let instance = self.instance(provider).ok_or("no plugin provider")?;
+            let backend = self.backend(provider).ok_or("no plugin provider")?;
             let id = provider.to_owned();
             let text = body.to_string();
             let prepared = blocking(move || {
-                instance.prepare_request(&crate::host::CallInfo::default(), &id, &text)
+                backend.prepare_request(&crate::host::CallInfo::default(), &id, &text)
             })
             .await?;
             serde_json::from_str(&prepared)

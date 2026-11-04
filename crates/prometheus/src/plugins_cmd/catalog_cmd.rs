@@ -61,6 +61,9 @@ pub(super) fn show(ctx: &Context<'_>, id: &str) -> Result<u8, Error> {
     let mut text = String::new();
     if let Some(target) = &installed {
         installed_text(&mut text, target);
+        if target.manifest.kind == pmt_plugins::manifest::Kind::Python {
+            bridge_text(&mut text, &scope, &target.manifest.id);
+        }
     }
     if let Some(entry) = entry {
         let _ = writeln!(
@@ -78,6 +81,42 @@ pub(super) fn show(ctx: &Context<'_>, id: &str) -> Result<u8, Error> {
         let _ = writeln!(text, "removed from the catalog: {}", removed.reason);
     }
     print_raw(&text)
+}
+
+/// What the python bridge runs a python plugin with: the Hermes API
+/// compat level, the interpreter and the plugin's environment.
+fn bridge_text(text: &mut String, scope: &pmt_config::ProfileScope, id: &str) {
+    use pmt_pybridge::{env, runtime};
+    let version = scope.config().python_bridge.python_version;
+    let _ = writeln!(
+        text,
+        "python bridge: Hermes API {}",
+        pmt_plugins::python::api::HERMES_COMPAT_LEVEL
+    );
+    let Some(python) = runtime::find(scope.home(), version) else {
+        let _ = writeln!(text, "  interpreter: Python {version} (not installed)");
+        return;
+    };
+    let _ = writeln!(
+        text,
+        "  interpreter: CPython {} ({})",
+        python.version,
+        python.exe.display()
+    );
+    let lock = plugins_host::bridge::prepare::lock_dir(scope, id).join(env::LOCK_FILE);
+    match env::existing(
+        &plugins_host::bridge::prepare::envs_root(scope),
+        id,
+        &lock,
+        &python,
+    ) {
+        Some(built) => {
+            let _ = writeln!(text, "  environment: {}", built.dir.display());
+        }
+        None => {
+            let _ = writeln!(text, "  environment: not built yet");
+        }
+    }
 }
 
 fn installed_text(text: &mut String, target: &manage::Target) {

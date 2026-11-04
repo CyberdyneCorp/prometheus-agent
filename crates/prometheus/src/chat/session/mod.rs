@@ -11,6 +11,7 @@ mod mcp;
 pub mod model;
 mod plugins;
 pub mod progress;
+pub mod python;
 pub mod serve;
 pub mod skills;
 pub mod summarize;
@@ -605,6 +606,7 @@ impl Factory {
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
             terminal.set_secret_source(skills.secret_source());
+            terminal.set_path_source(python::path_source(&self.scope, skills));
         }
         Ok(environment)
     }
@@ -616,7 +618,8 @@ impl Factory {
             .grants
             .capabilities(&Subject::Profile)?
             .union(&tool_output_reads(self.scope.dir(), &id.to_string()))
-            .union(&skills.sandbox_reads()))
+            .union(&skills.sandbox_reads())
+            .union(&python::sandbox_reads(&self.scope)))
     }
 
     /// The loop's own tools; `clarify` asks the person on an interactive

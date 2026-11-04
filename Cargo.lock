@@ -3146,6 +3146,7 @@ dependencies = [
  "pmt-core",
  "pmt-plugins",
  "pmt-providers",
+ "pmt-skills",
  "pmt-tools",
  "semver",
  "serde",
@@ -3192,6 +3193,26 @@ dependencies = [
 [[package]]
 name = "pmt-pybridge"
 version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "nix 0.31.3",
+ "pmt-config",
+ "pmt-core",
+ "pmt-plugins",
+ "pmt-providers",
+ "pmt-pybridge",
+ "pmt-tools",
+ "pmt-update",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sysinfo",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "zip",
+]
 
 [[package]]
 name = "pmt-rpc"
@@ -3476,6 +3497,7 @@ dependencies = [
  "pmt-obs",
  "pmt-plugins",
  "pmt-providers",
+ "pmt-pybridge",
  "pmt-rpc",
  "pmt-sandbox",
  "pmt-skills",

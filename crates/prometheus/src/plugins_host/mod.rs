@@ -13,6 +13,7 @@
 //! read when a session starts and stay as they were for its lifetime.
 
 pub mod approvals;
+pub mod bridge;
 pub mod catalog;
 #[cfg(feature = "gateway")]
 pub mod gateway;
@@ -389,7 +390,10 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
 /// survey without starting the WASM engine.
 fn load_now(scope: &ProfileScope, inputs: &LoadInputs<'_>, statuses: Vec<Status>) -> Loaded {
     let settings = hook_settings(scope);
-    let mut loaded = if statuses.iter().any(|s| s.state == State::Loaded) {
+    let wasm = |s: &Status| {
+        s.state == State::Loaded && s.kind != Some(pmt_plugins::manifest::Kind::Python)
+    };
+    let mut loaded = if statuses.iter().any(wasm) {
         match runtime() {
             Some(runtime) => load(runtime, &ports::ports(scope), inputs),
             None => Loaded::empty(engine_unavailable(statuses), settings),
@@ -397,6 +401,9 @@ fn load_now(scope: &ProfileScope, inputs: &LoadInputs<'_>, statuses: Vec<Status>
     } else {
         Loaded::empty(statuses, settings)
     };
+    // Python plugins run in bridge sidecars; their callbacks follow the
+    // WASM plugins'.
+    bridge::attach(scope, inputs, &mut loaded);
     // Shell hooks, hook directories and webhooks run after the plugins'
     // callbacks; the set was just built, so nothing else holds it yet.
     if let Some(hooks) = Arc::get_mut(&mut loaded.hooks) {

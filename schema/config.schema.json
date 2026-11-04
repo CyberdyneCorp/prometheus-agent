@@ -4761,6 +4761,74 @@
       },
       "type": "object"
     },
+    "PythonBridgeConfig": {
+      "additionalProperties": false,
+      "description": "The `[python_bridge]` section.",
+      "properties": {
+        "allow_unbounded_requirements": {
+          "default": false,
+          "description": "Accept requirements without an upper bound (`requests>=2`); by\ndefault they are refused so an install never picks up a new major.",
+          "type": "boolean"
+        },
+        "call_timeout_ms": {
+          "default": 30000,
+          "description": "Bound on one call into a sidecar (hook calls use\n`plugins.hook_timeout_ms`).",
+          "format": "uint64",
+          "maximum": 3600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "idle_shutdown_secs": {
+          "default": 600,
+          "description": "Stop a sidecar that has no hooks or providers after this many idle\nseconds (`0` keeps it running).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_memory_bytes": {
+          "default": 1073741824,
+          "description": "Resident memory of one sidecar's process tree; above it the sidecar\nis terminated as a crash.",
+          "format": "uint64",
+          "minimum": 16777216,
+          "type": "integer"
+        },
+        "max_processes": {
+          "default": 16,
+          "description": "Processes in one sidecar's tree; above it the sidecar is terminated\nas a crash.",
+          "format": "uint32",
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "python_version": {
+          "$ref": "#/$defs/PythonVersion",
+          "default": "3.12",
+          "description": "The managed CPython every bridged plugin, skill environment and\nnamed environment runs on (`3.11`, `3.12` or `3.13`)."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "PythonVersion": {
+      "description": "A supported interpreter version.",
+      "oneOf": [
+        {
+          "const": "3.11",
+          "description": "CPython 3.11.",
+          "type": "string"
+        },
+        {
+          "const": "3.12",
+          "description": "CPython 3.12.",
+          "type": "string"
+        },
+        {
+          "const": "3.13",
+          "description": "CPython 3.13.",
+          "type": "string"
+        }
+      ]
+    },
     "QuickCommand": {
       "additionalProperties": false,
       "description": "One `[quick_commands.<name>]` entry: a user slash command.",
@@ -7378,6 +7446,18 @@
       "description": "Per-provider overrides, keyed by provider id.",
       "type": "object",
       "x-apply": "next_session"
+    },
+    "python_bridge": {
+      "$ref": "#/$defs/PythonBridgeConfig",
+      "default": {
+        "allow_unbounded_requirements": false,
+        "call_timeout_ms": 30000,
+        "idle_shutdown_secs": 600,
+        "max_memory_bytes": 1073741824,
+        "max_processes": 16,
+        "python_version": "3.12"
+      },
+      "description": "The python bridge: managed interpreter and sidecar bounds."
     },
     "quick_commands": {
       "additionalProperties": {

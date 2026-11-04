@@ -136,6 +136,20 @@ impl ChildEnv {
         env
     }
 
+    /// Puts `dirs` first on `PATH`.
+    pub fn prepend_path(&mut self, dirs: &[std::path::PathBuf]) {
+        if dirs.is_empty() {
+            return;
+        }
+        let mut all: Vec<std::path::PathBuf> = dirs.to_vec();
+        if let Some(current) = self.get("PATH") {
+            all.extend(std::env::split_paths(current));
+        }
+        if let Ok(joined) = std::env::join_paths(all) {
+            self.set("PATH", joined);
+        }
+    }
+
     /// Points `TMPDIR` (and `TEMP`/`TMP` on Windows) at `dir`, the session
     /// scratch directory the sandbox lets the child write.
     pub fn set_temp_dir(&mut self, dir: &Path) {

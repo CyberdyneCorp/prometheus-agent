@@ -2265,3 +2265,84 @@ capabilities = [
 
 [connectors."Connector account management CLI"]
 "Disconnect needs confirmation" = ["crates/prometheus/tests/connectors_cli.rs::disconnect_needs_confirmation"]
+
+# Group 33 (python bridge)
+[python-bridge."Managed CPython runtime"]
+"Offline first use fails clearly" = ["crates/prometheus/tests/python_bridge.rs::offline_first_use_fails_clearly_and_the_session_starts", "crates/pmt-pybridge/src/runtime.rs::a_missing_runtime_names_the_install_command"]
+
+[python-bridge."Per-plugin pinned environments"]
+"Environment is reused" = ["crates/pmt-pybridge/tests/bridge/environments.rs::an_environment_is_built_offline_from_the_cache_and_then_reused"]
+"Plugin requirements are pinned with hashes" = ["crates/pmt-pybridge/tests/bridge/environments.rs::requirements_are_locked_to_one_exact_version_with_its_hash"]
+
+[python-bridge."Hermes API compatibility level"]
+"Plugin needing a newer Hermes API" = ["crates/pmt-plugins/src/python/hermes.rs::a_newer_hermes_api_is_named", "crates/pmt-plugins/src/python/api.rs::a_range_above_the_level_excludes_it"]
+
+[python-bridge."Sidecar wire protocol"]
+"Oversized frame is rejected" = ["crates/pmt-pybridge/tests/bridge/protocol.rs::an_oversized_tool_result_fails_with_frame_too_large", "crates/pmt-pybridge/src/wire.rs::an_oversized_frame_is_rejected_before_its_body"]
+
+[python-bridge."Supported PluginContext subset"]
+"Hermes tool plugin works unchanged" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_tool_plugin_works_unchanged", "crates/pmt-pybridge/tests/bridge/protocol.rs::a_tool_handler_runs_in_the_sidecar_and_its_return_is_the_result"]
+
+[python-bridge."Unsupported APIs fail with a named error"]
+"Platform adapter plugin gets a clear error" = ["crates/pmt-pybridge/tests/bridge/hermes.rs::a_platform_adapter_registration_fails_with_a_named_error"]
+
+[python-bridge."Static compatibility audit"]
+"Audit flags an unsupported call before install" = ["crates/prometheus/tests/python_bridge.rs::validate_reports_an_unsupported_call_with_its_file_and_line", "crates/pmt-plugins/src/python/audit.rs::an_unsupported_call_from_a_handler_degrades_with_file_and_line"]
+
+[python-bridge."Hermes import shims"]
+"Internal import is refused by name" = ["crates/pmt-pybridge/tests/bridge/hermes.rs::an_internal_import_is_refused_by_name"]
+
+[python-bridge."Hook name and payload translation"]
+"Narrow signature gets narrow payload" = ["crates/pmt-pybridge/tests/bridge/protocol.rs::a_narrow_hook_callback_gets_only_what_it_declares"]
+
+[python-bridge."Typed values across the wire"]
+"Provider result keeps its declared type" = ["crates/pmt-pybridge/tests/bridge/protocol.rs::a_provider_result_keeps_its_declared_dataclass_fields"]
+
+[python-bridge."Capability grants enforced at the process boundary"]
+"Plugin cannot read the user's SSH keys" = ["crates/prometheus/tests/python_bridge.rs::a_plugin_cannot_read_the_users_ssh_keys"]
+
+[python-bridge."Secrets and environment isolation"]
+"Ungranted secret is invisible" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::the_environment_holds_only_the_allowed_variables_and_granted_secrets"]
+
+[python-bridge."One profile per sidecar"]
+"Shared gateway, separate sidecars" = ["crates/prometheus/tests/python_bridge.rs::a_shared_process_runs_one_sidecar_per_profile"]
+
+[python-bridge."Sidecar lifecycle"]
+"Process tree is reaped" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::shutdown_reaps_the_process_tree_within_seven_seconds"]
+
+[python-bridge."Call timeouts and stall detection"]
+"GIL stall is recovered" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_gil_stall_is_killed_after_three_missed_pings_and_restarted"]
+
+[python-bridge."Crash isolation and restart policy"]
+"Crash loop is contained" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_crash_loop_marks_the_plugin_failed_and_spares_the_rest", "crates/prometheus/tests/python_bridge.rs::a_crashing_plugin_does_not_affect_the_agent"]
+
+[python-bridge."Resource limits"]
+"Memory leak is bounded" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_memory_leak_is_terminated_naming_the_limit"]
+
+[python-bridge."Registrations follow plugin-system reload rules"]
+"Restart does not mutate a live session" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_restart_that_drops_a_tool_answers_by_name"]
+
+[python-bridge."Python skill scripts"]
+"Skill script has no access to plugin environments" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]
+
+[python-bridge."Bridge diagnostics"]
+"Doctor detects a corrupted environment" = ["crates/prometheus/tests/python_bridge_cli.rs::doctor_names_the_plugin_and_package_of_a_corrupted_environment"]
+
+[python-bridge."Migration of Hermes plugins"]
+"Incompatible plugin is imported disabled" = ["crates/prometheus/src/plugins_host/bridge/migrate.rs::an_incompatible_plugin_is_imported_disabled_and_cited"]
+
+[python-bridge."Model-provider plugins through the bridge"]
+"Copilot provider plugin works unchanged" = ["crates/prometheus/tests/python_bridge.rs::a_copilot_provider_plugin_works_unchanged"]
+"Sidecar crash fails the call, not the agent" = ["crates/prometheus/tests/python_bridge.rs::a_sidecar_crash_fails_the_call_and_the_fallback_chain_answers"]
+
+[python-bridge."Plugin CLI commands through the bridge"]
+"Argparse error maps to usage exit" = ["crates/prometheus/tests/python_bridge.rs::an_argparse_error_maps_to_the_usage_exit"]
+
+[python-bridge."Host-bound plugin APIs through the bridge"]
+"Ungranted injection returns False" = ["crates/prometheus/tests/python_bridge.rs::an_ungranted_injection_returns_false_and_the_log_names_the_capability"]
+
+[python-bridge."Named side environments"]
+"Stdout is only the path" = ["crates/prometheus/tests/python_bridge_cli.rs::a_named_environment_prints_only_its_path_and_is_reused_offline"]
+
+[skills."Skill scripts run sandboxed with managed runtimes"]
+"Skill script gets its pinned environment" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]

@@ -1,0 +1,4 @@
+name: newer
+version: 1.0.0
+description: Needs a newer Hermes API
+requires_hermes: ">=2027.1"

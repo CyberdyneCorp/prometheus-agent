@@ -22,6 +22,7 @@ pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
 pmt-plugins = { path = "crates/pmt-plugins" }
 pmt-providers = { path = "crates/pmt-providers" }
+pmt-pybridge = { path = "crates/pmt-pybridge" }
 pmt-rpc = { path = "crates/pmt-rpc" }
 pmt-gateway = { path = "crates/pmt-gateway" }
 pmt-adapters-telegram = { path = "crates/pmt-adapters-telegram" }

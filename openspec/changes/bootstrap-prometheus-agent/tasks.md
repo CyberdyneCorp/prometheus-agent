@@ -341,12 +341,12 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 33. M2 Python bridge
 
-- [ ] 33.1 Implement the managed CPython runtime (uv-provisioned) and per-plugin pinned environments; verify a pinned environment is created offline from a cache fixture (spec: python-bridge)
-- [ ] 33.2 Implement the sidecar JSON-RPC wire protocol, typed values across the wire, one profile per sidecar and the lifecycle; verify with an echo plugin (spec: python-bridge)
-- [ ] 33.3 Implement the supported `PluginContext` subset, named errors for unsupported APIs, Hermes import shims, hook name/payload translation and the static compatibility audit; verify with real Hermes example plugins as fixtures (spec: python-bridge)
-- [ ] 33.4 Enforce grants at the process boundary (sandbox + egress proxy), secrets/env isolation, call timeouts with stall detection, crash isolation with restart policy and resource limits; verify that a crashing plugin does not affect the agent (spec: python-bridge, spec: security-boundaries)
-- [ ] 33.5 Implement model-provider plugins through the bridge (Hermes provider plugins such as Copilot work unchanged; a sidecar crash fails the call, not the agent; a profile naming a missing bridged provider fails closed), plugin CLI commands through the bridge (argparse errors map to exit 2), host-bound plugin APIs with grant checks and named side environments; verify with real Hermes plugin fixtures (spec: python-bridge, spec: model-providers)
-- [ ] 33.6 Implement Python skill scripts, registration reload rules, `prometheus bridge` diagnostics and migration of Hermes plugins; verify with an end-to-end Hermes plugin test (spec: python-bridge)
+- [x] 33.1 Implement the managed CPython runtime (uv-provisioned) and per-plugin pinned environments; verify a pinned environment is created offline from a cache fixture (spec: python-bridge)
+- [x] 33.2 Implement the sidecar JSON-RPC wire protocol, typed values across the wire, one profile per sidecar and the lifecycle; verify with an echo plugin (spec: python-bridge)
+- [x] 33.3 Implement the supported `PluginContext` subset, named errors for unsupported APIs, Hermes import shims, hook name/payload translation and the static compatibility audit; verify with real Hermes example plugins as fixtures (spec: python-bridge)
+- [x] 33.4 Enforce grants at the process boundary (sandbox + egress proxy), secrets/env isolation, call timeouts with stall detection, crash isolation with restart policy and resource limits; verify that a crashing plugin does not affect the agent (spec: python-bridge, spec: security-boundaries)
+- [x] 33.5 Implement model-provider plugins through the bridge (Hermes provider plugins such as Copilot work unchanged; a sidecar crash fails the call, not the agent; a profile naming a missing bridged provider fails closed), plugin CLI commands through the bridge (argparse errors map to exit 2), host-bound plugin APIs with grant checks and named side environments; verify with real Hermes plugin fixtures (spec: python-bridge, spec: model-providers)
+- [x] 33.6 Implement Python skill scripts, registration reload rules, `prometheus bridge` diagnostics and migration of Hermes plugins; verify with an end-to-end Hermes plugin test (spec: python-bridge)
 
 ## 34. M2 Security hardening for extensions
 

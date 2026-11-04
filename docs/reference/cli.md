@@ -41,6 +41,7 @@ Commands:
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
@@ -10759,6 +10760,333 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus connectors help help
 ```
 
+## `prometheus bridge`
+
+```text
+The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+
+Usage: prometheus bridge [OPTIONS] <COMMAND>
+
+Commands:
+  status   Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+  logs     A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+  restart  Restart a plugin's sidecar, clearing a `failed` state
+  doctor   Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+  env      Materialize a named pinned environment and print only its interpreter's path on stdout
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge status`
+
+```text
+Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+
+Usage: prometheus bridge status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge logs`
+
+```text
+A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+
+Usage: prometheus bridge logs [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --follow
+          Keep printing what is appended
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge restart`
+
+```text
+Restart a plugin's sidecar, clearing a `failed` state
+
+Usage: prometheus bridge restart [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge doctor`
+
+```text
+Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+
+Usage: prometheus bridge doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge env`
+
+```text
+Materialize a named pinned environment and print only its interpreter's path on stdout
+
+Usage: prometheus bridge env [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          `^[a-z0-9][a-z0-9_-]{0,63}$`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -r, --requirement <FILE>
+          A requirements file (repeatable)
+
+      --extra <SPEC>
+          One requirement (repeatable), e.g. `pypdf>=4,<5`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus bridge help [COMMAND]
+
+Commands:
+  status   Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+  logs     A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+  restart  Restart a plugin's sidecar, clearing a `failed` state
+  doctor   Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+  env      Materialize a named pinned environment and print only its interpreter's path on stdout
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus bridge help status`
+
+```text
+Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+
+Usage: prometheus bridge help status
+```
+
+## `prometheus bridge help logs`
+
+```text
+A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+
+Usage: prometheus bridge help logs
+```
+
+## `prometheus bridge help restart`
+
+```text
+Restart a plugin's sidecar, clearing a `failed` state
+
+Usage: prometheus bridge help restart
+```
+
+## `prometheus bridge help doctor`
+
+```text
+Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+
+Usage: prometheus bridge help doctor
+```
+
+## `prometheus bridge help env`
+
+```text
+Materialize a named pinned environment and print only its interpreter's path on stdout
+
+Usage: prometheus bridge help env
+```
+
+## `prometheus bridge help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus bridge help help
+```
+
 ## `prometheus mcp`
 
 ```text
@@ -13773,7 +14101,7 @@ Usage: prometheus runtimes install [OPTIONS] <NAME>...
 
 Arguments:
   <NAME>...
-          Runtime names (node, cpython, uv, chromium)
+          Runtime names (node, cpython, uv, chromium), or `python@<version>` for the python bridge's managed CPython (3.11, 3.12, 3.13)
 
 Options:
       --home <PATH>
@@ -14380,6 +14708,7 @@ Commands:
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
   connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
   mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
   plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
@@ -16068,6 +16397,61 @@ Remove an account (asks for confirmation unless --yes)
 Usage: prometheus help connectors disconnect
 ```
 
+## `prometheus help bridge`
+
+```text
+The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+
+Usage: prometheus help bridge [COMMAND]
+
+Commands:
+  status   Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+  logs     A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+  restart  Restart a plugin's sidecar, clearing a `failed` state
+  doctor   Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+  env      Materialize a named pinned environment and print only its interpreter's path on stdout
+```
+
+## `prometheus help bridge status`
+
+```text
+Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+
+Usage: prometheus help bridge status
+```
+
+## `prometheus help bridge logs`
+
+```text
+A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+
+Usage: prometheus help bridge logs
+```
+
+## `prometheus help bridge restart`
+
+```text
+Restart a plugin's sidecar, clearing a `failed` state
+
+Usage: prometheus help bridge restart
+```
+
+## `prometheus help bridge doctor`
+
+```text
+Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+
+Usage: prometheus help bridge doctor
+```
+
+## `prometheus help bridge env`
+
+```text
+Materialize a named pinned environment and print only its interpreter's path on stdout
+
+Usage: prometheus help bridge env
+```
+
 ## `prometheus help mcp`
 
 ```text
@@ -16664,6 +17048,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.runtimes_exclude.v1` | `prometheus runtimes exclude list` |
 | `prometheus.grants.v1` | `prometheus grants list` |
 | `prometheus.plugins.v1` | `prometheus plugins list` |
+| `prometheus.bridge_status.v1` | `prometheus bridge status` |
 | `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.prompt_size.v1` | `prometheus prompt size` |
 | `prometheus.config.v1` | `prometheus config show` |

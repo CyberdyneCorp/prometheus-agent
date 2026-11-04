@@ -1,0 +1,3 @@
+name: lazy
+version: 1.0.0
+description: Only a tool, so its sidecar may stop when idle

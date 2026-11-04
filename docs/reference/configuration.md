@@ -428,6 +428,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
 | `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
 | `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
+| `python_bridge.allow_unbounded_requirements` | boolean | `false` | any | `next_session` | Accept requirements without an upper bound (`requests>=2`); by default they are refused so an install never picks up a new major. |
+| `python_bridge.call_timeout_ms` | integer | `30000` | 1 to 3600000 | `next_session` | Bound on one call into a sidecar (hook calls use `plugins.hook_timeout_ms`). |
+| `python_bridge.idle_shutdown_secs` | integer | `600` | ≥ 0 | `next_session` | Stop a sidecar that has no hooks or providers after this many idle seconds (`0` keeps it running). |
+| `python_bridge.max_memory_bytes` | integer | `1073741824` | ≥ 16777216 | `next_session` | Resident memory of one sidecar's process tree; above it the sidecar is terminated as a crash. |
+| `python_bridge.max_processes` | integer | `16` | 1 to 4096 | `next_session` | Processes in one sidecar's tree; above it the sidecar is terminated as a crash. |
+| `python_bridge.python_version` | one of "3.11", "3.12", "3.13" | `"3.12"` | `"3.11"`, `"3.12"`, `"3.13"` | `next_session` | The managed CPython every bridged plugin, skill environment and named environment runs on (`3.11`, `3.12` or `3.13`). |
 | `quick_commands.<name>.command` | string | unset | any | `live` | The shell command an `exec` entry runs, with every secret removed from its environment and its output redacted. |
 | `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
 | `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |

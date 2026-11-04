@@ -79,6 +79,7 @@ pmt-mcp.workspace = true
 pmt-memory.workspace = true
 pmt-net.workspace = true
 pmt-plugins.workspace = true
+pmt-pybridge.workspace = true
 pmt-obs.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
@@ -132,6 +133,7 @@ pmt-mcp = { workspace = true, features = ["testkit"] }
 # The reference MCP client of the `mcp serve` conformance tests.
 rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
 pmt-plugins = { workspace = true, features = ["testkit"] }
+pmt-pybridge = { workspace = true, features = ["testkit"] }
 # The fake Nous connector gateway of the connectors tests.
 pmt-tools = { workspace = true, features = ["connectors-fake"] }
 minisign.workspace = true
