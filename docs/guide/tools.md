@@ -294,8 +294,7 @@ Cron jobs, `chat -z` runs and webhook/API sessions never wait: they answer
 from `approvals.cron_mode`, `approvals.single_query_mode` and
 `approvals.unattended_mode` (`deny` by default, or `approve`); a denial
 says which key to set. These are strings: `cron_mode = false` is a
-configuration error (exit 78). `smart` mode asks like `manual` until the
-guardian model arrives.
+configuration error (exit 78).
 
 Writes to protected instruction files (`AGENTS.md`, `CLAUDE.md`, ...) ask
 every time, in every mode including `off`, and a plugin rule that escalates

@@ -244,6 +244,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         source_tag: args.source.clone().or_else(|| {
             (mode == Mode::OneShot).then(|| pmt_store::sessions::ONESHOT_TAG.to_owned())
         }),
+        egress: args.egress_overrides(),
     })
 }
 
@@ -284,6 +285,7 @@ impl Tui<'_> {
             run_budget: self.args.run_budget,
             terminal: terminal::identity().filter(|_| scope.config().sessions.terminal_continue),
             cwd,
+            egress: self.args.egress_overrides(),
         };
         crate::tui_cmd::start(&launch, scope, ctx, ui)
     }

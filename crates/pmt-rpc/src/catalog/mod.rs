@@ -120,6 +120,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::ConfigGet>()
         .method::<c::SessionBanner>()
         .method::<c::PairingApprove>()
+        .method::<c::EgressSet>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()

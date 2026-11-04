@@ -11,7 +11,8 @@
 
 use std::collections::BTreeSet;
 
-use pmt_config::schema::SkillsConfig;
+use pmt_config::schema::{Config, SkillsConfig};
+use pmt_config::secrets::surface::SurfaceOnly;
 
 use crate::catalog::Skill;
 
@@ -41,23 +42,29 @@ pub struct SessionView {
 }
 
 /// Why a skill is hidden from everything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Hidden {
     /// Disabled by configuration.
     Disabled,
     /// Not for this OS.
     Platform,
+    /// It declares a secret a surface owns (spec: security-boundaries,
+    /// Gateway-owned secrets are never delegable).
+    SurfaceOnly(String),
 }
 
 impl Hidden {
     /// `skill_view`'s refusal for skill `name`.
     #[must_use]
-    pub fn message(self, name: &str) -> String {
+    pub fn message(&self, name: &str) -> String {
         match self {
             Self::Disabled => format!(
                 "Skill '{name}' is disabled. Enable it with prometheus skills enable {name}."
             ),
             Self::Platform => format!("Skill '{name}' is not supported on this platform."),
+            Self::SurfaceOnly(secret) => {
+                format!("Skill '{name}' is unavailable: secret '{secret}' is surface-only.")
+            }
         }
     }
 }
@@ -79,14 +86,26 @@ pub fn platform_ok(skill: &Skill, host: &str) -> bool {
 
 /// Why `skill` is hidden everywhere in a session, if it is.
 #[must_use]
-pub fn hidden(config: &SkillsConfig, view: &SessionView, skill: &Skill) -> Option<Hidden> {
-    if disabled(config, view.platform.as_deref(), &skill.name) {
+pub fn hidden(config: &Config, view: &SessionView, skill: &Skill) -> Option<Hidden> {
+    if disabled(&config.skills, view.platform.as_deref(), &skill.name) {
         Some(Hidden::Disabled)
     } else if !platform_ok(skill, host_platform()) {
         Some(Hidden::Platform)
     } else {
-        None
+        surface_only_secret(config, skill).map(Hidden::SurfaceOnly)
     }
+}
+
+/// The first secret `skill` declares that a surface owns.
+#[must_use]
+pub fn surface_only_secret(config: &Config, skill: &Skill) -> Option<String> {
+    let only = SurfaceOnly::of(config);
+    skill
+        .meta
+        .secrets
+        .iter()
+        .find(|decl| only.contains(&decl.name))
+        .map(|decl| decl.name.clone())
 }
 
 /// Whether the conditional gates let `skill` into the prompt index.

@@ -133,6 +133,7 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             text
         }),
         "yolo" => Ok(yolo(live, args)),
+        "egress" => egress(live, args),
         "config" => config(ctx.scope, args),
         _ => return None,
     })
@@ -253,6 +254,17 @@ fn approvals(live: &Live) -> String {
         ""
     };
     format!("approvals: {mode}{yolo}; timeout {} s", config.timeout_secs)
+}
+
+/// `/egress [status] | allow <host> | deny <host> | mode <m>`: changes the
+/// session's egress policy in place (the system prompt and tool array stay
+/// as they are, so the prompt cache holds).
+fn egress(live: &Live, args: &str) -> Result<String, Error> {
+    let (action, value) = args.trim().split_once(' ').unwrap_or((args.trim(), ""));
+    if !matches!(action, "" | "status") {
+        crate::egress::Change::parse(action, value)?.apply(&live.egress.hosts);
+    }
+    Ok(crate::egress::describe(&live.egress.hosts))
 }
 
 fn yolo(live: &Live, args: &str) -> String {

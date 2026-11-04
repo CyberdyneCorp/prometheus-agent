@@ -5,7 +5,9 @@
 //! capability baseline, its `capabilities` table (network hosts, readable
 //! and writable paths, like a plugin grant), reading its program's
 //! directory, spawning children and writing its own scratch directory
-//! `<profile>/cache/mcp/<server>`. Its environment holds only `PATH`,
+//! `<profile>/cache/mcp/<server>`; it reaches the network only through a
+//! loopback egress proxy under the profile's `security.egress` policy and
+//! its declared hosts. Its environment holds only `PATH`,
 //! `HOME`, `LANG`, `SYSTEMROOT` (and on Windows `PATHEXT` and
 //! `USERPROFILE`), `TMPDIR` (the scratch directory), its `env` values and
 //! its `env_secrets` from the secrets store, so no other secret (a
@@ -19,7 +21,7 @@
 //! catalog entries).
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use pmt_config::ProfileScope;
 use pmt_config::grants::baseline;
@@ -28,6 +30,7 @@ use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_mcp::Launch;
 use pmt_mcp::server::Launcher;
 use pmt_net::OutboundPolicy;
+use pmt_net::egress::Proxy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
 
 /// Variables a `stdio` server inherits from this process.
@@ -40,11 +43,13 @@ const INHERITED: &[&str] = &[
     "USERPROFILE",
 ];
 
-/// The launcher of server `name`.
+/// The launcher of server `name`. A `stdio` server's egress proxy lives
+/// until its next start.
 pub(super) fn launcher(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Launcher {
     let (scope, name, server) = (scope.clone(), name.to_owned(), server.clone());
+    let proxy = Mutex::new(None);
     Arc::new(move || match server.transport {
-        McpTransport::Stdio => stdio(&scope, &name, &server),
+        McpTransport::Stdio => stdio(&scope, &name, &server, &proxy),
         McpTransport::Http => http(&scope, &name, &server),
     })
 }
@@ -54,7 +59,12 @@ fn scratch(scope: &ProfileScope, name: &str) -> PathBuf {
     scope.dir().join("cache/mcp").join(name)
 }
 
-fn stdio(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<Launch, String> {
+fn stdio(
+    scope: &ProfileScope,
+    name: &str,
+    server: &McpServerConfig,
+    proxy_slot: &Mutex<Option<Proxy>>,
+) -> Result<Launch, String> {
     let config = scope.config();
     let scratch = scratch(scope, name);
     std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
@@ -69,11 +79,23 @@ fn stdio(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<L
         workspace: workspace.clone(),
         scratch: vec![scratch.clone()],
     };
-    let sandbox = Sandbox::new(
-        Policy::from_set(&capabilities, &paths),
-        &config.security.sandbox,
-    )
-    .map_err(|e| e.message().to_owned())?;
+    // Its network goes through an egress proxy under the profile's egress
+    // policy (spec: security-boundaries, Egress enforcement for child
+    // processes).
+    let hosts = Arc::new(crate::egress::host_policy(
+        &config.security.egress,
+        &crate::egress::Overrides::default(),
+    ));
+    let requester = format!("mcp:{name}");
+    let observer = crate::egress::observer(scope, None, None);
+    let proxy = crate::egress::child_proxy(scope, &capabilities, hosts, &requester, observer)
+        .map_err(|e| e.message().to_owned())?;
+    let mut policy = Policy::from_set(&capabilities, &paths);
+    if let Some(proxy) = &proxy {
+        policy = policy.through_proxy(proxy.addr().port());
+    }
+    let sandbox =
+        Sandbox::new(policy, &config.security.sandbox).map_err(|e| e.message().to_owned())?;
     let mut command = sandbox
         .command(program.as_deref().unwrap_or(Path::new(&command_text)))
         .map_err(|e| e.message().to_owned())?;
@@ -89,10 +111,18 @@ fn stdio(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<L
         }
     }
     command.env("TMPDIR", &scratch);
+    if let Some(proxy) = &proxy {
+        for var in pmt_net::egress::PROXY_VARS {
+            command.env(var, proxy.url());
+        }
+    }
+    *proxy_slot.lock().unwrap_or_else(PoisonError::into_inner) = proxy;
     for (key, value) in &server.env {
         command.env(key, fill(value)?);
     }
+    let only = pmt_config::secrets::surface::SurfaceOnly::of(config);
     for secret in &server.env_secrets {
+        only.check(secret).map_err(|e| e.message().to_owned())?;
         let value = scope
             .secrets()
             .resolve(secret)
@@ -170,6 +200,9 @@ fn http(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<La
         Some(McpAuth::Oauth) => Some(super::oauth::bearer(scope, name, server)?),
         _ if server.auth_secret.is_empty() => None,
         _ => {
+            pmt_config::secrets::surface::SurfaceOnly::of(scope.config())
+                .check(&server.auth_secret)
+                .map_err(|e| e.message().to_owned())?;
             let token = scope
                 .secrets()
                 .resolve(&server.auth_secret)

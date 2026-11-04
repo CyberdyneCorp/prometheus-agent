@@ -152,6 +152,8 @@ pub fn run(record: &DaemonRecord, scope: &ProfileScope, start: &Start<'_>) -> Re
         };
         let status = match open_session(&mut attached, start).await? {
             Opened::Session(session) => {
+                crate::egress::send(&attached.client, &session, &start.args.egress_overrides())
+                    .await?;
                 attached.session = session;
                 match start.mode {
                     Mode::OneShot => oneshot::run(&mut attached, start).await,

@@ -389,6 +389,7 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
 /// Loads when some plugin is to be instantiated; otherwise reports the
 /// survey without starting the WASM engine.
 fn load_now(scope: &ProfileScope, inputs: &LoadInputs<'_>, statuses: Vec<Status>) -> Loaded {
+    audit_tampered(scope, &statuses);
     let settings = hook_settings(scope);
     let wasm = |s: &Status| {
         s.state == State::Loaded && s.kind != Some(pmt_plugins::manifest::Kind::Python)
@@ -412,6 +413,21 @@ fn load_now(scope: &ProfileScope, inputs: &LoadInputs<'_>, statuses: Vec<Status>
         tracing::warn!("shell hooks not registered: the hook set is already shared");
     }
     loaded
+}
+
+/// Records each plugin refused because its files changed after install in
+/// the profile's security audit log.
+fn audit_tampered(scope: &ProfileScope, statuses: &[Status]) {
+    use pmt_core::audit::{AuditLog, Event, Kind};
+    let marker = pmt_plugins::load::MODIFIED_AFTER_INSTALL;
+    for status in statuses {
+        if let Some(problem) = status.problem.as_deref().filter(|p| p.ends_with(marker)) {
+            AuditLog::of(scope.dir()).record(
+                &Event::new(Kind::Signature, format!("plugin {}", status.id), "refused")
+                    .with_detail(problem.to_owned()),
+            );
+        }
+    }
 }
 
 /// The statuses of a load the WASM engine could not run: every plugin
@@ -490,5 +506,6 @@ pub fn inputs<'a>(
         embedded: &[],
         running: version,
         blocked,
+        profile_config: Some(scope.config()),
     }
 }

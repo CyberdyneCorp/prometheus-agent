@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use pmt_config::grants::SessionGrants;
 use pmt_config::schema::{ApprovalMode, ApprovalsConfig, UnattendedApproval};
+use pmt_core::audit::{AuditLog, Event, Kind};
 use pmt_core::capability::Capability;
 use pmt_core::human::{Channel, Unanswered};
 use serde::Serialize;
@@ -89,6 +90,8 @@ pub struct CommandGate {
     yolo: AtomicBool,
     session: Mutex<Vec<String>>,
     unobtainable: AtomicU32,
+    /// Where decisions are recorded, with the session id.
+    audit: Option<(AuditLog, String)>,
 }
 
 impl CommandGate {
@@ -102,7 +105,16 @@ impl CommandGate {
             yolo,
             session: Mutex::new(Vec::new()),
             unobtainable: AtomicU32::new(0),
+            audit: None,
         }
+    }
+
+    /// Records every decision of this gate in the profile's security audit
+    /// log under `session`.
+    #[must_use]
+    pub fn with_audit(mut self, log: AuditLog, session: impl Into<String>) -> Self {
+        self.audit = Some((log, session.into()));
+        self
     }
 
     /// How many calls this gate denied because they needed an approval
@@ -272,12 +284,31 @@ impl CommandGate {
     /// The decision step, with the plugin observers around it.
     async fn decide(&self, request: ApprovalRequest) -> GateVerdict {
         let Some(hooks) = self.setup.hooks.clone() else {
-            return self.decide_with(request, None).await.0;
+            let (verdict, choice, by) = self.decide_with(request.clone(), None).await;
+            self.audit(&request, choice, by);
+            return verdict;
         };
         hooks.before(&request).await;
         let (verdict, choice, by) = self.decide_with(request.clone(), Some(&*hooks)).await;
+        self.audit(&request, choice, by);
         hooks.after(&request, choice, by).await;
         verdict
+    }
+
+    /// Appends one decision to the audit log, when the gate has one.
+    fn audit(&self, request: &ApprovalRequest, choice: &str, by: &str) {
+        let Some((log, session)) = &self.audit else {
+            return;
+        };
+        let subject = request
+            .subject
+            .clone()
+            .unwrap_or_else(|| request.tool.clone());
+        log.record(
+            &Event::new(Kind::Approval, subject, choice)
+                .in_session(session.clone())
+                .with_detail(format!("by {by}: {}", request.summary())),
+        );
     }
 
     /// The selected plugin transport when there is one, otherwise the

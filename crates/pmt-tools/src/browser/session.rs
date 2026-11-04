@@ -286,7 +286,9 @@ impl BrowserManager {
                 old.terminate().await;
             }
         }
-        let session = Arc::new(self.create(wanted).await?);
+        let mut created = self.create(wanted).await?;
+        created.safety.session = Some(key.to_owned());
+        let session = Arc::new(created);
         sessions.insert(key.to_owned(), Arc::clone(&session));
         drop(sessions);
         self.start_reaper();

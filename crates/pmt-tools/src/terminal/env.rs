@@ -168,6 +168,13 @@ impl ChildEnv {
         }
     }
 
+    /// Points the child's HTTP clients at the egress proxy at `url`.
+    pub fn set_proxy(&mut self, url: &str) {
+        for name in pmt_net::egress::PROXY_VARS {
+            self.set(name, url);
+        }
+    }
+
     /// Sets one variable (replacing a case-variant on Windows).
     pub fn set(&mut self, name: &str, value: impl AsRef<OsStr>) {
         if cfg!(windows) {

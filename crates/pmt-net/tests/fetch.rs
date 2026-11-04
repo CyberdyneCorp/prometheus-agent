@@ -349,3 +349,45 @@ async fn os_store_child() {
     let response = fetch_corp(port, None).await.unwrap();
     assert_eq!(response.text().await.unwrap(), "hello");
 }
+
+/// Per-session network egress policy: an `allowlist` session's in-process
+/// fetches reach only allowed hosts; every refusal is reported with host,
+/// port and requester, and a mid-session `/egress allow` applies at once.
+#[tokio::test]
+async fn an_allowlist_session_fetches_only_allowed_hosts() {
+    use pmt_net::egress::{Allowed, Denial, HostPolicy, Mode, Observer, Reason};
+    let (port, seen) = serve(routes).await;
+    let hosts = Arc::new(HostPolicy::new(
+        Mode::Allowlist,
+        vec![Allowed::parse("corp.test")],
+    ));
+    let denials: Arc<Mutex<Vec<Denial>>> = Arc::default();
+    let sink = Arc::clone(&denials);
+    let observer: Observer = Arc::new(move |d| sink.lock().unwrap().push(d));
+    let fetch =
+        fetcher(public_loopback()).with_hosts(Arc::clone(&hosts), "web_extract", Some(observer));
+
+    let err = blocked(fetch.get(&format!("http://public.test:{port}/ok")).await);
+    assert!(err.message().contains("egress policy"), "{err}");
+    assert!(
+        fetch
+            .get(&format!("http://corp.test:{port}/ok"))
+            .await
+            .is_ok()
+    );
+    hosts.allow(Allowed::parse("public.test"));
+    assert!(
+        fetch
+            .get(&format!("http://public.test:{port}/ok"))
+            .await
+            .is_ok()
+    );
+
+    assert_eq!(*seen.lock().unwrap(), ["/ok", "/ok"]);
+    let denials = denials.lock().unwrap();
+    assert_eq!(denials.len(), 1);
+    assert_eq!(denials[0].host, "public.test");
+    assert_eq!(denials[0].port, port);
+    assert_eq!(denials[0].requester, "web_extract");
+    assert_eq!(denials[0].reason, Reason::NotAllowlisted);
+}

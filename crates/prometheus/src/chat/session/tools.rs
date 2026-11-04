@@ -56,6 +56,8 @@ pub struct GateInputs<'a> {
     pub yolo: bool,
     /// Plugin approval observers and transport.
     pub hooks: Option<Arc<dyn pmt_tools::approval::hooks::ApprovalHooks>>,
+    /// The session id (its decisions go to the security audit log).
+    pub session_id: String,
 }
 
 /// The approval gate: prompts go to the person on an interactive
@@ -87,7 +89,11 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         channel,
         yolo: inputs.yolo,
         hooks: inputs.hooks.clone(),
-    });
+    })
+    .with_audit(
+        pmt_core::audit::AuditLog::of(inputs.scope.dir()),
+        inputs.session_id.clone(),
+    );
     Ok(Gate {
         gate: Arc::new(gate),
         prompts,

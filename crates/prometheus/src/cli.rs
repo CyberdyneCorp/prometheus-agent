@@ -132,6 +132,12 @@ pub enum Command {
         #[command(subcommand)]
         command: GrantsCommand,
     },
+    /// Security records of the profile: verify the tamper-evident audit log.
+    Security {
+        /// The security subcommand.
+        #[command(subcommand)]
+        command: SecurityCommand,
+    },
     /// Back up the whole home to a .tar.zst archive, or restore one.
     Backup {
         /// The backup subcommand.
@@ -650,6 +656,24 @@ pub enum GrantsCommand {
         /// The grant id (`grant_<ULID>`) shown by `grants list`.
         id: String,
     },
+}
+
+/// `prometheus security` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SecurityCommand {
+    /// The security audit log (`<profile>/logs/security-audit.jsonl`).
+    Audit {
+        /// The audit subcommand.
+        #[command(subcommand)]
+        command: AuditCommand,
+    },
+}
+
+/// `prometheus security audit` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum AuditCommand {
+    /// Check the hash chain; exit 1 naming the first record that was edited, inserted or removed.
+    Verify,
 }
 
 /// `prometheus secrets` subcommands.

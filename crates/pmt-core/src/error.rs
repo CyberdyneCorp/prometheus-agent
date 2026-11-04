@@ -254,6 +254,9 @@ error_codes! {
     /// Revealing a secret was refused because stdout is not a terminal.
     SECRET_REVEAL_REFUSED = ("secret.reveal_refused", PermissionDenied,
         "`prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file.");
+    /// A secret owned by a surface was requested by a tool, child, skill or plugin.
+    SECRET_SURFACE_ONLY = ("secret.surface_only", PermissionDenied,
+        "The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own.");
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");

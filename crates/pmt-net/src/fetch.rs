@@ -19,6 +19,7 @@ use pmt_core::error::{Error, codes};
 use reqwest::{Response, Url, header, redirect};
 
 use crate::destination::{DestinationPolicy, Refusal};
+use crate::egress::{Denial, HostPolicy, Observer};
 use crate::http::{OutboundPolicy, base_builder, build};
 use crate::resolve::{Lookup, OutboundResolver, SystemLookup};
 
@@ -31,6 +32,14 @@ pub struct Fetcher {
     client: reqwest::Client,
     resolver: OutboundResolver,
     policy: Arc<DestinationPolicy>,
+    hosts: Option<SessionHosts>,
+}
+
+/// The session egress policy a fetcher also obeys.
+struct SessionHosts {
+    hosts: Arc<HostPolicy>,
+    requester: String,
+    observer: Option<Observer>,
 }
 
 impl Fetcher {
@@ -65,7 +74,25 @@ impl Fetcher {
             client,
             resolver,
             policy,
+            hosts: None,
         })
+    }
+
+    /// Also refusing what the session's egress policy refuses, reporting
+    /// each refusal of `requester` to `observer`.
+    #[must_use]
+    pub fn with_hosts(
+        mut self,
+        hosts: Arc<HostPolicy>,
+        requester: &str,
+        observer: Option<Observer>,
+    ) -> Self {
+        self.hosts = Some(SessionHosts {
+            hosts,
+            requester: requester.to_owned(),
+            observer,
+        });
+        self
     }
 
     /// GETs `url`, following redirects through the destination checks.
@@ -115,6 +142,7 @@ impl Fetcher {
     async fn preflight(&self, url: &Url) -> Result<(), Error> {
         let host = url.host_str().unwrap_or_default();
         let port = url.port_or_known_default();
+        self.check_session(host, port.unwrap_or_default())?;
         let literal = host.trim_start_matches('[').trim_end_matches(']');
         if let Ok(ip) = literal.parse::<IpAddr>() {
             return Ok(self.policy.check_addr(None, ip, port)?);
@@ -130,6 +158,35 @@ impl Fetcher {
             self.policy.check_addr(Some(host), ip, port)?;
         }
         Ok(())
+    }
+}
+
+impl Fetcher {
+    /// The session egress check of one hop.
+    fn check_session(&self, host: &str, port: u16) -> Result<(), Error> {
+        let Some(session) = &self.hosts else {
+            return Ok(());
+        };
+        let bare = host.trim_start_matches('[').trim_end_matches(']');
+        let Err(reason) = session.hosts.check(bare, port) else {
+            return Ok(());
+        };
+        if let Some(observer) = &session.observer {
+            observer(Denial {
+                host: bare.to_owned(),
+                port,
+                requester: session.requester.clone(),
+                reason,
+            });
+        }
+        Err(Error::new(
+            &codes::NET_DESTINATION_BLOCKED,
+            format!(
+                "destination {bare} is refused by the session's egress policy ({})",
+                reason.as_str()
+            ),
+        )
+        .with_hint("/egress status shows the policy; /egress allow <host> admits a host"))
     }
 }
 

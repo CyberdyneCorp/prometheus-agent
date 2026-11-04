@@ -10,10 +10,11 @@
 //! revocation applies to the next host call.
 
 use pmt_config::grants::{Grant, Grants, GrantsFile, LiveGrants, Subject};
+use pmt_config::secrets::surface::SurfaceOnly;
 use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_core::error::{Error, codes};
 
-use crate::manifest::label;
+use crate::manifest::{Manifest, label};
 
 /// A plugin's identity: its id and content digest.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -89,6 +90,55 @@ impl Approval {
             )),
         }
     }
+}
+
+/// Whether `manifest` may hold surface-only secret `name`: only a
+/// platform-adapter plugin, and only a secret of a plugin platform (a
+/// first-party surface's credentials are read by host code alone).
+fn may_hold(manifest: &Manifest, only: &SurfaceOnly, name: &str) -> bool {
+    !only.contains(name)
+        || (only.plugin_owner(name).is_some()
+            && manifest
+                .worlds
+                .iter()
+                .any(|(world, _)| world.name == "platform-adapter"))
+}
+
+/// Refuses `capabilities` when one reads a surface-only secret `manifest`
+/// may not hold (spec: security-boundaries, Gateway-owned secrets are
+/// never delegable).
+///
+/// # Errors
+///
+/// `secret.surface_only`: `secret '<NAME>' is surface-only`.
+pub fn check_surface_only(
+    manifest: &Manifest,
+    only: &SurfaceOnly,
+    capabilities: &CapabilitySet,
+) -> Result<(), Error> {
+    for capability in capabilities {
+        if let Capability::SecretsRead(name) = capability
+            && !may_hold(manifest, only, name)
+        {
+            return Err(pmt_config::secrets::surface::refusal(name));
+        }
+    }
+    Ok(())
+}
+
+/// `capabilities` without the surface-only secrets `manifest` may not
+/// hold: what a plugin runs with even when an older approval named one.
+#[must_use]
+pub fn withhold_surface_only(
+    manifest: &Manifest,
+    only: &SurfaceOnly,
+    capabilities: &CapabilitySet,
+) -> CapabilitySet {
+    capabilities
+        .iter()
+        .filter(|c| !matches!(c, Capability::SecretsRead(name) if !may_hold(manifest, only, name)))
+        .cloned()
+        .collect()
 }
 
 /// Records the approval of `capabilities` for `identity`.
@@ -181,6 +231,12 @@ impl PluginGrants {
             requested,
             live: LiveGrants::new(file),
         }
+    }
+
+    /// Whose grants these are (`plugin:<id>@<digest>`).
+    #[must_use]
+    pub fn subject(&self) -> &Subject {
+        &self.subject
     }
 
     /// Granted and requested now (an unreadable file grants nothing).

@@ -396,6 +396,23 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "egress",
+        &[],
+        Tools,
+        "Show or change this session's network egress (status | allow <host> | deny <host> | mode <public|allowlist|none>)",
+        &[
+            arg(
+                "action",
+                ArgKind::Choice(&["status", "allow", "deny", "mode"]),
+                false,
+            ),
+            text("value"),
+        ],
+        CHATS,
+        Immediate,
+        Effect::Immediate,
+    ),
+    command(
         "reload-secrets",
         &["reload_secrets"],
         Config,

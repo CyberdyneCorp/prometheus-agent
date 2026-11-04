@@ -450,3 +450,34 @@ fn slug_collisions_follow_precedence() {
     assert_eq!(table.commands.len(), 1);
     assert!(table.commands.contains_key("deploy-app"));
 }
+
+const BOT: &str = "---\nname: bot-helper\ndescription: Drives the bot.\nmetadata:\n  prometheus:\n    secrets:\n      - name: TELEGRAM_BOT_TOKEN\n---\nUse the bot.\n";
+
+/// Scenario: Skill requests the bot token. A skill declaring a surface's
+/// credential is unavailable: listed nowhere, refused on view naming the
+/// secret, and the token never reaches the terminal.
+#[tokio::test]
+async fn a_skill_declaring_a_bot_token_is_unavailable() {
+    let profile = Profile::new("");
+    write(&profile.skills(), "bot-helper/SKILL.md", BOT);
+    let session = Session::open(&profile).await;
+    let listed = session.json("skills_list", json!({})).await;
+    assert_eq!(listed["count"], 0, "{listed}");
+    assert!(
+        !session
+            .skills
+            .index_text()
+            .unwrap_or_default()
+            .contains("bot-helper")
+    );
+    let result = session
+        .call("skill_view", json!({"name": "bot-helper"}))
+        .await;
+    assert!(!result.status.succeeded());
+    let text = result.text_content();
+    assert!(
+        text.contains("secret 'TELEGRAM_BOT_TOKEN' is surface-only"),
+        "{text}"
+    );
+    assert!(session.skills.secret_source()().is_empty());
+}

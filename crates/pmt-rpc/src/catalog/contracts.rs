@@ -77,8 +77,10 @@ macro_rules! event {
 }
 
 mod messaging;
+mod security;
 mod tui;
 pub use messaging::*;
+pub use security::*;
 pub use tui::*;
 
 /// A `<major>.<minor>` protocol version on the wire.

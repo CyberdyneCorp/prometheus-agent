@@ -296,10 +296,52 @@ impl DegradedFeature {
     }
 }
 
+/// `security.egress.mode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EgressMode {
+    /// Any public address; private and metadata ranges denied.
+    #[default]
+    Public,
+    /// Only hosts named by `security.egress.allow` (or a session grant).
+    Allowlist,
+    /// No outbound connections.
+    None,
+}
+
+impl EgressMode {
+    /// Every mode, in documentation order.
+    pub const ALL: [Self; 3] = [Self::Public, Self::Allowlist, Self::None];
+
+    /// The configuration spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Allowlist => "allowlist",
+            Self::None => "none",
+        }
+    }
+
+    /// Parses a configuration spelling.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.as_str() == text)
+    }
+}
+
 /// The `[security.egress]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct EgressConfig {
+    /// Which hosts tools, sandboxed children, plugins and browsers may
+    /// reach: any public address (`public`), only the `allow` patterns
+    /// (`allowlist`) or nothing (`none`). A session can narrow or extend
+    /// it (`chat --egress`, `/egress`, `egress.set`).
+    pub mode: EgressMode,
+    /// Host patterns `allowlist` admits: `host`, `host:port` or
+    /// `*.suffix` (subdomains of `suffix`).
+    pub allow: Vec<String>,
     /// Allow private destinations without a session grant.
     pub allow_private: bool,
     /// CIDR ranges a local TUN proxy answers with (treated as public).

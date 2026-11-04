@@ -285,7 +285,11 @@ fn changed(command: &PluginsCommand) -> Change<'_> {
 
 fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
-        PluginsCommand::Install(args) => install::install(ctx, args),
+        PluginsCommand::Install(args) => crate::security_cmd::audit_signature(
+            ctx,
+            &format!("plugin {}", args.identifier),
+            install::install(ctx, args),
+        ),
         PluginsCommand::Search { query } => catalog_cmd::search(ctx, Some(query)),
         PluginsCommand::Browse => catalog_cmd::search(ctx, None),
         PluginsCommand::Show { id } => catalog_cmd::show(ctx, id),

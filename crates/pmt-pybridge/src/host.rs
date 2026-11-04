@@ -105,7 +105,10 @@ impl BridgeHost {
         if self.allows(capability) {
             return Ok(());
         }
-        let text = format!("capability_denied: {label}");
+        // `capability not granted: <capability>` is the security
+        // boundary's wording (the call fails, the plugin gains nothing);
+        // `capability_denied: <label>` is the plugin API's.
+        let text = format!("capability not granted: {capability} (capability_denied: {label})");
         self.log.note(&text);
         Err(HostFault::new("capability_denied", text))
     }
@@ -232,8 +235,9 @@ impl BridgeHost {
             target: None,
         };
         if !self.allows(&right) {
-            self.log
-                .note("message injection refused: capability_denied: inject_messages");
+            self.log.note(&format!(
+                "message injection refused: capability not granted: {right} (capability_denied: inject_messages)"
+            ));
             return Ok(json!(false));
         }
         let content = args["content"].as_str().unwrap_or("").to_owned();

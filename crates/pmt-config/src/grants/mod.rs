@@ -28,6 +28,7 @@ mod subject;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use pmt_core::audit::{AuditLog, Event, Kind};
 use pmt_core::capability::{BASELINE, Capability, CapabilitySet};
 use pmt_core::error::{Error, codes};
 use pmt_core::id::GrantId;
@@ -206,6 +207,27 @@ impl GrantsFile {
             grants.grants.extend(added.iter().cloned());
             added
         })
+        .inspect(|added| {
+            for grant in added {
+                self.audit(
+                    &grant.capability.to_string(),
+                    "added",
+                    &grant.subject,
+                    surface,
+                );
+            }
+        })
+    }
+
+    /// Records a grant change in the profile's security audit log.
+    fn audit(&self, subject: &str, decision: &str, holder: &impl std::fmt::Display, surface: &str) {
+        let Some(profile) = self.path.parent() else {
+            return;
+        };
+        AuditLog::of(profile).record(
+            &Event::new(Kind::Grant, subject, decision)
+                .with_detail(format!("{holder} on {surface}")),
+        );
     }
 
     /// Removes grant `id` and returns it.
@@ -218,6 +240,14 @@ impl GrantsFile {
             let index = grants.grants.iter().position(|g| g.id == id)?;
             Some(grants.grants.remove(index))
         })?
+        .inspect(|grant| {
+            self.audit(
+                &grant.capability.to_string(),
+                "revoked",
+                &grant.subject,
+                "cli",
+            );
+        })
         .ok_or_else(|| {
             Error::new(&codes::GRANTS_NOT_FOUND, format!("no grant with id '{id}'"))
                 .with_hint("list the grants with `prometheus grants list`")
@@ -230,6 +260,12 @@ impl GrantsFile {
     ///
     /// As [`GrantsFile::add`].
     pub fn consent(&self, consent: HookConsent) -> Result<(), Error> {
+        let what = format!(
+            "hook {:?} {}",
+            consent.kind,
+            consent.event.as_deref().unwrap_or("-")
+        );
+        let holder = consent.subject.clone();
         self.update(|grants| {
             grants.hooks.retain(|c| {
                 !(c.kind == consent.kind
@@ -238,6 +274,7 @@ impl GrantsFile {
             });
             grants.hooks.push(consent);
         })
+        .inspect(|()| self.audit(&what, "consented", &holder, "prompt"))
     }
 
     /// Removes the hook approvals `matching` selects and returns them.
@@ -271,6 +308,11 @@ impl GrantsFile {
                 grants.allow.push(pattern.to_owned());
             }
             new
+        })
+        .inspect(|new| {
+            if *new {
+                self.audit(pattern, "allowed always", &"approvals", "approval");
+            }
         })
     }
 

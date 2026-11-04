@@ -86,6 +86,8 @@ pub struct Policy {
     pub(crate) connect: Ports,
     pub(crate) bind: Ports,
     pub(crate) host_patterns: bool,
+    /// Outbound connections only to loopback (the egress proxy).
+    pub(crate) loopback_connect: bool,
     pub(crate) spawn: bool,
     pub(crate) unrepresentable: Vec<String>,
     pub(crate) limits: Option<ResourceLimits>,
@@ -115,6 +117,7 @@ impl Policy {
             connect: Ports::none(),
             bind: Ports::none(),
             host_patterns: false,
+            loopback_connect: false,
             spawn: false,
             unrepresentable: Vec::new(),
             limits: None,
@@ -218,6 +221,33 @@ impl Policy {
     #[must_use]
     pub fn has_host_patterns(&self) -> bool {
         self.host_patterns
+    }
+
+    /// Routes the child's network through the loopback egress proxy on
+    /// `port`: when the child may connect anywhere at all, it may connect
+    /// only to that port (on loopback where the OS can express it) and
+    /// the proxy enforces the host policy. A child without network stays
+    /// without.
+    #[must_use]
+    pub fn through_proxy(mut self, port: u16) -> Self {
+        if self.connects() {
+            self.connect = Ports::Only(std::iter::once(port).collect());
+            self.host_patterns = false;
+            self.loopback_connect = true;
+        }
+        self
+    }
+
+    /// Whether the child may open any outbound connection.
+    #[must_use]
+    pub fn connects(&self) -> bool {
+        !matches!(&self.connect, Ports::Only(ports) if ports.is_empty())
+    }
+
+    /// Whether outbound connections are confined to loopback.
+    #[must_use]
+    pub fn loopback_connect(&self) -> bool {
+        self.loopback_connect
     }
 
     /// Whether the child may start further processes.

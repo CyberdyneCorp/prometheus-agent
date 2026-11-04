@@ -205,6 +205,12 @@ text = "refused"
     let log =
         std::fs::read_to_string(home.path().join("profiles/default/logs/bridge/echo.log")).unwrap();
     assert!(log.contains("capability_denied: inject_messages"), "{log}");
+    // Plugin and sidecar isolation: the call fails without ambient
+    // authority, naming the capability.
+    assert!(
+        log.contains("capability not granted: plugin.inject_messages"),
+        "{log}"
+    );
 }
 
 #[test]

@@ -47,6 +47,7 @@ use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
 use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
 
+use self::env::Denials;
 use self::model::{Models, RouteFlags, SwitchableModel};
 use self::tool_state::{Registries, ToolState};
 use self::tools::{GateInputs, SurfaceInputsOwned, SwappableTools};
@@ -77,6 +78,8 @@ pub struct Options {
     /// `--ignore-rules`: no rule files, identity file, memory snapshot or
     /// preloaded skills (recorded on the session).
     pub ignore_rules: bool,
+    /// `--egress` and `--allow-host`.
+    pub egress: crate::egress::Overrides,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -187,6 +190,8 @@ pub struct Live {
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
     browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
+    /// The session's egress policy (`/egress`, `egress.set`).
+    pub egress: crate::egress::Running,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -462,13 +467,12 @@ impl Factory {
             prompt,
         );
         let events = events_to(trajectory.clone(), clients.map(|c| c.events));
+        let _ = environment.denials.set(Arc::downgrade(&events));
         let (tee, progress) = progress::Tee::new(events, interactive);
         model.watch_credentials(borrowed_watch(tee.notices()));
         let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
         setup.events = Arc::new(tee);
-        setup.summarizer = Some(summarizer as _);
-        setup.memory = Some(Arc::clone(&memory) as _);
-        setup.refresh_prompt = Some(self.refresher(&skills, &memory, &plugin_sections));
+        self.memory_and_refresh(&mut setup, summarizer, &skills, &memory, &plugin_sections);
         setup.compaction_boundary = Some(Arc::clone(&tool_state) as _);
         self.surface_setup(&mut setup, id);
         let agent = Agent::new(setup)?;
@@ -499,6 +503,7 @@ impl Factory {
             capabilities,
             trajectory,
             browser: environment.browser,
+            egress: environment.egress,
             _environment: environment.attachment,
             _skills: attached,
         };
@@ -562,7 +567,43 @@ impl Factory {
             interactive: self.options.interactive,
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
+            session_id: id.to_string(),
         })
+    }
+
+    /// The egress policy of session `id`: the profile's, with the chat
+    /// flags; refusals go to the audit log and, once the session's event
+    /// sink is set in `events`, to its trajectory and clients.
+    fn egress(&self, id: SessionId, events: &Denials) -> crate::egress::SessionEgress {
+        let hosts = Arc::new(crate::egress::host_policy(
+            &self.scope.config().security.egress,
+            &self.options.egress,
+        ));
+        let events = Arc::clone(events);
+        let runtime = tokio::runtime::Handle::current();
+        let emit: Arc<dyn Fn(&pmt_net::egress::Denial) + Send + Sync> = Arc::new(move |denial| {
+            let Some(sink) = events.get().and_then(std::sync::Weak::upgrade) else {
+                return;
+            };
+            let event = pmt_obs::trajectory::events::Event::EgressDenied(
+                pmt_obs::trajectory::payload::EgressDenied {
+                    host: denial.host.clone(),
+                    port: denial.port,
+                    requester: denial.requester.clone(),
+                    reason: denial.reason.as_str().to_owned(),
+                },
+            );
+            runtime.spawn(async move {
+                let emit = pmt_obs::trajectory::writer::Emit::now(event);
+                if let Err(err) = sink.emit(emit).await {
+                    tracing::debug!(error = %err, "egress.denied event not recorded");
+                }
+            });
+        });
+        crate::egress::SessionEgress {
+            hosts,
+            observer: crate::egress::observer(&self.scope, Some(id.to_string()), Some(emit)),
+        }
     }
 
     /// The trajectory writer of `session`, when trajectories are on.
@@ -589,6 +630,7 @@ impl Factory {
         skills: &Arc<SkillsSession>,
         clients: Option<&Clients>,
     ) -> Result<env::Attached, Error> {
+        let denials = env::Denials::default();
         let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
@@ -602,6 +644,8 @@ impl Factory {
             completions: clients.and_then(|c| c.completions.clone()),
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
+            egress: &self.egress(id, &denials),
+            denials: &denials,
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -781,14 +825,24 @@ impl Factory {
         (prompt, sections)
     }
 
-    /// The session's prompt refresher.
-    fn refresher(
+    /// Sets the session's summarizer, memory and prompt refresher on
+    /// `setup`.
+    fn memory_and_refresh(
         &self,
+        setup: &mut AgentSetup,
+        summarizer: Arc<summarize::RouteSummarizer>,
         skills: &Arc<SkillsSession>,
         memory: &Arc<MemorySession>,
         sections: &Arc<Mutex<Vec<String>>>,
-    ) -> RefreshPrompt {
-        refresher(skills, memory, sections, self.options.ignore_rules)
+    ) {
+        setup.summarizer = Some(summarizer as _);
+        setup.memory = Some(Arc::clone(memory) as _);
+        setup.refresh_prompt = Some(refresher(
+            skills,
+            memory,
+            sections,
+            self.options.ignore_rules,
+        ));
     }
 
     async fn prompt_setup(

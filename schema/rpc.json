@@ -901,6 +901,74 @@
         }
       ]
     },
+    "EgressSetParams": {
+      "additionalProperties": false,
+      "description": "`egress.set` params: changes applied in order (mode, then allow, then\ndeny); an empty change only reads the policy.",
+      "properties": {
+        "allow": {
+          "default": [],
+          "description": "Host patterns to admit (`host`, `host:port`, `*.suffix`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny": {
+          "default": [],
+          "description": "Host patterns to refuse in every mode.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "default": null,
+          "description": "`public`, `allowlist` or `none`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "EgressState": {
+      "additionalProperties": false,
+      "description": "`egress.set` result: the session's policy after the change.",
+      "properties": {
+        "allow": {
+          "description": "Admitted patterns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny": {
+          "description": "Refused patterns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "description": "The mode.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "allow",
+        "deny"
+      ],
+      "type": "object"
+    },
     "Empty": {
       "additionalProperties": false,
       "description": "No params.",
@@ -2342,8 +2410,13 @@
       "since": "1.0"
     },
     "egress.set": {
-      "declared": false,
       "owner": "security-boundaries",
+      "params": {
+        "$ref": "#/$defs/EgressSetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EgressState"
+      },
       "since": "1.0"
     },
     "evolve.cancel": {

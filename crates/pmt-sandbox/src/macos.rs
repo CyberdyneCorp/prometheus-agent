@@ -189,8 +189,16 @@ fn network(policy: &Policy, sbpl: &mut String) {
     match policy.connect() {
         Ports::All => sbpl.push_str("(allow network-outbound (remote ip))\n"),
         Ports::Only(ports) => {
+            let host = if policy.loopback_connect() {
+                "localhost"
+            } else {
+                "*"
+            };
             for port in ports {
-                let _ = writeln!(sbpl, "(allow network-outbound (remote tcp \"*:{port}\"))");
+                let _ = writeln!(
+                    sbpl,
+                    "(allow network-outbound (remote tcp \"{host}:{port}\"))"
+                );
             }
         }
     }

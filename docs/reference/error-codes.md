@@ -83,6 +83,7 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `secret.keychain_unavailable` | `unavailable` | 69 | `secrets.backend = "keychain"` is configured but no OS keychain is reachable (no Secret Service on Linux, locked keychain); use the `file` backend. |
 | `secret.managed` | `permission_denied` | 77 | The secret comes from the administrator-managed `managed-secrets.toml`, which takes precedence over every profile store and the environment; it cannot be set or unset per profile. |
 | `secret.reveal_refused` | `permission_denied` | 77 | `prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file. |
+| `secret.surface_only` | `permission_denied` | 77 | The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own. |
 | `profile.reserved` | `usage` | 2 | A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`). |
 | `profile.exists` | `usage` | 2 | `prometheus profile create` or `rename` names a profile that already exists. |
 | `profile.protected` | `usage` | 2 | The `default` profile cannot be deleted or renamed. |

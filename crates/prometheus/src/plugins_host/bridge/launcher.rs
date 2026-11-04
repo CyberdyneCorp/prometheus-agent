@@ -19,7 +19,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 use pmt_config::ProfileScope;
 use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_core::error::Error;
-use pmt_net::DestinationPolicy;
 use pmt_net::destination::PrivateGrant;
 use pmt_net::egress::{Allowed, Proxy, Rules};
 use pmt_plugins::grants::PluginGrants;
@@ -97,7 +96,9 @@ impl Sandboxed {
         Ok(set)
     }
 
-    /// An egress proxy for the granted hosts, when there are any.
+    /// An egress proxy for the granted hosts, when there are any: it
+    /// admits a host the plugin's grants and the profile's egress policy
+    /// both name.
     fn proxy(&self, granted: &CapabilitySet) -> Result<Option<Proxy>, Error> {
         let mut allowed = Vec::new();
         for capability in granted {
@@ -112,23 +113,30 @@ impl Sandboxed {
             return Ok(None);
         }
         let egress = &self.scope.config().security.egress;
-        let mut policy = DestinationPolicy::new(egress.allow_private, &egress.fake_ip_ranges)?;
+        let mut policy = crate::egress::destinations(egress)?;
         for entry in &allowed {
-            let text = entry
-                .port
-                .map_or_else(|| entry.host.clone(), |p| format!("{}:{p}", entry.host));
-            if let Ok(grant) = PrivateGrant::parse(&text) {
+            if let Ok(grant) = PrivateGrant::parse(&entry.to_string()) {
                 policy = policy.with_grant(grant);
             }
         }
-        Proxy::start(Rules { allowed, policy })
-            .map(Some)
-            .map_err(|e| {
-                Error::new(
-                    &pmt_core::error::codes::BRIDGE_CALL,
-                    format!("egress proxy did not start: {e}"),
-                )
-            })
+        let hosts = Arc::new(crate::egress::host_policy(
+            egress,
+            &crate::egress::Overrides::default(),
+        ));
+        let requester = self.grants.subject().to_string();
+        let observer = crate::egress::observer(&self.scope, None, None);
+        Proxy::start(
+            Rules::new(hosts, policy, &requester)
+                .granted(allowed)
+                .observed(observer),
+        )
+        .map(Some)
+        .map_err(|e| {
+            Error::new(
+                &pmt_core::error::codes::BRIDGE_CALL,
+                format!("egress proxy did not start: {e}"),
+            )
+        })
     }
 
     fn secrets(&self, granted: &CapabilitySet) -> Vec<(String, String)> {

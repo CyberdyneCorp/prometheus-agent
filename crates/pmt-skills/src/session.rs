@@ -210,7 +210,7 @@ impl SkillsSession {
         catalog
             .skills
             .iter()
-            .filter(|s| gates::hidden(&config.skills, &self.setup.view, s).is_none())
+            .filter(|s| gates::hidden(config, &self.setup.view, s).is_none())
             .map(AsRef::as_ref)
             .collect()
     }
@@ -316,9 +316,13 @@ impl SkillsSession {
                 return Vec::new();
             };
             let secrets = session.scope().secrets();
+            // A surface's credential never reaches a child, whatever a
+            // skill declares (such a skill is also hidden).
+            let only = pmt_config::secrets::surface::SurfaceOnly::of(session.scope().config());
             session
                 .granted_secrets()
                 .into_iter()
+                .filter(|name| !only.contains(name))
                 .filter_map(|name| secrets.resolve(&name).ok().map(|value| (name, value)))
                 .collect()
         })

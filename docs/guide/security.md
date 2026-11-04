@@ -80,3 +80,76 @@ errors. Setting it to `false` logs a WARN on every start.
 A stored secret is redacted whatever its length, so a very short value
 (`1234`) is replaced everywhere that text appears: keep only real secrets in
 the store.
+
+## Surface-only secrets
+
+The credentials a surface owns are never handed to anything else: the
+messaging bot tokens (`TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`,
+`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `MATRIX_ACCESS_TOKEN`,
+`EMAIL_PASSWORD`, `WHATSAPP_BRIDGE_TOKEN`), the relay credential
+(`PMT_RELAY_TOKEN`) and every secret the gateway configuration names
+(`token_secret`, `proxy_url_secret`, adapter options ending in `_secret`,
+webhook route secrets). A plugin asking for one cannot be approved, an MCP
+server cannot receive one in `env_secrets`, `auth_secret` or a `${NAME}`
+placeholder, and a skill declaring one is unavailable; each refusal says
+`secret '<NAME>' is surface-only`. The one exception is a
+`platform-adapter` plugin reading the credential of a plugin platform it
+serves.
+
+## Network egress
+
+`security.egress.mode` decides where tools, sandboxed children, plugins and
+browsers may connect: `public` (default: any public address; private and
+cloud-metadata ranges refused), `allowlist` (only `security.egress.allow`
+patterns: `host`, `host:port`, `*.suffix`) or `none`. A session can narrow
+or extend it without touching its system prompt or tools:
+
+```text
+$ prometheus chat --egress allowlist --allow-host api.github.com
+> /egress allow pypi.org
+egress: allowlist
+allowed: api.github.com, pypi.org
+denied: none
+```
+
+`/egress deny <host>` refuses a host in every mode and `/egress mode
+<mode>` switches the mode; clients use the `egress.set` RPC method. The
+session's terminal commands, browser interpreter and MCP stdio servers
+reach the network only through a loopback egress proxy: the OS sandbox lets
+them connect to the proxy's port alone (on loopback on macOS), and the
+proxy resolves each name itself, checks every address and connects to the
+address it checked, so DNS rebinding cannot slip past. Plugins' sidecars
+get a proxy that also requires their own `network` grants, and the browser
+tools refuse a navigation to a host the session's policy does not admit. Every refused
+connection becomes an `egress.denied` trajectory event naming the host,
+port, requester and reason, and a record in the security audit log.
+
+## Security audit log
+
+Approval decisions, grant changes, hardening downgrades, egress denials and
+signature failures are appended to `<profile>/logs/security-audit.jsonl`
+(mode 0600). Each record carries its time, session, subject, decision, the
+SHA-256 of the record before it and its own hash, so an edited, inserted or
+removed line breaks the chain:
+
+```console
+$ prometheus security audit verify
+audit log intact: 0 records (<path>)
+```
+
+After a hand edit it names the record:
+
+```text
+audit log broken at line 7: its content does not match its hash (edited) (<path>)
+```
+
+It exits 0 when the chain is intact and 1 naming the first broken line.
+
+## Security posture
+
+`prometheus doctor security` reports the trust boundaries, the sandbox
+enforcement of each feature, active downgrades, the egress mode, redaction,
+unsigned plugins, surfaces that admit everyone or have no allowlist and
+loose file modes. With `--strict` it exits 77 when any of them weakens the
+profile (a downgrade, an unsigned plugin, an open surface), which makes it
+a CI gate.

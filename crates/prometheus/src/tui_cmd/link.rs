@@ -111,6 +111,7 @@ impl Link {
             (create(&link.client, launch).await?, None)
         };
         let attached = resume(&link.client, &session, setup).await?;
+        crate::egress::send(&link.client, &session, &launch.egress).await?;
         link.adopt(session, &attached);
         link.refresh_commands().await;
         Ok((link, notice))

@@ -46,9 +46,13 @@ capabilities = [
   files and browser profile directories. A grant that names a path inside a
   store (for example `fs.read:~/.aws/config`) is honoured.
 - Without `process.spawn`, a child cannot start further processes.
-- The OS filters ports, not host names: a `net.connect:<host>` grant makes
-  `net` `partial` until the egress proxy (M2) filters hosts. UDP sockets are
-  refused only when outbound connections are restricted. `/proc` is not
+- The OS filters ports, not host names, so a session's children reach the
+  network only through its loopback egress proxy: the sandbox admits the
+  proxy's port alone (on macOS only on loopback; on Linux Landlock filters
+  the port, not the address) and the proxy filters hosts (see
+  [Network egress](security.md#network-egress)). A child given its own
+  `net.connect:<host>` grant without the proxy reports `net` `partial`. UDP
+  sockets are refused only when outbound connections are restricted. `/proc` is not
   readable on Linux (other processes' environments hold secrets).
 
 Known limits: on Linux and Windows the sandbox can only grant, so a granted

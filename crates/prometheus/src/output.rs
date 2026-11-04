@@ -64,6 +64,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "grants list",
     },
     JsonShape {
+        schema: "prometheus.security_audit.v1",
+        command: "security audit verify",
+    },
+    JsonShape {
         schema: "prometheus.plugins.v1",
         command: "plugins list",
     },

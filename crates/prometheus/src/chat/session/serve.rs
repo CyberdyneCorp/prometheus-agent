@@ -61,6 +61,8 @@ impl Factory {
         let capabilities = self.capabilities(id, &skills)?;
         let current = SharedScope::new(self.scope.clone());
         let target = pmt_providers::resolve::Target::default();
+        // An `mcp serve` session has no trajectory: refusals go to the
+        // audit log only.
         let environment = self.environment(id, &target, &capabilities, &current, &skills, None)?;
         let gate = self.gate(id)?.gate;
         // No one can answer a prompt: a call that needs approval is denied.

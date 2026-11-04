@@ -10,6 +10,10 @@
 
 use pmt_config::grants::Grants;
 
+/// The end of the refusal of a plugin whose files no longer match their
+/// install record (a signature failure for the security audit log).
+pub const MODIFIED_AFTER_INSTALL: &str = "was modified after install";
+
 use super::{LoadInputs, SAFE_MODE_NOTE, State, Status, identity, requested};
 use crate::discovery::{Discovered, Enablement, Source};
 use crate::grants::Approval;
@@ -104,7 +108,7 @@ fn provenance(plugin: &Discovered, inputs: &LoadInputs<'_>) -> Option<(State, St
     {
         return Some((
             State::Error,
-            format!("plugin '{}' was modified after install", plugin.id),
+            format!("plugin '{}' {MODIFIED_AFTER_INSTALL}", plugin.id),
         ));
     }
     let repo = record

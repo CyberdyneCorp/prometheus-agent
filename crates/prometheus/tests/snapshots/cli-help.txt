@@ -13,6 +13,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
@@ -111,6 +112,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn

@@ -70,6 +70,8 @@ impl DaemonHost {
             source_tag: None,
             ignore_user_config: setup.ignore_user_config,
             ignore_rules: setup.ignore_rules,
+            // A client narrows or extends it with `egress.set`.
+            egress: crate::egress::Overrides::default(),
         };
         let ad_hoc = setup
             .base_url

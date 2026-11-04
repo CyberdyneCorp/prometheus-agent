@@ -14,7 +14,7 @@ use pmt_config::grants::GrantsFile;
 use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_core::error::{Error, codes};
 use pmt_plugins::discovery::Discovered;
-use pmt_plugins::grants::{Approval, Identity, approve, revoke, select};
+use pmt_plugins::grants::{Approval, Identity, revoke, select};
 use pmt_plugins::host::state::StateDir;
 use pmt_plugins::load::{Status, survey};
 use pmt_plugins::manifest::{Manifest, describe, label};
@@ -173,6 +173,29 @@ pub(super) enum Decision {
     Unanswered,
 }
 
+/// Records `capabilities` for `identity` in the profile's grants, refusing
+/// a surface's secret (spec: security-boundaries, Gateway-owned secrets
+/// are never delegable).
+///
+/// # Errors
+///
+/// `secret.surface_only`; `grants.store`.
+pub(super) fn approve(
+    scope: &ProfileScope,
+    manifest: &Manifest,
+    identity: &Identity,
+    capabilities: &CapabilitySet,
+) -> Result<Vec<pmt_config::grants::Grant>, Error> {
+    let only = pmt_config::secrets::surface::SurfaceOnly::of(scope.config());
+    pmt_plugins::grants::check_surface_only(manifest, &only, capabilities)?;
+    pmt_plugins::grants::approve(
+        &GrantsFile::of(scope.profile()),
+        identity,
+        capabilities,
+        "cli",
+    )
+}
+
 /// Approves `target`'s capabilities: `--grant`, an approval already on
 /// file, or the plain-language screen on a terminal.
 pub(super) fn decide(
@@ -183,10 +206,10 @@ pub(super) fn decide(
     let file = GrantsFile::of(scope.profile());
     if let Some(list) = grant {
         approve(
-            &file,
+            scope,
+            &target.manifest,
             &target.identity,
             &select(&target.requested, list)?,
-            "cli",
         )?;
         return Ok(Decision::Approved);
     }
@@ -196,7 +219,7 @@ pub(super) fn decide(
     }
     Ok(match ask(target)? {
         Some(true) => {
-            approve(&file, &target.identity, &target.requested, "cli")?;
+            approve(scope, &target.manifest, &target.identity, &target.requested)?;
             Decision::Approved
         }
         Some(false) => Decision::Declined,
@@ -328,7 +351,7 @@ pub(super) fn grants(ctx: &Context<'_>, action: &GrantsAction) -> Result<u8, Err
         GrantsAction::Approve { id, capability } => {
             let target = target(&scope, id)?;
             let chosen = select(&target.requested, capability.as_deref().unwrap_or("all"))?;
-            let added = approve(&file, &target.identity, &chosen, "cli")?;
+            let added = approve(&scope, &target.manifest, &target.identity, &chosen)?;
             eprintln!("approved {} capabilities for '{id}'", added.len());
             Ok(0)
         }

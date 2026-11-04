@@ -74,9 +74,9 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, GatewayHealthConfig, LogLevel,
-    LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend,
-    SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
+    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode,
+    SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, PluginsConfig, PluginsWasmConfig, SignaturePolicy, TransportFallback,

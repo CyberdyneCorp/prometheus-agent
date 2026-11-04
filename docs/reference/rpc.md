@@ -62,7 +62,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `cron.blueprints.fill` | `scheduled-jobs` | 1.0 | not served yet | |
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | not served yet | |
 | `daemon.update` | `workspace-architecture` | 1.0 | not served yet | |
-| `egress.set` | `security-boundaries` | 1.0 | not served yet | |
+| `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
 | `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
 | `evolve.choose` | `harness-evolution` | 1.0 | not served yet | |
 | `evolve.list` | `harness-evolution` | 1.0 | not served yet | |
@@ -470,6 +470,27 @@ Where a command runs from this surface.
 | `exec` | It runs (`command.dispatch`). |
 | `unavailable` | Listed, but refused here with `reason`. |
 | `hidden` | Not offered on this surface. |
+
+### `EgressSetParams`
+
+`egress.set` params: changes applied in order (mode, then allow, then deny); an empty change only reads the policy.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `allow` | array of string | no | Host patterns to admit (`host`, `host:port`, `*.suffix`). |
+| `deny` | array of string | no | Host patterns to refuse in every mode. |
+| `mode` | string or null | no | `public`, `allowlist` or `none`. |
+| `session_id` | string | yes | The session. |
+
+### `EgressState`
+
+`egress.set` result: the session's policy after the change.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `allow` | array of string | yes | Admitted patterns. |
+| `deny` | array of string | yes | Refused patterns. |
+| `mode` | string | yes | The mode. |
 
 ### `Empty`
 

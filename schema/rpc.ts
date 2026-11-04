@@ -311,6 +311,28 @@ export type Dispatched = {
 /** Where a command runs from this surface. */
 export type Disposition = "exec" | "unavailable" | "hidden";
 
+/** `egress.set` params: changes applied in order (mode, then allow, then deny); an empty change only reads the policy. */
+export interface EgressSetParams {
+  /** Host patterns to admit (`host`, `host:port`, `*.suffix`). */
+  allow?: Array<string>;
+  /** Host patterns to refuse in every mode. */
+  deny?: Array<string>;
+  /** `public`, `allowlist` or `none`. */
+  mode?: string | null;
+  /** The session. */
+  session_id: string;
+}
+
+/** `egress.set` result: the session's policy after the change. */
+export interface EgressState {
+  /** Admitted patterns. */
+  allow: Array<string>;
+  /** Refused patterns. */
+  deny: Array<string>;
+  /** The mode. */
+  mode: string;
+}
+
 /** No params. */
 export type Empty = Record<string, unknown>;
 
@@ -741,6 +763,7 @@ export interface Methods {
   "complete.path": { params: CompleteParams; result: Completions };
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
+  "egress.set": { params: EgressSetParams; result: EgressState };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -788,7 +811,6 @@ export const UNDECLARED = [
   "cron.blueprints.fill",
   "cron.blueprints.list",
   "daemon.update",
-  "egress.set",
   "evolve.cancel",
   "evolve.choose",
   "evolve.list",

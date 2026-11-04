@@ -287,6 +287,28 @@ pub(super) fn distribution(inputs: &Inputs<'_>) -> Vec<Check> {
 /// no longer matches its install record, the kill list, approval) and
 /// unsigned or unadopted plugins, read without instantiating anything
 /// (spec: security-boundaries, Signed plugins).
+/// The ids of the profile's plugins installed without a verified
+/// signature.
+pub(super) fn unsigned_plugins(inputs: &Inputs<'_>) -> Vec<String> {
+    let scope = inputs.scope;
+    let version = crate::plugins_host::running_version();
+    let blocked = crate::plugins_host::catalog::kill_list(scope);
+    let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    pmt_plugins::load::survey(&crate::plugins_host::inputs(
+        scope, &cwd, &version, &blocked,
+    ))
+    .iter()
+    .filter(|(plugin, _)| {
+        plugin
+            .dir
+            .as_deref()
+            .and_then(|d| pmt_plugins::record::InstallRecord::read(d).ok().flatten())
+            .is_some_and(|r| r.unsigned())
+    })
+    .map(|(_, status)| status.id.clone())
+    .collect()
+}
+
 pub(super) fn plugins(inputs: &Inputs<'_>) -> Vec<Check> {
     use pmt_plugins::load::State;
     let scope = inputs.scope;

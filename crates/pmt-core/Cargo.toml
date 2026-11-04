@@ -23,6 +23,8 @@ sha2.workspace = true
 # Panic isolation spawns tasks; cancellation is a tokio-util token tree.
 tokio.workspace = true
 tokio-util.workspace = true
+# WARN when a security audit record cannot be written.
+tracing.workspace = true
 ulid.workspace = true
 
 # getrlimit/setrlimit for the open-file soft limit raise.

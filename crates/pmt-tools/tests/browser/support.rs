@@ -103,6 +103,8 @@ impl Fixture {
                 destinations: DestinationPolicy::new(true, &[]).unwrap(),
                 lookup: Arc::new(SystemLookup),
                 secrets: Redactor::new([&SecretString::new(KNOWN_SECRET)]),
+                egress: None,
+                session: None,
             },
             providers,
         })

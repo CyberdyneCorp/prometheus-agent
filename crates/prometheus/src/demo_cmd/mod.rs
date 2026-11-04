@@ -128,6 +128,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         source_tag: Some(SOURCE_TAG.to_owned()),
         ignore_user_config: false,
         ignore_rules: false,
+        egress: crate::egress::Overrides::default(),
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

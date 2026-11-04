@@ -20,6 +20,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
@@ -118,6 +119,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn
@@ -243,6 +255,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn
@@ -4143,6 +4166,198 @@ Usage: prometheus grants help revoke
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus grants help help
+```
+
+## `prometheus security`
+
+```text
+Security records of the profile: verify the tamper-evident audit log
+
+Usage: prometheus security [OPTIONS] <COMMAND>
+
+Commands:
+  audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus security audit`
+
+```text
+The security audit log (`<profile>/logs/security-audit.jsonl`)
+
+Usage: prometheus security audit [OPTIONS] <COMMAND>
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus security audit verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus security audit verify [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus security audit help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security audit help [COMMAND]
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus security audit help verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus security audit help verify
+```
+
+## `prometheus security audit help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security audit help help
+```
+
+## `prometheus security help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security help [COMMAND]
+
+Commands:
+  audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus security help audit`
+
+```text
+The security audit log (`<profile>/logs/security-audit.jsonl`)
+
+Usage: prometheus security help audit [COMMAND]
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+```
+
+## `prometheus security help audit verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus security help audit verify
+```
+
+## `prometheus security help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security help help
 ```
 
 ## `prometheus backup`
@@ -14687,6 +14902,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
@@ -15343,6 +15559,36 @@ Usage: prometheus help grants list
 Remove a grant; running sessions lose it at their next tool call
 
 Usage: prometheus help grants revoke
+```
+
+## `prometheus help security`
+
+```text
+Security records of the profile: verify the tamper-evident audit log
+
+Usage: prometheus help security [COMMAND]
+
+Commands:
+  audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+```
+
+## `prometheus help security audit`
+
+```text
+The security audit log (`<profile>/logs/security-audit.jsonl`)
+
+Usage: prometheus help security audit [COMMAND]
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+```
+
+## `prometheus help security audit verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus help security audit verify
 ```
 
 ## `prometheus help backup`
@@ -17047,6 +17293,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.runtimes_doctor.v1` | `prometheus runtimes doctor` |
 | `prometheus.runtimes_exclude.v1` | `prometheus runtimes exclude list` |
 | `prometheus.grants.v1` | `prometheus grants list` |
+| `prometheus.security_audit.v1` | `prometheus security audit verify` |
 | `prometheus.plugins.v1` | `prometheus plugins list` |
 | `prometheus.bridge_status.v1` | `prometheus bridge status` |
 | `prometheus.usage.v1` | `prometheus usage` |

@@ -22,7 +22,7 @@ use pmt_config::ProfileScope;
 use pmt_config::grants::GrantsFile;
 use pmt_core::capability::CapabilitySet;
 use pmt_core::error::{Error, codes};
-use pmt_plugins::grants::{Approval, Identity, approve, select};
+use pmt_plugins::grants::{Approval, Identity, select};
 use pmt_plugins::host::state::StateDir;
 use pmt_plugins::install::{self, Staged};
 use pmt_plugins::manifest::{Manifest, describe, label};
@@ -240,13 +240,12 @@ fn update_one(
     }
     let diff = difference(scope, &update.id, &fetched.staged.manifest)?;
     let signer_changed = fetched.record.signer != update.record.signer;
-    let file = GrantsFile::of(scope.profile());
     let new_identity = Identity {
         id: update.id.clone(),
         digest: fetched.staged.digest.clone(),
     };
     if diff.added.is_empty() && !signer_changed {
-        approve(&file, &new_identity, &diff.kept, "cli")?;
+        super::manage::approve(scope, &fetched.staged.manifest, &new_identity, &diff.kept)?;
         return replace(scope, fetched);
     }
     let approved = match grant {
@@ -261,7 +260,7 @@ fn update_one(
         None => None,
     };
     if let Some(chosen) = approved {
-        approve(&file, &new_identity, &chosen, "cli")?;
+        super::manage::approve(scope, &fetched.staged.manifest, &new_identity, &chosen)?;
         return replace(scope, fetched);
     }
     let line = requests_line(&update.id, &fetched.staged.manifest, &diff, signer_changed);

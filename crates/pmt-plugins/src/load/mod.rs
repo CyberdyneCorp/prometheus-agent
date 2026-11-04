@@ -44,8 +44,8 @@ use crate::tools;
 
 use self::order::Step;
 use self::prepare::{Job, Registration};
-pub use self::status::UNADOPTED_NOTE;
 use self::status::status_of;
+pub use self::status::{MODIFIED_AFTER_INSTALL, UNADOPTED_NOTE};
 
 /// The problem a safe-mode survey reports for a plugin it skips.
 pub const SAFE_MODE_NOTE: &str = "safe mode: not loaded";
@@ -67,6 +67,10 @@ pub struct LoadInputs<'a> {
     pub running: &'a Version,
     /// The catalog's kill list (embedded and cached live).
     pub blocked: &'a [crate::catalog::Removed],
+    /// The profile's configuration, whose surface-only secrets are
+    /// withheld from every plugin but their owning adapter (`None`:
+    /// nothing withheld).
+    pub profile_config: Option<&'a pmt_config::Config>,
 }
 
 /// The state `prometheus plugins list` shows.
@@ -477,7 +481,14 @@ pub(crate) fn requested(
     inputs: &LoadInputs<'_>,
 ) -> Result<CapabilitySet, Error> {
     let data = StateDir::new(inputs.profile_dir, &manifest.id);
-    manifest.capabilities.requested(data.root())
+    let requested = manifest.capabilities.requested(data.root())?;
+    Ok(match inputs.profile_config {
+        Some(config) => {
+            let only = pmt_config::secrets::surface::SurfaceOnly::of(config);
+            crate::grants::withhold_surface_only(manifest, &only, &requested)
+        }
+        None => requested,
+    })
 }
 
 fn job(

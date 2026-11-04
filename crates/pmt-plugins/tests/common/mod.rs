@@ -305,6 +305,7 @@ impl Profile {
                 embedded: &[],
                 running: &version(),
                 blocked: &self.blocked,
+                profile_config: None,
             },
         )
     }

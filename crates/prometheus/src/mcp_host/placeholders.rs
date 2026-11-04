@@ -53,6 +53,9 @@ fn value(scope: &ProfileScope, workspace: &Path, name: &str) -> Result<String, S
     if let Some(value) = context {
         return Ok(value);
     }
+    pmt_config::secrets::surface::SurfaceOnly::of(scope.config())
+        .check(name)
+        .map_err(|e| e.message().to_owned())?;
     scope
         .secrets()
         .resolve(name)

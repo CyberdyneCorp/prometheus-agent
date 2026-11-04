@@ -20,6 +20,16 @@ pub const SECRET: &str = "Blocked: URL contains what appears to be an API key or
 pub const METADATA: &str = "Blocked: URL targets a cloud metadata endpoint";
 /// The refusal of a private address.
 pub const PRIVATE: &str = "Blocked: URL targets a private or internal address";
+/// The refusal of a host the session's egress policy does not admit.
+pub const EGRESS: &str = "Blocked: the session's egress policy does not allow this host";
+
+/// Finds the egress policy of a session by id, with where its refusals go
+/// (spec: security-boundaries, Per-session network egress policy).
+pub type EgressLookup = Arc<
+    dyn Fn(&str) -> Option<(Arc<pmt_net::egress::HostPolicy>, pmt_net::egress::Observer)>
+        + Send
+        + Sync,
+>;
 
 /// Well-known credential shapes.
 static SECRET_SHAPES: LazyLock<Regex> = LazyLock::new(|| {
@@ -42,6 +52,11 @@ pub struct UrlSafety {
     pub lookup: Arc<dyn Lookup>,
     /// The session's known secret values.
     pub secrets: Redactor,
+    /// The sessions' egress policies (`None`: no session policy applies).
+    pub egress: Option<EgressLookup>,
+    /// The browser session's key (`<session id>[/<name>]`), set when the
+    /// browser session is created for it.
+    pub session: Option<String>,
 }
 
 impl UrlSafety {
@@ -68,6 +83,7 @@ impl UrlSafety {
         };
         let port = parsed.port_or_known_default();
         let literal = host.trim_start_matches('[').trim_end_matches(']');
+        self.check_session(literal, port.unwrap_or_default())?;
         if let Ok(ip) = literal.parse::<IpAddr>() {
             return verdict(self.destinations.check_addr(None, ip, port));
         }
@@ -82,6 +98,29 @@ impl UrlSafety {
             verdict(self.destinations.check_addr(Some(host), ip, port))?;
         }
         Ok(())
+    }
+}
+
+impl UrlSafety {
+    /// The session egress check of a navigation to `host:port`.
+    fn check_session(&self, host: &str, port: u16) -> Result<(), &'static str> {
+        let (Some(lookup), Some(key)) = (&self.egress, &self.session) else {
+            return Ok(());
+        };
+        let id = key.split('/').next().unwrap_or(key);
+        let Some((hosts, observer)) = lookup(id) else {
+            return Ok(());
+        };
+        let Err(reason) = hosts.check(host, port) else {
+            return Ok(());
+        };
+        observer(pmt_net::egress::Denial {
+            host: host.to_owned(),
+            port,
+            requester: "browser".to_owned(),
+            reason,
+        });
+        Err(EGRESS)
     }
 }
 
@@ -126,6 +165,8 @@ mod tests {
             destinations: DestinationPolicy::new(allow_private, &[]).unwrap(),
             lookup: Arc::new(Fixed),
             secrets: Redactor::new([&SecretString::new("hunter2-known-value")]),
+            egress: None,
+            session: None,
         }
     }
 
@@ -169,5 +210,36 @@ mod tests {
             assert_eq!(s.check(url).await, Err(SECRET), "{url}");
         }
         assert_eq!(s.check("https://public.test/search?q=rust").await, Ok(()));
+    }
+
+    /// Per-session network egress policy: a browser navigation of an
+    /// `allowlist` session to another host is refused and reported.
+    #[tokio::test]
+    async fn a_session_egress_policy_refuses_navigation_to_other_hosts() {
+        use std::sync::Mutex;
+
+        use pmt_net::egress::{Allowed, Denial, HostPolicy, Mode, Observer};
+
+        let hosts = Arc::new(HostPolicy::new(
+            Mode::Allowlist,
+            vec![Allowed::parse("public.test")],
+        ));
+        let seen: Arc<Mutex<Vec<Denial>>> = Arc::default();
+        let sink = Arc::clone(&seen);
+        let observer: Observer = Arc::new(move |d| sink.lock().unwrap().push(d));
+        let mut checked = safety(false);
+        checked.egress = Some(Arc::new(move |id| {
+            (id == "ses_1").then(|| (Arc::clone(&hosts), Arc::clone(&observer)))
+        }));
+        checked.session = Some("ses_1/main".to_owned());
+        assert_eq!(checked.check("https://public.test/").await, Ok(()));
+        assert_eq!(
+            checked.check("https://example.com/").await,
+            Err(super::EGRESS)
+        );
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].host, "example.com");
+        assert_eq!(seen[0].requester, "browser");
     }
 }

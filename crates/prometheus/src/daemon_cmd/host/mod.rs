@@ -538,6 +538,23 @@ impl Host for DaemonHost {
         })
     }
 
+    fn egress<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::EgressSetParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::EgressState> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let session = self.load(profile, id, &link).await?;
+            let hosts = &session.live.egress.hosts;
+            crate::egress::apply_set(hosts, params.mode.as_deref(), &params.allow, &params.deny)?;
+            let (mode, allow, deny) = crate::egress::snapshot(hosts);
+            Ok(pmt_rpc::contracts::EgressState { mode, allow, deny })
+        })
+    }
+
     fn compact<'a>(&'a self, profile: &'a str, params: CompactParams) -> HostFuture<'a, Compacted> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;

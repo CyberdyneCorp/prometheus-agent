@@ -11,9 +11,9 @@ use std::time::Duration;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
-    ConfigValue, ContextUsage, DispatchParams, Dispatched, Event, ForkParams, ModelOptions,
-    ResolveParams, ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef,
-    SessionSetup, SubagentList, SubmitParams, Submitted, Transcript,
+    ConfigValue, ContextUsage, DispatchParams, Dispatched, EgressSetParams, EgressState, Event,
+    ForkParams, ModelOptions, ResolveParams, ServerRequest, SessionCreateParams, SessionList,
+    SessionListParams, SessionRef, SessionSetup, SubagentList, SubmitParams, Submitted, Transcript,
 };
 use serde::Serialize;
 
@@ -91,6 +91,23 @@ pub trait Host: Send + Sync + 'static {
         params: DispatchParams,
         link: Link,
     ) -> HostFuture<'a, Dispatched>;
+
+    /// Changes (or reads) the session's egress policy (`egress.set`),
+    /// loading the session first. Hosts without egress policies refuse.
+    fn egress<'a>(
+        &'a self,
+        profile: &'a str,
+        params: EgressSetParams,
+        link: Link,
+    ) -> HostFuture<'a, EgressState> {
+        let _ = (profile, params, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no session egress policies",
+            ))
+        })
+    }
 
     /// Stops the session's running turn at its next safe point; a no-op
     /// when none runs.

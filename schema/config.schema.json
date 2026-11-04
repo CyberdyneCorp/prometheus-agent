@@ -1402,6 +1402,14 @@
       "additionalProperties": false,
       "description": "The `[security.egress]` section.",
       "properties": {
+        "allow": {
+          "default": [],
+          "description": "Host patterns `allowlist` admits: `host`, `host:port` or\n`*.suffix` (subdomains of `suffix`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "allow_private": {
           "default": false,
           "description": "Allow private destinations without a session grant.",
@@ -1414,9 +1422,34 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/EgressMode",
+          "default": "public",
+          "description": "Which hosts tools, sandboxed children, plugins and browsers may\nreach: any public address (`public`), only the `allow` patterns\n(`allowlist`) or nothing (`none`). A session can narrow or extend\nit (`chat --egress`, `/egress`, `egress.set`)."
         }
       },
       "type": "object"
+    },
+    "EgressMode": {
+      "description": "`security.egress.mode`.",
+      "oneOf": [
+        {
+          "const": "public",
+          "description": "Any public address; private and metadata ranges denied.",
+          "type": "string"
+        },
+        {
+          "const": "allowlist",
+          "description": "Only hosts named by `security.egress.allow` (or a session grant).",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No outbound connections.",
+          "type": "string"
+        }
+      ]
     },
     "EmptyResponseGuard": {
       "additionalProperties": false,
@@ -5215,8 +5248,10 @@
         "egress": {
           "$ref": "#/$defs/EgressConfig",
           "default": {
+            "allow": [],
             "allow_private": false,
-            "fake_ip_ranges": []
+            "fake_ip_ranges": [],
+            "mode": "public"
           },
           "description": "Outbound network policy."
         },
@@ -7487,8 +7522,10 @@
       "$ref": "#/$defs/SecurityConfig",
       "default": {
         "egress": {
+          "allow": [],
           "allow_private": false,
-          "fake_ip_ranges": []
+          "fake_ip_ranges": [],
+          "mode": "public"
         },
         "protected_instruction_extra_patterns": [],
         "protected_instruction_files": true,

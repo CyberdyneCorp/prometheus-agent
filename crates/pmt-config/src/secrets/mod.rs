@@ -12,6 +12,7 @@
 
 pub(crate) mod file;
 pub mod keychain;
+pub mod surface;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

@@ -48,6 +48,9 @@ pub(crate) struct Inputs<'a> {
     pub ctx: &'a Context<'a>,
     pub scope: &'a ProfileScope,
     pub online: bool,
+    /// The file-mode checks, read before the home was opened (opening it
+    /// tightens loose modes).
+    pub file_modes: Vec<Check>,
 }
 
 #[derive(Serialize)]
@@ -109,16 +112,19 @@ fn run_profile(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let (home_checks, secrets_mode) = groups::permissions(&root, &profile);
     let mut checks = Vec::new();
     if selected("home") {
-        checks.extend(home_checks);
+        checks.extend(home_checks.iter().cloned());
     }
     // Opened without migrating `config.toml`: a pending migration is
     // reported (and applied only by `--fix`), not applied by the diagnosis.
     match ctx.scope_unmigrated() {
         Ok(scope) => {
+            let mut file_modes = home_checks.clone();
+            file_modes.push(secrets_mode.clone());
             let inputs = Inputs {
                 ctx,
                 scope: &scope,
                 online: args.online,
+                file_modes,
             };
             for group in GROUPS.iter().filter(|g| **g != "home" && selected(g)) {
                 if *group == "secrets" {

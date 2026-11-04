@@ -15,6 +15,7 @@ use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
 use pmt_core::secret::Redactor;
 use pmt_net::OutboundPolicy;
+use pmt_net::egress::Proxy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
 use pmt_tools::browser::BrowserExec;
 use pmt_tools::environments::{Attachment, Environments, SessionEnv};
@@ -55,7 +56,17 @@ pub struct EnvInputs<'a> {
     pub providers: pmt_plugins::providers::ProviderRegistry,
     /// What the session's plugin calls report through `session.info`.
     pub plugin_call: pmt_plugins::host::CallInfo,
+    /// The session's egress policy.
+    pub egress: &'a crate::egress::SessionEgress,
+    /// Where its egress refusals are reported.
+    pub denials: &'a Denials,
 }
+
+/// Where a session's egress refusals go once its event sink exists. The
+/// handle is weak: a refusal reported after the session closed is dropped,
+/// and the trajectory writer stays solely owned for its finish.
+pub type Denials =
+    Arc<std::sync::OnceLock<std::sync::Weak<dyn pmt_agent::turn::events::EventSink>>>;
 
 /// An attached environment.
 pub struct Attached {
@@ -68,6 +79,10 @@ pub struct Attached {
     /// How the session runs a command: its sandbox, child environment and
     /// shell (skills' inline snippets run the same way).
     pub commands: Option<Commands>,
+    /// The session's egress policy and its children's proxy.
+    pub egress: crate::egress::Running,
+    /// Where its egress refusals are reported.
+    pub denials: Denials,
 }
 
 /// The parts a session runs commands with.
@@ -113,7 +128,18 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         scratch: vec![scratch.clone()],
     };
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
-    let process = processes(inputs, &scratch, &policy)
+    let proxy = crate::egress::child_proxy(
+        inputs.scope,
+        inputs.capabilities,
+        Arc::clone(&inputs.egress.hosts),
+        "terminal",
+        Arc::clone(&inputs.egress.observer),
+    )?;
+    let child_policy = match &proxy {
+        Some(proxy) => policy.as_ref().clone().through_proxy(proxy.addr().port()),
+        None => policy.as_ref().clone(),
+    };
+    let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
     let browser = process.as_ref().and_then(|(sandbox, env)| {
@@ -150,7 +176,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let env = SessionEnv {
         files: Some(Arc::new(files(inputs, places, user_home, policy))),
         terminal: terminal.clone(),
-        web: web(scope, &inputs.providers, &inputs.plugin_call).map(Arc::new),
+        web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
         vision: None,
         browser: browser.clone(),
     };
@@ -159,6 +185,8 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         browser,
         terminal,
         commands,
+        egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
+        denials: Arc::clone(inputs.denials),
     })
 }
 
@@ -188,9 +216,22 @@ fn processes(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
     policy: &Policy,
+    proxy: Option<&Proxy>,
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
+    let audit = pmt_core::audit::AuditLog::of(inputs.scope.dir());
+    for gap in sandbox.downgrades() {
+        audit.record(
+            &pmt_core::audit::Event::new(
+                pmt_core::audit::Kind::Downgrade,
+                gap.hardening.as_str(),
+                "allowed",
+            )
+            .in_session(inputs.session_id)
+            .with_detail(gap.reason.clone()),
+        );
+    }
     let mut env = ChildEnv::build(
         inputs.launch,
         EnvRequest {
@@ -199,6 +240,9 @@ fn processes(
         },
     );
     env.set_temp_dir(scratch);
+    if let Some(proxy) = proxy {
+        env.set_proxy(&proxy.url());
+    }
     let bundle = scratch.join("ca-bundle.pem");
     let extra_ca = config.network.extra_ca_file.as_deref().map(Path::new);
     if pmt_net::tls::write_child_bundle(&bundle, extra_ca).is_ok() {
@@ -246,6 +290,7 @@ fn web(
     scope: &ProfileScope,
     providers: &pmt_plugins::providers::ProviderRegistry,
     call: &pmt_plugins::host::CallInfo,
+    egress: &crate::egress::SessionEgress,
 ) -> Option<WebSession> {
     let config = scope.config();
     let policy = OutboundPolicy {
@@ -254,11 +299,16 @@ fn web(
         proxy: config.network.proxy.clone(),
     };
     let client = pmt_net::client(&policy).ok()?;
-    let egress = &config.security.egress;
-    let destinations =
-        pmt_net::destination::DestinationPolicy::new(egress.allow_private, &egress.fake_ip_ranges)
-            .ok()?;
-    let fetcher = Arc::new(pmt_net::fetch::Fetcher::new(&policy, destinations).ok()?);
+    let destinations = crate::egress::destinations(&config.security.egress).ok()?;
+    let fetcher = Arc::new(
+        pmt_net::fetch::Fetcher::new(&policy, destinations)
+            .ok()?
+            .with_hosts(
+                Arc::clone(&egress.hosts),
+                "web",
+                Some(Arc::clone(&egress.observer)),
+            ),
+    );
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());

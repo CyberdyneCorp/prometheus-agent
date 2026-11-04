@@ -31,6 +31,36 @@ impl ApprovalsFlag {
     }
 }
 
+/// Egress modes `--egress` accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum EgressFlag {
+    /// Any public host; private and metadata ranges denied.
+    Public,
+    /// Only `security.egress.allow` and `--allow-host` patterns.
+    Allowlist,
+    /// No outbound connections.
+    None,
+}
+
+impl EgressFlag {
+    /// The configured mode it stands for.
+    #[must_use]
+    pub fn mode(self) -> pmt_config::schema::EgressMode {
+        use pmt_config::schema::EgressMode;
+        match self {
+            Self::Public => EgressMode::Public,
+            Self::Allowlist => EgressMode::Allowlist,
+            Self::None => EgressMode::None,
+        }
+    }
+
+    /// The configuration spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.mode().as_str()
+    }
+}
+
 /// `prometheus chat` arguments (also accepted without the subcommand).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 #[allow(clippy::struct_excessive_bools)] // independent switches of one command line
@@ -73,6 +103,14 @@ pub struct ChatArgs {
     /// hardline blocks still apply).
     #[arg(long)]
     pub yolo: bool,
+    /// Network egress of this session: any public host, only allowed
+    /// hosts, or none (`security.egress.mode` otherwise).
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub egress: Option<EgressFlag>,
+    /// Admit this host pattern (`host`, `host:port`, `*.suffix`) in this
+    /// session, in addition to `security.egress.allow` (repeatable).
+    #[arg(long, value_name = "PATTERN", action = ArgAction::Append)]
+    pub allow_host: Vec<String>,
     /// Model calls allowed per turn.
     #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
     pub max_iterations: Option<u32>,
@@ -214,6 +252,15 @@ impl ChatArgs {
             ));
         }
         Ok(())
+    }
+
+    /// `--egress` and `--allow-host`.
+    #[must_use]
+    pub fn egress_overrides(&self) -> crate::egress::Overrides {
+        crate::egress::Overrides {
+            mode: self.egress.map(EgressFlag::mode),
+            allow: self.allow_host.clone(),
+        }
     }
 
     /// The configuration overrides these flags stand for, as `key=value`.
