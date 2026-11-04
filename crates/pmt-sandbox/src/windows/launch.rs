@@ -71,7 +71,13 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
         .collect();
     let security = SECURITY_CAPABILITIES {
         AppContainerSid: container.0,
-        Capabilities: capabilities.as_mut_ptr(),
+        // An empty Vec's pointer is dangling, not null: Windows on ARM64
+        // rejects it (ERROR_INVALID_PARAMETER) even with a zero count.
+        Capabilities: if capabilities.is_empty() {
+            ptr::null_mut()
+        } else {
+            capabilities.as_mut_ptr()
+        },
         CapabilityCount: u32::try_from(capabilities.len()).unwrap_or(0),
         Reserved: 0,
     };
