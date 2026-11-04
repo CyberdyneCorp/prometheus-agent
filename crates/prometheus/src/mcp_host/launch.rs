@@ -118,7 +118,7 @@ fn stdio(
         }
     }
     command.env("TMPDIR", &scratch);
-    if let Some(url) = proxy.as_ref().and_then(crate::egress::child_proxy_url) {
+    if let Some(url) = proxy.as_ref().map(pmt_net::egress::Proxy::url) {
         for var in pmt_net::egress::PROXY_VARS {
             command.env(var, &url);
         }

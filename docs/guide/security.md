@@ -121,11 +121,9 @@ them connect to the proxy alone (on macOS its port on loopback; on Linux
 they run in a network namespace of their own, see
 [Sandbox](sandbox.md)), and the proxy resolves each name itself, checks
 every address and connects to the address it checked, so DNS rebinding
-cannot slip past. Windows is the exception: an AppContainer cannot reach
-the loopback proxy, so a confined child connects directly to public
-addresses only while the policy admits every public host (the default
-`public` mode with no deny pattern) and gets no network otherwise; its
-`net` is reported `partial` (see [Sandbox](sandbox.md)). Plugins' sidecars get a proxy that also requires their
+cannot slip past. On Windows the child holds no network capability and
+reaches the proxy through a relay process inside its own AppContainer
+(see [Sandbox](sandbox.md)). Plugins' sidecars get a proxy that also requires their
 own `network` grants. A local browser sends every connection (pages,
 subresources, redirects, scripts, loopback included) through a proxy under
 the session's policy, and the browser tools also refuse a navigation the

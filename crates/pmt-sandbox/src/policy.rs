@@ -232,9 +232,9 @@ impl Policy {
     /// only to that port on loopback and the proxy enforces the host
     /// policy. macOS expresses "loopback only" in the Seatbelt profile;
     /// Linux gives the child its own network namespace whose listener
-    /// `relay` hands to the proxy (see [`crate::relay`]); Windows cannot
-    /// reach the proxy and asks `relay` whether the child may connect to
-    /// public addresses directly. A child without network stays without.
+    /// `relay` hands to the proxy; Windows runs a relay process inside the
+    /// child's `AppContainer` (see [`crate::relay`]). A child without
+    /// network stays without.
     #[must_use]
     pub fn through_proxy(mut self, port: u16, relay: Relay) -> Self {
         if self.connects() {

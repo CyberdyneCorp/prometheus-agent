@@ -18,6 +18,8 @@ seccompiler.workspace = true
 libc.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+# The egress relay of a proxied child: named pipes and loopback TCP.
+tokio = { workspace = true, features = ["net", "io-util"] }
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Security",

@@ -111,57 +111,77 @@ fn entries(listing: &str) -> String {
 }
 
 /// Egress for a proxied child (spec: security-boundaries, Egress
-/// enforcement for child processes): an `AppContainer` cannot reach the
-/// loopback proxy, so the child runs (net `partial`, the platform's
-/// maximum, not a refused downgrade), reaches no loopback address, and
-/// reaches public addresses (`internetClient`) only while its relay admits
-/// every public host, asked again at every start.
+/// enforcement for child processes): the child holds no network
+/// capability and reaches the loopback proxy only through the relay in its
+/// own container, at the address its proxy variables are rewritten to;
+/// connecting to the proxy directly or to a public host is refused, and
+/// `net` is reported `enforced`.
 #[test]
-fn a_proxied_child_gets_public_internet_only_while_the_policy_admits_it() {
+fn a_proxied_child_reaches_only_the_proxy() {
+    use std::io::Write as _;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let fixture = Fixture::new();
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let public = Arc::new(AtomicBool::new(false));
-    let gate = Arc::clone(&public);
-    let relay = pmt_sandbox::Relay::new(|_| {}).with_direct(move || gate.load(Ordering::SeqCst));
-    let sandbox = confine(fixture.policy(&[]).through_proxy(port, relay));
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = proxy.local_addr().unwrap().port();
+    let accepted = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&accepted);
+    std::thread::spawn(move || {
+        for stream in proxy.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            count.fetch_add(1, Ordering::SeqCst);
+            let _ = stream.write_all(b"proxy\n");
+        }
+    });
+    let sandbox = confine(
+        fixture
+            .policy(&[])
+            .through_proxy(port, pmt_sandbox::Relay::new(|_| {})),
+    );
     let net = &sandbox.report().features[1];
-    assert_eq!((net.feature, net.level), (Feature::Net, Level::Partial));
+    assert_eq!((net.feature, net.level), (Feature::Net, Level::Enforced));
     assert!(net.gap.is_none(), "{net:?}");
 
-    let connect = |host: &str, port: u16| {
-        let line = format!(
-            "try {{ [Net.Sockets.TcpClient]::new().Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().GetType().Name + ' ' + $_.Exception.GetBaseException().Message }}"
-        );
+    let run = |script: &str| {
         let output = sandbox
             .command("powershell.exe")
             .unwrap()
             .current_dir(&fixture.work)
-            .args(["-NoProfile", "-NonInteractive", "-Command", &line])
+            .env("HTTPS_PROXY", format!("http://127.0.0.1:{port}"))
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
             .output()
             .unwrap();
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        // Only a socket error counts as refused, not a broken command line.
-        assert!(
-            text == "connected" || text.starts_with("refused: SocketException"),
-            "{output:?}"
-        );
-        (text == "connected", format!("{text} {output:?}"))
+        (
+            String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            format!("{output:?}"),
+        )
     };
-    // github.com: a public host every CI runner reaches. The gate is asked
-    // at every start, both ways.
-    let mut seen = Vec::new();
-    for admitted in [true, false, true] {
-        public.store(admitted, Ordering::SeqCst);
-        let (reached, why) = connect("github.com", 443);
-        seen.push((admitted, reached, why));
+    let connect = |target: &str| {
+        let line = format!(
+            "try {{ $c = [Net.Sockets.TcpClient]::new(); $c.Connect({target}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().GetType().Name }}"
+        );
+        run(&line)
+    };
+    // Through the proxy variable: the relay, then the proxy.
+    let (through, why) = run(
+        "$u = [Uri]$env:HTTPS_PROXY; $c = [Net.Sockets.TcpClient]::new(); $c.Connect($u.Host, $u.Port); $b = [byte[]]::new(6); $n = $c.GetStream().Read($b, 0, 6); \"$($u.Port) $([Text.Encoding]::ASCII.GetString($b, 0, $n).Trim())\"",
+    );
+    let (relay_port, answer) = through.split_once(' ').unwrap_or_default();
+    assert_eq!(answer, "proxy", "{why}");
+    assert_ne!(relay_port, port.to_string(), "{why}");
+    assert_eq!(accepted.load(Ordering::SeqCst), 1);
+    // Around it: the proxy's own address, and a public host.
+    for target in [
+        format!("'127.0.0.1', {port}"),
+        "'github.com', 443".to_owned(),
+    ] {
+        let (text, why) = connect(&target);
+        assert_eq!(text, "refused: SocketException", "{target}: {why}");
     }
-    assert!(seen.iter().all(|(a, r, _)| a == r), "{seen:#?}");
-    let (reached, why) = connect("127.0.0.1", port);
-    assert!(!reached, "{why}");
-    assert!(listener.accept().is_err(), "the child reached loopback");
+    assert_eq!(
+        accepted.load(Ordering::SeqCst),
+        1,
+        "the child bypassed the relay"
+    );
 }

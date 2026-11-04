@@ -12,8 +12,11 @@
 mod common;
 
 use std::fmt::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
 
@@ -204,49 +207,118 @@ fn explicit_git_bash_under_the_sandbox_is_unavailable() {
     );
 }
 
-/// Egress of the session terminal (spec: security-boundaries, Egress
-/// enforcement for child processes). The `AppContainer` cannot reach the
-/// loopback egress proxy, so no proxy variables point there; a child
-/// connects directly to public addresses (`internetClient`) only under the
-/// default `public` policy (github.com, which every CI runner reaches), an
-/// allowlisted session's child reaches no host outside its allowlist (it
-/// gets no network at all), and neither reaches loopback.
+/// A local HTTP server answering `hello` and counting its connections.
+fn server() -> (u16, Arc<AtomicUsize>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let hits = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&hits);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            counter.fetch_add(1, Ordering::SeqCst);
+            let mut buffer = [0u8; 2048];
+            let _ = stream.read(&mut buffer);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
+            );
+        }
+    });
+    (port, hits)
+}
+
+/// The `egress.denied` payloads of the newest session's trajectory.
+fn denials(home: &Path) -> Vec<Value> {
+    let session = common::newest_session(home);
+    common::ok(&common::run(
+        home,
+        &["trajectory", "show", &session, "--format", "jsonl"],
+    ))
+    .lines()
+    .map(|line| serde_json::from_str::<Value>(line).unwrap())
+    .filter(|event| event["type"] == "egress.denied")
+    .map(|event| event["payload"].clone())
+    .collect()
+}
+
+/// Egress of the session terminal (spec: security-boundaries, Per-session
+/// network egress policy — Allowlist session; Egress enforcement for child
+/// processes). The confined child holds no network capability and reaches
+/// the session's egress proxy through the relay in its `AppContainer`: in
+/// an allowlist session the allowed host answers, another is refused with
+/// an `egress.denied` event, and bypassing the proxy fails; in a public
+/// session a public host is reached through the proxy, the metadata
+/// endpoint is refused, and a direct connection fails.
 #[test]
 fn session_children_reach_only_what_the_egress_policy_admits() {
     let fixture = Fixture::new();
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let port = listener.local_addr().unwrap().port();
-    let connect = |host: &str, port: u16| {
-        format!(
-            "try {{ [Net.Sockets.TcpClient]::new().Connect('{host}', {port}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().GetType().Name }}"
-        )
+    let home = fixture.home.path();
+    common::append_config(home, "\n[security.egress]\nallow_private = true\n");
+    let (allowed, allowed_hits) = server();
+    let (other, other_hits) = server();
+    let curl = |extra: &str, url: &str| {
+        format!("curl.exe -sS --max-time 20 {extra} {url}; Write-Output \" exit=$LASTEXITCODE\"")
     };
-    let commands = [
-        connect("github.com", 443),
-        "Write-Output \"proxy=[$env:HTTPS_PROXY]\"".to_owned(),
-        connect("127.0.0.1", port),
-    ];
-    let public = fixture.session("powershell", &[], &commands);
-    let allowlisted = fixture.session(
+    let allow = format!("127.0.0.1:{allowed}");
+    let results = fixture.session(
         "powershell",
-        &["--egress", "allowlist", "--allow-host", "example.org"],
-        &commands,
+        &["--egress", "allowlist", "--allow-host", &allow],
+        &[
+            curl("", &format!("http://127.0.0.1:{allowed}/")),
+            curl("", &format!("http://127.0.0.1:{other}/")),
+            curl(
+                "--noproxy '*' --connect-timeout 5",
+                &format!("http://127.0.0.1:{other}/"),
+            ),
+        ],
     );
-    for (results, internet) in [(&public, true), (&allowlisted, false)] {
-        let output = |i: usize| results[i]["output"].as_str().unwrap_or_default().to_owned();
-        // Only a socket error counts as refused, not a broken command.
-        let public = if internet {
-            "connected"
-        } else {
-            "refused: SocketException"
-        };
-        assert_eq!(output(0).trim(), public, "{results:#?}");
-        assert_eq!(output(1).trim(), "proxy=[]", "{results:#?}");
-        assert_eq!(output(2).trim(), "refused: SocketException", "{results:#?}");
-    }
+    let output = |results: &[Value], i: usize| {
+        results[i]["output"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned()
+    };
+    assert!(output(&results, 0).starts_with("hello"), "{results:#?}");
+    assert!(!output(&results, 1).contains("hello"), "{results:#?}");
+    let around = output(&results, 2);
     assert!(
-        listener.accept().is_err(),
-        "a session child reached loopback"
+        !around.contains("hello") && !around.ends_with("exit=0"),
+        "{results:#?}"
+    );
+    assert_eq!(allowed_hits.load(Ordering::SeqCst), 1, "{results:#?}");
+    assert_eq!(other_hits.load(Ordering::SeqCst), 0, "{results:#?}");
+    let denied = denials(home);
+    assert!(
+        denied.iter().any(|d| d["port"] == other
+            && d["reason"] == "not_allowlisted"
+            && d["requester"] == "terminal"),
+        "{denied:?}"
+    );
+
+    let results = fixture.session(
+        "powershell",
+        &[],
+        &[
+            curl("", "http://169.254.169.254/latest/meta-data/"),
+            // github.com: a public host every CI runner reaches.
+            curl("--ssl-no-revoke -o NUL -w '%{http_code}'", "https://github.com/"),
+            "try { [Net.Sockets.TcpClient]::new().Connect('github.com', 443); 'connected' } catch { 'refused: ' + $_.Exception.GetBaseException().GetType().Name }".to_owned(),
+        ],
+    );
+    assert!(!output(&results, 0).ends_with("exit=0"), "{results:#?}");
+    assert!(output(&results, 1).ends_with("exit=0"), "{results:#?}");
+    assert!(output(&results, 1).starts_with('2'), "{results:#?}");
+    assert_eq!(
+        output(&results, 2),
+        "refused: SocketException",
+        "{results:#?}"
+    );
+    let denied = denials(home);
+    assert!(
+        denied
+            .iter()
+            .any(|d| d["host"] == "169.254.169.254" && d["reason"] == "metadata"),
+        "{denied:?}"
     );
 }

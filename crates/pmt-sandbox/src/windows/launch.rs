@@ -8,7 +8,9 @@
 //! when the launcher dies (`KILL_ON_JOB_CLOSE`), may not reach the desktop,
 //! clipboard or global atoms, and, without `process.spawn`, may not start
 //! other processes; with resource limits the job caps the tree's committed
-//! memory and its active processes. Then the child is resumed.
+//! memory and its active processes. Then the child is resumed. A child
+//! that goes through the egress proxy first gets its relay (see
+//! [`super::relay`]) and an environment pointing at it.
 
 #![allow(unsafe_code)]
 
@@ -37,14 +39,14 @@ use windows_sys::Win32::System::JobObjects::{
     JobObjectBasicUIRestrictions, JobObjectExtendedLimitInformation, SetInformationJobObject,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_SUSPENDED, CreateProcessW, DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT,
-    GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
-    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
-    PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW,
-    UpdateProcThreadAttribute, WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, INFINITE,
+    InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+    PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, PROCESS_INFORMATION, ResumeThread,
+    STARTF_USESTDHANDLES, STARTUPINFOEXW, UpdateProcThreadAttribute, WaitForSingleObject,
 };
 
-use super::args::{LaunchSpec, command_line};
+use super::args::{LaunchSpec, Net, command_line, environment};
 use super::container::wide;
 use crate::policy::ResourceLimits;
 
@@ -57,7 +59,15 @@ const INTERNET_CLIENT: &str = "S-1-15-3-1";
 /// Runs the launcher; returns the child's exit code.
 pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
     let container = Sid::of_container(&spec.container)?;
-    let capability = if spec.internet {
+    // Kept alive until the child has exited.
+    let relay = match spec.net {
+        Net::Proxy(port) => Some((port, super::relay::start(&container, port)?)),
+        Net::None | Net::Internet => None,
+    };
+    let env = relay
+        .as_ref()
+        .map(|(proxy, relay)| environment(std::env::vars_os(), *proxy, relay.port));
+    let capability = if spec.net == Net::Internet {
         Some(Sid::parse(INTERNET_CLIENT)?)
     } else {
         None
@@ -69,18 +79,7 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
             Attributes: SE_GROUP_ENABLED,
         })
         .collect();
-    let security = SECURITY_CAPABILITIES {
-        AppContainerSid: container.0,
-        // An empty Vec's pointer is dangling, not null: Windows on ARM64
-        // rejects it (ERROR_INVALID_PARAMETER) even with a zero count.
-        Capabilities: if capabilities.is_empty() {
-            ptr::null_mut()
-        } else {
-            capabilities.as_mut_ptr()
-        },
-        CapabilityCount: u32::try_from(capabilities.len()).unwrap_or(0),
-        Reserved: 0,
-    };
+    let security = security_capabilities(&container, &mut capabilities);
     let handles = std_handles();
     let mut attributes = Attributes::new(2)?;
     attributes.set(
@@ -96,18 +95,85 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
         )?;
     }
     let job = Job::new(spec.spawn, spec.limits)?;
-    let child = create(spec, &handles, &mut attributes)?;
+    let launch = Launch {
+        program: &spec.program,
+        args: &spec.args,
+        handles: &handles,
+        env: env.as_deref(),
+        flags: 0,
+    };
+    let child = create(&launch, &mut attributes)?;
     job.assign(child.process)?;
-    // SAFETY: a valid thread handle of the suspended child.
-    if unsafe { ResumeThread(child.thread) } == u32::MAX {
-        return Err(last_error("ResumeThread"));
-    }
+    child.resume()?;
     child.wait()
 }
 
-struct Sid(PSID, fn(PSID));
+/// The `AppContainer` and capabilities a process is created with; the
+/// structure points into `capabilities`, which must outlive it.
+fn security_capabilities(
+    container: &Sid,
+    capabilities: &mut [SID_AND_ATTRIBUTES],
+) -> SECURITY_CAPABILITIES {
+    SECURITY_CAPABILITIES {
+        AppContainerSid: container.0,
+        // An empty slice's pointer is dangling, not null: Windows on ARM64
+        // rejects it (ERROR_INVALID_PARAMETER) even with a zero count.
+        Capabilities: if capabilities.is_empty() {
+            ptr::null_mut()
+        } else {
+            capabilities.as_mut_ptr()
+        },
+        CapabilityCount: u32::try_from(capabilities.len()).unwrap_or(0),
+        Reserved: 0,
+    }
+}
+
+/// A process running in an `AppContainer` without capabilities, in a Job
+/// Object of its own; dropping it kills the process.
+pub(super) struct Contained {
+    _child: Child,
+    _job: Job,
+}
+
+/// Starts `program` with `args` in `container`, with no capability, no
+/// inherited handles, no window and no right to start processes.
+pub(super) fn spawn_contained(
+    container: &Sid,
+    program: &std::ffi::OsStr,
+    args: &[OsString],
+) -> Result<Contained, String> {
+    let security = security_capabilities(container, &mut []);
+    let mut attributes = Attributes::new(1)?;
+    attributes.set(
+        PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+        &raw const security,
+        size_of::<SECURITY_CAPABILITIES>(),
+    )?;
+    let job = Job::new(false, None)?;
+    let launch = Launch {
+        program,
+        args,
+        handles: &[],
+        env: None,
+        flags: CREATE_NO_WINDOW,
+    };
+    let child = create(&launch, &mut attributes)?;
+    job.assign(child.process)?;
+    child.resume()?;
+    Ok(Contained {
+        _child: child,
+        _job: job,
+    })
+}
+
+pub(super) struct Sid(PSID, fn(PSID));
 
 impl Sid {
+    /// The SID itself, valid while `self` lives.
+    pub(super) fn as_ptr(&self) -> PSID {
+        self.0
+    }
+
     fn of_container(name: &str) -> Result<Self, String> {
         let wide_name = wide(OsString::from(name).as_os_str());
         let mut sid: PSID = ptr::null_mut();
@@ -292,6 +358,14 @@ struct Child {
 }
 
 impl Child {
+    fn resume(&self) -> Result<(), String> {
+        // SAFETY: a valid thread handle of the suspended child.
+        if unsafe { ResumeThread(self.thread) } == u32::MAX {
+            return Err(last_error("ResumeThread"));
+        }
+        Ok(())
+    }
+
     fn wait(&self) -> Result<u32, String> {
         let mut code = 0u32;
         // SAFETY: a valid process handle; `code` is a valid out pointer.
@@ -317,16 +391,23 @@ impl Drop for Child {
     }
 }
 
-fn create(
-    spec: &LaunchSpec,
-    handles: &[HANDLE],
-    attributes: &mut Attributes,
-) -> Result<Child, String> {
-    let mut line = command_line(&spec.program, &spec.args);
+/// What [`create`] starts.
+struct Launch<'a> {
+    program: &'a std::ffi::OsStr,
+    args: &'a [OsString],
+    /// The standard handles to pass, already in the attribute list.
+    handles: &'a [HANDLE],
+    /// An environment block; `None` inherits the launcher's.
+    env: Option<&'a [u16]>,
+    flags: u32,
+}
+
+fn create(launch: &Launch<'_>, attributes: &mut Attributes) -> Result<Child, String> {
+    let mut line = command_line(launch.program, launch.args);
     let mut info = STARTUPINFOEXW::default();
     info.StartupInfo.cb = u32::try_from(size_of::<STARTUPINFOEXW>()).unwrap_or(0);
     info.lpAttributeList = attributes.buffer.as_mut_ptr().cast();
-    if !handles.is_empty() {
+    if !launch.handles.is_empty() {
         // SAFETY: GetStdHandle has no preconditions.
         unsafe {
             info.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -335,9 +416,15 @@ fn create(
             info.StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
         }
     }
+    let mut flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED | launch.flags;
+    let env = launch.env.map_or(ptr::null(), |block| {
+        flags |= CREATE_UNICODE_ENVIRONMENT;
+        block.as_ptr().cast()
+    });
     let mut process = PROCESS_INFORMATION::default();
-    // SAFETY: `line` is a mutable NUL-terminated buffer; `info` and the
-    // attribute list it points to outlive the call; a null environment and
+    // SAFETY: `line` is a mutable NUL-terminated buffer; `info`, the
+    // attribute list it points to and the environment block (double-NUL
+    // terminated UTF-16) outlive the call; a null environment and
     // directory inherit the launcher's, which the caller configured.
     let ok = unsafe {
         CreateProcessW(
@@ -345,9 +432,9 @@ fn create(
             line.as_mut_ptr(),
             ptr::null(),
             ptr::null(),
-            i32::from(!handles.is_empty()),
-            EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED,
-            ptr::null(),
+            i32::from(!launch.handles.is_empty()),
+            flags,
+            env,
             ptr::null(),
             &raw const info.StartupInfo,
             &raw mut process,

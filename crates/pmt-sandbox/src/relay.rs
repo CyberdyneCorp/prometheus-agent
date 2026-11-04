@@ -10,12 +10,12 @@
 //! [`Relay`], which serves it with the proxy's rules until every process
 //! holding the child's end of the channel has exited.
 //!
-//! A Windows `AppContainer` cannot reach loopback at all (only an
-//! administrator can exempt a container), so there the proxy is out of
-//! reach: the relay instead answers, at every start, whether the policy
-//! admits every public host ([`Relay::admits_direct`]); only then does the
-//! child get `internetClient` (public addresses, never loopback or the
-//! private network), otherwise it gets no network.
+//! A Windows `AppContainer` reaches loopback only within its own package,
+//! so there the launcher runs a relay process in the child's container
+//! (see `windows/relay.rs`): the child, holding no network capability,
+//! reaches only that relay, which forwards each connection over a named
+//! pipe to the launcher and on to the proxy. The [`Relay`] callback is
+//! not used there.
 
 use std::sync::Arc;
 
@@ -30,13 +30,10 @@ pub struct Attached {
     pub alive: std::os::unix::net::UnixStream,
 }
 
-type Gate = Arc<dyn Fn() -> bool + Send + Sync>;
-
 /// Hands each [`Attached`] listener to the egress proxy.
 #[derive(Clone)]
 pub struct Relay {
     serve: Arc<dyn Fn(Attached) + Send + Sync>,
-    direct: Option<Gate>,
 }
 
 impl Relay {
@@ -44,28 +41,12 @@ impl Relay {
     pub fn new(serve: impl Fn(Attached) + Send + Sync + 'static) -> Self {
         Self {
             serve: Arc::new(serve),
-            direct: None,
         }
-    }
-
-    /// Asking `admits` whether a child that cannot reach the proxy may
-    /// connect directly to public addresses (see the module docs).
-    #[must_use]
-    pub fn with_direct(mut self, admits: impl Fn() -> bool + Send + Sync + 'static) -> Self {
-        self.direct = Some(Arc::new(admits));
-        self
     }
 
     /// Serves `attached`.
     pub fn serve(&self, attached: Attached) {
         (self.serve)(attached);
-    }
-
-    /// Whether the policy admits every public host now; `false` without a
-    /// gate.
-    #[must_use]
-    pub fn admits_direct(&self) -> bool {
-        self.direct.as_ref().is_some_and(|admits| admits())
     }
 }
 

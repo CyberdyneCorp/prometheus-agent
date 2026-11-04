@@ -2359,7 +2359,7 @@ capabilities = [
 "Session change keeps cache" = ["crates/prometheus/tests/egress_session.rs::changing_egress_mid_session_keeps_the_system_prompt"]
 
 [security-boundaries."Egress enforcement for child processes"]
-"DNS rebinding" = ["crates/pmt-net/src/egress/mod.rs::the_proxy_connects_only_to_the_address_it_checked", "crates/pmt-sandbox/tests/sandbox/linux.rs::a_proxied_child_reaches_only_the_proxy", "crates/pmt-sandbox/src/linux/mod.rs::a_proxied_child_needs_its_own_network_namespace", "crates/pmt-sandbox/tests/sandbox/windows.rs::a_proxied_child_gets_public_internet_only_while_the_policy_admits_it", "crates/pmt-net/src/egress/mod.rs::only_an_unrestricted_public_policy_admits_every_public_host"]
+"DNS rebinding" = ["crates/pmt-net/src/egress/mod.rs::the_proxy_connects_only_to_the_address_it_checked", "crates/pmt-sandbox/tests/sandbox/linux.rs::a_proxied_child_reaches_only_the_proxy", "crates/pmt-sandbox/src/linux/mod.rs::a_proxied_child_needs_its_own_network_namespace", "crates/pmt-sandbox/tests/sandbox/windows.rs::a_proxied_child_reaches_only_the_proxy", "crates/prometheus/tests/terminal_windows.rs::session_children_reach_only_what_the_egress_policy_admits"]
 
 [security-boundaries."Gateway-owned secrets are never delegable"]
 "Skill requests the bot token" = ["crates/pmt-skills/tests/skills/view.rs::a_skill_declaring_a_bot_token_is_unavailable", "crates/prometheus/tests/surface_secrets.rs::a_skill_declaring_a_bot_token_is_listed_unavailable", "crates/prometheus/tests/surface_secrets.rs::a_plugin_cannot_be_granted_a_bot_token", "crates/prometheus/tests/surface_secrets.rs::an_mcp_server_cannot_receive_a_surface_secret", "crates/pmt-plugins/src/grants.rs::an_adapter_plugin_holds_only_its_own_platform_token"]
