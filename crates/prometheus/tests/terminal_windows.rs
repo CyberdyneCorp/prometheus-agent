@@ -300,13 +300,22 @@ fn session_children_reach_only_what_the_egress_policy_admits() {
         "powershell",
         &[],
         &[
-            curl("", "http://169.254.169.254/latest/meta-data/"),
-            // github.com: a public host every CI runner reaches.
-            curl("--ssl-no-revoke -o NUL -w '%{http_code}'", "https://github.com/"),
+            // -f: the proxy's refusal is an HTTP error, not a page.
+            curl("-f", "http://169.254.169.254/latest/meta-data/"),
+            // github.com: a public host every CI runner reaches. The page
+            // goes to the workspace: the container may not open NUL.
+            curl(
+                "--ssl-no-revoke -o page.html -w '%{http_code}'",
+                "https://github.com/",
+            ),
             "try { [Net.Sockets.TcpClient]::new().Connect('github.com', 443); 'connected' } catch { 'refused: ' + $_.Exception.GetBaseException().GetType().Name }".to_owned(),
         ],
     );
-    assert!(!output(&results, 0).ends_with("exit=0"), "{results:#?}");
+    let metadata = output(&results, 0);
+    assert!(
+        metadata.contains("403") && !metadata.ends_with("exit=0"),
+        "{results:#?}"
+    );
     assert!(output(&results, 1).ends_with("exit=0"), "{results:#?}");
     assert!(output(&results, 1).starts_with('2'), "{results:#?}");
     assert_eq!(
