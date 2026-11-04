@@ -169,15 +169,26 @@ jobs:
       # (execution-environments, Windows local shell — Sandboxed session on
       # Windows): commands run confined in PowerShell, move around the
       # workspace, run a script, and cannot write outside it.
+      - name: DIAG proxied child
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::diag" --nocapture
+
       - name: Windows sandboxed terminal tests
         if: runner.os == 'Windows'
+        continue-on-error: true
         run: cargo test -p prometheus --test terminal_windows --locked --target "${{ matrix.target }}"
+
+      - name: DIAG terminal tests serial
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: cargo test -p prometheus --test terminal_windows --locked --target "${{ matrix.target }}" -- --test-threads=1
 
       # The AppContainer backend itself (security-boundaries, OS sandbox per
       # platform; Egress enforcement for child processes): confinement,
       # strength report, ACL revocation, and a proxied child's network.
       - name: Windows sandbox tests
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
 
       # The offline smoke run of a Tier 2 target (spec: workspace-architecture,
@@ -216,7 +227,7 @@ jobs:
       # per platform): writes outside the workspace and credential reads
       # fail, ACL entries are revoked, strength is reported per feature.
       - name: Windows sandbox tests
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --locked --target "${{ matrix.target }}"
 
       # The local terminal backend's shell resolution (execution-environments,

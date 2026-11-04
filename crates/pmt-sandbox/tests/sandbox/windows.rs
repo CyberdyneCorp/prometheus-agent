@@ -185,3 +185,66 @@ fn a_proxied_child_reaches_only_the_proxy() {
         "the child bypassed the relay"
     );
 }
+
+/// TEMPORARY CI diagnosis of proxied children on ARM64 (removed after).
+#[test]
+fn diag_proxied_child_location() {
+    let fixture = Fixture::new();
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = proxy.local_addr().unwrap().port();
+    let work = fixture.work.display().to_string();
+    let parent = fixture.work.parent().unwrap().display().to_string();
+    let probe = format!(
+        "foreach ($s in @({{ [IO.Directory]::GetFiles('{work}').Count }}, {{ [IO.Directory]::GetDirectories('{parent}').Count }}, {{ [IO.Directory]::SetCurrentDirectory('{work}'); 'cwd set' }}, {{ Import-Module Microsoft.PowerShell.Management; Set-Location -LiteralPath '{work}' -ErrorAction Stop; 'set-location ok' }})) {{ try {{ & $s }} catch {{ 'ERR ' + $_.Exception.GetBaseException().GetType().FullName + ': ' + $_.Exception.GetBaseException().Message }} }}"
+    );
+    let show = |label: &str, sandbox: &Sandbox, explicit_env: bool| {
+        let mut command = sandbox.command("powershell.exe").unwrap();
+        command.current_dir(&fixture.work);
+        if explicit_env {
+            command.env_clear().envs(std::env::vars_os());
+        }
+        let output = command
+            .args(["-NoProfile", "-NonInteractive", "-Command", &probe])
+            .output()
+            .unwrap();
+        eprintln!(
+            "DIAG {label}: status {:?}\nstdout:\n{}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = sandbox
+            .command("cmd.exe")
+            .unwrap()
+            .current_dir(&fixture.work)
+            .args(["/C", "cd & dir /b"])
+            .output()
+            .unwrap();
+        eprintln!(
+            "DIAG {label} cmd: {:?}\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    let plain = confine(fixture.policy(&[]));
+    show("plain", &plain, false);
+    show("plain+env", &plain, true);
+    for dir in fixture.work.ancestors().take(6) {
+        eprintln!("DIAG acl (plain) {}", acl(dir));
+    }
+    drop(plain);
+    let proxied = confine(
+        fixture
+            .policy(&[])
+            .through_proxy(port, pmt_sandbox::Relay::new(|_| {})),
+    );
+    show("proxied", &proxied, false);
+    for dir in fixture.work.ancestors().take(6) {
+        eprintln!("DIAG acl (proxied) {}", acl(dir));
+    }
+    eprintln!("DIAG acl launcher {}", acl(&crate::common::launcher()));
+    show("proxied again", &proxied, false);
+    drop(proxied);
+    drop(proxy);
+}
