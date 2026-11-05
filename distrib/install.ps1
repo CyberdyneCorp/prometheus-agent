@@ -4,7 +4,7 @@
 #
 #   irm https://github.com/CyberdyneCorp/prometheus-agent/releases/latest/download/install.ps1 | iex
 #   .\install.ps1 [-Channel stable|canary] [-Version vX.Y.Z] [-ModifyPath|-NoModifyPath] [-BaseUrl URL]
-#                  [-Without node,cpython,uv,chromium]
+#                  [-Without node,cpython,uv,chromium,doc-converter]
 #
 # It downloads the signed channel index and release manifest, verifies their
 # minisign signatures against the embedded keys (Ed25519 and BLAKE2b in the
@@ -46,8 +46,8 @@ if ($Version -ne '' -and $Version -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\
 # `-Without chromium,node` arrives as one string under `-File`.
 $Without = @($Without | ForEach-Object { $_ -split ',' } | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_.Trim() })
 foreach ($runtime in $Without) {
-    if (@('node', 'cpython', 'uv', 'chromium') -notcontains $runtime) {
-        Fail "--without: unknown runtime '$runtime' (expected node|cpython|uv|chromium)" 2
+    if (@('node', 'cpython', 'uv', 'chromium', 'doc-converter') -notcontains $runtime) {
+        Fail "--without: unknown runtime '$runtime' (expected node|cpython|uv|chromium|doc-converter)" 2
     }
 }
 $BaseUrl = $BaseUrl.TrimEnd('/')

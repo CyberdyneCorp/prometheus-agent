@@ -68,7 +68,7 @@ pub struct Policies {
     pub chromium: RuntimePolicy,
     /// Runtime `cpython`, else `python3`/`python` on `PATH`.
     pub python: RuntimePolicy,
-    /// Runtime `doc-converter`, else `doc-converter` on `PATH` (`read_file`
+    /// Runtime `doc-converter`, else `xberg` on `PATH` (`read_file`
     /// document extraction).
     pub documents: RuntimePolicy,
 }
@@ -124,7 +124,7 @@ fn over(
             pythons.extend(pmt_tools::terminal::shell::find_all(name, path_var, None));
         }
         converters.extend(pmt_tools::terminal::shell::find_all(
-            crate::chat::session::documents::RUNTIME,
+            crate::chat::session::documents::HOST_EXECUTABLE,
             path_var,
             None,
         ));

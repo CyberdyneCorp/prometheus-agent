@@ -12,7 +12,7 @@
 # OpenSSL 3), checks the archive against the signed SHA-256, installs
 # ~/.local/bin/prometheus (+ the `pmt` alias) and writes the install receipt
 # ~/.local/bin/install.json (owner `self`). Each `--without <runtime>`
-# (node, cpython, uv, chromium) is recorded in `runtimes.exclude` of the
+# (node, cpython, uv, chromium, doc-converter) is recorded in `runtimes.exclude` of the
 # home's daemon.toml, so nothing ever installs that runtime. It sends
 # nothing but the downloads themselves.
 set -eu
@@ -26,7 +26,7 @@ RELEASE_KEYS="
 usage() {
     cat <<'USAGE'
 usage: install.sh [--channel stable|canary] [--version vX.Y.Z] [--modify-path|--no-modify-path]
-                  [--base-url URL] [--without node|cpython|uv|chromium]...
+                  [--base-url URL] [--without node|cpython|uv|chromium|doc-converter]...
 USAGE
 }
 
@@ -73,8 +73,8 @@ if [ -n "$version" ] &&
 fi
 for runtime in $without; do
     case $runtime in
-    node | cpython | uv | chromium) ;;
-    *) die "--without: unknown runtime '$runtime' (expected node|cpython|uv|chromium)" 2 ;;
+    node | cpython | uv | chromium | doc-converter) ;;
+    *) die "--without: unknown runtime '$runtime' (expected node|cpython|uv|chromium|doc-converter)" 2 ;;
     esac
 done
 base_url=${base_url%/}

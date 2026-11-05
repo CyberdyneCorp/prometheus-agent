@@ -2471,7 +2471,7 @@ capabilities = [
 
 [execution-environments."read_file document extraction"]
 "SQLite schema overview" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_live_sqlite_database_is_summarised_without_being_modified"]
-"Scanned PDF" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_scanned_pdf_starts_with_the_coverage_warning", "crates/pmt-tools/src/files/documents/pdf.rs::a_scanned_range_is_reported_with_the_text_before_it", "crates/prometheus/tests/doc_converter.rs::a_converter_on_path_answers_with_pages"]
+"Scanned PDF" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_scanned_pdf_starts_with_the_coverage_warning", "crates/pmt-tools/src/files/documents/pdf.rs::a_scanned_range_is_reported_with_the_text_before_it", "crates/prometheus/tests/doc_converter.rs::a_converter_on_path_answers_with_pages_from_inside_the_sandbox", "crates/prometheus/tests/doc_converter.rs::the_pinned_runtime_converts_a_pdf_and_an_rtf"]
 
 # Groups 35.6 / 35.7 (snapshots, undo, rollback, store CLI, /diff, verify; notifications, handoff)
 [execution-environments."File snapshots and undo (upgrade)"]

@@ -5,8 +5,9 @@ binary pins (spec: distribution-and-update, Managed runtime store).
 usage: scripts/pin-runtimes
 
 Every artifact is recorded with its URL, size and SHA-256. Digests come from
-the publisher's checksum files where one exists (Node, uv, CPython); Chrome
-for Testing publishes none, so its archives are downloaded and hashed here.
+the publisher's checksum files where one exists (Node, uv, CPython) or the
+GitHub release's asset digests (xberg); Chrome for Testing publishes none,
+so its archives are downloaded and hashed here.
 Edit the versions below, run this script, review the diff and commit it:
 the binary built from that commit installs exactly these bytes.
 """
@@ -22,6 +23,8 @@ UV = "0.13.6"
 CPYTHON = "3.12.16"
 CPYTHON_BUILD = "20261026"
 CHROMIUM = "156.0.8078.80"
+# doc-converter: the xberg CLI (github.com/xberg-io/xberg, MIT).
+XBERG = "1.3.10"
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "crates/pmt-update/runtimes/index.json"
 
@@ -144,10 +147,44 @@ def chromium():
     return {"version": CHROMIUM, "artifacts": artifacts}
 
 
+# xberg publishes no Windows arm64 build.
+XBERG_PLATFORMS = {platform: triple for platform, triple in TRIPLES.items() if platform != "windows-arm64"}
+
+
+def doc_converter():
+    tag = f"v{XBERG}"
+    release = json.loads(fetch(f"https://api.github.com/repos/xberg-io/xberg/releases/tags/{tag}"))
+    assets = {asset["name"]: asset for asset in release["assets"]}
+    artifacts = {}
+    for platform, triple in XBERG_PLATFORMS.items():
+        windows = platform.startswith("windows")
+        fmt = "zip" if windows else "tar.gz"
+        asset = assets[f"xberg-cli-{triple}.{fmt}"]
+        algorithm, sha = asset["digest"].split(":")
+        assert algorithm == "sha256", asset["digest"]
+        # The musl builds' `xberg` is a launcher script for their bundled loader.
+        exe = f"xberg-cli-{triple}/xberg{'.exe' if windows else ''}"
+        print(f"  {asset['browser_download_url']}", file=sys.stderr)
+        artifacts[platform] = {
+            "url": asset["browser_download_url"],
+            "size": asset["size"],
+            "sha256": sha,
+            "format": fmt,
+            "exe": exe,
+        }
+    return {"version": XBERG, "artifacts": artifacts}
+
+
 def main():
     index = {
         "schema": "prometheus.runtime-index.v1",
-        "runtimes": {"node": node(), "cpython": cpython(), "uv": uv(), "chromium": chromium()},
+        "runtimes": {
+            "node": node(),
+            "cpython": cpython(),
+            "uv": uv(),
+            "chromium": chromium(),
+            "doc-converter": doc_converter(),
+        },
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")

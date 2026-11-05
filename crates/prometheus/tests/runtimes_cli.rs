@@ -30,7 +30,8 @@ fn an_unknown_runtime_exits_2_naming_the_expected_ones() {
     let out = common::run(home.path(), &["runtimes", "install", "java"]);
     assert_eq!(code(&out), 2);
     assert!(
-        common::stderr(&out).contains("unknown runtime 'java' (expected node|cpython|uv|chromium)"),
+        common::stderr(&out)
+            .contains("unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter)"),
         "{}",
         common::stderr(&out)
     );

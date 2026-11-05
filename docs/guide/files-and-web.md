@@ -59,9 +59,11 @@ being refused as binary:
   indexes, views and triggers. The file is opened read-only and immutable,
   so reading a live database never writes to it.
 - `.pdf`, `.doc`, `.xls`, `.ppt`, `.pptx`, `.odt`, `.ods`, `.odp`, `.rtf` and
-  `.epub` through the `doc-converter` runtime: from the managed runtime
-  store, else `doc-converter` on `PATH`, else installed on first use when
-  `runtimes.allow_lazy_install` allows. Without it these files keep the
+  `.epub` through the `doc-converter` runtime (the pinned
+  [xberg](https://github.com/xberg-io/xberg) CLI): from the managed runtime
+  store, else `xberg` on `PATH`, else installed on first use when
+  `runtimes.allow_lazy_install` allows (`prometheus runtimes install
+  doc-converter` installs it ahead of time). Without it these files keep the
   binary-file refusal plus `install the doc-converter runtime to read <ext>
   files`. A PDF in which more than 20% of the pages, or at least 10 pages,
   have no text starts with `[EXTRACTION COVERAGE WARNING: <n> of <total>
@@ -72,9 +74,16 @@ Files of a container, SSH or plugin backend are downloaded through the
 backend and converted on this host. Documents larger than 50 MB are not
 converted (a SQLite database read in place has no limit).
 
-The runtime contract: `doc-converter --json <file>` runs with an empty
-environment for at most two minutes and prints one JSON object, either
-`{"pages": ["<text of page 1>", ...]}` (PDFs) or `{"markdown": "..."}`.
+The converter parses untrusted files, so it runs confined: under the OS
+sandbox it reads only a private copy of the document (under
+`<profile>/cache/documents/`, removed afterwards), its own runtime directory
+and the system toolchain, writes only a private temp directory and has no
+network; its environment is empty, it runs for at most two minutes and at
+most 64 MB of its output is read. It runs as `xberg extract <copy> --format
+json --no-config-discovery --extract-pages true --no-cache true
+--content-format markdown` with OCR disabled (a page without a text layer
+stays empty, which the coverage warning reports); PDFs are read page by page,
+other formats as one Markdown document.
 
 Refused outright: binary files, device files, named pipes and sockets,
 `/proc/<pid>/environ`, `mem`, `maps` and similar files, and project dotenv

@@ -56,6 +56,9 @@ jobs:
       # x86_64 gnu job a missing runtime fails them instead of skipping.
       PMT_TEST_CONTAINER_RUNTIME: ${{ startsWith(matrix.os, 'ubuntu') && 'docker' || 'auto' }}
       PMT_TEST_CONTAINERS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'require' || '' }}
+      # The read_file document test installs the pinned doc-converter
+      # runtime (a download per job) and converts real files with it.
+      PMT_TEST_DOC_CONVERTER: require
     steps:
       # Full history: the health ratchet compares health.toml with the merge
       # base on origin/main.
