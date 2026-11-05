@@ -2446,7 +2446,7 @@ capabilities = [
 
 [execution-environments."Container hardening is never silently dropped"]
 "Runtime rejects no-new-privileges" = ["crates/pmt-sandbox/tests/sandbox/container.rs::runtime_rejects_no_new_privileges", "crates/pmt-sandbox/tests/sandbox/container.rs::an_allowed_rejection_drops_only_that_flag_and_warns_on_every_start"]
-"Reused container lost its waiver" = ["crates/pmt-sandbox/tests/sandbox/container.rs::a_reused_container_keeps_its_hardening_record", "crates/pmt-sandbox/tests/sandbox/container.rs::a_reused_container_made_from_other_settings_is_recreated"]
+"Reused container lost its waiver" = ["crates/pmt-sandbox/tests/sandbox/container.rs::a_reused_container_keeps_its_hardening_record", "crates/pmt-sandbox/tests/sandbox/container.rs::a_reused_container_made_from_other_settings_is_recreated", "crates/pmt-sandbox/tests/sandbox/container.rs::a_live_handle_does_not_carry_a_removed_waiver"]
 
 [execution-environments."Container lifecycle and orphan reaping"]
 "Long foreground command" = ["crates/pmt-sandbox/tests/sandbox/container.rs::long_foreground_command"]

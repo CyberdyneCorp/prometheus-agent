@@ -132,9 +132,7 @@ impl ContainerSpec {
         if let Some((uid, gid)) = self.user {
             args.push(format!("--user={uid}:{gid}"));
         }
-        if let Some(workspace) = &self.workspace {
-            args.push(format!("--volume={}:/workspace", workspace.display()));
-        }
+        args.extend(self.workspace_arg());
         args.extend(self.volumes.iter().map(Volume::arg));
         args.extend(
             self.config
@@ -145,14 +143,27 @@ impl ContainerSpec {
         args
     }
 
+    /// The workspace mount (`mount_workspace`).
+    fn workspace_arg(&self) -> Option<String> {
+        self.workspace
+            .as_ref()
+            .map(|w| format!("--volume={}:/workspace", w.display()))
+    }
+
     /// A digest of everything the container is created from: the settings,
     /// every hardening flag asked for (dropped or not), the extra arguments
     /// and the image. Two specs with one digest create the same container.
+    /// A `shared_key` container is shared whatever each session's
+    /// workspace is (the first session's stays mounted), so its workspace
+    /// mount is left out: a session on another workspace does not replace
+    /// the container the key shares.
     fn digest(&self) -> String {
         let mut hasher = Sha256::new();
+        let workspace = self.workspace_arg();
         let args = self
             .base_args()
             .into_iter()
+            .filter(|a| self.config.shared_key.is_empty() || Some(a) != workspace.as_ref())
             .chain(
                 hardening::flags(&self.config)
                     .into_iter()
@@ -513,7 +524,10 @@ impl Pool {
     }
 
     /// The container `spec` names, shared with every session already
-    /// using it.
+    /// using it with the same settings and waivers. A live handle made
+    /// from other settings or other `allow_degraded` entries is replaced:
+    /// its in-memory "running" state would otherwise let this session skip
+    /// the label check and run without hardening it no longer waives.
     #[must_use]
     pub fn container(&self, spec: ContainerSpec) -> Arc<Container> {
         let name = spec.name();
@@ -521,7 +535,10 @@ impl Pool {
             .containers
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        if let Some(existing) = map.get(&name).and_then(Weak::upgrade) {
+        if let Some(existing) = map.get(&name).and_then(Weak::upgrade)
+            && existing.spec.allow_degraded == spec.allow_degraded
+            && existing.spec.digest() == spec.digest()
+        {
             return existing;
         }
         let container = Arc::new(Container {

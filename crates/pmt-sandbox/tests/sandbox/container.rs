@@ -430,6 +430,26 @@ fn a_reused_container_keeps_its_hardening_record() {
     assert!(!fake.dir.join("exists").exists());
 }
 
+/// A handle of a session that ran under the waiver is still alive (another
+/// session, or the pool reaper holding it for a tick) when a session
+/// without the waiver asks for the same container: it must not inherit
+/// the live handle and skip the hardening check.
+#[test]
+fn a_live_handle_does_not_carry_a_removed_waiver() {
+    let fake = Fake::new();
+    fake.reject("no-new-privileges", "unknown flag: no-new-privileges");
+    let nnp = [DegradedFeature::NoNewPrivileges];
+    let waived = Pool::process().container(reused(&fake, "h-1", ContainerConfig::default(), &nnp));
+    waived.ensure_running().unwrap();
+
+    let err = session_on(&fake, reused(&fake, "h-2", ContainerConfig::default(), &[])).unwrap_err();
+    assert_eq!(
+        err.message(),
+        "container hardening 'no_new_privileges' unsupported by runtime"
+    );
+    drop(waived);
+}
+
 #[test]
 fn a_reused_container_made_from_other_settings_is_recreated() {
     let fake = Fake::new();
