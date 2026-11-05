@@ -98,16 +98,19 @@ fn parse_volume(entry: &str) -> Result<Volume, Error> {
             format!("terminal.container.volumes: '{entry}' is not host:container[:ro]"),
         )
     };
-    let mut parts = entry.split(':');
-    let (Some(host), Some(container)) = (parts.next(), parts.next()) else {
+    // Parsed from the right: a Windows host path starts with a drive
+    // letter and its colon (`C:\src:/src:ro`).
+    let (rest, read_only) = match entry.rsplit_once(':') {
+        Some((rest, "ro")) => (rest, true),
+        Some((rest, "rw")) => (rest, false),
+        _ => (entry, false),
+    };
+    let Some((host, container)) = rest.rsplit_once(':') else {
         return Err(invalid());
     };
-    let read_only = match parts.next() {
-        None | Some("rw") => false,
-        Some("ro") => true,
-        Some(_) => return Err(invalid()),
-    };
-    if parts.next().is_some() || !Path::new(host).is_absolute() || !container.starts_with('/') {
+    let drive = cfg!(windows) && host.as_bytes().get(1) == Some(&b':');
+    let colon_in_host = host[if drive { 2 } else { 0 }..].contains(':');
+    if colon_in_host || !Path::new(host).is_absolute() || !container.starts_with('/') {
         return Err(invalid());
     }
     Ok(Volume {
@@ -252,6 +255,9 @@ mod tests {
             format!("{}:/k", home.join(".ssh").display()),
             "/var/run/docker.sock:/s".to_owned(),
             "relative:/x".to_owned(),
+            format!("{}:/a:/b", home.join("code").display()),
+            format!("{}:/a:zz", home.join("code").display()),
+            format!("{}", home.join("code").display()),
         ];
         for entry in refused {
             assert!(
