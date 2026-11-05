@@ -10,7 +10,7 @@ use pmt_core::error::Error;
 use pmt_rpc::contracts::TurnFinished;
 use serde_json::Value;
 
-use pmt_rpc::contracts::COMMAND_NOTICE;
+use pmt_rpc::contracts::{COMMAND_NOTICE, PROCESS_NOTICE};
 
 /// Where an attached chat shows things.
 pub(super) trait Out {
@@ -76,6 +76,10 @@ pub(super) fn event(out: &dyn Out, data: &Value) {
             out.tool(&format!("· {tool}"));
         }
         Some(COMMAND_NOTICE) => out.notice(data["payload"]["text"].as_str().unwrap_or_default()),
+        Some(PROCESS_NOTICE) => out.notice(&format!(
+            "[background] {}",
+            data["payload"]["text"].as_str().unwrap_or_default()
+        )),
         _ => {}
     }
 }

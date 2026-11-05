@@ -707,7 +707,6 @@ impl Factory {
         let denials = env::Denials::default();
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
-        let snapshots = snapshots::open(&self.scope, &self.store, id, &self.options.cwd);
         let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
@@ -728,7 +727,7 @@ impl Factory {
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
             processes: &processes,
-            snapshots: snapshots.clone(),
+            snapshots: snapshots::opener(&self.scope, &self.store, id),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {

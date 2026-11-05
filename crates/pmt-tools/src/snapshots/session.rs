@@ -16,6 +16,7 @@ use super::checkpoint::{self, Trigger};
 use super::destructive::is_destructive;
 use super::journal::{self, Edit};
 use super::store::{SnapshotStore, now_ms};
+use super::tree::Tree;
 use crate::files::edits::{EditCall, EditRecorder};
 
 /// The session's current turn number (it only grows).
@@ -45,6 +46,8 @@ pub struct Settings {
 /// One session's snapshot recorder.
 pub struct SessionSnapshots {
     store: SnapshotStore,
+    /// Where the session's files are.
+    tree: Arc<dyn Tree>,
     session: String,
     workspace: PathBuf,
     settings: Settings,
@@ -65,11 +68,12 @@ impl std::fmt::Debug for SessionSnapshots {
 }
 
 impl SessionSnapshots {
-    /// The recorder of `session`, working in `workspace`; checkpoints
-    /// never include `excluded` directories.
+    /// The recorder of `session`, working in `workspace` (a path of
+    /// `tree`); checkpoints never include `excluded` directories.
     #[must_use]
     pub fn new(
         store: SnapshotStore,
+        tree: Arc<dyn Tree>,
         session: &str,
         workspace: &Path,
         settings: Settings,
@@ -79,6 +83,7 @@ impl SessionSnapshots {
         Self {
             excluded,
             store,
+            tree,
             session: session.to_owned(),
             workspace: workspace.to_path_buf(),
             settings,
@@ -91,6 +96,18 @@ impl SessionSnapshots {
     #[must_use]
     pub fn store(&self) -> &SnapshotStore {
         &self.store
+    }
+
+    /// Where the session's files are.
+    #[must_use]
+    pub fn tree(&self) -> &dyn Tree {
+        &*self.tree
+    }
+
+    /// The session's workspace, a path of [`SessionSnapshots::tree`].
+    #[must_use]
+    pub fn workspace(&self) -> &Path {
+        &self.workspace
     }
 
     /// The session's current turn.
@@ -120,9 +137,25 @@ impl SessionSnapshots {
         }
     }
 
-    /// Checkpoints the project of `path` unless it already was this turn.
+    /// Where the session's `path` is in its tree, or why it is not kept.
+    fn locate(&self, path: &Path) -> Option<PathBuf> {
+        let found = self.tree.locate(path);
+        if found.is_none() {
+            tracing::debug!(
+                path = %path.display(),
+                "not snapshotted: outside what this host can reach of the backend"
+            );
+        }
+        found
+    }
+
+    /// Checkpoints the project of the session's `path` unless it already
+    /// was this turn.
     fn checkpoint(&self, path: &Path, tool: &str) {
-        let root = checkpoint::project_of(path, &self.workspace);
+        let Some(path) = self.locate(path) else {
+            return;
+        };
+        let root = checkpoint::project_of(&*self.tree, &path, &self.workspace);
         let turn = self.turn();
         {
             let mut taken = self.taken.lock().unwrap_or_else(PoisonError::into_inner);
@@ -141,6 +174,7 @@ impl SessionSnapshots {
         };
         let taken = checkpoint::take(
             &self.store,
+            &*self.tree,
             &root,
             &trigger,
             self.settings.max_file_bytes,
@@ -166,11 +200,15 @@ impl SessionSnapshots {
     ) -> std::io::Result<()> {
         let before = before.map(|b| self.store.put(b)).transpose()?;
         let after = after.map(|b| self.store.put(b)).transpose()?;
+        let Some(path) = self.locate(path) else {
+            return Ok(());
+        };
         let edit = Edit {
             turn: self.turn(),
             call_id: call.map(|c| c.call_id.clone()).unwrap_or_default(),
             tool: call.map_or_else(|| "file".to_owned(), |c| c.tool.clone()),
-            path: path.to_path_buf(),
+            path,
+            backend: self.tree.backend().map(str::to_owned),
             before,
             after,
             at_ms: now_ms(),

@@ -22,8 +22,12 @@ pub struct Edit {
     pub call_id: String,
     /// The tool.
     pub tool: String,
-    /// The changed file.
+    /// The changed file, as its tree names it (a host path, or a path on
+    /// `backend`).
     pub path: PathBuf,
+    /// The backend whose own filesystem holds `path` (`None`: this host).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
     /// Its content before (`None`: it did not exist).
     pub before: Option<String>,
     /// Its content after (`None`: it was removed).
@@ -113,13 +117,20 @@ pub fn live_edits(store: &SnapshotStore, session: &str) -> Vec<Edit> {
     edits
 }
 
-/// The content the agent last wrote to each file, over every journal of
-/// the store (`None`: the agent removed it).
+/// The content the agent last wrote to each file of `backend` (`None`:
+/// this host), over every journal of the store (`None`: the agent removed
+/// it).
 #[must_use]
-pub fn last_written(store: &SnapshotStore) -> BTreeMap<PathBuf, (i64, Option<String>)> {
+pub fn last_written(
+    store: &SnapshotStore,
+    backend: Option<&str>,
+) -> BTreeMap<PathBuf, (i64, Option<String>)> {
     let mut last: BTreeMap<PathBuf, (i64, Option<String>)> = BTreeMap::new();
     for journal in store.journals() {
-        for edit in read_edits(&journal) {
+        for edit in read_edits(&journal)
+            .into_iter()
+            .filter(|e| e.backend.as_deref() == backend)
+        {
             let newer = last.get(&edit.path).is_none_or(|(at, _)| *at <= edit.at_ms);
             if newer {
                 last.insert(edit.path, (edit.at_ms, edit.after));

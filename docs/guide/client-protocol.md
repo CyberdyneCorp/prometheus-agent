@@ -142,7 +142,12 @@ it as a prompt: `/retry`, `/learn`, skill commands) or `{"type":
 "refused", "reason"}` (commands that belong to the client, such as
 `/exit` or `/theme`, and usage errors). A notice a command posts later
 (`/refine`'s summary) arrives as a `session.event` of type
-`command.notice` with `payload.text`.
+`command.notice` with `payload.text`. A background process notice of an
+interactive session (a `notify_on_complete` or quiet-wait exit, a watched
+line, a heartbeat) arrives as a `session.event` of type `process.notice`
+with `payload.kind` (`result`, `error` or `progress`) and `payload.text`,
+shown as its own message; gateway sessions get theirs in the chat instead,
+and one-shot sessions get none (quiet-wait never switches there).
 
 `prompt.submit` never drops an input: while a turn runs it follows
 `busy.input_mode` (queued, steered into the running turn, or run after

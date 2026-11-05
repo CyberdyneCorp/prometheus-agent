@@ -44,6 +44,10 @@ pub const PERSISTENT_LABEL: &str = "prometheus.persistent";
 /// The label holding a digest of the settings the container was created
 /// from (every `create` argument but its name and session).
 pub const SPEC_LABEL: &str = "prometheus.spec";
+/// Where the session workspace is mounted inside a container
+/// (`terminal.container.mount_workspace`).
+pub const WORKSPACE: &str = "/workspace";
+
 /// The label listing the hardening flags dropped under `allow_degraded`
 /// (comma separated, empty when none).
 pub const DROPPED_LABEL: &str = "prometheus.dropped";
@@ -147,7 +151,7 @@ impl ContainerSpec {
     fn workspace_arg(&self) -> Option<String> {
         self.workspace
             .as_ref()
-            .map(|w| format!("--volume={}:/workspace", w.display()))
+            .map(|w| format!("--volume={}:{WORKSPACE}", w.display()))
     }
 
     /// A digest of everything the container is created from: the settings,

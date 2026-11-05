@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use clap::{Args, Subcommand};
 use pmt_core::error::{Error, codes};
-use pmt_tools::snapshots::SnapshotStore;
 use pmt_tools::snapshots::manage::{self, PrunePolicy};
 use pmt_tools::snapshots::restore;
+use pmt_tools::snapshots::{HostTree, SnapshotStore};
 
 use crate::context::Context;
 
@@ -132,6 +132,7 @@ fn undo(
     let turn = sessions.user_turns(id)?;
     let report = restore::undo(
         store,
+        &HostTree,
         &id.to_string(),
         Some(turn),
         args.turn,
@@ -185,6 +186,7 @@ fn rollback(store: &SnapshotStore, args: &RollbackArgs, json: bool) -> Result<u8
     };
     let reply = crate::chat::commands::files::rollback_reply(
         store,
+        &HostTree,
         &dir,
         args.checkpoint,
         args.file.as_deref(),

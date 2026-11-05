@@ -67,8 +67,8 @@ pub struct EnvInputs<'a> {
     pub vault_prompt: Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>>,
     /// Receipts, quiet-wait and handoff of the background processes.
     pub processes: &'a super::processes::Wiring,
-    /// File snapshots (undo and checkpoints), when on.
-    pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
+    /// Opens the file snapshots (undo and checkpoints), when on.
+    pub snapshots: Option<super::snapshots::Opener<'a>>,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -189,14 +189,11 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
             })
     });
     let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
-    let registry = super::backend::registry(inputs.plugins, &inputs.plugin_call);
-    let remote = super::backend::select(
-        scope,
-        &registry,
-        inputs.session_id,
-        inputs.cwd,
-        user_home.as_deref(),
-    );
+    let remote = remote(inputs, user_home.as_deref());
+    let snapshots = inputs
+        .snapshots
+        .as_ref()
+        .map(|opener| opener.open(inputs.cwd, remote.as_ref()));
     let terminal = commands.clone().and_then(|commands| {
         terminal(
             inputs,
@@ -204,6 +201,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
             user_home.clone(),
             commands,
             remote.as_ref(),
+            snapshots.as_ref(),
         )
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok()
@@ -223,6 +221,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
             user_home,
             policy,
             file_backend,
+            snapshots.as_ref(),
         ))),
         terminal: terminal.clone(),
         web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
@@ -235,12 +234,24 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         browser,
         terminal,
         sync,
-        snapshots: inputs.snapshots.clone(),
+        snapshots,
         commands,
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
         previewer,
     })
+}
+
+/// The session's non-local terminal backend (`None`: the local one).
+fn remote(inputs: &EnvInputs<'_>, user_home: Option<&Path>) -> Option<super::backend::Remote> {
+    let registry = super::backend::registry(inputs.plugins, &inputs.plugin_call);
+    super::backend::select(
+        inputs.scope,
+        &registry,
+        inputs.session_id,
+        inputs.cwd,
+        user_home,
+    )
 }
 
 /// `browser_vault` of a session with a browser: the profile's vault (its
@@ -341,9 +352,9 @@ fn files(
     user_home: Option<PathBuf>,
     policy: Arc<Policy>,
     remote: Option<RemoteFiles>,
+    snapshots: Option<&Arc<pmt_tools::snapshots::SessionSnapshots>>,
 ) -> FileSession {
     let host_cwd = inputs.cwd.to_path_buf();
-    let remote_files = remote.is_some();
     let (backend, cwd) = remote.unwrap_or_else(|| {
         let backend: Arc<dyn pmt_tools::files::FileBackend> =
             Arc::new(LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy));
@@ -359,11 +370,7 @@ fn files(
         read_max_chars: limit(inputs.config, |c| c.files.read_max_chars),
         linter: Linter::builtin(),
         documents: super::documents::converter(inputs.scope, inputs.launch),
-        edits: inputs
-            .snapshots
-            .clone()
-            .filter(|_| !remote_files)
-            .map(|s| s as Arc<dyn pmt_tools::files::edits::EditRecorder>),
+        edits: snapshots.map(|s| Arc::clone(s) as Arc<dyn pmt_tools::files::edits::EditRecorder>),
     })
 }
 
@@ -416,6 +423,7 @@ fn terminal(
     user_home: Option<PathBuf>,
     commands: Commands,
     remote: Option<&super::backend::Remote>,
+    snapshots: Option<&Arc<pmt_tools::snapshots::SessionSnapshots>>,
 ) -> Result<Terminal, Error> {
     let config = inputs.scope.config();
     let target: Arc<dyn pmt_tools::terminal::target::Target> = match remote {
@@ -446,12 +454,11 @@ fn terminal(
         notify: inputs.completions.clone(),
         auto_notify: inputs.processes.auto_notify,
         receipts: Some(Arc::clone(&inputs.processes.receipts)),
-        // A remote backend's files are not on this host.
-        before_command: inputs.snapshots.clone().filter(|_| remote.is_none()).map(
-            |s| -> pmt_tools::terminal::BeforeCommand {
+        before_command: snapshots
+            .cloned()
+            .map(|s| -> pmt_tools::terminal::BeforeCommand {
                 Arc::new(move |command: &str, cwd: &Path| s.before_command(command, cwd))
-            },
-        ),
+            }),
         clock: None,
     })
     .map_err(|e| {

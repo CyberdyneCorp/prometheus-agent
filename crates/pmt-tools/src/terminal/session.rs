@@ -78,8 +78,9 @@ pub struct TerminalSetup {
     pub auto_notify: bool,
     /// Where ended background processes leave their receipts.
     pub receipts: Option<Arc<dyn Receipts>>,
-    /// Runs before every command on the host (destructive-command
-    /// checkpoints, spec: execution-environments, Snapshot triggers).
+    /// Runs before every command, on this host, with the command's
+    /// directory on its backend (destructive-command checkpoints, spec:
+    /// execution-environments, Snapshot triggers).
     pub before_command: Option<BeforeCommand>,
     /// The time source (default: the system clock).
     pub clock: Option<Clock>,
@@ -146,8 +147,9 @@ pub type SecretSource = Arc<dyn Fn() -> Vec<(String, SecretString)> + Send + Syn
 /// pinned Python environment of a skill whose script it runs).
 pub type PathSource = Arc<dyn Fn(&str) -> Vec<PathBuf> + Send + Sync>;
 
-/// Runs on a blocking thread before a command starts on the host, with the
-/// command and its directory; it must never fail the command.
+/// Runs on a blocking thread of this host before a command starts, with
+/// the command and its directory on the backend; it must never fail the
+/// command.
 pub type BeforeCommand = Arc<dyn Fn(&str, &Path) + Send + Sync>;
 
 /// Things the next result carries once.
@@ -414,15 +416,13 @@ impl Terminal {
         result
     }
 
-    /// The [`BeforeCommand`] hook of a host command (a remote backend's
-    /// files are not on this host).
+    /// The [`BeforeCommand`] hook of a command, with the command's
+    /// directory in the backend's own namespace (the hook knows where that
+    /// backend's files are).
     async fn before_command(&self, command: &str, cwd: &Path) {
         let Some(hook) = self.setup.before_command.clone() else {
             return;
         };
-        if !self.setup.target.descriptor().uses_host_filesystem {
-            return;
-        }
         let (command, cwd) = (command.to_owned(), cwd.to_path_buf());
         let _ = tokio::task::spawn_blocking(move || hook(&command, &cwd)).await;
     }

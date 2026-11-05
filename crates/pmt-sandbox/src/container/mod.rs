@@ -25,7 +25,7 @@ pub mod hardening;
 pub mod lifecycle;
 pub mod options;
 
-pub use lifecycle::{Activity, Container, ContainerSpec, Pool, reap_orphans};
+pub use lifecycle::{Activity, Container, ContainerSpec, Pool, WORKSPACE, reap_orphans};
 
 /// Variables the runtime and SSH clients read for their own configuration
 /// (sockets, contexts, config dirs); nothing else of this process reaches

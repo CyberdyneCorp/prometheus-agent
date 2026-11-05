@@ -7,8 +7,8 @@
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
-    Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList, SessionContextUsage,
-    SessionRef, TurnFinished,
+    Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList, PROCESS_NOTICE,
+    SessionContextUsage, SessionRef, TurnFinished,
 };
 use pmt_tui::app::Card;
 use pmt_tui::transcript::Kind;
@@ -103,6 +103,7 @@ impl Tui<'_> {
             }
             Some("tool.call") => self.app.transcript.push(Kind::Tool, text("tool")),
             Some(COMMAND_NOTICE) => self.notice(text("text")),
+            Some(PROCESS_NOTICE) => self.notice(format!("[background] {}", text("text"))),
             _ => {}
         }
     }

@@ -2462,7 +2462,7 @@ capabilities = [
 
 # Group 35.5 (quiet-wait auto-notify, retained process receipts, read_file document extraction)
 [execution-environments."Quiet-wait auto-notify"]
-"Second unchanged poll" = ["crates/pmt-tools/tests/terminal/notifications.rs::a_second_silent_poll_switches_on_completion_notification"]
+"Second unchanged poll" = ["crates/pmt-tools/tests/terminal/notifications.rs::a_second_silent_poll_switches_on_completion_notification", "crates/prometheus/tests/daemon_process_notices.rs::a_quiet_wait_exit_reaches_the_clients_of_an_interactive_session"]
 "Cron job" = ["crates/prometheus/src/chat/session/processes.rs::quiet_wait_needs_a_context_that_receives_completions", "crates/pmt-tools/tests/terminal/notifications.rs::without_auto_notify_polling_stays_plain_and_nothing_is_announced"]
 
 [execution-environments."Retained process receipts"]
@@ -2475,7 +2475,7 @@ capabilities = [
 
 # Groups 35.6 / 35.7 (snapshots, undo, rollback, store CLI, /diff, verify; notifications, handoff)
 [execution-environments."File snapshots and undo (upgrade)"]
-"Undo last turn" = ["crates/pmt-tools/tests/snapshots.rs::undo_restores_a_patched_file_and_removes_a_created_one", "crates/prometheus/tests/chat_undo.rs::undo_restores_the_patched_file_and_removes_the_created_one"]
+"Undo last turn" = ["crates/pmt-tools/tests/snapshots.rs::undo_restores_a_patched_file_and_removes_a_created_one", "crates/prometheus/tests/chat_undo.rs::undo_restores_the_patched_file_and_removes_the_created_one", "crates/pmt-tools/tests/snapshot_backends.rs::a_remote_backend_session_is_snapshotted_and_undone_through_its_backend", "crates/pmt-tools/tests/snapshot_backends.rs::a_mounted_container_workspace_is_snapshotted_on_the_host", "crates/prometheus/tests/container_backend.rs::a_container_session_write_is_undone_from_the_host"]
 "Conflicting edit" = ["crates/pmt-tools/tests/snapshots.rs::a_file_edited_after_the_agent_is_not_undone_without_force"]
 
 [execution-environments."Snapshot triggers, caps and per-run toggle"]
@@ -2494,7 +2494,7 @@ capabilities = [
 
 [execution-environments."Project run-recipe verification"]
 "Detect only" = ["crates/prometheus/tests/verify_cli.rs::detect_only_prints_the_cargo_recipe_and_runs_nothing"]
-"Failing tests" = ["crates/prometheus/tests/verify_cli.rs::a_failing_test_phase_is_reported_with_its_output_tail_and_exit_1"]
+"Failing tests" = ["crates/prometheus/tests/verify_cli.rs::a_failing_test_phase_is_reported_with_its_output_tail_and_exit_1", "crates/prometheus/tests/container_backend.rs::verify_runs_its_phases_inside_the_container"]
 
 [execution-environments."Background notifications are throttled"]
 "Ninth match" = ["crates/pmt-tools/tests/terminal/notifications.rs::the_ninth_match_disables_watching_and_falls_back_to_completion"]

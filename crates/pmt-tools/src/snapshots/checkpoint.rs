@@ -3,7 +3,6 @@
 //! content in the object pool. Files larger than the size cap are listed
 //! as skipped instead of stored.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::store::{SnapshotStore, now_ms, read_json, write_json};
+use super::tree::Tree;
 
 /// Files recorded per checkpoint at most (the rest is left out and the
 /// checkpoint marked `truncated`).
@@ -77,7 +77,7 @@ pub struct Trigger<'a> {
     pub tool: &'a str,
 }
 
-/// Takes a checkpoint of the project at `root`, keeping at most
+/// Takes a checkpoint of the project at `root` of `tree`, keeping at most
 /// `max_checkpoints` of it.
 ///
 /// # Errors
@@ -85,20 +85,21 @@ pub struct Trigger<'a> {
 /// The store cannot be written.
 pub fn take(
     store: &SnapshotStore,
+    tree: &dyn Tree,
     root: &Path,
     trigger: &Trigger<'_>,
     max_file_bytes: u64,
     max_checkpoints: usize,
 ) -> io::Result<Checkpoint> {
-    let id = store.touch_workspace(root)?;
-    let (files, truncated) = walk(root, trigger.excluded);
+    let id = store.touch_workspace(&tree.key(root))?;
+    let (files, truncated) = tree.walk(root, trigger.excluded, MAX_FILES);
     let mut entries = Vec::with_capacity(files.len());
     for (rel, path) in files {
-        let size = fs::metadata(&path).map_or(0, |m| m.len());
+        let size = tree.size(&path).unwrap_or(0);
         let hash = if size > max_file_bytes {
             None
         } else {
-            match fs::read(&path) {
+            match tree.read(&path) {
                 Ok(bytes) => Some(store.put(&bytes)?),
                 Err(_) => continue,
             }
@@ -147,61 +148,20 @@ pub fn list(store: &SnapshotStore, id: &str) -> Vec<Checkpoint> {
     found
 }
 
-/// The files of the project at `root` now (leaving out `excluded`):
-/// relative path (`/`-separated) to absolute path, and whether
-/// [`MAX_FILES`] cut the walk short.
-#[must_use]
-pub fn walk(root: &Path, excluded: &[PathBuf]) -> (BTreeMap<String, PathBuf>, bool) {
-    let top = root.to_path_buf();
-    let excluded = excluded.to_vec();
-    let walker = ignore::WalkBuilder::new(root)
-        .hidden(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .require_git(false)
-        .follow_links(false)
-        .filter_entry(move |entry| {
-            let path = entry.path();
-            if entry.file_name() == ".git" || excluded.iter().any(|e| path.starts_with(e)) {
-                return false;
-            }
-            // A nested repository is a project of its own.
-            !(path != top
-                && entry.file_type().is_some_and(|t| t.is_dir())
-                && path.join(".git").exists())
-        })
-        .build();
-    let mut files = BTreeMap::new();
-    for entry in walker.flatten() {
-        if !entry.file_type().is_some_and(|t| t.is_file()) {
-            continue;
-        }
-        if files.len() >= MAX_FILES {
-            return (files, true);
-        }
-        if let Ok(rel) = entry.path().strip_prefix(root) {
-            let rel = rel.to_string_lossy().replace('\\', "/");
-            files.insert(rel, entry.path().to_path_buf());
-        }
-    }
-    (files, false)
-}
-
 /// The project a path belongs to: the nearest enclosing directory with a
 /// `.git`, not above `workspace` when the path is inside it (then the
 /// workspace itself); outside it, the nearest repository or the path's
 /// directory.
 #[must_use]
-pub fn project_of(path: &Path, workspace: &Path) -> PathBuf {
-    let start = if path.is_dir() {
+pub fn project_of(tree: &dyn Tree, path: &Path, workspace: &Path) -> PathBuf {
+    let start = if tree.is_dir(path) {
         path
     } else {
         path.parent().unwrap_or(path)
     };
     let inside = start.starts_with(workspace);
     for dir in start.ancestors() {
-        if dir.join(".git").exists() {
+        if tree.exists(&dir.join(".git")) {
             return dir.to_path_buf();
         }
         if inside && dir == workspace {

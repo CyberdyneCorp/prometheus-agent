@@ -11,6 +11,8 @@
 //! - [`restore`]: undo, rollback listing, diff and restore.
 //! - [`manage`]: status and pruning.
 //! - [`worktree`]: the `/diff` command.
+//! - [`tree::Tree`]: where the session's files are (this host, a mounted
+//!   container workspace, or a backend's own filesystem).
 
 pub mod checkpoint;
 pub mod destructive;
@@ -19,7 +21,9 @@ pub mod manage;
 pub mod restore;
 pub mod session;
 pub mod store;
+pub mod tree;
 pub mod worktree;
 
 pub use session::{SessionSnapshots, Settings, TurnSource};
 pub use store::SnapshotStore;
+pub use tree::{BackendTree, HostTree, MountedTree, Tree};

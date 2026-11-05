@@ -262,14 +262,20 @@ impl DaemonHost {
             .unwrap_or_default();
         let factory = self.factory(profile, cwd, &setup)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
-        // A chat's session tells the chat when its background processes end.
-        let completions = matches!(row.origin, pmt_store::Origin::Gateway { .. }).then(|| {
-            notify::completions(
+        // A chat's session tells the chat when its background processes
+        // end; an interactive client session tells its clients. Other
+        // sessions (one-shot runs, cron, subagents) cannot receive a later
+        // notice, so quiet-wait never promises one there.
+        let oneshot = row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG);
+        let completions = match row.origin {
+            pmt_store::Origin::Gateway { .. } => Some(notify::completions(
                 Arc::clone(&self.gateway),
                 profile.scope().name().to_string(),
                 id.to_string(),
-            )
-        });
+            )),
+            pmt_store::Origin::None if !oneshot => Some(notify::to_clients(link.clone())),
+            _ => None,
+        };
         let clients = Clients {
             events: Arc::new(ToClients { link: link.clone() }),
             secrets: Arc::new(SecretsToClients {
@@ -300,7 +306,7 @@ impl DaemonHost {
             interrupt: Mutex::default(),
             queue: Mutex::default(),
             current: Mutex::default(),
-            oneshot: row.source_tag.as_deref() == Some(pmt_store::sessions::ONESHOT_TAG),
+            oneshot,
         });
         loaded.insert(id, Arc::clone(&session));
         Ok(session)

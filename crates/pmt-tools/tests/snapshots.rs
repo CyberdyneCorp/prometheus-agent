@@ -16,7 +16,7 @@ use pmt_tools::files::patch::PatchArgs;
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend, ReadArgs};
 use pmt_tools::snapshots::manage::{self, PrunePolicy};
 use pmt_tools::snapshots::{
-    SessionSnapshots, Settings, SnapshotStore, checkpoint, restore, worktree,
+    HostTree, SessionSnapshots, Settings, SnapshotStore, checkpoint, restore, worktree,
 };
 
 struct Fixture {
@@ -53,6 +53,7 @@ impl Fixture {
         let source = Arc::clone(&turn);
         let snapshots = Arc::new(SessionSnapshots::new(
             store.clone(),
+            Arc::new(HostTree),
             "ses_a",
             &work,
             settings(),
@@ -132,7 +133,7 @@ impl Fixture {
     }
 
     fn checkpoints(&self) -> Vec<checkpoint::Checkpoint> {
-        restore::checkpoints(&self.store, &self.work)
+        restore::checkpoints(&self.store, &HostTree, &self.work)
     }
 }
 
@@ -143,13 +144,13 @@ fn undo_restores_a_patched_file_and_removes_a_created_one() {
     fx.put("src/lib.rs", "fn a() {}\n");
     fx.patch("src/lib.rs", "fn a() {}", "fn b() {}");
     fx.write("src/new.rs", "pub fn new() {}\n");
-    let report = restore::undo(&fx.store, "ses_a", Some(1), 1, false, false).unwrap();
+    let report = restore::undo(&fx.store, &HostTree, "ses_a", Some(1), 1, false, false).unwrap();
     assert_eq!(fx.get("src/lib.rs").as_deref(), Some("fn a() {}\n"));
     assert_eq!(fx.get("src/new.rs"), None);
     assert_eq!(report.turns, [1]);
     assert!(report.conflicts.is_empty());
     // The turn is undone once.
-    let again = restore::undo(&fx.store, "ses_a", Some(1), 1, false, false).unwrap();
+    let again = restore::undo(&fx.store, &HostTree, "ses_a", Some(1), 1, false, false).unwrap();
     assert!(again.turns.is_empty());
 }
 
@@ -160,7 +161,7 @@ fn a_file_edited_after_the_agent_is_not_undone_without_force() {
     fx.put("src/lib.rs", "fn a() {}\n");
     fx.patch("src/lib.rs", "fn a() {}", "fn b() {}");
     fx.put("src/lib.rs", "fn mine() {}\n");
-    let report = restore::undo(&fx.store, "ses_a", Some(1), 1, false, false).unwrap();
+    let report = restore::undo(&fx.store, &HostTree, "ses_a", Some(1), 1, false, false).unwrap();
     assert_eq!(fx.get("src/lib.rs").as_deref(), Some("fn mine() {}\n"));
     assert_eq!(report.conflicts.len(), 1);
     assert!(
@@ -170,7 +171,7 @@ fn a_file_edited_after_the_agent_is_not_undone_without_force() {
         "{:?}",
         report.conflicts
     );
-    restore::undo(&fx.store, "ses_a", Some(1), 1, true, false).unwrap();
+    restore::undo(&fx.store, &HostTree, "ses_a", Some(1), 1, true, false).unwrap();
     assert_eq!(fx.get("src/lib.rs").as_deref(), Some("fn a() {}\n"));
 }
 
@@ -220,13 +221,13 @@ fn rollback_keeps_hand_edited_files_and_restores_the_rest() {
     fx.write("b.rs", "b1\n");
     fx.put("b.rs", "b-by-hand\n");
     let checkpoint = &fx.checkpoints()[0];
-    let report = restore::rollback(&fx.store, checkpoint, false, None).unwrap();
+    let report = restore::rollback(&fx.store, &HostTree, checkpoint, false, None).unwrap();
     assert_eq!(fx.get("a.rs").as_deref(), Some("a0\n"));
     assert_eq!(fx.get("b.rs").as_deref(), Some("b-by-hand\n"));
     assert_eq!(report.restored, ["a.rs"]);
     assert_eq!(report.kept, ["b.rs"]);
     assert!(report.render().contains("kept (hand-edited): b.rs"));
-    restore::rollback(&fx.store, checkpoint, true, Some("b.rs")).unwrap();
+    restore::rollback(&fx.store, &HostTree, checkpoint, true, Some("b.rs")).unwrap();
     assert_eq!(fx.get("b.rs").as_deref(), Some("b0\n"));
 }
 
@@ -236,7 +237,7 @@ fn a_rollback_diff_changes_nothing() {
     let fx = Fixture::new();
     fx.put("src/lib.rs", "one\n");
     fx.patch("src/lib.rs", "one", "two");
-    let listing = restore::listing(&fx.store, &fx.checkpoints());
+    let listing = restore::listing(&fx.store, &HostTree, &fx.checkpoints());
     assert_eq!(
         (
             listing[0].number,
@@ -245,7 +246,7 @@ fn a_rollback_diff_changes_nothing() {
         ),
         (1, 1, 2)
     );
-    let diff = restore::diff(&fx.store, &fx.checkpoints()[0]);
+    let diff = restore::diff(&fx.store, &HostTree, &fx.checkpoints()[0]);
     assert!(diff.contains("-one\n+two\n"), "{diff}");
     assert_eq!(fx.get("src/lib.rs").as_deref(), Some("two\n"));
 }
@@ -258,7 +259,7 @@ fn the_session_diff_lists_every_changed_file_with_counts() {
     fx.patch("a.rs", "two", "three");
     fx.write("b.rs", "new\nfile\n");
     let request = worktree::Request::parse("session --stat");
-    let text = worktree::diff(&fx.store, "ses_a", &fx.work, &request);
+    let text = worktree::diff(&fx.store, &HostTree, "ses_a", &fx.work, &request);
     assert!(text.contains("a.rs | +1 -1"), "{text}");
     assert!(text.contains("b.rs | +2 -0"), "{text}");
 }

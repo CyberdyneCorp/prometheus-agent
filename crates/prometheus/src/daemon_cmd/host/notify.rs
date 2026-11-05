@@ -1,17 +1,22 @@
-//! Background notifications of daemon sessions to their chat (spec:
-//! messaging-gateway, Background and internal notifications): a gateway
-//! session's terminal hands each background process notice (an exit, a
-//! watched line, a heartbeat) to [`completions`], which injects it through
-//! `Gateway::notify` (filtered
+//! Background notifications of daemon sessions (spec: messaging-gateway,
+//! Background and internal notifications; execution-environments,
+//! Quiet-wait auto-notify): a gateway session's terminal hands each
+//! background process notice (an exit, a watched line, a heartbeat) to
+//! [`completions`], which injects it through `Gateway::notify` (filtered
 //! there by `gateway.notifications.background`). A dropped admission (a
 //! human follow-up waits, or the conversation's lane is not up yet) is
 //! retried with backoff and is not a delivery attempt. Background
 //! subagents (subagent-delegation 38.3) deliver through [`deliver`] too.
+//! An interactive client session (TUI, attached line chat) gets them from
+//! [`to_clients`] as `process.notice` session events instead.
 
 use std::time::Duration;
 
+use pmt_gateway::Link;
 use pmt_gateway::messaging::{Admission, Background, BackgroundKind};
+use pmt_rpc::contracts::{PROCESS_NOTICE, SessionEvent};
 use pmt_tools::terminal::process::Notice;
+use serde_json::json;
 use tokio::sync::mpsc;
 use tracing::Instrument as _;
 
@@ -41,6 +46,41 @@ pub(super) fn completions(
         .in_current_span(),
     );
     tx
+}
+
+/// The sender an interactive client session's terminal reports its
+/// background processes to: each notice reaches the session's clients as
+/// a `process.notice` session event (kept for clients that re-attach
+/// later); its task ends when the session's terminal is dropped.
+pub(super) fn to_clients(link: Link) -> mpsc::UnboundedSender<Notice> {
+    let (tx, mut rx) = mpsc::unbounded_channel::<Notice>();
+    tokio::spawn(
+        async move {
+            while let Some(notice) = rx.recv().await {
+                link.emit::<SessionEvent>(&event_of(&notice));
+            }
+        }
+        .in_current_span(),
+    );
+    tx
+}
+
+/// The `session.event` of a background process notice.
+fn event_of(notice: &Notice) -> serde_json::Value {
+    let background = of_notice(notice);
+    let kind = match background.kind {
+        BackgroundKind::Result => "result",
+        BackgroundKind::Error => "error",
+        BackgroundKind::Progress => "progress",
+    };
+    json!({
+        "type": PROCESS_NOTICE,
+        "ts": jiff::Timestamp::now().to_string(),
+        "turn_id": null,
+        "span_id": null,
+        "parent_span_id": null,
+        "payload": {"kind": kind, "text": background.text},
+    })
 }
 
 /// The chat notification of a background process notice: an exit is a

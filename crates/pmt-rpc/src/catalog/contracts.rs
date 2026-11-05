@@ -618,6 +618,13 @@ pub enum PromptImage {
 /// text to show. Every other `session.event` is a trajectory event.
 pub const COMMAND_NOTICE: &str = "command.notice";
 
+/// The `session.event` type of a background process notice of the session
+/// (an exit, a watched line, a heartbeat; spec: execution-environments,
+/// Background notifications are throttled, Quiet-wait auto-notify):
+/// `payload.kind` is `result` (exit 0), `error` or `progress`, and
+/// `payload.text` is the text to show as its own message.
+pub const PROCESS_NOTICE: &str = "process.notice";
+
 /// `command.dispatch` params: a slash command the client does not handle
 /// itself (spec: tui, Slash command flow).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

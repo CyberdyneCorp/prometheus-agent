@@ -11,6 +11,7 @@ use std::process::Command;
 
 use super::journal;
 use super::store::SnapshotStore;
+use super::tree::Tree;
 
 /// What `/diff` shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -56,11 +57,18 @@ impl Request {
     }
 }
 
-/// The diff `request` asks for, in `cwd`, of `session`'s changes.
+/// The diff `request` asks for, in `cwd`, of `session`'s changes (their
+/// current content read from `tree`).
 #[must_use]
-pub fn diff(store: &SnapshotStore, session: &str, cwd: &Path, request: &Request) -> String {
+pub fn diff(
+    store: &SnapshotStore,
+    tree: &dyn Tree,
+    session: &str,
+    cwd: &Path,
+    request: &Request,
+) -> String {
     let text = match request.mode {
-        Mode::Session => session_diff(store, session, cwd, request),
+        Mode::Session => session_diff(store, tree, session, cwd, request),
         mode => match git(cwd, &["rev-parse", "--show-toplevel"]) {
             Some(_) => git_diff(cwd, mode, request),
             None => return "not a git repository".to_owned(),
@@ -119,9 +127,18 @@ fn null_device() -> &'static str {
 
 /// Per changed file: the content of its earliest snapshot in this
 /// session and its content now.
-fn session_diff(store: &SnapshotStore, session: &str, cwd: &Path, request: &Request) -> String {
+fn session_diff(
+    store: &SnapshotStore,
+    tree: &dyn Tree,
+    session: &str,
+    cwd: &Path,
+    request: &Request,
+) -> String {
     let mut first: BTreeMap<PathBuf, Option<String>> = BTreeMap::new();
-    for edit in journal::live_edits(store, session) {
+    let here = journal::live_edits(store, session)
+        .into_iter()
+        .filter(|e| e.backend.as_deref() == tree.backend());
+    for edit in here {
         first.entry(edit.path).or_insert(edit.before);
     }
     let mut text = String::new();
@@ -143,7 +160,8 @@ fn session_diff(store: &SnapshotStore, session: &str, cwd: &Path, request: &Requ
             .and_then(|h| store.get(&h).ok())
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .unwrap_or_default();
-        let now = std::fs::read(&path)
+        let now = tree
+            .read(&path)
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .unwrap_or_default();
         if then == now {

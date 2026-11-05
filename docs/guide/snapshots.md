@@ -27,9 +27,22 @@ With `files.snapshot.enabled = true` (default; `prometheus chat
   `install`, `sed -i`, `truncate`, `dd`, `shred`, output redirection `>`,
   `git reset`, `git clean`, `git checkout` and `git restore`.
 
-Recording never fails or blocks the call it records. Snapshots of remote
-backends (container, SSH, plugins) are not taken: their files are not on
-this host.
+Recording never fails or blocks the call it records. Sessions on other
+terminal backends are snapshotted too:
+
+- a `container` session whose workspace is mounted
+  (`terminal.container.mount_workspace`, the default) is recorded on the
+  host: its `/workspace/...` paths are the host project's files, so the
+  journal, the checkpoints, `/undo`, `/rollback` and `prometheus files`
+  all work on the host paths;
+- a session whose files live only in the backend (SSH, a plugin backend, a
+  container without the mount) is read, checkpointed and restored through
+  that backend's file operations: a checkpoint costs one backend call per
+  directory and per file (turn `files.snapshot.enabled` off for a huge
+  remote project). Those checkpoints and edits belong to that backend: the
+  host's `prometheus files undo` reports them as
+  `conflict: <path> is on the <backend> backend; undo it from a session on that backend`
+  instead of touching a host path of the same name.
 
 ## `/undo`
 
@@ -107,10 +120,18 @@ scripts with the package manager of its lockfile), `pyproject.toml` (uv,
 Poetry or pip), `go.mod` or a `Makefile`. `--detect-only` prints the recipe
 as JSON and runs nothing; `--save` writes it to `environment.json`.
 
-The phases run in order under the OS sandbox (the project writable, the
-network allowed), each bounded by `--timeout` (default 600 s); `start` runs in
-the background until its port (`--port` or the recipe's `port`) accepts
-connections or `--ready-timeout` (default 60 s) passes, then is stopped.
+The phases run in order on the profile's terminal backend, each bounded by
+`--timeout` (default 600 s): locally under the OS sandbox (the project
+writable, the network allowed); on `container` in the container (the project
+mounted as `/workspace`; a run from a session shares that session's
+container, a run from a shell gets one of its own, removed afterwards unless
+persistent); on `ssh` or a plugin backend in its workspace (the recipe is
+still detected from `PATH` on this host). A backend that cannot be set up
+fails the run; it never falls back to this host. `start` runs in the
+background until its port (`--port` or the recipe's `port`) accepts
+connections or `--ready-timeout` (default 60 s) passes, then is stopped; on a
+non-local backend the port is probed inside it (`nc -z`, else bash's
+`/dev/tcp`), so the backend needs one of them.
 Each phase prints its status and duration, and a failed one the tail of its
 output. The exit code is 0 when every phase passed and 1 otherwise. Run from
 a session's terminal (which sets `PROMETHEUS_SESSION_ID`), the outcome is

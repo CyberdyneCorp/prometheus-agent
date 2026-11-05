@@ -10,7 +10,7 @@ use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_store::Store;
 use pmt_tools::snapshots::restore::{self, UndoReport};
-use pmt_tools::snapshots::{SnapshotStore, worktree};
+use pmt_tools::snapshots::{HostTree, SnapshotStore, Tree, worktree};
 
 use super::Ctx;
 use crate::slash::Surface;
@@ -67,6 +67,7 @@ pub fn undo_files(
     let turn = store.user_turns(live.id)?;
     let report = restore::undo(
         snapshots.store(),
+        snapshots.tree(),
         &live.id.to_string(),
         Some(turn),
         count,
@@ -168,7 +169,15 @@ pub fn rollback_live(
     let Some(snapshots) = &live.snapshots else {
         return Ok("file snapshots are off for this session".to_owned());
     };
-    let reply = rollback_reply(snapshots.store(), &live.cwd, number, file, diff, all)?;
+    let reply = rollback_reply(
+        snapshots.store(),
+        snapshots.tree(),
+        snapshots.workspace(),
+        number,
+        file,
+        diff,
+        all,
+    )?;
     if number.is_some() && !diff {
         let note = "[The user rolled the workspace back to an earlier checkpoint; the latest turn's file changes are undone.]";
         store.append_message(
@@ -180,20 +189,21 @@ pub fn rollback_live(
 }
 
 /// The listing, the diff or the restore of checkpoint `number` of the
-/// workspace holding `dir`.
+/// workspace holding `dir` in `tree`.
 ///
 /// # Errors
 ///
 /// An unknown checkpoint, store I/O.
 pub fn rollback_reply(
     store: &SnapshotStore,
+    tree: &dyn Tree,
     dir: &Path,
     number: Option<usize>,
     file: Option<&str>,
     diff: bool,
     all: bool,
 ) -> Result<String, Error> {
-    let checkpoints = restore::checkpoints(store, dir);
+    let checkpoints = restore::checkpoints(store, tree, dir);
     let Some(number) = number else {
         if checkpoints.is_empty() {
             return Ok("no checkpoints for this workspace".to_owned());
@@ -201,7 +211,7 @@ pub fn rollback_reply(
         let mut text = String::from(
             "checkpoints (newest first; /rollback N restores, /rollback diff N previews):\n",
         );
-        for row in restore::listing(store, &checkpoints) {
+        for row in restore::listing(store, tree, &checkpoints) {
             let at = jiff::Timestamp::from_millisecond(row.created_ms).map_or_else(
                 |_| "?".to_owned(),
                 |t| t.strftime("%Y-%m-%d %H:%M:%S").to_string(),
@@ -221,9 +231,10 @@ pub fn rollback_reply(
         ))
     })?;
     if diff {
-        return Ok(restore::diff(store, checkpoint));
+        return Ok(restore::diff(store, tree, checkpoint));
     }
-    let report = restore::rollback(store, checkpoint, all, file).map_err(|e| io(store, &e))?;
+    let report =
+        restore::rollback(store, tree, checkpoint, all, file).map_err(|e| io(store, &e))?;
     Ok(report.render())
 }
 
@@ -238,12 +249,14 @@ fn remove(words: &mut Vec<&str>, flag: &str) -> bool {
 #[must_use]
 pub fn diff(ctx: &Ctx<'_>, args: &str) -> String {
     let request = worktree::Request::parse(args);
-    let store = ctx.live.snapshots.as_ref().map_or_else(
-        || SnapshotStore::of_profile(ctx.scope.dir()),
-        |s| s.store().clone(),
-    );
+    let host = SnapshotStore::of_profile(ctx.scope.dir());
+    let (store, tree): (&SnapshotStore, &dyn Tree) = match &ctx.live.snapshots {
+        Some(s) => (s.store(), s.tree()),
+        None => (&host, &HostTree),
+    };
     let text = worktree::diff(
-        &store,
+        store,
+        tree,
         &ctx.live.id.to_string(),
         &ctx.factory.options.cwd,
         &request,

@@ -3,9 +3,13 @@
 //!
 //! The recipe comes from `<project>/.prometheus/environment.json` or from
 //! the manifests (Cargo, package.json with its lockfile's package manager,
-//! pyproject, go.mod, Makefile). Phases run in order under the OS sandbox
-//! (workspace writable, network allowed) with a per-phase timeout; `start`
-//! runs in the background until its port answers, then is stopped.
+//! pyproject, go.mod, Makefile). Phases run in order on the profile's
+//! terminal backend with a per-phase timeout: on this host under the OS
+//! sandbox (workspace writable, network allowed), or through the selected
+//! container, SSH or plugin backend ([`backend`]); `start` runs in the
+//! background until its port answers, then is stopped.
+
+mod backend;
 
 use std::fmt::Write as _;
 use std::io::Read as _;
@@ -236,7 +240,12 @@ pub fn run(args: &VerifyArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         return Ok(pmt_core::exit::SUCCESS);
     }
     let scope = ctx.scope()?;
-    let runner = Runner::new(&scope, ctx.launch, &dir, args)?;
+    let host = Runner::new(&scope, ctx.launch, &dir, args)?;
+    let remote = backend::open(&scope, ctx.launch, &host, args)?;
+    let runner: &dyn Phases = match &remote {
+        Some(remote) => remote,
+        None => &host,
+    };
     let outcomes: Vec<Outcome> = recipe
         .phases
         .iter()
@@ -244,6 +253,7 @@ pub fn run(args: &VerifyArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         .filter(|p| !(args.skip_start && p.name == "start"))
         .map(|p| runner.phase(p, recipe.port))
         .collect();
+    drop(remote);
     let passed = outcomes.iter().all(|o| o.passed);
     record_evidence(&scope, ctx.launch, passed, &outcomes);
     if ctx.json {
@@ -315,12 +325,32 @@ pub fn render(outcomes: &[Outcome]) -> String {
     text
 }
 
-/// Runs phases under the OS sandbox in the project directory.
+/// Runs one phase somewhere.
+trait Phases {
+    /// Runs `phase` (`start` until `port` answers) and says how it went.
+    fn phase(&self, phase: &Phase, port: Option<u16>) -> Outcome;
+}
+
+/// An outcome of `phase` that has not run yet.
+fn outcome_of(phase: &Phase) -> Outcome {
+    Outcome {
+        phase: phase.name.clone(),
+        command: phase.command.clone(),
+        passed: false,
+        exit_code: None,
+        duration_ms: 0,
+        reason: None,
+        output_tail: String::new(),
+    }
+}
+
+/// Runs phases under the OS sandbox in the project directory on this host.
 struct Runner {
     sandbox: pmt_sandbox::Sandbox,
-    shell: PathBuf,
+    shell: pmt_tools::terminal::shell::Shell,
     env: pmt_tools::terminal::env::ChildEnv,
     dir: PathBuf,
+    scratch: PathBuf,
     timeout: Duration,
     ready_timeout: Duration,
 }
@@ -353,13 +383,13 @@ impl Runner {
         );
         env.set_temp_dir(&scratch);
         let shell =
-            pmt_tools::terminal::doctor::local_shell(&scope.config().terminal, launch, &sandbox)?
-                .path;
+            pmt_tools::terminal::doctor::local_shell(&scope.config().terminal, launch, &sandbox)?;
         Ok(Self {
             sandbox,
             shell,
             env,
             dir: dir.to_path_buf(),
+            scratch,
             timeout: Duration::from_secs(args.timeout),
             ready_timeout: Duration::from_secs(args.ready_timeout),
         })
@@ -368,7 +398,7 @@ impl Runner {
     fn spawn(&self, command: &str) -> Result<Child, String> {
         let mut cmd = self
             .sandbox
-            .command(&self.shell)
+            .command(&self.shell.path)
             .map_err(|e| e.message().to_owned())?;
         self.env.apply(&mut cmd);
         cmd.arg("-c")
@@ -379,27 +409,23 @@ impl Runner {
             .stderr(Stdio::piped());
         cmd.spawn().map_err(|e| format!("cannot start: {e}"))
     }
+}
 
+impl Phases for Runner {
     fn phase(&self, phase: &Phase, port: Option<u16>) -> Outcome {
         let started = Instant::now();
-        let mut outcome = Outcome {
-            phase: phase.name.clone(),
-            command: phase.command.clone(),
-            passed: false,
-            exit_code: None,
-            duration_ms: 0,
-            reason: None,
-            output_tail: String::new(),
-        };
+        let mut outcome = outcome_of(phase);
         match self.spawn(&phase.command) {
             Err(why) => outcome.reason = Some(why),
             Ok(child) if phase.name == "start" => self.start(child, port, &mut outcome),
             Ok(child) => self.wait(child, &mut outcome),
         }
-        outcome.duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        outcome.duration_ms = millis(started.elapsed());
         outcome
     }
+}
 
+impl Runner {
     fn wait(&self, mut child: Child, outcome: &mut Outcome) {
         let output = collect(&mut child);
         let deadline = Instant::now() + self.timeout;
@@ -493,6 +519,10 @@ fn collect(child: &mut Child) -> Collected {
     })
     .collect();
     Collected(readers)
+}
+
+fn millis(elapsed: Duration) -> u64 {
+    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
 }
 
 fn tail(text: &str) -> String {
