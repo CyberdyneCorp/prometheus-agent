@@ -179,6 +179,9 @@ pub struct Launched {
     pub profile_dir: PathBuf,
     /// The browser's short temporary directory.
     pub temp_dir: PathBuf,
+    /// Its OS sandbox, kept while the browser runs (on Windows dropping it
+    /// removes the `AppContainer` and its file entries).
+    pub sandbox: pmt_sandbox::Sandbox,
 }
 
 impl Launched {
@@ -231,12 +234,13 @@ pub async fn launch(
         temp: temp_dir.clone(),
     };
     match start(executable, &dirs, env, timeout, proxy, confinement).await {
-        Ok((child, pid, cdp)) => Ok(Launched {
+        Ok((Spawned { child, sandbox, .. }, pid, cdp)) => Ok(Launched {
             child,
             pid,
             cdp,
             profile_dir,
             temp_dir,
+            sandbox,
         }),
         Err(why) => {
             cleanup::remove_dir_async(&profile_dir).await;
@@ -305,16 +309,20 @@ async fn start(
     timeout: Duration,
     proxy: &Proxy,
     confinement: &Confinement,
-) -> Result<(Child, u32, Arc<Cdp>), String> {
-    let Spawned { mut child, connect } = spawn(executable, dirs, env, proxy, confinement)?;
-    let pid = child.id().unwrap_or_default();
-    let log = StderrTail::drain(child.stderr.take());
-    match connect.ready(&mut child, &dirs.profile, timeout).await {
-        Ok(cdp) => Ok((child, pid, cdp)),
+) -> Result<(Spawned, u32, Arc<Cdp>), String> {
+    let mut spawned = spawn(executable, dirs, env, proxy, confinement)?;
+    let pid = spawned.child.id().unwrap_or_default();
+    let log = StderrTail::drain(spawned.child.stderr.take());
+    match spawned
+        .connect
+        .ready(&mut spawned.child, &dirs.profile, timeout)
+        .await
+    {
+        Ok(cdp) => Ok((spawned, pid, cdp)),
         Err(why) => {
             cleanup::kill_group(pid);
-            let _ = child.start_kill();
-            let _ = child.wait().await;
+            let _ = spawned.child.start_kill();
+            let _ = spawned.child.wait().await;
             Err(log.explain(why).await)
         }
     }
@@ -324,6 +332,7 @@ async fn start(
 struct Spawned {
     child: Child,
     connect: Connect,
+    sandbox: pmt_sandbox::Sandbox,
 }
 
 /// How DevTools is reached: `--remote-debugging-pipe`, so the browser
@@ -335,13 +344,13 @@ enum Connect {
 
 impl Connect {
     async fn ready(
-        self,
+        &self,
         child: &mut Child,
         _profile_dir: &Path,
         timeout: Duration,
     ) -> Result<Arc<Cdp>, String> {
         let Self::Pipe(cdp) = self;
-        let probe = Arc::clone(&cdp);
+        let (cdp, probe) = (Arc::clone(cdp), Arc::clone(cdp));
         let answer = tokio::select! {
             answer = probe.call_within("Browser.getVersion", serde_json::json!({}), None, timeout) => answer,
             status = child.wait() => return Err(exited(status)),
@@ -404,6 +413,7 @@ fn confined_flags(command: &mut std::process::Command, dirs: &Dirs, confines: bo
 fn start_piped(
     command: std::process::Command,
     executable: &Path,
+    sandbox: pmt_sandbox::Sandbox,
     connect: impl FnOnce(&str) -> Result<Arc<Cdp>, String>,
 ) -> Result<Spawned, String> {
     let mut command = Command::from(command);
@@ -416,6 +426,7 @@ fn start_piped(
     Ok(Spawned {
         child,
         connect: Connect::Pipe(cdp),
+        sandbox,
     })
 }
 
@@ -450,7 +461,7 @@ fn spawn(
         vec![(to_browser_read.into(), 3), (from_browser_write.into(), 4)],
     )
     .map_err(pipe_error)?;
-    start_piped(command, executable, |label| {
+    start_piped(command, executable, sandbox, |label| {
         Cdp::over_pipe(label, to_browser_write.into(), from_browser_read.into())
     })
 }
@@ -487,7 +498,7 @@ fn spawn(
             from_browser_write.as_raw_handle() as usize
         ))
         .arg("about:blank");
-    let spawned = start_piped(command, executable, |label| {
+    let spawned = start_piped(command, executable, sandbox, |label| {
         Cdp::over_pipe(label, to_browser_write, from_browser_read)
     });
     // The child holds its own copies now.

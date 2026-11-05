@@ -80,6 +80,8 @@ struct LocalBrowser {
     pid: u32,
     /// The egress proxy all its connections go through (stops on drop).
     _proxy: Proxy,
+    /// Its OS sandbox (on Windows its `AppContainer`), kept while it runs.
+    _sandbox: pmt_sandbox::Sandbox,
 }
 
 impl LocalBrowser {
@@ -418,6 +420,7 @@ impl BrowserManager {
             temp_dir: launched.temp_dir,
             pid: launched.pid,
             _proxy: proxy,
+            _sandbox: launched.sandbox,
         };
         Ok(self.session_over(
             launched.cdp,
