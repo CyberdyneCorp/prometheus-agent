@@ -327,6 +327,23 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "browser",
+        &[],
+        Tools,
+        "Connect to your own browser over DevTools, show it, or disconnect",
+        &[
+            arg(
+                "action",
+                ArgKind::Choice(&["connect", "status", "disconnect"]),
+                false,
+            ),
+            text("url"),
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "mcp",
         &[],
         Tools,

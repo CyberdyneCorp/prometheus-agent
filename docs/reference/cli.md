@@ -20,6 +20,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -4184,6 +4185,168 @@ Usage: prometheus grants help revoke
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus grants help help
+```
+
+## `prometheus browser`
+
+```text
+Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+
+Usage: prometheus browser [OPTIONS] <COMMAND>
+
+Commands:
+  status         Show the browser provider, explicit endpoint and live browser sessions with their provider
+  close-profile  End your real browser so real-profile browsing can copy its profile (asks first)
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus browser status`
+
+```text
+Show the browser provider, explicit endpoint and live browser sessions with their provider
+
+Usage: prometheus browser status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus browser close-profile`
+
+```text
+End your real browser so real-profile browsing can copy its profile (asks first)
+
+Usage: prometheus browser close-profile [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus browser help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus browser help [COMMAND]
+
+Commands:
+  status         Show the browser provider, explicit endpoint and live browser sessions with their provider
+  close-profile  End your real browser so real-profile browsing can copy its profile (asks first)
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus browser help status`
+
+```text
+Show the browser provider, explicit endpoint and live browser sessions with their provider
+
+Usage: prometheus browser help status
+```
+
+## `prometheus browser help close-profile`
+
+```text
+End your real browser so real-profile browsing can copy its profile (asks first)
+
+Usage: prometheus browser help close-profile
+```
+
+## `prometheus browser help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus browser help help
 ```
 
 ## `prometheus vault`
@@ -15976,6 +16139,7 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -16636,6 +16800,34 @@ Usage: prometheus help grants list
 Remove a grant; running sessions lose it at their next tool call
 
 Usage: prometheus help grants revoke
+```
+
+## `prometheus help browser`
+
+```text
+Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+
+Usage: prometheus help browser [COMMAND]
+
+Commands:
+  status         Show the browser provider, explicit endpoint and live browser sessions with their provider
+  close-profile  End your real browser so real-profile browsing can copy its profile (asks first)
+```
+
+## `prometheus help browser status`
+
+```text
+Show the browser provider, explicit endpoint and live browser sessions with their provider
+
+Usage: prometheus help browser status
+```
+
+## `prometheus help browser close-profile`
+
+```text
+End your real browser so real-profile browsing can copy its profile (asks first)
+
+Usage: prometheus help browser close-profile
 ```
 
 ## `prometheus help vault`
@@ -18561,6 +18753,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
 | `prometheus.approvals_suggest.v1` | `prometheus approvals suggest` |
 | `prometheus.vault_list.v1` | `prometheus vault list` |
+| `prometheus.browser_status.v1` | `prometheus browser status` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |

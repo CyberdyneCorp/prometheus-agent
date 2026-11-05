@@ -25,6 +25,7 @@ use pmt_net::egress::Proxy;
 use super::cdp::Cdp;
 use super::cleanup;
 pub use super::confine::Confinement;
+pub use super::options::LaunchOptions;
 use crate::terminal::env::ChildEnv;
 
 /// Bound on a browser start (`browser.launch_timeout_secs` default).
@@ -174,8 +175,11 @@ pub struct Launched {
     pub pid: u32,
     /// The DevTools connection.
     pub cdp: Arc<Cdp>,
-    /// The throwaway profile directory.
+    /// The profile directory.
     pub profile_dir: PathBuf,
+    /// The profile directory is `browser.user_data_dir` (or a real-profile
+    /// snapshot) and outlives the browser.
+    pub keep_profile: bool,
     /// The browser's short temporary directory.
     pub temp_dir: PathBuf,
     /// Its OS sandbox, kept while the browser runs (on Windows dropping it
@@ -190,63 +194,95 @@ impl Launched {
         cleanup::kill_group(self.pid);
         let _ = self.child.start_kill();
         let _ = tokio::time::timeout(Duration::from_secs(5), self.child.wait()).await;
-        cleanup::remove_dir_async(&self.profile_dir).await;
+        if !self.keep_profile {
+            cleanup::remove_dir_async(&self.profile_dir).await;
+        }
         cleanup::remove_dir_async(&self.temp_dir).await;
     }
 }
 
-/// Launches `executable` headless on a fresh throwaway profile directory
-/// under `profiles_root` with `env` as its whole environment, under the
+/// Launches `executable` on a fresh throwaway profile directory under
+/// `profiles_root` (or `options.user_data_dir`, kept afterwards), headless
+/// unless `options.headed`, with `env` as its whole environment, under the
 /// OS sandbox of `confinement` (spec: execution-environments, Local
-/// browser isolation). Every connection the browser makes goes through
-/// `proxy`, the session's egress proxy, loopback included (spec:
-/// security-boundaries, the egress policy covers every outbound
-/// connection made by browsers): Chromium's implicit bypass of
-/// `localhost` would otherwise reach local services unchecked; where the
-/// sandbox confines the network the OS enforces it too.
+/// browser isolation; Local browser options and headed mode). Every
+/// connection the browser makes goes through `proxy`, the session's
+/// egress proxy, loopback included (spec: security-boundaries, the egress
+/// policy covers every outbound connection made by browsers): Chromium's
+/// implicit bypass of `localhost` would otherwise reach local services
+/// unchecked; where the sandbox confines the network the OS enforces it
+/// too.
 ///
 /// # Errors
 ///
 /// The sandbox cannot be built, the spawn failed, or the browser exited
-/// or did not answer over DevTools within `timeout`.
+/// or did not answer over DevTools within `options.timeout`.
 pub async fn launch(
     executable: &Path,
     profiles_root: &Path,
     env: &ChildEnv,
-    timeout: Duration,
     proxy: &Proxy,
     confinement: &Confinement,
+    options: &LaunchOptions,
 ) -> Result<Launched, String> {
-    let profile_dir = profiles_root.join(ulid::Ulid::generate().to_string().to_lowercase());
+    let keep_profile = options.user_data_dir.is_some();
+    let profile_dir = options
+        .user_data_dir
+        .clone()
+        .unwrap_or_else(|| profiles_root.join(ulid::Ulid::generate().to_string().to_lowercase()));
     pmt_core::private_fs::create_dir(&profile_dir)
         .map_err(|err| format!("cannot create the browser profile: {err}"))?;
+    let throwaway = |dir: PathBuf| async move {
+        if !keep_profile {
+            cleanup::remove_dir_async(&dir).await;
+        }
+    };
     let temp_dir = temp_root(profiles_root).join(format!(
         "pmt-browser-{}",
         &ulid::Ulid::generate().to_string().to_lowercase()[16..]
     ));
     if let Err(err) = pmt_core::private_fs::create_dir(&temp_dir) {
-        cleanup::remove_dir_async(&profile_dir).await;
+        throwaway(profile_dir).await;
         return Err(format!("cannot create the browser's temp directory: {err}"));
     }
     let dirs = Dirs {
         profile: profile_dir.clone(),
         temp: temp_dir.clone(),
     };
-    match start(executable, &dirs, env, timeout, proxy, confinement).await {
+    let run = Run {
+        executable,
+        dirs: &dirs,
+        env,
+        proxy,
+        confinement,
+        options,
+    };
+    match start(&run).await {
         Ok((Spawned { child, sandbox, .. }, pid, cdp)) => Ok(Launched {
             child,
             pid,
             cdp,
             profile_dir,
+            keep_profile,
             temp_dir,
             sandbox,
         }),
         Err(why) => {
-            cleanup::remove_dir_async(&profile_dir).await;
+            throwaway(profile_dir).await;
             cleanup::remove_dir_async(&temp_dir).await;
             Err(why)
         }
     }
+}
+
+/// Everything one browser start uses.
+pub(super) struct Run<'a> {
+    pub(super) executable: &'a Path,
+    dirs: &'a Dirs,
+    env: &'a ChildEnv,
+    pub(super) proxy: &'a Proxy,
+    pub(super) confinement: &'a Confinement,
+    pub(super) options: &'a LaunchOptions,
 }
 
 /// Where a browser's temp directory goes. Unix: the host's temp, since
@@ -270,14 +306,20 @@ struct Dirs {
 }
 
 /// The browser command line shared by every platform.
-fn base_command(command: &mut std::process::Command, dirs: &Dirs, env: &ChildEnv, proxy: &Proxy) {
-    let mut env = env.clone();
+fn base_command(command: &mut std::process::Command, run: &Run<'_>) {
+    let dirs = run.dirs;
+    let mut env = run.env.clone();
     env.set_temp_dir(&dirs.temp);
+    for (name, value) in &run.options.display_env {
+        env.set(name, value);
+    }
     env.apply(command);
     let mut flag = OsString::from("--user-data-dir=");
     flag.push(&dirs.profile);
+    if !run.options.headed {
+        command.arg("--headless=new");
+    }
     command
-        .arg("--headless=new")
         .arg(flag)
         .args([
             "--no-first-run",
@@ -288,7 +330,7 @@ fn base_command(command: &mut std::process::Command, dirs: &Dirs, env: &ChildEnv
             "--password-store=basic",
             "--use-mock-keychain",
         ])
-        .arg(format!("--proxy-server={}", proxy.url()))
+        .arg(format!("--proxy-server={}", run.proxy.url()))
         .arg("--proxy-bypass-list=<-loopback>")
         // A directory the sandbox lets the browser use: an AppContainer
         // process cannot even be created in a directory it cannot reach.
@@ -296,25 +338,19 @@ fn base_command(command: &mut std::process::Command, dirs: &Dirs, env: &ChildEnv
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
+    command.args(&run.options.extra_args);
     cleanup::new_group(command);
 }
 
 /// Spawns the browser and waits until it answers over DevTools, killing
 /// it when it does not.
-async fn start(
-    executable: &Path,
-    dirs: &Dirs,
-    env: &ChildEnv,
-    timeout: Duration,
-    proxy: &Proxy,
-    confinement: &Confinement,
-) -> Result<(Spawned, u32, Arc<Cdp>), String> {
-    let mut spawned = spawn(executable, dirs, env, proxy, confinement)?;
+async fn start(run: &Run<'_>) -> Result<(Spawned, u32, Arc<Cdp>), String> {
+    let mut spawned = spawn(run)?;
     let pid = spawned.child.id().unwrap_or_default();
     let log = StderrTail::drain(spawned.child.stderr.take());
     match spawned
         .connect
-        .ready(&mut spawned.child, &dirs.profile, timeout)
+        .ready(&mut spawned.child, &run.dirs.profile, run.options.timeout)
         .await
     {
         Ok(cdp) => Ok((spawned, pid, cdp)),
@@ -438,19 +474,13 @@ fn pipe_error(err: std::io::Error) -> String {
 }
 
 #[cfg(unix)]
-fn spawn(
-    executable: &Path,
-    dirs: &Dirs,
-    env: &ChildEnv,
-    proxy: &Proxy,
-    confinement: &Confinement,
-) -> Result<Spawned, String> {
-    let sandbox =
-        super::confine::sandbox(executable, &dirs.profile, &dirs.temp, proxy, confinement)?;
+fn spawn(run: &Run<'_>) -> Result<Spawned, String> {
+    let (executable, dirs) = (run.executable, run.dirs);
+    let sandbox = super::confine::sandbox(run, &dirs.profile, &dirs.temp)?;
     let mut command = sandbox
         .command(executable)
         .map_err(|err| err.message().to_owned())?;
-    base_command(&mut command, dirs, env, proxy);
+    base_command(&mut command, run);
     confined_flags(&mut command, dirs, sandbox.confines());
     command.arg("about:blank");
     let (to_browser_read, to_browser_write) = std::io::pipe().map_err(pipe_error)?;
@@ -469,17 +499,11 @@ fn spawn(
 /// loopback port of this process, so DevTools cannot listen there) and
 /// inherits the pipe ends, whose handle values its command line names.
 #[cfg(windows)]
-fn spawn(
-    executable: &Path,
-    dirs: &Dirs,
-    env: &ChildEnv,
-    proxy: &Proxy,
-    confinement: &Confinement,
-) -> Result<Spawned, String> {
+fn spawn(run: &Run<'_>) -> Result<Spawned, String> {
     use std::os::windows::io::{AsHandle as _, AsRawHandle as _};
 
-    let sandbox =
-        super::confine::sandbox(executable, &dirs.profile, &dirs.temp, proxy, confinement)?;
+    let (executable, dirs) = (run.executable, run.dirs);
+    let sandbox = super::confine::sandbox(run, &dirs.profile, &dirs.temp)?;
     let (to_browser_read, to_browser_write) = std::io::pipe().map_err(pipe_error)?;
     let (from_browser_read, from_browser_write) = std::io::pipe().map_err(pipe_error)?;
     let mut command = sandbox
@@ -488,7 +512,7 @@ fn spawn(
             &[to_browser_read.as_handle(), from_browser_write.as_handle()],
         )
         .map_err(|err| err.message().to_owned())?;
-    base_command(&mut command, dirs, env, proxy);
+    base_command(&mut command, run);
     confined_flags(&mut command, dirs, sandbox.confines());
     command
         .arg(format!(

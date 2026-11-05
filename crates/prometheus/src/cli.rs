@@ -132,6 +132,13 @@ pub enum Command {
         #[command(subcommand)]
         command: GrantsCommand,
     },
+    /// Browser sessions: status, and closing the real browser whose profile
+    /// real-profile browsing copies.
+    Browser {
+        /// The browser subcommand.
+        #[command(subcommand)]
+        command: crate::browser_cmd::BrowserCommand,
+    },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
     Vault {

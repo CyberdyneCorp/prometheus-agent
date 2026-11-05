@@ -19,7 +19,7 @@ use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, Buf
 use tokio::process::{ChildStdin, Command};
 
 use super::launch::RuntimePolicy;
-use super::session::{BrowserManager, BrowserSession};
+use super::session::{BrowserManager, BrowserSession, Origin, Request};
 use crate::result::{Content, Status, ToolResult};
 use crate::terminal::env::ChildEnv;
 
@@ -47,6 +47,8 @@ pub struct ExecSetup {
     pub workspace_root: PathBuf,
     /// The active model accepts image input (screenshots are attached).
     pub image_input: bool,
+    /// What the session asks of its browsers (its grants).
+    pub request: Request,
 }
 
 /// One call's arguments.
@@ -58,6 +60,9 @@ pub struct ExecArgs {
     pub session: Option<String>,
     /// Bound on the call.
     pub timeout_secs: Option<u64>,
+    /// Run on a local browser even when a cloud provider is configured
+    /// (offered with real-profile browsing).
+    pub local: bool,
 }
 
 /// `browser_exec` of one session.
@@ -92,7 +97,16 @@ impl BrowserExec {
     ///
     /// Why the browser cannot be started or reached.
     pub async fn browser(&self, key: &str) -> Result<Arc<BrowserSession>, String> {
-        self.setup.manager.session(key).await
+        self.setup
+            .manager
+            .session_for(key, &self.setup.request)
+            .await
+    }
+
+    /// The profile's browser manager.
+    #[must_use]
+    pub fn manager(&self) -> &Arc<BrowserManager> {
+        &self.setup.manager
     }
 
     /// Redacts `values` from this session's later outputs.
@@ -134,15 +148,22 @@ impl BrowserExec {
         if !is_plain_name(name) {
             return ToolResult::error("session must be a plain name (letters, digits, - and _)");
         }
-        let browser = match self
-            .setup
-            .manager
-            .session(&format!("{session_id}/{name}"))
-            .await
-        {
+        let key = format!("{session_id}/{name}");
+        let browser = match self.browser(&key).await {
             Ok(browser) => browser,
             Err(why) => return ToolResult::error(format!("browser_exec: {why}")),
         };
+        let route = Route {
+            manager: &self.setup.manager,
+            request: &self.setup.request,
+            key: &key,
+            main: Arc::clone(&browser),
+        };
+        if args.local
+            && let Err(why) = route.force_local().await
+        {
+            return ToolResult::error(format!("browser_exec: {why}"));
+        }
         let workspace = self.setup.workspace_root.join(name);
         if let Err(err) = pmt_core::private_fs::create_dir(&workspace) {
             return ToolResult::error(format!("browser_exec: cannot create the workspace: {err}"));
@@ -152,7 +173,7 @@ impl BrowserExec {
                 .unwrap_or(DEFAULT_TIMEOUT_SECS)
                 .clamp(TIMEOUT_RANGE.0, TIMEOUT_RANGE.1),
         );
-        let run = match self.run(&browser, &workspace, &args.code, limit).await {
+        let run = match self.run(&route, &workspace, &args.code, limit).await {
             Ok(run) => run,
             Err(why) => return ToolResult::error(format!("browser_exec: {why}")),
         };
@@ -161,7 +182,7 @@ impl BrowserExec {
 
     async fn run(
         &self,
-        browser: &BrowserSession,
+        route: &Route<'_>,
         workspace: &Path,
         code: &str,
         limit: Duration,
@@ -196,7 +217,7 @@ impl BrowserExec {
         });
         send(&mut stdin, &json!({"code": code})).await?;
         let mut session = Exchange {
-            browser,
+            route,
             workspace,
             stdin,
             screenshots: Vec::new(),
@@ -250,9 +271,18 @@ impl BrowserExec {
             "workspace": workspace.display().to_string(),
             "screenshots": shots,
         });
-        let handled = browser.dialogs().take_handled();
+        let mut handled = browser.dialogs().take_handled();
+        let mut notes = browser.take_notes();
+        if let Some(sidecar) = browser.sidecar() {
+            handled.extend(sidecar.dialogs().take_handled());
+            notes.extend(sidecar.take_notes());
+            body["local_sidecar"] = json!(browser.on_sidecar());
+        }
         if !handled.is_empty() {
             body["dialogs"] = json!(handled);
+        }
+        for (field, value) in notes {
+            body[field] = value;
         }
         if browser.fallback_from_cloud() {
             body["fallback_from_cloud"] = json!(true);
@@ -285,9 +315,69 @@ impl BrowserExec {
     }
 }
 
+/// Which browser a call's helpers drive: the session's own, or for a cloud
+/// session its local sidecar (spec: execution-environments, Private URLs
+/// route to a local browser). A navigation to a private, loopback or LAN
+/// address of a cloud session goes to the sidecar when
+/// `browser.auto_local_for_private_urls` is on, so the provider never
+/// receives the URL; a public navigation returns to the cloud browser.
+/// Every other helper drives whichever one holds the current page.
+struct Route<'a> {
+    manager: &'a Arc<BrowserManager>,
+    request: &'a Request,
+    key: &'a str,
+    main: Arc<BrowserSession>,
+}
+
+impl Route<'_> {
+    /// The browser holding the current page.
+    fn current(&self) -> Arc<BrowserSession> {
+        match self.main.sidecar() {
+            Some(sidecar) if self.main.on_sidecar() => sidecar,
+            _ => Arc::clone(&self.main),
+        }
+    }
+
+    /// The browser a navigation to `url` goes to, made current. Cloud
+    /// metadata and secret-bearing URLs are refused before any browser
+    /// sees them, on every route.
+    async fn for_url(&self, url: &str) -> Result<Arc<BrowserSession>, String> {
+        let cloud = matches!(self.main.origin(), Origin::Cloud(_));
+        if !cloud {
+            return Ok(Arc::clone(&self.main));
+        }
+        self.main.safety.check_always_refused(url).await?;
+        let private = self.main.safety.is_private(url).await;
+        if !private {
+            self.main.use_sidecar(false);
+            return Ok(Arc::clone(&self.main));
+        }
+        if !self.manager.config().auto_local_for_private_urls {
+            // Refused unless the egress policy admits the address; the
+            // navigation's own check says which.
+            return Ok(Arc::clone(&self.main));
+        }
+        self.force_local().await?;
+        Ok(self.current())
+    }
+
+    /// Makes the local sidecar current (`browser_exec(local=true)`; a
+    /// local session is already local).
+    async fn force_local(&self) -> Result<(), String> {
+        if !matches!(self.main.origin(), Origin::Cloud(_)) {
+            return Ok(());
+        }
+        self.manager
+            .sidecar(&self.main, self.key, self.request)
+            .await?;
+        self.main.use_sidecar(true);
+        Ok(())
+    }
+}
+
 /// The interpreter's side of one call.
 struct Exchange<'a> {
-    browser: &'a BrowserSession,
+    route: &'a Route<'a>,
     workspace: &'a Path,
     stdin: ChildStdin,
     screenshots: Vec<PathBuf>,
@@ -327,7 +417,19 @@ impl Exchange<'_> {
             text(at).ok_or_else(|| format!("{name}: argument {} must be a string", at + 1))
         };
         let number = |at: usize| args.get(at).and_then(Value::as_f64);
-        let b = self.browser;
+        let url = match name {
+            "new_tab" => text(0),
+            "goto_url" => Some(needed(0)?),
+            "cdp" => args
+                .get(1)
+                .and_then(|p| p.get("url"))
+                .and_then(Value::as_str),
+            _ => None,
+        };
+        let b = match url {
+            Some(url) => self.route.for_url(url).await?,
+            None => self.route.current(),
+        };
         match name {
             "new_tab" => b.new_tab(text(0)).await,
             "goto_url" => b.goto_url(needed(0)?).await,

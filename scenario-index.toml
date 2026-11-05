@@ -498,7 +498,7 @@ capabilities = [
 "Metadata endpoint locally" = ["crates/pmt-tools/src/browser/safety.rs::metadata_is_refused_even_where_private_addresses_are_allowed"]
 
 [execution-environments."Local browser isolation"]
-"No consent" = ["crates/pmt-tools/tests/browser/isolation.rs::no_consent", "crates/pmt-tools/tests/browser/isolation.rs::a_local_browser_writes_only_its_own_directories_and_goes_through_the_proxy", "crates/pmt-tools/src/browser/profile.rs::the_real_profile_needs_both_the_setting_and_the_grant", "crates/prometheus/tests/browser_windows.rs::a_local_browser_runs_in_an_app_container_behind_the_proxy"]
+"No consent" = ["crates/pmt-tools/tests/browser/isolation.rs::no_consent", "crates/pmt-tools/tests/browser/isolation.rs::a_local_browser_writes_only_its_own_directories_and_goes_through_the_proxy", "crates/pmt-tools/src/browser/profile.rs::the_real_profile_needs_both_the_setting_and_the_grant", "crates/pmt-tools/tests/browser/real_profile.rs::without_the_grant_the_session_gets_a_throwaway_profile", "crates/prometheus/tests/browser_windows.rs::a_local_browser_runs_in_an_app_container_behind_the_proxy"]
 
 [execution-environments."Browser supervision, dialogs and cleanup"]
 "Crashed browser" = ["crates/pmt-tools/tests/browser/main.rs::a_crashed_browser_is_replaced_and_its_record_removed"]
@@ -2511,3 +2511,26 @@ capabilities = [
 
 [execution-environments."Subagent process handoff"]
 "Fourth handoff" = ["crates/pmt-tools/tests/terminal/notifications.rs::a_subagent_hands_off_at_most_three_processes"]
+
+# Group 36 (browser upgrades: browser_cdp/browser_dialog, local options and
+# headed mode, connecting to the user's browser, first-party cloud
+# providers, private-URL sidecar, real-profile browsing).
+[execution-environments."browser_cdp and browser_dialog tools"]
+"Dialog answered" = ["crates/pmt-tools/tests/browser/cdp_tools.rs::a_pending_confirm_is_accepted_and_the_page_resumes"]
+"Closing the browser" = ["crates/pmt-tools/tests/browser/cdp_tools.rs::closing_or_crashing_the_browser_and_foreign_targets_are_refused"]
+
+[execution-environments."Local browser options and headed mode"]
+"Headless server" = ["crates/pmt-tools/tests/browser/local_options.rs::headed_without_a_display_runs_headless_and_says_so_once", "crates/pmt-tools/src/browser/options.rs::headed_without_a_display_runs_headless_with_a_notice"]
+
+[execution-environments."Connecting to the user's browser"]
+"Disconnect keeps the browser" = ["crates/pmt-tools/tests/browser/connect.rs::disconnecting_keeps_the_browser_and_returns_to_the_provider"]
+
+[execution-environments."First-party cloud browser providers"]
+"Key present, not configured" = ["crates/pmt-tools/tests/browser/cloud.rs::a_provider_key_alone_never_selects_the_provider"]
+
+[execution-environments."Private URLs route to a local browser"]
+"Localhost under Browserbase" = ["crates/pmt-tools/tests/browser/cloud.rs::a_private_url_opens_in_a_local_sidecar_and_never_reaches_the_provider"]
+
+[execution-environments."Real-profile browsing"]
+"Missing pin" = ["crates/pmt-tools/tests/browser/real_profile.rs::a_missing_pin_gives_a_throwaway_profile_and_says_why", "crates/pmt-tools/src/browser/real_profile/mod.rs::a_missing_pin_is_unavailable_naming_the_pin"]
+"Revoking consent" = ["crates/pmt-tools/tests/browser/real_profile.rs::turning_real_profile_browsing_off_deletes_the_snapshot_at_the_next_session", "crates/pmt-tools/src/browser/real_profile/mod.rs::turning_the_setting_off_deletes_the_snapshot"]

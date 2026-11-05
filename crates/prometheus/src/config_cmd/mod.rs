@@ -191,7 +191,7 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     let tools = pmt_tools::ToolRegistry::new(scope.name().as_str(), builtins);
     let config = scope.config();
     pmt_tools::selection::validate(&tools, &config.tools, &config.toolsets)?;
-    // Cloud browser providers are plugins (M2); M1 knows `local` only.
+    // `local` and the first-party cloud browser providers.
     pmt_tools::browser::validate_provider(&config.browser, &[])?;
     // Provider blocks and the fallback chain name registry entries
     // (custom blocks need a base URL; chain entries a known provider,

@@ -311,7 +311,7 @@ impl Factory {
     }
 
     /// The shared browser tools, set up on first use.
-    fn browser(&self) -> Option<&browser::Shared> {
+    pub(crate) fn browser(&self) -> Option<&browser::Shared> {
         self.browser
             .get_or_init(|| {
                 browser::Shared::new(

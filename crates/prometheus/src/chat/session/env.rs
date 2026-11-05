@@ -172,16 +172,9 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
-    let browser = process.as_ref().and_then(|(sandbox, env)| {
-        let shared = inputs.browser?;
-        let exec = shared.exec(
-            Arc::clone(sandbox),
-            env.clone(),
-            &scratch,
-            inputs.image_input,
-        );
-        Some(Arc::new(exec))
-    });
+    let browser = process
+        .as_ref()
+        .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
     let commands = process.and_then(|(sandbox, env)| {
         let config = scope.config();
         pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
@@ -534,6 +527,23 @@ fn web(
         FullTextStore::for_profile(scope.dir()),
         &plugins,
     ))
+}
+
+/// The session's `browser_exec`, when the profile has browser tools.
+fn browser_exec(
+    inputs: &EnvInputs<'_>,
+    sandbox: &Arc<Sandbox>,
+    env: &ChildEnv,
+    scratch: &Path,
+) -> Option<Arc<BrowserExec>> {
+    let exec = inputs.browser?.exec(
+        Arc::clone(sandbox),
+        env.clone(),
+        scratch,
+        inputs.image_input,
+        inputs.capabilities,
+    );
+    Some(Arc::new(exec))
 }
 
 /// A `live` size limit of the session's configuration, read at each use.

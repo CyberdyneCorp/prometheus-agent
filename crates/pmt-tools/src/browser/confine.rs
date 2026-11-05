@@ -37,20 +37,19 @@ const LINUX_READS: &[&str] = &["fs.read:/proc/**", "fs.read:/sys/**"];
 #[cfg(not(target_os = "linux"))]
 const LINUX_READS: &[&str] = &[];
 
-/// The sandbox of a browser run from `executable` with `profile` and
-/// `temp` as its only writable directories and `proxy` as its only way
-/// out.
+/// The sandbox of `run`'s browser with `profile` and `temp` as its only
+/// writable directories and its proxy as its only way out; a headed
+/// browser also reaches the display.
 ///
 /// # Errors
 ///
 /// The policy or the platform sandbox cannot be built.
 pub(super) fn sandbox(
-    executable: &Path,
+    run: &super::launch::Run<'_>,
     profile: &Path,
     temp: &Path,
-    proxy: &pmt_net::egress::Proxy,
-    confinement: &Confinement,
 ) -> Result<pmt_sandbox::Sandbox, String> {
+    let (executable, proxy, confinement) = (run.executable, run.proxy, run.confinement);
     let paths = pmt_sandbox::Paths {
         user_home: confinement.user_home.clone(),
         prometheus_home: confinement.prometheus_home.clone(),
@@ -77,8 +76,14 @@ pub(super) fn sandbox(
     if !readable_by_every_container(&installation) {
         capabilities.push(Capability::read_under(&installation));
     }
+    if run.options.headed {
+        capabilities.extend(display_reads(&run.options.display_env));
+    }
     let set: CapabilitySet = capabilities.into_iter().collect();
-    let policy = pmt_sandbox::Policy::from_set(&set, &paths).for_browser();
+    let mut policy = pmt_sandbox::Policy::from_set(&set, &paths).for_browser();
+    if run.options.headed {
+        policy = policy.with_display();
+    }
     // Linux serves the child's private listener from the proxy; on Windows
     // the launcher runs a relay in the child's AppContainer and connects
     // it to the proxy itself, so the callback is unused there.
@@ -97,6 +102,27 @@ pub(super) fn sandbox(
         report: None,
     };
     pmt_sandbox::Sandbox::with_options(policy, &confinement.sandbox, options).map_err(error)
+}
+
+/// What a headed browser reads to reach the display on Linux and the
+/// BSDs: the X11 socket directory, the X authority file and the Wayland
+/// socket's runtime directory (macOS and Windows reach their window
+/// systems through services, not files).
+fn display_reads(env: &[(String, std::ffi::OsString)]) -> Vec<Capability> {
+    if cfg!(any(target_os = "macos", windows)) {
+        return Vec::new();
+    }
+    let mut paths = vec![PathBuf::from("/tmp/.X11-unix")];
+    paths.extend(
+        env.iter()
+            .filter(|(name, _)| name == "XAUTHORITY" || name == "XDG_RUNTIME_DIR")
+            .map(|(_, value)| PathBuf::from(value)),
+    );
+    paths
+        .iter()
+        .filter(|path| path.is_absolute())
+        .map(|path| Capability::read_under(path))
+        .collect()
 }
 
 /// Whether every `AppContainer` already reads and executes `dir`: the

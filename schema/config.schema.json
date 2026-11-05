@@ -544,12 +544,24 @@
       "additionalProperties": false,
       "description": "The `[browser]` section.",
       "properties": {
+        "auto_local_for_private_urls": {
+          "default": true,
+          "description": "With a cloud provider, private and LAN URLs open in a local sidecar\nbrowser instead of being refused or sent to the provider.",
+          "type": "boolean"
+        },
         "cdp_url": {
           "description": "Explicit CDP endpoint.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "chromium_args": {
+          "description": "Extra local browser arguments; ones that disable the Chromium\nsandbox or web security need the matching\n`security.sandbox.allow_degraded` entry.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "dialog_policy": {
           "$ref": "#/$defs/DialogPolicy",
@@ -563,6 +575,16 @@
           "minimum": 0,
           "type": "integer"
         },
+        "executable_path": {
+          "default": "",
+          "description": "The local browser executable; empty uses the managed `chromium`\nruntime, then a Chromium-family browser of the host.",
+          "type": "string"
+        },
+        "headed": {
+          "default": false,
+          "description": "Open a visible window (headless with a notice without a display);\nkept between turns, idle reaping still applies.",
+          "type": "boolean"
+        },
         "inactivity_timeout_secs": {
           "default": 120,
           "description": "Idle browser sessions are closed after this long.",
@@ -571,9 +593,37 @@
           "type": "integer",
           "x-apply": "live"
         },
+        "launch_timeout_secs": {
+          "default": 30,
+          "description": "Bound on a local browser start.",
+          "format": "uint64",
+          "maximum": 600,
+          "minimum": 1,
+          "type": "integer"
+        },
         "provider": {
           "default": "local",
           "description": "Browser provider: `local` or a cloud browser plugin.",
+          "type": "string"
+        },
+        "real_profile_autoclose": {
+          "default": false,
+          "description": "The agent may offer `prometheus browser close-profile` (run only\nafter approval) when the real browser holds the profile.",
+          "type": "boolean"
+        },
+        "real_profile_pin": {
+          "default": "",
+          "description": "The real profile directory to copy (`Default`, `Profile 2`...);\nempty uses the browser's last used profile.",
+          "type": "string"
+        },
+        "use_real_profile": {
+          "default": false,
+          "description": "Browse on a snapshot of the user's real browser profile (needs the\n`browser.real_profile` grant).",
+          "type": "boolean"
+        },
+        "user_data_dir": {
+          "default": "",
+          "description": "A persistent local profile directory (relative paths resolve under\nthe profile); empty launches on a throwaway profile.",
           "type": "string"
         }
       },
@@ -1258,6 +1308,16 @@
         {
           "const": "cap_drop",
           "description": "Container `--cap-drop ALL`.",
+          "type": "string"
+        },
+        {
+          "const": "chromium_sandbox",
+          "description": "Chromium's own sandbox (`browser.chromium_args` `--no-sandbox`...).",
+          "type": "string"
+        },
+        {
+          "const": "web_security",
+          "description": "Chromium's same-origin policy (`--disable-web-security`...).",
           "type": "string"
         },
         {
@@ -7532,10 +7592,18 @@
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
       "default": {
+        "auto_local_for_private_urls": true,
         "dialog_policy": "must_respond",
         "dialog_timeout_secs": 300,
+        "executable_path": "",
+        "headed": false,
         "inactivity_timeout_secs": 120,
-        "provider": "local"
+        "launch_timeout_secs": 30,
+        "provider": "local",
+        "real_profile_autoclose": false,
+        "real_profile_pin": "",
+        "use_real_profile": false,
+        "user_data_dir": ""
       },
       "description": "Browser tool sessions."
     },

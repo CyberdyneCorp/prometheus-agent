@@ -603,6 +603,7 @@ impl Default for SshConfig {
 }
 
 /// The `[browser]` section.
+#[allow(clippy::struct_excessive_bools)] // independent switches
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
@@ -619,6 +620,35 @@ pub struct BrowserConfig {
     /// Idle browser sessions are closed after this long.
     #[schemars(extend("x-apply" = "live"))]
     pub inactivity_timeout_secs: u64,
+    /// The local browser executable; empty uses the managed `chromium`
+    /// runtime, then a Chromium-family browser of the host.
+    pub executable_path: String,
+    /// A persistent local profile directory (relative paths resolve under
+    /// the profile); empty launches on a throwaway profile.
+    pub user_data_dir: String,
+    /// Extra local browser arguments; ones that disable the Chromium
+    /// sandbox or web security need the matching
+    /// `security.sandbox.allow_degraded` entry.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub chromium_args: Vec<String>,
+    /// Bound on a local browser start.
+    #[schemars(range(min = 1, max = 600))]
+    pub launch_timeout_secs: u64,
+    /// Open a visible window (headless with a notice without a display);
+    /// kept between turns, idle reaping still applies.
+    pub headed: bool,
+    /// With a cloud provider, private and LAN URLs open in a local sidecar
+    /// browser instead of being refused or sent to the provider.
+    pub auto_local_for_private_urls: bool,
+    /// Browse on a snapshot of the user's real browser profile (needs the
+    /// `browser.real_profile` grant).
+    pub use_real_profile: bool,
+    /// The real profile directory to copy (`Default`, `Profile 2`...);
+    /// empty uses the browser's last used profile.
+    pub real_profile_pin: String,
+    /// The agent may offer `prometheus browser close-profile` (run only
+    /// after approval) when the real browser holds the profile.
+    pub real_profile_autoclose: bool,
 }
 
 impl Default for BrowserConfig {
@@ -629,6 +659,15 @@ impl Default for BrowserConfig {
             dialog_policy: DialogPolicy::MustRespond,
             dialog_timeout_secs: 300,
             inactivity_timeout_secs: 120,
+            executable_path: String::new(),
+            user_data_dir: String::new(),
+            chromium_args: Vec::new(),
+            launch_timeout_secs: 30,
+            headed: false,
+            auto_local_for_private_urls: true,
+            use_real_profile: false,
+            real_profile_pin: String::new(),
+            real_profile_autoclose: false,
         }
     }
 }

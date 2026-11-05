@@ -21,7 +21,7 @@ use pmt_config::schema::SandboxConfig;
 use pmt_core::env::{EnvPolicy, LaunchEnv};
 use pmt_net::DestinationPolicy;
 use pmt_net::egress::{HostPolicy, Mode, Proxy, Rules};
-use pmt_tools::browser::launch::{Confinement, launch};
+use pmt_tools::browser::launch::{Confinement, LaunchOptions, launch};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use serde_json::{Value, json};
 use wiremock::matchers::path;
@@ -144,13 +144,17 @@ async fn a_local_browser_runs_in_an_app_container_behind_the_proxy() {
         launcher: Some(PathBuf::from(env!("CARGO_BIN_EXE_prometheus"))),
     };
     let executable = browser(&home.join(".prometheus")).await;
+    let options = LaunchOptions {
+        timeout: Duration::from_secs(60),
+        ..LaunchOptions::default()
+    };
     let launched = launch(
         &executable,
         &profiles,
         &child_env(),
-        Duration::from_secs(60),
         &proxy,
         &confinement,
+        &options,
     )
     .await
     .unwrap();

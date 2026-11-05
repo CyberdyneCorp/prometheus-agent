@@ -10,8 +10,13 @@
 //! sandbox, whose Python setup is not covered here yet.
 #![cfg(unix)]
 
+mod cdp_tools;
 mod cleanup;
+mod cloud;
+mod connect;
 mod isolation;
+mod local_options;
+mod real_profile;
 mod support;
 mod vault;
 mod warm;
@@ -295,7 +300,7 @@ async fn dialogs_follow_the_dialog_policy() {
 struct FailingCloud;
 
 impl CloudProvider for FailingCloud {
-    fn create(&self) -> pmt_tools::browser::session::CreateFuture<'_> {
+    fn create(&self) -> pmt_tools::browser::cloud::CreateFuture<'_> {
         Box::pin(async { Err("quota exhausted".to_owned()) })
     }
 }
@@ -396,7 +401,7 @@ async fn an_explicit_endpoint_is_used_and_rebinding_replaces_the_session() {
     let first = manager.session("ses_b/default").await.unwrap();
     assert_eq!(first.origin(), &Origin::Connected(a.endpoint.clone()));
     assert_eq!(first.pid(), None, "an explicit endpoint launches nothing");
-    manager.set_connect(Some(b.endpoint.clone()));
+    manager.set_connect("ses_b", Some(b.endpoint.clone()));
     let second = manager.session("ses_b/default").await.unwrap();
     assert_eq!(second.origin(), &Origin::Connected(b.endpoint.clone()));
     // The supervisor gives up on a browser that is gone for good.
@@ -432,6 +437,7 @@ async fn a_crashed_owners_browser_is_reaped_by_the_next_process() {
         browser_start: pmt_core::runtime::process_start_time(launched.pid).unwrap(),
         profile_dir: launched.profile_dir.clone(),
         temp_dir: Some(launched.temp_dir.clone()),
+        keep_profile: false,
     };
     std::fs::create_dir_all(cache.join("records")).unwrap();
     std::fs::write(

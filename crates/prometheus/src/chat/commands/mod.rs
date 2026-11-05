@@ -6,6 +6,7 @@
 //! it drives stays with that client.
 
 mod background;
+mod browser;
 pub mod files;
 pub mod info;
 mod mcp;
@@ -111,6 +112,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,
+        "browser" => browser::browser(ctx, args).await,
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))

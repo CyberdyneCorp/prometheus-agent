@@ -79,11 +79,20 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `browser.auto_local_for_private_urls` | boolean | `true` | any | `next_session` | With a cloud provider, private and LAN URLs open in a local sidecar browser instead of being refused or sent to the provider. |
 | `browser.cdp_url` | string | unset | any | `next_session` | Explicit CDP endpoint. |
+| `browser.chromium_args` | array of string | unset | any | `next_session` | Extra local browser arguments; ones that disable the Chromium sandbox or web security need the matching `security.sandbox.allow_degraded` entry. |
 | `browser.dialog_policy` | one of "must_respond", "auto_dismiss", "auto_accept" | `"must_respond"` | `"must_respond"`, `"auto_dismiss"`, `"auto_accept"` | `next_session` | JavaScript dialog handling. |
 | `browser.dialog_timeout_secs` | integer | `300` | ≥ 0 | `next_session` | Unanswered dialogs are dismissed after this long. |
+| `browser.executable_path` | string | `""` | any | `next_session` | The local browser executable; empty uses the managed `chromium` runtime, then a Chromium-family browser of the host. |
+| `browser.headed` | boolean | `false` | any | `next_session` | Open a visible window (headless with a notice without a display); kept between turns, idle reaping still applies. |
 | `browser.inactivity_timeout_secs` | integer | `120` | ≥ 0 | `live` | Idle browser sessions are closed after this long. |
+| `browser.launch_timeout_secs` | integer | `30` | 1 to 600 | `next_session` | Bound on a local browser start. |
 | `browser.provider` | string | `"local"` | any | `next_session` | Browser provider: `local` or a cloud browser plugin. |
+| `browser.real_profile_autoclose` | boolean | `false` | any | `next_session` | The agent may offer `prometheus browser close-profile` (run only after approval) when the real browser holds the profile. |
+| `browser.real_profile_pin` | string | `""` | any | `next_session` | The real profile directory to copy (`Default`, `Profile 2`...); empty uses the browser's last used profile. |
+| `browser.use_real_profile` | boolean | `false` | any | `next_session` | Browse on a snapshot of the user's real browser profile (needs the `browser.real_profile` grant). |
+| `browser.user_data_dir` | string | `""` | any | `next_session` | A persistent local profile directory (relative paths resolve under the profile); empty launches on a throwaway profile. |
 | `budgets.allow_unpriced` | boolean | `false` | any | `live` | Allow models without a known price under a USD budget (token budgets still apply). |
 | `budgets.daily_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per day. |
 | `budgets.monthly_usd` | number | `0.0` | ≥ 0.0 | `live` | USD per month. |
@@ -466,7 +475,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
 | `security.protected_instruction_files` | boolean | `true` | any | `next_session` | Require human approval for agent writes to instruction files. |
 | `security.redact_secrets` | boolean | `true` | any | `next_session` | Redact every loaded secret value everywhere output is written. |
-| `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |
+| `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "chromium_sandbox", "web_security", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |
 | `security.sandbox.mode` | one of "enforce", "off" | `"enforce"` | `"enforce"`, `"off"` | `next_session` | Sandbox mode; `off` needs `allow_degraded` to name `all`. |
 | `sessions.auto_archive_secs` | integer | `604800` | ≥ 0 | `live` | Archive lineage tips idle for this long. |
 | `sessions.max_export_messages` | integer | `20000` | ≥ 0 | `live` | Refuse in-memory exports with more messages. |

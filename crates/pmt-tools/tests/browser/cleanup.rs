@@ -129,6 +129,7 @@ async fn reaping_an_orphan_kills_its_helpers_and_removes_the_profile() {
         browser_start: pmt_core::runtime::process_start_time(launched.pid).unwrap(),
         profile_dir: launched.profile_dir.clone(),
         temp_dir: Some(launched.temp_dir.clone()),
+        keep_profile: false,
     };
     let records_dir = fixture.browser_cache().join("records");
     std::fs::create_dir_all(&records_dir).unwrap();

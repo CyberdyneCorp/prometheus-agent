@@ -106,6 +106,8 @@ pub(crate) enum ChildKind {
     Program,
     /// A Chromium-family browser.
     Browser,
+    /// A Chromium-family browser with a window ([`Policy::with_display`]).
+    HeadedBrowser,
 }
 
 impl Policy {
@@ -311,10 +313,28 @@ impl Policy {
         self
     }
 
+    /// The policy of a browser that opens a window: on macOS it may also
+    /// reach the window server and the services a window uses (the
+    /// display's read paths are ordinary read roots elsewhere). Only a
+    /// browser's policy can have a display.
+    #[must_use]
+    pub fn with_display(mut self) -> Self {
+        if self.kind == ChildKind::Browser {
+            self.kind = ChildKind::HeadedBrowser;
+        }
+        self
+    }
+
     /// Whether this is a browser's policy.
     #[must_use]
     pub fn is_browser(&self) -> bool {
-        self.kind == ChildKind::Browser
+        matches!(self.kind, ChildKind::Browser | ChildKind::HeadedBrowser)
+    }
+
+    /// Whether this browser opens a window.
+    #[must_use]
+    pub fn has_display(&self) -> bool {
+        self.kind == ChildKind::HeadedBrowser
     }
 
     /// The resource bounds, if any.

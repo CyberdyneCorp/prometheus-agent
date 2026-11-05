@@ -5,9 +5,9 @@
 //! asks for it (`browser.use_real_profile`, which the real-profile mode
 //! adds) AND the session holds the `browser.real_profile` grant from
 //! `grants.toml`; every other launch gets a throwaway profile under
-//! `<profile>/cache/browser/profiles/`. The real-profile mode calls
-//! [`choose`] before touching the user's profile; until it ships every
-//! session launches on a throwaway profile ([`super::session`]).
+//! `<profile>/cache/browser/profiles/`. Real-profile browsing
+//! ([`super::real_profile::prepare`]) calls [`choose`] before touching the
+//! user's profile.
 
 use pmt_core::capability::{Capability, CapabilitySet};
 

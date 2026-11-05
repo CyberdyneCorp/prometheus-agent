@@ -360,6 +360,10 @@ pub enum DegradedFeature {
     ReadOnlyRootfs,
     /// Container `--cap-drop ALL`.
     CapDrop,
+    /// Chromium's own sandbox (`browser.chromium_args` `--no-sandbox`...).
+    ChromiumSandbox,
+    /// Chromium's same-origin policy (`--disable-web-security`...).
+    WebSecurity,
     /// Every feature.
     All,
 }
@@ -377,6 +381,8 @@ impl DegradedFeature {
             Self::NoNewPrivileges => "no_new_privileges",
             Self::ReadOnlyRootfs => "read_only_rootfs",
             Self::CapDrop => "cap_drop",
+            Self::ChromiumSandbox => "chromium_sandbox",
+            Self::WebSecurity => "web_security",
             Self::All => "all",
         }
     }

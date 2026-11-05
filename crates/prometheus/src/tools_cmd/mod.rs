@@ -47,8 +47,9 @@ use crate::model_cmd::block_on;
 use crate::output::{document, print_raw};
 
 /// The built-in tools of this binary, their handlers bound to the
-/// process-wide session environments; the browser tools' availability
-/// follows the runtime store and `daemon.toml` of the home at `home`.
+/// process-wide session environments; the local browser tools'
+/// availability follows the runtime store and `daemon.toml` of the home at
+/// `home` (`browser_cdp` and `browser_dialog` follow a connected browser).
 /// Each tool group registers its tools here as it lands; a toolset member
 /// that is not registered yet is shown as `unregistered`.
 #[must_use]
@@ -58,7 +59,9 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
         pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process())
             .into_iter()
             .map(|tool| {
-                if tool.descriptor.toolset == pmt_tools::browser::TOOLSET {
+                // The connected-browser tools keep their own probe: they
+                // need a connected browser, not a local runtime.
+                if tool.descriptor.toolset == pmt_tools::browser::TOOLSET && tool.probe.is_none() {
                     tool.with_probe(Arc::clone(&browser))
                 } else {
                     tool

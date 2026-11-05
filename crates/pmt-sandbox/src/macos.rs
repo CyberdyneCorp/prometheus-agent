@@ -160,7 +160,44 @@ fn browser(policy: &Policy, sbpl: &mut String) {
             path(root)
         );
     }
+    if policy.has_display() {
+        for service in WINDOW_SERVICES {
+            let _ = writeln!(sbpl, "(allow mach-lookup (global-name {}))", quote(service));
+        }
+        sbpl.push_str(WINDOW_RULES);
+    }
 }
+
+/// The services a headed browser's window reaches: the window server and
+/// its render server, the Dock, input methods, fonts, pasteboard and
+/// accessibility. Nothing here reads files or opens the network.
+const WINDOW_SERVICES: &[&str] = &[
+    "com.apple.windowserver.active",
+    "com.apple.CARenderServer",
+    "com.apple.dock.server",
+    "com.apple.dock.fullscreen",
+    "com.apple.pasteboard.1",
+    "com.apple.FontServer",
+    "com.apple.fonts",
+    "com.apple.tsm.uiserver",
+    "com.apple.TextInput",
+    "com.apple.iohideventsystem",
+    "com.apple.window_proxies",
+    "com.apple.coreservices.appleevents",
+    "com.apple.audio.SystemSoundServer-OSX",
+    "com.apple.accessibility.AXBackingStore",
+    "com.apple.inputmethodkit.launchagent",
+    "com.apple.inputmethodkit.launcher",
+    "com.apple.inputmethodkit.getxpcendpoint",
+    "com.apple.FSEvents",
+    "com.apple.powerlog.plsubmission",
+    "com.apple.distributed_notifications@Uv3",
+    "com.apple.coreservices.quarantine-resolver",
+];
+
+/// The window's graphics: the GPU user clients and shared memory with the
+/// window server.
+const WINDOW_RULES: &str = "(allow iokit-open (iokit-user-client-class \"IOSurfaceRootUserClient\") (iokit-user-client-class \"AGXDeviceUserClient\") (iokit-user-client-class \"IOAccelerationUserClient\") (iokit-user-client-class \"IOHIDParamUserClient\"))\n(allow ipc-posix-shm)\n";
 
 fn filesystem(policy: &Policy, sbpl: &mut String) {
     for root in policy.read_roots() {
