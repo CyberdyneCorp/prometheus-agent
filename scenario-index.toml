@@ -433,6 +433,9 @@ capabilities = [
 "Unknown backend" = ["crates/prometheus/tests/chat_startup.rs::an_unknown_backend_exits_78_listing_the_available_ones", "crates/pmt-sandbox/tests/sandbox/backend.rs::unknown_backend_exits_78_with_the_available_list"]
 "Reserved backend selected before it ships" = ["crates/prometheus/tests/chat_startup.rs::a_container_backend_without_a_runtime_never_runs_on_the_host", "crates/pmt-sandbox/tests/sandbox/backend.rs::reserved_backends_are_available_in_m2"]
 
+[execution-environments."Per-profile terminal backends in a shared gateway"]
+"Two profiles, two backends" = ["crates/prometheus/tests/terminal_profiles.rs::two_profiles_in_one_process_each_get_their_own_backend"]
+
 [execution-environments."Backend readiness checks"]
 "SSH misconfigured" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::ssh_misconfigured"]
 
