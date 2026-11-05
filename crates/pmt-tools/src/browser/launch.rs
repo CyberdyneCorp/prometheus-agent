@@ -394,15 +394,26 @@ fn spawn(
     if sandbox.confines() {
         std_command.arg("--no-sandbox");
     }
+    // Everything the browser would write under the user's home (config,
+    // caches, crash database) goes to its private temp directory instead:
+    // the home is read-only in the sandbox, and Chromium aborts when its
+    // crash handler cannot open a database. The crash handler is not
+    // started at all (it would need ptrace and a writable database).
+    let mut crash_dir = OsString::from("--crash-dumps-dir=");
+    crash_dir.push(&dirs.temp);
     std_command
         .env("MAC_CHROMIUM_TMPDIR", &dirs.temp)
+        .env("XDG_CONFIG_HOME", &dirs.temp)
+        .env("XDG_CACHE_HOME", &dirs.temp)
         .args([
             "--remote-debugging-pipe",
             "--disable-gpu",
             "--disable-dev-shm-usage",
             "--disable-crash-reporter",
+            "--disable-crashpad-for-testing",
             "--disable-breakpad",
         ])
+        .arg(crash_dir)
         .arg("about:blank");
     let pipe = |err: std::io::Error| format!("cannot create the DevTools pipe: {err}");
     let (to_browser_read, to_browser_write) = std::io::pipe().map_err(pipe)?;
