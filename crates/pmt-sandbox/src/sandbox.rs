@@ -167,6 +167,37 @@ impl Sandbox {
     }
 }
 
+impl Sandbox {
+    /// [`Sandbox::command`] for a child that also inherits `handles`
+    /// under their values in this process, so its command line can name
+    /// them (Chromium's `--remote-debugging-io-pipes`). The handles are
+    /// made inheritable: close this process's copies once the child has
+    /// started, as any other child spawned meanwhile inherits them too.
+    ///
+    /// # Errors
+    ///
+    /// As [`Sandbox::command`], or a handle cannot be made inheritable.
+    #[cfg(windows)]
+    pub fn command_inheriting(
+        &self,
+        program: impl AsRef<OsStr>,
+        handles: &[std::os::windows::io::BorrowedHandle<'_>],
+    ) -> Result<Command, Error> {
+        use std::os::windows::io::AsRawHandle as _;
+        self.check()?;
+        let mut values = Vec::with_capacity(handles.len());
+        for handle in handles {
+            crate::platform::launch::inheritable(handle.as_raw_handle())
+                .map_err(crate::sandbox::setup_error)?;
+            values.push(handle.as_raw_handle() as usize);
+        }
+        match &self.prepared {
+            Some(prepared) => prepared.command_with(&self.policy, program.as_ref(), values),
+            None => Ok(Command::new(program)),
+        }
+    }
+}
+
 /// A `sandbox.setup` error.
 #[cfg(any(target_os = "linux", windows))]
 pub(crate) fn setup_error(what: impl std::fmt::Display) -> Error {

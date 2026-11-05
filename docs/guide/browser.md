@@ -104,12 +104,17 @@ refused), so the browser runs with `--no-sandbox` while the OS sandbox
 confines its whole process tree. A host whose sandbox is degraded follows
 `security.sandbox.allow_degraded` like any other confined child.
 
-On Windows the browser still starts unconfined with a loopback DevTools
-port; only its proxy settings route it through the egress proxy.
+On Windows the browser runs in an `AppContainer` (with `--no-sandbox`,
+for the same reason): it writes only its profile and temp directories, has
+no network capability, and reaches the egress proxy through a relay inside
+its own container (its `--proxy-server` address is pointed at the relay).
+DevTools uses two anonymous pipes the browser inherits and finds through
+`--remote-debugging-io-pipes`, so nothing listens on a port there either.
 
 A session browses with a throwaway profile: without the
 `browser.real_profile` grant in `grants.toml` the user's real browser
-profile is never used (this release has no real-profile mode yet).
+profile is never used (this release has no real-profile mode yet; when it
+ships it needs both `browser.use_real_profile` and the grant).
 
 ## Safety
 

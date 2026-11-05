@@ -165,19 +165,34 @@ impl Prepared {
         reason = "one signature for every platform; Linux can fail"
     )]
     pub(crate) fn command(&self, policy: &Policy, program: &OsStr) -> Result<Command, Error> {
+        self.command_with(policy, program, Vec::new())
+    }
+
+    /// [`Prepared::command`] whose child inherits `handles` (values valid
+    /// in the launcher, which inherits them from this process).
+    #[allow(clippy::unnecessary_wraps, reason = "the same signature as `command`")]
+    pub(crate) fn command_with(
+        &self,
+        policy: &Policy,
+        program: &OsStr,
+        handles: Vec<usize>,
+    ) -> Result<Command, Error> {
         let mut command = Command::new(&self.launcher);
         let net = match policy.proxy_port() {
             Some(port) if policy.relay().is_some() => Net::Proxy(port),
             _ if policy.connect().is_all() => Net::Internet,
             _ => Net::None,
         };
-        command.args(LaunchSpec::head(
-            self.container.name(),
+        let spec = LaunchSpec {
+            container: self.container.name().to_owned(),
             net,
-            policy.may_spawn(),
-            policy.limits(),
-            program,
-        ));
+            spawn: policy.may_spawn(),
+            limits: policy.limits(),
+            handles,
+            program: program.to_os_string(),
+            args: Vec::new(),
+        };
+        command.args(spec.head());
         Ok(command)
     }
 }

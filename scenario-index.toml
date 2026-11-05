@@ -498,7 +498,7 @@ capabilities = [
 "Metadata endpoint locally" = ["crates/pmt-tools/src/browser/safety.rs::metadata_is_refused_even_where_private_addresses_are_allowed"]
 
 [execution-environments."Local browser isolation"]
-"No consent" = ["crates/pmt-tools/tests/browser/isolation.rs::no_consent", "crates/pmt-tools/tests/browser/isolation.rs::a_local_browser_writes_only_its_own_directories_and_goes_through_the_proxy"]
+"No consent" = ["crates/pmt-tools/tests/browser/isolation.rs::no_consent", "crates/pmt-tools/tests/browser/isolation.rs::a_local_browser_writes_only_its_own_directories_and_goes_through_the_proxy", "crates/prometheus/tests/browser_windows.rs::a_local_browser_runs_in_an_app_container_behind_the_proxy", "crates/pmt-tools/src/browser/profile.rs::the_real_profile_needs_both_the_setting_and_the_grant"]
 
 [execution-environments."Browser supervision, dialogs and cleanup"]
 "Crashed browser" = ["crates/pmt-tools/tests/browser/main.rs::a_crashed_browser_is_replaced_and_its_record_removed"]

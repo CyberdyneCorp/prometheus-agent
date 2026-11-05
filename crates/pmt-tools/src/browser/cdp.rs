@@ -48,6 +48,31 @@ impl std::fmt::Debug for Cdp {
     }
 }
 
+/// Sends each NUL-ended frame read from `pipe` until it ends or nobody
+/// listens.
+#[cfg(windows)]
+fn read_frames(pipe: std::io::PipeReader, frames: &mpsc::UnboundedSender<String>) {
+    use std::io::BufRead as _;
+
+    let mut reader = std::io::BufReader::new(pipe);
+    loop {
+        let mut frame = Vec::new();
+        match reader.read_until(0, &mut frame) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+        if frame.last() == Some(&0) {
+            frame.pop();
+        }
+        if frames
+            .send(String::from_utf8_lossy(&frame).into_owned())
+            .is_err()
+        {
+            return;
+        }
+    }
+}
+
 /// Default bound on one command.
 pub const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -122,6 +147,48 @@ impl Cdp {
                 frame.push(0);
                 if sender.write_all(&frame).await.is_err() {
                     break;
+                }
+            }
+        };
+        Ok(Self::assemble(label, writer, incoming))
+    }
+
+    /// [`Cdp::over_pipe`] on Windows: the browser reads `to_browser` and
+    /// writes `from_browser`, anonymous pipes it inherited and found
+    /// through `--remote-debugging-io-pipes`. Anonymous pipes have no
+    /// overlapped I/O, so each direction runs on a thread of its own; the
+    /// reader ends with the pipe (the browser and its launcher exited).
+    ///
+    /// # Errors
+    ///
+    /// The reader thread cannot be started.
+    #[cfg(windows)]
+    pub fn over_pipe(
+        label: &str,
+        to_browser: std::io::PipeWriter,
+        from_browser: std::io::PipeReader,
+    ) -> Result<Arc<Self>, String> {
+        use std::io::Write as _;
+
+        let (frames, received) = mpsc::unbounded_channel::<String>();
+        std::thread::Builder::new()
+            .name("cdp-pipe-reader".to_owned())
+            .spawn(move || read_frames(from_browser, &frames))
+            .map_err(|err| format!("cannot read the browser pipe: {err}"))?;
+        let incoming = futures_util::stream::unfold(received, |mut received| async move {
+            received.recv().await.map(|frame| (frame, received))
+        });
+        let writer = |mut queue: mpsc::UnboundedReceiver<String>| async move {
+            let mut pipe = to_browser;
+            while let Some(text) = queue.recv().await {
+                let mut frame = text.into_bytes();
+                frame.push(0);
+                let written =
+                    tokio::task::spawn_blocking(move || pipe.write_all(&frame).map(|()| pipe))
+                        .await;
+                match written {
+                    Ok(Ok(back)) => pipe = back,
+                    _ => break,
                 }
             }
         };

@@ -89,6 +89,7 @@ impl Shared {
                 user_home: launch.user_home().cloned().unwrap_or_default(),
                 prometheus_home: scope.home().to_path_buf(),
                 sandbox: config.security.sandbox.clone(),
+                launcher: None,
             },
         });
         Ok(Self {

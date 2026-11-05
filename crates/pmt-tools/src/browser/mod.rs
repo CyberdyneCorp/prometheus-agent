@@ -14,6 +14,7 @@ pub mod cleanup;
 pub mod confine;
 pub mod exec;
 pub mod launch;
+pub mod profile;
 pub mod records;
 pub mod safety;
 pub mod session;

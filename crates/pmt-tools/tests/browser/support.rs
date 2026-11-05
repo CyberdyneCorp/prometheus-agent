@@ -136,6 +136,7 @@ impl Fixture {
             user_home: self.home.clone(),
             prometheus_home: self.home.join(".prometheus"),
             sandbox,
+            launcher: None,
         }
     }
 

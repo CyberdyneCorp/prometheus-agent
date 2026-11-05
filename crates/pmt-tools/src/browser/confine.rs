@@ -6,15 +6,14 @@
 //! and its private temp directory, and connects only to the session's
 //! egress proxy: on macOS Seatbelt allows loopback to the proxy's port; on
 //! Linux the browser gets its own network namespace whose only way out is
-//! the proxy (Landlock + seccomp confine the rest). DevTools uses a pipe,
-//! so the browser listens on nothing. Credential stores stay denied.
+//! the proxy (Landlock + seccomp confine the rest); on Windows the
+//! browser runs in an `AppContainer` with no network capability whose
+//! only way out is its relay to the proxy. DevTools uses a pipe, so the
+//! browser listens on nothing. Credential stores stay denied.
 
-#[cfg(unix)]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pmt_config::schema::SandboxConfig;
-#[cfg(unix)]
 use pmt_core::capability::{Capability, CapabilitySet};
 
 /// Where a local browser's sandbox is anchored.
@@ -26,13 +25,16 @@ pub struct Confinement {
     pub prometheus_home: PathBuf,
     /// `security.sandbox`: the mode and the allowed downgrades.
     pub sandbox: SandboxConfig,
+    /// The executable that starts confined children on Windows
+    /// ([`pmt_sandbox::Options::launcher`]); `None`: this executable.
+    pub launcher: Option<PathBuf>,
 }
 
 /// What Linux browsers read beyond the toolchain: their own process
 /// information and the CPU and memory topology.
 #[cfg(target_os = "linux")]
 const LINUX_READS: &[&str] = &["fs.read:/proc/**", "fs.read:/sys/**"];
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(not(target_os = "linux"))]
 const LINUX_READS: &[&str] = &[];
 
 /// The sandbox of a browser run from `executable` with `profile` and
@@ -42,7 +44,6 @@ const LINUX_READS: &[&str] = &[];
 /// # Errors
 ///
 /// The policy or the platform sandbox cannot be built.
-#[cfg(unix)]
 pub(super) fn sandbox(
     executable: &Path,
     profile: &Path,
@@ -72,7 +73,10 @@ pub(super) fn sandbox(
     .collect::<Result<Vec<_>, _>>()
     .map_err(error)?;
     // A path with spaces (an `.app` bundle) has no capability-string form.
-    capabilities.push(Capability::read_under(&installation(executable)));
+    let installation = installation(executable);
+    if !readable_by_every_container(&installation) {
+        capabilities.push(Capability::read_under(&installation));
+    }
     let set: CapabilitySet = capabilities.into_iter().collect();
     let policy = pmt_sandbox::Policy::from_set(&set, &paths).for_browser();
     let attacher = proxy.attacher();
@@ -80,13 +84,35 @@ pub(super) fn sandbox(
         attacher.serve(attached.listener, attached.alive);
     });
     let policy = policy.through_proxy(proxy.addr().port(), relay);
-    pmt_sandbox::Sandbox::new(policy, &confinement.sandbox).map_err(error)
+    let options = pmt_sandbox::Options {
+        launcher: confinement.launcher.clone(),
+        report: None,
+    };
+    pmt_sandbox::Sandbox::with_options(policy, &confinement.sandbox, options).map_err(error)
+}
+
+/// Whether every `AppContainer` already reads and executes `dir`: the
+/// Windows and Program Files trees carry an `ALL APPLICATION PACKAGES`
+/// entry, and a grant there would need rights this user lacks (a browser
+/// installed for all users lives there). Elsewhere nothing is.
+fn readable_by_every_container(dir: &Path) -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    [
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramW6432",
+        "SystemRoot",
+    ]
+    .iter()
+    .filter_map(std::env::var_os)
+    .any(|root| dunce::simplified(dir).starts_with(Path::new(&root)))
 }
 
 /// The directory a browser executable is installed in: its `.app`
 /// bundle on macOS (frameworks and helpers live beside the executable's
 /// directory), else the executable's directory, symlinks resolved.
-#[cfg(unix)]
 fn installation(executable: &Path) -> PathBuf {
     let resolved = std::fs::canonicalize(executable).unwrap_or_else(|_| executable.to_path_buf());
     if let Some(bundle) = resolved
@@ -100,11 +126,25 @@ fn installation(executable: &Path) -> PathBuf {
         .map_or_else(|| resolved.clone(), Path::to_path_buf)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    #[cfg(windows)]
+    fn program_files_needs_no_grant() {
+        let root = std::env::var_os("ProgramFiles").unwrap();
+        let chrome = Path::new(&root).join(r"Google\Chrome\Application");
+        assert!(readable_by_every_container(&chrome));
+        let verbatim = PathBuf::from(format!(r"\\?\{}", chrome.display()));
+        assert!(readable_by_every_container(&verbatim));
+        assert!(!readable_by_every_container(Path::new(
+            r"C:\Users\me\chrome"
+        )));
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn an_app_bundle_is_installed_as_a_whole() {
         assert_eq!(
             installation(Path::new(

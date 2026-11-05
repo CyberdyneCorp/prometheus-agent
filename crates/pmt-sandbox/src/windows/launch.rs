@@ -4,13 +4,13 @@
 //!
 //! The launcher inherits the stdio, working directory and environment the
 //! caller set on its `Command`, and hands exactly its three standard handles
-//! to the child. The child is created suspended, put in a job that kills it
+//! plus the handles the launch arguments name to the child. The child is created suspended, put in a job that kills it
 //! when the launcher dies (`KILL_ON_JOB_CLOSE`), may not reach the desktop,
 //! clipboard or global atoms, and, without `process.spawn`, may not start
 //! other processes; with resource limits the job caps the tree's committed
 //! memory and its active processes. Then the child is resumed. A child
 //! that goes through the egress proxy first gets its relay (see
-//! [`super::relay`]) and an environment pointing at it.
+//! [`super::relay`]), and an environment and arguments pointing at it.
 
 #![allow(unsafe_code)]
 
@@ -46,7 +46,7 @@ use windows_sys::Win32::System::Threading::{
     STARTF_USESTDHANDLES, STARTUPINFOEXW, UpdateProcThreadAttribute, WaitForSingleObject,
 };
 
-use super::args::{LaunchSpec, Net, command_line, environment};
+use super::args::{LaunchSpec, Net, command_line, environment, to_relay};
 use super::container::wide;
 use crate::policy::ResourceLimits;
 
@@ -67,6 +67,14 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
     let env = relay
         .as_ref()
         .map(|(proxy, relay)| environment(std::env::vars_os(), *proxy, relay.port));
+    let args: Vec<OsString> = match &relay {
+        Some((proxy, relay)) => spec
+            .args
+            .iter()
+            .map(|arg| to_relay(arg.clone(), *proxy, relay.port))
+            .collect(),
+        None => spec.args.clone(),
+    };
     let capability = if spec.net == Net::Internet {
         Some(Sid::parse(INTERNET_CLIENT)?)
     } else {
@@ -80,7 +88,15 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
         })
         .collect();
     let security = security_capabilities(&container, &mut capabilities);
-    let handles = std_handles();
+    let std_io = std_handles();
+    let mut handles = std_io.clone();
+    for &value in &spec.handles {
+        let handle = value as HANDLE;
+        inheritable(handle)?;
+        if !handles.contains(&handle) {
+            handles.push(handle);
+        }
+    }
     let mut attributes = Attributes::new(2)?;
     attributes.set(
         PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
@@ -97,7 +113,8 @@ pub(crate) fn run(spec: &LaunchSpec) -> Result<u32, String> {
     let job = Job::new(spec.spawn, spec.limits)?;
     let launch = Launch {
         program: &spec.program,
-        args: &spec.args,
+        args: &args,
+        std_io: !std_io.is_empty(),
         handles: &handles,
         env: env.as_deref(),
         flags: 0,
@@ -153,6 +170,7 @@ pub(super) fn spawn_contained(
     let launch = Launch {
         program,
         args,
+        std_io: false,
         handles: &[],
         env: None,
         flags: CREATE_NO_WINDOW,
@@ -207,6 +225,16 @@ impl Drop for Sid {
     fn drop(&mut self) {
         (self.1)(self.0);
     }
+}
+
+/// Marks `handle`, owned by this process, inheritable.
+pub(crate) fn inheritable(handle: HANDLE) -> Result<(), String> {
+    // SAFETY: SetHandleInformation only changes the inherit flag; an
+    // invalid value makes it fail, which is reported.
+    if unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) } == 0 {
+        return Err(last_error("SetHandleInformation"));
+    }
+    Ok(())
 }
 
 /// The launcher's standard handles that exist, made inheritable, without
@@ -395,7 +423,9 @@ impl Drop for Child {
 struct Launch<'a> {
     program: &'a std::ffi::OsStr,
     args: &'a [OsString],
-    /// The standard handles to pass, already in the attribute list.
+    /// Whether the child gets the launcher's standard handles.
+    std_io: bool,
+    /// Every handle to pass, already in the attribute list.
     handles: &'a [HANDLE],
     /// An environment block; `None` inherits the launcher's.
     env: Option<&'a [u16]>,
@@ -407,7 +437,7 @@ fn create(launch: &Launch<'_>, attributes: &mut Attributes) -> Result<Child, Str
     let mut info = STARTUPINFOEXW::default();
     info.StartupInfo.cb = u32::try_from(size_of::<STARTUPINFOEXW>()).unwrap_or(0);
     info.lpAttributeList = attributes.buffer.as_mut_ptr().cast();
-    if !launch.handles.is_empty() {
+    if launch.std_io {
         // SAFETY: GetStdHandle has no preconditions.
         unsafe {
             info.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
