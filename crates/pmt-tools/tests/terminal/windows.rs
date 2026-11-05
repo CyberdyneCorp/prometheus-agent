@@ -123,6 +123,9 @@ fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> Terminal {
         notices: Vec::new(),
         notify: None,
         clock: None,
+        auto_notify: false,
+        receipts: None,
+        before_command: None,
     })
     .unwrap()
 }

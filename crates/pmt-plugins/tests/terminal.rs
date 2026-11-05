@@ -245,6 +245,9 @@ async fn killing_a_background_command_cancels_it_inside_the_plugin() {
         notices: Vec::new(),
         notify: None,
         clock: None,
+        auto_notify: false,
+        receipts: None,
+        before_command: None,
     })
     .unwrap();
     let started = terminal

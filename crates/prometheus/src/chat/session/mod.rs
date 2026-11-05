@@ -8,12 +8,14 @@
 pub mod api_hooks;
 pub mod backend;
 pub mod browser;
+pub mod documents;
 pub mod env;
 mod guardian;
 mod lifecycle;
 mod mcp;
 pub mod model;
 mod plugins;
+pub mod processes;
 pub mod progress;
 pub mod python;
 pub mod serve;
@@ -96,7 +98,7 @@ pub struct Clients {
     /// Where the terminal reports finished `notify_on_complete` background
     /// processes (a gateway session's chat).
     pub completions:
-        Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Completion>>,
+        Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>>,
 }
 
 /// What every session of this process shares.
@@ -119,6 +121,9 @@ pub struct Factory {
     pub options: Options,
     approver: Option<Arc<dyn Approver>>,
     secret_prompt: Option<Arc<dyn SecretPrompt>>,
+    /// Where the background processes of an interactive line session
+    /// report (printed as their own messages).
+    notices: Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>>,
     maintained: std::sync::atomic::AtomicBool,
     install_asks: Option<tokio::sync::mpsc::UnboundedSender<browser::InstallAsk>>,
     /// The browser tools every session shares, set up by the first
@@ -264,6 +269,7 @@ impl Factory {
             options,
             approver: None,
             secret_prompt: None,
+            notices: None,
             maintained: std::sync::atomic::AtomicBool::new(false),
             install_asks: None,
             browser: OnceLock::new(),
@@ -320,6 +326,17 @@ impl Factory {
                 .0
                 .supports_vision
         })
+    }
+
+    /// Sends the background process notices of this factory's sessions
+    /// to `notices` (an interactive line session prints them).
+    #[must_use]
+    pub fn with_notices(
+        mut self,
+        notices: tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>,
+    ) -> Self {
+        self.notices = Some(notices);
+        self
     }
 
     /// Asks the person for a skill's missing secrets with `prompt`
@@ -443,7 +460,7 @@ impl Factory {
         let capabilities = self.capabilities(id, &skills)?;
         let current = SharedScope::new(scope.clone());
         let environment = self.environment(
-            id,
+            &session,
             target,
             &capabilities,
             &current,
@@ -676,14 +693,17 @@ impl Factory {
     /// finished background processes to the `clients`' sender).
     fn environment(
         &self,
-        id: SessionId,
+        session: &pmt_store::Session,
         target: &pmt_providers::resolve::Target,
         capabilities: &CapabilitySet,
         config: &SharedScope,
         skills: &Arc<SkillsSession>,
         clients: Option<&Clients>,
     ) -> Result<env::Attached, Error> {
+        let id = session.id;
         let denials = env::Denials::default();
+        let processes =
+            processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
         let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
@@ -694,13 +714,16 @@ impl Factory {
             redactor: self.redactor.clone(),
             browser: self.browser(),
             image_input: self.image_input(target),
-            completions: clients.and_then(|c| c.completions.clone()),
+            completions: clients
+                .and_then(|c| c.completions.clone())
+                .or_else(|| self.notices.clone()),
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
             plugins: &self.plugins,
             egress: &self.egress(id, &denials),
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
+            processes: &processes,
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {

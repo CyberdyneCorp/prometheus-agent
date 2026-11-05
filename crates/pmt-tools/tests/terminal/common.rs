@@ -13,7 +13,7 @@ use pmt_core::secret::{Redactor, SecretString};
 use pmt_sandbox::{Options, Paths, Policy, Sandbox, StrengthReport};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
-use pmt_tools::terminal::process::{Clock, Completion};
+use pmt_tools::terminal::process::{Clock, Completion, Notice};
 use pmt_tools::terminal::{Terminal, TerminalArgs, TerminalResult, TerminalSetup, shell, spill};
 use tokio::sync::mpsc;
 
@@ -136,6 +136,9 @@ impl Fixture {
             notices: Vec::new(),
             notify: None,
             clock: None,
+            auto_notify: false,
+            receipts: None,
+            before_command: None,
         }
     }
 
@@ -167,7 +170,7 @@ impl Fixture {
 pub(crate) fn with_notifications(
     fixture: &Fixture,
     clock: Option<Clock>,
-) -> (Terminal, mpsc::UnboundedReceiver<Completion>) {
+) -> (Terminal, mpsc::UnboundedReceiver<Notice>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let env = fixture.child_env(&[], &[]);
     let mut setup = fixture.setup(TerminalConfig::default(), env, fixture.sandbox(&[], None));
@@ -202,5 +205,13 @@ impl ManualClock {
     pub(crate) fn clock(&self) -> Clock {
         let this = self.clone();
         Arc::new(move || this.base + *this.offset.lock().unwrap())
+    }
+}
+
+/// The completion `notice` carries (a test expecting an exit).
+pub(crate) fn exited(notice: Notice) -> Completion {
+    match notice {
+        Notice::Exited(done) => done,
+        other => panic!("expected an exit, got {other:?}"),
     }
 }

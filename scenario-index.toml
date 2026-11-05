@@ -2459,3 +2459,16 @@ capabilities = [
 
 [execution-environments."Remote file sync and sync-back"]
 "Sync-back cap" = ["crates/pmt-tools/tests/terminal/ssh.rs::sync_back_cap"]
+
+# Group 35.5 (quiet-wait auto-notify, retained process receipts, read_file document extraction)
+[execution-environments."Quiet-wait auto-notify"]
+"Second unchanged poll" = ["crates/pmt-tools/tests/terminal/notifications.rs::a_second_silent_poll_switches_on_completion_notification"]
+"Cron job" = ["crates/prometheus/src/chat/session/processes.rs::quiet_wait_needs_a_context_that_receives_completions", "crates/pmt-tools/tests/terminal/notifications.rs::without_auto_notify_polling_stays_plain_and_nothing_is_announced"]
+
+[execution-environments."Retained process receipts"]
+"Read after compression" = ["crates/prometheus/tests/process_receipts.rs::a_receipt_is_read_by_its_continuation_and_hidden_from_other_conversations"]
+"Other conversation" = ["crates/prometheus/tests/process_receipts.rs::a_receipt_is_read_by_its_continuation_and_hidden_from_other_conversations"]
+
+[execution-environments."read_file document extraction"]
+"SQLite schema overview" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_live_sqlite_database_is_summarised_without_being_modified"]
+"Scanned PDF" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_scanned_pdf_starts_with_the_coverage_warning", "crates/pmt-tools/src/files/documents/pdf.rs::a_scanned_range_is_reported_with_the_text_before_it", "crates/prometheus/tests/doc_converter.rs::a_converter_on_path_answers_with_pages"]

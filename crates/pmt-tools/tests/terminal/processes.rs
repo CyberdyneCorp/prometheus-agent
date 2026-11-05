@@ -87,7 +87,7 @@ async fn bad_requests_name_the_problem() {
         act(&session, "kill", Some("proc_nope")).await["error"]
             .as_str()
             .unwrap()
-            .starts_with("no process matches")
+            .starts_with("unknown process id")
     );
 }
 
@@ -171,7 +171,7 @@ async fn a_long_job_is_kept_for_thirty_minutes_after_it_finishes() {
         act(&session, "poll", Some(&id)).await["error"]
             .as_str()
             .unwrap()
-            .starts_with("no process matches")
+            .starts_with("unknown process id")
     );
 }
 

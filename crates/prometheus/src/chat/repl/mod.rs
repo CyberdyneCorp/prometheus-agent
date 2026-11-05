@@ -122,6 +122,8 @@ pub struct Asks {
     pub secrets: mpsc::UnboundedReceiver<SecretAsk>,
     /// The secret prompt to start listening when the REPL runs.
     pub secret_prompt: Option<Arc<CliSecretPrompt>>,
+    /// Background process notices, printed as their own messages.
+    pub notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
 }
 
 impl Asks {
@@ -133,8 +135,23 @@ impl Asks {
             installs: mpsc::unbounded_channel().1,
             secrets: mpsc::unbounded_channel().1,
             secret_prompt: None,
+            notices: mpsc::unbounded_channel().1,
         }
     }
+}
+
+/// Prints every background process notice above the prompt, as its own
+/// message. The task holds a printer, so it must end (aborted and awaited)
+/// before the input is dropped: the input waits for every printer.
+fn print_notices(
+    mut notices: mpsc::UnboundedReceiver<pmt_tools::terminal::process::Notice>,
+    printer: input::Printer,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(notice) = notices.recv().await {
+            printer.print(&format!("[background] {}", notice.text()));
+        }
+    })
 }
 
 /// Runs the line interface over `live` until the user leaves; returns the
@@ -194,6 +211,7 @@ pub async fn run(
         status_bar,
     };
     repl.attach(live);
+    let notices = print_notices(asks.notices, repl.input.printer());
     if let Some(prompt) = &asks.secret_prompt {
         prompt.listen();
     }
@@ -203,7 +221,10 @@ pub async fn run(
         repl.recap();
     }
     repl.spacer();
-    Ok(Box::pin(repl.main_loop()).await)
+    let status = Box::pin(repl.main_loop()).await;
+    notices.abort();
+    let _ = notices.await;
+    Ok(status)
 }
 
 impl Repl {

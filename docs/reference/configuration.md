@@ -508,6 +508,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `terminal.max_foreground_secs` | integer | `600` | ≥ 0 | `next_session` | Longer foreground calls become tracked background processes. |
 | `terminal.modal.mode` | one of "auto", "direct", "managed" | `"auto"` | `"auto"`, `"direct"`, `"managed"` | `next_session` | How the plugin authenticates. |
 | `terminal.persistent_shell` | boolean | `true` | any | `next_session` | Keep one shell per session. |
+| `terminal.process_wait_auto_notify` | boolean | `true` | any | `next_session` | Two `process` `poll`/`wait` calls in a row that find a running process silent switch on its completion notification (where the session can receive one). |
 | `terminal.shell_init_files` | array of string | `[]` | any | `next_session` | Extra files sourced at shell start (`~` expanded). |
 | `terminal.shell_init_timeout_secs` | integer | `10` | ≥ 0 | `next_session` | Bound on the whole shell init step. |
 | `terminal.singularity.image` | string | `""` | any | `next_session` | A SIF path or a `docker://` reference. |

@@ -38,10 +38,12 @@ async fn a_long_timeout_is_promoted_to_a_tracked_background_process() {
             .contains("promoted_from_foreground")
     );
     let id = result.process_id.unwrap();
-    let completion = tokio::time::timeout(Duration::from_secs(30), done.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    let completion = crate::common::exited(
+        tokio::time::timeout(Duration::from_secs(30), done.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+    );
     assert_eq!(
         (completion.process_id.as_str(), completion.exit_code),
         (id.as_str(), 0)

@@ -6086,6 +6086,11 @@
           "description": "Keep one shell per session.",
           "type": "boolean"
         },
+        "process_wait_auto_notify": {
+          "default": true,
+          "description": "Two `process` `poll`/`wait` calls in a row that find a running\nprocess silent switch on its completion notification (where the\nsession can receive one).",
+          "type": "boolean"
+        },
         "shell_init_files": {
           "default": [],
           "description": "Extra files sourced at shell start (`~` expanded).",
@@ -7969,6 +7974,7 @@
           "mode": "auto"
         },
         "persistent_shell": true,
+        "process_wait_auto_notify": true,
         "shell_init_files": [],
         "shell_init_timeout_secs": 10,
         "singularity": {

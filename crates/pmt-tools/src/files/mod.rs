@@ -10,6 +10,8 @@
 
 pub mod backend;
 mod diff;
+pub mod documents;
+pub mod edits;
 pub mod guards;
 pub mod lint;
 pub mod patch;
@@ -55,6 +57,11 @@ pub struct FileSetup {
     pub read_max_chars: crate::setting::Limit,
     /// Post-write syntax checks.
     pub linter: Linter,
+    /// The `doc-converter` runtime (PDF, legacy Office...), when the
+    /// profile has a runtime store.
+    pub documents: Option<Arc<dyn documents::DocConverter>>,
+    /// Records every file-tool change (snapshots for undo and rollback).
+    pub edits: Option<Arc<dyn edits::EditRecorder>>,
 }
 
 /// One session's file tools.

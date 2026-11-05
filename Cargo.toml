@@ -125,6 +125,8 @@ zstd = { version = "0.14", default-features = false }
 # Runtime archives published only as `.zip` (Chrome for Testing, Windows
 # builds of Node and uv); deflate through the flate2 backend above.
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
+# read_file document extraction: the XML parts of .docx and .xlsx files.
+roxmltree = "0.21"
 pmt-backup = { path = "crates/pmt-backup" }
 pmt-vault = { path = "crates/pmt-vault" }
 # Property tests (store transaction atomicity).

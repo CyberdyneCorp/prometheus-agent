@@ -68,6 +68,9 @@ pub struct Policies {
     pub chromium: RuntimePolicy,
     /// Runtime `cpython`, else `python3`/`python` on `PATH`.
     pub python: RuntimePolicy,
+    /// Runtime `doc-converter`, else `doc-converter` on `PATH` (`read_file`
+    /// document extraction).
+    pub documents: RuntimePolicy,
 }
 
 impl Policies {
@@ -115,10 +118,16 @@ fn over(
     path_var: Option<&OsStr>,
 ) -> Policies {
     let mut pythons = Vec::new();
+    let mut converters = Vec::new();
     if let Some(path_var) = path_var {
         for name in ["python3", "python"] {
             pythons.extend(pmt_tools::terminal::shell::find_all(name, path_var, None));
         }
+        converters.extend(pmt_tools::terminal::shell::find_all(
+            crate::chat::session::documents::RUNTIME,
+            path_var,
+            None,
+        ));
     }
     Policies {
         chromium: RuntimePolicy {
@@ -127,9 +136,14 @@ fn over(
             host_candidates: pmt_tools::browser::launch::system_candidates(path_var),
         },
         python: RuntimePolicy {
-            runtimes,
+            runtimes: Arc::clone(&runtimes),
             allow_lazy_install,
             host_candidates: pythons,
+        },
+        documents: RuntimePolicy {
+            runtimes,
+            allow_lazy_install,
+            host_candidates: converters,
         },
     }
 }

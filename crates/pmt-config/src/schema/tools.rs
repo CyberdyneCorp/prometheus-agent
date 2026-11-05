@@ -361,6 +361,10 @@ pub struct TerminalConfig {
     pub modal: ModalConfig,
     /// The first-party `singularity` backend plugin.
     pub singularity: SingularityConfig,
+    /// Two `process` `poll`/`wait` calls in a row that find a running
+    /// process silent switch on its completion notification (where the
+    /// session can receive one).
+    pub process_wait_auto_notify: bool,
 }
 
 impl Default for TerminalConfig {
@@ -385,6 +389,7 @@ impl Default for TerminalConfig {
             sync_back_max_bytes: 2_147_483_648,
             modal: ModalConfig::default(),
             singularity: SingularityConfig::default(),
+            process_wait_auto_notify: true,
         }
     }
 }

@@ -341,7 +341,9 @@ async fn start(
         let (install_asks, installs) = tokio::sync::mpsc::unbounded_channel();
         let (secret_asks, secrets) = tokio::sync::mpsc::unbounded_channel();
         let secret_prompt = Arc::new(repl::CliSecretPrompt::new(secret_asks));
+        let (notice_tx, notices) = tokio::sync::mpsc::unbounded_channel();
         factory = factory
+            .with_notices(notice_tx)
             .with_memory_approver(approver)
             .with_install_asks(install_asks)
             .with_secret_prompt(Arc::clone(&secret_prompt) as _);
@@ -350,6 +352,7 @@ async fn start(
             installs,
             secrets,
             secret_prompt: Some(secret_prompt),
+            notices,
         })
     } else {
         None

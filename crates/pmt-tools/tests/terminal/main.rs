@@ -11,6 +11,8 @@ mod environment;
 #[cfg(unix)]
 mod foreground;
 #[cfg(unix)]
+mod notifications;
+#[cfg(unix)]
 mod plugin;
 #[cfg(unix)]
 mod preview;

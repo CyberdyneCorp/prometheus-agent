@@ -18,7 +18,8 @@
 //!   [`compression_state`] each session's automatic-compaction guards,
 //!   and [`memory`] the built-in memory entries and staged changes, and
 //!   [`gateway`] the messaging gateway's routes, pairing and outbox, and
-//!   [`mcp_spend`] what conversations spent on costed MCP tools.
+//!   [`mcp_spend`] what conversations spent on costed MCP tools, and
+//!   [`process_receipts`] what ended background processes left behind.
 
 pub mod blobs;
 pub mod compaction;
@@ -43,6 +44,7 @@ mod migrate;
 pub mod model;
 pub mod model_context;
 pub mod onboarding;
+pub mod process_receipts;
 pub mod prompts;
 pub mod rebind;
 pub mod retention;
@@ -74,6 +76,7 @@ pub use model::{
     Archived, CostStatus, EndReason, LineageKind, MemoryKind, MemoryOrigin, MemoryStatus,
     MemoryTarget, MemoryTier, Origin, Role, Source, TitleSource,
 };
+pub use process_receipts::ProcessReceipt;
 pub use prompts::{PromptTier, SessionPrompt};
 pub use retention::Maintenance;
 pub use rewind::Rewound;
@@ -91,7 +94,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 19;
+pub const SCHEMA_VERSION: u32 = 20;
 
 #[cfg(test)]
 mod tests {

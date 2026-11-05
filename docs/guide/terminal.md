@@ -91,13 +91,49 @@ Secrets never enter the snapshot.
 
 The [`process`](../reference/tools.md#process) tool lists, polls, logs, waits for, kills and writes to a
 session's background processes (`list`, `poll`, `log`, `wait`, `kill`,
-`write`, `submit`, `close`; `handoff` arrives with subagents in M2). Ids can
-be shortened to any unique prefix. A session tracks at most 64 processes
-(the oldest finished one makes room), keeps the last 200,000 characters of
-each one's output, and forgets a process 30 minutes after it finished. When
-the session ends every process group is stopped, so nothing is left running.
-`pty = true` is accepted but not implemented yet: the process runs with
-pipes and the result says so.
+`write`, `submit`, `close`, `handoff`). Ids can be shortened to any unique
+prefix. A session tracks at most 64 processes (the oldest finished one
+makes room), keeps the last 200,000 characters of each one's output, and
+forgets a process 30 minutes after it finished. When the session ends every
+process group is stopped, so nothing is left running. `pty = true` is
+accepted but not implemented yet: the process runs with pipes and the
+result says so.
+
+**Receipts.** When a process ends, a receipt (command, exit code, start and
+end time, the last 200,000 characters of its redacted output) is kept in the
+profile's `state.db`: the newest 64 per profile, for at most 7 days. `poll`,
+`log` and `wait` with the original id read it after the process left the
+live list, including from a resumed session or a compression continuation
+of the same conversation; `list` shows the conversation's receipts marked
+`retained`. Any other conversation gets `unknown process id`, even with the
+exact id.
+
+**Notifications.** A background call can ask to be told about the process:
+`notify_on_complete` reports its exit; `watch_patterns` reports output lines
+containing one of the strings, at most once per 15 seconds per process
+(after 8 reports, or 3 windows in a row that held a match back, watching
+stops and the exit is reported instead); `heartbeat` (seconds, at least 60)
+reports what the process printed since the previous heartbeat. A session
+takes at most 15 such notifications per 10 seconds; past that, progress
+notifications pause for 30 seconds (an exit is never dropped). On the line
+interface each one is printed as its own `[background]` message; on a
+messaging chat it arrives as a background notification
+(`gateway.notifications.background`).
+
+**Quiet waits.** With `terminal.process_wait_auto_notify = true` (default),
+the second `poll` or `wait` in a row that finds a running process silent
+switches its exit notification on and says `No new output; you will be
+notified when it exits. Do other work or end your turn instead of polling.`
+New output, the exit, or any other action on the process resets the count.
+It never happens where a later notification cannot arrive: single-query
+`chat -z` runs, cron runs, subagents, sessions without a notification route,
+or a chat whose background notifications are `off`.
+
+**Handoff.** A subagent can give a running process to its parent session
+with `handoff` (at most 3 per subagent: `handoff cap reached (3 per
+subagent); wait on or kill the rest yourself.`); the parent then owns it,
+can poll and kill it, and is told when it exits. Other sessions get
+`handoff is available only to subagent sessions`.
 
 ## Windows
 

@@ -9,13 +9,13 @@ use std::time::Duration;
 
 use pmt_config::schema::TerminalConfig;
 use pmt_sandbox::backend::{Descriptor, ExecOutput, ExecRequest, Isolation, RemoteBackend};
-use pmt_tools::terminal::process::{Completion, ProcessArgs};
+use pmt_tools::terminal::process::{Notice, ProcessArgs};
 use pmt_tools::terminal::target::PluginTarget;
 use pmt_tools::terminal::{Status, Terminal, TerminalArgs};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::common::{Fixture, KNOWN_SECRET};
+use crate::common::{Fixture, KNOWN_SECRET, exited};
 
 #[derive(Debug)]
 struct Fake {
@@ -85,7 +85,7 @@ fn terminal(fixture: &Fixture, fake: &Arc<Fake>) -> Terminal {
 fn notified_terminal(
     fixture: &Fixture,
     fake: &Arc<Fake>,
-) -> (Terminal, mpsc::UnboundedReceiver<Completion>) {
+) -> (Terminal, mpsc::UnboundedReceiver<Notice>) {
     let env = fixture.child_env(&[], &[]);
     let mut setup = fixture.setup(TerminalConfig::default(), env, fixture.sandbox(&[], None));
     setup.target = Arc::new(PluginTarget::new(Arc::clone(fake) as Arc<dyn RemoteBackend>));
@@ -183,10 +183,12 @@ async fn a_long_test_run_on_a_plugin_backend_is_promoted_and_notifies() {
         !output.contains(KNOWN_SECRET),
         "background output is redacted"
     );
-    let completion = tokio::time::timeout(Duration::from_secs(10), completions.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    let completion = exited(
+        tokio::time::timeout(Duration::from_secs(10), completions.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+    );
     assert_eq!(completion.process_id, id);
     assert_eq!(completion.exit_code, 0);
     // The plugin bounds the command by the call's timeout.

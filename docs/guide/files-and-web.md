@@ -43,6 +43,39 @@ characters. When lines remain the result carries `next_offset`.
   `BLOCKED: You have already read this exact region ...`. A change on disk
   or a context compaction makes the region new again.
 
+### Documents
+
+Documents are converted to Markdown and paginated like text instead of
+being refused as binary:
+
+- `.ipynb` notebooks: cells in order, code fenced, outputs after them; an
+  output longer than 20,000 characters is cut with a marker giving a `jq`
+  command that prints all of it.
+- `.docx`: paragraphs (headings from the `Heading<N>` styles) and tables.
+- `.xlsx`: one table per sheet (the first row as header; at most 5,000 rows
+  and 256 columns per sheet).
+- SQLite databases (`.db`, `.sqlite`, `.sqlite3` with the SQLite header):
+  each table's `CREATE` statement, row count and first 5 rows, then the
+  indexes, views and triggers. The file is opened read-only and immutable,
+  so reading a live database never writes to it.
+- `.pdf`, `.doc`, `.xls`, `.ppt`, `.pptx`, `.odt`, `.ods`, `.odp`, `.rtf` and
+  `.epub` through the `doc-converter` runtime: from the managed runtime
+  store, else `doc-converter` on `PATH`, else installed on first use when
+  `runtimes.allow_lazy_install` allows. Without it these files keep the
+  binary-file refusal plus `install the doc-converter runtime to read <ext>
+  files`. A PDF in which more than 20% of the pages, or at least 10 pages,
+  have no text starts with `[EXTRACTION COVERAGE WARNING: <n> of <total>
+  pages in this PDF yielded no text ...]`, listing each empty page range with
+  the text extracted just before it.
+
+Files of a container, SSH or plugin backend are downloaded through the
+backend and converted on this host. Documents larger than 50 MB are not
+converted (a SQLite database read in place has no limit).
+
+The runtime contract: `doc-converter --json <file>` runs with an empty
+environment for at most two minutes and prints one JSON object, either
+`{"pages": ["<text of page 1>", ...]}` (PDFs) or `{"markdown": "..."}`.
+
 Refused outright: binary files, device files, named pipes and sockets,
 `/proc/<pid>/environ`, `mem`, `maps` and similar files, and project dotenv
 files (`.env`, `.env.*` except `.env.example`, `.env.sample` and

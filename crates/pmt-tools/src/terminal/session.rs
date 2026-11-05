@@ -25,7 +25,7 @@ use super::classify::{Plan, classify};
 use super::cwd::expand_home;
 use super::env::ChildEnv;
 use super::guard::{FnGuard, Guard, GuardChain, GuardRequest, Stop, WorkdirGuard};
-use super::process::{self, Clock, Completion, ProcessRegistry};
+use super::process::{self, Clock, Notice, ProcessRegistry, Receipts, Tracking};
 use super::result::{Status, TerminalResult};
 use super::shape::{self, OutputHook};
 use super::shell::{
@@ -71,8 +71,16 @@ pub struct TerminalSetup {
     /// One-time notices for the first result (for example from
     /// [`super::cwd::resolve`]).
     pub notices: Vec<String>,
-    /// Where background completion notifications go.
-    pub notify: Option<mpsc::UnboundedSender<Completion>>,
+    /// Where background process notifications go.
+    pub notify: Option<mpsc::UnboundedSender<Notice>>,
+    /// Quiet-wait auto-notify applies (`terminal.process_wait_auto_notify`
+    /// in a context that can receive a later completion).
+    pub auto_notify: bool,
+    /// Where ended background processes leave their receipts.
+    pub receipts: Option<Arc<dyn Receipts>>,
+    /// Runs before every command on the host (destructive-command
+    /// checkpoints, spec: execution-environments, Snapshot triggers).
+    pub before_command: Option<BeforeCommand>,
     /// The time source (default: the system clock).
     pub clock: Option<Clock>,
 }
@@ -103,11 +111,7 @@ struct Prepared {
 /// A planned execution.
 enum Exec {
     Foreground(String),
-    Background {
-        command: String,
-        notify: bool,
-        promoted: bool,
-    },
+    Background { tracking: Tracking, promoted: bool },
 }
 
 /// How a background command came to be, for its result.
@@ -141,6 +145,10 @@ pub type SecretSource = Arc<dyn Fn() -> Vec<(String, SecretString)> + Send + Syn
 /// Directories put first on `PATH` for one command, from its text (the
 /// pinned Python environment of a skill whose script it runs).
 pub type PathSource = Arc<dyn Fn(&str) -> Vec<PathBuf> + Send + Sync>;
+
+/// Runs on a blocking thread before a command starts on the host, with the
+/// command and its directory; it must never fail the command.
+pub type BeforeCommand = Arc<dyn Fn(&str, &Path) + Send + Sync>;
 
 /// Things the next result carries once.
 #[derive(Debug, Default)]
@@ -194,6 +202,8 @@ impl Terminal {
             max_chars: Arc::clone(&setup.max_chars),
             redactor: setup.redactor.clone(),
             notify: setup.notify.clone(),
+            auto_notify: setup.auto_notify,
+            receipts: setup.receipts.clone(),
             clock: setup
                 .clock
                 .clone()
@@ -357,6 +367,7 @@ impl Terminal {
         if let Err(message) = self.chain.run(&request, timeout_secs).await {
             return TerminalResult::refused(message);
         }
+        self.before_command(&args.command, &cwd).await;
         if let Some(plugin) = self.setup.target.plugin() {
             return match exec {
                 Exec::Foreground(command) => {
@@ -369,17 +380,13 @@ impl Terminal {
                     )
                     .await
                 }
-                Exec::Background {
-                    command,
-                    notify,
-                    promoted,
-                } => {
+                Exec::Background { tracking, promoted } => {
                     let bound = args.timeout.map(|_| timeout_secs);
                     let started = Started {
                         promoted,
                         pty: args.pty,
                     };
-                    self.on_plugin_background(&plugin, &command, &cwd, notify, bound, started)
+                    self.on_plugin_background(&plugin, &tracking, &cwd, bound, started)
                 }
             };
         }
@@ -395,20 +402,29 @@ impl Terminal {
                 self.foreground(&command, &cwd, timeout_secs, args.workdir.is_none())
                     .await
             }
-            Exec::Background {
-                command,
-                notify,
-                promoted,
-            } => {
+            Exec::Background { tracking, promoted } => {
                 let started = Started {
                     promoted,
                     pty: args.pty,
                 };
-                self.background(&command, &cwd, notify, started).await
+                self.background(&tracking, &cwd, started).await
             }
         };
         result.environment_recreated |= prepared.recreated;
         result
+    }
+
+    /// The [`BeforeCommand`] hook of a host command (a remote backend's
+    /// files are not on this host).
+    async fn before_command(&self, command: &str, cwd: &Path) {
+        let Some(hook) = self.setup.before_command.clone() else {
+            return;
+        };
+        if !self.setup.target.descriptor().uses_host_filesystem {
+            return;
+        }
+        let (command, cwd) = (command.to_owned(), cwd.to_path_buf());
+        let _ = tokio::task::spawn_blocking(move || hook(&command, &cwd)).await;
     }
 
     /// A foreground command on a plugin backend.
@@ -451,26 +467,30 @@ impl Terminal {
     fn on_plugin_background(
         &self,
         plugin: &Arc<dyn pmt_sandbox::backend::RemoteBackend>,
-        command: &str,
+        tracking: &Tracking,
         cwd: &Path,
-        notify: bool,
         timeout_secs: Option<u64>,
         started: Started,
     ) -> TerminalResult {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
         }
+        let command = tracking.command.as_str();
         let env = self.command_env(command);
         let job = super::plugin::job(plugin, command, &cwd.to_string_lossy(), &env, timeout_secs);
-        let id = self.processes.track_job(job, command, notify);
+        let id = self.processes.track_job(job, tracking);
         self.started(id, started)
     }
 
     fn plan(&self, args: &TerminalArgs, timeout_secs: u64) -> Result<Exec, String> {
         if args.background {
             return Ok(Exec::Background {
-                command: args.command.clone(),
-                notify: args.notify_on_complete,
+                tracking: Tracking {
+                    command: args.command.clone(),
+                    notify: args.notify_on_complete,
+                    watch_patterns: args.watch_patterns.clone(),
+                    heartbeat: process::watch::heartbeat_interval(args.heartbeat),
+                },
                 promoted: false,
             });
         }
@@ -478,8 +498,7 @@ impl Terminal {
             Plan::Refuse(message) => return Err(message),
             Plan::Background { command } => {
                 return Ok(Exec::Background {
-                    command,
-                    notify: false,
+                    tracking: Tracking::new(&command, false),
                     promoted: false,
                 });
             }
@@ -487,8 +506,7 @@ impl Terminal {
         };
         if timeout_secs > self.setup.terminal.max_foreground_secs {
             return Ok(Exec::Background {
-                command,
-                notify: true,
+                tracking: Tracking::new(&command, true),
                 promoted: true,
             });
         }
@@ -770,14 +788,14 @@ impl Terminal {
 
     async fn background(
         &self,
-        command: &str,
+        tracking: &Tracking,
         cwd: &Path,
-        notify: bool,
         started: Started,
     ) -> TerminalResult {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
         }
+        let command = tracking.command.as_str();
         let env = self.command_env(command);
         let shell = self.shell();
         let script = RunScript {
@@ -798,7 +816,7 @@ impl Terminal {
             Err(SpawnError::Refused(err)) => return TerminalResult::refused(err.message()),
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
         };
-        let id = self.processes.track(spawned, command, notify);
+        let id = self.processes.track(spawned, tracking);
         self.started(id, started)
     }
 
@@ -929,5 +947,11 @@ impl Drop for InFlight {
     fn drop(&mut self) {
         *self.0.last.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
         self.0.in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl process::Adopter for Terminal {
+    fn adopt(&self, process: process::HandedOff) -> Result<(), String> {
+        self.processes.adopt(process)
     }
 }

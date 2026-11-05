@@ -113,6 +113,9 @@ async fn a_command_printing_the_key_reaches_the_model_redacted() {
         notices: Vec::new(),
         notify: None,
         clock: None,
+        auto_notify: false,
+        receipts: None,
+        before_command: None,
     })
     .unwrap();
     let command = format!(

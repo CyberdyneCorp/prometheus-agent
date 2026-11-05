@@ -23,7 +23,7 @@ use pmt_tools::environments::{Attachment, Environments, SessionEnv};
 use pmt_tools::files::{ControlPaths, CwdSource, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
-use pmt_tools::terminal::process::Completion;
+use pmt_tools::terminal::process::Notice;
 use pmt_tools::terminal::shell::Shell;
 use pmt_tools::terminal::{Terminal, TerminalSetup, spill};
 use pmt_tools::web::{FullTextStore, WebSession};
@@ -52,7 +52,7 @@ pub struct EnvInputs<'a> {
     /// The session's model accepts images (browser screenshots).
     pub image_input: bool,
     /// Where finished `notify_on_complete` background processes go.
-    pub completions: Option<tokio::sync::mpsc::UnboundedSender<Completion>>,
+    pub completions: Option<tokio::sync::mpsc::UnboundedSender<Notice>>,
     /// Provider objects of the profile's plugins (web backends by name).
     pub providers: pmt_plugins::providers::ProviderRegistry,
     /// What the session's plugin calls report through `session.info`.
@@ -65,6 +65,8 @@ pub struct EnvInputs<'a> {
     pub denials: &'a Denials,
     /// Where `browser_vault` asks the person for a hidden value.
     pub vault_prompt: Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>>,
+    /// Receipts, quiet-wait and handoff of the background processes.
+    pub processes: &'a super::processes::Wiring,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -203,6 +205,9 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .ok()
         .map(Arc::new)
     });
+    if let Some(terminal) = &terminal {
+        inputs.processes.bind(terminal);
+    }
     let (file_backend, sync) = remote
         .as_ref()
         .map(|r| remote_parts(inputs, r, terminal.as_ref()))
@@ -347,6 +352,8 @@ fn files(
         },
         read_max_chars: limit(inputs.config, |c| c.files.read_max_chars),
         linter: Linter::builtin(),
+        documents: super::documents::converter(inputs.scope, inputs.launch),
+        edits: None,
     })
 }
 
@@ -425,6 +432,9 @@ fn terminal(
         guards: GuardChain::default(),
         notices: remote.and_then(|r| r.notice.clone()).into_iter().collect(),
         notify: inputs.completions.clone(),
+        auto_notify: inputs.processes.auto_notify,
+        receipts: Some(Arc::clone(&inputs.processes.receipts)),
+        before_command: None,
         clock: None,
     })
     .map_err(|e| {
