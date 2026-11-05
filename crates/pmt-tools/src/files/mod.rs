@@ -14,6 +14,7 @@ pub mod guards;
 pub mod lint;
 pub mod patch;
 mod read;
+pub mod remote;
 pub mod search;
 pub mod text;
 pub mod tools;
@@ -31,6 +32,7 @@ pub use backend::{Entry, FileBackend, Kind, LocalBackend, Meta};
 pub use guards::ControlPaths;
 pub use lint::Linter;
 pub use read::{DEFAULT_LIMIT, ReadArgs};
+pub use remote::RemoteFiles;
 
 use crate::result::{Status, ToolResult};
 use tracker::Tracker;

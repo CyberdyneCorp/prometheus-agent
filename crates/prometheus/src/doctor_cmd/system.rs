@@ -64,8 +64,22 @@ pub(super) fn terminal(inputs: &Inputs<'_>) -> Vec<Check> {
         Err(why) => return vec![Check::new("terminal", "backend", Status::Fail, why)],
     };
     let shell = pmt_tools::terminal::doctor::local_shell(config, inputs.ctx.launch, &sandbox);
-    pmt_tools::terminal::doctor::readiness(&BackendRegistry::builtin(), config, &sandbox, &shell)
-        .checks
+    let registry = if BackendRegistry::builtin().select(&config.backend).is_ok() {
+        BackendRegistry::builtin()
+    } else {
+        // A plugin backend: its own `check` answers.
+        let cwd = std::env::current_dir().unwrap_or_else(|_| inputs.scope.dir().to_path_buf());
+        let plugins = crate::plugins_host::for_session(inputs.scope, &cwd);
+        crate::chat::session::backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
+    };
+    pmt_tools::terminal::doctor::readiness(
+        &registry,
+        config,
+        &sandbox,
+        &inputs.scope.config().security.sandbox,
+        &shell,
+    )
+    .checks
 }
 
 /// The configured providers' endpoints: `(provider, host, port)`.

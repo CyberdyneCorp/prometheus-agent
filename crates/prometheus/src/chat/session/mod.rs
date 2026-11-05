@@ -6,6 +6,7 @@
 //! session row.
 
 pub mod api_hooks;
+pub mod backend;
 pub mod browser;
 pub mod env;
 mod guardian;
@@ -197,6 +198,8 @@ pub struct Live {
     browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
     /// The session's egress policy (`/egress`, `egress.set`).
     pub egress: crate::egress::Running,
+    /// Sync-back of a remote workspace (session end, `/sync`).
+    pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -218,11 +221,12 @@ impl Factory {
         // Settings only a session acts on fail here, before any turn
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
-        pmt_sandbox::backend::BackendRegistry::builtin().select(&config.terminal.backend)?;
         pmt_agent::compress::engine::select(&config.context, &[])?;
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
+            .select(&config.terminal.backend)?;
         let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?.with_plugins(
             &scope,
             &plugins,
@@ -509,6 +513,7 @@ impl Factory {
             trajectory,
             browser: environment.browser,
             egress: environment.egress,
+            sync: environment.sync,
             _environment: environment.attachment,
             _skills: attached,
         };
@@ -1238,13 +1243,35 @@ impl Live {
         if let Some(browser) = &self.browser {
             browser.close_session(&self.id.to_string()).await;
         }
+        if let Some(text) = self.sync_back().await {
+            tracing::info!(session = %self.id, "{text}");
+        }
+    }
+
+    /// Copies the remote workspace's changes back to the host (session end
+    /// and `/sync`); `None` without sync-back.
+    pub async fn sync_back(&self) -> Option<String> {
+        let sync = Arc::clone(self.sync.as_ref()?);
+        let budget = self.config.get().config().terminal.sync_back_max_bytes;
+        let done = tokio::task::spawn_blocking(move || sync.sync()).await;
+        Some(match done {
+            Ok(Ok(report)) => {
+                let copied = format!("sync-back copied {} files", report.copied.len());
+                match report.notice(budget) {
+                    Some(notice) => format!("{copied}; {notice}"),
+                    None => copied,
+                }
+            }
+            Ok(Err(why)) => format!("sync-back failed: {why}"),
+            Err(err) => format!("sync-back failed: {err}"),
+        })
     }
 }
 
 /// The running background processes of a session's terminal (none when
 /// the session has no local terminal).
 fn own_processes(
-    terminal: Option<&Arc<pmt_tools::terminal::LocalTerminal>>,
+    terminal: Option<&Arc<pmt_tools::terminal::Terminal>>,
 ) -> pmt_tools::approval::OwnProcesses {
     let terminal = terminal.map(Arc::downgrade);
     Arc::new(move || {

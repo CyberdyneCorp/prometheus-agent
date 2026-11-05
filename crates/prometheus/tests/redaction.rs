@@ -63,7 +63,7 @@ async fn a_command_printing_the_key_reaches_the_model_redacted() {
     use pmt_sandbox::{Paths, Policy, Sandbox};
     use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
     use pmt_tools::terminal::guard::GuardChain;
-    use pmt_tools::terminal::{LocalSetup, LocalTerminal, TerminalArgs, shell, spill};
+    use pmt_tools::terminal::{Terminal, TerminalArgs, TerminalSetup, shell, spill};
 
     let root = common::temp_home();
     let base = std::fs::canonicalize(root.path()).unwrap();
@@ -94,11 +94,13 @@ async fn a_command_printing_the_key_reaches_the_model_redacted() {
             ..EnvRequest::default()
         },
     );
-    let terminal = LocalTerminal::new(LocalSetup {
+    let terminal = Terminal::new(TerminalSetup {
         terminal: TerminalConfig::default(),
         max_chars: pmt_tools::setting::fixed(50_000),
         kill_grace: Duration::from_secs(2),
-        sandbox,
+        target: Arc::new(pmt_tools::terminal::target::LocalTarget::new(
+            sandbox, &scratch,
+        )),
         shell: shell::resolve_unix(env.get("PATH")),
         env,
         scratch: scratch.clone(),

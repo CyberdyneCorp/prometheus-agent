@@ -90,9 +90,10 @@ pub use state::{
 };
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
-    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
-    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
+    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ResultBudget,
+    SearxngConfig, SingularityConfig, SshConfig, SurfaceToolsets, TerminalConfig, ToolListing,
+    ToolOutputConfig, ToolSearchConfig, ToolSearchMode, ToolsConfig, ToolsetsConfig,
+    UnattendedApproval, WebConfig, WindowsShell,
 };
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,

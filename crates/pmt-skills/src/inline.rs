@@ -182,7 +182,7 @@ impl SandboxShell {
         let status = if let Ok(status) = tokio::time::timeout(timeout, child.wait()).await {
             status.map_err(|e| e.to_string())?
         } else {
-            spawn::stop(&mut child, spawned.group, KILL_GRACE).await;
+            spawn::stop(&mut child, &spawned.group, KILL_GRACE).await;
             return Err(format!("timed out after {} ms", timeout.as_millis()));
         };
         for pump in pumps {

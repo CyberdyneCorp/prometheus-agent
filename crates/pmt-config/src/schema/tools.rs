@@ -349,6 +349,18 @@ pub struct TerminalConfig {
     pub container: ContainerConfig,
     /// SSH backend.
     pub ssh: SshConfig,
+    /// Copy files changed in a remote workspace back to the host workspace
+    /// at session end and on `/sync`; unset is `true` for `ssh` and `false`
+    /// for every other backend.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_back: Option<bool>,
+    /// Total bytes one sync-back copies; larger files are skipped and
+    /// listed.
+    pub sync_back_max_bytes: u64,
+    /// The first-party `modal` backend plugin.
+    pub modal: ModalConfig,
+    /// The first-party `singularity` backend plugin.
+    pub singularity: SingularityConfig,
 }
 
 impl Default for TerminalConfig {
@@ -369,8 +381,50 @@ impl Default for TerminalConfig {
             windows_bash_path: None,
             container: ContainerConfig::default(),
             ssh: SshConfig::default(),
+            sync_back: None,
+            sync_back_max_bytes: 2_147_483_648,
+            modal: ModalConfig::default(),
+            singularity: SingularityConfig::default(),
         }
     }
+}
+
+impl TerminalConfig {
+    /// Whether sync-back is on for the selected backend.
+    #[must_use]
+    pub fn sync_back_enabled(&self) -> bool {
+        self.sync_back.unwrap_or(self.backend == "ssh")
+    }
+}
+
+/// The `[terminal.modal]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ModalConfig {
+    /// How the plugin authenticates.
+    pub mode: ModalMode,
+}
+
+/// `terminal.modal.mode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ModalMode {
+    /// `direct` when Modal secrets exist, else `managed` when a
+    /// subscription is signed in, else unavailable.
+    #[default]
+    Auto,
+    /// The user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets.
+    Direct,
+    /// A subscription gateway credential.
+    Managed,
+}
+
+/// The `[terminal.singularity]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SingularityConfig {
+    /// A SIF path or a `docker://` reference.
+    pub image: String,
 }
 
 /// Backend failure handling.
@@ -400,6 +454,7 @@ pub enum WindowsShell {
 /// The `[terminal.container]` section.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent switches
 pub struct ContainerConfig {
     /// CPU limit.
     #[schemars(range(min = 0.0))]
@@ -416,6 +471,23 @@ pub struct ContainerConfig {
     pub pids_limit: u32,
     /// Literal environment set in the container.
     pub env: BTreeMap<String, String>,
+    /// Runtime: `auto` (rootless Podman, else Docker), `podman`, `docker`
+    /// or the path of either executable.
+    pub runtime: String,
+    /// Image; empty is the release's `prometheus-sandbox` image.
+    pub image: String,
+    /// Extra mounts, `host:container[:ro]`.
+    pub volumes: Vec<String>,
+    /// Mount the session workspace at `/workspace`.
+    pub mount_workspace: bool,
+    /// Give the container a network; `false` runs it with none.
+    pub network: bool,
+    /// Run as the host user's uid and gid.
+    pub run_as_host_user: bool,
+    /// Sessions of the profile with the same key share one container.
+    pub shared_key: String,
+    /// Extra `create` arguments; anything weakening hardening is refused.
+    pub extra_args: Vec<String>,
 }
 
 impl Default for ContainerConfig {
@@ -428,6 +500,14 @@ impl Default for ContainerConfig {
             shm_size: "1g".to_owned(),
             pids_limit: 2048,
             env: BTreeMap::new(),
+            runtime: "auto".to_owned(),
+            image: String::new(),
+            volumes: Vec::new(),
+            mount_workspace: true,
+            network: true,
+            run_as_host_user: false,
+            shared_key: String::new(),
+            extra_args: Vec::new(),
         }
     }
 }
@@ -445,6 +525,12 @@ pub struct SshConfig {
     /// Port.
     #[schemars(range(min = 1, max = 65_535))]
     pub port: u32,
+    /// An `ssh_config` file passed with `-F` (identity, known hosts, jump
+    /// hosts); unset uses the user's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_file: Option<String>,
+    /// The remote workspace synced back to the host.
+    pub workspace: String,
 }
 
 impl Default for SshConfig {
@@ -453,6 +539,8 @@ impl Default for SshConfig {
             host: None,
             user: None,
             port: 22,
+            config_file: None,
+            workspace: "~/prometheus-workspace".to_owned(),
         }
     }
 }

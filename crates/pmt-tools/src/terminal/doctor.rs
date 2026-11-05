@@ -88,9 +88,10 @@ pub fn readiness(
     registry: &BackendRegistry,
     config: &TerminalConfig,
     sandbox: &Sandbox,
+    security: &pmt_config::schema::SandboxConfig,
     shell: &Result<Shell, Error>,
 ) -> Readiness {
-    let mut readiness = registry.readiness(config, sandbox);
+    let mut readiness = registry.readiness(config, sandbox, security);
     if config.backend == "local" {
         readiness.checks.push(shell_check(shell, cfg!(windows)));
     }

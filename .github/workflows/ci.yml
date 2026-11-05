@@ -51,6 +51,11 @@ jobs:
       # Cargo, nextest and the doctests all honour this, so scripts/check
       # itself needs no target flag and stays the same command as locally.
       CARGO_BUILD_TARGET: ${{ matrix.target }}
+      # The container and SSH backend tests run on the runner's Docker
+      # (podman on the images lacks rootless cgroup delegation); on the
+      # x86_64 gnu job a missing runtime fails them instead of skipping.
+      PMT_TEST_CONTAINER_RUNTIME: ${{ runner.os == 'Linux' && 'docker' || 'auto' }}
+      PMT_TEST_CONTAINERS: ${{ matrix.target == 'x86_64-unknown-linux-gnu' && 'require' || '' }}
     steps:
       # Full history: the health ratchet compares health.toml with the merge
       # base on origin/main.

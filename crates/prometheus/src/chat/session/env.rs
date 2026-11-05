@@ -20,12 +20,12 @@ use pmt_sandbox::{Paths, Policy, Sandbox};
 use pmt_tools::approval::explain::Previewer;
 use pmt_tools::browser::BrowserExec;
 use pmt_tools::environments::{Attachment, Environments, SessionEnv};
-use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
+use pmt_tools::files::{ControlPaths, CwdSource, FileSession, FileSetup, Linter, LocalBackend};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
 use pmt_tools::terminal::process::Completion;
 use pmt_tools::terminal::shell::Shell;
-use pmt_tools::terminal::{LocalSetup, LocalTerminal, spill};
+use pmt_tools::terminal::{Terminal, TerminalSetup, spill};
 use pmt_tools::web::{FullTextStore, WebSession};
 
 use super::browser::Shared;
@@ -101,7 +101,9 @@ pub struct Attached {
     /// The session's `browser_exec` (its browsers close at session end).
     pub browser: Option<Arc<BrowserExec>>,
     /// The session's terminal (skills pass their declared secrets to it).
-    pub terminal: Option<Arc<LocalTerminal>>,
+    pub terminal: Option<Arc<Terminal>>,
+    /// Sync-back of a remote workspace (session end, `/sync`).
+    pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
     /// How the session runs a command: its sandbox, child environment and
     /// shell (skills' inline snippets run the same way).
     pub commands: Option<Commands>,
@@ -143,18 +145,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         )
     })?;
     let user_home = inputs.launch.user_home().cloned();
-    let places = Places {
-        user_home: user_home.clone().unwrap_or_default(),
-        workspace: inputs.cwd.to_path_buf(),
-        scratch: vec![scratch.clone()],
-        toolchain: Vec::new(),
-    };
-    let paths = Paths {
-        user_home: user_home.clone().unwrap_or_default(),
-        prometheus_home: inputs.scope.home().to_path_buf(),
-        workspace: inputs.cwd.to_path_buf(),
-        scratch: vec![scratch.clone()],
-    };
+    let (places, paths) = places(inputs, user_home.as_deref(), &scratch);
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
     let proxy = crate::egress::child_proxy(
         inputs.scope,
@@ -192,18 +183,38 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
             })
     });
     let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
-    let terminal = commands
-        .clone()
-        .and_then(|commands| {
-            terminal(inputs, &scratch, user_home.clone(), commands)
-                .inspect_err(
-                    |err| tracing::warn!(error = %err, "terminal unavailable this session"),
-                )
-                .ok()
-        })
-        .map(Arc::new);
+    let registry = super::backend::registry(inputs.plugins, &inputs.plugin_call);
+    let remote = super::backend::select(
+        scope,
+        &registry,
+        inputs.session_id,
+        inputs.cwd,
+        user_home.as_deref(),
+    );
+    let terminal = commands.clone().and_then(|commands| {
+        terminal(
+            inputs,
+            &scratch,
+            user_home.clone(),
+            commands,
+            remote.as_ref(),
+        )
+        .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
+        .ok()
+        .map(Arc::new)
+    });
+    let (file_backend, sync) = remote
+        .as_ref()
+        .map(|r| remote_parts(inputs, r, terminal.as_ref()))
+        .unwrap_or_default();
     let env = SessionEnv {
-        files: Some(Arc::new(files(inputs, places, user_home, policy))),
+        files: Some(Arc::new(files(
+            inputs,
+            places,
+            user_home,
+            policy,
+            file_backend,
+        ))),
         terminal: terminal.clone(),
         web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
         vision: None,
@@ -214,6 +225,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         attachment: Environments::process().attach(inputs.session_id, env),
         browser,
         terminal,
+        sync,
         commands,
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
@@ -265,17 +277,70 @@ const PREVIEW_CAPABILITIES: &[&str] = &[
     "process.spawn:*",
 ];
 
+/// The session's places (file tools) and sandbox paths.
+fn places(inputs: &EnvInputs<'_>, user_home: Option<&Path>, scratch: &Path) -> (Places, Paths) {
+    let home = user_home.map(Path::to_path_buf).unwrap_or_default();
+    let places = Places {
+        user_home: home.clone(),
+        workspace: inputs.cwd.to_path_buf(),
+        scratch: vec![scratch.to_path_buf()],
+        toolchain: Vec::new(),
+    };
+    let paths = Paths {
+        user_home: home,
+        prometheus_home: inputs.scope.home().to_path_buf(),
+        workspace: inputs.cwd.to_path_buf(),
+        scratch: vec![scratch.to_path_buf()],
+    };
+    (places, paths)
+}
+
+/// The file backend of a remote session and where its relative paths
+/// start.
+type RemoteFiles = (Arc<dyn pmt_tools::files::FileBackend>, CwdSource);
+
+/// What a non-local backend adds: its file tools (relative paths follow the
+/// terminal's cwd inside that environment), its sync-back, and the
+/// container's idle reaper watching the terminal.
+fn remote_parts(
+    inputs: &EnvInputs<'_>,
+    remote: &super::backend::Remote,
+    terminal: Option<&Arc<Terminal>>,
+) -> (
+    Option<RemoteFiles>,
+    Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
+) {
+    if let (Some(terminal), Some(container)) = (terminal, &remote.container) {
+        let activity: Arc<dyn pmt_sandbox::container::Activity> = Arc::clone(terminal) as _;
+        container.attach(Arc::downgrade(&activity));
+    }
+    let cwd: CwdSource = if let Some(terminal) = terminal {
+        let terminal = Arc::clone(terminal);
+        Arc::new(move || terminal.cwd())
+    } else {
+        let start = remote.start_cwd.clone();
+        Arc::new(move || start.clone())
+    };
+    let sync = remote.sync_back(&inputs.scope.config().terminal, inputs.cwd);
+    (Some((Arc::clone(&remote.files), cwd)), sync)
+}
+
 fn files(
     inputs: &EnvInputs<'_>,
     places: Places,
     user_home: Option<PathBuf>,
     policy: Arc<Policy>,
+    remote: Option<RemoteFiles>,
 ) -> FileSession {
-    let cwd = inputs.cwd.to_path_buf();
-    let backend = LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy);
+    let host_cwd = inputs.cwd.to_path_buf();
+    let (backend, cwd) = remote.unwrap_or_else(|| {
+        let backend: Arc<dyn pmt_tools::files::FileBackend> =
+            Arc::new(LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy));
+        (backend, Arc::new(move || host_cwd.clone()))
+    });
     FileSession::new(FileSetup {
-        backend: Arc::new(backend),
-        cwd: Arc::new(move || cwd.clone()),
+        backend,
+        cwd,
         user_home,
         control: ControlPaths {
             prometheus_home: inputs.scope.home().to_path_buf(),
@@ -331,18 +396,26 @@ fn terminal(
     scratch: &Path,
     user_home: Option<PathBuf>,
     commands: Commands,
-) -> Result<LocalTerminal, Error> {
+    remote: Option<&super::backend::Remote>,
+) -> Result<Terminal, Error> {
     let config = inputs.scope.config();
-    LocalTerminal::new(LocalSetup {
+    let target: Arc<dyn pmt_tools::terminal::target::Target> = match remote {
+        Some(remote) => Arc::clone(&remote.target),
+        None => Arc::new(pmt_tools::terminal::target::LocalTarget::new(
+            commands.sandbox,
+            scratch,
+        )),
+    };
+    Terminal::new(TerminalSetup {
         terminal: config.terminal.clone(),
         max_chars: limit(inputs.config, |c| c.tool_output.max_chars),
         kill_grace: Duration::from_secs(2),
-        sandbox: commands.sandbox,
+        target,
         env: commands.env,
         shell: commands.shell,
         scratch: scratch.to_path_buf(),
         spill_dir: spill::session_dir(inputs.scope.dir(), inputs.session_id),
-        start_cwd: inputs.cwd.to_path_buf(),
+        start_cwd: remote.map_or_else(|| inputs.cwd.to_path_buf(), |r| r.start_cwd.clone()),
         user_home,
         redactor: inputs.redactor.clone(),
         hooks: vec![crate::plugins_host::terminal::output_hook(
@@ -350,7 +423,7 @@ fn terminal(
             inputs.plugin_call.clone(),
         )],
         guards: GuardChain::default(),
-        notices: Vec::new(),
+        notices: remote.and_then(|r| r.notice.clone()).into_iter().collect(),
         notify: inputs.completions.clone(),
         clock: None,
     })

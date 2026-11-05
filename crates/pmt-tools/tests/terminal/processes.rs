@@ -4,13 +4,13 @@
 use std::time::Duration;
 
 use pmt_tools::terminal::process::{MAX_PROCESSES, ProcessArgs};
-use pmt_tools::terminal::{LocalTerminal, TerminalArgs};
+use pmt_tools::terminal::{Terminal, TerminalArgs};
 use serde_json::Value;
 
 use crate::common::{Fixture, ManualClock, with_notifications};
 use crate::foreground::gone;
 
-async fn background(session: &LocalTerminal, command: &str) -> String {
+async fn background(session: &Terminal, command: &str) -> String {
     let args = TerminalArgs {
         background: true,
         ..TerminalArgs::new(command)
@@ -20,7 +20,7 @@ async fn background(session: &LocalTerminal, command: &str) -> String {
     result.process_id.unwrap()
 }
 
-async fn act(session: &LocalTerminal, action: &str, id: Option<&str>) -> Value {
+async fn act(session: &Terminal, action: &str, id: Option<&str>) -> Value {
     session
         .processes()
         .handle(&ProcessArgs {

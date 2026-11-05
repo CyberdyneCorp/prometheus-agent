@@ -10,6 +10,7 @@ wasmtime::component::bindgen!({
         "../../wit/tool",
         "../../wit/hook",
         "../../wit/provider",
+        "../../wit/terminal-backend",
     ],
     inline: "
         package prometheus:runtime;
@@ -17,6 +18,7 @@ wasmtime::component::bindgen!({
             include prometheus:tool/tool@1.1.0;
             include prometheus:hook/hook@1.3.0;
             include prometheus:provider/provider@1.1.0;
+            include prometheus:terminal-backend/terminal-backend@1.1.0;
         }
     ",
     world: "prometheus:runtime/plugin-host",

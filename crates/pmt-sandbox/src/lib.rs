@@ -20,12 +20,14 @@ pub mod backend;
 #[cfg(any(target_os = "linux", windows))]
 mod carve;
 pub mod console;
+pub mod container;
 pub mod launcher;
 mod locations;
 pub mod policy;
 pub mod relay;
 pub mod report;
 mod sandbox;
+pub mod ssh;
 
 #[cfg(target_os = "linux")]
 #[path = "linux/mod.rs"]

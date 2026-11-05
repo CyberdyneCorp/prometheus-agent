@@ -21,6 +21,7 @@ pub mod providers;
 pub mod python;
 pub mod record;
 pub mod surfaces;
+pub mod terminal;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 pub mod tools;

@@ -1,0 +1,9 @@
+# An SSH server for the `ssh` backend tests: user `pmt` (bash login shell),
+# public-key login only; the key arrives in PMT_PUBKEY at start.
+FROM docker.io/library/alpine:3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+RUN apk add --no-cache openssh-server bash \
+ && ssh-keygen -A \
+ && adduser -D -s /bin/bash pmt \
+ && echo "pmt:$(head -c 18 /dev/urandom | base64)" | chpasswd \
+ && printf 'PasswordAuthentication no\nPermitRootLogin no\nAllowTcpForwarding no\n' >> /etc/ssh/sshd_config
+CMD ["sh", "-c", "mkdir -p /home/pmt/.ssh && printf '%s\\n' \"$PMT_PUBKEY\" > /home/pmt/.ssh/authorized_keys && chown -R pmt:pmt /home/pmt/.ssh && chmod 700 /home/pmt/.ssh && chmod 600 /home/pmt/.ssh/authorized_keys && exec /usr/sbin/sshd -D -e"]

@@ -95,6 +95,10 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
             ctx.scope.dir().display()
         )),
         "undo" => session::undo(ctx),
+        "sync" => Ok(ctx.live.sync_back().await.unwrap_or_else(|| {
+            "nothing to sync: the terminal backend has no remote workspace or terminal.sync_back is off"
+                .to_owned()
+        })),
         "rewind" => session::rewind(ctx, args),
         "compress" => session::compress(ctx, args).await,
         "model" => session::model(ctx, args).await,

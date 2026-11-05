@@ -18,7 +18,6 @@ use std::time::{Duration, Instant};
 
 use pmt_config::schema::{DegradedMode, TerminalConfig};
 use pmt_core::secret::{Redactor, SecretString};
-use pmt_sandbox::Sandbox;
 use tokio::sync::mpsc;
 
 use super::args::TerminalArgs;
@@ -34,25 +33,27 @@ use super::shell::{
 };
 use super::spawn::{self, GroupGuard, SpawnError};
 use super::spill::{self, Capture};
+use super::target::Target;
 
 /// How long output readers may lag behind a foreground exit.
 const READ_GRACE: Duration = Duration::from_millis(500);
 
 /// Everything a session's local backend is built from.
-pub struct LocalSetup {
+pub struct TerminalSetup {
     /// The session's `[terminal]` settings.
     pub terminal: TerminalConfig,
     /// `tool_output.max_chars`.
     pub max_chars: crate::setting::Limit,
     /// `tools.kill_grace_secs`.
     pub kill_grace: Duration,
-    /// The session sandbox (built from its effective capability set).
-    pub sandbox: Arc<Sandbox>,
+    /// Where commands run: [`super::target::LocalTarget`] under the
+    /// session sandbox, or a container/SSH [`super::remote::RemoteTarget`].
+    pub target: Arc<dyn Target>,
     /// The child environment (see [`ChildEnv::build`]).
     pub env: ChildEnv,
-    /// The shell commands run in.
+    /// The shell commands run in (a remote target picks its own).
     pub shell: Shell,
-    /// The session scratch directory (granted to the sandbox).
+    /// The session scratch directory on this host (granted to the sandbox).
     pub scratch: PathBuf,
     /// `<profile>/cache/terminal-spill/<session_id>` ([`spill::session_dir`]).
     pub spill_dir: PathBuf,
@@ -76,9 +77,9 @@ pub struct LocalSetup {
     pub clock: Option<Clock>,
 }
 
-impl std::fmt::Debug for LocalSetup {
+impl std::fmt::Debug for TerminalSetup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LocalSetup")
+        f.debug_struct("TerminalSetup")
             .field("shell", &self.shell)
             .field("scratch", &self.scratch)
             .field("start_cwd", &self.start_cwd)
@@ -94,7 +95,7 @@ struct EnvState {
     evicted: bool,
 }
 
-/// What [`LocalTerminal::prepare`] hands to a run.
+/// What [`Terminal::prepare`] hands to a run.
 struct Prepared {
     recreated: bool,
 }
@@ -110,10 +111,10 @@ enum Exec {
 }
 
 /// One session on the local backend.
-pub struct LocalTerminal {
-    setup: LocalSetup,
-    files: StateFiles,
+pub struct Terminal {
+    setup: TerminalSetup,
     chain: GuardChain,
+    activity: Arc<Activity>,
     cwd: Mutex<PathBuf>,
     env_state: tokio::sync::Mutex<EnvState>,
     pending: Mutex<Pending>,
@@ -139,36 +140,37 @@ struct Pending {
     hint: Option<String>,
 }
 
-impl std::fmt::Debug for LocalTerminal {
+impl std::fmt::Debug for Terminal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LocalTerminal")
+        f.debug_struct("Terminal")
             .field("setup", &self.setup)
             .field("processes", &self.processes)
             .finish_non_exhaustive()
     }
 }
 
-impl LocalTerminal {
+impl Terminal {
     /// A session backend. Creates the scratch directory and prunes spill
     /// files older than seven days.
     ///
     /// # Errors
     ///
     /// The scratch directory cannot be created.
-    pub fn new(setup: LocalSetup) -> std::io::Result<Self> {
+    pub fn new(setup: TerminalSetup) -> std::io::Result<Self> {
         pmt_core::private_fs::create_dir(&setup.scratch)?;
         if let Some(root) = setup.spill_dir.parent() {
             spill::prune(root, std::time::SystemTime::now());
         }
-        let sandbox = Arc::clone(&setup.sandbox);
+        let target = Arc::clone(&setup.target);
         let capability = FnGuard::new("capability", move |_: &GuardRequest| {
-            sandbox
-                .check()
-                .map_err(|err| Stop::Denied(err.message().to_owned()))
+            target.check().map_err(Stop::Denied)
         });
         let mut guards: Vec<Arc<dyn Guard>> = vec![Arc::new(capability)];
         guards.extend(setup.guards.guards().iter().cloned());
-        guards.push(Arc::new(WorkdirGuard));
+        if setup.target.descriptor().uses_host_filesystem {
+            // A remote script changes directory itself (`cd || exit 126`).
+            guards.push(Arc::new(WorkdirGuard));
+        }
         let chain = GuardChain::new(guards);
         let mut notices = setup.notices.clone();
         notices.extend(setup.shell.notice.clone());
@@ -189,7 +191,7 @@ impl LocalTerminal {
                 .unwrap_or_else(|| Arc::new(Instant::now)),
         });
         Ok(Self {
-            files: StateFiles::in_dir(&setup.scratch),
+            activity: Arc::new(Activity::default()),
             cwd: Mutex::new(setup.start_cwd.clone()),
             chain,
             env_state: tokio::sync::Mutex::default(),
@@ -261,14 +263,57 @@ impl LocalTerminal {
         &self.processes
     }
 
-    /// Session end: stops every background process group.
+    /// Where commands run.
+    #[must_use]
+    pub fn target(&self) -> &Arc<dyn Target> {
+        &self.setup.target
+    }
+
+    /// Session end: stops every background process group, then releases
+    /// the backend environment.
     pub async fn close(&self) {
         self.processes.close().await;
+        let target = Arc::clone(&self.setup.target);
+        let _ = tokio::task::spawn_blocking(move || target.close()).await;
+    }
+
+    /// The shell in use: the remote backend's own, else the configured one.
+    fn shell(&self) -> Shell {
+        self.setup
+            .target
+            .shell()
+            .unwrap_or_else(|| self.setup.shell.clone())
+    }
+
+    /// Where `~` points: the remote home, else this host's.
+    fn home(&self) -> Option<PathBuf> {
+        self.setup
+            .target
+            .home()
+            .or_else(|| self.setup.user_home.clone())
+    }
+
+    fn state_files(&self) -> StateFiles {
+        StateFiles::in_dir(&self.setup.target.state_dir())
+    }
+
+    /// Runs a blocking target call off the async runtime.
+    async fn blocking<R: Send + 'static>(
+        &self,
+        f: impl FnOnce(&dyn Target) -> R + Send + 'static,
+    ) -> R {
+        let target = Arc::clone(&self.setup.target);
+        match tokio::task::spawn_blocking(move || f(target.as_ref())).await {
+            Ok(value) => value,
+            Err(err) => std::panic::resume_unwind(err.into_panic()),
+        }
     }
 
     /// Runs one `terminal` call.
     pub async fn run(&self, args: TerminalArgs) -> TerminalResult {
+        let busy = self.activity.enter();
         let mut result = self.dispatch(args).await;
+        drop(busy);
         let mut pending = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
         result.notices.splice(0..0, pending.notices.drain(..));
         if result.status != Status::Degraded
@@ -303,11 +348,31 @@ impl LocalTerminal {
         if let Err(message) = self.chain.run(&request, timeout_secs).await {
             return TerminalResult::refused(message);
         }
+        if let Some(plugin) = self.setup.target.plugin() {
+            return match exec {
+                Exec::Foreground(command) => {
+                    self.on_plugin(
+                        &plugin,
+                        &command,
+                        &cwd,
+                        timeout_secs,
+                        args.workdir.is_none(),
+                    )
+                    .await
+                }
+                Exec::Background { .. } => TerminalResult::refused(format!(
+                    "terminal backend '{}' runs foreground commands only; use a local, container or ssh backend for background processes",
+                    plugin.name()
+                )),
+            };
+        }
         let prepared = match self.prepare().await {
             Ok(prepared) => prepared,
             Err(SpawnError::Refused(err)) => return TerminalResult::refused(err.message()),
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
         };
+        // Connecting resolves a remote `~`.
+        let cwd = self.call_cwd(args.workdir.as_deref());
         let mut result = match exec {
             Exec::Foreground(command) => {
                 self.foreground(&command, &cwd, timeout_secs, args.workdir.is_none())
@@ -324,6 +389,41 @@ impl LocalTerminal {
         };
         result.environment_recreated |= prepared.recreated;
         result
+    }
+
+    /// A foreground command on a plugin backend.
+    async fn on_plugin(
+        &self,
+        plugin: &Arc<dyn pmt_sandbox::backend::RemoteBackend>,
+        command: &str,
+        cwd: &Path,
+        timeout_secs: u64,
+        track: bool,
+    ) -> TerminalResult {
+        let env = self.command_env(command);
+        let shaping = super::plugin::Shaping {
+            spill_dir: &self.setup.spill_dir,
+            max_chars: (self.setup.max_chars)(),
+            hooks: &self.setup.hooks,
+            redactor: &self.setup.redactor,
+        };
+        let start = cwd.to_string_lossy();
+        match super::plugin::run(plugin, command, &start, &env, timeout_secs, shaping).await {
+            super::plugin::Outcome::Failed(reason) => self.degraded(reason).await,
+            super::plugin::Outcome::Ran(result, observed) => {
+                let mut result = *result;
+                if let Some(observed) = observed.filter(|o| !o.is_empty()) {
+                    if observed != start {
+                        result.cwd = Some(observed.clone());
+                    }
+                    if track {
+                        *self.cwd.lock().unwrap_or_else(PoisonError::into_inner) =
+                            PathBuf::from(observed);
+                    }
+                }
+                result
+            }
+        }
     }
 
     fn plan(&self, args: &TerminalArgs, timeout_secs: u64) -> Result<Exec, String> {
@@ -360,7 +460,7 @@ impl LocalTerminal {
     fn call_cwd(&self, workdir: Option<&str>) -> PathBuf {
         let session = self.cwd();
         match workdir {
-            Some(dir) => session.join(expand_home(dir, self.setup.user_home.as_deref())),
+            Some(dir) => session.join(expand_home(dir, self.home().as_deref())),
             None => session,
         }
     }
@@ -371,7 +471,13 @@ impl LocalTerminal {
         if state.ready {
             return Ok(Prepared { recreated: false });
         }
-        if self.setup.shell.kind.is_posix() {
+        self.blocking(|target| target.connect()).await?;
+        if let Some(home) = self.setup.target.home() {
+            // A remote session starts in `~` (or below it) of the remote.
+            let mut cwd = self.cwd.lock().unwrap_or_else(PoisonError::into_inner);
+            *cwd = expand_home(&cwd.to_string_lossy(), Some(&home));
+        }
+        if self.shell().kind.is_posix() {
             self.init_shell().await?;
         }
         state.ready = true;
@@ -380,24 +486,38 @@ impl LocalTerminal {
         })
     }
 
-    fn init_files(&self) -> Vec<PathBuf> {
-        let home = self.setup.user_home.as_deref();
-        let mut files = Vec::new();
-        if self.setup.shell.kind == ShellKind::Bash
+    async fn init_files(&self) -> Vec<PathBuf> {
+        let home = self.home();
+        let mut candidates = Vec::new();
+        if self.shell().kind == ShellKind::Bash
             && self.setup.terminal.auto_source_bashrc
-            && let Some(rc) = home.map(|h| h.join(".bashrc")).filter(|rc| rc.is_file())
+            && let Some(home) = &home
         {
-            files.push(rc);
+            candidates.push((None, home.join(".bashrc")));
         }
-        let mut pending = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
         for configured in &self.setup.terminal.shell_init_files {
-            let path = expand_home(configured, home);
-            if path.is_file() {
-                files.push(path);
-            } else {
-                pending.notices.push(format!(
+            candidates.push((
+                Some(configured.clone()),
+                expand_home(configured, home.as_deref()),
+            ));
+        }
+        let checked = self
+            .blocking(move |target| {
+                candidates
+                    .into_iter()
+                    .map(|(configured, path)| (target.is_file(&path), configured, path))
+                    .collect::<Vec<_>>()
+            })
+            .await;
+        let mut pending = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut files = Vec::new();
+        for (exists, configured, path) in checked {
+            match (exists, configured) {
+                (true, _) => files.push(path),
+                (false, Some(configured)) => pending.notices.push(format!(
                     "terminal.shell_init_files: '{configured}' not found; skipped"
-                ));
+                )),
+                (false, None) => {}
             }
         }
         files
@@ -407,26 +527,20 @@ impl LocalTerminal {
     /// `terminal.shell_init_timeout_secs`; on timeout the shell runs without
     /// them and the next result carries [`INIT_TIMEOUT_HINT`].
     async fn init_shell(&self) -> Result<(), SpawnError> {
-        let _ = std::fs::remove_file(&self.files.snapshot);
-        let files = self.init_files();
+        let state = self.state_files();
+        let snapshot = state.snapshot.clone();
+        self.blocking(move |target| target.remove(&snapshot)).await;
+        let files = self.init_files().await;
         if files.is_empty() {
             return Ok(());
         }
-        let argv = init_argv(
-            &self.setup.shell,
-            &self.files,
-            self.setup.env.secret_names(),
-            &files,
-        );
-        let spawned = spawn::spawn(
-            &self.setup.sandbox,
-            &self.setup.env,
-            &argv,
-            &self.setup.scratch,
-            false,
-        )?;
+        let argv = init_argv(&self.shell(), &state, self.setup.env.secret_names(), &files);
+        let spawned =
+            self.setup
+                .target
+                .spawn(&self.setup.env, &argv, &self.setup.scratch, false)?;
         let (mut child, group) = (spawned.child, spawned.group);
-        let mut guard = GroupGuard::new(group, self.setup.kill_grace);
+        let mut guard = GroupGuard::new(group.clone(), self.setup.kill_grace);
         // Drain (and discard) init output so a chatty rc file cannot block.
         let drains = [
             child
@@ -440,8 +554,9 @@ impl LocalTerminal {
         ];
         let limit = Duration::from_secs(self.setup.terminal.shell_init_timeout_secs);
         if tokio::time::timeout(limit, child.wait()).await.is_err() {
-            spawn::stop(&mut child, group, self.setup.kill_grace).await;
-            let _ = std::fs::remove_file(&self.files.snapshot);
+            spawn::stop(&mut child, &group, self.setup.kill_grace).await;
+            let snapshot = state.snapshot.clone();
+            self.blocking(move |target| target.remove(&snapshot)).await;
             self.pending
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
@@ -467,21 +582,31 @@ impl LocalTerminal {
         track: bool,
     ) -> TerminalResult {
         let run = self.runs.fetch_add(1, Ordering::Relaxed);
+        let state = self.state_files();
         let files = StateFiles {
-            snapshot: self.files.snapshot.clone(),
-            cwd: self.setup.scratch.join(format!("pmt-shell-cwd-{run}")),
+            cwd: self
+                .setup
+                .target
+                .state_dir()
+                .join(format!("pmt-shell-cwd-{run}")),
+            snapshot: state.snapshot,
         };
         let env = self.command_env(command);
+        let shell = self.shell();
         let script = RunScript {
             command,
             cwd,
-            use_snapshot: self.setup.shell.kind.is_posix(),
+            use_snapshot: shell.kind.is_posix(),
             persist: self.setup.terminal.persistent_shell,
             track_cwd: true,
             hidden: env.secret_names(),
         };
-        let argv = run_argv(&self.setup.shell, &files, &script);
-        let spawned = match spawn::spawn(&self.setup.sandbox, &env, &argv, cwd, false) {
+        let argv = run_argv(&shell, &files, &script);
+        let spawned = match self
+            .setup
+            .target
+            .spawn(&env, &argv, &self.spawn_dir(cwd), false)
+        {
             Ok(spawned) => spawned,
             Err(SpawnError::Refused(err)) => return TerminalResult::refused(err.message()),
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
@@ -501,10 +626,13 @@ impl LocalTerminal {
             .full_output_path
             .map(|p| p.to_string_lossy().into_owned());
         if let Some(code) = status {
+            if let Some(reason) = self.blocking(move |target| target.failure(code)).await {
+                return self.degraded(reason).await;
+            }
             result.exit_code = Some(code);
             result.status = if code == 0 { Status::Ok } else { Status::Error };
             result.exit_code_meaning = shape::exit_code_meaning(command, code);
-            self.observe_cwd(&files.cwd, cwd, track, &mut result);
+            self.observe_cwd(&files.cwd, cwd, track, &mut result).await;
         } else {
             result.exit_code = Some(124);
             result.status = Status::Timeout;
@@ -512,8 +640,20 @@ impl LocalTerminal {
                 "the command was stopped after {timeout_secs}s; pass a larger timeout, or background=true for long-running work"
             ));
         }
-        let _ = std::fs::remove_file(&files.cwd);
+        let leftover = files.cwd.clone();
+        self.blocking(move |target| target.remove(&leftover)).await;
         result
+    }
+
+    /// The host directory a client process starts in: the call's cwd for
+    /// the local backend, the scratch directory for a remote one (whose
+    /// script changes directory itself).
+    fn spawn_dir(&self, cwd: &Path) -> PathBuf {
+        if self.setup.target.descriptor().uses_host_filesystem {
+            cwd.to_path_buf()
+        } else {
+            self.setup.scratch.clone()
+        }
     }
 
     /// Waits for a foreground command (stopping its group at the timeout)
@@ -524,7 +664,7 @@ impl LocalTerminal {
         timeout_secs: u64,
     ) -> (Option<i32>, Capture) {
         let (mut child, group) = (spawned.child, spawned.group);
-        let mut guard = GroupGuard::new(group, self.setup.kill_grace);
+        let mut guard = GroupGuard::new(group.clone(), self.setup.kill_grace);
         let capture = Arc::new(Mutex::new(Capture::new(&self.setup.spill_dir)));
         let readers: Vec<_> = [
             child.stdout.take().map(|r| capture_into(&capture, r)),
@@ -537,7 +677,7 @@ impl LocalTerminal {
         let status = if let Ok(status) = tokio::time::timeout(limit, child.wait()).await {
             Some(status.map_or(-1, spawn::exit_code))
         } else {
-            spawn::stop(&mut child, group, self.setup.kill_grace).await;
+            spawn::stop(&mut child, &group, self.setup.kill_grace).await;
             None
         };
         for reader in readers {
@@ -561,8 +701,15 @@ impl LocalTerminal {
     /// Reads the directory the command finished in (`cwd_observed`): it is
     /// reported when it differs from `start` and becomes the session cwd
     /// unless the call had its own `workdir`.
-    fn observe_cwd(&self, file: &Path, start: &Path, track: bool, result: &mut TerminalResult) {
-        let Ok(text) = std::fs::read_to_string(file) else {
+    async fn observe_cwd(
+        &self,
+        file: &Path,
+        start: &Path,
+        track: bool,
+        result: &mut TerminalResult,
+    ) {
+        let file = file.to_path_buf();
+        let Some(text) = self.blocking(move |target| target.take_text(&file)).await else {
             return;
         };
         let observed = observed_path(
@@ -572,7 +719,8 @@ impl LocalTerminal {
         if observed.as_os_str().is_empty() {
             return;
         }
-        if !same_dir(&observed, start) {
+        let host = self.setup.target.descriptor().uses_host_filesystem;
+        if !(observed == start || host && same_dir(&observed, start)) {
             result.cwd = Some(observed.to_string_lossy().into_owned());
         }
         if track {
@@ -592,16 +740,21 @@ impl LocalTerminal {
             return TerminalResult::refused(message);
         }
         let env = self.command_env(command);
+        let shell = self.shell();
         let script = RunScript {
             command,
             cwd,
-            use_snapshot: self.setup.shell.kind.is_posix(),
+            use_snapshot: shell.kind.is_posix(),
             persist: false,
             track_cwd: false,
             hidden: env.secret_names(),
         };
-        let argv = run_argv(&self.setup.shell, &self.files, &script);
-        let spawned = match spawn::spawn(&self.setup.sandbox, &env, &argv, cwd, true) {
+        let argv = run_argv(&shell, &self.state_files(), &script);
+        let spawned = match self
+            .setup
+            .target
+            .spawn(&env, &argv, &self.spawn_dir(cwd), true)
+        {
             Ok(spawned) => spawned,
             Err(SpawnError::Refused(err)) => return TerminalResult::refused(err.message()),
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
@@ -637,6 +790,7 @@ impl LocalTerminal {
             state.ready = false;
             state.evicted = true;
         }
+        self.blocking(|target| target.evict()).await;
         tracing::warn!("terminal environment failed: {reason}");
         let retry_hint =
             "the environment will be recreated on the next call; retry the command".to_owned();
@@ -682,4 +836,54 @@ fn same_dir(a: &Path, b: &Path) -> bool {
             .ok()
             .zip(std::fs::canonicalize(b).ok())
             .is_some_and(|(a, b)| a == b)
+}
+
+/// In-flight calls and the time the last one finished.
+#[derive(Debug)]
+struct Activity {
+    in_flight: std::sync::atomic::AtomicUsize,
+    last: Mutex<Instant>,
+}
+
+impl Default for Activity {
+    fn default() -> Self {
+        Self {
+            in_flight: std::sync::atomic::AtomicUsize::new(0),
+            last: Mutex::new(Instant::now()),
+        }
+    }
+}
+
+impl Activity {
+    fn enter(self: &Arc<Self>) -> InFlight {
+        self.in_flight.fetch_add(1, Ordering::SeqCst);
+        InFlight(Arc::clone(self))
+    }
+}
+
+/// What a session reports to a container's idle reaper (spec:
+/// execution-environments, Container lifecycle and orphan reaping): a
+/// foreground call in flight or a running background process keeps the
+/// environment alive.
+impl pmt_sandbox::container::Activity for Terminal {
+    fn busy(&self) -> bool {
+        self.activity.in_flight.load(Ordering::SeqCst) > 0 || !self.processes.running().is_empty()
+    }
+
+    fn idle_for(&self) -> Duration {
+        self.activity
+            .last
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .elapsed()
+    }
+}
+
+struct InFlight(Arc<Activity>);
+
+impl Drop for InFlight {
+    fn drop(&mut self) {
+        *self.0.last.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
+        self.0.in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
 }

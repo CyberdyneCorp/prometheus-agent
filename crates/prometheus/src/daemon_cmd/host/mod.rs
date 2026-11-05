@@ -137,9 +137,10 @@ fn busy(id: SessionId) -> Error {
 }
 
 impl Profile {
-    /// Opens the profile's store.
+    /// Opens the profile's store (and reaps its orphaned containers).
     fn open(scope: ProfileScope) -> Result<Arc<Self>, Error> {
         let store = Arc::new(Store::open(&scope)?);
+        crate::chat::session::backend::reap_orphans_in_background(&scope);
         let state = reload::State::new(&scope);
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),

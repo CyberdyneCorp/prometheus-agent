@@ -15,10 +15,11 @@ use pmt_core::error::{Error, codes};
 use wasmtime::component::{Component, HasSelf, InstancePre, Linker};
 use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
+mod backend;
 mod surfaces;
 
 use super::bindings::PluginHost;
-use super::bindings::exports::prometheus::{hook, provider, tool};
+use super::bindings::exports::prometheus::{hook, provider, terminal_backend, tool};
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
 use crate::worlds::WorldRef;
@@ -40,6 +41,7 @@ pub struct Instance {
     provider: Option<provider::plugin::GuestIndices>,
     surfaces: Option<hook::surfaces::GuestIndices>,
     models: Option<provider::models::GuestIndices>,
+    backend: Option<terminal_backend::plugin::GuestIndices>,
     live: Mutex<Option<Live>>,
     traps: Mutex<Traps>,
 }
@@ -94,6 +96,7 @@ impl Instance {
             provider: provider::plugin::GuestIndices::new(&pre).ok(),
             surfaces: hook::surfaces::GuestIndices::new(&pre).ok(),
             models: provider::models::GuestIndices::new(&pre).ok(),
+            backend: terminal_backend::plugin::GuestIndices::new(&pre).ok(),
             id,
             pre,
             ctx,
@@ -206,6 +209,9 @@ impl Instance {
             "tool" => self.tool.is_some(),
             "hook" => self.hook.is_some(),
             "provider" => self.provider.is_some(),
+            "terminal-backend" => {
+                self.backend.is_some() || self.exported.iter().any(|w| w.name == "terminal-backend")
+            }
             other => self.exported.iter().any(|w| w.name == other),
         }
     }

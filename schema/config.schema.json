@@ -1083,12 +1083,35 @@
           "description": "Literal environment set in the container.",
           "type": "object"
         },
+        "extra_args": {
+          "default": [],
+          "description": "Extra `create` arguments; anything weakening hardening is refused.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "image": {
+          "default": "",
+          "description": "Image; empty is the release's `prometheus-sandbox` image.",
+          "type": "string"
+        },
         "memory_bytes": {
           "default": 5368709120,
           "description": "Memory limit.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "mount_workspace": {
+          "default": true,
+          "description": "Mount the session workspace at `/workspace`.",
+          "type": "boolean"
+        },
+        "network": {
+          "default": true,
+          "description": "Give the container a network; `false` runs it with none.",
+          "type": "boolean"
         },
         "persistent": {
           "default": true,
@@ -1102,10 +1125,33 @@
           "minimum": 0,
           "type": "integer"
         },
+        "run_as_host_user": {
+          "default": false,
+          "description": "Run as the host user's uid and gid.",
+          "type": "boolean"
+        },
+        "runtime": {
+          "default": "auto",
+          "description": "Runtime: `auto` (rootless Podman, else Docker), `podman`, `docker`\nor the path of either executable.",
+          "type": "string"
+        },
+        "shared_key": {
+          "default": "",
+          "description": "Sessions of the profile with the same key share one container.",
+          "type": "string"
+        },
         "shm_size": {
           "default": "1g",
           "description": "`/dev/shm` size in the runtime's syntax.",
           "type": "string"
+        },
+        "volumes": {
+          "default": [],
+          "description": "Extra mounts, `host:container[:ro]`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -3277,6 +3323,38 @@
         }
       },
       "type": "object"
+    },
+    "ModalConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal.modal]` section.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/ModalMode",
+          "default": "auto",
+          "description": "How the plugin authenticates."
+        }
+      },
+      "type": "object"
+    },
+    "ModalMode": {
+      "description": "`terminal.modal.mode`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "`direct` when Modal secrets exist, else `managed` when a\nsubscription is signed in, else unavailable.",
+          "type": "string"
+        },
+        {
+          "const": "direct",
+          "description": "The user's `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` secrets.",
+          "type": "string"
+        },
+        {
+          "const": "managed",
+          "description": "A subscription gateway credential.",
+          "type": "string"
+        }
+      ]
     },
     "ModelAlias": {
       "anyOf": [
@@ -5531,6 +5609,18 @@
         }
       ]
     },
+    "SingularityConfig": {
+      "additionalProperties": false,
+      "description": "The `[terminal.singularity]` section.",
+      "properties": {
+        "image": {
+          "default": "",
+          "description": "A SIF path or a `docker://` reference.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "SkillsConfig": {
       "additionalProperties": false,
       "description": "The `[skills]` section.",
@@ -5656,6 +5746,13 @@
       "additionalProperties": false,
       "description": "The `[terminal.ssh]` section.",
       "properties": {
+        "config_file": {
+          "description": "An `ssh_config` file passed with `-F` (identity, known hosts, jump\nhosts); unset uses the user's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "host": {
           "description": "Host name.",
           "type": [
@@ -5677,6 +5774,11 @@
             "string",
             "null"
           ]
+        },
+        "workspace": {
+          "default": "~/prometheus-workspace",
+          "description": "The remote workspace synced back to the host.",
+          "type": "string"
         }
       },
       "type": "object"
@@ -5923,10 +6025,18 @@
             "cpus": 1.0,
             "disk_bytes": 53687091200,
             "env": {},
+            "extra_args": [],
+            "image": "",
             "memory_bytes": 5368709120,
+            "mount_workspace": true,
+            "network": true,
             "persistent": true,
             "pids_limit": 2048,
-            "shm_size": "1g"
+            "run_as_host_user": false,
+            "runtime": "auto",
+            "shared_key": "",
+            "shm_size": "1g",
+            "volumes": []
           },
           "description": "Container backend."
         },
@@ -5964,6 +6074,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "modal": {
+          "$ref": "#/$defs/ModalConfig",
+          "default": {
+            "mode": "auto"
+          },
+          "description": "The first-party `modal` backend plugin."
+        },
         "persistent_shell": {
           "default": true,
           "description": "Keep one shell per session.",
@@ -5984,12 +6101,34 @@
           "minimum": 0,
           "type": "integer"
         },
+        "singularity": {
+          "$ref": "#/$defs/SingularityConfig",
+          "default": {
+            "image": ""
+          },
+          "description": "The first-party `singularity` backend plugin."
+        },
         "ssh": {
           "$ref": "#/$defs/SshConfig",
           "default": {
-            "port": 22
+            "port": 22,
+            "workspace": "~/prometheus-workspace"
           },
           "description": "SSH backend."
+        },
+        "sync_back": {
+          "description": "Copy files changed in a remote workspace back to the host workspace\nat session end and on `/sync`; unset is `true` for `ssh` and `false`\nfor every other backend.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sync_back_max_bytes": {
+          "default": 2147483648,
+          "description": "Total bytes one sync-back copies; larger files are skipped and\nlisted.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
         },
         "timeout_secs": {
           "default": 180,
@@ -7809,21 +7948,37 @@
           "cpus": 1.0,
           "disk_bytes": 53687091200,
           "env": {},
+          "extra_args": [],
+          "image": "",
           "memory_bytes": 5368709120,
+          "mount_workspace": true,
+          "network": true,
           "persistent": true,
           "pids_limit": 2048,
-          "shm_size": "1g"
+          "run_as_host_user": false,
+          "runtime": "auto",
+          "shared_key": "",
+          "shm_size": "1g",
+          "volumes": []
         },
         "degraded_mode": "degrade",
         "env_passthrough": [],
         "idle_lifetime_secs": 300,
         "max_foreground_secs": 600,
+        "modal": {
+          "mode": "auto"
+        },
         "persistent_shell": true,
         "shell_init_files": [],
         "shell_init_timeout_secs": 10,
-        "ssh": {
-          "port": 22
+        "singularity": {
+          "image": ""
         },
+        "ssh": {
+          "port": 22,
+          "workspace": "~/prometheus-workspace"
+        },
+        "sync_back_max_bytes": 2147483648,
         "timeout_secs": 180,
         "windows_shell": "auto"
       },

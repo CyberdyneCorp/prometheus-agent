@@ -191,6 +191,16 @@ pub static BUILTINS: &[Command] = &[
         Effect::None,
     ),
     command(
+        "sync",
+        &[],
+        Session,
+        "Copy files changed in the remote workspace back to this host",
+        &[],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::None,
+    ),
+    command(
         "compress",
         &["compact"],
         Session,

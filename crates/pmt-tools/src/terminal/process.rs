@@ -507,7 +507,7 @@ async fn supervise(
 ) {
     let (status, killed) = tokio::select! {
         status = child.wait() => (status.ok(), false),
-        Ok(()) = kill => (spawn::stop(&mut child, entry.group, options.kill_grace).await, true),
+        Ok(()) = kill => (spawn::stop(&mut child, &entry.group, options.kill_grace).await, true),
     };
     for reader in readers {
         let abort = reader.abort_handle();

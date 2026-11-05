@@ -108,15 +108,84 @@ the level, for example `sandbox: partial:landlock_net`.
 
 ## Terminal backends
 
-`terminal.backend` selects where commands run: `local` (the sandboxed host)
-in this release; `container` and `ssh` are reserved and fail with
-`terminal backend 'container' is available in M2` (exit 69). Any other name
-fails validation (exit 78) and lists the available backends. `prometheus
-chat` (and every session start) checks the setting before the first turn,
-with the same exits; Prometheus never falls back to another backend. Defaults: `timeout_secs = 180`,
+`terminal.backend` selects where commands run: `local` (the sandboxed
+host), `container` (a hardened rootless container), `ssh` (another host),
+or a backend registered by an enabled `terminal-backend` plugin. Any other
+name fails validation (exit 78) and lists the available backends.
+`prometheus chat` (and every session start) checks the setting before the
+first turn, with the same exits; Prometheus never falls back to another
+backend: a backend that cannot be set up (no runtime, no SSH destination)
+refuses every command with the reason. Defaults: `timeout_secs = 180`,
 `max_foreground_secs = 600`, `idle_lifetime_secs = 300`,
 `persistent_shell = true`; container and SSH settings are only type-checked
-while another backend is selected.
+while another backend is selected. `prometheus doctor terminal` shows the
+selected backend's readiness (exit 0 ready, 1 not).
+
+Every backend declares an isolation descriptor (`isolation` = `os_sandbox`,
+`container` or `remote`, `uses_host_filesystem`, `default_cwd`,
+`session_isolated_when_ephemeral`, `persistent`); approval and file-tool
+decisions read only the descriptor. On `container`, `ssh` and plugin
+backends the file tools act inside that environment: `read_file
+/etc/hostname` reads the container's file, not the host's.
+
+### Container backend
+
+`terminal.container.runtime` is `auto` (Podman, else Docker), `podman`,
+`docker` or the path of either CLI. The runtime must be rootless (Docker
+Desktop, whose daemon runs in its own VM, counts as rootless); a rootful
+daemon needs `security.sandbox.allow_degraded = ["all"]`. Every container
+starts with `--cap-drop ALL` plus only `CHOWN`, `DAC_OVERRIDE` and `FOWNER`,
+`--security-opt no-new-privileges`, a read-only root, tmpfs `/tmp`
+(`rw,nosuid,size=512m`) and `/var/tmp` (`rw,noexec,nosuid,size=256m`), the
+configured pids, CPU and memory limits, and the labels
+`prometheus.profile=<profile>` and `prometheus.session=<session>`. A flag the
+runtime rejects fails creation with `container hardening '<flag>'
+unsupported by runtime` unless `allow_degraded` names its feature
+(`cap_drop`, `no_new_privileges`, `read_only_rootfs`; `all` for the tmpfs
+mounts and the limits), in which case it is dropped with a WARN on every
+start.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `image` | the release's `prometheus-sandbox` image | the image |
+| `mount_workspace` | `true` | the session workspace at `/workspace` (the start directory) |
+| `volumes` | `[]` | `host:container[:ro]`; `PROMETHEUS_HOME`, credential stores and runtime sockets are refused |
+| `network` | `true` | `false` runs the container with no network |
+| `run_as_host_user` | `false` | `--user <uid>:<gid>` |
+| `shared_key` | `""` | sessions of the profile with the same key share one container |
+| `persistent` | `true` | stop (keep) the container at session end instead of removing it |
+| `extra_args` | `[]` | extra `create` arguments; `--privileged`, `--cap-add`, a weakening `--security-opt`, `--pid/--network/--userns=host` and runtime-socket mounts are refused unless `allow_degraded` covers them |
+
+A container idle longer than `idle_lifetime_secs` is torn down (stopped
+when persistent, removed otherwise) unless a foreground call is in flight or
+a background process runs; the next command starts it again. Once per
+gateway start, exited containers of the profile that finished more than
+twice the idle lifetime ago are removed; other profiles' containers are
+never touched. A runtime that stops answering turns the next command into a
+`degraded` result and the call after it recreates the environment.
+
+### SSH backend
+
+`terminal.ssh.host` and `terminal.ssh.user` are required (`port` defaults to
+22; `config_file` is passed to `ssh -F` for identities, known hosts or jump
+hosts). Commands run over one multiplexed connection in batch mode (never a
+password prompt) and start in the remote home. Granted secrets never appear
+on a command line: they are written to a private file the command sources
+and deletes. With `terminal.sync_back` (default on for `ssh`), files changed
+under `terminal.ssh.workspace` are copied back to the host workspace at
+session end and on `/sync`, up to `terminal.sync_back_max_bytes` (2 GiB) per
+sync; files over the budget are skipped and listed, and a host file edited
+since the previous sync is reported as a conflict, never overwritten.
+
+### Plugin backends
+
+A `terminal-backend` plugin (world 1.1) provides `name`, `descriptor`,
+`check`, `execute`, `upload`, `download`, `cancel` and `teardown`. Its name
+may not be `local`, `container`, `docker`, `podman` or `ssh` (any case), and
+a descriptor with a missing field or an invalid value (a relative
+`default_cwd`) rejects the backend at load. An `execute` reply without an
+exit code is a contract violation (an error result, never exit 0). Plugin
+backends run foreground commands only.
 
 ```console
 $ prometheus config set terminal.backend acmebox

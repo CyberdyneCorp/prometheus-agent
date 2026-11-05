@@ -431,7 +431,7 @@ capabilities = [
 
 [execution-environments."Typed backend registry and selection"]
 "Unknown backend" = ["crates/prometheus/tests/chat_startup.rs::an_unknown_backend_exits_78_listing_the_available_ones", "crates/pmt-sandbox/tests/sandbox/backend.rs::unknown_backend_exits_78_with_the_available_list"]
-"Reserved backend selected before it ships" = ["crates/prometheus/tests/chat_startup.rs::a_reserved_backend_fails_the_session_start_with_69", "crates/pmt-sandbox/tests/sandbox/backend.rs::reserved_backends_are_available_in_m2"]
+"Reserved backend selected before it ships" = ["crates/prometheus/tests/chat_startup.rs::a_container_backend_without_a_runtime_never_runs_on_the_host", "crates/pmt-sandbox/tests/sandbox/backend.rs::reserved_backends_are_available_in_m2"]
 
 [execution-environments."Backend readiness checks"]
 "SSH misconfigured" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::ssh_misconfigured"]
@@ -466,7 +466,7 @@ capabilities = [
 "Redaction fails" = ["crates/pmt-tools/src/terminal/spill.rs::an_unreadable_raw_spill_leaves_no_path_and_no_file"]
 
 [execution-environments."Infrastructure failures are degraded results"]
-"Container runtime down" = { tests = ["crates/pmt-tools/tests/terminal/foreground.rs::a_broken_environment_is_degraded_and_recreated_on_the_next_call"], note = "the container backend arrives in M2; the degraded-result contract is the same for the local backend tested here" }
+"Container runtime down" = ["crates/pmt-tools/tests/terminal/container.rs::container_runtime_down", "crates/pmt-tools/tests/terminal/foreground.rs::a_broken_environment_is_degraded_and_recreated_on_the_next_call", "crates/pmt-tools/tests/terminal/ssh.rs::ssh_host_unreachable_is_degraded"]
 
 [execution-environments."Child environments are built from an allowlist"]
 "Bot token never reaches a shell" = ["crates/pmt-tools/tests/terminal/environment.rs::the_parents_secrets_never_reach_a_shell"]
@@ -2428,3 +2428,28 @@ capabilities = [
 
 [security-boundaries."Vault management CLI"]
 "Password on the command line" = ["crates/prometheus/tests/vault_cli.rs::a_password_on_the_command_line_exits_2"]
+
+# Group 35.1-35.4 (container, SSH and remote execution environments)
+[execution-environments."Built-in backend names are reserved"]
+"Plugin shadows container" = ["crates/pmt-sandbox/tests/sandbox/backend.rs::plugin_shadows_container", "crates/pmt-plugins/tests/terminal.rs::a_plugin_backend_named_like_a_builtin_is_rejected"]
+
+[execution-environments."Backend isolation descriptor"]
+"Relative default cwd" = ["crates/pmt-plugins/tests/terminal.rs::relative_default_cwd", "crates/pmt-sandbox/src/backend/descriptor.rs::a_relative_default_cwd_is_rejected"]
+"Container backend" = ["crates/pmt-tools/tests/terminal/container.rs::container_backend"]
+
+[execution-environments."Remote sandboxes are plugins"]
+"Plugin omits exit code" = ["crates/pmt-tools/tests/terminal/plugin.rs::plugin_omits_exit_code", "crates/pmt-plugins/tests/terminal.rs::plugin_omits_exit_code_reaches_the_host_as_missing"]
+
+[execution-environments."Container hardening is never silently dropped"]
+"Runtime rejects no-new-privileges" = ["crates/pmt-sandbox/tests/sandbox/container.rs::runtime_rejects_no_new_privileges", "crates/pmt-sandbox/tests/sandbox/container.rs::an_allowed_rejection_drops_only_that_flag_and_warns_on_every_start"]
+
+[execution-environments."Container lifecycle and orphan reaping"]
+"Long foreground command" = ["crates/pmt-sandbox/tests/sandbox/container.rs::long_foreground_command"]
+"Other profile's container" = ["crates/pmt-sandbox/tests/sandbox/container.rs::other_profiles_container"]
+
+[execution-environments."Container backend options"]
+"Network off" = ["crates/pmt-tools/tests/terminal/container.rs::network_off"]
+"Privileged extra arg" = ["crates/pmt-sandbox/tests/sandbox/container.rs::privileged_extra_arg", "crates/pmt-sandbox/src/container/options.rs::privileged_and_host_namespaces_are_refused_naming_the_argument"]
+
+[execution-environments."Remote file sync and sync-back"]
+"Sync-back cap" = ["crates/pmt-tools/tests/terminal/ssh.rs::sync_back_cap"]

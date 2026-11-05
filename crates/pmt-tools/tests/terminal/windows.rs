@@ -18,7 +18,7 @@ use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use pmt_tools::terminal::guard::GuardChain;
 use pmt_tools::terminal::shell::{Shell, ShellKind};
 use pmt_tools::terminal::windows_shell::{Probe, resolve};
-use pmt_tools::terminal::{LocalSetup, LocalTerminal, Status, TerminalArgs, spill};
+use pmt_tools::terminal::{Status, Terminal, TerminalArgs, TerminalSetup, spill};
 
 struct Machine {
     _root: tempfile::TempDir,
@@ -83,7 +83,7 @@ fn explicit_git_bash_without_git_is_not_found() {
 /// A session in `<base>\work` running `shell`. Confinement itself is
 /// covered by the pmt-sandbox Windows tests; these check the shell plumbing
 /// (encoding, exit codes, cwd tracking), so the sandbox is off.
-fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> LocalTerminal {
+fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> Terminal {
     let work = machine.base.join("work");
     let scratch = machine.base.join("scratch");
     std::fs::create_dir_all(work.join("sub")).unwrap();
@@ -102,11 +102,14 @@ fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> LocalTerminal
     let sandbox = Sandbox::with_options(policy, &config, Options::default()).unwrap();
     let mut env = ChildEnv::build(launch, EnvRequest::default());
     env.set_temp_dir(&scratch);
-    LocalTerminal::new(LocalSetup {
+    Terminal::new(TerminalSetup {
         terminal: TerminalConfig::default(),
         max_chars: pmt_tools::setting::fixed(50_000),
         kill_grace: Duration::from_secs(2),
-        sandbox: Arc::new(sandbox),
+        target: Arc::new(pmt_tools::terminal::target::LocalTarget::new(
+            Arc::new(sandbox),
+            &scratch,
+        )),
         env,
         shell,
         scratch,
@@ -126,7 +129,7 @@ fn session(machine: &Machine, launch: &LaunchEnv, shell: Shell) -> LocalTerminal
 
 /// `cd sub` is reported in the plain Windows form and becomes the session
 /// cwd (the next command starts there).
-async fn assert_cwd_follows(session: &LocalTerminal, machine: &Machine, cd: &str) {
+async fn assert_cwd_follows(session: &Terminal, machine: &Machine, cd: &str) {
     let sub = machine.base.join(r"work\sub");
     let moved = session.run(TerminalArgs::new(cd)).await;
     assert_eq!(moved.status, Status::Ok, "{moved:?}");

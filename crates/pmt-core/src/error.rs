@@ -502,7 +502,19 @@ error_codes! {
         "`terminal.backend` names a backend that is neither built in nor provided by an enabled plugin; the error lists the available backends.");
     /// The selected terminal backend ships in a later milestone.
     TERMINAL_BACKEND_UNAVAILABLE = ("terminal.backend_unavailable", Unavailable,
-        "The selected terminal backend (`container`, `ssh`) is reserved but not available in this build.");
+        "The selected terminal backend is a reserved built-in name that is not available in this build.");
+    /// A plugin tried to register a built-in terminal backend name.
+    TERMINAL_BACKEND_RESERVED = ("terminal.backend_reserved", Config,
+        "A `terminal-backend` plugin registered a backend whose lower-cased name is `local`, `container`, `docker`, `podman` or `ssh`; the plugin backend is rejected and the built-in stays selectable.");
+    /// A plugin backend's isolation descriptor is missing a field or holds an invalid value.
+    TERMINAL_BACKEND_DESCRIPTOR = ("terminal.backend_descriptor", Config,
+        "A `terminal-backend` plugin's isolation descriptor (`isolation`, `uses_host_filesystem`, `default_cwd`, `session_isolated_when_ephemeral`, `persistent`) is missing a field or holds an invalid value, so the backend was rejected at load time.");
+    /// The container runtime is missing, unreachable or not rootless.
+    TERMINAL_CONTAINER_RUNTIME = ("terminal.container_runtime", Unavailable,
+        "The `container` backend found no reachable rootless Podman or Docker runtime (`terminal.container.runtime`).");
+    /// Container hardening would be weakened.
+    TERMINAL_CONTAINER_HARDENING = ("terminal.container_hardening", Sandbox,
+        "The container runtime rejected a hardening flag, or `terminal.container.extra_args`/`volumes` would weaken hardening, and `security.sandbox.allow_degraded` does not cover it; no container was started.");
     /// `terminal.env_passthrough` (or `terminal.container.env`) names a secret.
     TERMINAL_ENV_PASSTHROUGH_SECRET = ("terminal.env_passthrough_secret", Config,
         "`terminal.env_passthrough` or `terminal.container.env` names a secret (a stored secret, a provider credential, a `PMT_SECRET_*` or secret-looking name); grant it with `secrets.read:<NAME>` instead.");

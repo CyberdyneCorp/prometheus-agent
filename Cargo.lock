@@ -3150,6 +3150,7 @@ dependencies = [
  "pmt-core",
  "pmt-plugins",
  "pmt-providers",
+ "pmt-sandbox",
  "pmt-skills",
  "pmt-tools",
  "semver",
@@ -3238,11 +3239,14 @@ dependencies = [
 name = "pmt-sandbox"
 version = "0.1.0"
 dependencies = [
+ "jiff",
  "landlock",
  "libc",
  "pmt-config",
  "pmt-core",
  "seccompiler",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

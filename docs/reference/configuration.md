@@ -489,21 +489,35 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `terminal.container.cpus` | number | `1.0` | ≥ 0.0 | `next_session` | CPU limit. |
 | `terminal.container.disk_bytes` | integer | `53687091200` | ≥ 0 | `next_session` | Disk limit. |
 | `terminal.container.env` | table | `{}` | any | `next_session` | Literal environment set in the container. |
+| `terminal.container.extra_args` | array of string | `[]` | any | `next_session` | Extra `create` arguments; anything weakening hardening is refused. |
+| `terminal.container.image` | string | `""` | any | `next_session` | Image; empty is the release's `prometheus-sandbox` image. |
 | `terminal.container.memory_bytes` | integer | `5368709120` | ≥ 0 | `next_session` | Memory limit. |
+| `terminal.container.mount_workspace` | boolean | `true` | any | `next_session` | Mount the session workspace at `/workspace`. |
+| `terminal.container.network` | boolean | `true` | any | `next_session` | Give the container a network; `false` runs it with none. |
 | `terminal.container.persistent` | boolean | `true` | any | `next_session` | Keep the container between sessions. |
 | `terminal.container.pids_limit` | integer | `2048` | ≥ 0 | `next_session` | Process limit. |
+| `terminal.container.run_as_host_user` | boolean | `false` | any | `next_session` | Run as the host user's uid and gid. |
+| `terminal.container.runtime` | string | `"auto"` | any | `next_session` | Runtime: `auto` (rootless Podman, else Docker), `podman`, `docker` or the path of either executable. |
+| `terminal.container.shared_key` | string | `""` | any | `next_session` | Sessions of the profile with the same key share one container. |
 | `terminal.container.shm_size` | string | `"1g"` | any | `next_session` | `/dev/shm` size in the runtime's syntax. |
+| `terminal.container.volumes` | array of string | `[]` | any | `next_session` | Extra mounts, `host:container[:ro]`. |
 | `terminal.cwd` | string | unset | any | `next_session` | Start directory for `local`; unset is the launch directory. |
 | `terminal.degraded_mode` | one of "degrade", "fail" | `"degrade"` | `"degrade"`, `"fail"` | `next_session` | Backend connection failures: degraded results or errors. |
 | `terminal.env_passthrough` | array of string | `[]` | any | `next_session` | Non-secret launch-environment variables passed to children. |
 | `terminal.idle_lifetime_secs` | integer | `300` | ≥ 0 | `next_session` | Idle time before a cached environment is torn down. |
 | `terminal.max_foreground_secs` | integer | `600` | ≥ 0 | `next_session` | Longer foreground calls become tracked background processes. |
+| `terminal.modal.mode` | one of "auto", "direct", "managed" | `"auto"` | `"auto"`, `"direct"`, `"managed"` | `next_session` | How the plugin authenticates. |
 | `terminal.persistent_shell` | boolean | `true` | any | `next_session` | Keep one shell per session. |
 | `terminal.shell_init_files` | array of string | `[]` | any | `next_session` | Extra files sourced at shell start (`~` expanded). |
 | `terminal.shell_init_timeout_secs` | integer | `10` | ≥ 0 | `next_session` | Bound on the whole shell init step. |
+| `terminal.singularity.image` | string | `""` | any | `next_session` | A SIF path or a `docker://` reference. |
+| `terminal.ssh.config_file` | string | unset | any | `next_session` | An `ssh_config` file passed with `-F` (identity, known hosts, jump hosts); unset uses the user's. |
 | `terminal.ssh.host` | string | unset | any | `next_session` | Host name. |
 | `terminal.ssh.port` | integer | `22` | 1 to 65535 | `next_session` | Port. |
 | `terminal.ssh.user` | string | unset | any | `next_session` | User name. |
+| `terminal.ssh.workspace` | string | `"~/prometheus-workspace"` | any | `next_session` | The remote workspace synced back to the host. |
+| `terminal.sync_back` | boolean | unset | any | `next_session` | Copy files changed in a remote workspace back to the host workspace at session end and on `/sync`; unset is `true` for `ssh` and `false` for every other backend. |
+| `terminal.sync_back_max_bytes` | integer | `2147483648` | ≥ 0 | `next_session` | Total bytes one sync-back copies; larger files are skipped and listed. |
 | `terminal.timeout_secs` | integer | `180` | ≥ 0 | `next_session` | Default foreground command timeout. |
 | `terminal.windows_bash_path` | string | unset | any | `next_session` | Git Bash path tried first by `windows_shell = "auto"`. |
 | `terminal.windows_shell` | one of "auto", "git-bash", "pwsh", "powershell" | `"auto"` | `"auto"`, `"git-bash"`, `"pwsh"`, `"powershell"` | `next_session` | Windows shell. |
