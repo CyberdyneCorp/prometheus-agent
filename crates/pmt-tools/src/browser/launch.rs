@@ -218,11 +218,7 @@ pub async fn launch(
     let profile_dir = profiles_root.join(ulid::Ulid::generate().to_string().to_lowercase());
     pmt_core::private_fs::create_dir(&profile_dir)
         .map_err(|err| format!("cannot create the browser profile: {err}"))?;
-    // Chromium puts its singleton socket under its temp directory, and a
-    // Unix socket path must stay under about 100 bytes: a session scratch
-    // directory is too deep, so the browser gets a short directory in the
-    // host's temp.
-    let temp_dir = std::env::temp_dir().join(format!(
+    let temp_dir = temp_root(profiles_root).join(format!(
         "pmt-browser-{}",
         &ulid::Ulid::generate().to_string().to_lowercase()[16..]
     ));
@@ -247,6 +243,20 @@ pub async fn launch(
             cleanup::remove_dir_async(&temp_dir).await;
             Err(why)
         }
+    }
+}
+
+/// Where a browser's temp directory goes. Unix: the host's temp, since
+/// Chromium puts its singleton socket there and a socket path must stay
+/// under about 100 bytes (a profile cache is too deep). Windows: beside the
+/// profiles, never below the user's `AppData`, whose directories (the
+/// `AppContainer` profiles' parent among them) the sandbox would otherwise
+/// rewrite listing entries on.
+fn temp_root(profiles_root: &Path) -> PathBuf {
+    if cfg!(windows) {
+        profiles_root.parent().unwrap_or(profiles_root).join("tmp")
+    } else {
+        std::env::temp_dir()
     }
 }
 
