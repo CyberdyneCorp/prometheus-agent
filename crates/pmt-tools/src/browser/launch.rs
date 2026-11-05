@@ -397,8 +397,8 @@ fn spawn(
     // Everything the browser would write under the user's home (config,
     // caches, crash database) goes to its private temp directory instead:
     // the home is read-only in the sandbox, and Chromium aborts when its
-    // crash handler cannot open a database. The crash handler is not
-    // started at all (it would need ptrace and a writable database).
+    // crash handler has no database. (`--disable-crashpad-for-testing`
+    // is no way out: Chromium's network service then crashes on start.)
     let mut crash_dir = OsString::from("--crash-dumps-dir=");
     crash_dir.push(&dirs.temp);
     std_command
@@ -410,7 +410,6 @@ fn spawn(
             "--disable-gpu",
             "--disable-dev-shm-usage",
             "--disable-crash-reporter",
-            "--disable-crashpad-for-testing",
             "--disable-breakpad",
         ])
         .arg(crash_dir)
