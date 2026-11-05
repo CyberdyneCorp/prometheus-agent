@@ -451,14 +451,21 @@ fn create(launch: &Launch<'_>, attributes: &mut Attributes) -> Result<Child, Str
         flags |= CREATE_UNICODE_ENVIRONMENT;
         block.as_ptr().cast()
     });
+    // An absolute program is started by its path: the command-line search
+    // CreateProcessW does otherwise is not needed (and splits on spaces).
+    let application = std::path::Path::new(launch.program)
+        .is_absolute()
+        .then(|| wide(launch.program));
+    let application_ptr = application.as_ref().map_or(ptr::null(), Vec::as_ptr);
     let mut process = PROCESS_INFORMATION::default();
-    // SAFETY: `line` is a mutable NUL-terminated buffer; `info`, the
+    // SAFETY: `application` (when set) is NUL-terminated and `line` is a
+    // mutable NUL-terminated buffer; `info`, the
     // attribute list it points to and the environment block (double-NUL
     // terminated UTF-16) outlive the call; a null environment and
     // directory inherit the launcher's, which the caller configured.
     let ok = unsafe {
         CreateProcessW(
-            ptr::null(),
+            application_ptr,
             line.as_mut_ptr(),
             ptr::null(),
             ptr::null(),
@@ -471,7 +478,10 @@ fn create(launch: &Launch<'_>, attributes: &mut Attributes) -> Result<Child, Str
         )
     };
     if ok == 0 {
-        return Err(last_error("CreateProcessW"));
+        return Err(last_error(&format!(
+            "CreateProcessW({})",
+            launch.program.to_string_lossy()
+        )));
     }
     Ok(Child {
         process: process.hProcess,
