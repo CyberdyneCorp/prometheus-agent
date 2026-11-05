@@ -127,9 +127,19 @@ impl RuntimePolicy {
 
 /// Chromium-family browsers commonly installed on this host type, plus
 /// the same names on `path_var`.
+///
+/// None on Windows: a local browser runs in an `AppContainer` there, and
+/// every full Chromium build (Chrome, Edge, Brave, Chromium) starts its
+/// crashpad handler before reading any switch, on a named pipe outside the
+/// container's pipe namespace, and aborts (`CreateNamedPipe: Access is
+/// denied`). The managed runtime, `chrome-headless-shell`, starts crash
+/// reporting only on `--enable-crash-reporter`, so it is the browser there.
 #[must_use]
 pub fn system_candidates(path_var: Option<&std::ffi::OsStr>) -> Vec<PathBuf> {
     let mut found = Vec::new();
+    if cfg!(windows) {
+        return found;
+    }
     if cfg!(target_os = "macos") {
         for app in [
             "Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -138,17 +148,6 @@ pub fn system_candidates(path_var: Option<&std::ffi::OsStr>) -> Vec<PathBuf> {
             "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
         ] {
             found.push(Path::new("/Applications").join(app));
-        }
-    }
-    if cfg!(windows) {
-        for root in ["C:\\Program Files", "C:\\Program Files (x86)"] {
-            for exe in [
-                "Google\\Chrome\\Application\\chrome.exe",
-                "Microsoft\\Edge\\Application\\msedge.exe",
-                "BraveSoftware\\Brave-Browser\\Application\\brave.exe",
-            ] {
-                found.push(Path::new(root).join(exe));
-            }
         }
     }
     let names = [

@@ -30,6 +30,13 @@
           "size": 126922702,
           "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/linux64/chrome-headless-shell-linux64.zip"
         },
+        "windows-arm64": {
+          "exe": "chrome-headless-shell-win64/chrome-headless-shell.exe",
+          "format": "zip",
+          "sha256": "10a77466005e7f64e00f1a75fd1ea81f4a38a60093c65fea6895843b26e60a9a",
+          "size": 125772546,
+          "url": "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.80/win64/chrome-headless-shell-win64.zip"
+        },
         "windows-x64": {
           "exe": "chrome-headless-shell-win64/chrome-headless-shell.exe",
           "format": "zip",

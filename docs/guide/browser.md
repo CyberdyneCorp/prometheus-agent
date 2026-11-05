@@ -55,7 +55,8 @@ The first call of a session key resolves a browser, in this order:
    `fallback_from_cloud: true`; when both fail the error names both
    reasons;
 3. a local headless Chromium: the managed `chromium` runtime, else a
-   Chrome, Chromium, Brave or Edge installed on the host, else the runtime
+   Chrome, Chromium, Brave or Edge installed on the host (not on Windows,
+   see Isolation), else the runtime
    installed on first use when lazy installs are allowed
    (`runtimes.allow_lazy_install`, part of the managed runtime store);
    otherwise the call fails with `chromium is not installed and lazy
@@ -110,10 +111,13 @@ no network capability, and reaches the egress proxy through a relay inside
 its own container (its `--proxy-server` address is pointed at the relay).
 DevTools uses two anonymous pipes the browser inherits and finds through
 `--remote-debugging-io-pipes`, so nothing listens on a port there either.
-Known limit: Google Chrome and Microsoft Edge abort there at start (their
-crash handler's pipe lies outside the container's pipe namespace), so on
-Windows a local browser currently fails to start rather than run
-unconfined.
+Google Chrome, Microsoft Edge and other full Chromium builds cannot start
+there (their crash handler opens a named pipe outside the container's pipe
+namespace before reading any switch), so Windows never picks a host
+browser: a local browser is always the managed `chromium` runtime
+(`chrome-headless-shell`, which starts no crash handler), installed on
+first use like any runtime. Windows on Arm runs its x64 build under
+emulation (Chrome for Testing publishes no arm64 build).
 
 A session browses with a throwaway profile: without the
 `browser.real_profile` grant in `grants.toml` the user's real browser

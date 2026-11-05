@@ -1,11 +1,15 @@
 //! Local browser isolation on Windows (spec: execution-environments, Local
-//! browser isolation): a real Chromium-family browser of the host (Chrome
-//! or Edge on the CI runners) starts inside an `AppContainer`, with the
-//! built binary as the sandbox launcher, answers DevTools over the
-//! inherited pipe, and reaches a local site only through the session's
-//! egress proxy (via the container's relay). What the container itself
-//! refuses (writes outside its directories, direct connections) is
-//! covered by pmt-sandbox's Windows tests.
+//! browser isolation): the browser a session picks there, the pinned
+//! `chrome-headless-shell` runtime (host Chrome and Edge abort in an
+//! `AppContainer`), installed from the runtime index, starts inside an
+//! `AppContainer` with the built binary as the sandbox launcher, answers
+//! DevTools over the inherited pipe, and reaches a local site only through
+//! the session's egress proxy (via the container's relay). What the
+//! container itself refuses (writes outside its directories, direct
+//! connections) is covered by pmt-sandbox's Windows tests.
+//!
+//! The runtime is a download: CI sets `PMT_TEST_BROWSER_RUNTIME=require`;
+//! elsewhere the test skips.
 
 #![cfg(windows)]
 
@@ -17,7 +21,7 @@ use pmt_config::schema::SandboxConfig;
 use pmt_core::env::{EnvPolicy, LaunchEnv};
 use pmt_net::DestinationPolicy;
 use pmt_net::egress::{HostPolicy, Mode, Proxy, Rules};
-use pmt_tools::browser::launch::{Confinement, launch, system_candidates};
+use pmt_tools::browser::launch::{Confinement, launch};
 use pmt_tools::terminal::env::{ChildEnv, EnvRequest};
 use serde_json::{Value, json};
 use wiremock::matchers::path;
@@ -48,11 +52,24 @@ public static class Token {
 Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:PMT_PROFILE_DIR) -and $_.Name -ne 'prometheus.exe' } | ForEach-Object { "$($_.ProcessId) $([Token]::IsAppContainer([int]$_.ProcessId))" }
 "#;
 
-fn browser() -> PathBuf {
-    system_candidates(std::env::var_os("PATH").as_deref())
-        .into_iter()
-        .find(|path| path.is_file())
-        .expect("no Chromium-family browser on this host (Chrome or Edge)")
+/// The browser a session on this host uses, as a session finds it: no
+/// host browser qualifies on Windows, so the pinned runtime is installed
+/// into `home`.
+async fn browser(home: &std::path::Path) -> PathBuf {
+    let policies = prometheus::runtimes_cmd::browser::for_home(
+        home,
+        &pmt_config::schema::NetworkConfig::default(),
+        None,
+        std::env::var_os("PATH").as_deref(),
+    )
+    .unwrap();
+    let exe = policies.chromium.executable("chromium").await.unwrap();
+    assert!(
+        exe.ends_with("chrome-headless-shell.exe"),
+        "not the managed runtime: {}",
+        exe.display()
+    );
+    exe
 }
 
 /// The browser's environment from this process's, as a session builds it.
@@ -104,8 +121,11 @@ async fn wait_for_title(cdp: &pmt_tools::browser::cdp::Cdp, want: &str) -> Resul
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "known gap (35.7): Chrome and Edge abort in an AppContainer: their crashpad handler pipe is outside the container's pipe namespace (CreateNamedPipe: Access is denied)"]
 async fn a_local_browser_runs_in_an_app_container_behind_the_proxy() {
+    if std::env::var("PMT_TEST_BROWSER_RUNTIME").as_deref() != Ok("require") {
+        eprintln!("skipped: set PMT_TEST_BROWSER_RUNTIME=require to download the pinned browser");
+        return;
+    }
     let root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let base = root.path().to_path_buf();
     let home = base.join("home");
@@ -123,8 +143,9 @@ async fn a_local_browser_runs_in_an_app_container_behind_the_proxy() {
         sandbox: SandboxConfig::default(),
         launcher: Some(PathBuf::from(env!("CARGO_BIN_EXE_prometheus"))),
     };
+    let executable = browser(&home.join(".prometheus")).await;
     let launched = launch(
-        &browser(),
+        &executable,
         &profiles,
         &child_env(),
         Duration::from_secs(60),

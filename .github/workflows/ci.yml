@@ -189,10 +189,13 @@ jobs:
         run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
 
       # A real local browser inside the AppContainer (execution-environments,
-      # Local browser isolation): DevTools over inherited pipe handles, every
+      # Local browser isolation): the pinned chrome-headless-shell runtime
+      # (downloaded per job), DevTools over inherited pipe handles, every
       # browser process contained, pages reached only through the proxy.
       - name: Windows browser isolation tests
         if: runner.os == 'Windows' && !cancelled()
+        env:
+          PMT_TEST_BROWSER_RUNTIME: require
         run: cargo test -p prometheus --test browser_windows --locked --target "${{ matrix.target }}"
 
       # The offline smoke run of a Tier 2 target (spec: workspace-architecture,

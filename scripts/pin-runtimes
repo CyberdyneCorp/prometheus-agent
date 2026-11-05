@@ -55,6 +55,10 @@ CHROME_PLATFORMS = {
     "linux-x64": "linux64",
     "linux-arm64": "linux-arm64",
     "windows-x64": "win64",
+    # Chrome for Testing has no Windows arm64 build; Windows on Arm runs the
+    # x64 one under emulation (the local browser there needs the managed
+    # runtime: host Chrome and Edge cannot start in an AppContainer).
+    "windows-arm64": "win64",
 }
 
 
