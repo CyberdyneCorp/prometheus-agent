@@ -366,7 +366,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [ ] 35.4 Implement container backend options (network off, privileged extra args refused), remote file sync with capped sync-back, first-party backend plugins (auto mode skips providers without credentials) and sudo password handling (interactive prompt, never for subagents); verify with container and SSH fixtures (spec: execution-environments)
 - [x] 35.5 Implement quiet-wait auto-notify (second unchanged poll notifies; cron runs wait silently), retained process receipts readable after compression and scoped to their conversation, and `read_file` document extraction (PDF, Office, SQLite schema overview, scanned PDF notice); verify with fixtures (spec: execution-environments)
 - [x] 35.6 Implement snapshot triggers, caps and the per-run toggle (one checkpoint per directory per turn, large files skipped), rollback listing, diff and selective restore (hand edits preserved, preview only), the snapshot store management CLI, the working-tree diff command and project run-recipe verification (detect-only and failing-test reporting); verify with workspace fixtures (spec: execution-environments)
-- [ ] 35.7 Implement throttled background notifications, subagent process handoff, file snapshots with undo, and local browser isolation; verify that `/undo` restores a file (spec: execution-environments)
+- [x] 35.7 Implement throttled background notifications, subagent process handoff, file snapshots with undo, and local browser isolation; verify that `/undo` restores a file (spec: execution-environments)
 
 ## 36. M2 Browser upgrades
 
