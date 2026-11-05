@@ -3,15 +3,22 @@
 //! (unstaged plus untracked by default, staged, or both), or `session`,
 //! the cumulative diff of every file the agent changed in this session
 //! from its earliest snapshot, which needs no repository.
+//!
+//! git runs where the session's files are: on this host for a local
+//! session or a container whose workspace is a host bind mount, and
+//! through the backend ([`BackendGit`]) for SSH, plugin and unmounted
+//! container sessions, whose cwd is not a host path.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use super::journal;
 use super::store::SnapshotStore;
 use super::tree::Tree;
+use crate::terminal::remote::exec::RemoteExec;
 
 /// What `/diff` shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -57,20 +64,98 @@ impl Request {
     }
 }
 
-/// The diff `request` asks for, in `cwd`, of `session`'s changes (their
-/// current content read from `tree`).
+/// Runs git for `/diff`.
+pub trait Git: Send + Sync + std::fmt::Debug {
+    /// git's standard output for `args` run in `cwd`; `None` when git
+    /// cannot run or fails (exit 1 is success: `diff --no-index` exits 1
+    /// when the files differ).
+    fn run(&self, cwd: &Path, args: &[&str]) -> Option<String>;
+
+    /// The null device where git runs (the "before" of an untracked file).
+    fn null_device(&self) -> &'static str {
+        "/dev/null"
+    }
+}
+
+/// git on this host.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HostGit;
+
+impl Git for HostGit {
+    fn run(&self, cwd: &Path, args: &[&str]) -> Option<String> {
+        let output = Command::new("git")
+            .current_dir(cwd)
+            .args(args)
+            .output()
+            .ok()?;
+        succeeded(output.status.code())
+            .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+
+    fn null_device(&self) -> &'static str {
+        if cfg!(windows) { "NUL" } else { "/dev/null" }
+    }
+}
+
+/// git on a backend whose files are not host files (POSIX `sh` there).
+#[derive(Debug, Clone)]
+pub struct BackendGit(pub Arc<dyn RemoteExec>);
+
+/// `cd` into `$1`, then git with the remaining arguments; 128 (git's own
+/// "not a repository" code) when the directory is missing.
+const BACKEND_GIT: &str = r#"cd "$1" || exit 128; shift; exec git "$@""#;
+
+impl Git for BackendGit {
+    fn run(&self, cwd: &Path, args: &[&str]) -> Option<String> {
+        let cwd = cwd.to_string_lossy();
+        let mut all = vec![cwd.as_ref()];
+        all.extend(args);
+        let output = self.0.exec(BACKEND_GIT, &all, None).ok()?;
+        succeeded(Some(output.code)).then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+}
+
+fn succeeded(code: Option<i32>) -> bool {
+    matches!(code, Some(0 | 1))
+}
+
+/// Where a session's `/diff` looks: its cwd and the git that reaches it.
+#[derive(Debug, Clone)]
+pub struct Worktree {
+    /// Runs git where the session's files are.
+    pub git: Arc<dyn Git>,
+    /// The session's directory, as `git` and the session's snapshot tree
+    /// name it.
+    pub cwd: PathBuf,
+}
+
+impl Worktree {
+    /// A session working in host directory `cwd`.
+    #[must_use]
+    pub fn host(cwd: &Path) -> Self {
+        Self {
+            git: Arc::new(HostGit),
+            cwd: cwd.to_path_buf(),
+        }
+    }
+}
+
+/// The diff `request` asks for in `worktree`, or of `session`'s changes
+/// (their current content read from `tree`).
 #[must_use]
 pub fn diff(
     store: &SnapshotStore,
     tree: &dyn Tree,
+    worktree: &Worktree,
     session: &str,
-    cwd: &Path,
     request: &Request,
 ) -> String {
+    let cwd = &worktree.cwd;
+    let git = worktree.git.as_ref();
     let text = match request.mode {
         Mode::Session => session_diff(store, tree, session, cwd, request),
-        mode => match git(cwd, &["rev-parse", "--show-toplevel"]) {
-            Some(_) => git_diff(cwd, mode, request),
+        mode => match git.run(cwd, &["rev-parse", "--show-toplevel"]) {
+            Some(_) => git_diff(git, cwd, mode, request),
             None => return "not a git repository".to_owned(),
         },
     };
@@ -81,18 +166,7 @@ pub fn diff(
     }
 }
 
-fn git(cwd: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new("git")
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .ok()?;
-    // `diff --no-index` exits 1 when the files differ.
-    (output.status.success() || output.status.code() == Some(1))
-        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
-fn git_diff(cwd: &Path, mode: Mode, request: &Request) -> String {
+fn git_diff(git: &dyn Git, cwd: &Path, mode: Mode, request: &Request) -> String {
     let stat: &[&str] = if request.stat { &["--stat"] } else { &[] };
     let paths: Vec<&str> = request.paths.iter().map(String::as_str).collect();
     let run = |base: &[&str]| {
@@ -100,7 +174,7 @@ fn git_diff(cwd: &Path, mode: Mode, request: &Request) -> String {
         args.extend(stat);
         args.push("--");
         args.extend(&paths);
-        git(cwd, &args).unwrap_or_default()
+        git.run(cwd, &args).unwrap_or_default()
     };
     let mut text = String::new();
     if matches!(mode, Mode::Staged | Mode::All) {
@@ -110,19 +184,15 @@ fn git_diff(cwd: &Path, mode: Mode, request: &Request) -> String {
         text.push_str(&run(&["diff", "--no-color"]));
         let mut untracked_args = vec!["ls-files", "--others", "--exclude-standard", "--"];
         untracked_args.extend(&paths);
-        let untracked = git(cwd, &untracked_args).unwrap_or_default();
+        let untracked = git.run(cwd, &untracked_args).unwrap_or_default();
         for file in untracked.lines().filter(|l| !l.is_empty()) {
             let mut args = vec!["diff", "--no-color", "--no-index"];
             args.extend(stat);
-            args.extend(["--", null_device(), file]);
-            text.push_str(&git(cwd, &args).unwrap_or_default());
+            args.extend(["--", git.null_device(), file]);
+            text.push_str(&git.run(cwd, &args).unwrap_or_default());
         }
     }
     text
-}
-
-fn null_device() -> &'static str {
-    if cfg!(windows) { "NUL" } else { "/dev/null" }
 }
 
 /// Per changed file: the content of its earliest snapshot in this

@@ -5,7 +5,7 @@
 //! command).
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -164,10 +164,13 @@ fn a_file_edited_after_the_agent_is_not_undone_without_force() {
     let report = restore::undo(&fx.store, &HostTree, "ses_a", Some(1), 1, false, false).unwrap();
     assert_eq!(fx.get("src/lib.rs").as_deref(), Some("fn mine() {}\n"));
     assert_eq!(report.conflicts.len(), 1);
+    // The conflict names the file by its native path (`src\\lib.rs` on Windows).
+    let tail = format!(
+        "{} changed since turn 1; use --force to overwrite",
+        Path::new("src").join("lib.rs").display()
+    );
     assert!(
-        report.conflicts[0].starts_with("conflict: ")
-            && report.conflicts[0]
-                .ends_with("src/lib.rs changed since turn 1; use --force to overwrite"),
+        report.conflicts[0].starts_with("conflict: ") && report.conflicts[0].ends_with(&tail),
         "{:?}",
         report.conflicts
     );
@@ -259,7 +262,13 @@ fn the_session_diff_lists_every_changed_file_with_counts() {
     fx.patch("a.rs", "two", "three");
     fx.write("b.rs", "new\nfile\n");
     let request = worktree::Request::parse("session --stat");
-    let text = worktree::diff(&fx.store, &HostTree, "ses_a", &fx.work, &request);
+    let text = worktree::diff(
+        &fx.store,
+        &HostTree,
+        &worktree::Worktree::host(&fx.work),
+        "ses_a",
+        &request,
+    );
     assert!(text.contains("a.rs | +1 -1"), "{text}");
     assert!(text.contains("b.rs | +2 -0"), "{text}");
 }

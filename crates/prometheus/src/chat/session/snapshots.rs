@@ -14,6 +14,7 @@ use pmt_config::ProfileScope;
 use pmt_config::schema::SnapshotTerminal;
 use pmt_core::id::SessionId;
 use pmt_store::Store;
+use pmt_tools::snapshots::worktree::{BackendGit, Worktree};
 use pmt_tools::snapshots::{
     BackendTree, HostTree, MountedTree, SessionSnapshots, Settings, SnapshotStore, Tree,
 };
@@ -81,22 +82,32 @@ impl Opener<'_> {
     }
 }
 
+/// Where `/diff` of the session working in host directory `cwd`, or on
+/// `remote`, runs git: on this host for a local session or a mounted
+/// container workspace (its host directory), else on the backend at the
+/// session's start directory there.
+#[must_use]
+pub fn worktree(cwd: &Path, remote: Option<&Remote>) -> Worktree {
+    let Some(remote) = remote else {
+        return Worktree::host(cwd);
+    };
+    match mounted(remote) {
+        Some((_, workspace)) => Worktree::host(&workspace),
+        None => Worktree {
+            git: Arc::new(BackendGit(Arc::clone(&remote.exec))),
+            cwd: remote.start_cwd.clone(),
+        },
+    }
+}
+
 /// Where the session's files are and its workspace there (for a mounted
 /// container workspace, the host directory).
 fn tree_of(scope: &ProfileScope, cwd: &Path, remote: Option<&Remote>) -> (Arc<dyn Tree>, PathBuf) {
     let Some(remote) = remote else {
         return (Arc::new(HostTree), cwd.to_path_buf());
     };
-    let mounted = remote
-        .container
-        .as_ref()
-        .and_then(|c| c.container().spec().workspace.clone());
-    match mounted {
-        Some(host) => {
-            let tree = MountedTree::new(Path::new(pmt_sandbox::container::WORKSPACE), &host);
-            let workspace = tree.locate(&remote.start_cwd).unwrap_or(host);
-            (Arc::new(tree), workspace)
-        }
+    match mounted(remote) {
+        Some((tree, workspace)) => (Arc::new(tree), workspace),
         None => (
             Arc::new(BackendTree::new(
                 &scope.config().terminal.backend,
@@ -105,4 +116,16 @@ fn tree_of(scope: &ProfileScope, cwd: &Path, remote: Option<&Remote>) -> (Arc<dy
             remote.start_cwd.clone(),
         ),
     }
+}
+
+/// A container session whose workspace is a host bind mount: the mount
+/// and the session's start directory located on the host.
+fn mounted(remote: &Remote) -> Option<(MountedTree, PathBuf)> {
+    let host = remote
+        .container
+        .as_ref()
+        .and_then(|c| c.container().spec().workspace.clone())?;
+    let tree = MountedTree::new(Path::new(pmt_sandbox::container::WORKSPACE), &host);
+    let workspace = tree.locate(&remote.start_cwd).unwrap_or(host);
+    Some((tree, workspace))
 }

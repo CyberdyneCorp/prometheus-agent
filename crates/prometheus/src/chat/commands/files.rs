@@ -257,8 +257,8 @@ pub fn diff(ctx: &Ctx<'_>, args: &str) -> String {
     let text = worktree::diff(
         store,
         tree,
+        &ctx.live.worktree,
         &ctx.live.id.to_string(),
-        &ctx.factory.options.cwd,
         &request,
     );
     match (ctx.surface, ctx.message_limit) {

@@ -109,6 +109,12 @@ On a messaging platform the diff is fenced and cut to the platform's message
 length with a note giving how many lines were left out. Outside a repository
 the git modes answer `not a git repository`.
 
+git runs where the session's files are: on this host for a local session
+or a container whose workspace is a bind mount of a host directory, and on
+the backend itself (in the session's start directory there) for SSH,
+`terminal-backend` plugin and unmounted container sessions, so the backend
+needs `git` installed for the git modes.
+
 ## `prometheus verify`
 
 `prometheus verify [PATH] [--detect-only] [--save] [--phase

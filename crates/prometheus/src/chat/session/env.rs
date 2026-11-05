@@ -110,6 +110,8 @@ pub struct Attached {
     pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
     /// File snapshots (`/undo`, `/rollback`, `/diff session`).
     pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
+    /// Where `/diff` runs git.
+    pub worktree: pmt_tools::snapshots::worktree::Worktree,
     /// How the session runs a command: its sandbox, child environment and
     /// shell (skills' inline snippets run the same way).
     pub commands: Option<Commands>,
@@ -194,6 +196,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .snapshots
         .as_ref()
         .map(|opener| opener.open(inputs.cwd, remote.as_ref()));
+    let worktree = super::snapshots::worktree(inputs.cwd, remote.as_ref());
     let terminal = commands.clone().and_then(|commands| {
         terminal(
             inputs,
@@ -235,6 +238,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         terminal,
         sync,
         snapshots,
+        worktree,
         commands,
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),

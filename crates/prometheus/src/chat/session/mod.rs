@@ -208,6 +208,8 @@ pub struct Live {
     pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
     /// File snapshots, when on (`/undo`, `/rollback`, `/diff session`).
     pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
+    /// Where `/diff` runs git (the session's backend).
+    pub worktree: pmt_tools::snapshots::worktree::Worktree,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -441,7 +443,6 @@ impl Factory {
         target: &pmt_providers::resolve::Target,
         clients: Option<Clients>,
     ) -> Result<Live, Error> {
-        let scope = &self.scope;
         let interactive = self.options.interactive;
         let model = Arc::new(SwitchableModel::new(
             target.clone(),
@@ -460,7 +461,7 @@ impl Factory {
         )));
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities(id, &skills)?;
-        let current = SharedScope::new(scope.clone());
+        let current = SharedScope::new(self.scope.clone());
         let environment = self.environment(
             &session,
             target,
@@ -486,7 +487,7 @@ impl Factory {
             .session_prompt(id, &skills, &memory, &mut notices)
             .await;
         let mut setup = AgentSetup::new(
-            scope.clone(),
+            self.scope.clone(),
             Arc::clone(&self.store),
             id,
             Arc::clone(&model) as _,
@@ -505,7 +506,7 @@ impl Factory {
         self.surface_setup(&mut setup, id);
         let agent = Agent::new(setup)?;
         let live = Live {
-            scope: scope.clone(),
+            scope: self.scope.clone(),
             id,
             agent,
             _plugin_llm: self.plugin_llm(id, &model),
@@ -517,7 +518,7 @@ impl Factory {
             clarify,
             skills,
             memory,
-            skill_nudge: Mutex::new(Nudge::new(&scope.config().skills, session.source)),
+            skill_nudge: Mutex::new(Nudge::new(&self.scope.config().skills, session.source)),
             tool_state,
             session_surface,
             plugins: self.plugins.clone(),
@@ -534,6 +535,7 @@ impl Factory {
             egress: environment.egress,
             sync: environment.sync,
             snapshots: environment.snapshots,
+            worktree: environment.worktree,
             _environment: environment.attachment,
             _skills: attached,
         };
