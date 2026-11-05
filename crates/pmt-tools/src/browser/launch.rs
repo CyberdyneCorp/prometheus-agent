@@ -277,6 +277,9 @@ fn base_command(command: &mut std::process::Command, dirs: &Dirs, env: &ChildEnv
         ])
         .arg(format!("--proxy-server={}", proxy.url()))
         .arg("--proxy-bypass-list=<-loopback>")
+        // A directory the sandbox lets the browser use: an AppContainer
+        // process cannot even be created in a directory it cannot reach.
+        .current_dir(&dirs.temp)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
