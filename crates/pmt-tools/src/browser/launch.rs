@@ -491,13 +491,6 @@ fn spawn(
         .map_err(|err| err.message().to_owned())?;
     base_command(&mut command, dirs, env, proxy);
     confined_flags(&mut command, dirs, sandbox.confines());
-    // Crashpad's handler talks over a named pipe outside the container's
-    // namespace, which an AppContainer may not create: Chromium aborts at
-    // start unless crashpad is off. (Unlike on Linux, the network service
-    // does not depend on it here.)
-    if sandbox.confines() {
-        command.arg("--disable-crashpad-for-testing");
-    }
     command
         .arg(format!(
             "--remote-debugging-io-pipes={},{}",
