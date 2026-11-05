@@ -241,7 +241,7 @@ fn carried(registry: &ToolRegistry, old: &Selection) -> Result<Selection, Error>
     selection.tools.retain(|t| !old.disabled.contains(t));
     selection.disabled.extend(old.disabled.iter().cloned());
     selection.posture = old.posture;
-    Ok(selection)
+    Ok(selection.with_session_opt_ins(old.session_opt_ins.iter().map(String::as_str)))
 }
 
 #[cfg(test)]

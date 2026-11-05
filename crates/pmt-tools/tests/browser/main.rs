@@ -12,8 +12,11 @@
 
 mod cdp_tools;
 mod cleanup;
+mod close_profile;
 mod cloud;
 mod connect;
+#[path = "../common/dispatcher.rs"]
+mod dispatcher;
 mod isolation;
 mod local_options;
 mod real_profile;

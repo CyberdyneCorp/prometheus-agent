@@ -202,8 +202,10 @@ In the line interface and the TUI:
   `--remote-debugging-port=9222` and a dedicated profile under
   `<profile>/cache/browser/connect/` (Chrome 136+ refuses remote debugging
   on the default profile). It also offers [`browser_cdp`](../reference/tools.md#browser_cdp) and
-  [`browser_dialog`](../reference/tools.md#browser_dialog) from then on, which rebuilds the session's tools (its
-  prompt cache starts over) unless `browser.cdp_url` already offers them.
+  [`browser_dialog`](../reference/tools.md#browser_dialog) from then on, to this session only, which rebuilds the
+  session's tools (its prompt cache starts over) unless `browser.cdp_url`
+  already offers them. Other sessions of the same process (the daemon's
+  included) do not get them from your connection.
 - `/browser status` shows the endpoint, the browser version and the open
   targets.
 - `/browser disconnect` detaches without closing your browser; the next
@@ -243,9 +245,15 @@ setting) uses the local browser even when a cloud provider is configured.
 Turning the setting off deletes the copy at the next browser use.
 
 `prometheus browser close-profile` ends your browser (after asking, or
-with `--yes`) so its databases can be copied; with
-`browser.real_profile_autoclose = true` the agent may offer it, and runs
-it only after you approve. Cookies your browser encrypted with the OS
+with `--yes`) so its databases can be copied. The agent never runs that
+command: from its terminal it is blocked under every approval mode
+(`BLOCKED (hardline)`). With `browser.real_profile_autoclose = true` it
+gets [`browser_close_profile`](../reference/tools.md#browser_close_profile) instead, which does the same from
+Prometheus itself (outside the terminal sandbox, which cannot signal your
+browser) and asks you every time, YOLO included, never remembering the
+answer; cron, API and one-shot runs neither get it nor can approve it.
+After it runs, the session's next browser call starts on a fresh copy.
+Cookies your browser encrypted with the OS
 keychain stay unreadable in the copy: the sandbox denies keychain access.
 
 ## Safety

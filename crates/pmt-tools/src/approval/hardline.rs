@@ -4,8 +4,11 @@
 //!
 //! Recursive deletes of `/`, the user home or a system directory, `mkfs`
 //! and other filesystem creation, writes to raw block devices, fork bombs,
-//! `kill -1`, shutdown/reboot/halt/poweroff, and deleting the running
-//! Prometheus binary or home.
+//! `kill -1`, shutdown/reboot/halt/poweroff, deleting the running
+//! Prometheus binary or home, and `prometheus browser close-profile`,
+//! which ends the user's own browser: the agent does that only through
+//! `browser_close_profile`, which asks the user every time (spec:
+//! execution-environments, Real-profile browsing).
 
 use std::sync::LazyLock;
 
@@ -98,6 +101,10 @@ fn segment(segment: &Segment, floors: &Floors) -> Option<String> {
             .filter(|a| matches!(a.as_str(), "0" | "6"))
             .map(|level| format!("system shutdown or reboot ({program} {level})")),
         "kill" => kill_all(args).then(|| "kill of every process (kill -1)".to_owned()),
+        "prometheus" if closes_browser(args) => Some(
+            "ending the user's browser (prometheus browser close-profile); browser_close_profile does it after asking the user"
+                .to_owned(),
+        ),
         "diskutil"
             if args.first().is_some_and(|verb| {
                 let verb = verb.to_ascii_lowercase();
@@ -112,6 +119,12 @@ fn segment(segment: &Segment, floors: &Floors) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// `prometheus [global options] browser close-profile`.
+fn closes_browser(args: &[String]) -> bool {
+    args.windows(2)
+        .any(|pair| pair[0] == "browser" && pair[1] == "close-profile")
 }
 
 /// A `>` redirection, `dd of=` or `tee` onto a raw block device.

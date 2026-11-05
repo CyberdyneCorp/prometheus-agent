@@ -41,6 +41,10 @@ pub struct Selection {
     pub disabled: BTreeSet<String>,
     /// Whether a posture toolset (`coding`) was named.
     pub posture: bool,
+    /// Selected tools this session opted into itself (`/browser connect`
+    /// for `browser_cdp`): their profile-level opt-in probe does not
+    /// apply, the session's own state answers it.
+    pub session_opt_ins: BTreeSet<String>,
 }
 
 impl Selection {
@@ -90,6 +94,7 @@ impl Selection {
             tools,
             disabled,
             posture,
+            session_opt_ins: BTreeSet::new(),
         })
     }
 
@@ -113,6 +118,18 @@ impl Selection {
             .collect();
         self.tools.retain(|name| !interactive.contains(name));
         self.disabled.extend(interactive);
+        self
+    }
+
+    /// This selection with `tools` opted in by the session itself (see
+    /// [`Selection::session_opt_ins`]); unselected names are ignored.
+    #[must_use]
+    pub fn with_session_opt_ins<'a>(mut self, tools: impl IntoIterator<Item = &'a str>) -> Self {
+        self.session_opt_ins = tools
+            .into_iter()
+            .filter(|name| self.contains(name))
+            .map(str::to_owned)
+            .collect();
         self
     }
 

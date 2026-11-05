@@ -12,7 +12,6 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -25,33 +24,6 @@ pub const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:9222";
 pub const DEFAULT_PORT: u16 = 9222;
 /// How long a started browser may take to open its debugging port.
 const START_WAIT: Duration = Duration::from_secs(30);
-
-/// Chat sessions of this process bound to an explicit endpoint (the
-/// `browser_cdp` probe's process-wide answer).
-static CONNECTED: AtomicUsize = AtomicUsize::new(0);
-
-/// Whether a session of this process is connected with `/browser connect`.
-#[must_use]
-pub fn any_connected() -> bool {
-    CONNECTED.load(Ordering::SeqCst) > 0
-}
-
-/// Counts one connected session while alive.
-#[derive(Debug)]
-pub(super) struct Counted;
-
-impl Counted {
-    pub(super) fn new() -> Self {
-        CONNECTED.fetch_add(1, Ordering::SeqCst);
-        Self
-    }
-}
-
-impl Drop for Counted {
-    fn drop(&mut self) {
-        CONNECTED.fetch_sub(1, Ordering::SeqCst);
-    }
-}
 
 /// The browser-level WebSocket endpoint of `endpoint` (`ws://`/`wss://`
 /// as given, `http://`/`https://` through `/json/version`).

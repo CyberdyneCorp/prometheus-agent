@@ -15,12 +15,14 @@
 //! [`status`] tells later processes what runs), [`cdp`] speaks the
 //! DevTools protocol, [`supervisor`] answers dialogs and reconnects,
 //! [`safety`] vets every navigation, [`tabs`] are the page helpers,
-//! [`exec`] runs the model's Python against them and [`cdp_tools`] sends
-//! raw commands and answers dialogs.
+//! [`exec`] runs the model's Python against them, [`cdp_tools`] sends
+//! raw commands and answers dialogs and [`close_profile`] ends the user's
+//! browser when it holds the real profile locked.
 
 pub mod cdp;
 pub mod cdp_tools;
 pub mod cleanup;
+pub mod close_profile;
 pub mod cloud;
 pub mod confine;
 pub mod connect;
@@ -90,7 +92,8 @@ pub fn validate_provider(config: &BrowserConfig, providers: &[&str]) -> Result<(
 
 struct Handler(Arc<Environments>);
 
-/// `browser_exec`, `browser_cdp`, `browser_dialog` and `browser_vault`.
+/// `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault` and
+/// `browser_close_profile`.
 #[must_use]
 pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     let mut tools = vec![
@@ -103,6 +106,7 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     ];
     tools.extend(cdp_tools::tools(environments));
     tools.push(vault::tool(environments));
+    tools.push(close_profile::tool(environments));
     tools
 }
 

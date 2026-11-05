@@ -180,7 +180,7 @@ async fn toolset_show_lists_resolved_tools_with_availability() {
         show(inv, "core").await.unwrap()
     })
     .await;
-    assert_eq!(shown.tools.len(), 27);
+    assert_eq!(shown.tools.len(), 28);
     let names: Vec<&str> = shown.tools.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, pmt_tools::toolset::CORE);
     snapshot("toolsets-show-core-fixture.txt", &render_show(&shown));
@@ -208,12 +208,12 @@ fn slash_listing_marks_active_toolsets() {
             .to_owned()
     };
     assert!(
-        line("core").starts_with("* core  (27 tools)  [active]"),
+        line("core").starts_with("* core  (28 tools)  [active]"),
         "{text}"
     );
     assert!(line("web").starts_with("* web  (2 tools)  [active]"));
     assert_eq!(line("video"), "  video  (1 tool)  [default-off]");
-    assert_eq!(line("coding"), "  coding  (23 tools)  [posture]");
+    assert_eq!(line("coding"), "  coding  (24 tools)  [posture]");
     assert!(line("file").starts_with("  file"));
 }
 

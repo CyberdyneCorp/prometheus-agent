@@ -193,3 +193,21 @@ fn unreadable_commands_are_parse_errors() {
     };
     assert!(evaluate("echo 'oops", &policy).is_err());
 }
+
+/// Scenario: Closing the locked browser asks every time. The agent's
+/// shell never ends the user's browser, whatever the mode or allow rules:
+/// only `browser_close_profile`, which asks, does.
+#[test]
+fn closing_the_users_browser_from_a_shell_is_hardline() {
+    for line in [
+        "prometheus browser close-profile --yes",
+        "/home/u/.local/bin/prometheus --profile work browser close-profile",
+        "echo y | prometheus browser close-profile",
+    ] {
+        let reason = hardline(line).unwrap_or_default();
+        assert!(reason.contains("browser_close_profile"), "{line}: {reason}");
+    }
+    for line in ["prometheus browser status", "echo browser close-profile"] {
+        assert_eq!(hardline(line), None, "{line}");
+    }
+}

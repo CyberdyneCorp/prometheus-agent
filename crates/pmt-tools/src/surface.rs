@@ -6,7 +6,8 @@
 //!
 //! A registered tool is exposed when the session's selection includes it,
 //! the session's capability set covers every capability it declares, and
-//! its availability probe passes. Every other registered tool is reported
+//! its availability probe passes (or the session opted into it itself,
+//! [`Selection::session_opt_ins`]). Every other registered tool is reported
 //! with exactly one [`Exclusion`]. The resulting [`ToolSurface`] is
 //! immutable: its definitions (names, descriptions, schemas, order) are
 //! serialized once and sent byte-identical on every model call, and later
@@ -122,6 +123,7 @@ impl ToolSurface {
         }
         let verdicts = probe_all(&candidates, inputs).await;
         candidates.retain(|tool| match probe_failure(tool, &verdicts) {
+            Some(_) if selection.session_opt_ins.contains(tool.name()) => true,
             Some(reason) => {
                 excluded.insert(tool.name().to_owned(), Exclusion::Unavailable(reason));
                 false

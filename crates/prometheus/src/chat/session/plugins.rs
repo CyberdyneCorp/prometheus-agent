@@ -224,6 +224,7 @@ impl Factory {
             &toolsets,
             &live.session_surface,
         )?;
+        let selection = self.with_browser_opt_ins(live.id, selection);
         live.tool_state.rebuild(registry, selection).await?;
         *lock(&live.plugin_sections) = self.plugin_sections(live.id).await;
         live.agent.rebuild_prompt(Rebuild::Now(reason.to_owned()));

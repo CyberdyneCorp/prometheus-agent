@@ -330,6 +330,23 @@ impl Factory {
             .as_ref()
     }
 
+    /// `selection` with `browser_cdp` and `browser_dialog` opted in when
+    /// session `id` ran `/browser connect` (spec: execution-environments,
+    /// `browser_cdp` and `browser_dialog` tools): another session's
+    /// connection never offers them. An unset browser has no connection.
+    fn with_browser_opt_ins(&self, id: SessionId, selection: Selection) -> Selection {
+        let connected = self
+            .browser
+            .get()
+            .and_then(Option::as_ref)
+            .is_some_and(|shared| shared.manager().connected(&id.to_string()));
+        if connected {
+            selection.with_session_opt_ins(pmt_tools::browser::cdp_tools::NAMES)
+        } else {
+            selection
+        }
+    }
+
     /// Whether the model of `target` accepts images.
     pub(super) fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
         target.model.as_deref().is_some_and(|model| {
@@ -596,6 +613,7 @@ impl Factory {
             &plugin_toolsets,
             &surface,
         )?;
+        let selection = self.with_browser_opt_ins(session.id, selection);
         Ok((registry, selection, surface))
     }
 

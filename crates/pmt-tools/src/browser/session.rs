@@ -26,7 +26,6 @@ use tokio::time::Instant;
 
 use super::cdp::Cdp;
 pub use super::cloud::CloudProvider;
-use super::connect::Counted;
 use super::launch::{self, RuntimePolicy};
 use super::local::LocalBrowser;
 use super::options::{self, Display};
@@ -256,7 +255,7 @@ pub struct BrowserManager {
     statuses: Sessions,
     sessions: tokio::sync::Mutex<HashMap<String, Arc<BrowserSession>>>,
     /// `/browser connect` endpoints by chat session id.
-    connected: Mutex<HashMap<String, (String, Counted)>>,
+    connected: Mutex<HashMap<String, String>>,
     /// The no-display notice was given (once per process).
     told_headless: AtomicBool,
     reaper: Mutex<Option<tokio::task::JoinHandle<()>>>,
@@ -316,12 +315,22 @@ impl BrowserManager {
             .unwrap_or_else(PoisonError::into_inner);
         match endpoint {
             Some(endpoint) => {
-                connected.insert(session.to_owned(), (endpoint, Counted::new()));
+                connected.insert(session.to_owned(), endpoint);
             }
             None => {
                 connected.remove(session);
             }
         }
+    }
+
+    /// Whether chat session `session` ran `/browser connect` (and has not
+    /// disconnected since).
+    #[must_use]
+    pub fn connected(&self, session: &str) -> bool {
+        self.connected
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains_key(session)
     }
 
     /// The explicit endpoint session `key` uses: its chat session's
@@ -334,7 +343,7 @@ impl BrowserManager {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .get(session)
-            .map(|(endpoint, _)| endpoint.clone());
+            .cloned();
         chosen.or_else(|| self.config().cdp_url.filter(|url| !url.trim().is_empty()))
     }
 
@@ -453,22 +462,61 @@ impl BrowserManager {
     /// session's browsers, keyed `<session id>/<name>`) and forgets the
     /// chat session's `/browser connect`.
     pub async fn close_prefixed(&self, prefix: &str) {
+        self.close_where(|key, _| key.starts_with(prefix)).await;
+        self.connected
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(prefix.trim_end_matches('/'));
+    }
+
+    /// Closes the sessions `pick` chooses.
+    async fn close_where(&self, pick: impl Fn(&str, &BrowserSession) -> bool) {
         let closed: Vec<_> = {
             let mut sessions = self.sessions.lock().await;
             let keys: Vec<String> = sessions
-                .keys()
-                .filter(|key| key.starts_with(prefix))
-                .cloned()
+                .iter()
+                .filter(|(key, session)| pick(key, session))
+                .map(|(key, _)| key.clone())
                 .collect();
             keys.iter().filter_map(|key| sessions.remove(key)).collect()
         };
         for session in closed {
             session.terminate().await;
         }
-        self.connected
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove(prefix.trim_end_matches('/'));
+    }
+
+    /// `browser_close_profile` for chat session `session`: ends the user's
+    /// real browser (`real_profile::close_profile`) so its profile can be
+    /// copied, then closes the chat session's local browsers so their next
+    /// use launches on a fresh copy.
+    ///
+    /// # Errors
+    ///
+    /// `browser.real_profile_autoclose` (or `use_real_profile`) is off, or
+    /// the default browser cannot be found.
+    pub async fn close_real_profile(&self, session: &str) -> Result<String, String> {
+        let config = self.config();
+        if !(config.use_real_profile && config.real_profile_autoclose) {
+            return Err(
+                "browser.real_profile_autoclose is off: ending the user's browser is not offered"
+                    .to_owned(),
+            );
+        }
+        let detect = Arc::clone(&self.setup.detect);
+        let (name, ended) = tokio::task::spawn_blocking(move || {
+            let name = detect.default_browser()?.name;
+            real_profile::close_profile(detect.as_ref()).map(|ended| (name, ended))
+        })
+        .await
+        .map_err(|err| format!("closing the browser failed: {err}"))??;
+        let prefix = format!("{session}/");
+        self.close_where(|key, browser| {
+            key.starts_with(&prefix) && matches!(browser.origin(), Origin::Local)
+        })
+        .await;
+        Ok(format!(
+            "ended {ended} {name} processes; the next browser call starts on a fresh copy of the profile"
+        ))
     }
 
     /// Closes every session (session end): local browsers are killed and
@@ -623,11 +671,11 @@ impl BrowserManager {
         }
         if let Choice::Unavailable(why) = choice {
             // With `real_profile_autoclose` the agent may offer to end the
-            // browser holding the profile, and runs it only once approved.
+            // browser holding the profile; the tool asks the user first.
             if config.real_profile_autoclose && why.contains("locked") {
                 session.note(
                     "real_profile_close",
-                    json!("ask the user before running 'prometheus browser close-profile', which ends their browser"),
+                    json!("browser_close_profile can end the user's browser so the profile can be copied; it asks the user first"),
                 );
             }
             session.note("real_profile_unavailable", json!(why));

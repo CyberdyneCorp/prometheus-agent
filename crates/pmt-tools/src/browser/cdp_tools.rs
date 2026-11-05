@@ -2,7 +2,8 @@
 //! `browser_cdp` and `browser_dialog` tools).
 //!
 //! Both are offered only while an explicit CDP endpoint is configured
-//! (`/browser connect` or `browser.cdp_url`) and act on the calling
+//! (`browser.cdp_url`, or the session's own `/browser connect`, which opts
+//! that session in when its tool array is built) and act on the calling
 //! session's connected browser. `browser_cdp` sends one raw DevTools
 //! command: page-level domains need the `target_id` they go to (attached
 //! as a flattened session once), a `frame_id` of an out-of-process frame
@@ -199,8 +200,14 @@ impl BrowserSession {
     }
 }
 
-/// `browser_cdp` and `browser_dialog`, offered while an explicit endpoint
-/// is configured.
+/// The tools a session is offered only while it has an explicit endpoint.
+pub const NAMES: [&str; 2] = ["browser_cdp", "browser_dialog"];
+
+/// `browser_cdp` and `browser_dialog`. Their probe answers the profile's
+/// opt-in, `browser.cdp_url`; a session that ran `/browser connect` opts
+/// in itself when its tool selection is built
+/// ([`crate::Selection::with_session_opt_ins`] with [`NAMES`]), so one
+/// session's connection never offers them to another.
 #[must_use]
 pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
     let probe = Arc::new(FnProbe::new("browser-cdp", |context| {
@@ -210,7 +217,7 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
             .cdp_url
             .as_deref()
             .is_some_and(|url| !url.trim().is_empty());
-        if configured || super::connect::any_connected() {
+        if configured {
             Ok(())
         } else {
             Err("no browser connected (/browser connect or browser.cdp_url)".to_owned())
@@ -323,7 +330,7 @@ fn common(mut d: ToolDescriptor) -> ToolDescriptor {
 
 fn cdp_descriptor() -> ToolDescriptor {
     common(ToolDescriptor::new(
-        "browser_cdp",
+        NAMES[0],
         TOOLSET,
         "Send one raw Chrome DevTools Protocol command to the connected browser. \
          Page-level domains (Page, Runtime, DOM, Emulation, Input, Network) need target_id \
@@ -346,7 +353,7 @@ fn cdp_descriptor() -> ToolDescriptor {
 
 fn dialog_descriptor() -> ToolDescriptor {
     common(ToolDescriptor::new(
-        "browser_dialog",
+        NAMES[1],
         TOOLSET,
         "Answer a JavaScript dialog (alert, confirm, prompt, beforeunload) in the connected \
          browser: accept or dismiss the oldest pending one, or the one dialog_id names; \

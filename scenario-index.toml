@@ -765,7 +765,7 @@ capabilities = [
 "Explaining a tool" = ["crates/prometheus/src/tools_cmd/tests.rs::explaining_a_tool"]
 
 [tool-system."Core toolset membership"]
-"Core listing" = ["crates/prometheus/tests/tools_cli.rs::core_listing_shows_the_27_tools_in_order"]
+"Core listing" = ["crates/prometheus/tests/tools_cli.rs::core_listing_shows_the_28_tools_in_order"]
 "Browser unavailable keeps the rest" = ["crates/pmt-tools/src/surface/tests.rs::browser_unavailable_keeps_the_rest_of_core"]
 
 [tool-system."Single-purpose toolsets and default-off toolsets"]
@@ -2518,6 +2518,7 @@ capabilities = [
 [execution-environments."browser_cdp and browser_dialog tools"]
 "Dialog answered" = ["crates/pmt-tools/tests/browser/cdp_tools.rs::a_pending_confirm_is_accepted_and_the_page_resumes"]
 "Closing the browser" = ["crates/pmt-tools/tests/browser/cdp_tools.rs::closing_or_crashing_the_browser_and_foreign_targets_are_refused"]
+"Connect offers the CDP tools to that session only" = ["crates/prometheus/tests/browser_daemon.rs::connect_offers_the_cdp_tools_to_the_connecting_session_only", "crates/pmt-tools/src/surface/tests.rs::a_session_opt_in_answers_only_its_own_tools_probe"]
 
 [execution-environments."Local browser options and headed mode"]
 "Headless server" = ["crates/pmt-tools/tests/browser/local_options.rs::headed_without_a_display_runs_headless_and_says_so_once", "crates/pmt-tools/src/browser/options.rs::headed_without_a_display_runs_headless_with_a_notice"]
@@ -2534,3 +2535,4 @@ capabilities = [
 [execution-environments."Real-profile browsing"]
 "Missing pin" = ["crates/pmt-tools/tests/browser/real_profile.rs::a_missing_pin_gives_a_throwaway_profile_and_says_why", "crates/pmt-tools/src/browser/real_profile/mod.rs::a_missing_pin_is_unavailable_naming_the_pin"]
 "Revoking consent" = ["crates/pmt-tools/tests/browser/real_profile.rs::turning_real_profile_browsing_off_deletes_the_snapshot_at_the_next_session", "crates/pmt-tools/src/browser/real_profile/mod.rs::turning_the_setting_off_deletes_the_snapshot"]
+"Closing the locked browser asks every time" = ["crates/pmt-tools/tests/browser/close_profile.rs::closing_the_users_browser_asks_every_time_and_ends_it_once_approved", "crates/pmt-tools/tests/browser/close_profile.rs::without_autoclose_the_users_browser_is_never_ended", "crates/pmt-tools/src/approval/tests.rs::closing_the_users_browser_from_a_shell_is_hardline"]

@@ -263,8 +263,10 @@ approval gate first, always in this order:
 
 1. **Hardline commands are blocked**, in every mode, backend and context:
    recursive deletes of `/`, your home or a system directory, `mkfs`,
-   writes to raw disks, fork bombs, `kill -1`, shutdown and reboot, and
-   deleting Prometheus itself or its home. The model gets
+   writes to raw disks, fork bombs, `kill -1`, shutdown and reboot,
+   deleting Prometheus itself or its home, and `prometheus browser
+   close-profile` (ending your own browser goes through
+   [`browser_close_profile`](../reference/tools.md#browser_close_profile), which asks you). The model gets
    `BLOCKED (hardline): <reason>`.
 2. **Stopping the daemon is blocked** in sessions the gateway daemon hosts
    (messaging chats, attached TUI and desktop sessions), in every mode

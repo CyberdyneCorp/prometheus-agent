@@ -197,7 +197,9 @@ async fn apply_tools_now(ctx: &Ctx<'_>, toolset: &str, enable: bool) -> Result<(
     } else {
         vec![toolset.to_owned()]
     };
-    let selection = Selection::resolve(&ctx.live.registry(), &enabled, &disabled)?;
+    let opt_ins = live.selection().session_opt_ins;
+    let selection = Selection::resolve(&ctx.live.registry(), &enabled, &disabled)?
+        .with_session_opt_ins(opt_ins.iter().map(String::as_str));
     ctx.factory.rebuild_tools(live, &selection).await?;
     live.agent.rebuild_prompt(Rebuild::Now("tools".to_owned()));
     Ok(())
