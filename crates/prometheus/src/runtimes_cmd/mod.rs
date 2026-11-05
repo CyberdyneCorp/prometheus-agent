@@ -117,13 +117,30 @@ fn install(
 ) -> Result<u8, Error> {
     // Every name is checked before anything is downloaded.
     for name in names {
-        store.index().pin(name)?;
-        if config.runtimes.exclude.contains(name) {
-            return Err(pmt_update::runtimes::install::excluded(name));
+        if let Some(Err(err)) = python_version(name) {
+            return Err(err);
+        }
+        let pinned = python_version(name).map_or(name.as_str(), |_| "uv");
+        store.index().pin(pinned)?;
+        for runtime in [
+            pinned,
+            if python_version(name).is_some() {
+                "cpython"
+            } else {
+                pinned
+            },
+        ] {
+            if config.runtimes.exclude.iter().any(|e| e == runtime) {
+                return Err(pmt_update::runtimes::install::excluded(runtime));
+            }
         }
     }
     let installer = installer(ctx, store.clone(), config)?;
     for name in names {
+        if let Some(version) = python_version(name) {
+            install_python(&installer, store, version?)?;
+            continue;
+        }
         let runtime = block_on(installer.install(name))??;
         println!(
             "{name} {} installed at {}",
@@ -132,6 +149,72 @@ fn install(
         );
     }
     Ok(0)
+}
+
+/// Installs the python bridge's interpreter `version` (and uv) when it is
+/// missing, under the lazy installation policy: not when
+/// `runtimes.allow_lazy_install = false` or `runtimes.exclude` names
+/// `cpython` or `uv` (spec: python-bridge, Managed CPython runtime; used by
+/// `plugins install`/`update`, which may use the network).
+///
+/// # Errors
+///
+/// The policy refusal or the download failure.
+pub fn ensure_python(
+    ctx: &Context<'_>,
+    version: pmt_config::schema::PythonVersion,
+) -> Result<(), Error> {
+    let home = ctx.home()?;
+    let root = home.root();
+    if pmt_pybridge::runtime::find(root, version).is_some()
+        && pmt_pybridge::runtime::uv(root).is_some()
+    {
+        return Ok(());
+    }
+    let config = DaemonConfig::load(root)?;
+    if !config.runtimes.allow_lazy_install {
+        return Err(pmt_pybridge::runtime::missing(version));
+    }
+    for runtime in ["uv", "cpython"] {
+        if config.runtimes.exclude.iter().any(|e| e == runtime) {
+            return Err(pmt_update::runtimes::install::excluded(runtime));
+        }
+    }
+    let store = Store::open(root);
+    let installer = installer(ctx, store.clone(), &config)?;
+    install_python(&installer, &store, version)
+}
+
+/// `python@<version>`: the managed CPython of the python bridge.
+fn python_version(name: &str) -> Option<Result<pmt_config::schema::PythonVersion, Error>> {
+    let version = name.strip_prefix("python@")?;
+    Some(
+        pmt_config::schema::PythonVersion::parse(version).ok_or_else(|| {
+            Error::new(
+                &pmt_core::error::codes::RUNTIME_UNKNOWN,
+                format!("unknown Python version '{version}' (expected 3.11, 3.12 or 3.13)"),
+            )
+        }),
+    )
+}
+
+/// Installs the pinned uv, then CPython `version` with it (spec:
+/// python-bridge, Managed CPython runtime).
+fn install_python(
+    installer: &Installer,
+    store: &Store,
+    version: pmt_config::schema::PythonVersion,
+) -> Result<(), Error> {
+    let uv = block_on(installer.install("uv"))??;
+    let home = store.root().parent().unwrap_or(store.root());
+    let python =
+        pmt_pybridge::runtime::install(&pmt_pybridge::runtime::Uv::new(uv.exe(), home), version)?;
+    println!(
+        "python@{version} {} installed at {}",
+        python.version,
+        python.dir.display()
+    );
+    Ok(())
 }
 
 fn remove(store: &Store, name: &str) -> Result<u8, Error> {

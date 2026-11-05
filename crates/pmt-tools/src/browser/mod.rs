@@ -18,6 +18,8 @@ pub mod safety;
 pub mod session;
 pub mod supervisor;
 pub mod tabs;
+pub mod vault;
+mod vault_js;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -65,14 +67,17 @@ pub fn validate_provider(config: &BrowserConfig, providers: &[&str]) -> Result<(
 
 struct Handler(Arc<Environments>);
 
-/// `browser_exec`.
+/// `browser_exec` and `browser_vault`.
 #[must_use]
 pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
-    vec![RegisteredTool::new(
-        descriptor(),
-        Owner::Builtin,
-        Arc::new(Handler(Arc::clone(environments))),
-    )]
+    vec![
+        RegisteredTool::new(
+            descriptor(),
+            Owner::Builtin,
+            Arc::new(Handler(Arc::clone(environments))),
+        ),
+        vault::tool(environments),
+    ]
 }
 
 impl ToolHandler for Handler {

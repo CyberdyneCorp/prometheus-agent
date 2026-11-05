@@ -3,7 +3,6 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use pmt_config::schema::SkillsConfig;
 use pmt_core::error::{Error, codes};
 use pmt_skills::catalog::{Missing, Provenance};
 use pmt_skills::layout::{self, SKILL_FILE};
@@ -26,13 +25,17 @@ struct Row {
 }
 
 /// The status column: enabled, disabled (everywhere or on surfaces),
-/// unsupported platform, shadowed.
-fn status(config: &SkillsConfig, skill: &Skill) -> String {
+/// unsupported platform, unavailable (a surface-only secret), shadowed.
+fn status(full: &pmt_config::Config, skill: &Skill) -> String {
+    let config = &full.skills;
     if gates::disabled(config, None, &skill.name) {
         return "disabled".to_owned();
     }
     if !gates::platform_ok(skill, gates::host_platform()) {
         return "unsupported platform".to_owned();
+    }
+    if let Some(secret) = gates::surface_only_secret(full, skill) {
+        return format!("unavailable: secret '{secret}' is surface-only");
     }
     let surfaces: Vec<&str> = config
         .platform_disabled
@@ -64,7 +67,7 @@ pub(super) fn list(env: &Env, outdated: bool) -> Result<u8, Error> {
         return list_outdated(env);
     }
     let catalog = env.catalog();
-    let config = &env.scope.config().skills;
+    let config = env.scope.config();
     let mut rows: Vec<Row> = catalog
         .skills
         .iter()
@@ -177,7 +180,7 @@ pub(super) fn show(env: &Env, name: &str) -> Result<u8, Error> {
         .read(SKILL_FILE)
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .unwrap_or_default();
-    let status = status(&env.scope.config().skills, &skill);
+    let status = status(env.scope.config(), &skill);
     let files = skill.dir.files();
     if env.json {
         return document(

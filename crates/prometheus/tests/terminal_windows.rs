@@ -12,8 +12,11 @@
 mod common;
 
 use std::fmt::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
 
@@ -51,6 +54,11 @@ impl Fixture {
     /// `terminal.windows_shell = shell` and the default (enforcing) sandbox;
     /// returns each call's result.
     fn terminal(&self, shell: &str, commands: &[String]) -> Vec<Value> {
+        self.session(shell, &[], commands)
+    }
+
+    /// As [`Fixture::terminal`], with extra `chat` arguments.
+    fn session(&self, shell: &str, chat: &[&str], commands: &[String]) -> Vec<Value> {
         let mut script = String::new();
         for (step, command) in commands.iter().enumerate() {
             // A JSON string is also a TOML basic string.
@@ -71,7 +79,9 @@ impl Fixture {
         std::fs::write(&path, script).unwrap();
         let out = common::command(self.home.path())
             .args(["--set", &format!("terminal.windows_shell={shell}")])
-            .args(["chat", "-z", "go", "--yolo", "--mock-script"])
+            .args(["chat", "-z", "go", "--yolo"])
+            .args(chat)
+            .arg("--mock-script")
             .arg(&path)
             .arg("--cwd")
             .arg(&self.work)
@@ -89,7 +99,7 @@ impl Fixture {
             .into_iter()
             .filter(|m| m["role"] == "tool")
             .map(|m| {
-                let content = m["content"].as_str().unwrap_or_default();
+                let content = untrusted_body(m["content"].as_str().unwrap_or_default());
                 serde_json::from_str(content).unwrap_or_else(|_| Value::from(content))
             })
             .collect();
@@ -139,6 +149,16 @@ impl Fixture {
     }
 }
 
+/// The result inside its provenance block (`<untrusted-content ...>` …
+/// `</untrusted-content>`, spec: tool-system, Tool result provenance).
+fn untrusted_body(content: &str) -> &str {
+    content
+        .strip_prefix("<untrusted-content")
+        .and_then(|rest| rest.split_once('\n'))
+        .and_then(|(_, body)| body.rsplit_once("\n</untrusted-content>"))
+        .map_or(content, |(body, _)| body)
+}
+
 /// The directory a result reports, in canonical form.
 fn cwd(result: &Value) -> PathBuf {
     let reported = result["cwd"].as_str().expect("cwd reported");
@@ -184,5 +204,130 @@ fn explicit_git_bash_under_the_sandbox_is_unavailable() {
     assert!(
         text.contains("git-bash cannot run inside the Windows sandbox (AppContainer)"),
         "{text}"
+    );
+}
+
+/// A local HTTP server answering `hello` and counting its connections.
+fn server() -> (u16, Arc<AtomicUsize>) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let hits = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&hits);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            counter.fetch_add(1, Ordering::SeqCst);
+            let mut buffer = [0u8; 2048];
+            let _ = stream.read(&mut buffer);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
+            );
+        }
+    });
+    (port, hits)
+}
+
+/// The `egress.denied` payloads of the newest session's trajectory.
+fn denials(home: &Path) -> Vec<Value> {
+    let session = common::newest_session(home);
+    common::ok(&common::run(
+        home,
+        &["trajectory", "show", &session, "--format", "jsonl"],
+    ))
+    .lines()
+    .map(|line| serde_json::from_str::<Value>(line).unwrap())
+    .filter(|event| event["type"] == "egress.denied")
+    .map(|event| event["payload"].clone())
+    .collect()
+}
+
+/// Egress of the session terminal (spec: security-boundaries, Per-session
+/// network egress policy — Allowlist session; Egress enforcement for child
+/// processes). The confined child holds no network capability and reaches
+/// the session's egress proxy through the relay in its `AppContainer`: in
+/// an allowlist session the allowed host answers, another is refused with
+/// an `egress.denied` event, and bypassing the proxy fails; in a public
+/// session a public host is reached through the proxy, the metadata
+/// endpoint is refused, and a direct connection fails.
+#[test]
+fn session_children_reach_only_what_the_egress_policy_admits() {
+    let fixture = Fixture::new();
+    let home = fixture.home.path();
+    common::append_config(home, "\n[security.egress]\nallow_private = true\n");
+    let (allowed, allowed_hits) = server();
+    let (other, other_hits) = server();
+    let curl = |extra: &str, url: &str| {
+        format!("curl.exe -sS --max-time 20 {extra} {url}; Write-Output \" exit=$LASTEXITCODE\"")
+    };
+    let allow = format!("127.0.0.1:{allowed}");
+    let results = fixture.session(
+        "powershell",
+        &["--egress", "allowlist", "--allow-host", &allow],
+        &[
+            curl("", &format!("http://127.0.0.1:{allowed}/")),
+            curl("", &format!("http://127.0.0.1:{other}/")),
+            curl(
+                "--noproxy '*' --connect-timeout 5",
+                &format!("http://127.0.0.1:{other}/"),
+            ),
+        ],
+    );
+    let output = |results: &[Value], i: usize| {
+        results[i]["output"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned()
+    };
+    assert!(output(&results, 0).starts_with("hello"), "{results:#?}");
+    assert!(!output(&results, 1).contains("hello"), "{results:#?}");
+    let around = output(&results, 2);
+    assert!(
+        !around.contains("hello") && !around.ends_with("exit=0"),
+        "{results:#?}"
+    );
+    assert_eq!(allowed_hits.load(Ordering::SeqCst), 1, "{results:#?}");
+    assert_eq!(other_hits.load(Ordering::SeqCst), 0, "{results:#?}");
+    let denied = denials(home);
+    assert!(
+        denied.iter().any(|d| d["port"] == other
+            && d["reason"] == "not_allowlisted"
+            && d["requester"] == "terminal"),
+        "{denied:?}"
+    );
+
+    let results = fixture.session(
+        "powershell",
+        &[],
+        &[
+            // -f: the proxy's refusal is an HTTP error, not a page.
+            curl("-f", "http://169.254.169.254/latest/meta-data/"),
+            // github.com: a public host every CI runner reaches. The page
+            // goes to the workspace: the container may not open NUL.
+            curl(
+                "--ssl-no-revoke -o page.html -w '%{http_code}'",
+                "https://github.com/",
+            ),
+            "try { [Net.Sockets.TcpClient]::new().Connect('github.com', 443); 'connected' } catch { 'refused: ' + $_.Exception.GetBaseException().GetType().Name }".to_owned(),
+        ],
+    );
+    let metadata = output(&results, 0);
+    assert!(
+        metadata.contains("403") && !metadata.ends_with("exit=0"),
+        "{results:#?}"
+    );
+    assert!(output(&results, 1).ends_with("exit=0"), "{results:#?}");
+    assert!(output(&results, 1).starts_with('2'), "{results:#?}");
+    assert_eq!(
+        output(&results, 2),
+        "refused: SocketException",
+        "{results:#?}"
+    );
+    let denied = denials(home);
+    assert!(
+        denied
+            .iter()
+            .any(|d| d["host"] == "169.254.169.254" && d["reason"] == "metadata"),
+        "{denied:?}"
     );
 }

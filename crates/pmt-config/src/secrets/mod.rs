@@ -5,13 +5,16 @@
 //!
 //! Resolution order for a [`SecretsHandle`]: the profile's store first,
 //! then, only for the process's launch profile, `PMT_SECRET_<NAME>` and the
-//! provider-native variable. Store values are read at every use, so a
+//! provider-native variable, then the command source ([`command`]; first
+//! with `secrets.command.override_existing`). Store values are read at every use, so a
 //! secret rotated with `prometheus secrets set` reaches the next request
 //! of a running session; launch-environment values are fixed for the
 //! process lifetime. Values are only ever held as [`SecretString`].
 
+pub mod command;
 pub(crate) mod file;
 pub mod keychain;
+pub mod surface;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -215,6 +218,8 @@ pub enum Source {
     /// The administrator's `managed-secrets.toml` (read-only, first in
     /// the resolution order).
     Managed,
+    /// The `secrets.command` helper's output.
+    Command,
 }
 
 impl From<SecretsBackend> for Source {
@@ -247,6 +252,7 @@ pub struct SecretsHandle {
     profile: String,
     store: SecretStore,
     launch_env: Option<BTreeMap<String, SecretString>>,
+    command: Option<Arc<command::CommandSecrets>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -281,8 +287,16 @@ impl SecretsHandle {
             profile: profile.to_owned(),
             store,
             launch_env,
+            command: None,
             state: Arc::default(),
         }
+    }
+
+    /// Adds the `secrets.command` helper's values.
+    #[must_use]
+    pub fn with_command(mut self, command: Option<Arc<command::CommandSecrets>>) -> Self {
+        self.command = command;
+        self
     }
 
     /// The configured backend.
@@ -400,6 +414,17 @@ impl SecretsHandle {
                     || winner.as_deref() != Some(variable),
             });
         }
+        let first = self.command_first();
+        for name in self.command.iter().flat_map(|c| c.iter()).map(|(n, _)| n) {
+            let env = self.launch_env_entry(name).is_some();
+            let other = stored.contains(name) || env;
+            rows.push(Listed {
+                name: name.clone(),
+                source: Source::Command,
+                variable: None,
+                shadowed: managed.contains(name) || (other && !first),
+            });
+        }
         rows.sort_by(|a, b| a.name.cmp(&b.name).then(a.shadowed.cmp(&b.shadowed)));
         Ok(rows)
     }
@@ -428,6 +453,9 @@ impl SecretsHandle {
                 .unwrap_or(variable);
             values.push((name.to_owned(), value.clone()));
         }
+        for (name, value) in self.command.iter().flat_map(|c| c.iter()) {
+            values.push((name.clone(), value.clone()));
+        }
         Ok(pmt_core::secret::Redactor::named(
             values.iter().map(|(name, value)| (name.as_str(), value)),
         ))
@@ -439,10 +467,19 @@ impl SecretsHandle {
         if let Some(value) = crate::managed::current()?.and_then(|m| m.secret(name)) {
             return Ok(Some(value.clone()));
         }
+        let command = self.command.as_ref().and_then(|c| c.get(name));
+        if let Some(value) = command.filter(|_| self.command_first()) {
+            return Ok(Some(value.clone()));
+        }
         Ok(match self.stored(name)? {
             Some(value) => Some(value),
-            None => self.launch_env_secret(name).cloned(),
+            None => self.launch_env_secret(name).or(command).cloned(),
         })
+    }
+
+    /// Whether helper values beat the store and the environment.
+    fn command_first(&self) -> bool {
+        self.command.as_ref().is_some_and(|c| c.override_existing)
     }
 
     fn stored(&self, name: &str) -> Result<Option<SecretString>, Error> {

@@ -12,6 +12,7 @@ use pmt_core::secret::{Redactor, SecretString};
 use pmt_net::DestinationPolicy;
 use pmt_net::resolve::SystemLookup;
 use pmt_sandbox::{Options, Paths, Policy, Sandbox};
+use pmt_tools::browser::safety::EgressLookup;
 use pmt_tools::browser::{
     BrowserExec, BrowserManager, BrowserSetup, CloudProvider, ExecArgs, ExecSetup, NoRuntimes,
     RuntimePolicy, UrlSafety,
@@ -93,6 +94,20 @@ impl Fixture {
         runtime: RuntimePolicy,
         providers: BTreeMap<String, Arc<dyn CloudProvider>>,
     ) -> Arc<BrowserManager> {
+        self.manager_over(runtime, providers, None)
+    }
+
+    /// A manager whose sessions' egress policies come from `egress`.
+    pub(crate) fn manager_with_egress(&self, egress: EgressLookup) -> Arc<BrowserManager> {
+        self.manager_over(Self::chromium(), BTreeMap::new(), Some(egress))
+    }
+
+    fn manager_over(
+        &self,
+        runtime: RuntimePolicy,
+        providers: BTreeMap<String, Arc<dyn CloudProvider>>,
+        egress: Option<EgressLookup>,
+    ) -> Arc<BrowserManager> {
         let config = Arc::clone(&self.config);
         BrowserManager::new(BrowserSetup {
             config: Arc::new(move || config.lock().unwrap().clone()),
@@ -103,6 +118,8 @@ impl Fixture {
                 destinations: DestinationPolicy::new(true, &[]).unwrap(),
                 lookup: Arc::new(SystemLookup),
                 secrets: Redactor::new([&SecretString::new(KNOWN_SECRET)]),
+                egress,
+                session: None,
             },
             providers,
         })
@@ -138,7 +155,8 @@ impl Fixture {
     }
 }
 
-/// Chromium-family browsers of this host, then Playwright's downloads.
+/// Chromium-family browsers of this host, then Playwright's downloads;
+/// the first one (the one tests start) is warmed once per run.
 pub(crate) fn browsers() -> Vec<PathBuf> {
     let mut found =
         pmt_tools::browser::launch::system_candidates(std::env::var_os("PATH").as_deref());
@@ -178,6 +196,7 @@ pub(crate) fn browsers() -> Vec<PathBuf> {
         !found.is_empty(),
         "no Chromium-family browser on this host: install Chrome/Chromium or run `npx playwright install chromium`"
     );
+    crate::warm::once(&found[0]);
     found
 }
 

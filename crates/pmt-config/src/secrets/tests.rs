@@ -198,3 +198,82 @@ fn migrate_moves_values_and_switches_the_backend() {
     assert!(keychain.accounts().is_empty());
     assert_eq!(back.get("A_KEY").unwrap().unwrap().expose(), "value-a");
 }
+
+/// Command secret source precedence: the store and the environment win
+/// unless `override_existing`; the helper fills names nobody else has.
+#[cfg(unix)]
+#[test]
+fn command_values_rank_after_the_store_unless_they_override() {
+    use crate::schema::SecretCommandConfig;
+
+    let temp = tempfile::tempdir().unwrap();
+    let home = Home::open(temp.path()).unwrap();
+    let store = file_store(&home, "default");
+    store
+        .set("TOKEN", &SecretString::new("from-store"))
+        .unwrap();
+    let helper = |override_existing| SecretCommandConfig {
+        enabled: true,
+        argv: vec![
+            "sh".into(),
+            "-c".into(),
+            "echo TOKEN=from-helper; echo ONLY_HELPER=h1; echo NATIVE=from-helper".into(),
+        ],
+        timeout_secs: 3,
+        override_existing,
+    };
+    let launch = || Some(env(&[("NATIVE", "from-env")]));
+    let ranked = SecretsHandle::new("default", store.clone(), launch())
+        .with_command(super::command::load(&helper(false)));
+    assert_eq!(ranked.resolve("TOKEN").unwrap().expose(), "from-store");
+    assert_eq!(ranked.resolve("NATIVE").unwrap().expose(), "from-env");
+    assert_eq!(ranked.resolve("ONLY_HELPER").unwrap().expose(), "h1");
+    let listed = ranked.list().unwrap();
+    assert!(
+        listed
+            .iter()
+            .any(|r| r.name == "TOKEN" && r.source == Source::Command && r.shadowed)
+    );
+    let redacted = ranked.redactor().unwrap().redact("value h1 here");
+    assert_eq!(redacted, "value [REDACTED:ONLY_HELPER] here");
+    let first = SecretsHandle::new("default", store, launch())
+        .with_command(super::command::load(&helper(true)));
+    assert_eq!(first.resolve("TOKEN").unwrap().expose(), "from-helper");
+    assert_eq!(first.resolve("NATIVE").unwrap().expose(), "from-helper");
+}
+
+/// Scenario: Helper times out. The helper's whole process group is killed
+/// at the timeout, nothing it printed is kept, and loading continues.
+#[cfg(unix)]
+#[test]
+fn a_helper_waiting_for_a_pin_is_killed_at_the_timeout() {
+    use super::command::{Failure, run};
+    use crate::schema::SecretCommandConfig;
+
+    let temp = tempfile::tempdir().unwrap();
+    let marker = temp.path().join("grandchild-survived");
+    let script = format!(
+        "(sleep 2; touch '{}') & printf 'Enter PIN: '; sleep 30; echo TOKEN=late",
+        marker.display()
+    );
+    let config = SecretCommandConfig {
+        enabled: true,
+        argv: vec!["sh".into(), "-c".into(), script],
+        timeout_secs: 1,
+        override_existing: false,
+    };
+    let started = std::time::Instant::now();
+    let failure = run(&config).unwrap_err();
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(
+        failure,
+        Failure::Failed("timed out after 1 s; killed".into())
+    );
+    assert!(failure.line().starts_with("helper command failed"));
+    assert!(!failure.line().contains("PIN"));
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    assert!(
+        !marker.exists(),
+        "the helper's process group was not killed"
+    );
+}

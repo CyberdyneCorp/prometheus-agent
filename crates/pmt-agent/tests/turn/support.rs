@@ -309,6 +309,7 @@ impl ToolPort for FakeTools {
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        _: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(async move {

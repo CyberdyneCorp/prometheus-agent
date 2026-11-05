@@ -1,0 +1,20 @@
+/// An external memory provider (spec: memory).
+package prometheus:memory-provider@1.0.0;
+
+interface plugin {
+    record recalled {
+        text: string,
+        score: f32,
+    }
+
+    /// The block added to the frozen system prompt at session start.
+    system-prompt-block: func() -> option<string>;
+    recall: func(query: string, limit: u32) -> result<list<recalled>, string>;
+    /// Called after each completed turn.
+    sync-turn: func(user: string, assistant: string) -> result<_, string>;
+}
+
+world memory-provider {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

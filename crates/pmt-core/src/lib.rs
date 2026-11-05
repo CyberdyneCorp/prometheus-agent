@@ -4,6 +4,7 @@
 //! panic isolation, runtime records and the home writer lock, the open-file
 //! limit raise, the doctor check shape and the typed capability vocabulary.
 
+pub mod audit;
 pub mod battery;
 pub mod cancel;
 pub mod capability;
@@ -18,8 +19,10 @@ pub mod inventory;
 pub mod nofile;
 pub mod panic;
 pub mod pause;
+pub mod pii;
 pub mod private_fs;
 pub mod protocol;
+pub mod provenance;
 pub mod registry;
 pub mod runtime;
 pub mod secret;

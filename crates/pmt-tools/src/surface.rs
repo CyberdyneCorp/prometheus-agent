@@ -25,7 +25,9 @@ use serde_json::Value;
 use crate::descriptor::{ExposedNames, RegisteredTool};
 use crate::probe::{ProbeCache, ProbeContext};
 use crate::registry::ToolRegistry;
+use crate::search;
 use crate::selection::Selection;
+use crate::variants::RouteTraits;
 
 /// Why a registered tool is not exposed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +80,8 @@ pub struct SurfaceInputs<'a> {
     pub config: &'a Config,
     /// The process-wide probe cache.
     pub probes: &'a ProbeCache,
+    /// The session's main route, which picks schema variants.
+    pub route: &'a RouteTraits,
 }
 
 /// The frozen tool surface of one session.
@@ -89,6 +93,11 @@ pub struct ToolSurface {
     serialized: Arc<str>,
     excluded: BTreeMap<String, Exclusion>,
     posture: bool,
+    variants: BTreeMap<String, &'static str>,
+    /// Tools left out of the array behind the tool-search bridge, still
+    /// part of the session's resolved tool set.
+    deferred: Vec<Arc<RegisteredTool>>,
+    catalog: Option<Arc<search::Catalog>>,
 }
 
 impl ToolSurface {
@@ -127,13 +136,7 @@ impl ToolSurface {
             .map(|(i, name)| (name.as_str(), i))
             .collect();
         candidates.sort_by_key(|tool| position.get(tool.name()).copied().unwrap_or(usize::MAX));
-        Self::freeze(
-            registry,
-            candidates,
-            excluded,
-            selection.posture,
-            inputs.config,
-        )
+        Self::freeze(registry, candidates, excluded, selection.posture, inputs)
     }
 
     fn freeze(
@@ -141,25 +144,38 @@ impl ToolSurface {
         tools: Vec<Arc<RegisteredTool>>,
         excluded: BTreeMap<String, Exclusion>,
         posture: bool,
-        config: &Config,
+        inputs: SurfaceInputs<'_>,
     ) -> Self {
         let exposed: ExposedNames = tools.iter().map(|t| t.name().to_owned()).collect();
         let absent: BTreeSet<&str> = excluded.keys().map(String::as_str).collect();
-        let definitions: Vec<ToolDefinition> = tools
+        let mut variants = BTreeMap::new();
+        let mut definitions: Vec<ToolDefinition> = tools
             .iter()
             .map(|tool| {
+                let advertised = tool.advertised(inputs.config, inputs.route);
+                if let Some(variant) = advertised.variant {
+                    variants.insert(tool.name().to_owned(), variant);
+                }
                 let description = match &tool.rewriter {
-                    Some(rewrite) => rewrite(&tool.descriptor.description, &exposed),
-                    None => tool.descriptor.description.clone(),
+                    Some(rewrite) => rewrite(&advertised.description, &exposed),
+                    None => advertised.description,
                 };
                 warn_on_absent_names(tool.name(), &description, &absent);
                 ToolDefinition {
                     name: tool.name().to_owned(),
                     description,
-                    parameters: tool.parameters_for(config),
+                    parameters: advertised.parameters,
                 }
             })
             .collect();
+        let mut tools = tools;
+        let (deferred, catalog) = defer(
+            registry,
+            &mut tools,
+            &mut definitions,
+            &inputs.config.tools.tool_search,
+            inputs.route,
+        );
         let serialized = serde_json::to_string(&definitions)
             .unwrap_or_else(|_| "[]".to_owned())
             .into();
@@ -170,7 +186,17 @@ impl ToolSurface {
             serialized,
             excluded,
             posture,
+            variants,
+            deferred,
+            catalog,
         }
+    }
+
+    /// The schema variant `tool` advertises in this surface (`None`: it is
+    /// not exposed or has no variants).
+    #[must_use]
+    pub fn variant(&self, tool: &str) -> Option<&'static str> {
+        self.variants.get(tool).copied()
     }
 
     /// The registry generation the surface was built from.
@@ -183,6 +209,79 @@ impl ToolSurface {
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&Arc<RegisteredTool>> {
         self.tools.iter().find(|t| t.name() == name)
+    }
+
+    /// The tool named `name` in the session's resolved tool set: exposed,
+    /// or deferred behind the tool-search bridge.
+    #[must_use]
+    pub fn resolve(&self, name: &str) -> Option<&Arc<RegisteredTool>> {
+        self.get(name)
+            .or_else(|| self.deferred.iter().find(|t| t.name() == name))
+    }
+
+    /// The tools deferred behind the tool-search bridge, in model order.
+    #[must_use]
+    pub fn deferred(&self) -> &[Arc<RegisteredTool>] {
+        &self.deferred
+    }
+
+    /// The deferred tools' catalog, when the session uses tool search.
+    #[must_use]
+    pub fn catalog(&self) -> Option<&Arc<search::Catalog>> {
+        self.catalog.as_ref()
+    }
+
+    /// Adds `remote`'s tools behind the tool-search bridge (spec:
+    /// connectors, Remote connector tools through the search bridge): the
+    /// bridge tools are rebuilt over the same local entries (or appear,
+    /// with none, when nothing was deferred) and nothing of `remote` enters
+    /// the array. The bridge is offered whatever `tools.tool_search.mode`
+    /// says, as remote tools have no other way in.
+    #[must_use]
+    pub fn with_remote(
+        mut self,
+        remote: Arc<dyn search::Remote>,
+        config: &pmt_config::schema::ToolSearchConfig,
+    ) -> Self {
+        let entries = match self.catalog.take() {
+            Some(catalog) => {
+                let bridge = [
+                    search::TOOL_SEARCH,
+                    search::TOOL_DESCRIBE,
+                    search::TOOL_CALL,
+                ];
+                self.tools.retain(|t| !bridge.contains(&t.name()));
+                self.definitions
+                    .retain(|d| !bridge.contains(&d.name.as_str()));
+                catalog.entries().to_vec()
+            }
+            None => Vec::new(),
+        };
+        let (catalog, bridge) = search::bridge_over(entries, config, Some(remote));
+        for tool in bridge {
+            self.definitions.push(ToolDefinition {
+                name: tool.name().to_owned(),
+                description: tool.descriptor.description.clone(),
+                parameters: tool.descriptor.parameters.clone(),
+            });
+            self.tools.push(Arc::new(tool));
+        }
+        self.serialized = serde_json::to_string(&self.definitions)
+            .unwrap_or_else(|_| "[]".to_owned())
+            .into();
+        self.catalog = Some(catalog);
+        self
+    }
+
+    /// The remote tool `tool_call` runs for `name`, when a remote owns it.
+    #[must_use]
+    pub fn remote_tool(&self, name: &str) -> Option<Arc<RegisteredTool>> {
+        let remote = self.catalog.as_ref()?.remote()?;
+        if remote.owns(name) {
+            remote.tool(name)
+        } else {
+            None
+        }
     }
 
     /// Exposed tool names, in model order.
@@ -213,6 +312,46 @@ impl ToolSurface {
     pub fn posture(&self) -> bool {
         self.posture
     }
+}
+
+/// Moves the deferrable tools out of `tools` and `definitions` and appends
+/// the bridge tools when tool search is active for the session.
+fn defer(
+    registry: &ToolRegistry,
+    tools: &mut Vec<Arc<RegisteredTool>>,
+    definitions: &mut Vec<ToolDefinition>,
+    config: &pmt_config::schema::ToolSearchConfig,
+    route: &RouteTraits,
+) -> (Vec<Arc<RegisteredTool>>, Option<Arc<search::Catalog>>) {
+    let Some(split) = search::split(tools, definitions, registry, config, route) else {
+        return (Vec::new(), None);
+    };
+    let mut kept_tools = Vec::new();
+    let mut kept_definitions = Vec::new();
+    let mut deferred = Vec::new();
+    let mut deferred_definitions = Vec::new();
+    for (i, (tool, definition)) in tools.drain(..).zip(definitions.drain(..)).enumerate() {
+        if split.deferred.contains(&i) {
+            deferred.push(tool);
+            deferred_definitions.push(definition);
+        } else {
+            kept_tools.push(tool);
+            kept_definitions.push(definition);
+        }
+    }
+    let pairs: Vec<_> = deferred.iter().zip(deferred_definitions.iter()).collect();
+    let (catalog, bridge) = search::bridge(&pairs, config);
+    for tool in bridge {
+        kept_definitions.push(ToolDefinition {
+            name: tool.name().to_owned(),
+            description: tool.descriptor.description.clone(),
+            parameters: tool.descriptor.parameters.clone(),
+        });
+        kept_tools.push(Arc::new(tool));
+    }
+    *tools = kept_tools;
+    *definitions = kept_definitions;
+    (deferred, Some(catalog))
 }
 
 /// The first reason found without probing: toolset membership, then the

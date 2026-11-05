@@ -24,7 +24,7 @@ The project SHALL publish a `SECURITY.md` that classifies as security boundaries
 - **THEN** it SHALL be treated as an in-scope private finding
 
 ### Requirement: Typed capability vocabulary
-The system SHALL express every permission as a capability from a closed vocabulary: `fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host-pattern>[:<port>]`, `net.listen:loopback[:<port>]`, `process.spawn:<program|*>`, `secrets.read:<NAME>`, `llm.call[:<model-role>]`, `tools.call:<tool>`, `tools.override:<tool>`, `ui.<surface>`, `browser.real_profile`; an unrecognized capability string in config, a plugin manifest or a grants file SHALL be a load-time error naming the string, and globs SHALL be resolved against canonical paths with symlinks resolved.
+The system SHALL express every permission as a capability from a closed vocabulary: `fs.read:<glob>`, `fs.write:<glob>`, `net.connect:<host-pattern>[:<port>]`, `net.listen:loopback[:<port>]`, `process.spawn:<program|*>`, `secrets.read:<NAME>`, `llm.call[:<model-role>]`, `tools.call:<tool>`, `tools.override:<tool>`, `ui.<surface>`, `browser.real_profile`, and the plugin rights `plugin.<right>[:<target>]` that `plugin-system` capability declarations map to (`hook`, `command`, `cli_command`, `prompt_section`, `provider`, `provider_override`, `approval_transport`, `inject_messages`, `platform_action`, `llm_model`, `llm_provider_override`); an unrecognized capability string in config, a plugin manifest or a grants file SHALL be a load-time error naming the string, and globs SHALL be resolved against canonical paths with symlinks resolved.
 **Milestone:** M1
 
 #### Scenario: Unknown capability
@@ -65,13 +65,13 @@ A capability request not covered by existing grants SHALL be presented to the hu
 - **THEN** the request SHALL remain pending until answered through the `approval.respond` RPC by the session's authenticated surface
 
 ### Requirement: Grants pinned to plugin identity
-Plugin grants SHALL be bound to the plugin id and content digest; an update that keeps the same signer and requests no new capabilities SHALL keep the grants, while an update requesting additional capabilities or signed by a different key SHALL load with only the previously granted capabilities until the user approves the difference shown by `prometheus plugins diff-grants <id>`.
+Plugin grants SHALL be bound to the plugin id and content digest; an update that keeps the same signer and requests no new capabilities SHALL keep the grants, while an update requesting additional capabilities or signed by a different key SHALL NOT replace the installed version: the installed version SHALL keep running with its existing grants and the new version SHALL wait, never loaded, until the user approves the difference shown by `prometheus plugins diff-grants <id>` (the update semantics of `plugin-system`, Capability grants are user-approved and digest-bound).
 **Milestone:** M2
 
 #### Scenario: Update adds network access
 - **GIVEN** an installed plugin granted no network capability
-- **WHEN** an update requests `net.connect:*.tracker.example`
-- **THEN** the updated plugin SHALL run without that capability until the user approves it
+- **WHEN** an update requests `net.connect:*.tracker.example` and the user has not approved it
+- **THEN** the installed version SHALL keep running without network access, the new version SHALL NOT load, and `prometheus plugins diff-grants <id>` SHALL list `network *.tracker.example` as new
 
 ### Requirement: OS sandbox per platform
 The system SHALL confine every local child process (terminal commands, background processes, code execution, MCP stdio servers, the Python bridge, hook and skill scripts, local browsers) using Landlock (filesystem and, where the kernel supports it, TCP) plus a seccomp filter on Linux, a generated Seatbelt profile on macOS, and an AppContainer with a Job Object on Windows, each derived from the child's effective capability set; enforcement per feature (`fs`, `net`, `process`, `syscalls`) SHALL be reported as `enforced`, `partial` or `unavailable` by `prometheus doctor security`.

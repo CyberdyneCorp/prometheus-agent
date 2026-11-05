@@ -11,9 +11,9 @@ use std::time::Duration;
 use pmt_core::error::Error;
 use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
-    ConfigValue, ContextUsage, DispatchParams, Dispatched, Event, ForkParams, ModelOptions,
-    ResolveParams, ServerRequest, SessionCreateParams, SessionList, SessionListParams, SessionRef,
-    SessionSetup, SubagentList, SubmitParams, Submitted, Transcript,
+    ConfigValue, ContextUsage, DispatchParams, Dispatched, EgressSetParams, EgressState, Event,
+    ForkParams, ModelOptions, ResolveParams, ServerRequest, SessionCreateParams, SessionList,
+    SessionListParams, SessionRef, SessionSetup, SubagentList, SubmitParams, Submitted, Transcript,
 };
 use serde::Serialize;
 
@@ -92,6 +92,37 @@ pub trait Host: Send + Sync + 'static {
         link: Link,
     ) -> HostFuture<'a, Dispatched>;
 
+    /// Changes (or reads) the session's egress policy (`egress.set`),
+    /// loading the session first. Hosts without egress policies refuse.
+    fn egress<'a>(
+        &'a self,
+        profile: &'a str,
+        params: EgressSetParams,
+        link: Link,
+    ) -> HostFuture<'a, EgressState> {
+        let _ = (profile, params, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no session egress policies",
+            ))
+        })
+    }
+
+    /// The credential vault of `profile` and its scope (`vault.*`). Hosts
+    /// without profiles on disk refuse.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; profile errors.
+    fn vault(&self, profile: &str) -> Result<crate::vault::VaultAccess, Error> {
+        let _ = profile;
+        Err(Error::new(
+            &pmt_core::error::codes::RPC_NOT_SERVED,
+            "this host has no credential vault",
+        ))
+    }
+
     /// Stops the session's running turn at its next safe point; a no-op
     /// when none runs.
     fn interrupt<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, ()>;
@@ -154,6 +185,23 @@ pub trait Host: Send + Sync + 'static {
     /// input is queued; `true` when it was unloaded (or was not loaded).
     fn unload_idle<'a>(&'a self, _profile: &'a str, _session_id: &'a str) -> HostFuture<'a, bool> {
         Box::pin(async { Ok(false) })
+    }
+
+    /// Replaces `profile`'s live plugin set (`prometheus plugins reload
+    /// [<id>]`, spec: plugin-system, Hot reload respects the prompt-cache
+    /// invariant); answers what is active now and what waits for the next
+    /// session.
+    fn reload_plugins<'a>(
+        &'a self,
+        _profile: &'a str,
+        _plugin: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_INVALID_REQUEST,
+                "this daemon hosts no plugins",
+            ))
+        })
     }
 
     /// Each served profile's configuration state, for `daemon status`.

@@ -17,12 +17,15 @@
 
 pub mod destination;
 pub mod doctor;
+pub mod egress;
 pub mod fetch;
 pub mod http;
+pub mod identity;
 pub mod listen;
 pub mod resolve;
 pub mod tls;
 
 pub use destination::{DestinationPolicy, PrivateGrant};
 pub use fetch::Fetcher;
-pub use http::{OutboundPolicy, client, client_builder, clients_built};
+pub use http::{OutboundPolicy, client, client_builder, client_with_identity, clients_built};
+pub use identity::ClientIdentity;

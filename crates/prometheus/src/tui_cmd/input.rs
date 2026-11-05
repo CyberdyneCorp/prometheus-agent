@@ -69,7 +69,7 @@ impl Tui<'_> {
         }
     }
 
-    /// `o`/`s`/`a`/`d` on an empty composer answers an approval card,
+    /// `o`/`s`/`a`/`d`/`e` on an empty composer answers an approval card,
     /// `y`/`n` the `/terminal-setup` card.
     fn answer_key(&mut self, c: char) -> bool {
         let approval = self
@@ -79,7 +79,7 @@ impl Tui<'_> {
         if self.asking.is_empty() && self.setup.is_some() && "yn".contains(c) {
             return self.answer_setup(&c.to_string());
         }
-        approval && "osad".contains(c) && self.answer(&c.to_string())
+        approval && "osade".contains(c) && self.answer(&c.to_string())
     }
 
     pub(super) fn on_action(&mut self, action: Action) {

@@ -42,6 +42,8 @@ pub struct Models {
     /// Auxiliary calls (image descriptions) on the same client, mock,
     /// usage recorder and credentials as the main route.
     aux: Arc<AuxCaller>,
+    /// `privacy.redact_pii`: what every request is redacted with.
+    pii: Option<Arc<pmt_core::pii::Pii>>,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -85,6 +87,25 @@ impl ProviderSetupParts {
     }
 }
 
+/// Builds model ports of a profile's routes.
+#[derive(Clone)]
+pub(crate) struct PortMaker {
+    setup: Arc<ProviderSetupParts>,
+    caller: ModelCaller,
+}
+
+impl PortMaker {
+    /// The port serving `target`.
+    ///
+    /// # Errors
+    ///
+    /// Resolution errors of the target or the chain.
+    pub(crate) async fn port(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
+        let model = ProviderModel::start(self.setup.setup(), self.caller.clone(), target).await?;
+        Ok(Arc::new(model))
+    }
+}
+
 /// The chat flags that pick the route.
 #[derive(Debug, Clone, Default)]
 pub struct RouteFlags<'a> {
@@ -125,6 +146,16 @@ impl Models {
             .with_mock(mock)
             .with_recorder(recorder)
             .with_credentials(Arc::clone(&accounts) as _);
+        // `privacy.redact_pii`: every model request of the profile, main and
+        // auxiliary, leaves the process redacted.
+        let pii = pmt_config::privacy::pii(scope.dir(), &config.privacy)?;
+        let (aux, caller) = match &pii {
+            Some(pii) => (
+                aux.with_pii(Arc::clone(pii)),
+                caller.with_pii(Arc::clone(pii)),
+            ),
+            None => (aux, caller),
+        };
         Ok(Self {
             setup: Arc::new(ProviderSetupParts {
                 config: Arc::new(config.clone()),
@@ -136,7 +167,57 @@ impl Models {
             }),
             caller,
             aux: Arc::new(aux),
+            pii,
         })
+    }
+
+    /// Hashes messaging user `id` in every later request (a gateway
+    /// session's platform user), when PII is redacted.
+    pub fn register_user_id(&self, id: &str) {
+        if let Some(pii) = &self.pii {
+            pii.register_id(id);
+        }
+    }
+
+    /// Adds the model providers the profile's plugins registered (spec:
+    /// plugin-system, Model-provider plugins; they join at the session
+    /// boundary) with their request hooks, and the plugins'
+    /// `transform_api_error_classification` hooks.
+    ///
+    /// # Errors
+    ///
+    /// The registry refuses a plugin descriptor (a name clash).
+    pub fn with_plugins(
+        mut self,
+        scope: &ProfileScope,
+        plugins: &crate::plugins_host::ProfilePlugins,
+        cwd: &Path,
+    ) -> Result<Self, Error> {
+        let loaded = plugins.current();
+        let models = loaded.surfaces.models.clone();
+        if !models.is_empty() {
+            let registered = crate::plugins_host::providers::registered(&models);
+            let registry = ProviderRegistry::for_profile(scope.config(), registered)?;
+            let parts = &self.setup;
+            self.setup = Arc::new(ProviderSetupParts {
+                config: Arc::clone(&parts.config),
+                registry: Arc::new(registry),
+                secrets: parts.secrets.clone(),
+                accounts: Arc::clone(&parts.accounts),
+                catalog: Arc::clone(&parts.catalog),
+                ad_hoc: parts.ad_hoc.clone(),
+            });
+            self.caller = self.caller.with_request_hooks(Arc::new(
+                pmt_plugins::surfaces::ModelRequestHooks::new(models),
+            ));
+        }
+        let call = pmt_plugins::host::CallInfo {
+            session_id: None,
+            surface: "cli".to_owned(),
+            cwd: Some(cwd.display().to_string()),
+        };
+        self.caller = self.caller.with_classifier(plugins.error_classifier(call));
+        Ok(self)
     }
 
     /// The session's first route: flags over the profile config. A profile
@@ -205,14 +286,36 @@ impl Models {
         })
     }
 
+    /// The session's approval guardian on its `approval` auxiliary route.
+    pub(crate) fn guardian(
+        &self,
+        model: &Arc<SwitchableModel>,
+        session: pmt_core::id::SessionId,
+    ) -> Arc<super::guardian::RouteGuardian> {
+        Arc::new(super::guardian::RouteGuardian {
+            parts: Arc::clone(&self.setup),
+            aux: Arc::clone(&self.aux),
+            model: Arc::clone(model),
+            session,
+        })
+    }
+
     /// The port of `target`, with the profile's fallback chain.
     ///
     /// # Errors
     ///
     /// Resolution errors of the target or the chain.
     pub async fn port(&self, target: &Target) -> Result<Arc<ProviderModel>, Error> {
-        let model = ProviderModel::start(self.setup.setup(), self.caller.clone(), target).await?;
-        Ok(Arc::new(model))
+        self.maker().port(target).await
+    }
+
+    /// What builds ports of this profile's routes, owned (a plugin's
+    /// model override is resolved at call time).
+    pub(crate) fn maker(&self) -> PortMaker {
+        PortMaker {
+            setup: Arc::clone(&self.setup),
+            caller: self.caller.clone(),
+        }
     }
 
     /// A resolver over the profile (for `/model`).
@@ -274,6 +377,8 @@ pub struct SwitchableModel {
     /// The route a `/model --once` switch replaced, put back when the turn
     /// that used the switch ends.
     restore: std::sync::Mutex<Option<Restore>>,
+    /// The session's `*_api_request` hooks.
+    api_hooks: std::sync::OnceLock<super::api_hooks::ApiHooks>,
 }
 
 /// The route to go back to after a `--once` turn.
@@ -293,7 +398,13 @@ impl SwitchableModel {
             session: std::sync::Mutex::default(),
             watch: std::sync::Mutex::default(),
             restore: std::sync::Mutex::default(),
+            api_hooks: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Fires `hooks` around every call from now on.
+    pub fn observe_api(&self, hooks: super::api_hooks::ApiHooks) {
+        let _ = self.api_hooks.set(hooks);
     }
 
     /// Calls `watch` with the credential of every route this port sends on,
@@ -414,6 +525,17 @@ impl ModelPort for SwitchableModel {
         deltas: &'a dyn DeltaSink,
     ) -> BoxFuture<'a, Result<ModelReply, ModelFailure>> {
         let model = self.model();
-        Box::pin(async move { model.call(request, ctx, deltas).await })
+        let target = self.target();
+        Box::pin(async move {
+            let hooks = self.api_hooks.get();
+            if let Some(hooks) = hooks {
+                hooks.before(&target, request).await;
+            }
+            let result = model.call(request, ctx, deltas).await;
+            if let Some(hooks) = hooks {
+                hooks.after(&target, &result).await;
+            }
+            result
+        })
     }
 }

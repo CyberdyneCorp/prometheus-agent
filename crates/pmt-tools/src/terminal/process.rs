@@ -369,7 +369,8 @@ impl ProcessRegistry {
     }
 
     fn shaped(&self, text: &str) -> String {
-        let clean = shape::clean(text, &[], &self.options.redactor);
+        // Background output is not a foreground result: no hooks run.
+        let clean = self.options.redactor.redact_all(&shape::strip_ansi(text));
         shape::truncate(&clean, (self.options.max_chars)()).0
     }
 
@@ -418,6 +419,17 @@ impl ProcessRegistry {
             let _ = tokio::time::timeout(limit, state.wait_for(|s| *s != State::Running)).await;
         }
         describe(entry)
+    }
+
+    /// OS pids of processes still running (the session may kill them even
+    /// where the self-termination guard applies).
+    #[must_use]
+    pub fn running_pids(&self) -> Vec<u32> {
+        self.lock()
+            .iter()
+            .filter(|e| e.state() == State::Running)
+            .filter_map(|e| e.pid)
+            .collect()
     }
 
     /// Ids of processes still running.

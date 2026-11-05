@@ -35,7 +35,7 @@ fn done(env: &Env, message: &str) -> Result<u8, Error> {
 /// `cli`).
 pub(super) fn scan_now(env: &Env) -> reload::Scan {
     let catalog = env.catalog();
-    let config = &env.scope.config().skills;
+    let config = env.scope.config();
     let view = gates::SessionView {
         platform: Some("cli".to_owned()),
         ..gates::SessionView::default()

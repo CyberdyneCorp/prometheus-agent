@@ -58,6 +58,7 @@ async fn session_tools(profile: &Profile, session: pmt_core::id::SessionId) -> A
         capabilities: &capabilities,
         config,
         probes: &ProbeCache::new(),
+        route: &pmt_tools::variants::RouteTraits::default(),
     })
     .await;
     let timings = Arc::new(Timings::default());

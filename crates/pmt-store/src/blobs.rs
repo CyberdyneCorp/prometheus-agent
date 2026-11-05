@@ -164,6 +164,12 @@ impl Store {
         put(self.location().blobs(), bytes)
     }
 
+    /// Where `blob` lives on disk.
+    #[must_use]
+    pub fn blob_path(&self, blob: &BlobRef) -> PathBuf {
+        blob_path(self.location().blobs(), blob.sha256())
+    }
+
     /// Reads a blob, verifying its hash.
     ///
     /// # Errors

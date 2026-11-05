@@ -70,6 +70,8 @@ impl DaemonHost {
             source_tag: None,
             ignore_user_config: setup.ignore_user_config,
             ignore_rules: setup.ignore_rules,
+            // A client narrows or extends it with `egress.set`.
+            egress: crate::egress::Overrides::default(),
         };
         let ad_hoc = setup
             .base_url
@@ -86,9 +88,15 @@ impl DaemonHost {
             gateway: Arc::clone(&self.gateway),
             profile: profile.scope().name().as_str().to_owned(),
         };
+        let daemon = crate::daemon_cmd::self_guard::daemon(
+            scope.home(),
+            self.launch.user_home().map(PathBuf::as_path),
+            true,
+        );
         let factory = Factory::new(scope, &self.launch, &flags(setup), ad_hoc, options)?
             .with_current(profile.current.clone())
-            .with_messaging(Arc::new(ports));
+            .with_messaging(Arc::new(ports))
+            .hosted_by(daemon);
         let factory = Arc::new(factory);
         factories.insert(key, Arc::clone(&factory));
         Ok(factory)

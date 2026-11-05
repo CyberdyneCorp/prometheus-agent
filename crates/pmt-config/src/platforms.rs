@@ -112,6 +112,17 @@ pub fn is_known(name: &str) -> bool {
             .contains_key(name)
 }
 
+/// The platforms installed adapter plugins declared, in name order.
+#[must_use]
+pub fn plugin_platforms() -> Vec<String> {
+    PLUGINS
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .keys()
+        .cloned()
+        .collect()
+}
+
 /// The schema of `name`'s `options` table.
 #[must_use]
 pub fn options_schema(name: &str) -> Option<&'static Value> {

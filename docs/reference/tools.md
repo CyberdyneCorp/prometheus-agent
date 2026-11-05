@@ -38,76 +38,87 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
 | `coding` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `manage_connections` |  | posture | Software work: core without media generation, speech, scheduling or computer use |
+| `acp` |  | `coding` |  | The coding tools for ACP editor sessions |
+| `acp_unattended` | `web_search`, `web_extract`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `clarify`, `delegate_task`, `manage_connections` |  |  | ACP tools for clients that cannot answer prompts: no shell or code execution |
+| `api_server` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `todo`, `memory`, `session_search`, `execute_code`, `delegate_task`, `cronjob`, `manage_connections` |  |  | The core tools without speech, clarify and computer use, for API server callers |
+| `gateway` |  |  |  | Every messaging platform bundle: core plus each platform's tools |
+| `platform-telegram` |  | `core` |  | The core tools plus those of the telegram platform |
+| `platform-discord` |  | `core` |  | The core tools plus those of the discord platform |
+| `platform-slack` |  | `core` |  | The core tools plus those of the slack platform |
+| `platform-email` |  | `core` |  | The core tools plus those of the email platform |
+| `platform-matrix` |  | `core` |  | The core tools plus those of the matrix platform |
+| `platform-signal` |  | `core` |  | The core tools plus those of the signal platform |
+| `platform-whatsapp` |  | `core` |  | The core tools plus those of the whatsapp platform |
 
 ## Tool names
 
 ### `web_search`
 
-Toolsets: `core`, `web`, `search`, `webhook-safe`, `coding`.
+Toolsets: `core`, `web`, `search`, `webhook-safe`, `coding`, `acp_unattended`, `api_server`.
 
 ### `web_extract`
 
-Toolsets: `core`, `web`, `webhook-safe`, `coding`.
+Toolsets: `core`, `web`, `webhook-safe`, `coding`, `acp_unattended`, `api_server`.
 
 ### `terminal`
 
-Toolsets: `core`, `terminal`, `debugging`, `coding`.
+Toolsets: `core`, `terminal`, `debugging`, `coding`, `api_server`.
 
 ### `process`
 
-Toolsets: `core`, `terminal`, `process`, `debugging`, `coding`.
+Toolsets: `core`, `terminal`, `process`, `debugging`, `coding`, `api_server`.
 
 ### `read_file`
 
-Toolsets: `core`, `file`, `coding`.
+Toolsets: `core`, `file`, `coding`, `acp_unattended`, `api_server`.
 
 ### `write_file`
 
-Toolsets: `core`, `file`, `coding`.
+Toolsets: `core`, `file`, `coding`, `acp_unattended`, `api_server`.
 
 ### `patch`
 
-Toolsets: `core`, `file`, `coding`.
+Toolsets: `core`, `file`, `coding`, `acp_unattended`, `api_server`.
 
 ### `search_files`
 
-Toolsets: `core`, `file`, `coding`.
+Toolsets: `core`, `file`, `coding`, `acp_unattended`, `api_server`.
 
 ### `vision_analyze`
 
-Toolsets: `core`, `vision`, `webhook-safe`, `coding`.
+Toolsets: `core`, `vision`, `webhook-safe`, `coding`, `acp_unattended`, `api_server`.
 
 ### `image_generate`
 
-Toolsets: `core`, `image_gen`.
+Toolsets: `core`, `image_gen`, `api_server`.
 
 ### `skills_list`
 
-Toolsets: `core`, `skills`, `coding`.
+Toolsets: `core`, `skills`, `coding`, `acp_unattended`, `api_server`.
 
 ### `skill_view`
 
-Toolsets: `core`, `skills`, `coding`.
+Toolsets: `core`, `skills`, `coding`, `acp_unattended`, `api_server`.
 
 ### `skill_manage`
 
-Toolsets: `core`, `skills`, `coding`.
+Toolsets: `core`, `skills`, `coding`, `acp_unattended`, `api_server`.
 
 ### `browser_exec`
 
-Toolsets: `core`, `browser`, `coding`.
+Toolsets: `core`, `browser`, `coding`, `api_server`.
 
 ### `browser_cdp`
 
-Toolsets: `core`, `browser`, `coding`.
+Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
 
 ### `browser_dialog`
 
-Toolsets: `core`, `browser`, `coding`.
+Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
 
 ### `browser_vault`
 
-Toolsets: `core`, `browser`, `coding`.
+Toolsets: `core`, `browser`, `coding`, `acp_unattended`, `api_server`.
 
 ### `text_to_speech`
 
@@ -115,31 +126,31 @@ Toolsets: `core`, `tts`.
 
 ### `todo`
 
-Toolsets: `core`, `todo`, `coding`.
+Toolsets: `core`, `todo`, `coding`, `acp_unattended`, `api_server`.
 
 ### `memory`
 
-Toolsets: `core`, `memory`, `coding`.
+Toolsets: `core`, `memory`, `coding`, `acp_unattended`, `api_server`.
 
 ### `session_search`
 
-Toolsets: `core`, `session_search`, `coding`.
+Toolsets: `core`, `session_search`, `coding`, `acp_unattended`, `api_server`.
 
 ### `clarify`
 
-Toolsets: `core`, `clarify`, `webhook-safe`, `coding`.
+Toolsets: `core`, `clarify`, `webhook-safe`, `coding`, `acp_unattended`.
 
 ### `execute_code`
 
-Toolsets: `core`, `code_execution`, `coding`.
+Toolsets: `core`, `code_execution`, `coding`, `api_server`.
 
 ### `delegate_task`
 
-Toolsets: `core`, `delegation`, `coding`.
+Toolsets: `core`, `delegation`, `coding`, `acp_unattended`, `api_server`.
 
 ### `cronjob`
 
-Toolsets: `core`, `cronjob`.
+Toolsets: `core`, `cronjob`, `api_server`.
 
 ### `computer_use`
 
@@ -147,7 +158,7 @@ Toolsets: `core`, `computer_use`.
 
 ### `manage_connections`
 
-Toolsets: `core`, `connections`, `coding`.
+Toolsets: `core`, `connections`, `coding`, `acp_unattended`, `api_server`.
 
 ### `x_search`
 

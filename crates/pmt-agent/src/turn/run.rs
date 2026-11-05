@@ -204,6 +204,14 @@ pub(super) struct Turn<'a> {
     pub(super) request_rows: usize,
     /// This turn's recall block (wire only).
     pub(super) ephemeral: Option<super::recall::Ephemeral>,
+    /// The delta sink the plugin hooks watch (`None` without hooks).
+    pub(super) stream: Option<std::sync::Arc<super::observe::Stream>>,
+    /// A `transform_llm_output` callback holds this turn's reply.
+    pub(super) held: bool,
+    /// Files edited this turn (`pre_verify`).
+    pub(super) edited: std::collections::BTreeSet<String>,
+    /// `pre_verify` continuations made this turn.
+    pub(super) verify_nudges: u32,
 }
 
 impl<'a> Turn<'a> {
@@ -238,12 +246,17 @@ impl<'a> Turn<'a> {
             compression_attempts: 0,
             request_rows: 0,
             ephemeral: None,
+            stream: None,
+            held: false,
+            edited: std::collections::BTreeSet::new(),
+            verify_nudges: 0,
         }
     }
 
     async fn run(mut self, input: TurnInput) -> Result<TurnResult, Error> {
         let setup = &self.agent.setup;
         setup.model.start_turn().await;
+        self.start_stream();
         let route = setup.model.route().await;
         let mut frozen = self.freeze(&route).await?;
         let text = match self.agent.steers.take() {
@@ -274,6 +287,7 @@ impl<'a> Turn<'a> {
         }))
         .await;
         self.recall(&text, &wire).await;
+        self.hook_context(&text, &wire).await;
         let ending = self.iterate(&mut frozen).await?;
         self.finish(ending, Some(&frozen)).await
     }
@@ -359,6 +373,16 @@ impl<'a> Turn<'a> {
             )));
         }
         self.empty_streak = 0;
+        let mut reply = reply;
+        if reply.tool_calls.is_empty() {
+            if let Some(message) = self.verify_nudge(&reply, route).await {
+                self.keep_reply(&reply).await?;
+                self.emit_step(Vec::new()).await;
+                self.append(&transcript::notice_row(&message, "pre_verify"))?;
+                return Ok(Next::Continue);
+            }
+            reply.text = self.transform_final(reply.text, route).await;
+        }
         self.keep_reply(&reply).await?;
         if !reply.tool_calls.is_empty() {
             return Ok(match self.tool_round(&reply).await? {
@@ -472,7 +496,17 @@ impl<'a> Turn<'a> {
 
     /// Stores the assistant row and emits its events.
     pub(super) async fn keep_reply(&mut self, reply: &ModelReply) -> Result<(), Error> {
-        let row = transcript::assistant_row(reply);
+        let mut row = transcript::assistant_row(reply);
+        let interim = !reply.tool_calls.is_empty() && !reply.text.is_empty();
+        if interim {
+            self.observe_hook("on_interim_message", [("text", reply.text.clone().into())]);
+        }
+        // A held turn's commentary between tool calls is stored hidden and
+        // never shown: only the hook's final reply reaches the person.
+        let hidden = interim && self.held;
+        if hidden {
+            row.metadata = Some(serde_json::json!({ "hidden": true, "kind": "interim" }));
+        }
         let id = row.id.to_string();
         self.append(&row)?;
         if let Some(text) = &reply.reasoning {
@@ -483,7 +517,7 @@ impl<'a> Turn<'a> {
             }))
             .await;
         }
-        if !reply.text.is_empty() {
+        if !reply.text.is_empty() && !hidden {
             self.emit(Event::AssistantMessage(MessageText {
                 message_id: Some(id),
                 text: reply.text.clone(),

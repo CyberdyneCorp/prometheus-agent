@@ -1,0 +1,12 @@
+# The plugin authoring guide's example (docs/guide/plugin-authoring.md).
+manifest_version = 1
+id = "weather"
+version = "1.0.0"
+kind = "wasm"
+description = "Current weather for a city, from wttr.in."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["tool@1.0"]
+
+[capabilities]
+network = ["wttr.in"]

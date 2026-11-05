@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use pmt_config::schema::{FallbackEntry, SecretName};
 use pmt_core::error::{Error, codes};
 use pmt_providers::resolve::{self, Target};
-use pmt_providers::{ProviderRegistry, fallback, target};
+use pmt_providers::{fallback, target};
 use serde::Serialize;
 
 use crate::cli::FallbackCommand;
@@ -147,7 +147,7 @@ fn remove(ctx: &Context<'_>, entry: &str) -> Result<u8, Error> {
         Ok(n) if (1..=chain.len()).contains(&n) => Some(n - 1),
         Ok(_) => None,
         Err(_) => {
-            let registry = ProviderRegistry::for_profile(config, Vec::new())?;
+            let (registry, _) = crate::plugins_host::providers::registry(&scope, config)?;
             let target = target::parse(entry, &config.model, &registry, None)?;
             let canonical = registry.lookup(&target.provider)?.id().to_owned();
             chain.iter().position(|e| {

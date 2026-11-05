@@ -48,6 +48,12 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
 
@@ -61,6 +67,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn

@@ -23,10 +23,13 @@ use pmt_providers::request::Tool;
 use pmt_store::Store;
 use pmt_tools::approval::{ApprovalRequest, CommandGate, Context, Decision, Floors, GateSetup};
 use pmt_tools::budget::ResultBudget;
-use pmt_tools::dispatch::NoHooks;
+use pmt_tools::dispatch::ToolHooks;
 use pmt_tools::probe::ProbeCache;
 use pmt_tools::protected::ProtectedFiles;
-use pmt_tools::{DispatchSetup, Dispatcher, Selection, SurfaceInputs, ToolRegistry, ToolSurface};
+use pmt_tools::variants::RouteTraits;
+use pmt_tools::{
+    DispatchSetup, Dispatcher, Selection, SessionSurface, SurfaceInputs, ToolRegistry, ToolSurface,
+};
 
 /// The approval gate of a session and, on an interactive surface, the
 /// receiving end of its prompts.
@@ -51,6 +54,20 @@ pub struct GateInputs<'a> {
     pub interactive: bool,
     /// `--yolo`.
     pub yolo: bool,
+    /// Plugin approval observers and transport.
+    pub hooks: Option<Arc<dyn pmt_tools::approval::hooks::ApprovalHooks>>,
+    /// The session id (its decisions go to the security audit log).
+    pub session_id: String,
+    /// The smart-mode approval guardian.
+    pub guardian: Option<Arc<dyn pmt_tools::approval::guardian::Guardian>>,
+    /// Runs approval `explain` previews.
+    pub previewer: Option<pmt_tools::approval::explain::Previewer>,
+    /// In a daemon-hosted session: the daemon and the session's own
+    /// background processes (the self-termination guard).
+    pub hosted: Option<(
+        pmt_tools::approval::selfterm::Daemon,
+        pmt_tools::approval::OwnProcesses,
+    )>,
 }
 
 /// The approval gate: prompts go to the person on an interactive
@@ -81,16 +98,41 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
         protected: ProtectedFiles::from_config(&config.security)?,
         channel,
         yolo: inputs.yolo,
-    });
+        hooks: inputs.hooks.clone(),
+    })
+    .with_audit(
+        pmt_core::audit::AuditLog::of(inputs.scope.dir()),
+        inputs.session_id.clone(),
+    );
+    let gate = match &inputs.guardian {
+        Some(guardian) => gate.with_guardian(Arc::clone(guardian)),
+        None => gate,
+    };
+    let gate = match &inputs.previewer {
+        Some(previewer) => gate.with_previewer(previewer.clone()),
+        None => gate,
+    };
+    let gate = match &inputs.hosted {
+        Some((daemon, own)) => gate.hosted_by(daemon.clone(), Arc::clone(own)),
+        None => gate,
+    };
     Ok(Gate {
         gate: Arc::new(gate),
         prompts,
     })
 }
 
-/// The tool selection of a session: `tools.enabled_toolsets` (or
-/// `--toolsets`) minus the disabled toolsets; a non-interactive run drops
-/// the tools that need a person.
+/// The tool selection of a session of `surface` (spec: tool-system,
+/// Per-surface default toolsets): `toolsets.surfaces.<surface>`, else
+/// `tools.enabled_toolsets` with `core` standing for the surface's
+/// default, minus the disabled toolsets; a non-interactive run drops the
+/// tools that need a person.
+///
+/// `plugins` are the toolsets of the profile's enabled plugins: enabling a
+/// plugin opts its tools in (`tools.disabled_toolsets` still removes them),
+/// except on webhook-triggered runs (read-only unless the surface or route
+/// names toolsets) and for a toolset named after a messaging platform,
+/// which reaches only that platform's sessions through its bundle.
 ///
 /// # Errors
 ///
@@ -99,20 +141,50 @@ pub fn selection(
     registry: &ToolRegistry,
     config: &Config,
     interactive: bool,
+    plugins: &[String],
+    surface: &SessionSurface,
 ) -> Result<Selection, Error> {
-    // `toolsets.surfaces.cli` (the tool configurator's per-surface list)
-    // wins over the profile-wide `tools.enabled_toolsets`.
-    let enabled = config
-        .toolsets
-        .surfaces
-        .get("cli")
-        .unwrap_or(&config.tools.enabled_toolsets);
-    let selection = Selection::resolve(registry, enabled, &config.tools.disabled_toolsets)?;
+    let mut enabled = surface.starting_toolsets(registry, &config.tools, &config.toolsets);
+    crate::tools_cmd::opt_in(&mut enabled, plugins, surface);
+    let selection = Selection::resolve(registry, &enabled, &config.tools.disabled_toolsets)?;
     Ok(if interactive {
         selection
     } else {
         selection.without_interactive(registry)
     })
+}
+
+/// The surface stored session `session` was started from: a messaging
+/// session's platform (`webhook` for webhook-triggered runs), else its
+/// source; sources without a surface of their own (subagents, evals,
+/// imports) start like the CLI.
+#[must_use]
+pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
+    use pmt_store::{Origin, Source};
+    if let Origin::Gateway { platform, .. } = &session.origin {
+        return SessionSurface::Gateway(platform.to_lowercase());
+    }
+    match session.source {
+        Source::Tui => SessionSurface::Tui,
+        Source::Desktop => SessionSurface::Desktop,
+        Source::Cron => SessionSurface::Cron,
+        Source::Api => SessionSurface::Api,
+        Source::Acp if session.source_tag.as_deref() == Some(ACP_UNATTENDED_TAG) => {
+            SessionSurface::AcpUnattended
+        }
+        Source::Acp => SessionSurface::Acp,
+        _ => SessionSurface::Cli,
+    }
+}
+
+/// The source tag of unattended ACP sessions (spec: acp-adapter).
+const ACP_UNATTENDED_TAG: &str = "acp-unattended";
+
+/// The schema-variant traits of `model`'s current route.
+pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> RouteTraits {
+    let route = model.route().await;
+    RouteTraits::of(&route.provider, &route.model, route.wire_format)
+        .with_context_window(route.context_window)
 }
 
 /// What one surface build needs.
@@ -137,6 +209,10 @@ pub struct SurfaceInputsOwned<'a> {
     pub redactor: &'a Redactor,
     /// The route's context window (result budget).
     pub context_window: Option<u64>,
+    /// Plugin tool hooks (`pre_tool_call`, `post_tool_call`).
+    pub hooks: Arc<dyn ToolHooks>,
+    /// The main route schema variants are picked for.
+    pub route: &'a RouteTraits,
 }
 
 /// Builds the surface and the dispatcher over it, and records the
@@ -146,6 +222,42 @@ pub struct SurfaceInputsOwned<'a> {
 ///
 /// Store errors recording the surface.
 pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<SessionTools>, Error> {
+    let (dispatcher, timings) = dispatcher(inputs).await?;
+    Ok(Arc::new(SessionTools::new(
+        inputs.agent.map(Arc::clone),
+        Arc::new(dispatcher),
+        timings,
+    )))
+}
+
+/// `surface` with the hosted connector tools behind its tool-search bridge
+/// (spec: connectors, Remote connector tools through the search bridge),
+/// for a turn-loop session whose selection has `manage_connections` and a
+/// profile with connectors on and a Nous sign-in.
+fn with_connectors(inputs: &SurfaceInputsOwned<'_>, surface: ToolSurface) -> ToolSurface {
+    let selected = inputs
+        .selection
+        .tools
+        .iter()
+        .any(|t| t == pmt_tools::connectors::manage::NAME);
+    if inputs.agent.is_none() || !selected {
+        return surface;
+    }
+    match crate::connectors_host::remote(inputs.scope) {
+        Some(remote) => surface.with_remote(remote, &inputs.scope.config().tools.tool_search),
+        None => surface,
+    }
+}
+
+/// The session's dispatcher over its surface (recorded for `tools list
+/// --session`) and the timings it reports to.
+///
+/// # Errors
+///
+/// Store errors recording the surface.
+pub async fn dispatcher(
+    inputs: &SurfaceInputsOwned<'_>,
+) -> Result<(Dispatcher, Arc<Timings>), Error> {
     let config = inputs.scope.config();
     let surface = ToolSurface::build(SurfaceInputs {
         registry: inputs.registry,
@@ -153,8 +265,10 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
         capabilities: inputs.capabilities,
         config,
         probes: &ProbeCache::new(),
+        route: inputs.route,
     })
     .await;
+    let surface = with_connectors(inputs, surface);
     crate::tools_cmd::record_session_surface(
         inputs.store,
         inputs.session,
@@ -167,7 +281,7 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
         session_id: session_id.clone(),
         surface: Arc::new(surface),
         capabilities: Arc::new(inputs.capabilities.clone()),
-        hooks: Arc::new(NoHooks),
+        hooks: Arc::clone(&inputs.hooks),
         gate: Arc::clone(inputs.gate) as _,
         observer: Arc::clone(&timings) as _,
         budget: ResultBudget::for_session(
@@ -186,11 +300,7 @@ pub async fn session_tools(inputs: &SurfaceInputsOwned<'_>) -> Result<Arc<Sessio
             .unwrap_or(1)
             .max(1),
     });
-    Ok(Arc::new(SessionTools::new(
-        inputs.agent.map(Arc::clone),
-        Arc::new(dispatcher),
-        timings,
-    )))
+    Ok((dispatcher, timings))
 }
 
 /// The session's tool port; a `--now` change swaps it at a turn boundary.
@@ -229,9 +339,10 @@ impl ToolPort for SwappableTools {
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         let tools = self.tools();
-        Box::pin(async move { tools.run(calls, cancel).await })
+        Box::pin(async move { tools.run(calls, turn_id, cancel).await })
     }
 }

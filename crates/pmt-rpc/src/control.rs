@@ -106,6 +106,15 @@ pub enum ControlRequest {
         /// channel).
         target: String,
     },
+    /// Replaces a profile's live plugin set (`prometheus plugins reload
+    /// [<id>]`); answers what is active now and what waits.
+    PluginsReload {
+        /// The owning profile.
+        profile: String,
+        /// The plugin the report is about (every plugin reloads).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        plugin: Option<String>,
+    },
     /// A graceful drain and exit; `restart` marks the daemon retiring so
     /// it refuses new work while it drains.
     Stop {
@@ -262,6 +271,9 @@ pub struct ControlResponse {
     /// `ResolveRole`: the role's id, when a connected adapter knows it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved: Option<String>,
+    /// `PluginsReload`: the reload report.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reloaded: Option<String>,
 }
 
 /// How long a control exchange may take.

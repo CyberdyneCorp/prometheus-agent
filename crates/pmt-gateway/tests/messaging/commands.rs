@@ -201,6 +201,54 @@ async fn lifecycle_hooks_fire_around_a_turn() {
 }
 
 #[tokio::test]
+async fn step_compaction_and_turn_end_hooks_carry_their_fields() {
+    // The payloads Hermes `agent:step`, `session:compress`, `agent:end`
+    // and `gateway:startup` hook directories map onto (spec:
+    // plugin-system, Gateway hook directories).
+    let hooks = Arc::new(Hooks::default());
+    let recorder = Recorder::new(json!({}));
+    for name in [
+        "on_gateway_startup",
+        "post_llm_call",
+        "post_compaction",
+        "on_turn_end",
+    ] {
+        hooks.register("default", name, recorder.clone()).unwrap();
+    }
+    let h = Harness::start(Setup {
+        hooks,
+        ..Setup::new(&open("telegram"))
+    })
+    .await;
+    h.dm("telegram", "1", "compact").await;
+    said(&h.adapter("telegram"), "xxxx").await;
+    eventually("the turn-end hook ran", || {
+        recorder.names().contains(&"on_turn_end".to_owned())
+    })
+    .await;
+    let calls = recorder.calls.lock().unwrap().clone();
+    let of = |name: &str| {
+        calls.iter().find(|(n, _)| n == name).map_or_else(
+            || panic!("{name} never fired: {calls:?}"),
+            |(_, p)| p.clone(),
+        )
+    };
+    assert_eq!(of("on_gateway_startup")["platforms"], json!(["telegram"]));
+    let step = of("post_llm_call");
+    assert_eq!(step["iteration"], 1);
+    assert_eq!(step["tool_names"], json!(["terminal", "read_file"]));
+    let session = step["session_id"].as_str().unwrap().to_owned();
+    assert!(!session.is_empty());
+    let compaction = of("post_compaction");
+    assert_eq!(compaction["old_session_id"], session.as_str());
+    assert_eq!(compaction["in_place"], true);
+    assert_eq!(compaction["compression_count"], 2);
+    let end = of("on_turn_end");
+    assert_eq!(end["response"], "x".repeat(500));
+    assert_eq!(end["exit_reason"], "completed");
+}
+
+#[tokio::test]
 async fn new_replaces_the_session_and_records_why() {
     let h = Harness::start(Setup::new(&open("telegram"))).await;
     h.dm("telegram", "1", "first").await;

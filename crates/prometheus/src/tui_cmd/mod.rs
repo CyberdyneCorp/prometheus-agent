@@ -77,6 +77,8 @@ pub struct Launch {
     pub cwd: PathBuf,
     /// This terminal's identity (`-c` prefers its last session).
     pub terminal: Option<String>,
+    /// `--egress` and `--allow-host`, applied with `egress.set`.
+    pub egress: crate::egress::Overrides,
 }
 
 /// How the TUI ended.

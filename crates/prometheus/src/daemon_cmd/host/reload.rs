@@ -82,7 +82,10 @@ impl DaemonHost {
             .collect()
     }
 
-    async fn check(&self, profile: &Profile) {
+    /// Re-reads `profile`'s `config.toml` when it changed since the last
+    /// read (the poll calls it; so does a plugin reload, which must see a
+    /// change the CLI wrote a moment ago).
+    pub(super) async fn check(&self, profile: &Profile) {
         let current = profile.scope();
         let text = std::fs::read(config_path(&current)).ok();
         {
@@ -138,6 +141,14 @@ impl DaemonHost {
             );
         }
         profile.current.replace(new.clone());
+        if found
+            .iter()
+            .any(|c| c.key == "mcp" || c.key.starts_with("mcp."))
+        {
+            // MCP servers follow `mcp.servers` (spec: plugin-system, MCP
+            // config watch, recycling and discovery wait).
+            crate::mcp_host::config_changed(&new);
+        }
         // New sessions are built from the new snapshot.
         profile
             .factories

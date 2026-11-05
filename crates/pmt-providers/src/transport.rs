@@ -18,7 +18,7 @@ use crate::cost::Pending;
 use crate::event::{Normalizer, StopReason, StreamEvent, Usage};
 use crate::mock::{self, Feed, Mock};
 use crate::request::Request;
-use crate::resolve::Route;
+use crate::resolve::{BoxFuture, Route};
 use crate::sse::SseParser;
 use crate::wire::{self, Decode, EncodeOptions};
 
@@ -57,12 +57,41 @@ pub fn body(route: &Route, request: &Request) -> serde_json::Value {
     wire::encode(route.wire_format, &request, &EncodeOptions { cache_key })
 }
 
+/// Request hooks of model providers registered by plugins (spec:
+/// plugin-system, Model-provider plugins): header building and request
+/// preparation run in the plugin, the HTTP request and streaming stay in
+/// the host, so credentials never reach the plugin.
+pub trait RequestHooks: Send + Sync {
+    /// Whether `provider` has hooks.
+    fn handles(&self, provider: &str) -> bool;
+    /// Headers added to every request to `provider` (the credential
+    /// header is set after them and wins).
+    fn headers<'a>(
+        &'a self,
+        provider: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<(String, String)>, String>>;
+    /// The JSON body about to be sent to `provider`, rewritten.
+    fn prepare<'a>(
+        &'a self,
+        provider: &'a str,
+        body: serde_json::Value,
+    ) -> BoxFuture<'a, Result<serde_json::Value, String>>;
+}
+
 /// Sends model requests: over HTTP, or to the in-process [`Mock`] for
 /// routes of the built-in `mock` provider.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct Sender {
     client: reqwest::Client,
     mock: Arc<Mock>,
+    hooks: Option<Arc<dyn RequestHooks>>,
+    pii: Option<Arc<pmt_core::pii::Pii>>,
+}
+
+impl std::fmt::Debug for Sender {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Sender").finish_non_exhaustive()
+    }
 }
 
 impl Sender {
@@ -71,7 +100,21 @@ impl Sender {
         Self {
             client,
             mock: Arc::new(Mock::echo()),
+            hooks: None,
+            pii: None,
         }
+    }
+
+    /// Replaces PII in every request before it leaves the process.
+    pub(crate) fn with_pii(mut self, pii: Arc<pmt_core::pii::Pii>) -> Self {
+        self.pii = Some(pii);
+        self
+    }
+
+    /// Runs plugin request hooks of the providers they handle.
+    pub(crate) fn with_request_hooks(mut self, hooks: Arc<dyn RequestHooks>) -> Self {
+        self.hooks = Some(hooks);
+        self
     }
 
     /// Serves mock routes from `mock` (the session's script).
@@ -91,26 +134,77 @@ impl Sender {
         route: &Route,
         request: &Request,
     ) -> Result<ModelStream, ProviderError> {
+        let redacted = self.pii.as_deref().map(|pii| request.redacted(pii));
+        let request = redacted.as_ref().unwrap_or(request);
         if mock::serves(route) {
             let feed = self.mock.reply(route, request)?;
             return ModelStream::start(Source::Mock(feed), Limits::of(route)).await;
         }
-        send_http(&self.client, route, request).await
+        let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
+        send_http(&self.client, hooks, route, request).await
     }
+}
+
+/// The body and extra headers of a request, through the plugin's hooks.
+/// A hook that fails (a crashed or stalled plugin) fails the call without
+/// retrying the same route, and the fallback chain applies (spec:
+/// python-bridge, Model-provider plugins through the bridge).
+async fn hooked(
+    hooks: &dyn RequestHooks,
+    route: &Route,
+    body: serde_json::Value,
+) -> Result<(serde_json::Value, Vec<(String, String)>), ProviderError> {
+    let failed = |what: &str, why: String| ProviderError {
+        class: crate::classify::ErrorClass::ServerError,
+        status: None,
+        message: format!(
+            "provider plugin of '{}' failed to {what}: {why}",
+            route.provider
+        ),
+        retry_after: None,
+        reset_at: None,
+        refusal: None,
+        body: None,
+        verdict: Some(Box::new(crate::classify::Reclassified {
+            reason: "provider_plugin_failed".to_owned(),
+            retryable: Some(false),
+            should_compress: false,
+            should_rotate_credential: false,
+            should_fallback: Some(true),
+            message: None,
+        })),
+    };
+    let body = hooks
+        .prepare(&route.provider, body)
+        .await
+        .map_err(|why| failed("prepare the request", why))?;
+    let headers = hooks
+        .headers(&route.provider)
+        .await
+        .map_err(|why| failed("build the headers", why))?;
+    Ok((body, headers))
 }
 
 async fn send_http(
     client: &reqwest::Client,
+    hooks: Option<&dyn RequestHooks>,
     route: &Route,
     request: &Request,
 ) -> Result<ModelStream, ProviderError> {
     let limits = Limits::of(route);
-    let body = serde_json::to_vec(&body(route, request)).expect("JSON values serialize");
+    let (body, headers) = match hooks {
+        Some(hooks) => hooked(hooks, route, body(route, request)).await?,
+        None => (body(route, request), Vec::new()),
+    };
+    let body = serde_json::to_vec(&body).expect("JSON values serialize");
     let mut builder = client
         .post(wire::endpoint(route.wire_format, &route.base_url))
         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
         .header("accept", "text/event-stream")
         .body(body);
+    for (name, value) in headers {
+        builder = builder.header(name, value);
+    }
     builder = authenticate(builder, route);
     let response = match timeout_at(limits.deadline, builder.send()).await {
         Err(_) => return Err(timed_out("no response within the request timeout")),

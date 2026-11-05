@@ -90,6 +90,12 @@ pub(super) fn verify(dir: &Path, key: &Path) -> Result<(), String> {
     for installer in INSTALLERS {
         signed(dir, installer, &trust, &mut problems);
     }
+    let advisories = pmt_update::advisories::FILE;
+    if let Some(bytes) = signed(dir, advisories, &trust, &mut problems)
+        && let Err(err) = pmt_update::advisories::Catalog::parse(&String::from_utf8_lossy(&bytes))
+    {
+        problems.push(format!("{advisories}: {}", err.message()));
+    }
     if problems.is_empty() {
         println!("release verified: {}", dir.display());
         return Ok(());
@@ -224,6 +230,9 @@ mod tests {
             std::fs::write(dir.join(installer), "installer").unwrap();
             signed.push(dir.join(installer));
         }
+        let advisories = crate::repo_root().join("crates/pmt-update/advisories/advisories.json");
+        std::fs::copy(advisories, dir.join("advisories.json")).unwrap();
+        signed.push(dir.join("advisories.json"));
         write(dir, "v1.4.0", "abc").unwrap();
         signed.push(dir.join(MANIFEST_FILE));
         signed.push(dir.join("channel-stable.json"));

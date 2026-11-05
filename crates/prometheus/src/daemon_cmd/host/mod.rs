@@ -193,6 +193,8 @@ impl DaemonHost {
     /// Hands sessions the started messaging gateway (`send_message`).
     pub(super) fn set_gateway(&self, gateway: pmt_gateway::messaging::Gateway) {
         let _ = self.gateway.set(gateway);
+        // Plugins post, inject and act through the same gateway.
+        crate::plugins_host::messaging::set_gateway(Arc::clone(&self.gateway));
     }
 
     /// The served profile names.
@@ -536,6 +538,31 @@ impl Host for DaemonHost {
         })
     }
 
+    fn egress<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::EgressSetParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::EgressState> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let session = self.load(profile, id, &link).await?;
+            let hosts = &session.live.egress.hosts;
+            crate::egress::apply_set(hosts, params.mode.as_deref(), &params.allow, &params.deny)?;
+            let (mode, allow, deny) = crate::egress::snapshot(hosts);
+            Ok(pmt_rpc::contracts::EgressState { mode, allow, deny })
+        })
+    }
+
+    fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(pmt_gateway::vault::VaultAccess {
+            vault: crate::vault_cmd::open(&scope),
+            scope,
+        })
+    }
+
     fn compact<'a>(&'a self, profile: &'a str, params: CompactParams) -> HostFuture<'a, Compacted> {
         Box::pin(async move {
             let profile = &self.profile(profile)?;
@@ -617,6 +644,24 @@ impl Host for DaemonHost {
 
     fn banner<'a>(&'a self, profile: &'a str, session_id: &'a str) -> HostFuture<'a, BannerInfo> {
         Box::pin(async move { Self::banner_of(&*self.profile(profile)?, session_id).await })
+    }
+
+    fn reload_plugins<'a>(
+        &'a self,
+        profile: &'a str,
+        plugin: Option<&'a str>,
+    ) -> HostFuture<'a, String> {
+        Box::pin(async move {
+            let profile = self.profile(profile)?;
+            // `plugins enable` and friends write `config.toml` and ask for
+            // the reload at once: read it now rather than at the next poll.
+            self.check(&profile).await;
+            let scope = profile.scope();
+            let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+            let loaded = crate::plugins_host::reload(&scope, &cwd).current();
+            crate::plugins_host::reload::check_target(&loaded, plugin)?;
+            Ok(crate::plugins_host::reload::report(&loaded, plugin, false))
+        })
     }
 
     fn config_get<'a>(&'a self, profile: &'a str, key: &'a str) -> HostFuture<'a, ConfigValue> {

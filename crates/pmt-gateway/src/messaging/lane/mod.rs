@@ -17,6 +17,7 @@ mod commands;
 mod confirm;
 mod controls;
 mod history;
+mod hook_events;
 mod input;
 mod lifecycle;
 mod models;
@@ -79,6 +80,9 @@ pub(crate) enum Msg {
     Cancelled { id: String, reason: String },
     /// A background notification.
     Internal(Background),
+    /// Text a plugin injected (spec: plugin-system, Plugin live messages
+    /// and message injection): a turn of its own after the running one.
+    Injected(String),
     /// A confirmation was answered yes: run its action.
     Confirmed {
         action: confirm::Action,
@@ -477,11 +481,15 @@ impl Lane {
                 self.progressed();
                 self.delta(&text).await;
             }
-            Msg::Event { kind, payload } => self.session_event(&kind, &payload).await,
+            Msg::Event { kind, payload } => {
+                self.hook_event(&kind, &payload).await;
+                self.session_event(&kind, &payload).await;
+            }
             Msg::Asked { id, method, params } => self.asked(id, &method, &params),
             Msg::Resolved { id, by_client } => self.resolved(&id, &by_client),
             Msg::Cancelled { id, reason } => self.cancelled(&id, &reason),
             Msg::Internal(event) => self.internal(event),
+            Msg::Injected(text) => self.injected(text).await,
             Msg::Confirmed { action, routing } => self.confirmed(action, &routing).await,
             Msg::ModelPicked { reference, routing } => {
                 self.switch_model(&routing, &reference).await;
@@ -565,6 +573,22 @@ impl Lane {
     }
 
     /// A background event: shown now when idle, after the turn otherwise.
+    async fn injected(&mut self, text: String) {
+        self.pending.push_back(Pending {
+            origin: Origin::Queued,
+            text,
+            images: Vec::new(),
+            routing: self.routing.clone(),
+            reply_to: None,
+            voice: false,
+            sent_at: jiff::Timestamp::now(),
+            addressed: true,
+        });
+        if self.running.is_none() {
+            self.next().await;
+        }
+    }
+
     fn internal(&mut self, event: Background) {
         if self.running.is_some() {
             self.pending.push_back(Pending {

@@ -66,12 +66,20 @@ fn counting(runs: &Arc<AtomicUsize>) -> Arc<dyn ToolHandler> {
     }))
 }
 
-/// `terminal` (spawns processes) and `write_file` (writes `/path`).
+/// `terminal` and `execute_code` (spawn processes) and `write_file`
+/// (writes `/path`).
 fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
     let schema = |key: &str| json!({"type": "object", "properties": {key: {"type": "string"}}});
     let mut terminal =
         ToolDescriptor::new("terminal", "terminal", "Runs commands.", schema("command"));
     terminal.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
+    let mut code = ToolDescriptor::new(
+        "execute_code",
+        "code_execution",
+        "Runs Python.",
+        schema("code"),
+    );
+    code.capabilities = vec![Capability::parse("process.spawn:*").unwrap()];
     let mut write = ToolDescriptor::new("write_file", "file", "Writes files.", schema("path"));
     write.claims = Some(ResourceClaims::writes(vec![PathClaim::Argument(
         "/path".into(),
@@ -81,10 +89,30 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
         PathClaim::Argument("/path".into()),
         PathClaim::PatchText("/patch".into()),
     ]));
+    // `read_file` (a `core` member) stands for a costed MCP tool.
+    let render = ToolDescriptor::new(
+        "read_file",
+        "file",
+        "Renders (costs credits).",
+        schema("prompt"),
+    );
+    let over_budget: crate::descriptor::CallGuard = Arc::new(|_: &str, _: &Value| {
+        Some(Escalation {
+            rule_key: "mcp:renders:render:spend".into(),
+            reason:
+                "render costs about 20 credits; 90 credits used in this conversation (limit 100)"
+                    .into(),
+            once_only: true,
+        })
+    });
     vec![
         RegisteredTool::new(terminal, Owner::Builtin, counting(runs)),
+        RegisteredTool::new(code, Owner::Builtin, counting(runs)),
         RegisteredTool::new(write, Owner::Builtin, counting(runs)),
         RegisteredTool::new(patch, Owner::Builtin, counting(runs)),
+        RegisteredTool::new(render, Owner::Builtin, counting(runs)).with_guard(over_budget),
+        crate::connectors::manage::registered(),
+        crate::browser::vault::tool(&Arc::new(crate::environments::Environments::default())),
     ]
 }
 
@@ -94,10 +122,10 @@ struct Escalating;
 impl ToolHooks for Escalating {
     fn pre_tool_call<'a>(&'a self, call: HookCall<'a>) -> SeamFuture<'a, PreDecision> {
         let decision = if call.tool == "write_file" {
-            PreDecision::Escalate(Escalation {
-                rule_key: "no-writes".into(),
-                reason: "the audit plugin reviews every write".into(),
-            })
+            PreDecision::Escalate(Escalation::new(
+                "no-writes",
+                "the audit plugin reviews every write",
+            ))
         } else {
             PreDecision::Continue
         };
@@ -111,6 +139,8 @@ struct Options {
     yolo: bool,
     security: SecurityConfig,
     hooks: Arc<dyn ToolHooks>,
+    guardian: Option<Arc<dyn crate::approval::guardian::Guardian>>,
+    hosted: Option<(crate::approval::selfterm::Daemon, Vec<u32>)>,
 }
 
 impl Default for Options {
@@ -121,6 +151,8 @@ impl Default for Options {
             yolo: false,
             security: SecurityConfig::default(),
             hooks: Arc::new(crate::dispatch::NoHooks),
+            guardian: None,
+            hosted: None,
         }
     }
 }
@@ -143,7 +175,7 @@ async fn session(
     let floors = Floors::new(&fx.profile.path().join("work"))
         .user_home(Some(fx.profile.home()))
         .prometheus_home(fx.profile.home());
-    let gate = Arc::new(CommandGate::new(GateSetup {
+    let mut gate = CommandGate::new(GateSetup {
         approvals: options.approvals,
         context: options.context,
         floors,
@@ -151,7 +183,15 @@ async fn session(
         protected: ProtectedFiles::from_config(&options.security).unwrap(),
         channel,
         yolo: options.yolo,
-    }));
+        hooks: None,
+    });
+    if let Some(guardian) = options.guardian {
+        gate = gate.with_guardian(guardian);
+    }
+    if let Some((daemon, own)) = options.hosted {
+        gate = gate.hosted_by(daemon, Arc::new(move || own.clone()));
+    }
+    let gate = Arc::new(gate);
     let registry = ToolRegistry::new(
         "default",
         Arc::new(Builtins::standard(tools(&fx.runs)).unwrap()),
@@ -163,6 +203,7 @@ async fn session(
         capabilities: &caps,
         config: &Config::default(),
         probes: &ProbeCache::new(),
+        route: &crate::variants::RouteTraits::default(),
     })
     .await;
     let dispatcher = Dispatcher::new(DispatchSetup {
@@ -483,6 +524,45 @@ async fn headless_plugin_escalation_is_denied_naming_the_rule() {
 }
 
 #[tokio::test]
+async fn a_once_only_rule_asks_under_yolo_every_time_and_is_refused_unattended() {
+    let fx = fixture();
+    let (channel, mut prompts) = attached();
+    let options = Options {
+        yolo: true,
+        ..Options::default()
+    };
+    let session = session(&fx, channel, options).await;
+    for _ in 0..2 {
+        let pending = run(&session, "read_file", json!({"prompt": "cat"}));
+        let asked = answer(&mut prompts, Decision::Always).await;
+        assert_eq!(asked.remember, None, "never remembered");
+        assert!(asked.summary().contains("about 20 credits"));
+        assert_eq!(pending.await.unwrap().status, Status::Ok);
+    }
+    assert!(GrantsFile::of(&fx.profile).load().unwrap().allow.is_empty());
+    let options = Options {
+        yolo: true,
+        context: Context::Cron,
+        approvals: ApprovalsConfig {
+            cron_mode: UnattendedApproval::Approve,
+            ..ApprovalsConfig::default()
+        },
+        ..Options::default()
+    };
+    let unattended = self::session(&fx, Channel::unattended(), options).await;
+    let result = run(&unattended, "read_file", json!({"prompt": "cat"}))
+        .await
+        .unwrap();
+    assert_eq!(result.status, Status::Denied);
+    assert!(
+        result.text_content().ends_with(STOP),
+        "{}",
+        result.text_content()
+    );
+    assert_eq!(fx.runs.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
 async fn protected_files_ask_under_yolo_every_time() {
     let fx = fixture();
     let (channel, mut prompts) = attached();
@@ -640,3 +720,35 @@ async fn device_namespace_writes_are_refused_by_the_gate_before_any_resolution()
     }
     assert_eq!(fx.runs.load(Ordering::SeqCst), 0, "no handler ran");
 }
+
+/// connectors, Connection flows require the user: Cron cannot install MCP
+/// servers (the action never reaches the tool, so nothing is written).
+#[tokio::test]
+async fn cron_cannot_install_mcp_servers() {
+    let fx = fixture();
+    let options = Options {
+        context: Context::Cron,
+        approvals: ApprovalsConfig {
+            cron_mode: UnattendedApproval::Approve,
+            ..ApprovalsConfig::default()
+        },
+        ..Options::default()
+    };
+    let session = session(&fx, Channel::unattended(), options).await;
+    let install = json!({"action": "install", "connectors": [{"name": "linear", "mcp": true}]});
+    let result = run(&session, "manage_connections", install).await.unwrap();
+    assert_eq!(result.status, Status::Denied, "{}", result.text_content());
+    assert_eq!(result.status.as_str(), "denied");
+    // A status check is no change: it passes the gate (to the turn loop).
+    let status = run(&session, "manage_connections", json!({"action": "status"}))
+        .await
+        .unwrap();
+    assert_eq!(
+        status.text_content(),
+        "manage_connections must be handled by the agent loop"
+    );
+}
+
+mod guarded;
+mod selfterm;
+mod vault;

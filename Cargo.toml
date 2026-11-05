@@ -17,9 +17,12 @@ pmt-agent = { path = "crates/pmt-agent" }
 pmt-config = { path = "crates/pmt-config" }
 pmt-core = { path = "crates/pmt-core" }
 pmt-memory = { path = "crates/pmt-memory" }
+pmt-mcp = { path = "crates/pmt-mcp" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
+pmt-plugins = { path = "crates/pmt-plugins" }
 pmt-providers = { path = "crates/pmt-providers" }
+pmt-pybridge = { path = "crates/pmt-pybridge" }
 pmt-rpc = { path = "crates/pmt-rpc" }
 pmt-gateway = { path = "crates/pmt-gateway" }
 pmt-adapters-telegram = { path = "crates/pmt-adapters-telegram" }
@@ -38,6 +41,17 @@ pmt-tui = { path = "crates/pmt-tui" }
 pmt-update = { path = "crates/pmt-update" }
 prometheus = { path = "crates/prometheus" }
 schemars = "1.2"
+# MCP client and server (design D7): stdio and streamable HTTP transports,
+# no macros, OAuth or child-process wrapper (stdio servers are spawned
+# through the execution sandbox and handed over as pipes).
+rmcp = { version = "3.8.0", default-features = false }
+# WASM plugin host (design D7): the Component Model on Cranelift, with no
+# WASI (plugins get only the WIT host interfaces) and no on-disk code cache.
+wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std"] }
+# Test-only: turns the sample plugins' core modules into components.
+wit-component = "0.254.2"
+# `requires_prometheus` ranges and WIT world versions.
+semver = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 jiff = "0.2"
@@ -52,6 +66,10 @@ toml_edit = "0.25"
 trybuild = "1.0"
 tracing = "0.1"
 sha2 = "0.11"
+# TOTP codes of vault logins (HMAC-SHA1, RFC 6238).
+sha1 = "0.11"
+# Base32 TOTP seeds.
+data-encoding = "2.11"
 # Terminal QR codes for `gateway whatsapp pair` (no image rendering).
 qrcode = { version = "0.14", default-features = false }
 reqwest = { version = "0.13", default-features = false }
@@ -62,6 +80,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-platform-verifier = "0.7"
 # The OS roots exported into the CA bundle handed to sandboxed children.
 rustls-native-certs = "0.8"
+# Decrypts an encrypted PKCS#8 client key of an mTLS MCP server
+# (`client_key_password_secret`).
+pkcs8 = { version = "0.10", default-features = false, features = ["encryption", "pem", "std"] }
 base64 = "0.23"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 resvg = { version = "0.49", default-features = false }
@@ -105,6 +126,7 @@ zstd = { version = "0.14", default-features = false }
 # builds of Node and uv); deflate through the flate2 backend above.
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }
 pmt-backup = { path = "crates/pmt-backup" }
+pmt-vault = { path = "crates/pmt-vault" }
 # Property tests (store transaction atomicity).
 proptest = { version = "1.9", default-features = false, features = ["std"] }
 # Test-only capture of log events; 7.3 installs the real subscriber.
@@ -180,6 +202,43 @@ pedantic = { level = "warn", priority = -1 }
 opt-level = 3
 
 [profile.dev.package.blake2]
+opt-level = 3
+
+# Plugin tests compile WASM components inside the `plugins.load_timeout_ms`
+# deadline; an unoptimized Cranelift needs several seconds per component and
+# overran the deadline on loaded CI runners.
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+[profile.dev.package.cranelift-assembler-x64]
+opt-level = 3
+[profile.dev.package.cranelift-frontend]
+opt-level = 3
+[profile.dev.package.cranelift-bforest]
+opt-level = 3
+[profile.dev.package.cranelift-bitset]
+opt-level = 3
+[profile.dev.package.cranelift-entity]
+opt-level = 3
+[profile.dev.package.cranelift-control]
+opt-level = 3
+[profile.dev.package.regalloc2]
+opt-level = 3
+[profile.dev.package.wasmtime]
+opt-level = 3
+[profile.dev.package.wasmtime-environ]
+opt-level = 3
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 3
+[profile.dev.package.wasmparser]
+opt-level = 3
+
+# Shell completion runs on every TAB and must answer within 200 ms on a store
+# of 10000 sessions (spec: cli); its test times the dev binary, where an
+# unoptimized clap (building the whole command tree with its debug checks)
+# and SQLite took most of that on loaded Intel macOS runners.
+[profile.dev.package.clap_builder]
+opt-level = 3
+[profile.dev.package.libsqlite3-sys]
 opt-level = 3
 
 [profile.release]

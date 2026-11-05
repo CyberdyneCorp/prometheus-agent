@@ -53,10 +53,19 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 /// One profile's hooks: event name and callback, in registration order.
 type ProfileHooks = Vec<(String, Arc<dyn Hook>)>;
 
+/// Where a profile's other hook callbacks live (the embedder's plugin
+/// hooks, shell hooks and hook directories): one callback per profile
+/// that runs them for every event, after the hooks registered here.
+pub trait HookBridge: Send + Sync {
+    /// The bridge callback of `profile`, if it has one.
+    fn hook(&self, profile: &str) -> Option<Arc<dyn Hook>>;
+}
+
 /// Hooks by profile and name.
 pub struct Hooks {
     by_profile: RwLock<HashMap<String, ProfileHooks>>,
     timeout: Duration,
+    bridge: RwLock<Option<Arc<dyn HookBridge>>>,
 }
 
 impl Default for Hooks {
@@ -78,7 +87,18 @@ impl Hooks {
         Self {
             by_profile: RwLock::default(),
             timeout,
+            bridge: RwLock::default(),
         }
+    }
+
+    /// Runs `bridge`'s callback of the event's profile after the hooks
+    /// registered here, for every event.
+    ///
+    /// # Panics
+    ///
+    /// When the hooks lock is poisoned.
+    pub fn set_bridge(&self, bridge: Arc<dyn HookBridge>) {
+        *self.bridge.write().expect("hooks poisoned") = Some(bridge);
     }
 
     /// Registers `hook` for event `name` of `profile`.
@@ -103,7 +123,8 @@ impl Hooks {
     }
 
     fn of(&self, profile: &str, name: &str) -> Vec<Arc<dyn Hook>> {
-        self.by_profile
+        let mut hooks: Vec<Arc<dyn Hook>> = self
+            .by_profile
             .read()
             .expect("hooks poisoned")
             .get(profile)
@@ -114,7 +135,10 @@ impl Hooks {
                     .map(|(_, h)| Arc::clone(h))
                     .collect()
             })
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let bridge = self.bridge.read().expect("hooks poisoned").clone();
+        hooks.extend(bridge.and_then(|b| b.hook(profile)));
+        hooks
     }
 
     async fn run(&self, hook: &dyn Hook, name: &str, payload: &Value) -> Option<Value> {

@@ -13,6 +13,8 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  vault        The credential vault: logins, cards and addresses the browser fills by handle
+  security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
@@ -33,7 +35,10 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -61,6 +66,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -V, --version
           Print version
@@ -102,6 +113,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn

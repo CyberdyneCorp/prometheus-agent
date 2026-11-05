@@ -8,6 +8,10 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+# MCP tool filters (`mcp.servers.<name>.tools`) are checked as globs.
+glob.workspace = true
+# The PII redaction hashing key.
+getrandom.workspace = true
 jiff.workspace = true
 keyring-core.workspace = true
 pmt-core.workspace = true
@@ -23,7 +27,7 @@ tracing.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The current user's uid (managed secrets ownership in test directories).
-nix = { workspace = true, features = ["user"] }
+nix = { workspace = true, features = ["user", "signal"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store.workspace = true

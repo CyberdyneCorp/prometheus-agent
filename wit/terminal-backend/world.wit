@@ -1,0 +1,24 @@
+/// A remote terminal backend (spec: execution-environments).
+package prometheus:terminal-backend@1.0.0;
+
+interface plugin {
+    record command {
+        line: string,
+        cwd: option<string>,
+        env: list<tuple<string, string>>,
+        timeout-ms: u64,
+    }
+
+    record output {
+        exit-code: s32,
+        stdout: string,
+        stderr: string,
+    }
+
+    run: func(command: command) -> result<output, string>;
+}
+
+world terminal-backend {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

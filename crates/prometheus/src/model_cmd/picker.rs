@@ -111,7 +111,7 @@ pub(crate) fn pick(
         index -= 1;
     }
     let provider = providers[index];
-    let choices = models.catalog.picker_models(provider);
+    let choices = models.model_ids(provider);
     let Some(model) = ask_or_type(input, out, "model", &choices)? else {
         return Ok(None);
     };
@@ -128,7 +128,7 @@ pub(crate) fn chat_choices(models: &Models) -> Vec<pmt_gateway::messaging::Model
         .filter(|p| !p.descriptor().hidden && p.enabled() && connected(models, p))
         .map(|p| pmt_gateway::messaging::ModelChoice {
             provider: p.id().to_owned(),
-            models: models.catalog.picker_models(p),
+            models: models.model_ids(p),
         })
         .filter(|c| !c.models.is_empty())
         .collect()

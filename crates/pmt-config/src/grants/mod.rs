@@ -28,6 +28,7 @@ mod subject;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use pmt_core::audit::{AuditLog, Event, Kind};
 use pmt_core::capability::{BASELINE, Capability, CapabilitySet};
 use pmt_core::error::{Error, codes};
 use pmt_core::id::GrantId;
@@ -83,6 +84,35 @@ pub struct Grants {
     pub grants: Vec<Grant>,
     /// `[approvals].allow`: command patterns approved with `always`.
     pub allow: Vec<String>,
+    /// `[[hook]]`: approved shell hooks and gateway hook directories.
+    pub hooks: Vec<HookConsent>,
+}
+
+/// What a hook consent approves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookKind {
+    /// A `[[hooks.<event>]]` shell hook.
+    Shell,
+    /// A gateway hook directory `<profile_home>/hooks/<name>/`.
+    Directory,
+}
+
+/// One approved hook (spec: plugin-system, Shell hooks with first-use
+/// consent; Gateway hook directories): bound to the digest of its program
+/// or handler, so an edit needs a new approval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookConsent {
+    /// Shell hook or hook directory.
+    pub kind: HookKind,
+    /// The event of a shell hook.
+    pub event: Option<String>,
+    /// The shell hook's command, or the directory name.
+    pub subject: String,
+    /// `sha256:<hex>` of the program or handler.
+    pub digest: String,
+    /// When it was approved.
+    pub granted_at: jiff::Timestamp,
 }
 
 impl Grants {
@@ -177,6 +207,27 @@ impl GrantsFile {
             grants.grants.extend(added.iter().cloned());
             added
         })
+        .inspect(|added| {
+            for grant in added {
+                self.audit(
+                    &grant.capability.to_string(),
+                    "added",
+                    &grant.subject,
+                    surface,
+                );
+            }
+        })
+    }
+
+    /// Records a grant change in the profile's security audit log.
+    fn audit(&self, subject: &str, decision: &str, holder: &impl std::fmt::Display, surface: &str) {
+        let Some(profile) = self.path.parent() else {
+            return;
+        };
+        AuditLog::of(profile).record(
+            &Event::new(Kind::Grant, subject, decision)
+                .with_detail(format!("{holder} on {surface}")),
+        );
     }
 
     /// Removes grant `id` and returns it.
@@ -189,9 +240,58 @@ impl GrantsFile {
             let index = grants.grants.iter().position(|g| g.id == id)?;
             Some(grants.grants.remove(index))
         })?
+        .inspect(|grant| {
+            self.audit(
+                &grant.capability.to_string(),
+                "revoked",
+                &grant.subject,
+                "cli",
+            );
+        })
         .ok_or_else(|| {
             Error::new(&codes::GRANTS_NOT_FOUND, format!("no grant with id '{id}'"))
                 .with_hint("list the grants with `prometheus grants list`")
+        })
+    }
+
+    /// Records a hook approval, replacing an earlier one of the same hook.
+    ///
+    /// # Errors
+    ///
+    /// As [`GrantsFile::add`].
+    pub fn consent(&self, consent: HookConsent) -> Result<(), Error> {
+        let what = format!(
+            "hook {:?} {}",
+            consent.kind,
+            consent.event.as_deref().unwrap_or("-")
+        );
+        let holder = consent.subject.clone();
+        self.update(|grants| {
+            grants.hooks.retain(|c| {
+                !(c.kind == consent.kind
+                    && c.event == consent.event
+                    && c.subject == consent.subject)
+            });
+            grants.hooks.push(consent);
+        })
+        .inspect(|()| self.audit(&what, "consented", &holder, "prompt"))
+    }
+
+    /// Removes the hook approvals `matching` selects and returns them.
+    ///
+    /// # Errors
+    ///
+    /// As [`GrantsFile::add`].
+    pub fn revoke_hooks(
+        &self,
+        matching: impl Fn(&HookConsent) -> bool,
+    ) -> Result<Vec<HookConsent>, Error> {
+        self.update(|grants| {
+            let (removed, kept) = std::mem::take(&mut grants.hooks)
+                .into_iter()
+                .partition(|c| matching(c));
+            grants.hooks = kept;
+            removed
         })
     }
 
@@ -208,6 +308,11 @@ impl GrantsFile {
                 grants.allow.push(pattern.to_owned());
             }
             new
+        })
+        .inspect(|new| {
+            if *new {
+                self.audit(pattern, "allowed always", &"approvals", "approval");
+            }
         })
     }
 
@@ -226,9 +331,23 @@ impl GrantsFile {
         for entry in raw.grant {
             grants.push(self.typed(entry)?);
         }
+        let mut hooks = Vec::with_capacity(raw.hook.len());
+        for entry in raw.hook {
+            hooks.push(HookConsent {
+                kind: entry.kind,
+                event: entry.event,
+                subject: entry.subject,
+                digest: entry.digest,
+                granted_at: entry
+                    .granted_at
+                    .parse()
+                    .map_err(|e| self.error(&format!("granted_at '{}': {e}", entry.granted_at)))?,
+            });
+        }
         Ok(Grants {
             grants,
             allow: raw.approvals.allow,
+            hooks,
         })
     }
 
@@ -270,6 +389,19 @@ struct RawFile {
     approvals: RawApprovals,
     #[serde(default)]
     grant: Vec<RawGrant>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hook: Vec<RawHook>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawHook {
+    kind: HookKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    event: Option<String>,
+    subject: String,
+    digest: String,
+    granted_at: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -303,6 +435,17 @@ fn render(grants: &Grants) -> String {
                 capability: g.capability.to_string(),
                 surface: g.surface.clone(),
                 granted_at: g.granted_at.to_string(),
+            })
+            .collect(),
+        hook: grants
+            .hooks
+            .iter()
+            .map(|h| RawHook {
+                kind: h.kind,
+                event: h.event.clone(),
+                subject: h.subject.clone(),
+                digest: h.digest.clone(),
+                granted_at: h.granted_at.to_string(),
             })
             .collect(),
     };

@@ -7,6 +7,8 @@
 
 mod background;
 pub mod info;
+mod mcp;
+pub(crate) mod plugins;
 pub(crate) mod quick;
 mod refine;
 pub(crate) mod session;
@@ -78,9 +80,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "status" => info::status(ctx),
         "platforms" => info::platforms(ctx).await,
         "version" => Ok(format!("prometheus {}", crate::build_info::identity())),
-        "toolsets" => {
-            crate::tools_cmd::slash_toolsets(&ctx.factory.registry, &ctx.live.selection())
-        }
+        "toolsets" => crate::tools_cmd::slash_toolsets(&ctx.live.registry(), &ctx.live.selection()),
         "bundles" => Ok(pmt_skills::bundles::listing(&pmt_skills::bundles::load(
             ctx.scope.dir(),
         ))),
@@ -100,6 +100,8 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "model" => session::model(ctx, args).await,
         "reasoning" => session::reasoning(ctx, args).await,
         "tools" => session::tools(ctx, args).await,
+        "plugins" => plugins::plugins(ctx, args).await,
+        "mcp" => mcp::mcp(ctx, args).await,
         other => return state_command(ctx, other, args).map(|r| r.map(Reply::Text)),
     };
     Some(text.map(Reply::Text))
@@ -131,6 +133,7 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             text
         }),
         "yolo" => Ok(yolo(live, args)),
+        "egress" => egress(live, args),
         "config" => config(ctx.scope, args),
         _ => return None,
     })
@@ -149,11 +152,13 @@ pub fn profile_registry(scope: &ProfileScope) -> Registry {
     registry
 }
 
-/// The commands of `live`: the built-ins, the profile's quick commands
-/// and the session's skill commands; load warnings are logged.
+/// The commands of `live`: the built-ins, the profile's quick commands,
+/// the commands of the profile's current plugins and the session's skill
+/// commands; load warnings are logged.
 #[must_use]
 pub fn registry(scope: &ProfileScope, live: &Live) -> Registry {
     let mut registry = profile_registry(scope);
+    plugins::register(&mut registry, live);
     let core = registry.builtin_names();
     let table = pmt_skills::slash::table(&live.skills, &core);
     for (slug, skill) in &table.commands {
@@ -249,6 +254,17 @@ fn approvals(live: &Live) -> String {
         ""
     };
     format!("approvals: {mode}{yolo}; timeout {} s", config.timeout_secs)
+}
+
+/// `/egress [status] | allow <host> | deny <host> | mode <m>`: changes the
+/// session's egress policy in place (the system prompt and tool array stay
+/// as they are, so the prompt cache holds).
+fn egress(live: &Live, args: &str) -> Result<String, Error> {
+    let (action, value) = args.trim().split_once(' ').unwrap_or((args.trim(), ""));
+    if !matches!(action, "" | "status") {
+        crate::egress::Change::parse(action, value)?.apply(&live.egress.hosts);
+    }
+    Ok(crate::egress::describe(&live.egress.hosts))
 }
 
 fn yolo(live: &Live, args: &str) -> String {

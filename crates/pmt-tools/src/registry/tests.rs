@@ -223,3 +223,39 @@ fn members_list_tools_then_registered_then_includes() {
         ]
     );
 }
+
+fn mcp_server(registry: &mut ToolRegistry, server: &str, tool_name: &str) {
+    let owner = Owner::Mcp(server.into());
+    let toolset = format!("mcp-{server}");
+    registry
+        .register_toolsets(&owner, vec![Toolset::new(&toolset, "", &[])])
+        .unwrap();
+    registry
+        .register(tool(tool_name, &toolset, owner), &none())
+        .unwrap();
+}
+
+#[test]
+fn bare_server_name() {
+    let mut registry = ToolRegistry::new("default", builtins());
+    mcp_server(&mut registry, "github", "mcp__github__create_issue");
+    let enabled = vec!["core".to_owned(), "github".to_owned()];
+    let selection = crate::Selection::resolve(&registry, &enabled, &[]).unwrap();
+    assert!(selection.contains("mcp__github__create_issue"));
+    assert_eq!(selection.toolsets, ["core", "mcp-github"]);
+    let listed: Vec<&str> = registry.toolsets().map(|t| t.name.as_str()).collect();
+    assert!(listed.contains(&"mcp-github") && !listed.contains(&"github"));
+}
+
+#[test]
+fn colliding_server_name() {
+    let mut registry = ToolRegistry::new("default", builtins());
+    mcp_server(&mut registry, "memory", "mcp__memory__recall");
+    let selection = crate::Selection::resolve(&registry, &["memory".to_owned()], &[]).unwrap();
+    assert_eq!(selection.toolsets, ["memory"]);
+    assert!(!selection.contains("mcp__memory__recall"));
+    assert_eq!(
+        registry.canonical_toolset("memory").as_deref(),
+        Some("memory")
+    );
+}

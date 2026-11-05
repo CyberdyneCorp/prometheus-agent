@@ -194,8 +194,9 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     // Cloud browser providers are plugins (M2); M1 knows `local` only.
     pmt_tools::browser::validate_provider(&config.browser, &[])?;
     // Provider blocks and the fallback chain name registry entries
-    // (custom blocks need a base URL; chain entries a known provider).
-    let providers = pmt_providers::ProviderRegistry::for_profile(scope.config(), Vec::new())?;
+    // (custom blocks need a base URL; chain entries a known provider,
+    // plugin providers included).
+    let (providers, _) = crate::plugins_host::providers::registry(&scope, scope.config())?;
     pmt_providers::fallback::chain(scope.config(), &providers)?;
     // Model aliases name registry providers; reasoning overrides name
     // levels or tiers.

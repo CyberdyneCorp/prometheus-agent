@@ -109,13 +109,17 @@ impl Capture {
 
     /// Ends the capture: the shaped output and, when it was truncated and
     /// the full text could be written, the spill file path.
-    #[must_use]
-    pub fn finish(mut self, max_chars: usize, hooks: &[OutputHook], redactor: &Redactor) -> Shaped {
+    pub async fn finish(
+        mut self,
+        max_chars: usize,
+        hooks: &[OutputHook],
+        redactor: &Redactor,
+    ) -> Shaped {
         if let Some(raw) = self.raw.take() {
             drop(raw);
-            return self.finish_spilled(max_chars, hooks, redactor);
+            return self.finish_spilled(max_chars, hooks, redactor).await;
         }
-        let text = shape::clean(&String::from_utf8_lossy(&self.head), hooks, redactor);
+        let text = shape::clean(&String::from_utf8_lossy(&self.head), hooks, redactor).await;
         let (output, truncated) = shape::truncate(&text, max_chars);
         let full_output_path = (truncated && !self.lossy)
             .then(|| self.write_log(&text))
@@ -142,14 +146,14 @@ impl Capture {
         }
     }
 
-    fn finish_spilled(
+    async fn finish_spilled(
         &self,
         max_chars: usize,
         hooks: &[OutputHook],
         redactor: &Redactor,
     ) -> Shaped {
         let (raw, log) = (self.raw_path(), self.log_path());
-        let result = redact_file(&raw, &log, max_chars, hooks, redactor);
+        let result = redact_file(&raw, &log, max_chars, hooks, redactor).await;
         let _ = fs::remove_file(&raw);
         match result {
             Ok(view) => Shaped {
@@ -160,7 +164,8 @@ impl Capture {
             Err(err) => {
                 tracing::warn!("terminal output spill could not be redacted: {err}; dropping it");
                 let _ = fs::remove_file(&log);
-                let text = shape::clean(&String::from_utf8_lossy(&self.head), hooks, redactor);
+                let text =
+                    shape::clean(&String::from_utf8_lossy(&self.head), hooks, redactor).await;
                 Shaped {
                     output: shape::truncate(&text, max_chars).0,
                     truncated: true,
@@ -244,7 +249,7 @@ impl View {
 /// Writes `raw` cleaned (hooks, ANSI, redaction) to `log` chunk by chunk.
 /// Chunks end at a newline and never inside a PEM block, so redaction
 /// sees whole lines and whole keys.
-fn redact_file(
+async fn redact_file(
     raw: &Path,
     log: &Path,
     max_chars: usize,
@@ -262,7 +267,7 @@ fn redact_file(
         if !complete {
             continue;
         }
-        let text = shape::clean(&String::from_utf8_lossy(&chunk), hooks, redactor);
+        let text = shape::clean(&String::from_utf8_lossy(&chunk), hooks, redactor).await;
         out.write_all(text.as_bytes())?;
         view.push(&text);
         chunk.clear();
@@ -322,8 +327,8 @@ mod tests {
         Redactor::new([&secret])
     }
 
-    #[test]
-    fn huge_output_streams_to_a_redacted_private_file() {
+    #[tokio::test]
+    async fn huge_output_streams_to_a_redacted_private_file() {
         let temp = dir();
         let mut capture = Capture::new(temp.path());
         let line = "\u{1b}[32mok\u{1b}[0m hunter2-secret line\n";
@@ -332,7 +337,7 @@ mod tests {
             capture.push(line.as_bytes());
             sent += line.len();
         }
-        let shaped = capture.finish(1_000, &[], &redactor());
+        let shaped = capture.finish(1_000, &[], &redactor()).await;
         let path = shaped.full_output_path.expect("spilled");
         let full = fs::read_to_string(&path).unwrap();
         assert!(!full.contains("hunter2-secret") && !full.contains('\u{1b}'));
@@ -350,31 +355,34 @@ mod tests {
         assert_eq!(leftovers.len(), 1, "the raw file is removed");
     }
 
-    #[test]
-    fn an_unreadable_raw_spill_leaves_no_path_and_no_file() {
+    #[tokio::test]
+    async fn an_unreadable_raw_spill_leaves_no_path_and_no_file() {
         let temp = dir();
         let mut capture = Capture::new(temp.path());
         capture.push(&vec![b'x'; MEMORY_LIMIT + 10]);
         // The raw spill cannot be re-read for redaction.
         fs::remove_file(capture.raw_path()).unwrap();
         let log = capture.log_path();
-        let shaped = capture.finish(100, &[], &redactor());
+        let shaped = capture.finish(100, &[], &redactor()).await;
         assert_eq!(shaped.full_output_path, None);
         assert!(!log.exists());
         assert!(shaped.output.contains("OUTPUT TRUNCATED"));
     }
 
-    #[test]
-    fn small_truncated_output_is_written_whole() {
+    #[tokio::test]
+    async fn small_truncated_output_is_written_whole() {
         let temp = dir();
         let mut capture = Capture::new(temp.path());
         capture.push("a".repeat(300).as_bytes());
-        let shaped = capture.finish(100, &[], &redactor());
+        let shaped = capture.finish(100, &[], &redactor()).await;
         let full = fs::read_to_string(shaped.full_output_path.unwrap()).unwrap();
         assert_eq!(full.len(), 300);
         let mut short = Capture::new(temp.path());
         short.push(b"fits");
-        assert_eq!(short.finish(100, &[], &redactor()).full_output_path, None);
+        assert_eq!(
+            short.finish(100, &[], &redactor()).await.full_output_path,
+            None
+        );
     }
 
     #[test]

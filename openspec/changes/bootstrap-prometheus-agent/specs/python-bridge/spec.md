@@ -161,13 +161,18 @@ When a sidecar exits unexpectedly the host SHALL fail its in-flight calls with `
 - **THEN** the plugin SHALL be marked `failed`, no further restarts SHALL happen, and the session SHALL continue with its other tools
 
 ### Requirement: Resource limits
-Each sidecar SHALL be limited to `python_bridge.max_memory_bytes` (default 1073741824) of resident memory and `python_bridge.max_processes` (default 16) processes, using OS facilities (cgroups on Linux, Job Objects on Windows, rlimits on macOS), and exceeding a limit SHALL be handled as a crash with the status `resource limit exceeded (<limit>)`.
+Each sidecar's process tree SHALL be limited to `python_bridge.max_memory_bytes` (default 1073741824) of resident memory and `python_bridge.max_processes` (default 16) processes. The OS SHALL enforce what it can express: on Linux the sandbox SHALL set a data-segment rlimit of `max_memory_bytes` on the sidecar (inherited by its children) and make the sidecar the subreaper of its descendants so none leaves its tree; on Windows the sandbox's Job Object SHALL cap the tree's committed memory at `max_memory_bytes` and, with `subprocess` granted, its active processes at `max_processes`; macOS offers no usable equivalent (its address-space and data rlimits cannot be lowered below the shared-cache mapping and `RLIMIT_NPROC` counts every process of the user), so there the host's sampler is the bound. On every OS the host SHALL also sample the tree's summed resident memory and process count at least twice a second, remembering its members so that a descendant which left the sidecar's process group is terminated with the sidecar. An allocation the OS refuses and a sample over a limit SHALL both be handled as a crash with the status `resource limit exceeded (<limit>)`, and `prometheus doctor` SHALL report which mechanism enforces the limits on the host.
 **Milestone:** M2
 
 #### Scenario: Memory leak is bounded
 - **GIVEN** a plugin that allocates without bound
 - **WHEN** its resident memory exceeds 1024 MiB
 - **THEN** the sidecar SHALL be terminated and the crash reason SHALL name the memory limit
+
+#### Scenario: A child outside the process group is reaped
+- **GIVEN** a bridged plugin with `subprocess` granted whose child started its own session
+- **WHEN** the sidecar stops
+- **THEN** the child SHALL be terminated with it
 
 ### Requirement: Registrations follow plugin-system reload rules
 Registrations received from a sidecar SHALL be applied with the same rules as WASM plugins: tools and system-prompt sections join only sessions started afterwards, hooks and commands become active immediately, and a sidecar restart after a crash SHALL re-run `register` and SHALL NOT change the tool list or prompt of any session already in progress (a tool whose registration disappears after restart SHALL return `tool '<name>' is no longer provided by plugin '<id>'`).

@@ -1,9 +1,11 @@
-//! Per-turn memory recall on the wire only (spec: memory, Per-turn recall
-//! injection; agent-turn-loop, Request-time additions never touch history).
+//! Per-turn memory recall and plugin `pre_llm_call` context on the wire
+//! only (spec: memory, Per-turn recall injection; plugin-system,
+//! `pre_llm_call` context preserves the prompt cache; agent-turn-loop,
+//! Request-time additions never touch history).
 //!
-//! The recall block rides on this turn's user message in every request of
-//! the turn and is never stored: the stored row keeps only the user's
-//! text. The next turn therefore sends that message without the block, an
+//! The block (recall, then hook context) rides on this turn's user message
+//! in every request of the turn and is never stored: the stored row keeps
+//! only the user's text. The next turn therefore sends that message without the block, an
 //! expected change the cache-break check must not report, so the canonical
 //! prefix digests the message as stored.
 
@@ -63,6 +65,33 @@ impl Turn<'_> {
             entry_ids: recalled.entry_ids,
         }))
         .await;
+    }
+}
+
+impl Turn<'_> {
+    /// Appends the plugins' `pre_llm_call` context for this turn to the
+    /// block (after any recall).
+    pub(super) async fn hook_context(&mut self, text: &str, wire: &str) {
+        let Some(hooks) = self.agent.setup.turn_hooks.clone() else {
+            return;
+        };
+        let session = self.agent.setup.session.to_string();
+        let Some(context) = hooks.pre_llm_call(&session, text).await else {
+            return;
+        };
+        match &mut self.ephemeral {
+            Some(ephemeral) => {
+                ephemeral.block.push_str("\n\n");
+                ephemeral.block.push_str(&context);
+            }
+            None => {
+                self.ephemeral = Some(Ephemeral {
+                    wire: wire.to_owned(),
+                    block: context,
+                    index: None,
+                });
+            }
+        }
     }
 }
 

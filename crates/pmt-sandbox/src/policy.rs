@@ -19,6 +19,7 @@ use pmt_core::capability::{BASELINE, Capability, CapabilitySet};
 use pmt_core::error::Error;
 
 use crate::locations;
+use crate::relay::Relay;
 
 /// The directories a session's capabilities are written against.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +65,19 @@ impl Ports {
     }
 }
 
+/// Resource bounds of a confined process tree, enforced where the OS can:
+/// on Linux a data-segment rlimit per process (and the child becomes the
+/// subreaper of its descendants, so none leaves its tree), on Windows the
+/// Job Object's committed-memory and active-process limits for the whole
+/// tree. macOS has no usable equivalent; callers sample there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResourceLimits {
+    /// Memory bound in bytes.
+    pub memory_bytes: u64,
+    /// Most processes in the tree.
+    pub processes: u32,
+}
+
 /// What the OS sandbox enforces for one child.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
@@ -73,8 +87,13 @@ pub struct Policy {
     pub(crate) connect: Ports,
     pub(crate) bind: Ports,
     pub(crate) host_patterns: bool,
+    /// Outbound connections only to loopback (the egress proxy).
+    pub(crate) loopback_connect: bool,
+    /// Serves a proxied child's private listener (Linux).
+    pub(crate) relay: Option<Relay>,
     pub(crate) spawn: bool,
     pub(crate) unrepresentable: Vec<String>,
+    pub(crate) limits: Option<ResourceLimits>,
 }
 
 impl Policy {
@@ -101,8 +120,11 @@ impl Policy {
             connect: Ports::none(),
             bind: Ports::none(),
             host_patterns: false,
+            loopback_connect: false,
+            relay: None,
             spawn: false,
             unrepresentable: Vec::new(),
+            limits: None,
         };
         for capability in capabilities {
             policy.apply(capability, paths);
@@ -138,7 +160,8 @@ impl Policy {
             | Capability::ToolsCall(_)
             | Capability::ToolsOverride(_)
             | Capability::Ui(_)
-            | Capability::BrowserRealProfile => {}
+            | Capability::BrowserRealProfile
+            | Capability::Plugin { .. } => {}
         }
     }
 
@@ -204,10 +227,69 @@ impl Policy {
         self.host_patterns
     }
 
+    /// Routes the child's network through the loopback egress proxy on
+    /// `port`: when the child may connect anywhere at all, it may connect
+    /// only to that port on loopback and the proxy enforces the host
+    /// policy. macOS expresses "loopback only" in the Seatbelt profile;
+    /// Linux gives the child its own network namespace whose listener
+    /// `relay` hands to the proxy; Windows runs a relay process inside the
+    /// child's `AppContainer` (see [`crate::relay`]). A child without
+    /// network stays without.
+    #[must_use]
+    pub fn through_proxy(mut self, port: u16, relay: Relay) -> Self {
+        if self.connects() {
+            self.connect = Ports::Only(std::iter::once(port).collect());
+            self.host_patterns = false;
+            self.loopback_connect = true;
+            self.relay = Some(relay);
+        }
+        self
+    }
+
+    /// The relay of a proxied child.
+    #[cfg_attr(not(any(target_os = "linux", windows)), allow(dead_code))]
+    pub(crate) fn relay(&self) -> Option<&Relay> {
+        self.relay.as_ref()
+    }
+
+    /// The egress proxy's port, when the child goes through one.
+    #[must_use]
+    pub fn proxy_port(&self) -> Option<u16> {
+        match &self.connect {
+            Ports::Only(ports) if self.loopback_connect => ports.first().copied(),
+            _ => None,
+        }
+    }
+
+    /// Whether the child may open any outbound connection.
+    #[must_use]
+    pub fn connects(&self) -> bool {
+        !matches!(&self.connect, Ports::Only(ports) if ports.is_empty())
+    }
+
+    /// Whether outbound connections are confined to loopback.
+    #[must_use]
+    pub fn loopback_connect(&self) -> bool {
+        self.loopback_connect
+    }
+
     /// Whether the child may start further processes.
     #[must_use]
     pub fn may_spawn(&self) -> bool {
         self.spawn
+    }
+
+    /// The policy with `limits` on the child's tree.
+    #[must_use]
+    pub fn with_limits(mut self, limits: ResourceLimits) -> Self {
+        self.limits = Some(limits);
+        self
+    }
+
+    /// The resource bounds, if any.
+    #[must_use]
+    pub fn limits(&self) -> Option<ResourceLimits> {
+        self.limits
     }
 
     /// Patterns dropped because the OS cannot express them.

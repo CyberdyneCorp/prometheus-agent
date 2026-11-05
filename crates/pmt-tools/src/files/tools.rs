@@ -15,6 +15,7 @@ use crate::descriptor::{
 };
 use crate::environments::{Environments, part};
 use crate::result::ToolResult;
+use crate::variants::{ModelFamily, OCR, RouteTraits, SchemaVariant};
 
 /// The toolset of every file tool.
 pub const TOOLSET: &str = "file";
@@ -50,14 +51,16 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
         RegisteredTool::new(descriptor, Owner::Builtin, handler)
     };
     vec![
-        entry(read_file(), |files, args| files.read_file(&read_args(args))),
+        entry(read_file(), |files, args| files.read_file(&read_args(args)))
+            .with_variants(Arc::new(read_file_variant)),
         entry(write_file(), |files, args| {
             files.write_file(text(args, "path"), text(args, "content"))
         }),
         entry(patch(), |files, args| match PatchArgs::from_value(args) {
             Ok(patch) => files.patch(&patch),
             Err(why) => ToolResult::error(why),
-        }),
+        })
+        .with_variants(Arc::new(patch_variant)),
         entry(search_files(), |files, args| {
             files.search_files(&SearchArgs::from_value(args))
         }),
@@ -114,6 +117,22 @@ fn read_file() -> ToolDescriptor {
     d
 }
 
+/// `read_file` mentions scanned PDF pages only when hosted OCR is
+/// reachable.
+fn read_file_variant(route: &RouteTraits) -> SchemaVariant {
+    if !route.auxiliary.contains(OCR) {
+        return SchemaVariant::base("text");
+    }
+    SchemaVariant {
+        name: "scanned_pdf",
+        description: Some(format!(
+            "{} PDF pages without a text layer are read with hosted OCR.",
+            read_file().description
+        )),
+        parameters: None,
+    }
+}
+
 fn write_file() -> ToolDescriptor {
     let mut d = descriptor(
         "write_file",
@@ -166,6 +185,35 @@ fn patch() -> ToolDescriptor {
         PathClaim::PatchText("/patch".into()),
     ]));
     d
+}
+
+/// `patch` advertises its V4A `mode`/`patch` arguments only to OpenAI-family
+/// models (trained on that format); other routes see the replace-only
+/// schema. The handler accepts both shapes either way.
+fn patch_variant(route: &RouteTraits) -> SchemaVariant {
+    if route.family == ModelFamily::OpenAi {
+        return SchemaVariant::base("v4a");
+    }
+    SchemaVariant {
+        name: "replace",
+        description: Some(
+            "Edit a file: replace old_string with new_string in path; old_string must match \
+             exactly one location unless replace_all=true (whitespace and quote differences \
+             are tolerated). The result has a unified diff and a syntax check (lint)."
+                .to_owned(),
+        ),
+        parameters: Some(json!({
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "The file to edit."},
+                "old_string": {"type": "string", "description": "The text to find."},
+                "new_string": {"type": "string", "description": "Its replacement."},
+                "replace_all": {"type": "boolean", "description": "Replace every match (default false)."}
+            },
+            "required": ["path", "old_string", "new_string"],
+            "additionalProperties": false
+        })),
+    }
 }
 
 fn search_files() -> ToolDescriptor {

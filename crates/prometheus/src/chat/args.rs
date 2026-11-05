@@ -31,6 +31,36 @@ impl ApprovalsFlag {
     }
 }
 
+/// Egress modes `--egress` accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum EgressFlag {
+    /// Any public host; private and metadata ranges denied.
+    Public,
+    /// Only `security.egress.allow` and `--allow-host` patterns.
+    Allowlist,
+    /// No outbound connections.
+    None,
+}
+
+impl EgressFlag {
+    /// The configured mode it stands for.
+    #[must_use]
+    pub fn mode(self) -> pmt_config::schema::EgressMode {
+        use pmt_config::schema::EgressMode;
+        match self {
+            Self::Public => EgressMode::Public,
+            Self::Allowlist => EgressMode::Allowlist,
+            Self::None => EgressMode::None,
+        }
+    }
+
+    /// The configuration spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.mode().as_str()
+    }
+}
+
 /// `prometheus chat` arguments (also accepted without the subcommand).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 #[allow(clippy::struct_excessive_bools)] // independent switches of one command line
@@ -73,6 +103,14 @@ pub struct ChatArgs {
     /// hardline blocks still apply).
     #[arg(long)]
     pub yolo: bool,
+    /// Network egress of this session: any public host, only allowed
+    /// hosts, or none (`security.egress.mode` otherwise).
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub egress: Option<EgressFlag>,
+    /// Admit this host pattern (`host`, `host:port`, `*.suffix`) in this
+    /// session, in addition to `security.egress.allow` (repeatable).
+    #[arg(long, value_name = "PATTERN", action = ArgAction::Append)]
+    pub allow_host: Vec<String>,
     /// Model calls allowed per turn.
     #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
     pub max_iterations: Option<u32>,
@@ -112,6 +150,9 @@ pub struct ChatArgs {
     /// file, the memory snapshot and preloaded skills.
     #[arg(long)]
     pub ignore_rules: bool,
+    /// The global `--safe-mode` (set from the top-level flag).
+    #[arg(skip)]
+    pub safe_mode: bool,
     /// Write this run's usage as JSON to PATH when it ends, whatever the
     /// outcome.
     #[arg(long, value_name = "PATH")]
@@ -177,17 +218,65 @@ impl ChatArgs {
         )
     }
 
+    /// `--ignore-user-config`, or `--safe-mode`, which implies it.
+    #[must_use]
+    pub fn ignores_user_config(&self) -> bool {
+        self.ignore_user_config || self.safe_mode
+    }
+
+    /// `--ignore-rules`, or `--safe-mode`, which implies it.
+    #[must_use]
+    pub fn ignores_rules(&self) -> bool {
+        self.ignore_rules || self.safe_mode
+    }
+
+    /// Runs in this process: `--in-process`, or `--safe-mode`, which never
+    /// hands a turn to a daemon that read the profile's configuration.
+    #[must_use]
+    pub fn runs_in_process(&self) -> bool {
+        self.in_process || self.safe_mode
+    }
+
+    /// `--safe-mode` without `--model` and `--provider`: no route can be
+    /// read from a profile it does not read (spec: plugin-system, Safe
+    /// mode).
+    ///
+    /// # Errors
+    ///
+    /// `model.not_configured` (exit 78).
+    pub fn check_safe_mode(&self) -> Result<(), Error> {
+        if self.safe_mode && (self.model.is_none() || self.provider.is_none()) {
+            return Err(Error::new(
+                &codes::MODEL_NOT_CONFIGURED,
+                "--safe-mode reads no profile default model: launch with --model <m> --provider <p>",
+            ));
+        }
+        Ok(())
+    }
+
+    /// `--egress` and `--allow-host`.
+    #[must_use]
+    pub fn egress_overrides(&self) -> crate::egress::Overrides {
+        crate::egress::Overrides {
+            mode: self.egress.map(EgressFlag::mode),
+            allow: self.allow_host.clone(),
+        }
+    }
+
     /// The configuration overrides these flags stand for, as `key=value`.
     #[must_use]
     pub fn overrides(&self) -> Vec<String> {
         let mut set = Vec::new();
+        if self.safe_mode {
+            set.push("plugins.safe_mode=true".to_owned());
+        }
         if let Some(mode) = self.approvals {
             set.push(format!("approvals.mode={}", mode.as_str()));
         }
         if let Some(n) = self.max_iterations {
             set.push(format!("agent.max_iterations={n}"));
         }
-        if self.ignore_rules {
+        if self.ignores_rules() {
             set.push("prompt.load_identity=false".to_owned());
         }
         if !self.toolsets.is_empty() {

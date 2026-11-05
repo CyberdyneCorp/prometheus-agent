@@ -43,6 +43,74 @@ $ prometheus config validate
 <...>config.toml is valid
 ```
 
+## Toolsets per surface
+
+Each kind of session starts from its own surface's toolsets:
+`toolsets.surfaces.<surface>` when set, otherwise `tools.enabled_toolsets`
+where `core` stands for the surface's built-in default:
+
+| Surface | Key | Built-in default |
+|---|---|---|
+| line chat and one-shot runs | `cli` | `core` |
+| terminal UI | `tui` | `core` |
+| desktop app | `desktop` | `core` |
+| scheduled jobs | `cron` | `core` |
+| API server | `api` | `api_server` (`core` without [`text_to_speech`](../reference/tools.md#text_to_speech), [`clarify`](../reference/tools.md#clarify), [`computer_use`](../reference/tools.md#computer_use)) |
+| ACP editors | `acp`, `acp_unattended` | `acp` (the `coding` tools), `acp_unattended` (no shell or code execution) |
+| a messaging platform | `gateway.<platform>` | `platform-<platform>` |
+| webhook-triggered runs | `gateway.webhook` | `webhook-safe` |
+
+```toml
+[toolsets.surfaces]
+cron = ["web", "file"]
+
+[toolsets.surfaces.gateway]
+telegram = ["platform-telegram", "x_search"]
+```
+
+`tools.disabled_toolsets` is still subtracted last on every surface. A
+webhook-triggered run never falls back to `tools.enabled_toolsets`: its
+payload comes from outside, so it gets `webhook-safe` ([`web_search`](../reference/tools.md#web_search),
+[`web_extract`](../reference/tools.md#web_extract), [`vision_analyze`](../reference/tools.md#vision_analyze), [`clarify`](../reference/tools.md#clarify)) unless
+`toolsets.surfaces.gateway.webhook` or the route names toolsets. An unknown
+surface key fails validation with exit 78.
+
+Every messaging platform has a bundle `platform-<platform>`: `core` plus
+that platform's own tools (`discord` for Discord, `feishu_doc` and
+`feishu_drive` for Feishu, a plugin platform's toolset named after it), so
+platform tools appear only in that platform's chats; `discord_admin` is
+never in a bundle and is enabled by naming it. `gateway` is every bundle.
+Disabling a toolset built on `core` (a bundle, `gateway`, `api_server`)
+removes only its tools outside `core`: `disabled_toolsets =
+["platform-discord"]` drops the Discord tools and keeps
+[`terminal`](../reference/tools.md#terminal).
+Disabling `core` itself or a single-purpose toolset removes all of its
+tools. A toolset an enabled plugin registers joins every session except
+webhook-triggered runs; one named after a messaging platform joins only
+that platform's sessions, through its bundle.
+
+`prometheus tools summary` prints, per surface, the toolsets its sessions
+start from, the provider of each tool category they use and every selected
+tool that is not available, with its reason (`--json` for a document).
+`prometheus tools post-setup <toolset>` runs the setup a toolset still
+needs: for `browser` (or a toolset including it, such as `core`) it
+installs the pinned browser engine (and the Python that
+[`browser_exec`](../reference/tools.md#browser_exec) runs, when the host has none) from the managed runtime store after asking,
+with the same digest checks as `prometheus runtimes install`; without a
+terminal it needs `--yes` and otherwise exits 4. For web search it points to
+the backend to configure. `prometheus tools configure` offers the install
+when you enable a toolset whose runtime is missing.
+
+```console
+$ prometheus tools summary
+cli: toolsets core, x_search
+gateway.webhook: toolsets webhook-safe
+$ prometheus tools post-setup file
+toolset file: setup complete
+$ prometheus tools post-setup fiel   # exits 2
+error: unknown toolset 'fiel' (did you mean 'file'?)
+```
+
 The [tools reference](../reference/tools.md) lists every shipped toolset
 and tool name. To see them in your profile:
 
@@ -64,7 +132,10 @@ each `exposed` or with the reason it would not be. `tools list` prints every
 registered tool with its toolset and the same verdict, and `tools explain
 <name>` its schema, owner, capabilities, `effect`, `idempotent`, resource
 claims, timeout, result budget, the active approval mode and the approval
-rules that apply to its calls. `tools list --session <id>` prints the
+rules that apply to its calls. Like a new session, these listings (and
+`prometheus prompt size`) include the tools of enabled plugins and of
+configured MCP servers (as their servers last listed them), with those
+toolsets selected. `tools list --session <id>` prints the
 surface that session froze when it built it (its id, an id prefix or its
 title), so later config, grant or runtime changes do not hide what the
 session was given; a session that never built a surface exits 66
@@ -90,6 +161,15 @@ The tool list is fixed when a session starts and sent unchanged on every
 model call, which keeps the provider's prompt cache valid. Toolset, plugin,
 credential and config changes apply from the next session (or a compaction
 or explicit `--now` reload).
+
+Some tools describe themselves differently for different models, chosen
+from the session's main route when the list is fixed: [`patch`](../reference/tools.md#patch) offers its
+V4A multi-file mode (`mode = "v4a"` with the patch text) only to OpenAI-family models
+(GPT, o-series, Codex) and the replace-only form to others, and
+[`read_file`](../reference/tools.md#read_file) mentions scanned PDF pages only when hosted OCR is reachable.
+Switching models with `/model` keeps the variant until the next session
+(or a `--now` rebuild), and a tool accepts the arguments of every variant,
+so a resumed session's earlier V4A call still runs.
 
 ## How a call runs
 
@@ -186,19 +266,34 @@ approval gate first, always in this order:
    writes to raw disks, fork bombs, `kill -1`, shutdown and reboot, and
    deleting Prometheus itself or its home. The model gets
    `BLOCKED (hardline): <reason>`.
-2. **Your deny rules are blocked** the same way: `approvals.deny` holds
+2. **Stopping the daemon is blocked** in sessions the gateway daemon hosts
+   (messaging chats, attached TUI and desktop sessions), in every mode
+   including yolo: `prometheus daemon|gateway stop|restart`, `systemctl
+   stop|restart|kill` of `prometheus-daemon.service`, `launchctl
+   bootout|kill` of `ai.prometheus.daemon`, `schtasks /End` of
+   `Prometheus Daemon`, and `kill`, `pkill`, `killall` or `taskkill` aimed
+   at the `prometheus` executable or the daemon's pid. Indirect routes
+   count too: pids from `pgrep`/`pidof`/`grep` lookups or from the
+   daemon's `run/` records reaching `kill` through `$(...)`, a variable
+   or `xargs`, and code
+   ([`execute_code`](../reference/tools.md#execute_code), `python3 -c`)
+   whose strings are such commands or that calls `os.kill` on the
+   daemon's pid or the parent process. The model gets
+   `BLOCKED (self-termination): <reason>`. Killing the session's own
+   background processes, or any other pid, goes on through the gate.
+3. **Your deny rules are blocked** the same way: `approvals.deny` holds
    command globs (`*` any text, `?` one character) matched against the
    whole command and each command in it (`BLOCKED (deny rule '<rule>')`).
-3. **`approvals.mode = "off"`** (or `--yolo`, or `/yolo` for one session)
+4. **`approvals.mode = "off"`** (or `--yolo`, or `/yolo` for one session)
    runs everything else without asking; the status line shows `YOLO`.
-4. **Allow rules** in `grants.toml` (`[approvals] allow = [...]`) run
+5. **Allow rules** in `grants.toml` (`[approvals] allow = [...]`) run
    without asking; a command line is allowed when every command in it,
    nested `$(...)` ones included, matches a rule. A command is matched
    with its output redirections, so `echo hi` never covers
    `echo hi > ~/.bashrc`, and `git status*` never covers
    `git status; curl x | sh`. A rule without wildcards (an `always`
    answer) also covers exactly the line it was given for.
-5. **Dangerous commands ask**: recursive deletes, `git reset --hard`,
+6. **Dangerous commands ask**: recursive deletes, `git reset --hard`,
    force pushes, `chmod -R`, `sudo`, a download piped into a shell,
    destructive SQL and similar, plus two content checks: a `curl`/`wget`
    request body or upload that sends a secret-named variable (`$..._KEY`,
@@ -209,7 +304,15 @@ approval gate first, always in this order:
 
 You answer a prompt with `once`, `session` (until the session ends),
 `always` (added to `[approvals].allow` in `grants.toml`; an entry you delete
-by hand is never written back) or `deny`. No answer within
+by hand is never written back) or `deny`, or ask for `explain` first: the
+prompt comes back with the parsed command (programs, arguments,
+redirections, pipelines), the rule that asked, the absolute paths and
+expanded globs it would touch and, for commands with a dry-run form (`rm`
+lists what its operands match, `git clean -n`, `git status --short` and
+`git diff --stat` for `git reset --hard`, `rsync --dry-run`, `terraform
+plan`, `kubectl … --dry-run=server`), that preview's output run under a
+sandbox that may neither write nor connect. Nothing of the command runs
+until you decide. No answer within
 `approvals.timeout_secs` (300 s), a closed interface or a session without
 any way to ask all mean deny, and the model is told not to retry.
 
@@ -217,8 +320,16 @@ Cron jobs, `chat -z` runs and webhook/API sessions never wait: they answer
 from `approvals.cron_mode`, `approvals.single_query_mode` and
 `approvals.unattended_mode` (`deny` by default, or `approve`); a denial
 says which key to set. These are strings: `cron_mode = false` is a
-configuration error (exit 78). `smart` mode asks like `manual` until the
-guardian model arrives.
+configuration error (exit 78).
+
+With `approvals.mode = "smart"` the auxiliary `approval` model
+(`[auxiliary.approval]`, else the session's model) judges a flagged call
+first: `approve` runs it, `deny` refuses it, and anything else, an error or
+its timeout asks you as `manual` does. After
+`approvals.denial_breaker_threshold` (3; `0` disables) guardian denials in
+a row the denial adds `CIRCUIT BREAKER: <n> consecutive commands were
+blocked. STOP attempting variations of this operation.`; any approval
+resets the count.
 
 Writes to protected instruction files (`AGENTS.md`, `CLAUDE.md`, ...) ask
 every time, in every mode including `off`, and a plugin rule that escalates
@@ -236,6 +347,45 @@ nothing was executed
 $ prometheus approvals test --context cron -- git reset --hard
 ```
 
-The verdict is one of `hardline`, `deny rule`, `bypass`, `allowlisted`,
-`would prompt` or `allowed`; the command always exits 0, or 2 when the
-command line cannot be read (an unterminated quote).
+The verdict is one of `hardline`, `self-termination` (as a daemon-hosted
+session would see it), `deny rule`, `bypass`, `allowlisted`, `would
+prompt` or `allowed`; the command always exits 0, or 2 when the command
+line cannot be read (an unterminated quote).
+
+Turn what you keep approving into allow rules:
+
+```console
+$ prometheus approvals suggest
+no proposals: no command was approved often enough in the last 90 days
+```
+
+After you have approved `cargo test -p core` a few times it lists:
+
+```text
+1. cargo test *  (5 approvals; e.g. cargo test -p core)
+nothing changed; add proposals with --apply <n,...>
+```
+
+It reads the approvals (`once`, `session`, `always`, by you, a plugin
+transport or the smart guardian) recorded in the security audit log over
+the last `--days` (90) days, generalizes each command to its program and
+subcommand (`cargo test -p core` becomes `cargo test *`; pipelines,
+`&&` chains and redirections stay exact), and lists up to `--limit` (20)
+patterns approved at least `--min-count` (2) times, leaving out hardline
+commands, patterns covering a command you denied and patterns you already
+allow. Nothing changes without `--apply <n,...>`, which merges the chosen
+proposals into `[approvals].allow` like an `always` answer; an unknown
+number exits 2.
+
+## Where results come from
+
+Every tool result carries a provenance record `{source, trust}`, stored
+with the message: results from the web, the browser, command output,
+vision, messaging, MCP servers (`mcp:<server>`), plugins (`plugin:<id>`),
+connectors and files read outside the session's workspace are
+`untrusted`; Prometheus' own tools and files inside the workspace are
+`trusted`. Untrusted text reaches the model inside
+`<untrusted-content source="…" id="<nonce>">…</untrusted-content>`, the
+session's nonce declared once in its system prompt, and any delimiter text
+inside the content is escaped so a page cannot close its block and smuggle
+instructions after it.

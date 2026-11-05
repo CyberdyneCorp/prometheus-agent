@@ -106,6 +106,68 @@ fn the_text_report_and_its_errors() {
     assert_ne!(out.status.code(), Some(0));
 }
 
+/// The tool names `prompt size` reports, sorted.
+fn tools(home: &Path, extra: &[&str]) -> Vec<String> {
+    let mut argv = vec!["prompt", "size", "--json"];
+    argv.extend_from_slice(extra);
+    let doc: Value = serde_json::from_str(&ok(&run(home, &argv))).unwrap();
+    let mut names: Vec<String> = doc["toolsets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|set| set["tools"].as_array().unwrap().clone())
+        .map(|t| t.as_str().unwrap().to_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_surface_reports_the_toolsets_a_new_session_there_starts_with() {
+    let home = temp_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "toolsets.surfaces.cron", r#"["file"]"#],
+    ));
+    let file = tools(home.path(), &["--toolsets", "file"]);
+    assert!(!file.is_empty());
+    let cron = tools(home.path(), &["--platform", "cron"]);
+    assert_eq!(cron, file);
+    assert!(!cron.contains(&"terminal".to_owned()), "{cron:?}");
+
+    let safe = tools(home.path(), &["--toolsets", "webhook-safe"]);
+    let webhook = tools(home.path(), &["--platform", "webhook"]);
+    assert!(!safe.is_empty());
+    assert_eq!(webhook, safe);
+    assert!(!webhook.contains(&"terminal".to_owned()), "{webhook:?}");
+}
+
+#[test]
+fn the_tool_schemas_are_the_variants_the_model_would_get() {
+    let home = temp_home();
+    let file_bytes = |model: &str| {
+        let out = ok(&run(
+            home.path(),
+            &[
+                "prompt",
+                "size",
+                "--toolsets",
+                "file",
+                "--model",
+                model,
+                "--json",
+            ],
+        ));
+        let doc: Value = serde_json::from_str(&out).unwrap();
+        let sets = doc["toolsets"].as_array().unwrap();
+        let file = sets.iter().find(|s| s["toolset"] == "file").unwrap();
+        file["bytes"].as_u64().unwrap()
+    };
+    let openai = file_bytes("openai/gpt-5");
+    let anthropic = file_bytes("anthropic/claude-sonnet-4");
+    assert!(openai > anthropic, "{openai} vs {anthropic}");
+}
+
 fn scope(root: &Path) -> ProfileScope {
     let home = Home::open(root).unwrap();
     let profile = home.profile(&ProfileName::default_profile()).unwrap();

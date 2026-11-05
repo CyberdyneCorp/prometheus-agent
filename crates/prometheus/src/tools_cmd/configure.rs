@@ -7,7 +7,7 @@
 
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
-use pmt_tools::ToolRegistry;
+use pmt_tools::{SessionSurface, ToolRegistry};
 
 use crate::context::Context;
 use crate::output::print;
@@ -15,7 +15,7 @@ use crate::setup_cmd::{Wizard, write_changed};
 
 /// Surfaces a toolset selection can be saved for (`gateway.<platform>`
 /// too).
-pub const SURFACES: &[&str] = &["cli", "tui", "cron", "acp"];
+pub const SURFACES: &[&str] = pmt_config::schema::SurfaceToolsets::KEYS;
 
 /// A provider-backed tool category.
 #[derive(Debug, Clone, Copy)]
@@ -124,22 +124,20 @@ pub fn check_provider(category: &Category, provider: &str) -> Result<&'static st
 /// # Errors
 ///
 /// `tools.unknown_provider` (78) listing the surfaces.
-pub fn check_surface(surface: &str) -> Result<(), Error> {
-    let gateway = surface.strip_prefix("gateway.").is_some_and(|p| {
-        !p.is_empty()
-            && p.chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    });
-    if SURFACES.contains(&surface) || gateway {
-        return Ok(());
-    }
-    Err(Error::new(
-        &codes::TOOLS_UNKNOWN_PROVIDER,
-        format!(
-            "unknown surface '{surface}'; surfaces: {}, gateway.<platform>",
-            SURFACES.join(", ")
-        ),
-    ))
+pub fn check_surface(surface: &str) -> Result<SessionSurface, Error> {
+    let known = |parsed: &SessionSurface| match parsed {
+        SessionSurface::Gateway(platform) => pmt_config::platforms::is_known(platform),
+        _ => true,
+    };
+    SessionSurface::parse(surface).filter(known).ok_or_else(|| {
+        Error::new(
+            &codes::TOOLS_UNKNOWN_PROVIDER,
+            format!(
+                "unknown surface '{surface}'; surfaces: {}, gateway.<platform>",
+                SURFACES.join(", ")
+            ),
+        )
+    })
 }
 
 /// Saves a toolset change for the next sessions: `tools.disabled_toolsets`
@@ -174,13 +172,19 @@ pub fn persist_toolset(scope: &ProfileScope, toolset: &str, enable: bool) -> Res
     ])
 }
 
-/// The toolsets `surface` gets: its saved list, else the profile's.
-fn surface_toolsets(scope: &ProfileScope, surface: Option<&str>) -> Vec<String> {
+/// The toolsets `surface` starts from: its saved list, else the
+/// profile's with `core` standing for the surface's default; without a
+/// surface, the profile-wide list.
+fn surface_toolsets(
+    scope: &ProfileScope,
+    registry: &ToolRegistry,
+    surface: Option<&SessionSurface>,
+) -> Vec<String> {
     let config = scope.config();
-    surface
-        .and_then(|s| config.toolsets.surfaces.get(s))
-        .unwrap_or(&config.tools.enabled_toolsets)
-        .clone()
+    match surface {
+        Some(surface) => surface.starting_toolsets(registry, &config.tools, &config.toolsets),
+        None => config.tools.enabled_toolsets.clone(),
+    }
 }
 
 fn toml_list(names: &[String]) -> String {
@@ -214,15 +218,18 @@ pub fn set_toolset(
     let Some(surface) = surface else {
         return persist_toolset(scope, toolset, enable);
     };
-    check_surface(surface)?;
-    let mut list = surface_toolsets(scope, Some(surface));
+    let parsed = check_surface(surface)?;
+    let mut list = surface_toolsets(scope, registry, Some(&parsed));
     list.retain(|t| t != toolset);
     if enable {
         list.push(toolset.to_owned());
     }
     write_changed(
         scope,
-        &[(&format!("toolsets.surfaces.{surface}"), toml_list(&list))],
+        &[(
+            &format!("toolsets.surfaces.{}", parsed.key()),
+            toml_list(&list),
+        )],
     )
     .map(drop)
 }
@@ -273,30 +280,29 @@ pub(crate) fn interactive(
     surface: Option<&str>,
     wizard: &mut Wizard<'_>,
 ) -> Result<(), Error> {
-    if let Some(surface) = surface {
-        check_surface(surface)?;
-    }
-    toggle_toolsets(ctx, surface, wizard)?;
+    let parsed = surface.map(check_surface).transpose()?;
+    toggle_toolsets(ctx, parsed.as_ref(), wizard)?;
     choose_providers(ctx, wizard)?;
     wizard.say("tool settings apply from the next session")
 }
 
 fn toggle_toolsets(
     ctx: &Context<'_>,
-    surface: Option<&str>,
+    surface: Option<&SessionSurface>,
     wizard: &mut Wizard<'_>,
 ) -> Result<(), Error> {
     let scope = ctx.scope()?;
     let registry = super::registry(&scope)?;
-    let enabled = surface_toolsets(&scope, surface);
+    let enabled = surface_toolsets(&scope, &registry, surface);
     let toolsets: Vec<String> = registry
         .toolsets()
         .filter(|t| !t.posture)
         .map(|t| t.name.clone())
         .collect();
+    let key = surface.map(SessionSurface::key);
     wizard.say(&format!(
         "Toolsets for {}:",
-        surface.unwrap_or("every surface")
+        key.as_deref().unwrap_or("every surface")
     ))?;
     for (n, name) in toolsets.iter().enumerate() {
         let mark = if enabled.contains(name) { "on " } else { "off" };
@@ -311,9 +317,39 @@ fn toggle_toolsets(
             wizard.say(&format!("no toolset '{answer}'"))?;
             continue;
         };
-        let now = surface_toolsets(&ctx.scope()?, surface).contains(name);
-        set_toolset(&ctx.scope()?, &registry, name, !now, surface)?;
+        let now = surface_toolsets(&ctx.scope()?, &registry, surface).contains(name);
+        set_toolset(&ctx.scope()?, &registry, name, !now, key.as_deref())?;
         wizard.say(&format!("{name}: {}", if now { "off" } else { "on" }))?;
+        if !now {
+            offer_post_setup(ctx, &registry, name, wizard)?;
+        }
+    }
+    Ok(())
+}
+
+/// Offers the post-setup of a toolset just enabled whose setup is
+/// incomplete (spec: tool-system, Tool configuration summary and
+/// post-setup): each missing step is shown, and when a runtime is to be
+/// installed the answer is the install's confirmation. A missing backend
+/// is only pointed to (the provider questions follow).
+fn offer_post_setup(
+    ctx: &Context<'_>,
+    registry: &ToolRegistry,
+    toolset: &str,
+    wizard: &mut Wizard<'_>,
+) -> Result<(), Error> {
+    let survey = super::setup::survey(ctx, registry, toolset)?;
+    for step in &survey.steps {
+        wizard.say(&format!(
+            "{toolset} needs setup: {}",
+            step.describe(&survey.store)
+        ))?;
+    }
+    if super::setup::runtimes(&survey.steps).is_empty() {
+        return Ok(());
+    }
+    if wizard.confirm(&format!("run post-setup for {toolset} now?"), false)? {
+        super::setup::post_setup(ctx, toolset, &super::setup::Consent::Given)?;
     }
     Ok(())
 }

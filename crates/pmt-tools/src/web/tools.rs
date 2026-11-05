@@ -40,7 +40,16 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
         Arc::new(FnProbe::new(
             id,
             move |context: crate::probe::ProbeContext<'_>| {
-                resolve(&context.config.web, capability, context.has_secret).map(|_| ())
+                let web = &context.config.web;
+                let id = super::select::configured(web, capability);
+                // An id this build does not implement may name a plugin's
+                // provider, which only the session knows: the tool is
+                // offered and a call answers `<category> provider '<id>'
+                // is not installed or not enabled` when nothing provides it.
+                if id != "auto" && !super::BACKENDS.contains(&id) {
+                    return Ok(());
+                }
+                resolve(web, capability, context.has_secret).map(|_| ())
             },
         ))
     };

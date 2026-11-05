@@ -178,7 +178,7 @@ fn list_models(ctx: &Context<'_>, models: &Models, chosen: &[&Provider]) -> Resu
         .and_then(|p| models.registry.canonical(p));
     let mut rows = Vec::new();
     for provider in chosen {
-        for model in models.catalog.picker_models(provider) {
+        for model in models.model_ids(provider) {
             let (meta, _) = models
                 .catalog
                 .metadata_at(provider.id(), &model, provider.base_url());

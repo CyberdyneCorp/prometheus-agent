@@ -18,7 +18,7 @@ use pmt_core::error::{Error, codes};
 
 use crate::descriptor::{self, Owner, RegisteredTool};
 use crate::probe::SecretPresence;
-use crate::toolset::{self, Toolset, Toolsets};
+use crate::toolset::{self, Composition, Toolset, Toolsets};
 
 /// The built-in tools and toolsets, shared by every profile.
 #[derive(Debug, Clone)]
@@ -172,6 +172,21 @@ impl ToolRegistry {
         self.toolsets
             .get(name)
             .or_else(|| self.builtins.toolsets.get(name))
+    }
+
+    /// The toolset a name means: the toolset of that name, else the
+    /// toolset `mcp-<name>` of MCP server `name` (its bare name is an
+    /// alias; a built-in or plugin toolset of the same name wins). Aliases
+    /// are never listed as toolsets of their own.
+    #[must_use]
+    pub fn canonical_toolset(&self, name: &str) -> Option<String> {
+        if self.toolset(name).is_some() {
+            return Some(name.to_owned());
+        }
+        let aliased = format!("mcp-{name}");
+        self.toolset(&aliased)
+            .filter(|t| t.owner == Owner::Mcp(name.to_owned()))
+            .map(|_| aliased)
     }
 
     /// Every toolset of this profile, by name.
@@ -345,18 +360,54 @@ impl ToolRegistry {
     }
 
     /// The members of toolset `name`: listed tools, then tools registered
-    /// under it, then the members of its includes; first occurrence wins.
+    /// under it, then the members of its includes (a platform bundle's
+    /// registered platform toolsets and `gateway`'s bundles count as
+    /// includes); first occurrence wins.
     ///
     /// # Errors
     ///
     /// `registry.unknown_name` for an unknown toolset.
     pub fn members(&self, name: &str) -> Result<Vec<String>, Error> {
         let mut out = Vec::new();
-        self.expand(name, &mut out)?;
+        let mut visited = Vec::new();
+        self.expand(name, &mut out, &mut visited)?;
         Ok(out)
     }
 
-    fn expand(&self, name: &str, out: &mut Vec<String>) -> Result<(), Error> {
+    /// The toolsets `set` includes: its static includes, then, for a
+    /// platform bundle, the platform's own toolsets that are registered,
+    /// and for `gateway` every platform bundle.
+    fn includes_of(&self, set: &Toolset) -> Vec<String> {
+        let mut includes = set.includes.clone();
+        match &set.composition {
+            Composition::Platform(platform) => includes.extend(
+                toolset::platform_toolsets(platform)
+                    .into_iter()
+                    .filter(|t| self.toolset(t).is_some()),
+            ),
+            Composition::Gateway => includes.extend(
+                self.toolsets()
+                    .filter(|t| matches!(t.composition, Composition::Platform(_)))
+                    .map(|t| t.name.clone()),
+            ),
+            Composition::Plain | Composition::OnCore => {}
+        }
+        includes
+    }
+
+    /// Expands `name` into `out`. Dynamic includes (a plugin platform's
+    /// toolset including `gateway`) could loop; a toolset already being
+    /// or done expanding adds nothing new, so it is skipped.
+    fn expand(
+        &self,
+        name: &str,
+        out: &mut Vec<String>,
+        visited: &mut Vec<String>,
+    ) -> Result<(), Error> {
+        if visited.iter().any(|v| v == name) {
+            return Ok(());
+        }
+        visited.push(name.to_owned());
         let set = self
             .toolset(name)
             .ok_or_else(|| self.unknown_toolset(name))?;
@@ -369,10 +420,44 @@ impl ToolRegistry {
                 out.push(tool);
             }
         }
-        for include in &set.includes {
-            self.expand(include, out)?;
+        for include in self.includes_of(set) {
+            self.expand(&include, out, visited)?;
         }
         Ok(())
+    }
+
+    /// Adds a bundle (`platform-<name>`) for every platform in
+    /// `platforms` that has none: platforms registered by adapter
+    /// plugins. Their tools join the bundle through the toolset named
+    /// after the platform.
+    #[must_use]
+    pub fn with_platforms<'a>(mut self, platforms: impl IntoIterator<Item = &'a str>) -> Self {
+        for platform in platforms {
+            let name = toolset::bundle_name(platform);
+            if self.toolset(&name).is_none() {
+                self.toolsets.insert(name, Toolset::bundle(platform));
+                self.generation += 1;
+            }
+        }
+        self
+    }
+
+    /// Whether disabling `name` removes only its members outside `core`:
+    /// it is marked as built on `core`, or includes `core` directly or
+    /// through one of its includes.
+    #[must_use]
+    pub fn builds_on_core(&self, name: &str) -> bool {
+        const CORE: &str = "core";
+        let Some(set) = self.toolset(name).filter(|t| t.name != CORE) else {
+            return false;
+        };
+        set.composition != Composition::Plain
+            || set.includes.iter().any(|include| {
+                include == CORE
+                    || self
+                        .toolset(include)
+                        .is_some_and(|t| t.includes.iter().any(|i| i == CORE))
+            })
     }
 }
 

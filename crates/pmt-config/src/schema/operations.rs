@@ -176,6 +176,59 @@ pub struct TelemetryConfig {
     pub endpoint: Option<String>,
 }
 
+/// The `[vault]` section: the credential vault.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct VaultConfig {
+    /// Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`)
+    /// or `keychain` (the OS keychain; the file when none is reachable).
+    /// `prometheus vault key migrate --to` moves an existing key.
+    pub key_storage: VaultKeyStorage,
+    /// The 1Password CLI as a read-only login source.
+    pub onepassword: VaultSourceConfig,
+    /// The Bitwarden CLI as a read-only login source.
+    pub bitwarden: VaultSourceConfig,
+}
+
+/// Where the vault key is kept.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultKeyStorage {
+    /// `<profile>/vault/vault.key` (0600).
+    #[default]
+    File,
+    /// The OS keychain.
+    Keychain,
+}
+
+/// A password-manager login source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct VaultSourceConfig {
+    /// Offer its logins when its CLI is installed and signed in.
+    pub enabled: bool,
+}
+
+impl Default for VaultSourceConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+/// The `[privacy]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct PrivacyConfig {
+    /// Replace phone numbers, other people's email addresses and messaging
+    /// user ids (with a stable `user_<hash>`) in what reaches model
+    /// providers, logs, trajectories and telemetry.
+    pub redact_pii: bool,
+    /// The profile owner's email addresses, which `redact_pii` keeps.
+    pub owner_emails: Vec<String>,
+}
+
 /// The `[secrets]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -183,6 +236,35 @@ pub struct TelemetryConfig {
 pub struct SecretsConfig {
     /// Where this profile's secrets are stored.
     pub backend: SecretsBackend,
+    /// A helper command printing `NAME=VALUE` lines (POSIX only).
+    pub command: SecretCommandConfig,
+}
+
+/// The `[secrets.command]` section: a helper run once per process start,
+/// without a shell, whose stdout lines `NAME=VALUE` become secrets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SecretCommandConfig {
+    /// Run the helper (off by default; unsupported on Windows).
+    pub enabled: bool,
+    /// The helper's program and arguments (no shell).
+    pub argv: Vec<String>,
+    /// Seconds before the helper's process group is killed.
+    #[schemars(range(min = 1, max = 300))]
+    pub timeout_secs: u64,
+    /// Let helper values win over the secrets store and the environment.
+    pub override_existing: bool,
+}
+
+impl Default for SecretCommandConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            argv: Vec::new(),
+            timeout_secs: 3,
+            override_existing: false,
+        }
+    }
 }
 
 /// Secrets store backends.
@@ -217,6 +299,9 @@ pub struct SecurityConfig {
     /// Extra instruction-file basename globs (case-insensitive), e.g.
     /// `"*.mdc"`; writes to matches need human approval in every mode.
     pub protected_instruction_extra_patterns: Vec<String>,
+    /// Supply-chain advisory ids whose startup warning is silenced
+    /// (`prometheus doctor --ack <id>`); `doctor security` still shows them.
+    pub acked_advisories: Vec<String>,
 }
 
 impl Default for SecurityConfig {
@@ -228,6 +313,7 @@ impl Default for SecurityConfig {
             egress: EgressConfig::default(),
             protected_instruction_files: true,
             protected_instruction_extra_patterns: Vec::new(),
+            acked_advisories: Vec::new(),
         }
     }
 }
@@ -296,14 +382,62 @@ impl DegradedFeature {
     }
 }
 
+/// `security.egress.mode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum EgressMode {
+    /// Any public address; private and metadata ranges denied.
+    #[default]
+    Public,
+    /// Only hosts named by `security.egress.allow` (or a session grant).
+    Allowlist,
+    /// No outbound connections.
+    None,
+}
+
+impl EgressMode {
+    /// Every mode, in documentation order.
+    pub const ALL: [Self; 3] = [Self::Public, Self::Allowlist, Self::None];
+
+    /// The configuration spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Allowlist => "allowlist",
+            Self::None => "none",
+        }
+    }
+
+    /// Parses a configuration spelling.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.as_str() == text)
+    }
+}
+
 /// The `[security.egress]` section.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct EgressConfig {
+    /// Which hosts tools, sandboxed children, plugins and browsers may
+    /// reach: any public address (`public`), only the `allow` patterns
+    /// (`allowlist`) or nothing (`none`). A session can narrow or extend
+    /// it (`chat --egress`, `/egress`, `egress.set`).
+    pub mode: EgressMode,
+    /// Host patterns `allowlist` admits: `host`, `host:port` or
+    /// `*.suffix` (subdomains of `suffix`).
+    pub allow: Vec<String>,
     /// Allow private destinations without a session grant.
     pub allow_private: bool,
     /// CIDR ranges a local TUN proxy answers with (treated as public).
     pub fake_ip_ranges: Vec<String>,
+    /// Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g.
+    /// `*.casino.example`); a session can add to them, never remove.
+    pub deny: Vec<String>,
+    /// Absolute paths of shared blocklist files: one pattern per line, `#`
+    /// comments; re-read when a file changes.
+    pub deny_files: Vec<String>,
 }
 
 /// The `[network]` section.

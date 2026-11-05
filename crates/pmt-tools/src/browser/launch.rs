@@ -189,7 +189,12 @@ impl Launched {
 }
 
 /// Launches `executable` headless on a fresh profile directory under
-/// `profiles_root` with `env` as its whole environment.
+/// `profiles_root` with `env` as its whole environment. With `proxy`
+/// (`http://127.0.0.1:<port>`, the session's egress proxy) every
+/// connection the browser makes goes through it, loopback included
+/// (spec: security-boundaries, the egress policy covers every outbound
+/// connection made by browsers): Chromium's implicit bypass of
+/// `localhost` would otherwise reach local services unchecked.
 ///
 /// # Errors
 ///
@@ -200,6 +205,7 @@ pub async fn launch(
     profiles_root: &Path,
     env: &ChildEnv,
     timeout: Duration,
+    proxy: Option<&str>,
 ) -> Result<Launched, String> {
     let profile_dir = profiles_root.join(ulid::Ulid::generate().to_string().to_lowercase());
     pmt_core::private_fs::create_dir(&profile_dir)
@@ -231,8 +237,14 @@ pub async fn launch(
             "--disable-sync",
             "--password-store=basic",
             "--use-mock-keychain",
-            "about:blank",
-        ])
+        ]);
+    if let Some(proxy) = proxy {
+        std_command
+            .arg(format!("--proxy-server={proxy}"))
+            .arg("--proxy-bypass-list=<-loopback>");
+    }
+    std_command
+        .arg("about:blank")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());

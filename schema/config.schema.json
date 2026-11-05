@@ -75,6 +75,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "max_verify_nudges": {
+          "default": 3,
+          "description": "Most consecutive verification nudges (`pre_verify` hook\ncontinuations) in one turn; after that the turn finishes.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
         "personalities": {
           "additionalProperties": {
             "type": "string"
@@ -221,6 +229,13 @@
           "$ref": "#/$defs/UnattendedApproval",
           "default": "deny",
           "description": "Decision for approvals in cron jobs."
+        },
+        "denial_breaker_threshold": {
+          "default": 3,
+          "description": "In `smart` mode, after this many consecutive denials by the\napproval guardian the denial tells the model to stop trying\nvariations (`0` disables); a human approval resets the count.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "deny": {
           "default": [],
@@ -1016,6 +1031,32 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ConnectorsConfig": {
+      "additionalProperties": false,
+      "description": "The `[connectors]` section: hosted app integrations (Gmail, Notion,\nLinear...) whose tools run on the Nous connector gateway.",
+      "properties": {
+        "connect_timeout_secs": {
+          "default": 300,
+          "description": "How long a connection card or `connectors connect` waits for the\nuser to finish signing in.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Offer hosted connectors when the profile has a Nous sign-in.",
+          "type": "boolean"
+        },
+        "gateway_url": {
+          "default": "https://connector-gateway.nousresearch.com",
+          "description": "The connector gateway's origin (a self-hosted gateway, or a test\nserver); `https` except on loopback.",
+          "type": "string"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "ContainerConfig": {
       "additionalProperties": false,
       "description": "The `[terminal.container]` section.",
@@ -1368,10 +1409,34 @@
       "additionalProperties": false,
       "description": "The `[security.egress]` section.",
       "properties": {
+        "allow": {
+          "default": [],
+          "description": "Host patterns `allowlist` admits: `host`, `host:port` or\n`*.suffix` (subdomains of `suffix`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "allow_private": {
           "default": false,
           "description": "Allow private destinations without a session grant.",
           "type": "boolean"
+        },
+        "deny": {
+          "default": [],
+          "description": "Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g.\n`*.casino.example`); a session can add to them, never remove.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny_files": {
+          "default": [],
+          "description": "Absolute paths of shared blocklist files: one pattern per line, `#`\ncomments; re-read when a file changes.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "fake_ip_ranges": {
           "default": [],
@@ -1380,9 +1445,34 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/EgressMode",
+          "default": "public",
+          "description": "Which hosts tools, sandboxed children, plugins and browsers may\nreach: any public address (`public`), only the `allow` patterns\n(`allowlist`) or nothing (`none`). A session can narrow or extend\nit (`chat --egress`, `/egress`, `egress.set`)."
         }
       },
       "type": "object"
+    },
+    "EgressMode": {
+      "description": "`security.egress.mode`.",
+      "oneOf": [
+        {
+          "const": "public",
+          "description": "Any public address; private and metadata ranges denied.",
+          "type": "string"
+        },
+        {
+          "const": "allowlist",
+          "description": "Only hosts named by `security.egress.allow` (or a session grant).",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No outbound connections.",
+          "type": "string"
+        }
+      ]
     },
     "EmptyResponseGuard": {
       "additionalProperties": false,
@@ -2232,6 +2322,26 @@
       ],
       "type": "object"
     },
+    "GuidanceMode": {
+      "description": "What a security guidance finding does to a write.",
+      "oneOf": [
+        {
+          "const": "warn",
+          "description": "The write proceeds; its result lists the findings.",
+          "type": "string"
+        },
+        {
+          "const": "block",
+          "description": "The write is refused with the guidance as the reason.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No matching.",
+          "type": "string"
+        }
+      ]
+    },
     "HomeChannel": {
       "additionalProperties": false,
       "description": "`[gateway.platforms.<name>.home_channel]`: the default destination of\nscheduled output, platform-only send targets and notices without an\noriginating chat.",
@@ -2257,6 +2367,32 @@
         }
       },
       "type": "object"
+    },
+    "HooksConfig": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/ShellHook"
+        },
+        "type": "array"
+      },
+      "description": "The `[hooks]` section.",
+      "properties": {
+        "auto_accept": {
+          "default": false,
+          "description": "Run shell hooks nobody approved yet without asking (as\n`--accept-hooks` does for one run); every hook still runs in the\nsession's sandbox.",
+          "type": "boolean"
+        },
+        "outbound": {
+          "default": [],
+          "description": "Outbound webhooks: hook events sent as HTTPS `POST` requests.",
+          "items": {
+            "$ref": "#/$defs/OutboundHook"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ImageInputMode": {
       "description": "Image input routing modes.",
@@ -2439,6 +2575,133 @@
         }
       ]
     },
+    "McpAuth": {
+      "description": "`mcp.servers.<name>.auth`.",
+      "oneOf": [
+        {
+          "const": "header",
+          "description": "The `auth_secret` bearer token.",
+          "type": "string"
+        },
+        {
+          "const": "oauth",
+          "description": "OAuth 2.1 with PKCE.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpCapabilities": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.capabilities]`: the sandbox of a `stdio` server,\nin the words of a plugin manifest.",
+      "properties": {
+        "fs_read": {
+          "default": [],
+          "description": "Paths it may read: absolute, or under `$workspace`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fs_write": {
+          "default": [],
+          "description": "Paths it may write: absolute, or under `$workspace`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "network": {
+          "default": [],
+          "description": "Hosts it may connect to (`api.github.com`, `*.example.com`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "McpConfig": {
+      "additionalProperties": false,
+      "description": "The `[mcp]` section: the external MCP servers the profile's sessions\nconnect to.",
+      "properties": {
+        "auto_reload_on_config_change": {
+          "default": true,
+          "description": "The daemon applies `mcp.servers` edits within a minute (new\nsessions only).",
+          "type": "boolean"
+        },
+        "call_timeout_secs": {
+          "default": 300,
+          "description": "Bound on one tool call of a server that sets no `timeout_secs`.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "connect_timeout_secs": {
+          "default": 60,
+          "description": "Bound on starting and initializing a server that sets no\n`connect_timeout_secs`.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "discovery_concurrency": {
+          "default": 4,
+          "description": "Servers connected at once when a session needs them.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "discovery_wait_ms": {
+          "default": 1500,
+          "description": "How long an interactive session start waits for servers still\nconnecting; later ones join later sessions.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "servers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/McpServerConfig"
+          },
+          "default": {},
+          "description": "Servers by name; their tools register as `mcp__<name>__<tool>` in\ntoolset `mcp-<name>`.",
+          "type": "object"
+        },
+        "single_query_discovery_wait_ms": {
+          "default": 15000,
+          "description": "The same wait for one-shot `-q` runs.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "McpElicitationConfig": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.elicitation]`.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Route the server's form requests to the person.",
+          "type": "boolean"
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "Declined when unanswered this long.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "McpEvents": {
       "additionalProperties": false,
       "description": "`[gateway.mcp_events]` (experimental).",
@@ -2450,6 +2713,453 @@
         }
       },
       "type": "object"
+    },
+    "McpOAuthConfig": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.oauth]`.",
+      "properties": {
+        "client_id": {
+          "default": "",
+          "description": "A client registered with the authorization server beforehand (for\nservers without dynamic client registration).",
+          "type": "string"
+        },
+        "client_name": {
+          "default": "",
+          "description": "The client name sent at dynamic registration.",
+          "type": "string"
+        },
+        "client_secret_name": {
+          "default": "",
+          "description": "Secrets-store name of that client's secret.",
+          "type": "string"
+        },
+        "flow": {
+          "$ref": "#/$defs/McpOAuthFlow",
+          "default": "browser",
+          "description": "`browser` (authorization code) or `device` (device code)."
+        },
+        "redirect_host": {
+          "$ref": "#/$defs/McpRedirectHost",
+          "default": "127.0.0.1",
+          "description": "The redirect host: `127.0.0.1` or `localhost`."
+        },
+        "redirect_port": {
+          "default": 0,
+          "description": "A fixed callback port (0: any free port).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "redirect_uri": {
+          "default": "",
+          "description": "A full redirect URI registered with the client (overrides host and\nport).",
+          "type": "string"
+        },
+        "scopes": {
+          "default": [],
+          "description": "Requested scopes (default: what the server advertises).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout_secs": {
+          "default": 300,
+          "description": "How long a login waits for the person.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 10,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "McpOAuthFlow": {
+      "description": "`mcp.servers.<name>.oauth.flow`.",
+      "oneOf": [
+        {
+          "const": "browser",
+          "description": "Authorization code with PKCE and a loopback (or pasted) redirect.",
+          "type": "string"
+        },
+        {
+          "const": "device",
+          "description": "Device code.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpRedirectHost": {
+      "description": "`mcp.servers.<name>.oauth.redirect_host`.",
+      "oneOf": [
+        {
+          "const": "127.0.0.1",
+          "description": "`127.0.0.1`.",
+          "type": "string"
+        },
+        {
+          "const": "localhost",
+          "description": "`localhost`.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpSamplingConfig": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.sampling]`.",
+      "properties": {
+        "allowed_models": {
+          "default": [],
+          "description": "When not empty, `model` must be one of these.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": null,
+          "description": "Default: on for `trust = \"full\"` servers, off for `untrusted`\nones.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "max_rpm": {
+          "default": 10,
+          "description": "Requests per sliding minute.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tokens_cap": {
+          "default": 4096,
+          "description": "Requested answer sizes are capped at this.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_tool_rounds": {
+          "default": 5,
+          "description": "Tool rounds of one sampling exchange.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "default": null,
+          "description": "The model answering instead of the session's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 30,
+          "description": "Bound on one sampling call.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "McpServerConfig": {
+      "additionalProperties": false,
+      "description": "One `[mcp.servers.<name>]` entry.",
+      "properties": {
+        "args": {
+          "default": [],
+          "description": "Its arguments.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How an `http` server authenticates: `header` (the `auth_secret`\nbearer token) or `oauth` (OAuth 2.1 with PKCE, `prometheus mcp\nlogin`)."
+        },
+        "auth_secret": {
+          "default": "",
+          "description": "Secrets-store name of the bearer token sent to an `http` server.",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/McpCapabilities",
+          "default": {
+            "fs_read": [],
+            "fs_write": [],
+            "network": []
+          },
+          "description": "What a `stdio` server's sandbox lets it reach, like a plugin grant."
+        },
+        "client_cert": {
+          "default": "",
+          "description": "A PEM file holding the client certificate (and its key unless\n`client_key` is set) presented to an `https` server.",
+          "type": "string"
+        },
+        "client_key": {
+          "default": "",
+          "description": "The PEM file of the client certificate's private key.",
+          "type": "string"
+        },
+        "client_key_password_secret": {
+          "default": "",
+          "description": "Secrets-store name of the password of an encrypted `client_key`.",
+          "type": "string"
+        },
+        "command": {
+          "default": "",
+          "description": "The program of a `stdio` server (a bare name is looked up on\n`PATH`).",
+          "type": "string"
+        },
+        "connect_timeout_secs": {
+          "default": null,
+          "description": "Overrides `mcp.connect_timeout_secs` for this server.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cost_unit": {
+          "default": "credits",
+          "description": "The unit of `tool_costs` and `spend_limit`.",
+          "type": "string"
+        },
+        "elicitation": {
+          "$ref": "#/$defs/McpElicitationConfig",
+          "default": {
+            "enabled": true,
+            "timeout_secs": 300
+          },
+          "description": "`elicitation/create` answers."
+        },
+        "enabled": {
+          "default": true,
+          "description": "`false` skips the server without connecting.",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Environment variables of a `stdio` server, literal values. A\n`stdio` server gets only these, `env_secrets` and `PATH`, `HOME`,\n`LANG`, `SYSTEMROOT` and `TMPDIR`.",
+          "type": "object"
+        },
+        "env_secrets": {
+          "default": [],
+          "description": "Secrets-store names passed to a `stdio` server as environment\nvariables of the same name.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Headers sent with every request to an `http` server (`${NAME}`\nplaceholders come from the secrets store).",
+          "type": "object"
+        },
+        "identity_header": {
+          "additionalProperties": true,
+          "default": null,
+          "description": "`{ name, value_from = \"static\" | \"profile\", value }`: a header sent\nwith every request naming the caller (the literal `value` or the\nprofile name); never overrides a same-named `headers` entry. An\ninvalid block, or one on a `stdio` server, is warned and ignored.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "idle_timeout_secs": {
+          "default": 0,
+          "description": "Stop a `stdio` server after this many idle seconds (0: never); it\nrestarts on its next call.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lazy": {
+          "default": false,
+          "description": "Register the tools from the schema cache and start the server on\nits first call.",
+          "type": "boolean"
+        },
+        "max_lifetime_secs": {
+          "default": 0,
+          "description": "Stop a `stdio` server this many seconds after it started (0:\nnever); it restarts on its next call.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "oauth": {
+          "$ref": "#/$defs/McpOAuthConfig",
+          "default": {
+            "client_id": "",
+            "client_name": "",
+            "client_secret_name": "",
+            "flow": "browser",
+            "redirect_host": "127.0.0.1",
+            "redirect_port": 0,
+            "redirect_uri": "",
+            "scopes": [],
+            "timeout_secs": 300
+          },
+          "description": "The OAuth client of an `auth = \"oauth\"` server."
+        },
+        "sampling": {
+          "$ref": "#/$defs/McpSamplingConfig",
+          "default": {
+            "allowed_models": [],
+            "enabled": null,
+            "max_rpm": 10,
+            "max_tokens_cap": 4096,
+            "max_tool_rounds": 5,
+            "model": null,
+            "timeout_secs": 30
+          },
+          "description": "`sampling/createMessage` answers."
+        },
+        "spend_limit": {
+          "default": 0.0,
+          "description": "The most one conversation may spend on this server's tools before\neach further costed call asks (0: no limit).",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "timeout_secs": {
+          "default": null,
+          "description": "Overrides `mcp.call_timeout_secs` for this server.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tool_costs": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "What the server's tools cost: a number, or `{ credits = [min, max],\nnote = \"...\" }`, per tool name. A malformed entry skips the server.",
+          "type": "object"
+        },
+        "tools": {
+          "$ref": "#/$defs/McpToolFilter",
+          "default": {
+            "exclude": [],
+            "include": null
+          },
+          "description": "Which of the server's tools register."
+        },
+        "transport": {
+          "$ref": "#/$defs/McpTransport",
+          "default": "stdio",
+          "description": "How the server is reached."
+        },
+        "trust": {
+          "$ref": "#/$defs/McpTrust",
+          "default": "untrusted",
+          "description": "`untrusted` servers' tools need approval unless they declare\n`readOnlyHint`; `full` trusts them like built-in tools."
+        },
+        "url": {
+          "default": "",
+          "description": "The endpoint of an `http` (streamable HTTP) server.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "McpServerModeConfig": {
+      "additionalProperties": false,
+      "description": "The `[mcp_server]` section: what `prometheus mcp serve` offers MCP\nclients.",
+      "properties": {
+        "allow_remote": {
+          "default": false,
+          "description": "Let `--http` bind an address that is not loopback.",
+          "type": "boolean"
+        },
+        "expose_toolsets": {
+          "default": [
+            "skills"
+          ],
+          "description": "Toolsets exposed as MCP tools; `skills` exposes only the read-only\nskill tools.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object",
+      "x-apply": "restart"
+    },
+    "McpToolFilter": {
+      "additionalProperties": false,
+      "description": "`[mcp.servers.<name>.tools]`.",
+      "properties": {
+        "exclude": {
+          "default": [],
+          "description": "Tool names (exact or globs) never registered.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include": {
+          "default": null,
+          "description": "Whitelist of the server's tool names (exact or case-sensitive\nglobs); wins over `exclude`, and an empty list registers nothing.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "McpTransport": {
+      "description": "`mcp.servers.<name>.transport`.",
+      "oneOf": [
+        {
+          "const": "stdio",
+          "description": "A child process speaking JSON-RPC on its stdin and stdout.",
+          "type": "string"
+        },
+        {
+          "const": "http",
+          "description": "A streamable HTTP endpoint.",
+          "type": "string"
+        }
+      ]
+    },
+    "McpTrust": {
+      "description": "`mcp.servers.<name>.trust`.",
+      "oneOf": [
+        {
+          "const": "full",
+          "description": "Trusted like a built-in tool.",
+          "type": "string"
+        },
+        {
+          "const": "untrusted",
+          "description": "Every tool not declaring `readOnlyHint` needs approval.",
+          "type": "string"
+        }
+      ]
     },
     "MediaConfig": {
       "additionalProperties": false,
@@ -2953,6 +3663,57 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "OutboundHook": {
+      "additionalProperties": false,
+      "description": "One `[[hooks.outbound]]` webhook.",
+      "properties": {
+        "events": {
+          "description": "The hook events delivered (names of the closed hook registry).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "matcher": {
+          "default": null,
+          "description": "A regular expression the tool name must match (tool events only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Unique name (logs and `prometheus plugins hooks list`).",
+          "type": "string"
+        },
+        "secret_name": {
+          "default": null,
+          "description": "The secrets-store entry whose value signs each delivery\n(`X-Prometheus-Signature-256`); unsigned without one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 10,
+          "description": "How long one delivery attempt may take.",
+          "format": "uint64",
+          "maximum": 60,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "description": "Where events are sent (`POST`): `https://`, or `http://` to a loopback\naddress.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "events"
+      ],
+      "type": "object"
     },
     "OutboxConfig": {
       "additionalProperties": false,
@@ -3544,6 +4305,138 @@
       },
       "type": "object"
     },
+    "PluginsConfig": {
+      "additionalProperties": false,
+      "description": "The `[plugins]` section.",
+      "properties": {
+        "approval_transport": {
+          "default": "",
+          "description": "The plugin approval transport that presents approval requests,\n`<plugin_id>:<name>`; empty asks on the session's own surface.",
+          "type": "string"
+        },
+        "approval_transport_fallback": {
+          "$ref": "#/$defs/TransportFallback",
+          "default": "deny",
+          "description": "What a failing, timed-out, unbound or missing approval transport\nleads to: `deny` the request, or ask on the session's own surface\n(`builtin`)."
+        },
+        "catalog_url": {
+          "default": "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json",
+          "description": "Where the signed live plugin catalog is fetched from (cached 6 hours\nunder the profile's `cache/`); empty uses only the catalog embedded\nin the binary.",
+          "type": "string"
+        },
+        "disabled": {
+          "default": [],
+          "description": "Ids never instantiated; wins over `enabled`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": [],
+          "description": "Ids of the non-embedded plugins to instantiate; a discovered plugin\nstays disabled until listed here (`prometheus plugins enable <id>`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entries": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "default": {},
+          "description": "Each plugin's own settings, `plugins.entries.<id>.<key>`, read and\nwritten by the plugin through its `config` host interface.",
+          "type": "object"
+        },
+        "hook_context_max_chars": {
+          "default": 10000,
+          "description": "`pre_llm_call` context of one callback above this many characters\nis spilled to `hook_outputs/<session>/` and replaced by its head,\ntail and the spill path.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hook_timeout_ms": {
+          "default": 30000,
+          "description": "Bound on one hook callback; a callback that overruns counts as no\nresult and is suspended for 60 seconds.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "load_timeout_ms": {
+          "default": 10000,
+          "description": "Bound on instantiating and registering one plugin; a plugin that\noverruns is skipped with `load timed out` while the others load.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "safe_mode": {
+          "default": false,
+          "description": "Skip every non-embedded plugin, MCP server and python-bridge\nsidecar (as `prometheus --safe-mode` does, without its other effects).",
+          "type": "boolean"
+        },
+        "scan_on_install": {
+          "default": true,
+          "description": "Statically scan every plugin install and update for threats\n(reverse shells, credential exfiltration, destructive commands,\npersistence, obfuscated execution, prompt injection); `false` skips\nthe scan and the install record says so.",
+          "type": "boolean"
+        },
+        "security_guidance": {
+          "$ref": "#/$defs/SecurityGuidanceConfig",
+          "default": {
+            "mode": "warn"
+          },
+          "description": "The first-party `security-guidance` plugin (enable it with\n`plugins.enabled = [\"security-guidance\"]`)."
+        },
+        "signature_policy": {
+          "$ref": "#/$defs/SignaturePolicy",
+          "default": "require",
+          "description": "What installing an unsigned local `.pmtpkg` needs: `require` (only\nwith `--allow-unsigned`), `warn` or `off`. Catalog installs always\nneed a valid signature unless `--allow-unsigned` is given."
+        },
+        "trusted_project_dirs": {
+          "default": [],
+          "description": "Project roots whose `.prometheus/plugins/` directory is scanned;\nany other project's plugins are never read.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wasm": {
+          "$ref": "#/$defs/PluginsWasmConfig",
+          "default": {
+            "call_timeout_ms": 30000,
+            "max_memory_bytes": 268435456
+          },
+          "description": "WASM plugin limits."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "PluginsWasmConfig": {
+      "additionalProperties": false,
+      "description": "The `[plugins.wasm]` section.",
+      "properties": {
+        "call_timeout_ms": {
+          "default": 30000,
+          "description": "CPU bound of one call into a plugin (fuel and epoch interruption);\nan overrun fails the call with `plugin '<id>' exceeded call timeout`.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_memory_bytes": {
+          "default": 268435456,
+          "description": "Linear memory cap of one plugin instance.",
+          "format": "uint64",
+          "minimum": 65536,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "PolicyChatType": {
       "description": "The chat kinds a policy can match.",
       "oneOf": [
@@ -3608,6 +4501,27 @@
           "type": "string"
         }
       ]
+    },
+    "PrivacyConfig": {
+      "additionalProperties": false,
+      "description": "The `[privacy]` section.",
+      "properties": {
+        "owner_emails": {
+          "default": [],
+          "description": "The profile owner's email addresses, which `redact_pii` keeps.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "redact_pii": {
+          "default": false,
+          "description": "Replace phone numbers, other people's email addresses and messaging\nuser ids (with a stable `user_<hash>`) in what reaches model\nproviders, logs, trajectories and telemetry.",
+          "type": "boolean"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "ProfileRoute": {
       "additionalProperties": false,
@@ -3951,6 +4865,74 @@
       },
       "type": "object"
     },
+    "PythonBridgeConfig": {
+      "additionalProperties": false,
+      "description": "The `[python_bridge]` section.",
+      "properties": {
+        "allow_unbounded_requirements": {
+          "default": false,
+          "description": "Accept requirements without an upper bound (`requests>=2`); by\ndefault they are refused so an install never picks up a new major.",
+          "type": "boolean"
+        },
+        "call_timeout_ms": {
+          "default": 30000,
+          "description": "Bound on one call into a sidecar (hook calls use\n`plugins.hook_timeout_ms`).",
+          "format": "uint64",
+          "maximum": 3600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "idle_shutdown_secs": {
+          "default": 600,
+          "description": "Stop a sidecar that has no hooks or providers after this many idle\nseconds (`0` keeps it running).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_memory_bytes": {
+          "default": 1073741824,
+          "description": "Resident memory of one sidecar's process tree; above it the sidecar\nis terminated as a crash.",
+          "format": "uint64",
+          "minimum": 16777216,
+          "type": "integer"
+        },
+        "max_processes": {
+          "default": 16,
+          "description": "Processes in one sidecar's tree; above it the sidecar is terminated\nas a crash.",
+          "format": "uint32",
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "python_version": {
+          "$ref": "#/$defs/PythonVersion",
+          "default": "3.12",
+          "description": "The managed CPython every bridged plugin, skill environment and\nnamed environment runs on (`3.11`, `3.12` or `3.13`)."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "PythonVersion": {
+      "description": "A supported interpreter version.",
+      "oneOf": [
+        {
+          "const": "3.11",
+          "description": "CPython 3.11.",
+          "type": "string"
+        },
+        {
+          "const": "3.12",
+          "description": "CPython 3.12.",
+          "type": "string"
+        },
+        {
+          "const": "3.13",
+          "description": "CPython 3.13.",
+          "type": "string"
+        }
+      ]
+    },
     "QuickCommand": {
       "additionalProperties": false,
       "description": "One `[quick_commands.<name>]` entry: a user slash command.",
@@ -4286,6 +5268,39 @@
       "minimum": 0,
       "type": "integer"
     },
+    "SecretCommandConfig": {
+      "additionalProperties": false,
+      "description": "The `[secrets.command]` section: a helper run once per process start,\nwithout a shell, whose stdout lines `NAME=VALUE` become secrets.",
+      "properties": {
+        "argv": {
+          "default": [],
+          "description": "The helper's program and arguments (no shell).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Run the helper (off by default; unsupported on Windows).",
+          "type": "boolean"
+        },
+        "override_existing": {
+          "default": false,
+          "description": "Let helper values win over the secrets store and the environment.",
+          "type": "boolean"
+        },
+        "timeout_secs": {
+          "default": 3,
+          "description": "Seconds before the helper's process group is killed.",
+          "format": "uint64",
+          "maximum": 300,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "SecretName": {
       "description": "The name of a secret in the secrets store (`^[A-Z][A-Z0-9_]{0,127}$`).\nConfig keys that need a credential hold a name, never the value.",
       "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
@@ -4315,6 +5330,16 @@
           "$ref": "#/$defs/SecretsBackend",
           "default": "file",
           "description": "Where this profile's secrets are stored."
+        },
+        "command": {
+          "$ref": "#/$defs/SecretCommandConfig",
+          "default": {
+            "argv": [],
+            "enabled": false,
+            "override_existing": false,
+            "timeout_secs": 3
+          },
+          "description": "A helper command printing `NAME=VALUE` lines (POSIX only)."
         }
       },
       "type": "object",
@@ -4324,6 +5349,14 @@
       "additionalProperties": false,
       "description": "The `[security]` section.",
       "properties": {
+        "acked_advisories": {
+          "default": [],
+          "description": "Supply-chain advisory ids whose startup warning is silenced\n(`prometheus doctor --ack <id>`); `doctor security` still shows them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "capabilities": {
           "description": "Profile capability baseline; unset uses the built-in baseline\n(workspace read/write, toolchain read, `process.spawn:*`, egress\npolicy, `llm.call`).",
           "items": {
@@ -4337,8 +5370,12 @@
         "egress": {
           "$ref": "#/$defs/EgressConfig",
           "default": {
+            "allow": [],
             "allow_private": false,
-            "fake_ip_ranges": []
+            "deny": [],
+            "deny_files": [],
+            "fake_ip_ranges": [],
+            "mode": "public"
           },
           "description": "Outbound network policy."
         },
@@ -4371,6 +5408,18 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "SecurityGuidanceConfig": {
+      "additionalProperties": false,
+      "description": "`[plugins.security_guidance]`.",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/GuidanceMode",
+          "default": "warn",
+          "description": "`warn` (write, then report the matched rules), `block` (refuse the\nwrite with the guidance) or `off`."
+        }
+      },
+      "type": "object"
     },
     "SessionsConfig": {
       "additionalProperties": false,
@@ -4413,6 +5462,40 @@
       "type": "object",
       "x-apply": "live"
     },
+    "ShellHook": {
+      "additionalProperties": false,
+      "description": "One `[[hooks.<event>]]` shell hook.",
+      "properties": {
+        "command": {
+          "description": "The program and its arguments, split like a shell would but run\nwithout one; the event's JSON arrives on stdin.",
+          "type": "string"
+        },
+        "fail_closed": {
+          "default": false,
+          "description": "`pre_tool_call` only: a hook that fails (cannot start, times out,\nanswers garbage) blocks the call instead of letting it run.",
+          "type": "boolean"
+        },
+        "matcher": {
+          "default": null,
+          "description": "A regular expression the tool name must match (tool events only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 60,
+          "description": "How long one run may take (clamped to 300).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
     "ShutdownConfig": {
       "additionalProperties": false,
       "description": "`[gateway.shutdown]`.",
@@ -4427,6 +5510,26 @@
         }
       },
       "type": "object"
+    },
+    "SignaturePolicy": {
+      "description": "`plugins.signature_policy`.",
+      "oneOf": [
+        {
+          "const": "require",
+          "description": "An unsigned local package installs only with `--allow-unsigned`.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "An unsigned local package installs with a warning.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Local packages are not checked for a signature.",
+          "type": "string"
+        }
+      ]
     },
     "SkillsConfig": {
       "additionalProperties": false,
@@ -4678,6 +5781,93 @@
       },
       "type": "object"
     },
+    "SurfaceToolsets": {
+      "additionalProperties": false,
+      "description": "`[toolsets.surfaces]`: one optional toolset list per session surface.\nAn unset surface starts from `tools.enabled_toolsets`, where `core`\nstands for the surface's built-in default.",
+      "properties": {
+        "acp": {
+          "description": "ACP editor sessions (default `acp`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "acp_unattended": {
+          "description": "Unattended ACP sessions (default `acp_unattended`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "api": {
+          "description": "The OpenAI-compatible API server (default `api_server`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cli": {
+          "description": "Line-mode chat and one-shot runs (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "cron": {
+          "description": "Scheduled jobs without per-job toolsets (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "desktop": {
+          "description": "The desktop app (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "gateway": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Messaging sessions per platform (`gateway.<platform>`, default\n`platform-<platform>`; `gateway.webhook` defaults to\n`webhook-safe`).",
+          "type": "object"
+        },
+        "tui": {
+          "description": "The terminal UI (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "TailMode": {
       "description": "Tail retention modes.",
       "oneOf": [
@@ -4824,6 +6014,26 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "ToolListing": {
+      "description": "`tools.tool_search.listing`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "List the deferred tools within the listing budget.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "The same as `auto`.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "No listing.",
+          "type": "string"
+        }
+      ]
+    },
     "ToolLoopGuardrails": {
       "additionalProperties": false,
       "description": "The `[tool_loop_guardrails]` section.",
@@ -4928,6 +6138,86 @@
         }
       ]
     },
+    "ToolSearchConfig": {
+      "additionalProperties": false,
+      "description": "The `[tools.tool_search]` section (spec: tool-system, Tool search\nprogressive disclosure; Tool search listing, ranking and limits).",
+      "properties": {
+        "defer": {
+          "default": null,
+          "description": "Tools deferred besides MCP and plugin tools while tool search is\nactive; unset defers `computer_use`, `session_search`,\n`image_generate`, `todo`, `process`, `cronjob` and `browser_vault`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "listing": {
+          "$ref": "#/$defs/ToolListing",
+          "default": "auto",
+          "description": "Whether the `tool_search` description lists the deferred tools."
+        },
+        "listing_max_tokens": {
+          "default": 4000,
+          "description": "Token budget (4 characters each) of the deferrable schemas, and of\nthe deferred-tool manifest in the `tool_search` description.",
+          "format": "uint32",
+          "maximum": 60000,
+          "minimum": 200,
+          "type": "integer"
+        },
+        "max_search_limit": {
+          "default": 25,
+          "description": "The most matches per query `tool_search` returns.",
+          "format": "uint32",
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/ToolSearchMode",
+          "default": "auto",
+          "description": "`auto` defers MCP and plugin tools behind `tool_search`,\n`tool_describe` and `tool_call` when their schemas outgrow the\nthresholds below; `on` always does, `off` never."
+        },
+        "search_default_limit": {
+          "default": 5,
+          "description": "Matches per query when `tool_search` names no `limit`.",
+          "format": "uint32",
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "threshold_pct": {
+          "default": 5,
+          "description": "Percent of the main model's context window the deferrable tools'\nschemas may take before `auto` defers them.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ToolSearchMode": {
+      "description": "`tools.tool_search.mode`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Defer when the deferrable schemas outgrow the thresholds.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "Always defer.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never defer.",
+          "type": "string"
+        }
+      ]
+    },
     "ToolsConfig": {
       "additionalProperties": false,
       "description": "The `[tools]` section.",
@@ -4972,6 +6262,19 @@
             "overrides": {}
           },
           "description": "Tool result size budgets."
+        },
+        "tool_search": {
+          "$ref": "#/$defs/ToolSearchConfig",
+          "default": {
+            "defer": null,
+            "listing": "auto",
+            "listing_max_tokens": 4000,
+            "max_search_limit": 25,
+            "mode": "auto",
+            "search_default_limit": 5,
+            "threshold_pct": 5
+          },
+          "description": "Progressive disclosure of large tool surfaces."
         }
       },
       "type": "object",
@@ -4982,15 +6285,9 @@
       "description": "The `[toolsets]` section.",
       "properties": {
         "surfaces": {
-          "additionalProperties": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
+          "$ref": "#/$defs/SurfaceToolsets",
           "default": {},
-          "description": "Default toolsets per surface (otherwise `core`).",
-          "type": "object"
+          "description": "Starting toolsets per session surface, replacing the surface's\ndefault (spec: tool-system, Per-surface default toolsets)."
         }
       },
       "type": "object",
@@ -5021,6 +6318,21 @@
         }
       },
       "type": "object"
+    },
+    "TransportFallback": {
+      "description": "`plugins.approval_transport_fallback`.",
+      "oneOf": [
+        {
+          "const": "deny",
+          "description": "Deny the request.",
+          "type": "string"
+        },
+        {
+          "const": "builtin",
+          "description": "Ask on the session's own surface.",
+          "type": "string"
+        }
+      ]
     },
     "TuiConfig": {
       "additionalProperties": false,
@@ -5425,6 +6737,60 @@
           "type": "string"
         }
       ]
+    },
+    "VaultConfig": {
+      "additionalProperties": false,
+      "description": "The `[vault]` section: the credential vault.",
+      "properties": {
+        "bitwarden": {
+          "$ref": "#/$defs/VaultSourceConfig",
+          "default": {
+            "enabled": true
+          },
+          "description": "The Bitwarden CLI as a read-only login source."
+        },
+        "key_storage": {
+          "$ref": "#/$defs/VaultKeyStorage",
+          "default": "file",
+          "description": "Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`)\nor `keychain` (the OS keychain; the file when none is reachable).\n`prometheus vault key migrate --to` moves an existing key."
+        },
+        "onepassword": {
+          "$ref": "#/$defs/VaultSourceConfig",
+          "default": {
+            "enabled": true
+          },
+          "description": "The 1Password CLI as a read-only login source."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "VaultKeyStorage": {
+      "description": "Where the vault key is kept.",
+      "oneOf": [
+        {
+          "const": "file",
+          "description": "`<profile>/vault/vault.key` (0600).",
+          "type": "string"
+        },
+        {
+          "const": "keychain",
+          "description": "The OS keychain.",
+          "type": "string"
+        }
+      ]
+    },
+    "VaultSourceConfig": {
+      "additionalProperties": false,
+      "description": "A password-manager login source.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Offer its logins when its CLI is installed and signed in.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "VisionConfig": {
       "additionalProperties": false,
@@ -5903,6 +7269,7 @@
         },
         "intent_continuation": "auto",
         "max_iterations": 500,
+        "max_verify_nudges": 3,
         "personalities": {},
         "personality": "none",
         "reasoning_overrides": {},
@@ -5915,6 +7282,7 @@
       "$ref": "#/$defs/ApprovalsConfig",
       "default": {
         "cron_mode": "deny",
+        "denial_breaker_threshold": 3,
         "deny": [],
         "mode": "manual",
         "single_query_mode": "deny",
@@ -6000,6 +7368,15 @@
         "threshold_tokens": 0
       },
       "description": "Context compression."
+    },
+    "connectors": {
+      "$ref": "#/$defs/ConnectorsConfig",
+      "default": {
+        "connect_timeout_secs": 300,
+        "enabled": true,
+        "gateway_url": "https://connector-gateway.nousresearch.com"
+      },
+      "description": "Hosted app connectors (Gmail, Notion...) through the Nous gateway."
     },
     "context": {
       "$ref": "#/$defs/ContextConfig",
@@ -6143,12 +7520,43 @@
       },
       "description": "The profile's part in the home's gateway daemon."
     },
+    "hooks": {
+      "$ref": "#/$defs/HooksConfig",
+      "default": {
+        "auto_accept": false,
+        "outbound": []
+      },
+      "description": "Shell hooks and outbound webhooks."
+    },
     "logging": {
       "$ref": "#/$defs/LoggingConfig",
       "default": {
         "level": "info"
       },
       "description": "Structured log files."
+    },
+    "mcp": {
+      "$ref": "#/$defs/McpConfig",
+      "default": {
+        "auto_reload_on_config_change": true,
+        "call_timeout_secs": 300,
+        "connect_timeout_secs": 60,
+        "discovery_concurrency": 4,
+        "discovery_wait_ms": 1500,
+        "servers": {},
+        "single_query_discovery_wait_ms": 15000
+      },
+      "description": "External MCP servers."
+    },
+    "mcp_server": {
+      "$ref": "#/$defs/McpServerModeConfig",
+      "default": {
+        "allow_remote": false,
+        "expose_toolsets": [
+          "skills"
+        ]
+      },
+      "description": "What `prometheus mcp serve` exposes."
     },
     "memory": {
       "$ref": "#/$defs/MemoryConfig",
@@ -6214,6 +7622,40 @@
       },
       "description": "Trajectories."
     },
+    "plugins": {
+      "$ref": "#/$defs/PluginsConfig",
+      "default": {
+        "approval_transport": "",
+        "approval_transport_fallback": "deny",
+        "catalog_url": "https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json",
+        "disabled": [],
+        "enabled": [],
+        "entries": {},
+        "hook_context_max_chars": 10000,
+        "hook_timeout_ms": 30000,
+        "load_timeout_ms": 10000,
+        "safe_mode": false,
+        "scan_on_install": true,
+        "security_guidance": {
+          "mode": "warn"
+        },
+        "signature_policy": "require",
+        "trusted_project_dirs": [],
+        "wasm": {
+          "call_timeout_ms": 30000,
+          "max_memory_bytes": 268435456
+        }
+      },
+      "description": "Plugin enablement, hook bounds and WASM limits."
+    },
+    "privacy": {
+      "$ref": "#/$defs/PrivacyConfig",
+      "default": {
+        "owner_emails": [],
+        "redact_pii": false
+      },
+      "description": "PII redaction."
+    },
     "prompt": {
       "$ref": "#/$defs/PromptConfig",
       "default": {
@@ -6242,6 +7684,18 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "python_bridge": {
+      "$ref": "#/$defs/PythonBridgeConfig",
+      "default": {
+        "allow_unbounded_requirements": false,
+        "call_timeout_ms": 30000,
+        "idle_shutdown_secs": 600,
+        "max_memory_bytes": 1073741824,
+        "max_processes": 16,
+        "python_version": "3.12"
+      },
+      "description": "The python bridge: managed interpreter and sidecar bounds."
+    },
     "quick_commands": {
       "additionalProperties": {
         "$ref": "#/$defs/QuickCommand"
@@ -6262,16 +7716,27 @@
     "secrets": {
       "$ref": "#/$defs/SecretsConfig",
       "default": {
-        "backend": "file"
+        "backend": "file",
+        "command": {
+          "argv": [],
+          "enabled": false,
+          "override_existing": false,
+          "timeout_secs": 3
+        }
       },
       "description": "Secrets store backend."
     },
     "security": {
       "$ref": "#/$defs/SecurityConfig",
       "default": {
+        "acked_advisories": [],
         "egress": {
+          "allow": [],
           "allow_private": false,
-          "fake_ip_ranges": []
+          "deny": [],
+          "deny_files": [],
+          "fake_ip_ranges": [],
+          "mode": "public"
         },
         "protected_instruction_extra_patterns": [],
         "protected_instruction_files": true,
@@ -6407,6 +7872,15 @@
           "default_chars": 100000,
           "mcp_chars": 50000,
           "overrides": {}
+        },
+        "tool_search": {
+          "defer": null,
+          "listing": "auto",
+          "listing_max_tokens": 4000,
+          "max_search_limit": 25,
+          "mode": "auto",
+          "search_default_limit": 5,
+          "threshold_pct": 5
         }
       },
       "description": "Toolset selection, timeouts and result budgets."
@@ -6457,6 +7931,19 @@
         }
       },
       "description": "Interactive interface selection."
+    },
+    "vault": {
+      "$ref": "#/$defs/VaultConfig",
+      "default": {
+        "bitwarden": {
+          "enabled": true
+        },
+        "key_storage": "file",
+        "onepassword": {
+          "enabled": true
+        }
+      },
+      "description": "The credential vault."
     },
     "vision": {
       "$ref": "#/$defs/VisionConfig",

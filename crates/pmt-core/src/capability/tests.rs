@@ -320,3 +320,32 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn plugin_rights_parse_round_trip_and_cover() {
+    for text in [
+        "plugin.hook:pre_tool_call",
+        "plugin.command:standup",
+        "plugin.prompt_section:4000",
+        "plugin.platform_action:add_reaction",
+        "plugin.llm_model:*",
+        "plugin.llm_model:openrouter/gpt-5",
+        "plugin.approval_transport",
+    ] {
+        assert_eq!(cap(text).to_string(), text);
+    }
+    for bad in [
+        "plugin.hooks:pre_tool_call",
+        "plugin.hook",
+        "plugin.approval_transport:x",
+        "plugin.prompt_section:4001",
+        "plugin.platform_action:pin",
+    ] {
+        assert!(Capability::parse(bad).is_err(), "{bad}");
+    }
+    assert!(cap("plugin.prompt_section:4000").covers(&cap("plugin.prompt_section:200")));
+    assert!(!cap("plugin.prompt_section:200").covers(&cap("plugin.prompt_section:4000")));
+    assert!(cap("plugin.llm_model:*").covers(&cap("plugin.llm_model:gpt-5")));
+    assert!(!cap("plugin.hook:pre_tool_call").covers(&cap("plugin.hook:post_tool_call")));
+    assert!(!cap("plugin.hook:pre_tool_call").covers(&cap("plugin.command:pre_tool_call")));
+}

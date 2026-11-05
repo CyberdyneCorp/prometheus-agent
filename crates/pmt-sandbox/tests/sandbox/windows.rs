@@ -109,3 +109,130 @@ fn acl_entries_are_revoked_when_the_sandbox_ends() {
 fn entries(listing: &str) -> String {
     listing.replace("(I)", "")
 }
+
+/// Egress for a proxied child (spec: security-boundaries, Egress
+/// enforcement for child processes): the child holds no network
+/// capability and reaches the loopback proxy only through the relay in its
+/// own container, at the address its proxy variables are rewritten to;
+/// connecting to the proxy directly or to a public host is refused, and
+/// `net` is reported `enforced`. (Diagnosed on ARM64: the relay, its pipe
+/// and the rewritten environment work there; the "Access is denied" once
+/// seen from proxied terminal commands was a lost ACL entry, see
+/// `concurrent_sandboxes_keep_their_entries_on_shared_ancestors`.)
+#[test]
+fn a_proxied_child_reaches_only_the_proxy() {
+    use std::io::Write as _;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let fixture = Fixture::new();
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = proxy.local_addr().unwrap().port();
+    let accepted = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&accepted);
+    std::thread::spawn(move || {
+        for stream in proxy.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            count.fetch_add(1, Ordering::SeqCst);
+            let _ = stream.write_all(b"proxy\n");
+        }
+    });
+    let sandbox = confine(
+        fixture
+            .policy(&[])
+            .through_proxy(port, pmt_sandbox::Relay::new(|_| {})),
+    );
+    let net = &sandbox.report().features[1];
+    assert_eq!((net.feature, net.level), (Feature::Net, Level::Enforced));
+    assert!(net.gap.is_none(), "{net:?}");
+
+    let run = |script: &str| {
+        let output = sandbox
+            .command("powershell.exe")
+            .unwrap()
+            .current_dir(&fixture.work)
+            .env("HTTPS_PROXY", format!("http://127.0.0.1:{port}"))
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .output()
+            .unwrap();
+        (
+            String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            format!("{output:?}"),
+        )
+    };
+    let connect = |target: &str| {
+        let line = format!(
+            "try {{ $c = [Net.Sockets.TcpClient]::new(); $c.Connect({target}); 'connected' }} catch {{ 'refused: ' + $_.Exception.GetBaseException().GetType().Name }}"
+        );
+        run(&line)
+    };
+    // Through the proxy variable: the relay, then the proxy.
+    let (through, why) = run(
+        "$u = [Uri]$env:HTTPS_PROXY; $c = [Net.Sockets.TcpClient]::new(); $c.Connect($u.Host, $u.Port); $b = [byte[]]::new(6); $n = $c.GetStream().Read($b, 0, 6); \"$($u.Port) $([Text.Encoding]::ASCII.GetString($b, 0, $n).Trim())\"",
+    );
+    let (relay_port, answer) = through.split_once(' ').unwrap_or_default();
+    assert_eq!(answer, "proxy", "{why}");
+    assert_ne!(relay_port, port.to_string(), "{why}");
+    assert_eq!(accepted.load(Ordering::SeqCst), 1);
+    // Around it: the proxy's own address, and a public host.
+    for target in [
+        format!("'127.0.0.1', {port}"),
+        "'github.com', 443".to_owned(),
+    ] {
+        let (text, why) = connect(&target);
+        assert_eq!(text, "refused: SocketException", "{target}: {why}");
+    }
+    assert_eq!(
+        accepted.load(Ordering::SeqCst),
+        1,
+        "the child bypassed the relay"
+    );
+}
+
+/// Sandboxes that start and end at the same time (concurrent sessions, or
+/// the commands of several daemons) share the directories above their
+/// workspaces, whose DACLs each one rewrites to add and later drop its
+/// listing entry. Every container keeps its entry while it lives (a lost
+/// entry denies its PowerShell `Set-Location` into the workspace, seen as
+/// "Access is denied" on the ARM64 runners), and none is left behind.
+#[test]
+fn concurrent_sandboxes_keep_their_entries_on_shared_ancestors() {
+    const SANDBOXES: usize = 8;
+    let root = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let shared = std::fs::canonicalize(root.path()).unwrap().join("shared");
+    let containers = |listing: &str| listing.matches("S-1-15-2-").count();
+    for round in 0..3 {
+        let workspaces: Vec<_> = (0..SANDBOXES)
+            .map(|i| shared.join(format!("w{round}-{i}")))
+            .collect();
+        let sandboxes: Vec<Sandbox> = std::thread::scope(|scope| {
+            let started: Vec<_> = workspaces
+                .iter()
+                .map(|work| scope.spawn(move || confine(workspace_policy(work))))
+                .collect();
+            started.into_iter().map(|t| t.join().unwrap()).collect()
+        });
+        let during = acl(&shared);
+        assert_eq!(containers(&during), SANDBOXES, "round {round}: {during}");
+        std::thread::scope(|scope| {
+            for sandbox in sandboxes {
+                scope.spawn(move || drop(sandbox));
+            }
+        });
+        let after = acl(&shared);
+        assert_eq!(containers(&after), 0, "round {round}: {after}");
+    }
+}
+
+/// The baseline policy of a session whose home and workspace is `work`.
+fn workspace_policy(work: &Path) -> pmt_sandbox::Policy {
+    let home = work.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let paths = pmt_sandbox::Paths {
+        user_home: home.clone(),
+        prometheus_home: home.join(".prometheus"),
+        workspace: work.to_path_buf(),
+        scratch: Vec::new(),
+    };
+    pmt_sandbox::Policy::from_capabilities(pmt_core::capability::BASELINE, &paths).unwrap()
+}

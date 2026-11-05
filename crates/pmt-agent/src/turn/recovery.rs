@@ -95,7 +95,11 @@ impl Turn<'_> {
         ctx.stale_cap = self.stale_cap();
         let deltas = self.options.deltas.clone();
         let model = setup.model.clone();
-        self.race_model(model.call(request, &ctx, &*deltas)).await
+        let outcome = self.race_model(model.call(request, &ctx, &*deltas)).await;
+        if let Some(stream) = &self.stream {
+            stream.end();
+        }
+        outcome
     }
 
     /// The stale-call cap under a run budget (no clock read without one).

@@ -137,7 +137,7 @@ fn refused(target: &Resolved) -> Error {
 }
 
 impl Shared {
-    fn gateway_config(&self, profile: &str) -> Result<GatewayConfig, Error> {
+    pub(crate) fn gateway_config(&self, profile: &str) -> Result<GatewayConfig, Error> {
         self.agents
             .scope(profile)
             .map(|s| s.config().gateway.clone())

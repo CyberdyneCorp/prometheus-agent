@@ -11,12 +11,21 @@
 //! (`internetClient`) or none; capabilities cannot filter ports or hosts, so
 //! a port or host list is `partial`. Listening is never granted (loopback
 //! needs a per-container exemption), which is narrower than any grant.
+//!
+//! A child routed through the egress proxy ([`Policy::through_proxy`])
+//! gets no network capability at all and reaches the proxy only through a
+//! relay process running in its own container ([`relay`]): an
+//! `AppContainer` reaches a loopback listener only of its own package.
+//! Every connection then meets the proxy's host rules, so `net` is
+//! `enforced`.
 
 mod acl;
 mod args;
 pub(crate) mod console;
 mod container;
 pub(crate) mod launch;
+mod pipe;
+pub(crate) mod relay;
 
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
@@ -27,6 +36,7 @@ use pmt_config::schema::DegradedFeature;
 use pmt_core::error::Error;
 
 pub(crate) use args::LaunchSpec;
+use args::Net;
 use container::{Access, AppContainer};
 
 use crate::carve::{Reach, carve};
@@ -45,6 +55,9 @@ pub(crate) struct Prepared {
 
 pub(crate) fn probe(policy: &Policy) -> StrengthReport {
     let net = match policy.connect() {
+        _ if policy.relay().is_some() => {
+            FeatureReport::full(Feature::Net, Level::Enforced, "appcontainer relay")
+        }
         Ports::All if !policy.has_host_patterns() => {
             FeatureReport::full(Feature::Net, Level::Enforced, PLATFORM)
         }
@@ -103,6 +116,10 @@ pub(crate) fn prepare(
         }
     }
     open_ancestors(&mut container, policy);
+    if policy.relay().is_some() {
+        // The relay runs the launcher's executable inside the container.
+        container::open_to_containers(&launcher).map_err(setup_error)?;
+    }
     Ok(Prepared {
         container,
         launcher,
@@ -149,11 +166,16 @@ impl Prepared {
     )]
     pub(crate) fn command(&self, policy: &Policy, program: &OsStr) -> Result<Command, Error> {
         let mut command = Command::new(&self.launcher);
-        let internet = policy.connect().is_all();
+        let net = match policy.proxy_port() {
+            Some(port) if policy.relay().is_some() => Net::Proxy(port),
+            _ if policy.connect().is_all() => Net::Internet,
+            _ => Net::None,
+        };
         command.args(LaunchSpec::head(
             self.container.name(),
-            internet,
+            net,
             policy.may_spawn(),
+            policy.limits(),
             program,
         ));
         Ok(command)

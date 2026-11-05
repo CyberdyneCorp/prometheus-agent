@@ -396,7 +396,7 @@ capabilities = [
 "Explicit downgrade" = ["crates/pmt-sandbox/tests/sandbox/degrade.rs::allowed_downgrade_runs_and_warns_on_every_start"]
 
 [security-boundaries."Private and metadata destinations"]
-"Mapped metadata address" = ["crates/pmt-net/src/destination.rs::metadata_endpoints_and_their_mapped_forms"]
+"Mapped metadata address" = ["crates/pmt-net/src/destination.rs::metadata_endpoints_and_their_mapped_forms", "crates/prometheus/src/plugins_host/ports.rs::metadata_and_private_addresses_are_refused_under_a_wildcard_grant"]
 
 [security-boundaries."Secrets storage"]
 "Secret written by setup" = ["crates/prometheus/tests/setup_cli.rs::the_wizard_writes_config_and_the_key_to_the_secrets_store"]
@@ -531,6 +531,9 @@ capabilities = [
 [execution-environments."browser_exec tool"]
 "Batched sub-procedure" = ["crates/pmt-tools/tests/browser/main.rs::a_batched_sub_procedure_keeps_its_tab_for_the_next_call"]
 "No terminal toolset" = ["crates/pmt-tools/tests/toolsets.rs::browser_exec_needs_the_terminal_toolset"]
+
+[model-providers."Hermes model-provider plugins hosted by the Python bridge"]
+"Profile references a missing bridged provider" = ["crates/prometheus/tests/python_bridge.rs::a_profile_naming_a_missing_bridged_provider_fails_closed"]
 
 [model-providers."Typed profile-scoped provider registry"]
 "Plugin provider is invisible to another profile" = ["crates/pmt-providers/src/registry.rs::plugin_provider_is_invisible_to_another_profile"]
@@ -1691,6 +1694,7 @@ capabilities = [
 
 [messaging-gateway."Gateway lifecycle hooks are typed"]
 "Secondary profile hook isolation" = ["crates/pmt-gateway/tests/messaging/commands.rs::a_hook_of_another_profile_never_runs", "crates/pmt-gateway/tests/messaging/commands.rs::reset_ends_the_replaced_session_for_its_own_profile_hooks"]
+"Typo in hook name" = ["crates/pmt-plugins/src/manifest/tests.rs::hook_typos_and_bad_values_are_refused", "crates/pmt-plugins/tests/hooks.rs::an_unknown_hook_name_fails_at_load"]
 
 # Group 24.7-24.10 (relay, health export, rate limits, chat policies,
 # service installation, daemon inventory, enrollment, pause, home channel,
@@ -1996,3 +2000,431 @@ capabilities = [
 
 [messaging-gateway."Concurrency caps across surfaces"]
 "Cap queues a turn" = ["crates/prometheus/tests/gateway_limits.rs::a_third_turn_waits_for_a_free_slot_and_then_runs", "crates/pmt-gateway/src/slots.rs::a_turn_beyond_the_cap_waits_its_turn_in_order", "crates/pmt-gateway/tests/messaging/display.rs::a_turn_waiting_for_a_slot_is_announced"]
+
+# Group 28.1-28.5 (WASM plugin host: WIT worlds, manifests, discovery,
+# enablement, digest-bound grants, wasmtime limits, host interfaces, plugin
+# tools, typed hooks, pre_tool_call directives, pre_llm_call context).
+
+[plugin-system."Plugin kinds and manifest"]
+"Unknown capability key fails closed" = ["crates/pmt-plugins/src/manifest/tests.rs::unknown_capability_key_fails_closed", "crates/prometheus/tests/plugins_manage.rs::manifest_errors_are_listed_and_refused"]
+"Newer manifest is refused" = ["crates/pmt-plugins/src/manifest/tests.rs::newer_manifest_is_refused"]
+
+[plugin-system."Discovery sources and identity"]
+"Untrusted project plugin is not scanned" = ["crates/pmt-plugins/src/discovery/tests.rs::untrusted_project_plugin_is_not_scanned"]
+
+[plugin-system."Opt-in enablement"]
+"Installed is not enabled" = ["crates/pmt-plugins/src/discovery/tests.rs::a_discovered_plugin_stays_disabled_until_enabled", "crates/prometheus/tests/plugins_manage.rs::a_discovered_plugin_stays_disabled_until_enabled_with_approval", "crates/prometheus/tests/plugins_catalog.rs::an_unsigned_local_package_needs_an_explicit_flag"]
+
+[plugin-system."Capability declarations"]
+"Undeclared host is blocked" = ["crates/pmt-plugins/tests/runtime.rs::an_undeclared_host_is_blocked_before_any_connection"]
+
+[plugin-system."WASM sandbox resource limits"]
+"Infinite loop is interrupted" = { tests = ["crates/pmt-plugins/tests/runtime.rs::an_infinite_loop_is_interrupted_within_the_bound", "crates/pmt-plugins/tests/tools.rs::plugin_tools_register_under_the_plugin_toolset_and_a_timeout_is_a_result"], note = "with a 300 ms call timeout instead of the 30 s default; the timed-out tool call is a timeout result, so the turn goes on" }
+
+[plugin-system."Host interfaces offered to plugins"]
+"Secret outside the grant is not readable" = ["crates/pmt-plugins/tests/runtime.rs::a_secret_outside_the_grant_is_not_readable_and_revocation_is_immediate"]
+
+[plugin-system."Plugin state and profile scope"]
+"Two profiles get two instances" = ["crates/pmt-plugins/tests/runtime.rs::two_profiles_get_two_instances"]
+
+[plugin-system."Plugin tool registration"]
+"Override needs a grant" = { tests = ["crates/pmt-plugins/tests/tools.rs::plugin_tools_register_under_the_plugin_toolset_and_a_timeout_is_a_result", "crates/pmt-plugins/tests/tools.rs::overriding_a_core_tool_needs_the_grant"], note = "a built-in tool `ok` stands in for `web_search`; the registry rule is the same for every core tool" }
+
+[plugin-system."Typed hook registry"]
+"Typo is a load error" = ["crates/pmt-plugins/tests/hooks.rs::an_unknown_hook_name_fails_at_load", "crates/pmt-plugins/src/manifest/tests.rs::hook_typos_and_bad_values_are_refused"]
+
+[plugin-system."Hook payloads are versioned and additive"]
+"Old plugin receives a new payload" = { tests = ["crates/pmt-plugins/src/hooks/payload.rs::an_old_plugin_receives_only_the_fields_of_its_version"], note = "the test supplies its own addition table; the host's real one (`ADDED`: `turn_id`, `response`, `platforms` at 1.3) is applied the same way" }
+
+[plugin-system."Hook isolation and time bounds"]
+"Failing hook does not block others" = ["crates/pmt-plugins/tests/hooks.rs::a_failing_hook_does_not_block_the_next_one", "crates/pmt-plugins/tests/hooks.rs::a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while"]
+
+[plugin-system."pre_tool_call directives"]
+"Block beats approve" = { tests = ["crates/pmt-plugins/tests/hooks.rs::block_beats_approve_and_modify_merges", "crates/pmt-tools/src/dispatch/tests.rs::hook_block_skips_the_handler_and_post_sees_blocked", "crates/pmt-tools/src/dispatch/tests.rs::hook_modify_merges_arguments_and_revalidates_them"], note = "the combined decision is a block, and a blocked call never reaches the approval gate" }
+
+[plugin-system."pre_llm_call context preserves the prompt cache"]
+"Large hook context is spilled" = ["crates/pmt-plugins/tests/hooks.rs::large_hook_context_is_spilled", "crates/pmt-agent/tests/turn/hooks.rs::hook_context_rides_on_the_current_user_message_only", "crates/prometheus/tests/plugins_manage.rs::an_enabled_plugin_tool_and_hook_serve_a_session"]
+
+[plugin-system."Plugin LLM access gate"]
+"Model override without grant" = ["crates/pmt-plugins/tests/runtime.rs::model_calls_need_the_llm_grant_and_overrides_need_their_own", "crates/prometheus/tests/plugins_session.rs::a_plugin_model_call_is_charged_to_the_session_under_the_plugin"]
+
+[plugin-system."Plugin event bus"]
+"Reserved namespace rejected" = ["crates/pmt-plugins/tests/runtime.rs::ungranted_imports_are_denied_and_always_on_ones_work", "crates/pmt-plugins/tests/extensions.rs::events_reach_subscribers_in_order_and_a_failing_one_does_not_affect_the_emitter"]
+
+[plugin-system."WIT world versioning and compatibility"]
+"Previous major still loads" = { tests = ["crates/pmt-plugins/src/worlds.rs::previous_major_still_loads_and_others_are_refused", "crates/pmt-plugins/tests/extensions.rs::a_plugin_built_against_an_older_hook_minor_still_loads"], note = "no world has a previous major yet; the policy is checked against a host at tool@3.x, and a component built against hook@1.0 loads on the hook@1.1 host. `plugins show` prints `<world>@<major> (previous major)` for such a world" }
+
+[security-boundaries."Plugin and sidecar isolation"]
+"Runaway plugin" = ["crates/pmt-plugins/tests/hooks.rs::a_slow_hook_counts_as_no_result_and_is_skipped_for_a_while", "crates/pmt-plugins/tests/runtime.rs::an_infinite_loop_is_interrupted_within_the_bound"]
+
+# Group 28.6-28.9 (WASM plugin host: sections, commands, event bus,
+# bundled skills, LLM gate, provider objects; load order, hot reload, safe
+# mode; catalog, kill list, signed packages, plugins CLI; authoring guide).
+
+[plugin-system."Capability grants are user-approved and digest-bound"]
+"Capability escalation on update waits for approval" = { tests = ["crates/prometheus/tests/plugins_catalog.rs::capability_escalation_on_update_waits_for_approval"], note = "a package install; the update is a new package at the recorded path (a catalog update takes the same path), reported with the full version 1.1.0" }
+
+[plugin-system."Plugin system-prompt sections are bounded and frozen"]
+"Duplicate section id refused" = ["crates/pmt-plugins/tests/extensions.rs::duplicate_section_id_is_refused_naming_the_first_plugin", "crates/pmt-plugins/tests/extensions.rs::a_section_id_listed_twice_by_one_plugin_is_refused", "crates/pmt-plugins/tests/extensions.rs::sections_need_the_grant_and_stay_within_their_bounds", "crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
+
+[plugin-system."Plugin slash commands"]
+"Core command cannot be taken" = ["crates/prometheus/src/slash/tests.rs::a_plugin_redeclaring_a_built_in_fails_and_the_built_in_stays", "crates/pmt-plugins/tests/extensions.rs::commands_register_only_when_granted_and_run_in_the_plugin", "crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now"]
+
+[plugin-system."Plugin-bundled skills"]
+"Disabling a plugin hides its skills next session" = ["crates/prometheus/tests/plugins_session.rs::sections_and_skills_join_sessions_started_while_the_plugin_is_enabled"]
+
+[plugin-system."Provider-object plugins fail closed when unregistered"]
+"Missing image provider does not fall back" = { tests = ["crates/pmt-plugins/tests/extensions.rs::missing_provider_does_not_fall_back_and_a_registered_one_answers", "crates/pmt-tools/src/web/select.rs::an_unknown_backend_is_not_installed_and_never_replaced"], note = "the image generation tool is task 49.2; until it lands the scenario is checked on the provider registry every category resolves through, and on the web tools, whose backend selection uses it" }
+
+[plugin-system."Load order, dependencies and deadline"]
+"Cycle refuses only its members" = ["crates/pmt-plugins/src/load/order.rs::cycle_refuses_only_its_members", "crates/pmt-plugins/tests/loading.rs::a_cycle_refuses_only_its_members_and_dependencies_load_first", "crates/pmt-plugins/tests/loading.rs::a_plugin_overrunning_the_load_deadline_is_skipped_and_others_load"]
+
+[plugin-system."Hot reload respects the prompt-cache invariant"]
+"New tool waits for the next session" = ["crates/prometheus/tests/plugins_session.rs::a_reloaded_plugin_tool_waits_for_the_next_session_unless_now", "crates/prometheus/tests/plugins_session.rs::an_enabled_plugin_command_works_at_once_in_a_running_daemon_session"]
+
+[plugin-system."Safe mode"]
+"Broken config does not block safe mode" = ["crates/prometheus/tests/plugins_session.rs::safe_mode_starts_with_a_broken_config_and_without_plugins"]
+"Broken plugin bypassed" = ["crates/prometheus/tests/plugins_session.rs::safe_mode_starts_with_a_broken_config_and_without_plugins", "crates/pmt-plugins/tests/loading.rs::safe_mode_instantiates_no_plugin_and_changes_no_setting"]
+
+[plugin-system."Plugin catalog"]
+"Tampered catalog is ignored" = ["crates/prometheus/tests/plugins_catalog.rs::a_tampered_catalog_is_ignored_for_the_embedded_one", "crates/pmt-plugins/src/catalog/tests.rs::a_live_catalog_needs_a_verifying_signature_and_a_bounded_size"]
+
+[plugin-system."Catalog kill list"]
+"Removed plugin stops loading" = ["crates/prometheus/tests/plugins_catalog.rs::a_removed_plugin_stops_loading_and_is_not_installed", "crates/pmt-plugins/tests/loading.rs::a_plugin_on_the_kill_list_stops_loading_unless_installed_with_allow_removed"]
+
+[plugin-system."Signed plugin packages and provenance"]
+"Unsigned local package needs an explicit flag" = ["crates/prometheus/tests/plugins_catalog.rs::an_unsigned_local_package_needs_an_explicit_flag", "crates/prometheus/tests/plugins_catalog.rs::an_unsigned_catalog_install_is_refused_by_default"]
+
+[plugin-system."plugins CLI"]
+"Hand-placed plugin needs adoption" = { tests = ["crates/prometheus/tests/plugins_catalog.rs::a_hand_placed_plugin_needs_adoption", "crates/pmt-plugins/tests/loading.rs::a_hand_placed_plugin_is_unadopted_and_never_loads"], note = "the loader every process uses (daemon or CLI) is checked through `plugins list`" }
+"Symbolic ref refused" = ["crates/prometheus/tests/plugins_catalog.rs::a_symbolic_ref_is_refused"]
+
+[security-boundaries."Signed plugins"]
+"Tampered plugin" = ["crates/prometheus/tests/plugins_catalog.rs::a_tampered_plugin_does_not_load_and_doctor_reports_it"]
+
+[security-boundaries."Grants pinned to plugin identity"]
+"Update adds network access" = ["crates/prometheus/tests/plugins_catalog.rs::an_update_adding_network_access_waits_while_the_installed_version_runs"]
+
+# Group 29 (plugin hooks, shell hooks and extension surfaces)
+[plugin-system."Transform hooks rewrite results and replies"]
+"Held reply never leaks" = ["crates/prometheus/tests/plugins_transforms.rs::a_held_reply_never_leaks_on_a_messaging_platform", "crates/prometheus/tests/plugins_transforms.rs::a_held_reply_whose_hook_times_out_is_withheld", "crates/pmt-agent/tests/turn/hooks.rs::a_held_turn_streams_nothing_before_the_hook_rewrote_it"]
+"Tool result redaction" = ["crates/prometheus/tests/plugins_transforms.rs::a_tool_result_is_redacted_before_the_model_sees_it_and_stored_as_seen"]
+
+[plugin-system."Streaming and lifecycle observer hooks"]
+"Stream observer cannot change output" = ["crates/prometheus/tests/plugins_transforms.rs::a_stream_observer_cannot_change_the_reply", "crates/pmt-agent/tests/turn/hooks.rs::stream_observers_see_every_delta_and_cannot_change_them"]
+
+[plugin-system."pre_verify continuation hook"]
+"Endless continue is bounded" = ["crates/prometheus/tests/plugins_transforms.rs::an_endless_pre_verify_continue_is_bounded"]
+
+[plugin-system."transform_api_error_classification hook"]
+"Provider plugin claims its quirk" = ["crates/prometheus/tests/plugins_providers.rs::a_provider_plugin_claims_its_404_and_the_turn_falls_back"]
+
+[plugin-system."Approval and human-input observer hooks"]
+"Notifier observes approvals" = ["crates/prometheus/tests/plugins_transforms.rs::a_notifier_observes_approvals_in_a_messaging_session"]
+
+[plugin-system."Install-time threat scan"]
+"Reverse shell blocked even with force" = ["crates/prometheus/tests/plugins_threat.rs::a_reverse_shell_is_blocked_even_with_force", "crates/prometheus/src/plugins_cmd/threat.rs::a_reverse_shell_in_a_script_is_dangerous_with_its_file_and_line"]
+
+[plugin-system."Model-provider plugins"]
+"Plugin cannot silently replace a built-in" = ["crates/pmt-plugins/tests/surfaces.rs::a_plugin_cannot_silently_replace_a_builtin_provider"]
+
+[plugin-system."Shell hooks with first-use consent"]
+"Exit 2 blocks a tool call" = ["crates/prometheus/tests/plugins_hooks.rs::exit_2_blocks_a_tool_call_once_the_hook_is_approved", "crates/prometheus/src/hooks_host/shell.rs::exit_two_blocks_with_stdout_then_stderr_then_the_default"]
+"Edited script needs re-approval" = ["crates/prometheus/tests/plugins_hooks.rs::an_edited_script_needs_approval_again", "crates/prometheus/tests/plugins_hooks.rs::an_edited_interpreted_script_needs_approval_again"]
+
+[plugin-system."Hooks CLI"]
+"Test shows fail-closed outcome" = ["crates/prometheus/tests/plugins_hooks.rs::hooks_test_shows_the_fail_closed_outcome"]
+
+[plugin-system."Gateway hook directories"]
+"Unapproved hook directory is inert" = ["crates/prometheus/tests/plugins_hooks.rs::an_unapproved_hook_directory_is_inert"]
+
+[plugin-system."Outbound webhooks"]
+"Signed delivery verifiable by receiver" = ["crates/prometheus/tests/plugins_webhooks.rs::a_signed_delivery_is_verifiable_by_the_receiver"]
+"Dead endpoint never stalls a turn" = ["crates/prometheus/tests/plugins_webhooks.rs::a_dead_endpoint_never_stalls_a_turn"]
+
+[plugin-system."Plugin CLI subcommands"]
+"Honcho management command" = { tests = ["crates/prometheus/tests/plugins_surfaces.rs::a_plugin_command_runs_with_its_exit_code_and_shows_in_help"], note = "checked with a WASM plugin's command; hosting the bridged honcho memory provider's commands is the python bridge's (task 33.x)" }
+
+[plugin-system."Approval transports"]
+"Transport cannot widen scope" = ["crates/prometheus/tests/plugins_surfaces.rs::a_transport_cannot_widen_a_once_only_request", "crates/pmt-tools/src/approval/hooks.rs::a_transport_cannot_widen_a_once_only_request"]
+
+[plugin-system."Plugin live messages and message injection"]
+"Progress message edits in place" = ["crates/prometheus/tests/plugins_messaging.rs::a_progress_message_is_edited_in_place", "crates/pmt-plugins/tests/surfaces.rs::injection_needs_its_grant_and_live_messages_bind_to_the_calling_session"]
+"Injection into another profile refused" = ["crates/prometheus/tests/plugins_messaging.rs::injection_reaches_the_plugins_own_profile_only"]
+
+[plugin-system."Platform actions"]
+"Ungranted verb returns structured error" = ["crates/pmt-plugins/tests/surfaces.rs::an_ungranted_platform_verb_returns_a_structured_error_without_an_adapter_call"]
+
+# Group 30: toolset surfaces and schema variants (tasks 30.1-30.2).
+
+[tool-system."Per-surface default toolsets"]
+"Cron override" = { tests = ["crates/pmt-tools/tests/surfaces.rs::cron_override", "crates/prometheus/tests/tools_surfaces_cli.rs::the_summary_lists_each_surfaces_toolsets_providers_and_unavailable_tools"], note = "cron job execution lands with task group 41; its sessions (source cron) resolve the `cron` surface through `chat::session::tools::surface_of`, so the surface resolution is what is proven here" }
+"Webhook payload cannot execute" = ["crates/pmt-tools/tests/surfaces.rs::webhook_payload_cannot_execute", "crates/prometheus/tests/gateway_webhooks.rs::a_route_without_toolsets_runs_read_only_and_answers_the_caller"]
+
+[tool-system."Platform bundles"]
+"Feishu tools stay on Feishu" = { tests = ["crates/pmt-tools/tests/surfaces.rs::feishu_tools_stay_on_feishu"], note = "the Feishu adapter and its tools are M3 (task 78.5); the bundle mechanism is proven with test toolsets `feishu_doc`/`feishu_drive` registered for platform `feishu`" }
+"Plugin platform bundle" = ["crates/pmt-tools/tests/surfaces.rs::plugin_platform_bundle"]
+
+[tool-system."Disabling a bundle never strips core"]
+"Disable the Discord bundle" = { tests = ["crates/pmt-tools/tests/surfaces.rs::disable_the_discord_bundle"], note = "the Discord tools are M3 (task 78.7); a `discord` toolset registered by the adapter's owner stands in for them" }
+
+[tool-system."Tool configuration summary and post-setup"]
+"Browser needs a runtime" = ["crates/prometheus/src/tools_cmd/setup/tests.rs::the_browser_runtime_is_installed_and_the_tools_become_available", "crates/prometheus/tests/tools_surfaces_cli.rs::post_setup_installs_the_browser_runtime_only_after_confirmation"]
+
+[tool-system."Model-dependent schema variants"]
+"Variant frozen for the session" = ["crates/prometheus/tests/chat_model_switch.rs::a_model_switch_keeps_the_frozen_patch_variant", "crates/pmt-tools/tests/file_tools/variants.rs::patch_advertises_v4a_only_to_openai_family_routes"]
+"Handler accepts any variant" = ["crates/pmt-tools/tests/file_tools/variants.rs::handler_accepts_any_variant"]
+
+# Group 31: MCP client and server (tasks 31.1-31.4).
+
+[plugin-system."MCP client servers"]
+"Crashed MCP server does not break the session" = ["crates/prometheus/tests/mcp_client.rs::crashed_mcp_server_does_not_break_the_session", "crates/pmt-mcp/tests/client.rs::a_crashed_server_answers_unavailable_and_restarts_after_its_backoff"]
+
+[plugin-system."MCP server mode"]
+"Terminal not exposed by default" = ["crates/prometheus/tests/mcp_serve.rs::terminal_not_exposed_by_default"]
+
+[tool-system."MCP tool naming and filtering"]
+"Include beats exclude" = ["crates/pmt-mcp/tests/client.rs::include_beats_exclude_and_full_trust_asks_for_nothing", "crates/pmt-mcp/src/naming.rs::include_beats_exclude"]
+
+[tool-system."MCP runtime safety"]
+"Provider key not forwarded" = ["crates/prometheus/tests/mcp_client.rs::provider_key_not_forwarded"]
+"Open circuit" = ["crates/pmt-mcp/tests/client.rs::three_timeouts_open_the_circuit_and_the_fourth_call_never_reaches_the_server"]
+
+[tool-system."Tool search progressive disclosure"]
+"Out-of-scope bridge call" = ["crates/pmt-tools/tests/tool_search.rs::out_of_scope_bridge_call_is_an_unknown_tool"]
+
+[tool-system."Tool search listing, ranking and limits"]
+"Oversized server collapses alone" = ["crates/pmt-tools/src/search/manifest.rs::an_oversized_server_collapses_alone"]
+"Limit clamp" = ["crates/pmt-tools/tests/tool_search.rs::limit_clamp"]
+
+# Group 31: MCP client and server (tasks 31.5-31.7).
+
+[plugin-system."MCP OAuth for HTTP servers"]
+"Dead refresh token parks the server" = ["crates/prometheus/tests/mcp_extensions.rs::dead_refresh_token_parks_the_server"]
+"DCR-less server without client" = ["crates/prometheus/tests/mcp_extensions.rs::dcr_less_server_without_client"]
+
+[plugin-system."MCP mTLS and identity header"]
+"Profile identity per profile" = ["crates/prometheus/tests/mcp_extensions.rs::profile_identity_per_profile"]
+
+[plugin-system."MCP config watch, recycling and discovery wait"]
+"Recycled server restarts on demand" = ["crates/pmt-mcp/tests/extensions.rs::recycled_server_restarts_on_demand"]
+
+[plugin-system."mcp CLI"]
+"Preset fills transport" = ["crates/prometheus/tests/mcp_extensions.rs::preset_fills_transport"]
+
+[plugin-system."MCP catalog entries"]
+"Large surface uses an exclude list" = ["crates/prometheus/tests/mcp_extensions.rs::large_surface_uses_an_exclude_list"]
+
+[plugin-system."MCP sampling"]
+"Rate limit enforced" = ["crates/pmt-mcp/tests/extensions.rs::rate_limit_enforced"]
+
+[plugin-system."MCP elicitation"]
+"Unattended elicitation declined" = ["crates/prometheus/tests/mcp_extensions.rs::unattended_elicitation_declined", "crates/pmt-mcp/tests/extensions.rs::unattended_elicitation_declined"]
+
+[plugin-system."MCP tool costs and spend limits"]
+"Budget crossing asks even when trusted" = ["crates/pmt-mcp/tests/extensions.rs::budget_crossing_asks_even_when_trusted", "crates/pmt-tools/src/approval/gate/tests.rs::a_once_only_rule_asks_under_yolo_every_time_and_is_refused_unattended"]
+
+[tool-system."Registry toolset aliases"]
+"Bare server name" = ["crates/pmt-tools/src/registry/tests.rs::bare_server_name", "crates/prometheus/tests/mcp_extensions.rs::bare_server_name_selects_its_toolset"]
+"Colliding server name" = ["crates/pmt-tools/src/registry/tests.rs::colliding_server_name", "crates/prometheus/tests/mcp_extensions.rs::colliding_server_name_selects_the_builtin_and_doctor_warns"]
+
+[tool-system."MCP resource and prompt utility tools"]
+"Tools-only server" = ["crates/pmt-mcp/tests/extensions.rs::tools_only_server_gets_no_utility_tools"]
+
+[tool-system."MCP tool list changes respect the frozen surface"]
+"Burst of notifications" = ["crates/pmt-mcp/tests/extensions.rs::burst_of_notifications", "crates/prometheus/tests/mcp_extensions.rs::a_tool_list_change_reaches_the_session_at_its_compaction_boundary"]
+
+[tool-system."MCP result sanitization"]
+"Smuggled instructions removed" = ["crates/pmt-mcp/tests/extensions.rs::smuggled_instructions_removed_and_reserved_meta_dropped", "crates/pmt-mcp/src/sanitize.rs::smuggled_instructions_are_removed_and_the_visible_text_kept"]
+"Reserved meta dropped" = ["crates/pmt-mcp/src/sanitize.rs::reserved_meta_dropped"]
+
+[tool-system."MCP media results"]
+"Screenshot from an MCP server" = ["crates/pmt-mcp/tests/extensions.rs::screenshot_from_an_mcp_server"]
+
+# Group 32 (connectors)
+[connectors."Connector availability"]
+"Disabled feature is invisible" = ["crates/prometheus/tests/connectors_cli.rs::a_disabled_feature_is_invisible"]
+"No silent identity creation" = ["crates/prometheus/tests/connectors_cli.rs::no_identity_is_created_and_nothing_is_sent_without_a_sign_in", "crates/pmt-tools/tests/connectors.rs::without_a_sign_in_hosted_actions_point_to_the_user_and_send_nothing"]
+
+[connectors."Remote connector tools through the search bridge"]
+"Gateway slow" = ["crates/pmt-tools/tests/connectors.rs::a_slow_gateway_degrades_to_local_results_without_an_error"]
+"Connector tool absent from the tool array" = ["crates/pmt-tools/tests/connectors.rs::connector_tools_never_enter_the_tool_array", "crates/prometheus/tests/connectors_cli.rs::a_signed_in_session_reaches_connectors_only_through_the_bridge"]
+
+[connectors."Connector calls run through the dispatch pipeline"]
+"Unlinked account" = ["crates/pmt-tools/tests/connectors.rs::an_unlinked_account_is_connection_required_through_the_whole_pipeline", "crates/prometheus/tests/connectors_cli.rs::a_signed_in_session_reaches_connectors_only_through_the_bridge"]
+
+[connectors."Multiple accounts per connector"]
+"Ambiguous account refused" = ["crates/pmt-tools/tests/connectors.rs::several_named_accounts_need_an_alias_and_results_name_the_account"]
+
+[connectors."manage_connections tool"]
+"Wrong target kind" = ["crates/pmt-tools/tests/connectors.rs::wrong_target_kinds_and_removals_are_refused_without_a_request", "crates/pmt-tools/src/connectors/manage/args.rs::install_of_a_hosted_connector_names_the_call_that_works"]
+
+[connectors."Connection flows require the user"]
+"Gateway chat gets a link" = ["crates/pmt-tools/tests/connectors.rs::a_chat_without_a_card_gets_a_link_and_nothing_is_awaited", "crates/prometheus/tests/connectors_cli.rs::a_run_without_a_card_gets_a_connect_link"]
+"Cron cannot install MCP servers" = ["crates/pmt-tools/src/approval/gate/tests.rs::cron_cannot_install_mcp_servers"]
+
+[connectors."Reconnect and rename semantics"]
+"Reconnect keeps history" = ["crates/pmt-tools/tests/connectors.rs::reconnect_repairs_only_broken_accounts_and_keeps_history", "crates/prometheus/tests/connectors_cli.rs::list_accounts_rename_and_connect"]
+
+[connectors."Connector account management CLI"]
+"Disconnect needs confirmation" = ["crates/prometheus/tests/connectors_cli.rs::disconnect_needs_confirmation"]
+
+# Group 33 (python bridge)
+[python-bridge."Scope of hosted code"]
+"Memory provider runs in a sidecar" = { deferred = "needs the memory.provider contract (44.9)" }
+
+[plugin-system."Python plugins route through the bridge"]
+"Hermes plugin is hosted out-of-process" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_tool_plugin_works_unchanged"]
+
+[python-bridge."Managed CPython runtime"]
+"Offline first use fails clearly" = ["crates/prometheus/tests/python_bridge.rs::offline_first_use_fails_clearly_and_the_session_starts", "crates/pmt-pybridge/src/runtime.rs::a_missing_runtime_names_the_install_command"]
+
+[python-bridge."Per-plugin pinned environments"]
+"Environment is reused" = ["crates/pmt-pybridge/tests/bridge/environments.rs::an_environment_is_built_offline_from_the_cache_and_then_reused"]
+"Plugin requirements are pinned with hashes" = ["crates/pmt-pybridge/tests/bridge/environments.rs::requirements_are_locked_to_one_exact_version_with_its_hash"]
+
+[python-bridge."Hermes API compatibility level"]
+"Plugin needing a newer Hermes API" = ["crates/pmt-plugins/src/python/hermes.rs::a_newer_hermes_api_is_named", "crates/pmt-plugins/src/python/api.rs::a_range_above_the_level_excludes_it"]
+
+[python-bridge."Sidecar wire protocol"]
+"Oversized frame is rejected" = ["crates/pmt-pybridge/tests/bridge/protocol.rs::an_oversized_tool_result_fails_with_frame_too_large", "crates/pmt-pybridge/src/wire.rs::an_oversized_frame_is_rejected_before_its_body"]
+
+[python-bridge."Supported PluginContext subset"]
+"Hermes tool plugin works unchanged" = ["crates/prometheus/tests/python_bridge.rs::a_hermes_tool_plugin_works_unchanged", "crates/pmt-pybridge/tests/bridge/protocol.rs::a_tool_handler_runs_in_the_sidecar_and_its_return_is_the_result"]
+
+[python-bridge."Unsupported APIs fail with a named error"]
+"Platform adapter plugin gets a clear error" = ["crates/pmt-pybridge/tests/bridge/hermes.rs::a_platform_adapter_registration_fails_with_a_named_error"]
+
+[python-bridge."Static compatibility audit"]
+"Audit flags an unsupported call before install" = ["crates/prometheus/tests/python_bridge.rs::validate_reports_an_unsupported_call_with_its_file_and_line", "crates/pmt-plugins/src/python/audit.rs::an_unsupported_call_from_a_handler_degrades_with_file_and_line"]
+
+[python-bridge."Hermes import shims"]
+"Internal import is refused by name" = ["crates/pmt-pybridge/tests/bridge/hermes.rs::an_internal_import_is_refused_by_name"]
+
+[python-bridge."Hook name and payload translation"]
+"Narrow signature gets narrow payload" = ["crates/pmt-pybridge/tests/bridge/protocol.rs::a_narrow_hook_callback_gets_only_what_it_declares"]
+
+[python-bridge."Typed values across the wire"]
+"Provider result keeps its declared type" = ["crates/pmt-pybridge/tests/bridge/protocol.rs::a_provider_result_keeps_its_declared_dataclass_fields"]
+
+[python-bridge."Capability grants enforced at the process boundary"]
+"Plugin cannot read the user's SSH keys" = ["crates/prometheus/tests/python_bridge.rs::a_plugin_cannot_read_the_users_ssh_keys"]
+
+[python-bridge."Secrets and environment isolation"]
+"Ungranted secret is invisible" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::the_environment_holds_only_the_allowed_variables_and_granted_secrets"]
+
+[python-bridge."One profile per sidecar"]
+"Shared gateway, separate sidecars" = ["crates/prometheus/tests/python_bridge.rs::a_shared_process_runs_one_sidecar_per_profile"]
+
+[python-bridge."Sidecar lifecycle"]
+"Process tree is reaped" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::shutdown_reaps_the_process_tree_within_seven_seconds"]
+
+[python-bridge."Call timeouts and stall detection"]
+"GIL stall is recovered" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_gil_stall_is_killed_after_three_missed_pings_and_restarted", "crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_stall_is_killed_after_three_ping_periods_not_more"]
+
+[python-bridge."Crash isolation and restart policy"]
+"Crash loop is contained" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_crash_loop_marks_the_plugin_failed_and_spares_the_rest", "crates/prometheus/tests/python_bridge.rs::a_crashing_plugin_does_not_affect_the_agent"]
+
+[python-bridge."Resource limits"]
+"Memory leak is bounded" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_memory_leak_is_terminated_naming_the_limit", "crates/pmt-pybridge/tests/bridge/lifecycle.rs::an_allocation_the_os_refuses_is_a_memory_limit_crash"]
+"A child outside the process group is reaped" = ["crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_child_that_left_the_process_group_is_reaped_with_the_sidecar"]
+
+[python-bridge."Registrations follow plugin-system reload rules"]
+"Restart does not mutate a live session" = ["crates/prometheus/tests/python_bridge.rs::a_sidecar_restart_does_not_mutate_a_live_sessions_tools_or_prompt", "crates/pmt-pybridge/tests/bridge/lifecycle.rs::a_restart_that_drops_a_tool_answers_by_name"]
+
+[python-bridge."Python skill scripts"]
+"Skill script has no access to plugin environments" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]
+
+[python-bridge."Bridge diagnostics"]
+"Doctor detects a corrupted environment" = ["crates/prometheus/tests/python_bridge_cli.rs::doctor_names_the_plugin_and_package_of_a_corrupted_environment"]
+
+[python-bridge."Migration of Hermes plugins"]
+"Incompatible plugin is imported disabled" = ["crates/prometheus/src/plugins_host/bridge/migrate.rs::an_incompatible_plugin_is_imported_disabled_and_cited"]
+
+[python-bridge."Model-provider plugins through the bridge"]
+"Copilot provider plugin works unchanged" = ["crates/prometheus/tests/python_bridge.rs::a_copilot_provider_plugin_works_unchanged", "crates/prometheus/tests/python_bridge_hermes.rs::the_hermes_nvidia_provider_plugin_serves_a_session"]
+"Sidecar crash fails the call, not the agent" = ["crates/prometheus/tests/python_bridge.rs::a_sidecar_crash_fails_the_call_and_the_fallback_chain_answers"]
+
+[python-bridge."Plugin CLI commands through the bridge"]
+"Argparse error maps to usage exit" = ["crates/prometheus/tests/python_bridge.rs::an_argparse_error_maps_to_the_usage_exit"]
+
+[python-bridge."Host-bound plugin APIs through the bridge"]
+"Ungranted injection returns False" = ["crates/prometheus/tests/python_bridge.rs::an_ungranted_injection_returns_false_and_the_log_names_the_capability"]
+
+[python-bridge."Named side environments"]
+"Stdout is only the path" = ["crates/prometheus/tests/python_bridge_cli.rs::a_named_environment_prints_only_its_path_and_is_reused_offline"]
+
+[skills."Skill scripts run sandboxed with managed runtimes"]
+"Skill script gets its pinned environment" = ["crates/prometheus/tests/python_bridge.rs::a_skill_script_gets_its_environment_and_no_plugin_environment"]
+
+# Group 34.1-34.3 (security hardening for extensions: egress proxy and
+# per-session egress policy, surface-only secrets and sidecar isolation,
+# tamper-evident audit log and posture check)
+[security-boundaries."Per-session network egress policy (upgrade)"]
+"Allowlist session" = ["crates/prometheus/tests/egress_session.rs::an_allowlist_session_refuses_other_hosts_and_records_the_denial", "crates/prometheus/tests/egress_session.rs::a_sandboxed_child_reaches_only_allowed_hosts", "crates/pmt-net/tests/fetch.rs::an_allowlist_session_fetches_only_allowed_hosts", "crates/pmt-net/src/egress/mod.rs::an_allowlist_session_refuses_other_hosts_and_follows_session_changes", "crates/pmt-tools/src/browser/safety.rs::a_session_egress_policy_refuses_navigation_to_other_hosts", "crates/pmt-tools/tests/browser/main.rs::a_page_subresource_to_a_host_the_session_refuses_is_denied", "crates/prometheus/src/plugins_host/ports.rs::egress_mode_none_refuses_a_plugin_request", "crates/prometheus/src/egress.rs::a_shared_childs_refusal_goes_to_the_calling_session", "crates/prometheus/tests/terminal_windows.rs::session_children_reach_only_what_the_egress_policy_admits"]
+"Session change keeps cache" = ["crates/prometheus/tests/egress_session.rs::changing_egress_mid_session_keeps_the_system_prompt"]
+
+[security-boundaries."Egress enforcement for child processes"]
+"DNS rebinding" = ["crates/pmt-net/src/egress/mod.rs::the_proxy_connects_only_to_the_address_it_checked", "crates/pmt-sandbox/tests/sandbox/linux.rs::a_proxied_child_reaches_only_the_proxy", "crates/pmt-sandbox/src/linux/mod.rs::a_proxied_child_needs_its_own_network_namespace", "crates/pmt-sandbox/tests/sandbox/windows.rs::a_proxied_child_reaches_only_the_proxy", "crates/prometheus/tests/terminal_windows.rs::session_children_reach_only_what_the_egress_policy_admits"]
+
+[security-boundaries."Gateway-owned secrets are never delegable"]
+"Skill requests the bot token" = ["crates/pmt-skills/tests/skills/view.rs::a_skill_declaring_a_bot_token_is_unavailable", "crates/prometheus/tests/surface_secrets.rs::a_skill_declaring_a_bot_token_is_listed_unavailable", "crates/prometheus/tests/surface_secrets.rs::a_plugin_cannot_be_granted_a_bot_token", "crates/prometheus/tests/surface_secrets.rs::an_mcp_server_cannot_receive_a_surface_secret", "crates/pmt-plugins/src/grants.rs::an_adapter_plugin_holds_only_its_own_platform_token"]
+
+[security-boundaries."Tamper-evident security audit log (upgrade)"]
+"Edited record" = ["crates/prometheus/tests/security_audit.rs::editing_an_audit_record_by_hand_fails_verification_naming_its_line", "crates/pmt-core/src/audit.rs::editing_a_record_names_its_line"]
+
+[security-boundaries."Security posture check"]
+"Strict check in CI" = ["crates/prometheus/tests/security_posture.rs::strict_posture_check_fails_on_an_unsigned_plugin_and_names_it", "crates/prometheus/tests/security_posture.rs::the_posture_names_open_surfaces_and_the_egress_mode"]
+
+# Group 34.4 (tool result provenance, approval explain and dry-run, smart
+# approvals with a denial breaker)
+[tool-system."Tool result provenance tagging (upgrade)"]
+"Web page tries to close the delimiter" = ["crates/prometheus/tests/provenance.rs::a_fetched_page_cannot_close_its_untrusted_block", "crates/pmt-core/src/provenance.rs::a_closing_tag_inside_the_content_cannot_close_the_block"]
+"Provenance is recorded" = ["crates/prometheus/tests/provenance.rs::an_mcp_result_is_stored_untrusted_inside_one_block", "crates/pmt-tools/src/provenance.rs::outside_sources_are_untrusted_and_workspace_files_trusted"]
+
+[tool-system."Approval explain and dry-run (upgrade)"]
+"Explaining a recursive delete" = ["crates/pmt-tools/tests/terminal/preview.rs::explaining_a_recursive_delete_lists_the_matched_paths_and_deletes_nothing", "crates/pmt-tools/src/approval/gate/tests/guarded.rs::explain_asks_again_with_the_explanation_and_runs_nothing_until_approved"]
+"Preview cannot write" = ["crates/pmt-tools/tests/terminal/preview.rs::a_preview_that_writes_is_denied_and_the_denial_is_shown"]
+
+[tool-system."Smart approvals with a denial breaker"]
+"Third denial" = ["crates/prometheus/tests/security_audit.rs::the_third_guardian_denial_carries_the_circuit_breaker", "crates/pmt-tools/src/approval/gate/tests/guarded.rs::the_third_consecutive_guardian_denial_trips_the_breaker"]
+
+# Group 34.7 (self-termination guard, approval suggestions)
+[tool-system."Self-termination guard"]
+"pkill under yolo" = ["crates/prometheus/tests/self_termination.rs::pkill_under_yolo_is_blocked_and_the_daemon_keeps_running", "crates/pmt-tools/src/approval/gate/tests/selfterm.rs::pkill_under_yolo_is_blocked_in_a_daemon_session", "crates/pmt-tools/src/approval/selfterm.rs::commands_that_stop_the_daemon_are_named", "crates/pmt-tools/src/approval/selfterm.rs::name_patterns_are_read_as_the_tools_read_them", "crates/pmt-tools/src/approval/selfterm.rs::daemon_pids_reaching_kill_indirectly_are_blocked", "crates/pmt-tools/src/approval/selfterm.rs::code_execution_bodies_are_read", "crates/pmt-tools/src/approval/gate/tests/selfterm.rs::indirect_kills_and_code_under_yolo_are_blocked_in_a_daemon_session", "crates/prometheus/tests/approvals_cli.rs::indirect_and_code_self_termination_commands"]
+"Own background process" = ["crates/pmt-tools/src/approval/gate/tests/selfterm.rs::own_background_process_is_left_to_the_normal_gate", "crates/pmt-tools/src/approval/selfterm.rs::unrelated_and_own_processes_pass", "crates/pmt-tools/src/approval/selfterm.rs::unrelated_code_and_pipelines_pass"]
+
+[tool-system."Approval suggestions mined from history"]
+"Repeated approvals proposed" = ["crates/prometheus/tests/approvals_cli.rs::repeated_approvals_are_proposed_without_changing_grants", "crates/pmt-tools/src/approval/suggest.rs::approvals_generalize_to_the_program_and_subcommand"]
+
+# Group 34.6 (website blocklist, supply-chain advisories, command secret
+# source, PII redaction, security guidance)
+[security-boundaries."Website blocklist"]
+"Shared list file" = ["crates/prometheus/tests/website_blocklist.rs::web_extract_of_a_host_in_a_shared_list_file_is_blocked", "crates/prometheus/tests/website_blocklist.rs::a_sandboxed_child_cannot_reach_a_blocklisted_host", "crates/pmt-net/src/egress/denylist.rs::a_list_file_is_reread_when_it_changes", "crates/pmt-net/src/egress/policy.rs::a_session_cannot_lift_the_profile_blocklist", "crates/pmt-tools/src/browser/safety.rs::a_blocklisted_navigation_is_refused_naming_the_host"]
+
+[security-boundaries."Supply-chain advisory catalog"]
+"Compromised MCP package" = ["crates/prometheus/tests/advisories.rs::a_pinned_compromised_mcp_package_is_warned_about_until_acknowledged", "crates/prometheus/tests/advisories.rs::acknowledging_an_unknown_advisory_exits_66", "crates/pmt-update/tests/update.rs::the_update_check_refreshes_the_signed_advisory_catalog", "crates/prometheus/src/advisories.rs::pinned_mcp_packages_are_read_from_their_command"]
+
+[security-boundaries."Command secret source"]
+"Helper times out" = ["crates/prometheus/tests/secrets_command.rs::a_helper_waiting_for_a_pin_is_killed_and_startup_continues", "crates/pmt-config/src/secrets/tests.rs::a_helper_waiting_for_a_pin_is_killed_at_the_timeout", "crates/pmt-config/src/secrets/tests.rs::command_values_rank_after_the_store_unless_they_override"]
+
+[security-boundaries."Optional PII redaction"]
+"Group chat" = ["crates/prometheus/tests/pii_redaction.rs::a_group_message_reaches_the_provider_pseudonymized_and_the_reply_reaches_the_chat", "crates/pmt-core/src/pii.rs::phones_and_other_peoples_emails_are_replaced", "crates/pmt-core/src/pii.rs::user_ids_get_a_stable_keyed_hash"]
+
+[security-boundaries."Security guidance on written code"]
+"Warn mode" = ["crates/prometheus/tests/security_guidance.rs::warn_mode_writes_the_file_and_reports_the_rule", "crates/prometheus/tests/security_guidance.rs::block_mode_refuses_the_write_with_the_guidance", "crates/pmt-tools/src/guidance/mod.rs::each_class_is_found_in_typical_code"]
+
+# Group 34.5 (credential vault storage, browser_vault, codes/cards/addresses,
+# vault management CLI)
+[security-boundaries."Credential vault storage"]
+"Interrupted key migration" = ["crates/pmt-vault/tests/vault.rs::an_interrupted_migration_opens_with_the_file_key_and_completes_on_rerun", "crates/pmt-vault/tests/vault.rs::a_vault_whose_key_is_missing_fails_and_is_never_rekeyed"]
+
+[security-boundaries."browser_vault fills by handle"]
+"Origin mismatch" = ["crates/pmt-tools/tests/browser/vault.rs::a_fill_on_another_origin_is_refused_and_types_nothing", "crates/pmt-vault/src/origin.rs::origins_match_exactly"]
+"Result shape" = ["crates/pmt-tools/tests/browser/vault.rs::a_login_fills_by_handle_and_returns_only_the_count_and_origin"]
+
+[security-boundaries."Vault codes, cards and addresses"]
+"Card fill from a webhook session" = ["crates/pmt-tools/src/approval/gate/tests/vault.rs::a_card_fill_from_a_webhook_session_is_refused_before_anything_runs", "crates/pmt-tools/src/browser/vault.rs::only_card_fills_escalate_and_never_are_remembered"]
+
+[security-boundaries."Vault management CLI"]
+"Password on the command line" = ["crates/prometheus/tests/vault_cli.rs::a_password_on_the_command_line_exits_2"]

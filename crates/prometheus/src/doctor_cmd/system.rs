@@ -118,21 +118,31 @@ pub(super) async fn network(inputs: &Inputs<'_>) -> Vec<Check> {
         timeout: PROBE_TIMEOUT,
     };
     let mut checks = check.run(&pmt_net::resolve::SystemLookup).await;
-    let egress = &config.security.egress;
     checks.push(Check::new(
         "network",
         "egress",
         Status::Ok,
-        format!(
-            "egress: direct (no proxy in this build); private destinations {}",
-            if egress.allow_private {
-                "allowed"
-            } else {
-                "blocked for tools"
-            }
-        ),
+        egress_line(&config.security.egress),
     ));
     checks
+}
+
+/// The egress mode, its allow list and the private-range setting.
+fn egress_line(egress: &pmt_config::schema::EgressConfig) -> String {
+    let allow = if egress.allow.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", egress.allow.join(", "))
+    };
+    format!(
+        "egress: {}{allow}; sandboxed children through a per-session loopback proxy; private destinations {}",
+        egress.mode.as_str(),
+        if egress.allow_private {
+            "allowed"
+        } else {
+            "blocked"
+        }
+    )
 }
 
 /// The trust boundaries (spec: security-boundaries, SECURITY.md).
@@ -184,6 +194,14 @@ pub(super) fn security(inputs: &Inputs<'_>) -> Vec<Check> {
             .with_hint("prometheus config set security.protected_instruction_files true"),
         );
     }
+    checks.push(Check::new(
+        "security",
+        "egress",
+        Status::Ok,
+        egress_line(&config.egress),
+    ));
+    checks.extend(posture(inputs));
+    checks.extend(advisories(inputs));
     checks.push(if config.redact_secrets {
         Check::new("security", "redaction", Status::Ok, "secret redaction on")
     } else {
@@ -195,5 +213,105 @@ pub(super) fn security(inputs: &Inputs<'_>) -> Vec<Check> {
         )
         .with_hint("prometheus config set security.redact_secrets true")
     });
+    checks
+}
+
+/// Supply-chain advisories matching this install, acknowledged ones
+/// included (an acknowledgement silences the startup warning only).
+fn advisories(inputs: &Inputs<'_>) -> Vec<Check> {
+    let acked = &inputs.scope.config().security.acked_advisories;
+    let found = crate::advisories::matches(inputs.scope);
+    if found.is_empty() {
+        return vec![Check::new(
+            "security",
+            "advisories",
+            Status::Ok,
+            "no installed package matches a supply-chain advisory",
+        )];
+    }
+    found
+        .iter()
+        .map(|m| {
+            let advisory = &m.advisory;
+            let note = if acked.iter().any(|a| a.eq_ignore_ascii_case(&advisory.id)) {
+                " (acknowledged)"
+            } else {
+                ""
+            };
+            Check::new(
+                "security",
+                "advisory",
+                Status::Warn,
+                format!(
+                    "advisory {}{note}: {} {} ({}) is compromised: {}",
+                    advisory.id,
+                    m.installed.name,
+                    m.installed.version,
+                    m.installed.location,
+                    advisory.summary
+                ),
+            )
+            .with_hint(advisory.remediation.clone())
+        })
+        .collect()
+}
+
+/// The posture findings beyond the sandbox: unsigned plugins, surfaces
+/// that admit everyone or have no allowlist, and file-mode violations
+/// (spec: security-boundaries, Security posture check).
+fn posture(inputs: &Inputs<'_>) -> Vec<Check> {
+    let mut checks = Vec::new();
+    for id in super::groups::unsigned_plugins(inputs) {
+        checks.push(
+            Check::new(
+                "security",
+                "unsigned_plugin",
+                Status::Warn,
+                format!("unsigned plugin: {id}"),
+            )
+            .with_hint("reinstall it from a signed catalog package, or remove it"),
+        );
+    }
+    let platforms = &inputs.scope.config().gateway.platforms;
+    for (name, platform) in platforms.iter().filter(|(_, p)| p.enabled) {
+        let message = if platform.allow_all {
+            format!("open surface: {name} admits every sender (allow_all)")
+        } else if platform.allow_users.is_empty()
+            && platform.allow_chats.is_empty()
+            && platform.allow_roles.is_empty()
+        {
+            format!(
+                "surface without allowlist: {name} refuses every sender until one is configured"
+            )
+        } else {
+            continue;
+        };
+        checks.push(
+            Check::new("security", "surface", Status::Warn, message).with_hint(format!(
+                "set gateway.platforms.{name}.allow_users (or allow_chats, allow_roles)"
+            )),
+        );
+    }
+    for check in &inputs.file_modes {
+        if check.status != Status::Ok {
+            checks.push(
+                Check::new(
+                    "security",
+                    "file_modes",
+                    check.status,
+                    format!("file modes: {}", check.message),
+                )
+                .with_hint("prometheus doctor --fix"),
+            );
+        }
+    }
+    if checks.is_empty() {
+        checks.push(Check::new(
+            "security",
+            "posture",
+            Status::Ok,
+            "no unsigned plugins, open surfaces or loose file modes",
+        ));
+    }
     checks
 }

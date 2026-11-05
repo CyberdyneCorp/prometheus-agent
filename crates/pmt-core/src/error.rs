@@ -254,6 +254,9 @@ error_codes! {
     /// Revealing a secret was refused because stdout is not a terminal.
     SECRET_REVEAL_REFUSED = ("secret.reveal_refused", PermissionDenied,
         "`prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file.");
+    /// A secret owned by a surface was requested by a tool, child, skill or plugin.
+    SECRET_SURFACE_ONLY = ("secret.surface_only", PermissionDenied,
+        "The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own.");
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");
@@ -584,6 +587,9 @@ error_codes! {
     /// A tool category names an unregistered provider.
     TOOLS_UNKNOWN_PROVIDER = ("tools.unknown_provider", Config,
         "The tool configurator (`prometheus tools provider|enable|disable|configure`) named a category, provider or surface that is not registered, or a posture toolset (chosen per session, never saved); the message lists the valid names and nothing was written.");
+    /// A toolset's post-setup needs a confirmation nobody can give.
+    TOOLS_SETUP_CONFIRMATION = ("tools.setup_confirmation", PermissionDenied,
+        "`prometheus tools post-setup <toolset>` would install managed runtimes and needs a confirmation: run it on a terminal or pass `--yes`; nothing was downloaded (the command exits 4).");
     /// `prometheus doctor` was given an unknown group.
     DOCTOR_UNKNOWN_GROUP = ("doctor.unknown_group", Usage,
         "`prometheus doctor <group>` names a group that does not exist; the message lists the groups.");
@@ -689,6 +695,27 @@ error_codes! {
     /// `approvals test` was given a command line it cannot read.
     APPROVALS_UNPARSABLE = ("approvals.unparsable", Usage,
         "`prometheus approvals test` cannot read the command line (an unterminated quote or substitution); fix its quoting.");
+    /// The vault's key is missing.
+    VAULT_KEY_NOT_FOUND = ("vault.key_not_found", NotFound,
+        "The vault's key is in neither `<profile>/vault/vault.key` nor the keychain entry `vault.keyref` names (`vault key not found; restore it or delete vault.enc to start over`). The vault is never re-keyed silently.");
+    /// `vault.enc` does not decrypt.
+    VAULT_CORRUPT = ("vault.corrupt", InvalidInput,
+        "`vault.enc` cannot be decrypted with the vault key: the key belongs to another vault or the file is damaged. Restore both from a backup.");
+    /// A vault file could not be read or written.
+    VAULT_IO = ("vault.io", Io,
+        "A file under `<profile>/vault/` could not be read or written.");
+    /// No vault item has that handle.
+    VAULT_NOT_FOUND = ("vault.not_found", NotFound,
+        "No vault item has that handle; `prometheus vault list` shows them.");
+    /// A secret value was given on the command line.
+    VAULT_SECRET_ON_ARGV = ("vault.secret_on_argv", Usage,
+        "`prometheus vault add` reads passwords, card numbers, security codes and TOTP seeds only from a masked prompt, never from the command line (where shell history and process lists would keep them).");
+    /// `doctor --ack` named an advisory the catalog does not have.
+    ADVISORY_UNKNOWN = ("advisory.unknown", NotFound,
+        "`prometheus doctor --ack` named an advisory id that is not in the supply-chain advisory catalog; `prometheus doctor security` lists the advisories that match this install.");
+    /// `approvals suggest --apply` named a proposal that is not listed.
+    APPROVALS_NO_SUCH_PROPOSAL = ("approvals.no_such_proposal", Usage,
+        "`prometheus approvals suggest --apply` named a proposal number that is not in the list; run it without `--apply` to see the numbered proposals. Nothing was changed.");
     /// No skill of that name resolves in the profile.
     SKILL_NOT_FOUND = ("skill.not_found", NotFound,
         "No skill of that name resolves in the profile (`Skill '<name>' not found in profile '<profile>'.`); the message names another profile of the home that has it.");
@@ -933,6 +960,100 @@ error_codes! {
     /// plugin host, which this build does not have yet.
     PLUGINS_HOST_UNAVAILABLE = ("plugins.host_unavailable", Unavailable,
         "The command needs the WASM plugin host to load a plugin adapter, and this build has none; first-party adapters are tested by platform name (`prometheus plugins test-adapter telegram`) in a build with the `adapter-kits` feature.");
+    /// A `plugin.toml` (or a WIT world it names) is invalid.
+    PLUGINS_MANIFEST = ("plugins.manifest", InvalidInput,
+        "A plugin manifest is invalid: an unknown field, kind, world or capability, a newer manifest_version, a requires_prometheus range excluding this version, or a bad value; the message names it.");
+    /// No discovered plugin has this id.
+    PLUGINS_NOT_FOUND = ("plugins.not_found", NotFound,
+        "No plugin with this id was discovered in the profile's plugins directory, a trusted project directory or the built-in plugins; `prometheus plugins list` shows what was found.");
+    /// A plugin directory cannot be used (reserved id, unreadable files).
+    PLUGINS_DISCOVERY = ("plugins.discovery", Config,
+        "A plugin directory cannot be used: its id is reserved by a built-in plugin, it does not match its directory name, or its files cannot be read; the message names it.");
+    /// Enabling needs the user to approve the plugin's capabilities.
+    PLUGINS_APPROVAL_REQUIRED = ("plugins.approval_required", PermissionDenied,
+        "Enabling a plugin needs its capabilities approved; run the command on a terminal, or pass `--grant all` or `--grant <capability>,...` to approve non-interactively.");
+    /// A plugin used a capability its grant does not cover.
+    PLUGINS_CAPABILITY_DENIED = ("plugins.capability_denied", PermissionDenied,
+        "A plugin called a host interface its approved capabilities do not cover (`capability_denied: <capability> <detail>`); approve it with `prometheus plugins grants approve <id> <capability>` if intended.");
+    /// A plugin could not be compiled, linked or instantiated.
+    PLUGINS_LOAD = ("plugins.load", Unavailable,
+        "A plugin could not be loaded: its component is missing or invalid, imports something the host does not offer, lacks an export of a world it declares, or failed while registering; the message names the plugin.");
+    /// A call into a plugin trapped, timed out or returned an error.
+    PLUGINS_CALL = ("plugins.call", Tool,
+        "A call into a plugin failed: it trapped, exceeded `plugins.wasm.call_timeout_ms`, is suspended after repeated traps, or returned an error; the message names the plugin.");
+    /// A plugin package without a signature the policy accepts.
+    PLUGINS_UNSIGNED = ("plugins.unsigned", PermissionDenied,
+        "The plugin package carries no signature a trusted key verifies; under `plugins.signature_policy = \"require\"` (and for every catalog install) it installs only with `--allow-unsigned`, which the install record keeps.");
+    /// A plugin package or catalog whose signature does not verify.
+    PLUGINS_SIGNATURE = ("plugins.signature", PermissionDenied,
+        "The plugin package's signature does not verify against its publisher key (or the package does not match its catalog digest); nothing was installed, and no flag overrides it.");
+    /// A plugin on the catalog's kill list.
+    PLUGINS_REMOVED = ("plugins.removed", PermissionDenied,
+        "The plugin (or its repository) was removed from the catalog and is blocked; only `prometheus plugins install --allow-removed` installs it anyway, recorded on its install record.");
+    /// A plugin the install-time threat scan refused.
+    PLUGINS_THREAT = ("plugins.threat", PermissionDenied,
+        "The install-time threat scan graded the plugin `dangerous` (refused; `--force` does not override it), graded it `caution` without confirmation or `--force`, or could not finish (it fails closed); the message names each finding, file and line.");
+    /// A plugin catalog or package that could not be fetched.
+    PLUGINS_CATALOG = ("plugins.catalog", Unavailable,
+        "The plugin catalog entry, package or repository could not be fetched or read; the message names it.");
+    /// No MCP server with this name is configured.
+    MCP_NOT_FOUND = ("mcp.not_found", NotFound,
+        "No `[mcp.servers.<name>]` entry has this name in the profile's config.toml; `prometheus mcp list` shows the configured servers.");
+    /// `mcp add` of a name that is already configured.
+    MCP_EXISTS = ("mcp.exists", InvalidInput,
+        "An MCP server with this name is already configured; remove it first with `prometheus mcp remove <name>` or pick another name.");
+    /// An MCP server could not be started or reached.
+    MCP_UNREACHABLE = ("mcp.unreachable", Unavailable,
+        "The MCP server did not start, did not complete the initialize handshake or the tool listing within its connect timeout, or refused the connection; the message says why.");
+    /// `mcp login` of a server whose authorization server registers no
+    /// clients dynamically, without a configured client.
+    MCP_OAUTH_CLIENT_REQUIRED = ("mcp.oauth_client_required", Config,
+        "The MCP server's authorization server does not register OAuth clients dynamically (and accepts no client metadata document); register a client with its provider and set `mcp.servers.<name>.oauth.client_id` (and `oauth.client_secret_name`).");
+    /// `mcp login` failed.
+    MCP_LOGIN_FAILED = ("mcp.login_failed", Auth,
+        "The MCP server's OAuth login did not complete: discovery, registration, the authorization response (state or issuer mismatch, refusal) or the token exchange failed, or no one answered in time; the message says which.");
+    /// `mcp serve --http` on an address that is not loopback.
+    MCP_REMOTE_REFUSED = ("mcp.remote_refused", PermissionDenied,
+        "`prometheus mcp serve --http` binds only loopback addresses unless `mcp_server.allow_remote = true` is set in the profile's config.toml.");
+    /// Connectors without a Nous sign-in.
+    CONNECTORS_SIGNIN_REQUIRED = ("connectors.signin_required", Config,
+        "Hosted connectors run on the Nous connector gateway and need a Nous Portal sign-in in this profile: run `prometheus auth login nous`. No identity is ever created without that step.");
+    /// Connectors switched off.
+    CONNECTORS_DISABLED = ("connectors.disabled", Config,
+        "`connectors.enabled = false` in the profile's config.toml; set it to true to use hosted connectors.");
+    /// An account alias outside the alias pattern.
+    CONNECTORS_INVALID_ALIAS = ("connectors.invalid_alias", Usage,
+        "A connector account alias must match `^[a-z0-9][a-z0-9-]{0,31}$` (lower-case letters, digits and dashes, at most 32 characters, not starting with a dash).");
+    /// No such connector or account.
+    CONNECTORS_NOT_FOUND = ("connectors.not_found", NotFound,
+        "The connector gateway knows no connector or account by this name; `prometheus connectors list` and `prometheus connectors accounts` show what exists.");
+    /// The gateway refused or could not be reached.
+    CONNECTORS_GATEWAY = ("connectors.gateway", Unavailable,
+        "The Nous connector gateway could not be reached, answered an error or does not serve connectors for this account; the message carries its answer.");
+    /// A connection the user did not finish in time.
+    CONNECTORS_NOT_CONNECTED = ("connectors.not_connected", Unavailable,
+        "`prometheus connectors connect` waited `connectors.connect_timeout_secs` and the account was still not connected; open the link again or rerun the command.");
+    /// A disconnect nobody confirmed.
+    CONNECTORS_CONFIRMATION = ("connectors.confirmation", PermissionDenied,
+        "`prometheus connectors disconnect` removes an account and asks for confirmation: run it on a terminal or pass `--yes`; nothing was removed (the command exits 4).");
+    /// The managed Python a bridged plugin needs is not installed.
+    BRIDGE_RUNTIME_MISSING = ("bridge.runtime_missing", Unavailable,
+        "The managed CPython of `python_bridge.python_version` (or the managed uv that builds plugin environments) is not installed and could not be downloaded; run `prometheus runtimes install python@<version>`. Bridged plugins fail; the rest of Prometheus keeps working.");
+    /// A plugin's requirements are not usable.
+    BRIDGE_REQUIREMENTS = ("bridge.requirements", Config,
+        "A bridged plugin's requirements are refused (a requirement without an upper bound while `python_bridge.allow_unbounded_requirements = false`, or an unreadable `requirements.txt`/`pyproject.toml`), or its environment has no lock yet: run `prometheus plugins update <id>` with network access.");
+    /// Building a plugin environment failed.
+    BRIDGE_ENVIRONMENT = ("bridge.environment", Unavailable,
+        "Resolving or building a pinned Python environment failed (uv reported an error, a package is not in the cache while offline, or the lock does not match); the message carries uv's output.");
+    /// A sidecar broke the wire protocol.
+    BRIDGE_PROTOCOL = ("bridge.protocol", Protocol,
+        "A bridge sidecar sent a frame larger than 16 MiB (`frame_too_large`), malformed JSON-RPC, or a different protocol version (`bridge protocol mismatch`); the sidecar is stopped.");
+    /// A call into a sidecar failed.
+    BRIDGE_CALL = ("bridge.call", Tool,
+        "A call into a bridged Python plugin failed: the plugin raised, timed out (`bridge call timed out after <n> ms`), its sidecar crashed (`bridge_crashed`) or the plugin is `failed` after a crash loop (`prometheus bridge restart <id>`).");
+    /// A plugin is incompatible with the bridge.
+    BRIDGE_INCOMPATIBLE = ("bridge.incompatible", PermissionDenied,
+        "The static compatibility audit classifies the plugin `incompatible` (an unsupported `PluginContext` API is reachable from `register`), or its `requires_hermes` range excludes the bridge's compat level; it installs only with `--force` and stays disabled.");
     /// A system-scope service install without root or administrator rights.
     SERVICE_NEEDS_ROOT = ("service.needs_root", PermissionDenied,
         "`prometheus daemon install-service --system` installs a boot-time unit and must run as root (administrator on Windows); the per-user install needs no elevation.");

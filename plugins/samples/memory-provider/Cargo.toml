@@ -1,0 +1,21 @@
+[package]
+name = "sample-memory-provider"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen-rt.workspace = true
+
+[package.metadata.component]
+package = "prometheus-samples:memory-provider"
+
+[package.metadata.component.target]
+path = "../../../wit/memory-provider"
+world = "memory-provider"
+
+[package.metadata.component.target.dependencies]
+"prometheus:host" = { path = "../../../wit/host" }

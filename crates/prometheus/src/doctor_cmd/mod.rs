@@ -8,6 +8,7 @@
 //! the network.
 
 pub mod args;
+mod bridge;
 mod daemon;
 mod fix;
 mod groups;
@@ -47,6 +48,9 @@ pub(crate) struct Inputs<'a> {
     pub ctx: &'a Context<'a>,
     pub scope: &'a ProfileScope,
     pub online: bool,
+    /// The file-mode checks, read before the home was opened (opening it
+    /// tightens loose modes).
+    pub file_modes: Vec<Check>,
 }
 
 #[derive(Serialize)]
@@ -63,6 +67,13 @@ struct Report<'a> {
 ///
 /// `doctor.unknown_group` (2); home errors.
 pub fn run(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    if let Some(id) = &args.ack {
+        let id = crate::advisories::ack(&ctx.scope()?, id)?;
+        eprintln!(
+            "acknowledged {id}: its startup warning is silenced; prometheus doctor security still shows it"
+        );
+        return Ok(0);
+    }
     if let Some(group) = &args.group
         && !GROUPS.contains(&group.as_str())
     {
@@ -108,16 +119,19 @@ fn run_profile(args: &DoctorArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let (home_checks, secrets_mode) = groups::permissions(&root, &profile);
     let mut checks = Vec::new();
     if selected("home") {
-        checks.extend(home_checks);
+        checks.extend(home_checks.iter().cloned());
     }
     // Opened without migrating `config.toml`: a pending migration is
     // reported (and applied only by `--fix`), not applied by the diagnosis.
     match ctx.scope_unmigrated() {
         Ok(scope) => {
+            let mut file_modes = home_checks.clone();
+            file_modes.push(secrets_mode.clone());
             let inputs = Inputs {
                 ctx,
                 scope: &scope,
                 online: args.online,
+                file_modes,
             };
             for group in GROUPS.iter().filter(|g| **g != "home" && selected(g)) {
                 if *group == "secrets" {
@@ -174,7 +188,12 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "terminal" => system::terminal(inputs),
         "distribution" => groups::distribution(inputs),
         "runtimes" => groups::runtimes(inputs),
-        "plugins" => groups::plugins(),
+        "plugins" => {
+            let mut checks = groups::plugins(inputs);
+            checks.extend(bridge::checks(inputs));
+            checks.extend(groups::mcp(inputs));
+            checks
+        }
         "observability" => groups::observability(inputs),
         "network" => system::network(inputs).await,
         "providers" => groups::providers(inputs).await?,

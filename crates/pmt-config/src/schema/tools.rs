@@ -21,6 +21,8 @@ pub struct ToolsConfig {
     pub kill_grace_secs: u64,
     /// Tool result size budgets.
     pub result_budget: ResultBudget,
+    /// Progressive disclosure of large tool surfaces.
+    pub tool_search: ToolSearchConfig,
 }
 
 impl Default for ToolsConfig {
@@ -31,8 +33,78 @@ impl Default for ToolsConfig {
             default_timeout_secs: 300,
             kill_grace_secs: 5,
             result_budget: ResultBudget::default(),
+            tool_search: ToolSearchConfig::default(),
         }
     }
+}
+
+/// The `[tools.tool_search]` section (spec: tool-system, Tool search
+/// progressive disclosure; Tool search listing, ranking and limits).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ToolSearchConfig {
+    /// `auto` defers MCP and plugin tools behind `tool_search`,
+    /// `tool_describe` and `tool_call` when their schemas outgrow the
+    /// thresholds below; `on` always does, `off` never.
+    pub mode: ToolSearchMode,
+    /// Percent of the main model's context window the deferrable tools'
+    /// schemas may take before `auto` defers them.
+    #[schemars(range(min = 0, max = 100))]
+    pub threshold_pct: u32,
+    /// Token budget (4 characters each) of the deferrable schemas, and of
+    /// the deferred-tool manifest in the `tool_search` description.
+    #[schemars(range(min = 200, max = 60_000))]
+    pub listing_max_tokens: u32,
+    /// Tools deferred besides MCP and plugin tools while tool search is
+    /// active; unset defers `computer_use`, `session_search`,
+    /// `image_generate`, `todo`, `process`, `cronjob` and `browser_vault`.
+    pub defer: Option<Vec<String>>,
+    /// Matches per query when `tool_search` names no `limit`.
+    #[schemars(range(min = 1, max = 50))]
+    pub search_default_limit: u32,
+    /// The most matches per query `tool_search` returns.
+    #[schemars(range(min = 1, max = 50))]
+    pub max_search_limit: u32,
+    /// Whether the `tool_search` description lists the deferred tools.
+    pub listing: ToolListing,
+}
+
+impl Default for ToolSearchConfig {
+    fn default() -> Self {
+        Self {
+            mode: ToolSearchMode::Auto,
+            threshold_pct: 5,
+            listing_max_tokens: 4_000,
+            defer: None,
+            search_default_limit: 5,
+            max_search_limit: 25,
+            listing: ToolListing::Auto,
+        }
+    }
+}
+
+/// `tools.tool_search.mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolSearchMode {
+    /// Defer when the deferrable schemas outgrow the thresholds.
+    Auto,
+    /// Always defer.
+    On,
+    /// Never defer.
+    Off,
+}
+
+/// `tools.tool_search.listing`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolListing {
+    /// List the deferred tools within the listing budget.
+    Auto,
+    /// The same as `auto`.
+    On,
+    /// No listing.
+    Off,
 }
 
 /// The `[tools.result_budget]` section.
@@ -62,8 +134,89 @@ impl Default for ResultBudget {
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct ToolsetsConfig {
-    /// Default toolsets per surface (otherwise `core`).
-    pub surfaces: BTreeMap<String, Vec<String>>,
+    /// Starting toolsets per session surface, replacing the surface's
+    /// default (spec: tool-system, Per-surface default toolsets).
+    pub surfaces: SurfaceToolsets,
+}
+
+/// `[toolsets.surfaces]`: one optional toolset list per session surface.
+/// An unset surface starts from `tools.enabled_toolsets`, where `core`
+/// stands for the surface's built-in default.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SurfaceToolsets {
+    /// Line-mode chat and one-shot runs (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cli: Option<Vec<String>>,
+    /// The terminal UI (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tui: Option<Vec<String>>,
+    /// The desktop app (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub desktop: Option<Vec<String>>,
+    /// Scheduled jobs without per-job toolsets (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cron: Option<Vec<String>>,
+    /// The OpenAI-compatible API server (default `api_server`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api: Option<Vec<String>>,
+    /// ACP editor sessions (default `acp`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acp: Option<Vec<String>>,
+    /// Unattended ACP sessions (default `acp_unattended`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acp_unattended: Option<Vec<String>>,
+    /// Messaging sessions per platform (`gateway.<platform>`, default
+    /// `platform-<platform>`; `gateway.webhook` defaults to
+    /// `webhook-safe`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub gateway: BTreeMap<String, Vec<String>>,
+}
+
+impl SurfaceToolsets {
+    /// The surfaces with a key of their own (besides `gateway.<platform>`).
+    pub const KEYS: &[&str] = &[
+        "cli",
+        "tui",
+        "desktop",
+        "cron",
+        "api",
+        "acp",
+        "acp_unattended",
+    ];
+
+    /// The list saved for surface `key` (`cli`, `gateway.telegram`...).
+    #[must_use]
+    pub fn get(&self, key: &str) -> Option<&Vec<String>> {
+        if let Some(platform) = key.strip_prefix("gateway.") {
+            return self.gateway.get(platform);
+        }
+        match key {
+            "cli" => self.cli.as_ref(),
+            "tui" => self.tui.as_ref(),
+            "desktop" => self.desktop.as_ref(),
+            "cron" => self.cron.as_ref(),
+            "api" => self.api.as_ref(),
+            "acp" => self.acp.as_ref(),
+            "acp_unattended" => self.acp_unattended.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Every saved list with its surface key, in key order.
+    #[must_use]
+    pub fn entries(&self) -> Vec<(String, &Vec<String>)> {
+        let mut out: Vec<(String, &Vec<String>)> = Self::KEYS
+            .iter()
+            .filter_map(|key| self.get(key).map(|list| ((*key).to_owned(), list)))
+            .collect();
+        out.extend(
+            self.gateway
+                .iter()
+                .map(|(platform, list)| (format!("gateway.{platform}"), list)),
+        );
+        out
+    }
 }
 
 /// The `[approvals]` section.
@@ -83,6 +236,10 @@ pub struct ApprovalsConfig {
     pub timeout_secs: u64,
     /// Command patterns that are always blocked.
     pub deny: Vec<String>,
+    /// In `smart` mode, after this many consecutive denials by the
+    /// approval guardian the denial tells the model to stop trying
+    /// variations (`0` disables); a human approval resets the count.
+    pub denial_breaker_threshold: u32,
 }
 
 impl Default for ApprovalsConfig {
@@ -94,6 +251,7 @@ impl Default for ApprovalsConfig {
             unattended_mode: UnattendedApproval::Deny,
             timeout_secs: 300,
             deny: Vec::new(),
+            denial_breaker_threshold: 3,
         }
     }
 }

@@ -283,14 +283,115 @@ pub(super) fn distribution(inputs: &Inputs<'_>) -> Vec<Check> {
     }
 }
 
-/// `plugins`: signatures and grants of installed plugins.
-pub(super) fn plugins() -> Vec<Check> {
-    vec![Check::new(
-        "plugins",
-        "installed",
-        Status::Ok,
-        "no plugins installed",
-    )]
+/// `plugins`: what keeps a discovered plugin from loading (a digest that
+/// no longer matches its install record, the kill list, approval) and
+/// unsigned or unadopted plugins, read without instantiating anything
+/// (spec: security-boundaries, Signed plugins).
+/// The ids of the profile's plugins installed without a verified
+/// signature.
+pub(super) fn unsigned_plugins(inputs: &Inputs<'_>) -> Vec<String> {
+    let scope = inputs.scope;
+    let version = crate::plugins_host::running_version();
+    let blocked = crate::plugins_host::catalog::kill_list(scope);
+    let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    pmt_plugins::load::survey(&crate::plugins_host::inputs(
+        scope, &cwd, &version, &blocked,
+    ))
+    .iter()
+    .filter(|(plugin, _)| {
+        plugin
+            .dir
+            .as_deref()
+            .and_then(|d| pmt_plugins::record::InstallRecord::read(d).ok().flatten())
+            .is_some_and(|r| r.unsigned())
+    })
+    .map(|(_, status)| status.id.clone())
+    .collect()
+}
+
+pub(super) fn plugins(inputs: &Inputs<'_>) -> Vec<Check> {
+    use pmt_plugins::load::State;
+    let scope = inputs.scope;
+    let version = crate::plugins_host::running_version();
+    let blocked = crate::plugins_host::catalog::kill_list(scope);
+    let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
+    let surveyed = pmt_plugins::load::survey(&crate::plugins_host::inputs(
+        scope, &cwd, &version, &blocked,
+    ));
+    let mut checks = Vec::new();
+    for (plugin, status) in &surveyed {
+        let unsigned = plugin
+            .dir
+            .as_deref()
+            .and_then(|d| pmt_plugins::record::InstallRecord::read(d).ok().flatten())
+            .is_some_and(|r| r.unsigned());
+        let (state, message) = match (status.state, &status.problem) {
+            (State::Error, Some(problem)) => (Status::Fail, format!("{}: {problem}", status.id)),
+            (State::Unadopted, _) => (Status::Warn, format!("{}: unadopted", status.id)),
+            _ if unsigned => (Status::Warn, format!("{}: unsigned", status.id)),
+            _ => continue,
+        };
+        checks.push(Check::new("plugins", "plugin", state, message));
+    }
+    if checks.is_empty() {
+        let message = if surveyed.is_empty() {
+            "no plugins installed".to_owned()
+        } else {
+            format!("{} plugins, no problems", surveyed.len())
+        };
+        checks.push(Check::new("plugins", "installed", Status::Ok, message));
+    }
+    checks
+}
+
+/// MCP servers in the `plugins` group: a name that is also a built-in
+/// toolset (its bare name then means the built-in, spec: tool-system,
+/// Registry toolset aliases), an entry skipped for a configuration error
+/// and a parked OAuth sign-in.
+pub(super) fn mcp(inputs: &Inputs<'_>) -> Vec<Check> {
+    let scope = inputs.scope;
+    let servers = &scope.config().mcp.servers;
+    let mut checks = Vec::new();
+    if let Ok(registry) = crate::tools_cmd::registry(scope) {
+        for name in servers.keys() {
+            let builtin = registry
+                .toolset(name)
+                .is_some_and(|t| t.owner == pmt_tools::descriptor::Owner::Builtin);
+            if builtin {
+                checks.push(
+                    Check::new(
+                        "plugins",
+                        "mcp",
+                        Status::Warn,
+                        format!("MCP server '{name}' has the name of built-in toolset '{name}', which that name selects"),
+                    )
+                    .with_hint(format!("reference the server's tools as 'mcp-{name}'")),
+                );
+            }
+        }
+    }
+    for (name, why) in crate::mcp_host::skipped(scope) {
+        checks.push(Check::new(
+            "plugins",
+            "mcp",
+            Status::Fail,
+            format!("MCP server '{name}' skipped: {why}"),
+        ));
+    }
+    for name in servers.keys() {
+        if crate::mcp_host::oauth::record(scope, name).is_some_and(|r| r.parked.is_some()) {
+            checks.push(Check::new(
+                "plugins",
+                "mcp",
+                Status::Warn,
+                format!(
+                    "MCP server '{name}' {}",
+                    crate::mcp_host::oauth::needs_login(name)
+                ),
+            ));
+        }
+    }
+    checks
 }
 
 /// `observability`: exporters (none can be enabled in this build).

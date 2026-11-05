@@ -243,6 +243,7 @@ impl ToolPort for Child {
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        _: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         let token = cancel.child();

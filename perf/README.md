@@ -110,6 +110,30 @@ compared with a thin-LTO base, so its gate saw the gateway's growth net of
 that saving (about +7%); every branch after it builds base and head alike
 with fat LTO, so their growth is measured in full again.
 
+The WASM plugin host (m2-extensions) re-baselined `perf/reference.json`
+deliberately: wasmtime with the Cranelift compiler (design D7; plugins are
+compiled at load, so the compiler ships in the binary) took the stripped
+binary from 42.97 to 54.07 MiB (+26%) on the reference runner, while
+startup (2.67 -> 2.73 ms median), peak RSS (9.10 -> 9.49 MiB) and the chat
+prompt (34.69 -> 33.59 ms) stayed put: nothing of the engine runs unless a
+plugin is enabled. Measured by CI run 41610015894. Cranelift's host ISA
+and the Pulley interpreter come with the engine's `cranelift` feature;
+there is no smaller configuration that still compiles components at load.
+
+The MCP client and server (m2-extensions, group 31) re-baselined it again,
+deliberately: rmcp with the client and server roles over stdio and
+streamable HTTP (both directions, since `mcp serve --http` and HTTP MCP
+servers are specified), its JSON-RPC model types, the OAuth sign-in,
+client certificates (PKCS#8 decryption), sampling, elicitation and the
+catalog took the stripped binary from 54.07 to 64.12 MiB (+19%) on the
+reference runner, after the hooks and toolset groups between them had used
+1.8 MiB of the 15% (55.83 MiB). Nothing of it runs before a session starts
+an MCP server: startup stayed within the 1 ms floor (2.73 -> 3.52 ms
+median), peak RSS moved 9.49 -> 10.48 MiB and the chat prompt 33.59 ->
+37.77 ms. No rmcp feature can go: each one backs a specified transport or
+role, and the client and server share the model types. Measured by CI run
+41757484815.
+
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.
 

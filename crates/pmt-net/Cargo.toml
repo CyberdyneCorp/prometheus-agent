@@ -16,9 +16,10 @@ reqwest = { workspace = true, features = ["rustls-no-provider", "socks"] }
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
 rustls-native-certs.workspace = true
+pkcs8.workspace = true
 base64.workspace = true
 ipnet.workspace = true
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["net", "io-util", "rt", "macros", "time"] }
 tracing.workspace = true
 
 [dev-dependencies]

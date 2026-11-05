@@ -32,6 +32,11 @@ use pmt_core::error::{Error, codes};
 
 use crate::context::Context;
 pub use legacy::LegacyUnit;
+
+/// The names the daemon's supervisor knows it by: systemd unit, launchd
+/// label and Scheduled Task (what the self-termination guard protects).
+pub(crate) const SERVICE_NAMES: [&str; 3] =
+    [units::SYSTEMD_UNIT, units::LAUNCHD_LABEL, units::TASK_NAME];
 use units::Daemon;
 #[cfg(target_os = "macos")]
 use units::LAUNCHD_LABEL;

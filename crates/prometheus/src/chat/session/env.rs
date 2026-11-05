@@ -5,6 +5,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use pmt_plugins::providers::Category;
 use std::time::Duration;
 
 use pmt_config::{ProfileScope, SharedScope};
@@ -13,7 +15,9 @@ use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
 use pmt_core::secret::Redactor;
 use pmt_net::OutboundPolicy;
+use pmt_net::egress::Proxy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
+use pmt_tools::approval::explain::Previewer;
 use pmt_tools::browser::BrowserExec;
 use pmt_tools::environments::{Attachment, Environments, SessionEnv};
 use pmt_tools::files::{ControlPaths, FileSession, FileSetup, Linter, LocalBackend};
@@ -49,7 +53,46 @@ pub struct EnvInputs<'a> {
     pub image_input: bool,
     /// Where finished `notify_on_complete` background processes go.
     pub completions: Option<tokio::sync::mpsc::UnboundedSender<Completion>>,
+    /// Provider objects of the profile's plugins (web backends by name).
+    pub providers: pmt_plugins::providers::ProviderRegistry,
+    /// What the session's plugin calls report through `session.info`.
+    pub plugin_call: pmt_plugins::host::CallInfo,
+    /// The profile's plugins (their `transform_terminal_output` hooks).
+    pub plugins: &'a crate::plugins_host::ProfilePlugins,
+    /// The session's egress policy.
+    pub egress: &'a crate::egress::SessionEgress,
+    /// Where its egress refusals are reported.
+    pub denials: &'a Denials,
+    /// Where `browser_vault` asks the person for a hidden value.
+    pub vault_prompt: Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>>,
 }
+
+/// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
+/// hidden line, or `secret.request` to a daemon session's clients).
+pub struct VaultPrompt(pub Arc<dyn pmt_skills::secrets::SecretPrompt>);
+
+impl pmt_tools::browser::vault::MaskedPrompt for VaultPrompt {
+    fn ask<'a>(
+        &'a self,
+        name: &'a str,
+        question: &'a str,
+    ) -> pmt_tools::dispatch::SeamFuture<'a, Option<pmt_core::secret::SecretString>> {
+        let prompt = Arc::clone(&self.0);
+        let (name, question) = (name.to_owned(), question.to_owned());
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || prompt.ask("browser_vault", &name, Some(&question)))
+                .await
+                .ok()
+                .flatten()
+        })
+    }
+}
+
+/// Where a session's egress refusals go once its event sink exists. The
+/// handle is weak: a refusal reported after the session closed is dropped,
+/// and the trajectory writer stays solely owned for its finish.
+pub type Denials =
+    Arc<std::sync::OnceLock<std::sync::Weak<dyn pmt_agent::turn::events::EventSink>>>;
 
 /// An attached environment.
 pub struct Attached {
@@ -62,6 +105,12 @@ pub struct Attached {
     /// How the session runs a command: its sandbox, child environment and
     /// shell (skills' inline snippets run the same way).
     pub commands: Option<Commands>,
+    /// The session's egress policy and its children's proxy.
+    pub egress: crate::egress::Running,
+    /// Where its egress refusals are reported.
+    pub denials: Denials,
+    /// Runs approval `explain` previews (read-only, offline).
+    pub previewer: Option<Previewer>,
 }
 
 /// The parts a session runs commands with.
@@ -107,7 +156,18 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         scratch: vec![scratch.clone()],
     };
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
-    let process = processes(inputs, &scratch, &policy)
+    let proxy = crate::egress::child_proxy(
+        inputs.scope,
+        inputs.capabilities,
+        Arc::clone(&inputs.egress.hosts),
+        "terminal",
+        Arc::clone(&inputs.egress.observer),
+    )?;
+    let child_policy = match &proxy {
+        Some(proxy) => crate::egress::through(policy.as_ref().clone(), proxy),
+        None => policy.as_ref().clone(),
+    };
+    let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
     let browser = process.as_ref().and_then(|(sandbox, env)| {
@@ -131,6 +191,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
                 shell,
             })
     });
+    let previewer = commands.as_ref().and_then(|c| previewer(inputs, &paths, c));
     let terminal = commands
         .clone()
         .and_then(|commands| {
@@ -144,8 +205,9 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let env = SessionEnv {
         files: Some(Arc::new(files(inputs, places, user_home, policy))),
         terminal: terminal.clone(),
-        web: web(scope).map(Arc::new),
+        web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
         vision: None,
+        vault: browser.as_ref().map(|browser| vault(inputs, browser)),
         browser: browser.clone(),
     };
     Ok(Attached {
@@ -153,8 +215,55 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         browser,
         terminal,
         commands,
+        egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
+        denials: Arc::clone(inputs.denials),
+        previewer,
     })
 }
+
+/// `browser_vault` of a session with a browser: the profile's vault (its
+/// key in the OS keychain only where `vault.keyref` or
+/// `vault.key_storage` says so).
+fn vault(
+    inputs: &EnvInputs<'_>,
+    browser: &Arc<BrowserExec>,
+) -> Arc<pmt_tools::browser::vault::VaultSession> {
+    let keychain = Arc::new(pmt_config::secrets::OsKeychain);
+    Arc::new(pmt_tools::browser::vault::VaultSession {
+        vault: Arc::new(pmt_vault::Vault::of(inputs.scope.dir(), keychain)),
+        storage: inputs.scope.config().vault.key_storage,
+        browser: Arc::clone(browser),
+        prompt: inputs.vault_prompt.clone(),
+    })
+}
+
+/// The approval previewer: the session's shell (POSIX shells only: the
+/// previews are `sh -c` lines) under a sandbox that reads the workspace,
+/// scratch and toolchain and may neither write nor connect (spec:
+/// tool-system, Approval explain and dry-run).
+fn previewer(inputs: &EnvInputs<'_>, paths: &Paths, commands: &Commands) -> Option<Previewer> {
+    if !commands.shell.kind.is_posix() {
+        return None;
+    }
+    let policy = Policy::from_capabilities(PREVIEW_CAPABILITIES, paths).ok()?;
+    let sandbox = Sandbox::new(policy, &inputs.scope.config().security.sandbox)
+        .inspect_err(|err| tracing::warn!(error = %err, "approval previews unavailable"))
+        .ok()?;
+    Some(Previewer::new(
+        Arc::new(sandbox),
+        commands.env.clone(),
+        commands.shell.path.clone(),
+    ))
+}
+
+/// What an approval preview may do: read, and start the preview's own
+/// programs; never write or connect.
+const PREVIEW_CAPABILITIES: &[&str] = &[
+    "fs.read:<workspace>/**",
+    "fs.read:<scratch>/**",
+    "fs.read:<toolchain>",
+    "process.spawn:*",
+];
 
 fn files(
     inputs: &EnvInputs<'_>,
@@ -182,9 +291,22 @@ fn processes(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
     policy: &Policy,
+    proxy: Option<&Proxy>,
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
+    let audit = pmt_core::audit::AuditLog::of(inputs.scope.dir());
+    for gap in sandbox.downgrades() {
+        audit.record(
+            &pmt_core::audit::Event::new(
+                pmt_core::audit::Kind::Downgrade,
+                gap.hardening.as_str(),
+                "allowed",
+            )
+            .in_session(inputs.session_id)
+            .with_detail(gap.reason.clone()),
+        );
+    }
     let mut env = ChildEnv::build(
         inputs.launch,
         EnvRequest {
@@ -193,6 +315,9 @@ fn processes(
         },
     );
     env.set_temp_dir(scratch);
+    if let Some(url) = proxy.map(pmt_net::egress::Proxy::url) {
+        env.set_proxy(&url);
+    }
     let bundle = scratch.join("ca-bundle.pem");
     let extra_ca = config.network.extra_ca_file.as_deref().map(Path::new);
     if pmt_net::tls::write_child_bundle(&bundle, extra_ca).is_ok() {
@@ -220,7 +345,10 @@ fn terminal(
         start_cwd: inputs.cwd.to_path_buf(),
         user_home,
         redactor: inputs.redactor.clone(),
-        hooks: Vec::new(),
+        hooks: vec![crate::plugins_host::terminal::output_hook(
+            inputs.plugins.clone(),
+            inputs.plugin_call.clone(),
+        )],
         guards: GuardChain::default(),
         notices: Vec::new(),
         notify: inputs.completions.clone(),
@@ -234,8 +362,14 @@ fn terminal(
     })
 }
 
-/// The web tools, when the profile can build an outbound client.
-fn web(scope: &ProfileScope) -> Option<WebSession> {
+/// The web tools, when the profile can build an outbound client; a
+/// backend id this build does not implement may name a plugin's provider.
+fn web(
+    scope: &ProfileScope,
+    providers: &pmt_plugins::providers::ProviderRegistry,
+    call: &pmt_plugins::host::CallInfo,
+    egress: &crate::egress::SessionEgress,
+) -> Option<WebSession> {
     let config = scope.config();
     let policy = OutboundPolicy {
         force_ipv4: config.network.force_ipv4,
@@ -243,20 +377,33 @@ fn web(scope: &ProfileScope) -> Option<WebSession> {
         proxy: config.network.proxy.clone(),
     };
     let client = pmt_net::client(&policy).ok()?;
-    let egress = &config.security.egress;
-    let destinations =
-        pmt_net::destination::DestinationPolicy::new(egress.allow_private, &egress.fake_ip_ranges)
-            .ok()?;
-    let fetcher = Arc::new(pmt_net::fetch::Fetcher::new(&policy, destinations).ok()?);
+    let destinations = crate::egress::destinations(&config.security.egress).ok()?;
+    let fetcher = Arc::new(
+        pmt_net::fetch::Fetcher::new(&policy, destinations)
+            .ok()?
+            .with_hosts(
+                Arc::clone(&egress.hosts),
+                "web",
+                Some(Arc::clone(&egress.observer)),
+            ),
+    );
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());
-    Some(WebSession::from_config(
+    let plugins = |capability, id: &str| {
+        let category = match capability {
+            pmt_tools::web::Capability::Search => Category::WebSearch,
+            pmt_tools::web::Capability::Extract => Category::WebExtract,
+        };
+        providers.web_backend(category, id, call).ok()
+    };
+    Some(WebSession::from_config_with(
         &config.web,
         &client,
         fetcher,
         &lookup,
         FullTextStore::for_profile(scope.dir()),
+        &plugins,
     ))
 }
 

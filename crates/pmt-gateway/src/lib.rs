@@ -30,6 +30,7 @@ pub mod router;
 pub mod server;
 pub mod slots;
 pub mod tickets;
+pub mod vault;
 
 pub use daemon::{Exit, run};
 pub use host::{Author, Host, HostFuture, Link};

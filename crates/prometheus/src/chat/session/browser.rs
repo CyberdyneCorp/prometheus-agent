@@ -81,6 +81,8 @@ impl Shared {
                 destinations,
                 lookup: Arc::new(SystemLookup),
                 secrets: redactor.clone(),
+                egress: Some(Arc::new(crate::egress::session_policy)),
+                session: None,
             },
             providers: BTreeMap::new(),
         });

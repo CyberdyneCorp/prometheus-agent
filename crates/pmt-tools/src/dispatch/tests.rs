@@ -35,6 +35,7 @@ use crate::testing::{FnHandler, path_schema};
 pub(super) struct Recorder {
     pub(super) events: Mutex<Vec<String>>,
     block: Option<String>,
+    modify: Option<serde_json::Value>,
 }
 
 impl Recorder {
@@ -49,10 +50,12 @@ impl Recorder {
 impl ToolHooks for Recorder {
     fn pre_tool_call<'a>(&'a self, call: HookCall<'a>) -> SeamFuture<'a, PreDecision> {
         self.push(format!("pre {}", call.tool));
-        let decision = self
-            .block
-            .clone()
-            .map_or(PreDecision::Continue, PreDecision::Block);
+        let modify = self.modify.as_ref().and_then(|v| v.as_object().cloned());
+        let decision = match (self.block.clone(), modify) {
+            (Some(message), _) => PreDecision::Block(message),
+            (None, Some(fields)) => PreDecision::Modify(fields),
+            (None, None) => PreDecision::Continue,
+        };
         Box::pin(async move { decision })
     }
     fn post_tool_call<'a>(
@@ -127,6 +130,7 @@ pub(super) async fn harness(tools: Vec<RegisteredTool>, options: Options) -> Har
         capabilities: &options.capabilities,
         config: &Config::default(),
         probes: &ProbeCache::new(),
+        route: &crate::variants::RouteTraits::default(),
     })
     .await;
     let profile = tempfile::tempdir().unwrap();
@@ -430,4 +434,35 @@ async fn gate_verdicts_map_to_statuses() {
         assert_eq!(result.status, status);
         assert_eq!(runs.load(Ordering::SeqCst), 0);
     }
+}
+
+#[tokio::test]
+async fn hook_modify_merges_arguments_and_revalidates_them() {
+    let echo = || {
+        let handler = FnHandler(|_: &CallContext, args: serde_json::Value| {
+            Ok(ToolResult::ok(
+                args["path"].as_str().unwrap_or("?").to_owned(),
+            ))
+        });
+        tool_with("read_file", Arc::new(handler))
+    };
+    let options = |modify| Options {
+        recorder: Recorder {
+            modify: Some(modify),
+            ..Recorder::default()
+        },
+        ..Options::default()
+    };
+    let merged = harness(vec![echo()], options(json!({"path": "b"}))).await;
+    let result = call(&merged, "read_file", r#"{"path": "a"}"#).await;
+    assert_eq!(result.text_content(), "b");
+
+    let invalid = harness(vec![echo()], options(json!({"path": 3}))).await;
+    let result = call(&invalid, "read_file", r#"{"path": "a"}"#).await;
+    assert_eq!(result.status, Status::Blocked);
+    assert!(
+        result.text_content().contains("/path: expected string"),
+        "{}",
+        result.text_content()
+    );
 }

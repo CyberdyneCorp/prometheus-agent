@@ -4,6 +4,7 @@
 //! rebuilds earlier requests byte-for-byte (spec: agent-turn-loop,
 //! Request-time additions never touch history).
 
+use pmt_core::provenance::{self, Provenance, Trust};
 use pmt_providers::request::{Message, Part, Role as WireRole};
 use pmt_store::{Message as Row, NewMessage, Role};
 use pmt_tools::{Status, ToolResult};
@@ -150,13 +151,28 @@ fn call_json(call: &RequestedCall) -> Value {
 
 /// The tool row answering `call`.
 #[must_use]
-pub fn tool_row(call: &RequestedCall, result: &ToolResult) -> NewMessage {
-    let mut row = NewMessage::new(Role::Tool, result.text_content());
+pub fn tool_row(call: &RequestedCall, result: &ToolResult, nonce: &str) -> NewMessage {
+    let provenance = result
+        .metadata
+        .get("provenance")
+        .and_then(Provenance::from_value);
+    let text = result.text_content();
+    // Untrusted content reaches the model inside one delimited block
+    // (spec: tool-system, Tool result provenance tagging).
+    let text = match &provenance {
+        Some(p) if p.trust == Trust::Untrusted => provenance::wrap(&text, &p.source, nonce),
+        _ => text,
+    };
+    let mut row = NewMessage::new(Role::Tool, text);
     row.tool_call_id = Some(call.id.clone());
     row.tool_name = Some(call.name.clone());
-    row.metadata = Some(json!({
+    let mut metadata = json!({
         "status": result.status.as_str(),
         "is_error": !matches!(result.status, Status::Ok | Status::Degraded),
-    }));
+    });
+    if let Some(provenance) = provenance {
+        metadata["provenance"] = provenance.to_value();
+    }
+    row.metadata = Some(metadata);
     row
 }

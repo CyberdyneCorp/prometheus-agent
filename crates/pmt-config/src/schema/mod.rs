@@ -17,15 +17,20 @@
 //! the whole file validates in one place.
 
 mod agent;
+mod connectors;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
 mod gateway_platform;
 mod gateway_policy;
 mod gateway_routes;
+mod hooks;
 mod interface;
+mod mcp;
 mod models;
 mod operations;
+mod plugins;
+mod python_bridge;
 mod state;
 mod tools;
 mod webhook;
@@ -39,6 +44,7 @@ pub use agent::{
     PromptCacheConfig, PromptCacheTtl, PromptConfig, ReasoningLevel, TailMode, ToolLoopGuardrails,
     VisionConfig,
 };
+pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
@@ -51,10 +57,16 @@ pub use gateway::{
     resolve_policy,
 };
 pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
+pub use hooks::{HooksConfig, OutboundHook, ShellHook};
 pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
     ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
+};
+pub use mcp::{
+    McpAuth, McpCapabilities, McpConfig, McpElicitationConfig, McpOAuthConfig, McpOAuthFlow,
+    McpRedirectHost, McpSamplingConfig, McpServerConfig, McpServerModeConfig, McpToolFilter,
+    McpTransport, McpTrust,
 };
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
@@ -62,10 +74,16 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, GatewayHealthConfig, LogLevel,
-    LoggingConfig, NetworkConfig, ObservabilityConfig, SandboxConfig, SandboxMode, SecretsBackend,
-    SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
+    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
+    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
+    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
 };
+pub use plugins::{
+    DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
+    SignaturePolicy, TransportFallback,
+};
+pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use state::{
     JournalMode, MemoryConfig, MemoryReviewMode, RecallConfig, SessionsConfig, SkillsConfig,
     SnapshotsConfig, StorageConfig,
@@ -73,8 +91,8 @@ pub use state::{
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
     FilesConfig, FirecrawlConfig, KeylessConfig, ResultBudget, SearxngConfig, SshConfig,
-    TerminalConfig, ToolOutputConfig, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
-    WindowsShell,
+    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
+    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WindowsShell,
 };
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
@@ -110,6 +128,8 @@ pub struct Config {
     pub cli: CliConfig,
     /// Context compression.
     pub compression: CompressionConfig,
+    /// Hosted app connectors (Gmail, Notion...) through the Nous gateway.
+    pub connectors: ConnectorsConfig,
     /// Context engine selection.
     pub context: ContextConfig,
     /// Profile time zone (scheduler keys arrive with M2).
@@ -122,8 +142,14 @@ pub struct Config {
     pub files: FilesConfig,
     /// The profile's part in the home's gateway daemon.
     pub gateway: GatewayConfig,
+    /// Shell hooks and outbound webhooks.
+    pub hooks: HooksConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
+    /// External MCP servers.
+    pub mcp: McpConfig,
+    /// What `prometheus mcp serve` exposes.
+    pub mcp_server: McpServerModeConfig,
     /// Built-in memory.
     pub memory: MemoryConfig,
     /// The main model and provider.
@@ -136,10 +162,16 @@ pub struct Config {
     pub network: NetworkConfig,
     /// Trajectories.
     pub observability: ObservabilityConfig,
+    /// Plugin enablement, hook bounds and WASM limits.
+    pub plugins: PluginsConfig,
     /// System prompt assembly.
     pub prompt: PromptConfig,
+    /// The python bridge: managed interpreter and sidecar bounds.
+    pub python_bridge: PythonBridgeConfig,
     /// Provider prompt caching.
     pub prompt_cache: PromptCacheConfig,
+    /// PII redaction.
+    pub privacy: PrivacyConfig,
     /// Per-provider overrides, keyed by provider id.
     #[schemars(extend("x-apply" = "next_session"))]
     pub providers: std::collections::BTreeMap<String, ProviderConfig>,
@@ -172,6 +204,8 @@ pub struct Config {
     pub toolsets: ToolsetsConfig,
     /// Interactive interface selection.
     pub ui: UiConfig,
+    /// The credential vault.
+    pub vault: VaultConfig,
     /// Image input routing.
     pub vision: VisionConfig,
     /// Web tools.
@@ -191,20 +225,27 @@ impl Default for Config {
             busy: BusyConfig::default(),
             cli: CliConfig::default(),
             compression: CompressionConfig::default(),
+            connectors: ConnectorsConfig::default(),
             context: ContextConfig::default(),
             cron: CronConfig::default(),
             display: DisplayConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),
+            hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
+            mcp: McpConfig::default(),
+            mcp_server: McpServerModeConfig::default(),
             memory: MemoryConfig::default(),
             model: ModelConfig::default(),
             models: std::collections::BTreeMap::new(),
             network: NetworkConfig::default(),
             observability: ObservabilityConfig::default(),
+            plugins: PluginsConfig::default(),
             prompt: PromptConfig::default(),
+            python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
+            privacy: PrivacyConfig::default(),
             providers: std::collections::BTreeMap::new(),
             quick_commands: std::collections::BTreeMap::new(),
             secrets: SecretsConfig::default(),
@@ -220,6 +261,7 @@ impl Default for Config {
             tools: ToolsConfig::default(),
             toolsets: ToolsetsConfig::default(),
             ui: UiConfig::default(),
+            vault: VaultConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
         }

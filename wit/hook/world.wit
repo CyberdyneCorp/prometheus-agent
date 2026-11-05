@@ -1,0 +1,165 @@
+/// Callbacks on the closed hook list (spec: plugin-system, Typed hook
+/// registry; Hook payloads are versioned and additive).
+package prometheus:hook@1.3.0;
+
+interface plugin {
+    /// One hook firing. `payload` is a JSON object carrying
+    /// `schema_version` (`prometheus.hooks.v1`); the host removes the
+    /// fields added after the hook world minor version the plugin was
+    /// built against, so a plugin only ever sees fields it knows.
+    record hook-event {
+        hook: string,
+        schema-version: string,
+        payload: string,
+    }
+
+    /// Escalation to the human approval gate (`pre_tool_call`).
+    record approval {
+        message: string,
+        rule-key: option<string>,
+    }
+
+    /// What a callback answers. Directives are read only from the hooks
+    /// that take them; any other hook ignores everything but `none`.
+    /// The transform hooks read `context` as their rewrite
+    /// (`transform_tool_result`: the first answer, even empty, replaces
+    /// the result; `transform_llm_output`: the first non-empty one
+    /// replaces the reply); `transform_api_error_classification` reads
+    /// `modify` as its `{reason, retryable?, should_compress?,
+    /// should_rotate_credential?, should_fallback?, message?}` object;
+    /// `pre_verify` reads `modify` as `{action = "continue", message}`
+    /// (or `{decision = "block", reason}`).
+    variant reply {
+        none,
+        /// `pre_llm_call`: text appended to the current turn's user
+        /// message only.
+        context(string),
+        /// `pre_tool_call`: a JSON object shallow-merged into the tool
+        /// arguments, then re-validated against the tool schema.
+        modify(string),
+        /// `pre_tool_call`: the tool does not run; the message is its result.
+        block(string),
+        /// `pre_tool_call`: ask a human first.
+        approve(approval),
+    }
+
+    /// The hook names this plugin handles; each must also be listed in
+    /// the manifest's `hooks` capability.
+    hooks: func() -> list<string>;
+    on-hook: func(event: hook-event) -> result<reply, string>;
+}
+
+/// Added in 1.1: what a plugin contributes besides callbacks (spec:
+/// plugin-system, Plugin system-prompt sections are bounded and frozen;
+/// Plugin slash commands; Plugin event bus). A component built against
+/// 1.0 does not export it and contributes none of these.
+interface extensions {
+    /// One slash command; its name must be in the `commands` grant.
+    record command {
+        /// Without the `/`.
+        name: string,
+        /// One line for `/help`.
+        description: string,
+        /// Surfaces it runs on (`cli`, `tui`, `gateway`, `desktop`,
+        /// `dashboard`, `acp`); empty means every surface.
+        surfaces: list<string>,
+    }
+
+    /// The ids of the system-prompt sections this plugin contributes,
+    /// read once at load (`^[a-z0-9][a-z0-9._-]{0,127}$`, unique across
+    /// plugins); needs the `prompt_section` grant.
+    sections: func() -> list<string>;
+    /// A section's text, asked once when a session's prompt is built; it
+    /// stays as answered for the whole session.
+    render-section: func(id: string) -> result<string, string>;
+    /// The slash commands this plugin registers, read once at load.
+    commands: func() -> list<command>;
+    /// Runs `/<name> <args>`; the answer is shown to the person.
+    run-command: func(name: string, args: string) -> result<string, string>;
+    /// An event matching one of this plugin's `events.subscribe`
+    /// patterns, delivered asynchronously in emit order.
+    on-event: func(name: string, payload: string) -> result<_, string>;
+}
+
+/// Added in 1.2: stream holding, `prometheus plugins run` commands and
+/// approval transports. A component built against 1.0 or 1.1 does not
+/// export it and offers none of these.
+interface surfaces {
+    /// Hooks registered with `hold_stream = true`; only
+    /// `transform_llm_output` honours it (others are ignored with a
+    /// warning): replies of every session of the profile are not streamed
+    /// and reach the person only through the hook.
+    hold-stream: func() -> list<string>;
+
+    /// One `prometheus plugins run <id> <name>` command; its name must be
+    /// in the `cli_commands` grant.
+    record cli-command {
+        name: string,
+        /// One line for `prometheus plugins run <id>` and `prometheus help`.
+        description: string,
+    }
+
+    /// The invoking terminal.
+    record terminal {
+        columns: u16,
+        rows: u16,
+        tty: bool,
+    }
+
+    /// What a command printed and its exit code (printed after anything
+    /// it streamed through `console`).
+    record cli-output {
+        code: u8,
+        stdout: list<u8>,
+        stderr: list<u8>,
+    }
+
+    cli-commands: func() -> list<cli-command>;
+    run-cli: func(name: string, args: list<string>, terminal: terminal) -> result<cli-output, string>;
+
+    /// One approval request (immutable): answer with its `id`, `digest`
+    /// and one of `choices`, or the host denies it.
+    record approval-request {
+        id: string,
+        digest: string,
+        /// Redacted.
+        command: string,
+        description: string,
+        /// `cli`, `gateway`, `cron`...
+        surface: string,
+        timeout-secs: u32,
+        /// `once`, `session`, `always`, `deny` (those this request offers).
+        choices: list<string>,
+    }
+
+    record approval-response {
+        id: string,
+        digest: string,
+        choice: string,
+    }
+
+    /// Names of the approval transports this plugin registers (needs the
+    /// `approval_transport` grant).
+    transports: func() -> list<string>;
+    /// Presents `request` on transport `name` and waits for the answer.
+    present-approval: func(name: string, request: approval-request) -> result<approval-response, string>;
+}
+
+/// Added in 1.3: the invoking terminal of a running `run-cli` command,
+/// so a command streams its output as it goes (spec: plugin-system,
+/// Plugin CLI subcommands). Outside `run-cli` writes are dropped.
+interface console {
+    /// Writes `bytes` to the command's stdout.
+    write-stdout: func(bytes: list<u8>);
+    /// Writes `bytes` to the command's stderr.
+    write-stderr: func(bytes: list<u8>);
+}
+
+world hook {
+    include prometheus:host/imports@1.0.0;
+    include prometheus:messaging/imports@1.0.0;
+    import console;
+    export plugin;
+    export extensions;
+    export surfaces;
+}

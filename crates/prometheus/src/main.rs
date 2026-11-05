@@ -89,18 +89,28 @@ fn main() -> ExitCode {
     startup::warn_ignored_env(&launch);
     startup::raise_nofile(home.map(PathBuf::as_path));
     let reporter = startup::crash_reporter(home, &launch);
-    match panic::catch_main(&reporter, || run(&cli, &launch)) {
+    let outcome = panic::catch_main(&reporter, || run(&cli, &launch));
+    // Python-bridge sidecars and their children end with the process.
+    prometheus::plugins_host::bridge::shutdown_all();
+    match outcome {
         Ok(code) => ExitCode::from(code),
         Err(err) => failure(&err, cli.json),
     }
 }
 
 fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
+    let mut set = cli.set.clone();
+    if cli.accept_hooks {
+        set.push("hooks.auto_accept=true".to_owned());
+    }
+    if cli.safe_mode {
+        set.push("plugins.safe_mode=true".to_owned());
+    }
     let ctx = Context {
         home_flag: cli.home.as_deref(),
         launch,
         profile: cli.profile.as_deref(),
-        set: &cli.set,
+        set: &set,
         json: cli.json,
     };
     let result = match &cli.command {
@@ -111,6 +121,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Config { command }) => config_cmd::run(command, &ctx),
         Some(Command::Secrets { command }) => secrets_cmd::run(command, &ctx),
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
+        Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
+        Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),
@@ -138,13 +150,17 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Pairing { command }) => prometheus::daemon_cmd::pairing(command, &ctx),
         #[cfg(not(feature = "gateway"))]
         Some(Command::Daemon(_)) => prometheus::surface::require("gateway").map(|()| 0),
-        Some(Command::Plugins { command }) => prometheus::plugins_cmd::run(command),
+        Some(Command::Plugins { command }) => prometheus::plugins_cmd::run(command, &ctx),
+        #[cfg(feature = "mcp")]
+        Some(Command::Mcp { command }) => prometheus::mcp_cmd::run(command.as_ref(), &ctx),
         Some(Command::Rpc { command }) => prometheus::rpc_cmd::run(command, &ctx),
+        Some(Command::Connectors { command }) => prometheus::connectors_cmd::run(command, &ctx),
+        Some(Command::Bridge { command }) => prometheus::bridge_cmd::run(command, &ctx),
         Some(Command::SelfTest) => Ok(self_test_cmd::run(&ctx)),
         Some(Command::Completions { shell }) => prometheus::completions::script(*shell),
         Some(Command::Complete { .. }) => Ok(0),
         Some(Command::Runtimes { command }) => runtimes_cmd::run(command, &ctx),
-        Some(Command::Chat(args)) => chat::run(args, &ctx, ui(cli)),
+        Some(Command::Chat(args)) => chat::run(&safe(args, cli), &ctx, ui(cli)),
         #[cfg(feature = "tui")]
         Some(Command::Tui(args)) => prometheus::tui_cmd::run(args, &ctx, ui(cli)),
         #[cfg(not(feature = "tui"))]
@@ -161,12 +177,20 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Evolve(_)) => prometheus::surface::require("evolve").map(|()| 0),
         #[cfg(not(feature = "eval"))]
         Some(Command::Eval(_)) => prometheus::surface::require("eval").map(|()| 0),
-        None => chat::run(&cli.chat, &ctx, ui(cli)),
+        None => chat::run(&safe(&cli.chat, cli), &ctx, ui(cli)),
     };
     result.unwrap_or_else(|err| {
         print_error(&err, cli.json);
         err.exit_code()
     })
+}
+
+/// The chat flags with the global `--safe-mode`.
+fn safe(args: &prometheus::cli::ChatArgs, cli: &Cli) -> prometheus::cli::ChatArgs {
+    prometheus::cli::ChatArgs {
+        safe_mode: cli.safe_mode,
+        ..args.clone()
+    }
 }
 
 fn ui(cli: &Cli) -> chat::Ui {
@@ -195,6 +219,13 @@ fn usage_failure(err: &clap::Error) -> ExitCode {
     if let Some(unknown) = unknown_command(err) {
         return failure(&unknown, json_requested());
     }
+    if err.kind() == ClapErrorKind::DisplayHelp && top_level_help() {
+        let _ = err.print();
+        if let Some(section) = plugin_commands_help() {
+            print!("{section}");
+        }
+        return ExitCode::SUCCESS;
+    }
     if display_only || !json_requested() {
         err.exit();
     }
@@ -203,6 +234,46 @@ fn usage_failure(err: &clap::Error) -> ExitCode {
     let message = first_line.strip_prefix("error: ").unwrap_or(first_line);
     let usage = Error::new(&codes::CLI_USAGE, message).with_hint("run: prometheus help");
     failure(&usage, true)
+}
+
+/// Whether the command line asks for the top-level help (`prometheus
+/// help`, `prometheus --help`).
+fn top_level_help() -> bool {
+    let (_, words) = help_words();
+    matches!(words.as_slice(), [one] if one == "help" || one == "-h" || one == "--help")
+}
+
+/// The `--home` value and the other words of the command line.
+fn help_words() -> (Option<PathBuf>, Vec<String>) {
+    let mut home = None;
+    let mut words = Vec::new();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--home" {
+            home = args.next().map(PathBuf::from);
+        } else if let Some(value) = arg.strip_prefix("--home=") {
+            home = Some(PathBuf::from(value));
+        } else if !arg.starts_with('-') || arg == "-h" || arg == "--help" {
+            words.push(arg);
+        }
+    }
+    (home, words)
+}
+
+/// The enabled plugins' commands of the selected profile (spec:
+/// plugin-system, Plugin CLI subcommands).
+fn plugin_commands_help() -> Option<String> {
+    let launch = startup::launch_env().ok()?;
+    let (home, _) = help_words();
+    let ctx = prometheus::context::Context {
+        home_flag: home.as_deref(),
+        launch: &launch,
+        profile: None,
+        set: &[],
+        json: false,
+    };
+    let scope = ctx.scope().ok()?;
+    prometheus::plugins_cmd::run_cmd::help_section(&scope)
 }
 
 /// `unknown command 'sesions' (did you mean 'sessions'?)` for a mistyped

@@ -11,6 +11,7 @@ mod gateway;
 mod gateway_chats;
 mod integrity;
 mod lifecycle;
+mod mcp_spend;
 mod open;
 mod prompts;
 mod search;

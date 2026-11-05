@@ -197,7 +197,7 @@ pub async fn view(session: &SkillsSession, args: &Value) -> ToolResult {
             return ToolResult::error(hints::not_found(scope.home(), scope.name().as_str(), name));
         }
     };
-    if let Some(hidden) = gates::hidden(&config.skills, &session.setup().view, &skill) {
+    if let Some(hidden) = gates::hidden(&config, &session.setup().view, &skill) {
         return ToolResult::error(hidden.message(&skill.name));
     }
     if let Some(file) = file.filter(|f| *f != SKILL_FILE) {

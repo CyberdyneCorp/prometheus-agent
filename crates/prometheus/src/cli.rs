@@ -59,6 +59,15 @@ pub struct Cli {
     /// Only the answer: no banner, spinner or tool previews.
     #[arg(short, long, global = true)]
     pub quiet: bool,
+    /// Recovery start (spec: plugin-system, Safe mode).
+    #[arg(long, global = true)]
+    #[arg(
+        help = "Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider"
+    )]
+    pub safe_mode: bool,
+    /// Run shell hooks nobody approved yet (as `hooks.auto_accept`).
+    #[arg(long, global = true)]
+    pub accept_hooks: bool,
     /// `-V/--version`: the identity line (`--verbose`: as `version --verbose`).
     #[arg(short = 'V', long = "version", help = "Print version")]
     pub print_version: bool,
@@ -122,6 +131,19 @@ pub enum Command {
         /// The grants subcommand.
         #[command(subcommand)]
         command: GrantsCommand,
+    },
+    /// The credential vault: logins, cards and addresses the browser fills
+    /// by handle.
+    Vault {
+        /// The vault subcommand.
+        #[command(subcommand)]
+        command: crate::vault_cmd::VaultCommand,
+    },
+    /// Security records of the profile: verify the tamper-evident audit log.
+    Security {
+        /// The security subcommand.
+        #[command(subcommand)]
+        command: SecurityCommand,
     },
     /// Back up the whole home to a .tar.zst archive, or restore one.
     Backup {
@@ -235,8 +257,34 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::daemon_cmd::PairingCommand,
     },
-    /// Plugin tools: `plugins test-adapter <platform|path>` runs the adapter
-    /// conformance kit against a built-in mock of the platform.
+    /// Hosted app connectors (Gmail, Notion, Linear...) on the Nous
+    /// connector gateway: list them, list and rename accounts, connect and
+    /// disconnect accounts.
+    Connectors {
+        /// The connectors subcommand.
+        #[command(subcommand)]
+        command: crate::connectors_cmd::ConnectorsCommand,
+    },
+    /// The python bridge: sidecar status, logs and restarts, a doctor for
+    /// the managed runtime and plugin environments, and named side
+    /// environments for skill scripts.
+    Bridge {
+        /// The bridge subcommand.
+        #[command(subcommand)]
+        command: crate::bridge_cmd::BridgeCommand,
+    },
+    /// MCP servers: add (from a preset or the catalog), list, remove, test
+    /// and sign in to the profile's servers, pick their tools, show their
+    /// state, and serve Prometheus tools and skills to MCP clients. With no
+    /// subcommand on a terminal, an interactive picker.
+    #[cfg(feature = "mcp")]
+    Mcp {
+        /// The mcp subcommand.
+        #[command(subcommand)]
+        command: Option<crate::mcp_cmd::McpCommand>,
+    },
+    /// Plugins: list, enable and disable them, manage their capability
+    /// grants, and run the adapter conformance kit (`plugins test-adapter`).
     Plugins {
         /// The plugins subcommand.
         #[command(subcommand)]
@@ -395,10 +443,31 @@ pub enum DebugCommand {
 /// `prometheus approvals` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ApprovalsCommand {
-    /// Run a command line through the approval gate order (hardline, deny
-    /// rules, bypass, allowlist, dangerous-pattern and content detectors)
-    /// without executing it, asking anyone or saving anything.
+    /// Run a command line through the approval gate order (hardline,
+    /// self-termination, deny rules, bypass, allowlist, dangerous-pattern
+    /// and content detectors) without executing it, asking anyone or saving
+    /// anything.
     Test(ApprovalsTestArgs),
+    /// Propose allow patterns from the commands you approved recently;
+    /// nothing changes without `--apply`.
+    Suggest(ApprovalsSuggestArgs),
+}
+
+/// Arguments of `approvals suggest`.
+#[derive(Debug, Clone, clap::Args)]
+pub struct ApprovalsSuggestArgs {
+    /// Look at approvals from the last N days.
+    #[arg(long, value_name = "N", default_value_t = 90)]
+    pub days: u32,
+    /// Propose only patterns approved at least N times.
+    #[arg(long, value_name = "N", default_value_t = 2)]
+    pub min_count: usize,
+    /// Show at most N proposals.
+    #[arg(long, value_name = "N", default_value_t = 20)]
+    pub limit: usize,
+    /// Add the numbered proposals to `[approvals].allow` in `grants.toml`.
+    #[arg(long, value_name = "N,...", value_delimiter = ',')]
+    pub apply: Vec<usize>,
 }
 
 /// Arguments of `approvals test`.
@@ -424,7 +493,8 @@ pub struct ApprovalsTestArgs {
 pub enum ApprovalModeArg {
     /// Ask for every dangerous call.
     Manual,
-    /// Pre-screen with the guardian model (asks like manual in M1).
+    /// Pre-screen with the guardian model, asking a human when it cannot
+    /// decide.
     Smart,
     /// Bypass prompts; hardline and deny rules still block.
     Off,
@@ -556,10 +626,12 @@ pub enum PromptCommand {
 /// `prometheus prompt size` options.
 #[derive(Debug, clap::Args)]
 pub struct PromptSizeArgs {
-    /// Surface whose platform hint the prompt carries.
+    /// Surface a new session starts on (`cli`, `cron`, `api`, a messaging
+    /// platform such as `telegram` or `webhook`...): its platform hint and
+    /// starting toolsets.
     #[arg(long, value_name = "SURFACE", default_value = "cli")]
     pub platform: String,
-    /// Comma-separated toolsets (default: `tools.enabled_toolsets`).
+    /// Comma-separated toolsets (default: the surface's starting toolsets).
     #[arg(long, value_name = "A,B", value_delimiter = ',')]
     pub toolsets: Vec<String>,
     /// `<provider>/<model>` or a model of the configured provider (default:
@@ -613,6 +685,24 @@ pub enum GrantsCommand {
         /// The grant id (`grant_<ULID>`) shown by `grants list`.
         id: String,
     },
+}
+
+/// `prometheus security` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SecurityCommand {
+    /// The security audit log (`<profile>/logs/security-audit.jsonl`).
+    Audit {
+        /// The audit subcommand.
+        #[command(subcommand)]
+        command: AuditCommand,
+    },
+}
+
+/// `prometheus security audit` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum AuditCommand {
+    /// Check the hash chain; exit 1 naming the first record that was edited, inserted or removed.
+    Verify,
 }
 
 /// `prometheus secrets` subcommands.

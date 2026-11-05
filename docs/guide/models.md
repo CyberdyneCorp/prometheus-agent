@@ -385,6 +385,7 @@ first rule not used up whose matchers all hold:
 | `model` | the route's model equals it (`mock/primary`, `mock/secondary`...) |
 | `user`, `user_regex` | the last user message contains the text or matches the regex |
 | `tool_result`, `tool_result_regex` | the last tool result contains the text or matches the regex |
+| `tools`, `tools_regex` | the tool array offered to the model, as JSON, contains the text or matches the regex |
 
 A rule answers with `reasoning`, `text` and `tool_calls` (streamed in that
 order, word by word), or injects a `fault`. It answers one call, unless it

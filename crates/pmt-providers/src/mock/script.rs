@@ -7,7 +7,8 @@
 //! latency_ms = 0                 # default delay before every chunk
 //!
 //! [[rule]]
-//! user = "summarise"             # or user_regex; tool_result(_regex)
+//! user = "summarise"             # or user_regex; tool_result(_regex);
+//!                                # tools(_regex): the offered tool array as JSON
 //! [[rule.tool_calls]]
 //! name = "read_file"
 //! arguments = { path = "README.md" }
@@ -61,6 +62,7 @@ pub(crate) struct Matcher {
     pub model: Option<String>,
     pub user: Option<TextMatch>,
     pub tool_result: Option<TextMatch>,
+    pub tools: Option<TextMatch>,
 }
 
 /// A substring or a regex.
@@ -141,6 +143,8 @@ struct RawRule {
     user_regex: Option<String>,
     tool_result: Option<String>,
     tool_result_regex: Option<String>,
+    tools: Option<String>,
+    tools_regex: Option<String>,
     text: Option<String>,
     reasoning: Option<String>,
     #[serde(default)]
@@ -257,6 +261,7 @@ fn matcher(raw: &RawRule) -> Result<Matcher, String> {
             raw.tool_result.as_deref(),
             raw.tool_result_regex.as_deref(),
         )?,
+        tools: text_match("tools", raw.tools.as_deref(), raw.tools_regex.as_deref())?,
     })
 }
 

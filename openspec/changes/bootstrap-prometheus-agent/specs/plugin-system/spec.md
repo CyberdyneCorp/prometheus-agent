@@ -229,7 +229,7 @@ The system SHALL load enabled plugins in `requires_plugins` dependency order wit
 - **THEN** the session SHALL start without loading that plugin
 
 ### Requirement: Plugin catalog
-The system SHALL resolve bare plugin names through a catalog of entries with `id`, `repo` (`https://` only), `ref` (full 40-hex commit SHA or package digest `sha256:<64 hex>`), `tier` (`official`, `verified` or `community`), `category`, `capabilities_summary` and `publisher_key`; the live catalog SHALL be fetched from `plugins.catalog_url`, cached under the profile's `cache/` directory for 6 hours, rejected when larger than 2 MiB or failing signature verification against the release-embedded catalog key, written atomically, and on any failure the catalog embedded in the binary SHALL be used; invalid entries SHALL be skipped with a WARN.
+The system SHALL resolve bare plugin names through a catalog of entries with `id`, `repo` (`https://` only), `ref` (full 40-hex commit SHA or package digest `sha256:<64 hex>`), `tier` (`official`, `verified` or `community`), `category`, `capabilities_summary` and `publisher_key` (an entry pinning a package digest also carries the `https://` `package` URL it is downloaded from, its signature at `<package>.minisig`); the live catalog SHALL be fetched from `plugins.catalog_url`, cached under the profile's `cache/` directory for 6 hours, rejected when larger than 2 MiB or failing signature verification against the release-embedded catalog key, written atomically, and on any failure the catalog embedded in the binary SHALL be used; invalid entries SHALL be skipped with a WARN.
 **Milestone:** M2
 
 #### Scenario: Tampered catalog is ignored

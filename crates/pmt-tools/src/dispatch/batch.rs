@@ -103,7 +103,7 @@ impl Dispatcher {
         let mut executed = Vec::with_capacity(handles.len());
         for (call, handle) in calls.iter().zip(handles) {
             executed.push(handle.await.unwrap_or_else(|err| Executed {
-                tool: self.setup.surface.get(&call.name).cloned(),
+                tool: self.setup.surface.resolve(&call.name).cloned(),
                 result: ToolResult::error(format!(
                     "[TOOL_ERROR] {} failed: panic: {err}",
                     call.name

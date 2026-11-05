@@ -9,7 +9,7 @@ boundary; approvals and scanners are heuristics on top of it.
 |---|---|---|---|---|---|
 | Linux | Landlock + seccomp | enforced (Landlock) | enforced (Landlock TCP rules, ABI 4 / Linux 6.7, plus seccomp for non-TCP IP sockets) | enforced (seccomp; signal scoping on Linux 6.12+) | enforced (seccomp) |
 | macOS | Seatbelt (`sandbox-exec`) | enforced | enforced | enforced | partial (platform maximum) |
-| Windows | AppContainer + Job Object | enforced (ACL entries for the container SID) | enforced (`internetClient` capability or none) | enforced (Job Object) | partial (platform maximum) |
+| Windows | AppContainer + Job Object | enforced (ACL entries for the container SID) | enforced (`internetClient` capability, none, or only the egress proxy through a relay in the container) | enforced (Job Object) | partial (platform maximum) |
 
 `partial` at the platform maximum is not a downgrade. Other platforms
 (Android, the BSDs) have no backend: every feature is `unavailable`.
@@ -46,9 +46,27 @@ capabilities = [
   files and browser profile directories. A grant that names a path inside a
   store (for example `fs.read:~/.aws/config`) is honoured.
 - Without `process.spawn`, a child cannot start further processes.
-- The OS filters ports, not host names: a `net.connect:<host>` grant makes
-  `net` `partial` until the egress proxy (M2) filters hosts. UDP sockets are
-  refused only when outbound connections are restricted. `/proc` is not
+- The OS filters ports, not host names, so a session's children reach the
+  network only through its loopback egress proxy, which filters hosts (see
+  [Network egress](security.md#network-egress)). On macOS the Seatbelt
+  profile admits the proxy's port on loopback alone. On Linux Landlock
+  filters the port, not the address, so a proxied child runs in a network
+  namespace of its own whose only way out is a listener on the proxy's
+  port, served by the proxy; this needs unprivileged user namespaces
+  (Ubuntu 24.04 restricts them through AppArmor:
+  `sysctl kernel.apparmor_restrict_unprivileged_userns=0`). Without them
+  `net` is `partial` (`landlock_net`) and the downgrade rule applies. On
+  Windows an AppContainer reaches a loopback listener only of its own
+  container, so the launcher starts a small relay process (the same
+  executable) inside the child's container: the child gets no network
+  capability at all, its proxy variables point at the relay's loopback
+  port, and the relay forwards each connection over a named pipe (open
+  only to your account and that container) to the launcher, which
+  connects it to the proxy. Direct connections, to the proxy's own port,
+  other loopback services, the private network or the internet, fail, so
+  `net` is `enforced` (mechanism `appcontainer relay`). A child given its own
+  `net.connect:<host>` grant without the proxy reports `net` `partial`. UDP
+  sockets are refused only when outbound connections are restricted. `/proc` is not
   readable on Linux (other processes' environments hold secrets).
 
 Known limits: on Linux and Windows the sandbox can only grant, so a granted
@@ -59,7 +77,10 @@ granted (a link such as `~/.ssh -> ~/dotfiles/ssh` would otherwise expose
 its target); a link whose target lies in a granted directory still works. On
 Windows, listening sockets are never granted (loopback needs a
 per-container exemption), and the session adds then revokes ACL entries for
-its container on the granted directories. Below a directory whose ACL is not
+its container on the granted directories (and listing entries on the
+directories above them). Sessions that start or end at the same time take
+turns on these ACL changes (a named mutex of the logon session), so one
+session's change never drops another's entry. Below a directory whose ACL is not
 marked auto-inherited (uncommon; seen on some CI images), Windows keeps the
 other entries' rights but stores them as explicit entries after the
 revocation, so later permission changes on the parent no longer flow down.

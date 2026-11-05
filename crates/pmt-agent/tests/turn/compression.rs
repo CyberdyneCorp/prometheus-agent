@@ -855,3 +855,80 @@ async fn the_summary_comes_from_the_auxiliary_compression_route() {
         .collect();
     assert_eq!(purposes, ["auxiliary.compression"]);
 }
+
+/// Tools whose array grows by `fresh` once their boundary refresh ran.
+struct Refreshable {
+    inner: Arc<FakeTools>,
+    refreshed: std::sync::atomic::AtomicUsize,
+}
+
+impl pmt_agent::turn::tools::ToolPort for Refreshable {
+    fn definitions(&self) -> Vec<pmt_providers::request::Tool> {
+        let mut tools = self.inner.definitions();
+        if self.refreshed.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+            tools.push(pmt_providers::request::Tool {
+                name: "fresh".into(),
+                description: "Appeared after the refresh.".into(),
+                parameters: serde_json::json!({"type": "object"}),
+            });
+        }
+        tools
+    }
+
+    fn run<'a>(
+        &'a self,
+        calls: &'a [pmt_agent::turn::model::RequestedCall],
+        turn_id: &'a str,
+        cancel: &'a pmt_core::cancel::CancelToken,
+    ) -> BoxFuture<'a, pmt_agent::turn::tools::ToolBatch> {
+        self.inner.run(calls, turn_id, cancel)
+    }
+}
+
+impl pmt_agent::turn::CompactionBoundary for Refreshable {
+    fn refresh_tools(&self) -> BoxFuture<'_, ()> {
+        self.refreshed
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Box::pin(async {})
+    }
+}
+
+fn tool_names(request: &Request) -> Vec<String> {
+    request.tools.iter().map(|t| t.name.clone()).collect()
+}
+
+/// Scenario: tool-system, MCP tool list changes respect the frozen
+/// surface (the compaction boundary): the tool array changes only at the
+/// commit, never between ordinary turns.
+#[tokio::test]
+async fn a_compaction_boundary_refreshes_the_tool_array() {
+    let profile = Profile::new(SMALL);
+    let s = profile.session(Source::Cli);
+    let model = mock_model(&profile, "[[rule]]\ntext = \"ok\"\nrepeat = true\n", "mock").await;
+    let tools = Arc::new(Refreshable {
+        inner: FakeTools::new(),
+        refreshed: std::sync::atomic::AtomicUsize::new(0),
+    });
+    let summarizer = FakeSummarizer::new();
+    let boundary = Arc::clone(&tools);
+    let run = agent(&profile, s, model.clone(), tools.clone(), |setup| {
+        setup.summarizer = Some(summarizer.clone());
+        setup.compaction_boundary = Some(boundary);
+    });
+    run.turn(&profile, "one").await;
+    run.turn(&profile, "two").await;
+    assert_eq!(tools.refreshed.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(tool_names(&model.requests()[1]), ["lookup"]);
+    run.agent
+        .compress(&profile.scope, &manual::parse("here 1").unwrap())
+        .await
+        .unwrap();
+    run.turn(&profile, "three").await;
+    run.turn(&profile, "four").await;
+    assert_eq!(tools.refreshed.load(std::sync::atomic::Ordering::SeqCst), 1);
+    let requests = model.requests();
+    let last = requests.len() - 1;
+    assert_eq!(tool_names(&requests[last - 1]), ["lookup", "fresh"]);
+    assert_eq!(tool_names(&requests[last]), ["lookup", "fresh"]);
+    assert_eq!(rebuilds(&run), ["new_session", "compaction"]);
+}

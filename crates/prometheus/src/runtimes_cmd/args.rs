@@ -9,7 +9,8 @@ pub enum RuntimesCommand {
     List,
     /// Download, verify and install the pinned versions.
     Install {
-        /// Runtime names (node, cpython, uv, chromium).
+        /// Runtime names (node, cpython, uv, chromium), or `python@<version>`
+        /// for the python bridge's managed CPython (3.11, 3.12, 3.13).
         #[arg(required = true, value_name = "NAME")]
         names: Vec<String>,
     },

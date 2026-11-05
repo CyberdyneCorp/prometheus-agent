@@ -5,15 +5,23 @@
 //! [`Factory::open`] builds one [`Live`] session over a new or resumed
 //! session row.
 
+pub mod api_hooks;
 pub mod browser;
 pub mod env;
+mod guardian;
+mod lifecycle;
+mod mcp;
 pub mod model;
+mod plugins;
 pub mod progress;
+pub mod python;
+pub mod serve;
 pub mod skills;
 pub mod summarize;
+mod tool_state;
 pub mod tools;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use jiff::Timestamp;
@@ -42,7 +50,9 @@ use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
 use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
 
+use self::env::Denials;
 use self::model::{Models, RouteFlags, SwitchableModel};
+use self::tool_state::{Registries, ToolState};
 use self::tools::{GateInputs, SurfaceInputsOwned, SwappableTools};
 
 /// Clarify questions waiting for the person.
@@ -71,6 +81,8 @@ pub struct Options {
     /// `--ignore-rules`: no rule files, identity file, memory snapshot or
     /// preloaded skills (recorded on the session).
     pub ignore_rules: bool,
+    /// `--egress` and `--allow-host`.
+    pub egress: crate::egress::Overrides,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -94,8 +106,9 @@ pub struct Factory {
     pub store: Arc<Store>,
     /// The model side.
     pub models: Models,
-    /// The tool registry.
-    pub registry: Arc<ToolRegistry>,
+    /// The core tools plus those of the current plugin and MCP server
+    /// sets; read through [`Factory::session_registry`].
+    registries: Arc<Registries>,
     grants: Arc<SessionGrants>,
     launch: LaunchEnv,
     redactor: Redactor,
@@ -112,9 +125,20 @@ pub struct Factory {
     browser: OnceLock<Option<browser::Shared>>,
     /// The gateway's `send_message` ports (daemon sessions only).
     messaging: Option<Arc<dyn pmt_agent::tools::MessagingPorts>>,
+    /// The daemon hosting this factory's sessions (daemon sessions only).
+    daemon: Option<pmt_tools::approval::selfterm::Daemon>,
     /// The profile's configuration as it is now: `scope` until a daemon
     /// reload replaces it (shared tools read their `live` keys from it).
     current: SharedScope,
+    /// The profile's live plugin set.
+    plugins: crate::plugins_host::ProfilePlugins,
+    /// The configuration the plugin set is loaded from: `scope` until a
+    /// one-process `/plugins reload` re-reads `config.toml`.
+    plugin_scope: SharedScope,
+    /// The `--set` list a one-process session opened `scope` with, so
+    /// `/plugins reload` can re-read `config.toml` through it (`None`: the
+    /// daemon, whose own reloads keep the profile scope current).
+    reread: Option<Vec<String>>,
 }
 
 /// One running session.
@@ -125,6 +149,8 @@ pub struct Live {
     pub id: SessionId,
     /// The turn loop.
     pub agent: Agent,
+    /// Keeps the session reachable by the profile's MCP servers.
+    _mcp: crate::mcp_host::sessions::Registration,
     /// The model port.
     pub model: Arc<SwitchableModel>,
     /// The tool port.
@@ -141,9 +167,20 @@ pub struct Live {
     pub memory: Arc<MemorySession>,
     /// Counts tool-calling iterations towards a background skill review.
     pub skill_nudge: Mutex<Nudge>,
-    /// The toolset selection the session's tools are built from (`/tools
-    /// --now` replaces it).
-    selection: Mutex<Selection>,
+    /// The registry, selection and main route the session's tools are
+    /// built from, and their rebuild (`--now`, a compaction boundary).
+    tool_state: Arc<ToolState>,
+    /// The surface the session's toolsets start from.
+    session_surface: pmt_tools::SessionSurface,
+    /// The profile's live plugin set (slash commands, reload).
+    pub plugins: crate::plugins_host::ProfilePlugins,
+    /// The session's working directory (plugin `session.info`).
+    cwd: PathBuf,
+    /// The surface that created the session (`cli`, `tui`, `gateway`...).
+    surface: &'static str,
+    /// The plugin system-prompt sections the session's prompt carries.
+    plugin_sections: Arc<Mutex<Vec<String>>>,
+    _plugin_llm: crate::plugins_host::llm::Registration,
     /// Notices to show once at start.
     pub notices: Vec<String>,
     /// What this run did (`--usage-file`).
@@ -155,10 +192,11 @@ pub struct Live {
     /// and-profiles, Live reload with apply classes). Turns and tools
     /// read it at use.
     pub config: SharedScope,
-    agent_tools: Arc<AgentTools>,
     capabilities: CapabilitySet,
     trajectory: Option<Arc<TrajectoryWriter>>,
     browser: Option<Arc<pmt_tools::browser::BrowserExec>>,
+    /// The session's egress policy (`/egress`, `egress.set`).
+    pub egress: crate::egress::Running,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -184,8 +222,25 @@ impl Factory {
         pmt_agent::compress::engine::select(&config.context, &[])?;
         let store = Arc::new(Store::open(&scope)?);
         let user_home = launch.user_home().map(PathBuf::as_path);
-        let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?;
-        let registry = Arc::new(crate::tools_cmd::registry(&scope)?);
+        let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        let models = Models::open(&scope, &store, user_home, flags, ad_hoc)?.with_plugins(
+            &scope,
+            &plugins,
+            &options.cwd,
+        )?;
+        let plugin_scope = SharedScope::new(scope.clone());
+        let registries = Arc::new(Registries::new(
+            scope.clone(),
+            plugin_scope.clone(),
+            Arc::clone(&store),
+            options.cwd.clone(),
+            plugins::PluginTools::build(
+                &scope,
+                &plugins,
+                &crate::mcp_host::manager(&scope),
+                &plugins::session_calls(&store, &options.cwd),
+            )?,
+        ));
         let grants = Arc::new(SessionGrants::new(
             baseline(&scope.config().security),
             GrantsFile::of(scope.profile()),
@@ -193,10 +248,11 @@ impl Factory {
         let redactor = scope.secrets().redactor().unwrap_or_default();
         Ok(Self {
             current: SharedScope::new(scope.clone()),
+            plugin_scope,
             scope,
             store,
             models,
-            registry,
+            registries,
             grants,
             launch: launch.clone(),
             redactor,
@@ -208,6 +264,9 @@ impl Factory {
             install_asks: None,
             browser: OnceLock::new(),
             messaging: None,
+            daemon: None,
+            plugins,
+            reread: None,
         })
     }
 
@@ -249,7 +308,7 @@ impl Factory {
     }
 
     /// Whether the model of `target` accepts images.
-    fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
+    pub(super) fn image_input(&self, target: &pmt_providers::resolve::Target) -> bool {
         target.model.as_deref().is_some_and(|model| {
             self.models
                 .catalog()
@@ -366,10 +425,9 @@ impl Factory {
             self.models.port(target).await?,
         ));
         self.maintain();
-        let session = self.store.session(id)?;
-        self.record.session(id, session.root_session_id, target);
-        self.record_launch_flags(id)?;
-        let selection = tools::selection(&self.registry, config, interactive)?;
+        let session = self.session_row(id, target)?;
+        self.discover_mcp().await;
+        let (registry, selection, session_surface) = self.session_selection(&session)?;
         let inline_shell = Arc::new(skills::DeferredShell::default());
         let skills = Arc::new(SkillsSession::new(self.skills_setup(
             id,
@@ -390,26 +448,20 @@ impl Factory {
         )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
-        let (agent_tools, clarify) = self.agent_tools(id, &memory, &summarizer, &capabilities)?;
-        let gate = self.gate()?;
+        let cards = shows_cards(interactive, &session_surface);
+        let (agent_tools, clarify) =
+            self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
+        let gate = self.gate(id, Some(&model), Some(&environment))?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
-        let session_tools = tools::session_tools(&SurfaceInputsOwned {
-            scope,
-            store: &self.store,
-            session: id,
-            registry: &self.registry,
-            selection: &selection,
-            capabilities: &capabilities,
-            gate: &gate.gate,
-            agent: Some(&agent_tools),
-            redactor: &self.redactor,
-            context_window: None,
-        })
-        .await?;
-        let tool_port = Arc::new(SwappableTools::new(session_tools));
+        let ports = (&gate.gate, &agent_tools, &model);
+        let built = (registry, selection, &capabilities);
+        let tool_state = self.tool_state(id, built, ports).await?;
+        let tool_port = tool_state.tools();
         let trajectory = self.trajectory(&session)?;
         let mut notices = Vec::new();
-        let prompt = self.prompt_setup(&skills, &memory, &mut notices).await;
+        let (prompt, plugin_sections) = self
+            .session_prompt(id, &skills, &memory, &mut notices)
+            .await;
         let mut setup = AgentSetup::new(
             scope.clone(),
             Arc::clone(&self.store),
@@ -419,20 +471,22 @@ impl Factory {
             prompt,
         );
         let events = events_to(trajectory.clone(), clients.map(|c| c.events));
+        let _ = environment.denials.set(Arc::downgrade(&events));
+        let events = self.with_lifecycle_hooks(id, &session, events);
         let (tee, progress) = progress::Tee::new(events, interactive);
-        model.watch_credentials(borrowed_watch(tee.notices()));
+        self.observe_model(&model, id, tee.notices());
+        let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
         setup.events = Arc::new(tee);
-        setup.redactor = self.redactor.clone();
-        setup.summarizer = Some(summarizer as _);
-        setup.memory = Some(Arc::clone(&memory) as _);
-        setup.interactive = interactive;
-        setup.unattended = !interactive;
-        setup.refresh_prompt = Some(refresher(&skills, &memory, self.options.ignore_rules));
+        self.memory_and_refresh(&mut setup, summarizer, &skills, &memory, &plugin_sections);
+        setup.compaction_boundary = Some(Arc::clone(&tool_state) as _);
+        self.surface_setup(&mut setup, id);
         let agent = Agent::new(setup)?;
         let live = Live {
             scope: scope.clone(),
             id,
             agent,
+            _plugin_llm: self.plugin_llm(id, &model),
+            _mcp: mcp,
             model,
             tools: tool_port,
             gate: gate.gate,
@@ -441,15 +495,20 @@ impl Factory {
             skills,
             memory,
             skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
-            selection: Mutex::new(selection),
+            tool_state,
+            session_surface,
+            plugins: self.plugins.clone(),
+            cwd: self.options.cwd.clone(),
+            surface: session.source.as_str(),
+            plugin_sections,
             notices,
             progress,
             config: current,
             record: Arc::clone(&self.record),
-            agent_tools,
             capabilities,
             trajectory,
             browser: environment.browser,
+            egress: environment.egress,
             _environment: environment.attachment,
             _skills: attached,
         };
@@ -457,8 +516,91 @@ impl Factory {
         Ok(live)
     }
 
-    /// The session's command approval gate.
-    fn gate(&self) -> Result<tools::Gate, Error> {
+    /// Announces borrowed logins on `notices` and fires the API hooks
+    /// around every call of the session's `model`.
+    fn observe_model(&self, model: &SwitchableModel, id: SessionId, notices: progress::Notices) {
+        model.watch_credentials(borrowed_watch(notices));
+        model.observe_api(api_hooks::ApiHooks::new(
+            self.plugins.clone(),
+            self.plugin_call(id),
+        ));
+    }
+
+    /// `events` with the session's lifecycle hooks fired from them; the
+    /// gateway fires its own turns' lifecycle hooks.
+    fn with_lifecycle_hooks(
+        &self,
+        id: SessionId,
+        session: &pmt_store::Session,
+        events: Arc<dyn EventSink>,
+    ) -> Arc<dyn EventSink> {
+        if session.source.as_str() == "gateway" {
+            return events;
+        }
+        Arc::new(lifecycle::LifecycleHooks::new(
+            events,
+            self.plugins.clone(),
+            self.plugin_call(id),
+        ))
+    }
+
+    /// The registry of a session of `session`'s row, its toolset selection
+    /// and the surface it starts from.
+    fn session_selection(
+        &self,
+        session: &pmt_store::Session,
+    ) -> Result<(Arc<ToolRegistry>, Selection, pmt_tools::SessionSurface), Error> {
+        // Plugin and MCP toolsets: enabling a plugin or configuring a
+        // server opts its tools in.
+        let (registry, plugin_toolsets) = self.session_registry()?;
+        let surface = tools::surface_of(session);
+        let selection = tools::selection(
+            &registry,
+            self.scope.config(),
+            self.options.interactive,
+            &plugin_toolsets,
+            &surface,
+        )?;
+        Ok((registry, selection, surface))
+    }
+
+    /// The parts of a session's agent setup that come from this factory's
+    /// surface: redaction, interactivity and plugin turn hooks.
+    fn surface_setup(&self, setup: &mut AgentSetup, id: SessionId) {
+        setup.redactor = self.redactor.clone();
+        setup.interactive = self.options.interactive;
+        setup.unattended = !self.options.interactive;
+        setup.turn_hooks = Some(self.plugins.turn_hooks(self.plugin_call(id)));
+    }
+
+    /// What plugin host calls of session `id` report as their session:
+    /// the surface that created it (`cli`, `tui`, `gateway`, `cron`...)
+    /// and this factory's working directory.
+    fn plugin_call(&self, id: SessionId) -> pmt_plugins::host::CallInfo {
+        session_call(
+            id,
+            &plugins::stored_surface(&self.store, id),
+            &self.options.cwd,
+        )
+    }
+
+    /// The session's command approval gate; with the session's `model`,
+    /// `smart` mode asks the approval guardian on its auxiliary route.
+    fn gate(
+        &self,
+        id: SessionId,
+        model: Option<&Arc<SwitchableModel>>,
+        environment: Option<&env::Attached>,
+    ) -> Result<tools::Gate, Error> {
+        let previewer = environment.and_then(|e| e.previewer.clone());
+        let terminal = environment.and_then(|e| e.terminal.as_ref());
+        let guardian = model.map(|model| self.models.guardian(model, id));
+        let hooks = crate::plugins_host::approvals::PluginApprovals::new(
+            self.plugins.clone(),
+            self.plugin_call(id),
+            self.redactor.clone(),
+            &self.scope.config().plugins,
+        );
         tools::gate(&GateInputs {
             scope: &self.scope,
             grants: &self.grants,
@@ -466,7 +608,50 @@ impl Factory {
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
             yolo: self.options.yolo,
+            hooks: Some(Arc::new(hooks)),
+            session_id: id.to_string(),
+            guardian: guardian.map(|g| g as _),
+            previewer,
+            hosted: self
+                .daemon
+                .clone()
+                .map(|daemon| (daemon, own_processes(terminal))),
         })
+    }
+
+    /// The egress policy of session `id`: the profile's, with the chat
+    /// flags; refusals go to the audit log and, once the session's event
+    /// sink is set in `events`, to its trajectory and clients.
+    fn egress(&self, id: SessionId, events: &Denials) -> crate::egress::SessionEgress {
+        let hosts = Arc::new(crate::egress::host_policy(
+            &self.scope.config().security.egress,
+            &self.options.egress,
+        ));
+        let events = Arc::clone(events);
+        let runtime = tokio::runtime::Handle::current();
+        let emit: Arc<dyn Fn(&pmt_net::egress::Denial) + Send + Sync> = Arc::new(move |denial| {
+            let Some(sink) = events.get().and_then(std::sync::Weak::upgrade) else {
+                return;
+            };
+            let event = pmt_obs::trajectory::events::Event::EgressDenied(
+                pmt_obs::trajectory::payload::EgressDenied {
+                    host: denial.host.clone(),
+                    port: denial.port,
+                    requester: denial.requester.clone(),
+                    reason: denial.reason.as_str().to_owned(),
+                },
+            );
+            runtime.spawn(async move {
+                let emit = pmt_obs::trajectory::writer::Emit::now(event);
+                if let Err(err) = sink.emit(emit).await {
+                    tracing::debug!(error = %err, "egress.denied event not recorded");
+                }
+            });
+        });
+        crate::egress::SessionEgress {
+            hosts,
+            observer: crate::egress::observer(&self.scope, Some(id.to_string()), Some(emit)),
+        }
     }
 
     /// The trajectory writer of `session`, when trajectories are on.
@@ -493,6 +678,7 @@ impl Factory {
         skills: &Arc<SkillsSession>,
         clients: Option<&Clients>,
     ) -> Result<env::Attached, Error> {
+        let denials = env::Denials::default();
         let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
@@ -504,12 +690,35 @@ impl Factory {
             browser: self.browser(),
             image_input: self.image_input(target),
             completions: clients.and_then(|c| c.completions.clone()),
+            providers: self.plugins.current().providers.clone(),
+            plugin_call: self.plugin_call(id),
+            plugins: &self.plugins,
+            egress: &self.egress(id, &denials),
+            denials: &denials,
+            vault_prompt: self.vault_prompt(clients),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
             terminal.set_secret_source(skills.secret_source());
+            terminal.set_path_source(python::path_source(&self.scope, skills));
         }
         Ok(environment)
+    }
+
+    /// Where `browser_vault` asks for a password or code: the session's
+    /// clients (a daemon session) or the local terminal (an interactive
+    /// chat); nobody in cron, webhook, API and single-query runs.
+    fn vault_prompt(
+        &self,
+        clients: Option<&Clients>,
+    ) -> Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>> {
+        if !self.options.interactive {
+            return None;
+        }
+        let secrets = clients
+            .map(|c| Arc::clone(&c.secrets))
+            .or_else(|| self.secret_prompt.clone())?;
+        Some(Arc::new(env::VaultPrompt(secrets)))
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -519,17 +728,20 @@ impl Factory {
             .grants
             .capabilities(&Subject::Profile)?
             .union(&tool_output_reads(self.scope.dir(), &id.to_string()))
-            .union(&skills.sandbox_reads()))
+            .union(&skills.sandbox_reads())
+            .union(&python::sandbox_reads(&self.scope)))
     }
 
     /// The loop's own tools; `clarify` asks the person on an interactive
-    /// session.
+    /// session, where `cards` also lets `manage_connections` show its
+    /// connection card (else it hands out links).
     fn agent_tools(
         &self,
         id: SessionId,
         memory: &Arc<MemorySession>,
         summarizer: &Arc<summarize::RouteSummarizer>,
         capabilities: &CapabilitySet,
+        cards: bool,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
             let (clarifier, surface) =
@@ -538,6 +750,10 @@ impl Factory {
         } else {
             (Clarifier::unattended(), None)
         };
+        let clarifier = clarifier.with_observer(crate::plugins_host::approvals::input_observer(
+            self.plugins.clone(),
+            self.plugin_call(id),
+        ));
         let tools = AgentTools::new(
             Arc::clone(&self.store),
             id,
@@ -545,7 +761,8 @@ impl Factory {
             SessionSearch::new(Arc::clone(&self.store), id)
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
-        .with_memory(Arc::clone(memory) as _);
+        .with_memory(Arc::clone(memory) as _)
+        .with_connections(crate::connectors_host::manager(&self.scope, cards));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,
@@ -566,6 +783,36 @@ impl Factory {
         Arc::new(move |path| {
             capabilities.allows_path(pmt_core::capability::Access::Read, path, &places)
         })
+    }
+
+    /// The stored row of session `id`, recorded for `--usage-file` with
+    /// the launch flags; a gateway session's platform user id is hashed in
+    /// every model request when PII is redacted (spec:
+    /// security-boundaries, Optional PII redaction).
+    fn session_row(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+    ) -> Result<pmt_store::Session, Error> {
+        let session = self.store.session(id)?;
+        if let pmt_store::Origin::Gateway {
+            user: Some(user), ..
+        } = &session.origin
+        {
+            self.models.register_user_id(user);
+        }
+        self.record.session(id, session.root_session_id, target);
+        self.record_launch_flags(id)?;
+        Ok(session)
+    }
+
+    /// Marks this factory's sessions as hosted by `daemon`: their gates
+    /// block commands that would stop it (spec: tool-system,
+    /// Self-termination guard).
+    #[must_use]
+    pub fn hosted_by(mut self, daemon: pmt_tools::approval::selfterm::Daemon) -> Self {
+        self.daemon = Some(daemon);
+        self
     }
 
     /// Sends `send_message` calls of this factory's sessions through
@@ -591,6 +838,15 @@ impl Factory {
         setup.cwd = Some(self.options.cwd.clone());
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
+        setup.plugins = self.plugins.current().skill_dirs();
+        let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
+        setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
+            plugins.observe(
+                call.clone(),
+                "on_skill_lifecycle",
+                crate::plugins_host::skill_fields(skill, action),
+            );
+        }));
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))
@@ -615,6 +871,76 @@ impl Factory {
             .count();
         setup.prior_user_turns = u32::try_from(prior).unwrap_or(u32::MAX);
         Ok(setup)
+    }
+
+    /// The session's tools, built from `registry` and `selection` for the
+    /// route `model` is on, and the state that rebuilds them.
+    ///
+    /// # Errors
+    ///
+    /// Store errors recording the surface.
+    async fn tool_state(
+        &self,
+        id: SessionId,
+        (registry, selection, capabilities): (Arc<ToolRegistry>, Selection, &CapabilitySet),
+        (gate, agent, model): (&Arc<CommandGate>, &Arc<AgentTools>, &Arc<SwitchableModel>),
+    ) -> Result<Arc<ToolState>, Error> {
+        let route = tools::route_traits(model.as_ref()).await;
+        let inputs = tool_state::Inputs {
+            scope: self.scope.clone(),
+            store: Arc::clone(&self.store),
+            session: id,
+            capabilities: capabilities.clone(),
+            gate: Arc::clone(gate),
+            agent: Arc::clone(agent),
+            redactor: self.redactor.clone(),
+            hooks: self
+                .plugins
+                .tool_hooks_with_guidance(self.plugin_call(id), &self.scope.config().plugins),
+            model: Arc::clone(model),
+        };
+        let built = tools::session_tools(&inputs.surface(&registry, &selection, &route)).await?;
+        Ok(Arc::new(ToolState::new(
+            Arc::clone(&self.registries),
+            inputs,
+            Arc::new(SwappableTools::new(built)),
+            (registry, selection, route),
+        )))
+    }
+
+    /// The session's prompt inputs and its plugin sections (kept for
+    /// rebuilds; `/plugins reload --now` replaces them).
+    async fn session_prompt(
+        &self,
+        id: SessionId,
+        skills: &Arc<SkillsSession>,
+        memory: &Arc<MemorySession>,
+        notices: &mut Vec<String>,
+    ) -> (PromptSetup, Arc<Mutex<Vec<String>>>) {
+        let mut prompt = self.prompt_setup(skills, memory, notices).await;
+        prompt.plugin_sections = self.plugin_sections(id).await;
+        let sections = Arc::new(Mutex::new(prompt.plugin_sections.clone()));
+        (prompt, sections)
+    }
+
+    /// Sets the session's summarizer, memory and prompt refresher on
+    /// `setup`.
+    fn memory_and_refresh(
+        &self,
+        setup: &mut AgentSetup,
+        summarizer: Arc<summarize::RouteSummarizer>,
+        skills: &Arc<SkillsSession>,
+        memory: &Arc<MemorySession>,
+        sections: &Arc<Mutex<Vec<String>>>,
+    ) {
+        setup.summarizer = Some(summarizer as _);
+        setup.memory = Some(Arc::clone(memory) as _);
+        setup.refresh_prompt = Some(refresher(
+            skills,
+            memory,
+            sections,
+            self.options.ignore_rules,
+        ));
     }
 
     async fn prompt_setup(
@@ -659,7 +985,8 @@ impl Factory {
     }
 
     /// Rebuilds `live`'s tool surface from `selection` (`/tools ... --now`);
-    /// the new tools serve from the next turn.
+    /// the new tools serve from the next turn. Schema variants are picked
+    /// again for the route the session is on now.
     ///
     /// # Errors
     ///
@@ -669,21 +996,9 @@ impl Factory {
         live: &Live,
         selection: &Selection,
     ) -> Result<(), Error> {
-        let tools = tools::session_tools(&SurfaceInputsOwned {
-            scope: &self.scope,
-            store: &self.store,
-            session: live.id,
-            registry: &self.registry,
-            selection,
-            capabilities: &live.capabilities,
-            gate: &live.gate,
-            agent: Some(&live.agent_tools),
-            redactor: &self.redactor,
-            context_window: None,
-        })
-        .await?;
-        live.tools.swap(tools);
-        Ok(())
+        live.tool_state
+            .rebuild(live.registry(), selection.clone())
+            .await
     }
 }
 
@@ -701,25 +1016,36 @@ impl Factory {
         live: &Live,
         child: SessionId,
     ) -> Result<Arc<SessionTools>, Error> {
-        let selection = Selection::resolve(
-            &self.registry,
-            &[pmt_skills::tools::TOOLSET.to_owned()],
-            &[],
-        )?;
+        let registry = live.registry();
+        let route = live.tool_state.route();
+        let selection =
+            Selection::resolve(&registry, &[pmt_skills::tools::TOOLSET.to_owned()], &[])?;
         tools::session_tools(&SurfaceInputsOwned {
             scope: &self.scope,
             store: &self.store,
             session: child,
-            registry: &self.registry,
+            registry: &registry,
             selection: &selection,
             capabilities: &live.capabilities,
             gate: &live.gate,
             agent: None,
             redactor: &self.redactor,
             context_window: None,
+            hooks: self
+                .plugins
+                .tool_hooks_with_guidance(self.plugin_call(child), &self.scope.config().plugins),
+            route: &route,
         })
         .await
     }
+}
+
+/// Whether a session shows connection cards: an interactive terminal,
+/// the TUI or the desktop (messaging chats, one-shot runs and cron get
+/// links instead).
+fn shows_cards(interactive: bool, surface: &pmt_tools::SessionSurface) -> bool {
+    use pmt_tools::SessionSurface::{Cli, Desktop, Tui};
+    interactive && matches!(surface, Cli | Tui | Desktop)
 }
 
 /// Announces each borrowed login's first use in the session (spec:
@@ -751,38 +1077,61 @@ fn borrowed_watch(notices: progress::Notices) -> pmt_agent::turn::model::Credent
 }
 
 /// Re-reads the skills index and the memory snapshot before every prompt
-/// rebuild (a `--now` change or a compaction), never in between.
+/// rebuild (a `--now` change or a compaction), never in between; the
+/// plugin sections are the session's own (changed only by `/plugins
+/// reload --now`).
 fn refresher(
     skills: &Arc<SkillsSession>,
     memory: &Arc<MemorySession>,
+    plugin_sections: &Arc<Mutex<Vec<String>>>,
     ignore_rules: bool,
 ) -> RefreshPrompt {
     let skills = Arc::clone(skills);
     let memory = Arc::clone(memory);
+    let sections = Arc::clone(plugin_sections);
     Arc::new(move |prompt: &mut PromptSetup| {
         prompt.skills_index = skills.index_text();
+        prompt.plugin_sections.clone_from(&plugins::lock(&sections));
         if !ignore_rules {
             memory.refresh(prompt);
         }
     })
 }
 
+/// The `session.info` of a plugin call made for session `id` from
+/// `surface` in `cwd`.
+fn session_call(id: SessionId, surface: &str, cwd: &Path) -> pmt_plugins::host::CallInfo {
+    pmt_plugins::host::CallInfo {
+        session_id: Some(id.to_string()),
+        surface: surface.to_owned(),
+        cwd: Some(cwd.to_string_lossy().into_owned()),
+    }
+}
+
 impl Live {
+    /// What a plugin call made for this session from `surface` (where the
+    /// user typed it: `cli`, `tui`, `gateway`...) reports as its session.
+    #[must_use]
+    pub fn plugin_call(&self, surface: &str) -> pmt_plugins::host::CallInfo {
+        session_call(self.id, surface, &self.cwd)
+    }
+
+    /// The surface that created the session (`cli`, `tui`, `gateway`...).
+    #[must_use]
+    pub fn surface(&self) -> &'static str {
+        self.surface
+    }
+
+    /// The tool registry the session's tools come from.
+    #[must_use]
+    pub fn registry(&self) -> Arc<ToolRegistry> {
+        self.tool_state.registry()
+    }
+
     /// The toolset selection the session's tools are built from.
     #[must_use]
     pub fn selection(&self) -> Selection {
-        self.selection
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-
-    /// Records the selection the session's tools were rebuilt from.
-    pub fn set_selection(&self, selection: Selection) {
-        *self
-            .selection
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = selection;
+        self.tool_state.selection()
     }
 
     /// Records `session.start` for `session` on `target`'s route.
@@ -798,6 +1147,17 @@ impl Live {
             parent_session_id: session.parent_session_id.map(|p| p.to_string()),
         }))
         .await;
+        // The gateway fires its own sessions' start through its hooks.
+        if self.surface() != "gateway" {
+            let fields = lifecycle::session_start(&self.id.to_string(), self.surface());
+            self.plugins
+                .fire_observer(
+                    &self.plugin_call(self.surface()),
+                    "on_session_start",
+                    fields,
+                )
+                .await;
+        }
     }
 
     /// Emits `event` outside any turn.
@@ -821,6 +1181,9 @@ impl Live {
     /// closes the trajectory.
     pub async fn close(self, store: &Store, reason: EndReason) {
         self.end(store, reason).await;
+        // Webhooks of the session's last events go out before the process
+        // that ran it may exit.
+        crate::hooks_host::outbound::flush(crate::hooks_host::outbound::FLUSH).await;
         let trajectory = self.trajectory;
         drop(self.agent);
         if let Some(writer) = trajectory.and_then(|t| Arc::try_unwrap(t).ok())
@@ -859,8 +1222,36 @@ impl Live {
         if let Err(err) = store.end_session(self.id, reason) {
             tracing::warn!(error = %err, session = %self.id, "could not end the session");
         }
+        // The gateway fires its own sessions' end through its hooks.
+        if self.surface() != "gateway" {
+            let fields = serde_json::json!({
+                "session_id": self.id.to_string(),
+                "reason": reason.as_str(),
+                "platform": self.surface(),
+            });
+            if let serde_json::Value::Object(fields) = fields {
+                self.plugins
+                    .fire_observer(&self.plugin_call(self.surface()), "on_session_end", fields)
+                    .await;
+            }
+        }
         if let Some(browser) = &self.browser {
             browser.close_session(&self.id.to_string()).await;
         }
     }
+}
+
+/// The running background processes of a session's terminal (none when
+/// the session has no local terminal).
+fn own_processes(
+    terminal: Option<&Arc<pmt_tools::terminal::LocalTerminal>>,
+) -> pmt_tools::approval::OwnProcesses {
+    let terminal = terminal.map(Arc::downgrade);
+    Arc::new(move || {
+        terminal
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .map(|t| t.processes().running_pids())
+            .unwrap_or_default()
+    })
 }

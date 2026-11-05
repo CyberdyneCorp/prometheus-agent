@@ -51,10 +51,12 @@ pub trait ToolPort: Send + Sync {
         false
     }
 
-    /// Runs one response's calls; outcomes come back in call order.
+    /// Runs one response's calls (made in turn `turn_id`); outcomes come
+    /// back in call order.
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch>;
 }
@@ -109,10 +111,15 @@ impl SessionTools {
         }
     }
 
-    async fn run_all(&self, calls: &[RequestedCall], cancel: &CancelToken) -> ToolBatch {
+    async fn run_all(
+        &self,
+        calls: &[RequestedCall],
+        turn_id: &str,
+        cancel: &CancelToken,
+    ) -> ToolBatch {
         let batch: Vec<ToolCall> = calls
             .iter()
-            .map(|c| ToolCall::new(&c.id, &c.name, &c.arguments))
+            .map(|c| ToolCall::new(&c.id, &c.name, &c.arguments).in_turn(turn_id))
             .collect();
         let plan = self.dispatcher.plan(&batch);
         let planned = BatchPlanned {
@@ -193,8 +200,9 @@ impl ToolPort for SessionTools {
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
-        Box::pin(self.run_all(calls, cancel))
+        Box::pin(self.run_all(calls, turn_id, cancel))
     }
 }

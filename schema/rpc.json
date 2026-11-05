@@ -156,6 +156,13 @@
             "null"
           ]
         },
+        "explanation": {
+          "description": "What an `explain` answer produced: the parsed command, the rule,\nthe paths it touches and a dry-run preview (the request is asked\nagain with it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "findings": {
           "description": "Why approval is needed.",
           "items": {
@@ -784,6 +791,11 @@
           "const": "deny",
           "description": "Refuse.",
           "type": "string"
+        },
+        {
+          "const": "explain",
+          "description": "Show the parsed command, the rule, the paths it touches and a\ndry-run preview, then ask again; never an approval.",
+          "type": "string"
         }
       ]
     },
@@ -900,6 +912,74 @@
           "type": "string"
         }
       ]
+    },
+    "EgressSetParams": {
+      "additionalProperties": false,
+      "description": "`egress.set` params: changes applied in order (mode, then allow, then\ndeny); an empty change only reads the policy.",
+      "properties": {
+        "allow": {
+          "default": [],
+          "description": "Host patterns to admit (`host`, `host:port`, `*.suffix`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny": {
+          "default": [],
+          "description": "Host patterns to refuse in every mode.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "default": null,
+          "description": "`public`, `allowlist` or `none`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "EgressState": {
+      "additionalProperties": false,
+      "description": "`egress.set` result: the session's policy after the change.",
+      "properties": {
+        "allow": {
+          "description": "Admitted patterns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny": {
+          "description": "Refused patterns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "description": "The mode.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "allow",
+        "deny"
+      ],
+      "type": "object"
     },
     "Empty": {
       "additionalProperties": false,
@@ -2088,6 +2168,342 @@
       ],
       "type": "object"
     },
+    "VaultAddParams": {
+      "additionalProperties": false,
+      "description": "`vault.add` params: exactly one of `login`, `card`, `address`.",
+      "properties": {
+        "address": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VaultAddressInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An address."
+        },
+        "card": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VaultCardInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A payment card."
+        },
+        "label": {
+          "description": "A name for the item.",
+          "type": "string"
+        },
+        "login": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VaultLoginInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A login."
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "VaultAddressInput": {
+      "additionalProperties": false,
+      "description": "An address to add.",
+      "properties": {
+        "city": {
+          "description": "City.",
+          "type": "string"
+        },
+        "country": {
+          "description": "Country.",
+          "type": "string"
+        },
+        "line1": {
+          "description": "Street line.",
+          "type": "string"
+        },
+        "line2": {
+          "default": "",
+          "description": "Second line.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Full name.",
+          "type": "string"
+        },
+        "postal_code": {
+          "description": "Postal code.",
+          "type": "string"
+        },
+        "region": {
+          "default": "",
+          "description": "State or region.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "line1",
+        "city",
+        "postal_code",
+        "country"
+      ],
+      "type": "object"
+    },
+    "VaultCardInput": {
+      "additionalProperties": false,
+      "description": "A payment card to add.",
+      "properties": {
+        "cvc": {
+          "description": "Security code.",
+          "type": "string"
+        },
+        "expiry": {
+          "description": "`MM/YY`.",
+          "type": "string"
+        },
+        "holder": {
+          "description": "Cardholder name.",
+          "type": "string"
+        },
+        "number": {
+          "description": "Card number.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "holder",
+        "number",
+        "expiry",
+        "cvc"
+      ],
+      "type": "object"
+    },
+    "VaultItem": {
+      "additionalProperties": false,
+      "description": "One vault item's metadata (never a secret value; spec:\nsecurity-boundaries, Vault management CLI).",
+      "properties": {
+        "handle": {
+          "description": "`login_...`, `card_...` or `address_...`.",
+          "type": "string"
+        },
+        "identifier": {
+          "description": "A login's identifier.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`login`, `card` or `address`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "The label.",
+          "type": "string"
+        },
+        "origins": {
+          "description": "A login's origins.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "totp": {
+          "description": "Whether a login has a TOTP seed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "handle",
+        "kind",
+        "label",
+        "origins",
+        "totp"
+      ],
+      "type": "object"
+    },
+    "VaultItems": {
+      "additionalProperties": false,
+      "description": "`vault.list` result.",
+      "properties": {
+        "items": {
+          "description": "Every item's metadata.",
+          "items": {
+            "$ref": "#/$defs/VaultItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "VaultListParams": {
+      "additionalProperties": false,
+      "description": "`vault.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "VaultLoginInput": {
+      "additionalProperties": false,
+      "description": "A login to add.",
+      "properties": {
+        "identifier": {
+          "description": "User name or email.",
+          "type": "string"
+        },
+        "origins": {
+          "description": "Origins it fills on (`https://host`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "password": {
+          "description": "The password.",
+          "type": "string"
+        },
+        "totp": {
+          "default": null,
+          "description": "A base32 TOTP seed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "origins",
+        "identifier",
+        "password"
+      ],
+      "type": "object"
+    },
+    "VaultRemoveParams": {
+      "additionalProperties": false,
+      "description": "`vault.remove` params.",
+      "properties": {
+        "handle": {
+          "description": "The item's handle.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "type": "object"
+    },
+    "VaultSource": {
+      "additionalProperties": false,
+      "description": "One password-manager source.",
+      "properties": {
+        "available": {
+          "description": "Whether this build can read it.",
+          "type": "boolean"
+        },
+        "enabled": {
+          "description": "`vault.<name>.enabled`.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "`onepassword` or `bitwarden`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "enabled",
+        "available"
+      ],
+      "type": "object"
+    },
+    "VaultSourceList": {
+      "additionalProperties": false,
+      "description": "`vault.sources` result.",
+      "properties": {
+        "sources": {
+          "description": "The sources after the change.",
+          "items": {
+            "$ref": "#/$defs/VaultSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "type": "object"
+    },
+    "VaultSourcesParams": {
+      "additionalProperties": false,
+      "description": "`vault.sources` params: reads, or enables or disables one source.",
+      "properties": {
+        "disable": {
+          "default": null,
+          "description": "`onepassword` or `bitwarden` to disable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enable": {
+          "default": null,
+          "description": "`onepassword` or `bitwarden` to enable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Version": {
       "additionalProperties": false,
       "description": "A `<major>.<minor>` protocol version on the wire.",
@@ -2342,8 +2758,13 @@
       "since": "1.0"
     },
     "egress.set": {
-      "declared": false,
       "owner": "security-boundaries",
+      "params": {
+        "$ref": "#/$defs/EgressSetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/EgressState"
+      },
       "since": "1.0"
     },
     "evolve.cancel": {
@@ -2741,23 +3162,43 @@
       "since": "1.0"
     },
     "vault.add": {
-      "declared": false,
       "owner": "security-boundaries",
+      "params": {
+        "$ref": "#/$defs/VaultAddParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VaultItem"
+      },
       "since": "1.0"
     },
     "vault.list": {
-      "declared": false,
       "owner": "security-boundaries",
+      "params": {
+        "$ref": "#/$defs/VaultListParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VaultItems"
+      },
       "since": "1.0"
     },
     "vault.remove": {
-      "declared": false,
       "owner": "security-boundaries",
+      "params": {
+        "$ref": "#/$defs/VaultRemoveParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VaultItem"
+      },
       "since": "1.0"
     },
     "vault.sources": {
-      "declared": false,
       "owner": "security-boundaries",
+      "params": {
+        "$ref": "#/$defs/VaultSourcesParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VaultSourceList"
+      },
       "since": "1.0"
     },
     "voice.client_config": {

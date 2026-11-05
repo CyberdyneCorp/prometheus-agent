@@ -77,7 +77,9 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface, quiet: bool)
     if args.oneshot() || !terminals {
         return Mode::OneShot;
     }
-    if args.line {
+    // Safe mode stays in this process on the line interface: the TUI runs
+    // over a gateway that reads the profile's configuration.
+    if args.line || args.safe_mode {
         return Mode::Line;
     }
     if args.tui {
@@ -110,10 +112,15 @@ pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
     }
 }
 
+/// What every safe-mode start shows (spec: plugin-system, Safe mode).
+pub const SAFE_MODE_BANNER: &str =
+    "safe mode is active: no plugins, MCP servers, sidecars, hooks or webhooks are loaded";
+
 /// An interactive start on a profile with no model offers `setup model`
 /// (spec: cli, Setup wizard).
 fn offers_setup(args: &ChatArgs, outcome: &Result<u8, Error>) -> bool {
     matches!(outcome, Err(err) if err.code().code == codes::MODEL_NOT_CONFIGURED.code)
+        && !args.safe_mode
         && !args.oneshot()
         && terminal::interactive()
 }
@@ -125,6 +132,7 @@ fn run_recorded(
     record: &Arc<usage_file::RunRecord>,
 ) -> Result<u8, Error> {
     let source = args.prompt_source()?;
+    args.check_safe_mode()?;
     let images = args
         .image
         .iter()
@@ -142,17 +150,25 @@ fn run_recorded(
     let mut set = ctx.set.to_vec();
     set.extend(args.overrides());
     let ctx = Context { set: &set, ..*ctx };
-    let scope = if args.ignore_user_config {
+    let scope = if args.ignores_user_config() {
         ctx.scope_defaults()?
     } else {
         ctx.scope()?
     };
+    if scope.config().plugins.safe_mode && !ui.quiet {
+        eprintln!("{SAFE_MODE_BANNER}");
+    }
     let mode = mode(
         args,
         terminal::interactive(),
         scope.config().ui.interface,
         ui.quiet,
     );
+    // Only a foreground interactive chat asks about unapproved shell hooks
+    // (spec: plugin-system, Shell hooks with first-use consent).
+    if mode != Mode::OneShot && terminal::interactive() {
+        crate::hooks_host::consent::ask_pending(&scope)?;
+    }
     // The prompt is read before anything starts, so a missing file or an
     // empty pipe fails fast.
     let first = match (mode, &source) {
@@ -172,7 +188,7 @@ fn run_recorded(
         };
         return tui.run(&ctx, &scope, ui);
     }
-    if !args.in_process
+    if !args.runs_in_process()
         && let Some(daemon) = crate::daemon_client::running(scope.home())?
     {
         let config = scope.config();
@@ -197,25 +213,14 @@ fn run_recorded(
     }
     let _lock = WriterLock::acquire(scope.home(), Role::Chat, vec![scope.name().to_string()])?;
     let ad_hoc = crate::model_cmd::explain::ad_hoc(&args.endpoint)?;
-    let options = Options {
-        interactive: mode == Mode::Line,
-        yolo: args.yolo,
-        cwd: current_dir()?,
-        skills: args.skills.clone(),
-        pass_session_id: args.pass_session_id,
-        no_context_files: args.no_context_files,
-        ignore_user_config: args.ignore_user_config,
-        ignore_rules: args.ignore_rules,
-        source_tag: args.source.clone().or_else(|| {
-            (mode == Mode::OneShot).then(|| pmt_store::sessions::ONESHOT_TAG.to_owned())
-        }),
-    };
+    let options = session_options(args, mode)?;
     let flags = RouteFlags {
         provider: args.provider.as_deref(),
         model: args.model.as_deref(),
         mock_script: args.mock_script.as_deref(),
     };
-    let mut factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?;
+    let mut factory =
+        Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?.with_config_reread(set.clone());
     record.store(&factory.store);
     factory.record = Arc::clone(record);
     let first = First {
@@ -223,6 +228,24 @@ fn run_recorded(
         images,
     };
     crate::model_cmd::block_on(start(factory, args, &flags, mode, first, ui))?
+}
+
+/// The session flags of a chat in this process.
+fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
+    Ok(Options {
+        interactive: mode == Mode::Line,
+        yolo: args.yolo,
+        cwd: current_dir()?,
+        skills: args.skills.clone(),
+        pass_session_id: args.pass_session_id,
+        no_context_files: args.no_context_files,
+        ignore_user_config: args.ignores_user_config(),
+        ignore_rules: args.ignores_rules(),
+        source_tag: args.source.clone().or_else(|| {
+            (mode == Mode::OneShot).then(|| pmt_store::sessions::ONESHOT_TAG.to_owned())
+        }),
+        egress: args.egress_overrides(),
+    })
 }
 
 /// A chat that opens the TUI.
@@ -252,7 +275,7 @@ impl Tui<'_> {
             resume: self.args.resume.clone(),
             continue_: self.args.continue_.clone(),
             setup: remote::setup_of(self.args, self.set, &cwd)?,
-            standalone: self.args.in_process,
+            standalone: self.args.runs_in_process(),
             first: self.first,
             images: self
                 .images
@@ -262,6 +285,7 @@ impl Tui<'_> {
             run_budget: self.args.run_budget,
             terminal: terminal::identity().filter(|_| scope.config().sessions.terminal_continue),
             cwd,
+            egress: self.args.egress_overrides(),
         };
         crate::tui_cmd::start(&launch, scope, ctx, ui)
     }

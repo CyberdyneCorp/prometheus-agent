@@ -10,9 +10,11 @@
 //! `transform_tool_result` hooks, then the result budget. Each step that
 //! stops the call produces a typed result instead; nothing a handler does
 //! escapes the dispatcher. Error text is sanitized and bounded before the
-//! model sees it. Provenance tagging (M2) attaches after the budget.
+//! model sees it. Provenance (`{source, trust}`, [`crate::provenance`])
+//! attaches after the budget.
 
 mod batch;
+mod bridge;
 pub mod plan;
 pub mod seams;
 
@@ -45,6 +47,9 @@ pub struct ToolCall {
     pub name: String,
     /// Argument JSON text.
     pub arguments: String,
+    /// The turn the call belongs to, when a turn loop made it (hooks see
+    /// it as `turn_id`).
+    pub turn_id: Option<String>,
 }
 
 impl ToolCall {
@@ -55,7 +60,15 @@ impl ToolCall {
             call_id: call_id.to_owned(),
             name: name.to_owned(),
             arguments: arguments.to_owned(),
+            turn_id: None,
         }
+    }
+
+    /// The same call, made in turn `turn_id`.
+    #[must_use]
+    pub fn in_turn(mut self, turn_id: &str) -> Self {
+        self.turn_id = Some(turn_id.to_owned());
+        self
     }
 }
 
@@ -135,11 +148,29 @@ impl Dispatcher {
         agent: Option<&Arc<dyn AgentLoopCalls>>,
     ) -> Executed {
         let setup = &self.setup;
+        if call.name == crate::search::TOOL_CALL && setup.surface.catalog().is_some() {
+            // Boxed: each bridged call runs through `execute` again.
+            return Box::pin(self.bridge(call, cancel, agent)).await;
+        }
+        let tool = setup.surface.resolve(&call.name).cloned();
+        self.execute_tool(call, tool, cancel, agent).await
+    }
+
+    /// Runs `call` of `tool` (resolved by the caller; `None`: unknown)
+    /// through the pipeline up to the per-result budget, then tags the
+    /// result with the tool's provenance.
+    async fn execute_tool(
+        &self,
+        call: &ToolCall,
+        tool: Option<Arc<RegisteredTool>>,
+        cancel: &CancelToken,
+        agent: Option<&Arc<dyn AgentLoopCalls>>,
+    ) -> Executed {
+        let setup = &self.setup;
         setup
             .observer
             .tool_call(&call.call_id, &call.name, &call.arguments);
         let started = Instant::now();
-        let tool = setup.surface.get(&call.name).cloned();
         let (arguments, result) = tokio::select! {
             biased;
             () = cancel.cancelled() => (raw(call), cancelled(&call.name)),
@@ -150,6 +181,7 @@ impl Dispatcher {
         let hook_call = HookCall {
             session_id: &setup.session_id,
             call_id: &call.call_id,
+            turn_id: call.turn_id.as_deref(),
             tool: &call.name,
             arguments: &arguments,
         };
@@ -157,10 +189,31 @@ impl Dispatcher {
             .hooks
             .post_tool_call(hook_call, result.status, duration_ms)
             .await;
-        result = setup.hooks.transform_tool_result(hook_call, result).await;
+        result = setup
+            .hooks
+            .transform_tool_result(hook_call, result, duration_ms)
+            .await;
         setup
             .budget
             .apply(&call.call_id, tool.as_deref(), &mut result);
+        // A call stopped before it ran (a hook, a rule, an approval, the
+        // user) holds only Prometheus' own words.
+        let stopped = matches!(
+            result.status,
+            Status::Blocked | Status::Denied | Status::Cancelled
+        );
+        let provenance = match tool.as_deref().filter(|_| !stopped) {
+            Some(tool) => {
+                let workspace = crate::environments::Environments::process()
+                    .session(&setup.session_id)
+                    .and_then(|env| env.files.as_ref().map(|files| files.cwd()));
+                crate::provenance::classify(tool, &arguments, workspace.as_deref())
+            }
+            None => pmt_core::provenance::Provenance::trusted("prometheus"),
+        };
+        result
+            .metadata
+            .insert("provenance".to_owned(), provenance.to_value());
         Executed {
             tool,
             result,
@@ -183,11 +236,11 @@ impl Dispatcher {
                 ToolResult::error(format!("unknown tool: {}", call.name)),
             );
         };
-        let arguments = match checked_arguments(call, tool) {
+        let mut arguments = match checked_arguments(call, tool) {
             Ok(arguments) => arguments,
             Err(result) => return (raw(call), result),
         };
-        let result = match self.admit(call, tool, &arguments).await {
+        let result = match self.admit(call, tool, &mut arguments).await {
             Ok(()) => match (&tool.executor, agent) {
                 (Executor::AgentLoop, Some(agent)) => {
                     // The loop owns their timing (clarify waits for a human).
@@ -200,17 +253,19 @@ impl Dispatcher {
         (arguments, result)
     }
 
-    /// `pre_tool_call` hooks, capability re-check and approval gate.
+    /// `pre_tool_call` hooks (which may rewrite `arguments`), capability
+    /// re-check and approval gate.
     async fn admit(
         &self,
         call: &ToolCall,
         tool: &RegisteredTool,
-        arguments: &Value,
+        arguments: &mut Value,
     ) -> Result<(), ToolResult> {
         let setup = &self.setup;
         let hook_call = HookCall {
             session_id: &setup.session_id,
             call_id: &call.call_id,
+            turn_id: call.turn_id.as_deref(),
             tool: &call.name,
             arguments,
         };
@@ -218,7 +273,12 @@ impl Dispatcher {
             PreDecision::Continue => None,
             PreDecision::Block(message) => return Err(ToolResult::text(Status::Blocked, message)),
             PreDecision::Escalate(escalation) => Some(escalation),
+            PreDecision::Modify(fields) => {
+                *arguments = modified(call, tool, arguments, fields)?;
+                None
+            }
         };
+        let arguments = &*arguments;
         let held = setup
             .capabilities
             .current()
@@ -232,12 +292,17 @@ impl Dispatcher {
             let err = pmt_core::capability::not_granted(missing);
             return Err(ToolResult::text(Status::Denied, err.message()));
         }
+        let guarded = tool
+            .guard
+            .as_ref()
+            .and_then(|guard| guard(&setup.session_id, arguments));
         let request = GateRequest {
             session_id: &setup.session_id,
             call_id: &call.call_id,
             tool,
             arguments,
             escalation: escalation.as_ref(),
+            guarded: guarded.as_ref(),
         };
         match setup.gate.check(request).await {
             GateVerdict::Allow => Ok(()),
@@ -310,6 +375,35 @@ fn checked_arguments(call: &ToolCall, tool: &RegisteredTool) -> Result<Value, To
         call.name,
         lines.join("\n")
     )))
+}
+
+/// `arguments` with a hook's `fields` shallow-merged in, re-validated
+/// against the tool schema; a violation blocks the call.
+fn modified(
+    call: &ToolCall,
+    tool: &RegisteredTool,
+    arguments: &Value,
+    fields: serde_json::Map<String, Value>,
+) -> Result<Value, ToolResult> {
+    let mut merged = arguments.clone();
+    if let Value::Object(map) = &mut merged {
+        map.extend(fields);
+    }
+    let schema = &tool.descriptor.parameters;
+    args::coerce(schema, &mut merged);
+    let violations = args::validate(schema, &merged);
+    if violations.is_empty() {
+        return Ok(merged);
+    }
+    let lines: Vec<String> = violations.iter().map(ToString::to_string).collect();
+    Err(ToolResult::text(
+        Status::Blocked,
+        format!(
+            "pre_tool_call modified the arguments of {} into invalid ones:\n{}",
+            call.name,
+            lines.join("\n")
+        ),
+    ))
 }
 
 /// The raw argument text, for hooks of calls whose arguments did not

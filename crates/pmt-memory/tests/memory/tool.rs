@@ -222,6 +222,7 @@ async fn surface_of(profile: &Profile) -> ToolSurface {
         capabilities: &capabilities,
         config: profile.scope.config(),
         probes: &ProbeCache::new(),
+        route: &pmt_tools::variants::RouteTraits::default(),
     })
     .await
 }

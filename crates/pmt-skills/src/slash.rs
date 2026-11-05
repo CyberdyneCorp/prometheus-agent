@@ -89,7 +89,7 @@ pub fn resolve(
         Missing::Ambiguous(paths) => Missing::ambiguous_message(name, &paths),
         Missing::NotFound => format!("unknown skill '{name}'"),
     })?;
-    if let Some(hidden) = gates::hidden(&config.skills, &session.setup().view, &skill) {
+    if let Some(hidden) = gates::hidden(config, &session.setup().view, &skill) {
         return Err(hidden.message(&skill.name));
     }
     Ok(skill)

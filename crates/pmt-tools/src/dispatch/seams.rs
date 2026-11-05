@@ -26,6 +26,8 @@ pub struct HookCall<'a> {
     pub session_id: &'a str,
     /// The model's call id.
     pub call_id: &'a str,
+    /// The turn that made the call (none outside a turn loop).
+    pub turn_id: Option<&'a str>,
     /// Tool name as called.
     pub tool: &'a str,
     /// Validated arguments (or the raw text when they did not parse).
@@ -42,15 +44,36 @@ pub enum PreDecision {
     /// Run it only after a human approval (the approval gate asks; with no
     /// channel the call is denied naming the rule).
     Escalate(Escalation),
+    /// Run it with these fields shallow-merged into the arguments; merged
+    /// arguments that break the tool schema block the call with the
+    /// validation error.
+    Modify(serde_json::Map<String, Value>),
 }
 
-/// A plugin rule asking for human approval of one call.
+/// A rule asking for human approval of one call: a plugin hook's, or a
+/// tool's own ([`crate::ToolDescriptor::approval`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Escalation {
-    /// The plugin's rule key; approvals record it as `plugin_rule:<key>`.
+    /// The rule key; approvals record it as `plugin_rule:<key>`.
     pub rule_key: String,
     /// Why the rule wants a human to look.
     pub reason: String,
+    /// Ask every time, in every approval mode and under YOLO, offering
+    /// only a one-time approval (an MCP spend limit).
+    pub once_only: bool,
+}
+
+impl Escalation {
+    /// A rule `rule_key` asking because of `reason`, remembered like any
+    /// approval.
+    #[must_use]
+    pub fn new(rule_key: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            rule_key: rule_key.into(),
+            reason: reason.into(),
+            once_only: false,
+        }
+    }
 }
 
 /// Tool-call hooks (`pre_tool_call`, `post_tool_call`,
@@ -73,13 +96,15 @@ pub trait ToolHooks: Send + Sync {
         Box::pin(async {})
     }
 
-    /// Rewrites a result before the result budget.
+    /// Rewrites a result before the result budget (what the model sees
+    /// and the transcript stores).
     fn transform_tool_result<'a>(
         &'a self,
         call: HookCall<'a>,
         result: ToolResult,
+        duration_ms: u64,
     ) -> SeamFuture<'a, ToolResult> {
-        let _ = call;
+        let _ = (call, duration_ms);
         Box::pin(async move { result })
     }
 }
@@ -103,6 +128,8 @@ pub struct GateRequest<'a> {
     pub arguments: &'a Value,
     /// A `pre_tool_call` hook's escalation, when one asked for approval.
     pub escalation: Option<&'a Escalation>,
+    /// The tool's own per-call rule ([`crate::RegisteredTool::guard`]).
+    pub guarded: Option<&'a Escalation>,
 }
 
 /// The approval gate's answer.

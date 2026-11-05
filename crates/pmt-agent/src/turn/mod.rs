@@ -23,6 +23,7 @@ pub mod interrupt;
 pub mod iteration;
 pub mod lease;
 pub mod model;
+mod observe;
 mod recall;
 mod recovery;
 pub mod repair;
@@ -48,6 +49,7 @@ use pmt_providers::request::CacheTtl;
 use pmt_store::Store;
 
 pub use compression::CONTEXT_FULL;
+
 pub use events::{EventSink, NoEvents, Recorded};
 pub use exit::{ExitReason, TurnId, TurnResult, TurnUsage};
 pub use interrupt::{Interrupt, Issuer};
@@ -165,6 +167,120 @@ pub struct AgentSetup {
     /// The session's memory: per-turn recall and the `memory` tool's turn
     /// state (pass the same port to `AgentTools::with_memory`).
     pub memory: Option<Arc<dyn crate::tools::MemoryPort>>,
+    /// Plugin turn hooks (`pre_llm_call`).
+    pub turn_hooks: Option<Arc<dyn TurnHooks>>,
+    /// Refreshes the session's tools at a compaction boundary, before the
+    /// prompt is frozen again: the one point besides session start where
+    /// the tool array may change on its own (spec: tool-system, Tool
+    /// surface frozen per session; MCP tool list changes respect the
+    /// frozen surface).
+    pub compaction_boundary: Option<Arc<dyn CompactionBoundary>>,
+}
+
+/// What a session refreshes when a compaction commits. The prompt cache
+/// breaks there anyway, so a tool array that went stale (an MCP server's
+/// tool list changed, a plugin reloaded) is rebuilt then instead of
+/// waiting for the next session.
+pub trait CompactionBoundary: Send + Sync {
+    /// Rebuilds the tools behind [`AgentSetup::tools`] if they are stale;
+    /// the prompt frozen next reads their definitions. A failure keeps
+    /// the current tools (the implementation reports it).
+    fn refresh_tools(&self) -> model::BoxFuture<'_, ()>;
+}
+
+/// Plugin hooks the turn loop fires (spec: plugin-system, `pre_llm_call`
+/// context preserves the prompt cache; Transform hooks rewrite results and
+/// replies; Streaming and lifecycle observer hooks; `pre_verify`
+/// continuation hook).
+pub trait TurnHooks: Send + Sync {
+    /// Fired once per turn before the first model call; the returned text
+    /// rides on this turn's user message on the wire only, never in the
+    /// system prompt or stored history.
+    fn pre_llm_call<'a>(
+        &'a self,
+        session_id: &'a str,
+        user_message: &'a str,
+    ) -> model::BoxFuture<'a, Option<String>>;
+
+    /// Asked once at turn start: some `transform_llm_output` callback
+    /// holds the stream, so this turn streams no reply text.
+    fn holds_stream(&self) -> bool {
+        false
+    }
+
+    /// `transform_llm_output`: the final reply of the turn, before it is
+    /// delivered and stored. `held` is what [`Self::holds_stream`]
+    /// answered at turn start.
+    fn transform_llm_output<'a>(
+        &'a self,
+        reply: FinalReply<'a>,
+        held: bool,
+    ) -> model::BoxFuture<'a, Transformed> {
+        let _ = (reply, held);
+        Box::pin(async { Transformed::Unchanged })
+    }
+
+    /// `pre_verify`: the turn edited files and is about to finish; `Some`
+    /// continues it with that message as a synthetic user message.
+    fn pre_verify<'a>(&'a self, verify: Verify<'a>) -> model::BoxFuture<'a, Option<String>> {
+        let _ = verify;
+        Box::pin(async { None })
+    }
+
+    /// An observer hook (`on_stream_*`, `on_interim_message`,
+    /// `agent_loop_stopped`): fired off the turn's path; whatever the
+    /// callbacks answer is discarded.
+    fn observe(&self, hook: &'static str, payload: serde_json::Map<String, serde_json::Value>) {
+        let _ = (hook, payload);
+    }
+}
+
+/// The final reply `transform_llm_output` sees.
+#[derive(Debug, Clone, Copy)]
+pub struct FinalReply<'a> {
+    /// The session.
+    pub session_id: &'a str,
+    /// The reply text.
+    pub text: &'a str,
+    /// The model that wrote it.
+    pub model: &'a str,
+    /// The surface (`cli`, `telegram`...).
+    pub platform: &'a str,
+}
+
+/// What `transform_llm_output` decided.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Transformed {
+    /// Deliver the reply as written.
+    Unchanged,
+    /// Deliver (and store) this instead.
+    Replaced(String),
+    /// A holding callback failed without a rewrite: deliver
+    /// [`WITHHELD`] instead.
+    Withheld,
+}
+
+/// What a person sees when a holding `transform_llm_output` callback
+/// failed or timed out without a rewrite.
+pub const WITHHELD: &str = "reply withheld by a plugin";
+
+/// What `pre_verify` sees.
+#[derive(Debug, Clone)]
+pub struct Verify<'a> {
+    /// The session.
+    pub session_id: &'a str,
+    /// The surface.
+    pub platform: &'a str,
+    /// The model.
+    pub model: &'a str,
+    /// An interactive coding surface (CLI, TUI, desktop, ACP).
+    pub coding: bool,
+    /// Continuations already made this turn (from 0).
+    pub attempt: u32,
+    /// The reply about to be final.
+    pub final_response: &'a str,
+    /// The files edited this turn, sorted.
+    pub changed_paths: Vec<String>,
 }
 
 /// Updates a [`PromptSetup`] from the current disk state.
@@ -199,6 +315,8 @@ impl AgentSetup {
             summarizer: None,
             refresh_prompt: None,
             memory: None,
+            turn_hooks: None,
+            compaction_boundary: None,
         }
     }
 }

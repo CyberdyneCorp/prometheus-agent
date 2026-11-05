@@ -138,7 +138,7 @@ impl Layer {
             Self::Memory => "The memory and user-profile snapshot taken at session start.",
             Self::PluginSections => "Sections contributed by plugins.",
             Self::SessionInfo => {
-                "The session start time and, with `prompt.include_session_id`, `Session ID: ses_<ULID>`."
+                "The session's untrusted-content delimiter id (when it has tools), the session start time and, with `prompt.include_session_id`, `Session ID: ses_<ULID>`."
             }
             Self::Runtime => "The runtime environment block, always the last text of the prompt.",
         }
@@ -337,7 +337,7 @@ pub fn build(inputs: &PromptInputs) -> Result<Built, Error> {
         (inputs.pass_session_id || config.prompt.include_session_id).then_some(inputs.session_id);
     sections.push(section(
         Layer::SessionInfo,
-        Some(blocks::session_info(inputs.started_at, shown_id)),
+        Some(session_info(inputs, shown_id)),
     ));
     sections.push(section(
         Layer::Runtime,
@@ -348,6 +348,22 @@ pub fn build(inputs: &PromptInputs) -> Result<Built, Error> {
         warnings: loaded.warnings,
         context_files: loaded.files,
     })
+}
+
+/// The session block: with tools, the declaration of the session's
+/// untrusted-content delimiter (spec: tool-system, Tool result provenance
+/// tagging; per session, so in the session tier), then the start time and
+/// the shown id.
+fn session_info(inputs: &PromptInputs, shown_id: Option<SessionId>) -> String {
+    let info = blocks::session_info(inputs.started_at, shown_id);
+    if inputs.tool_names.is_empty() {
+        return info;
+    }
+    let nonce = pmt_core::provenance::nonce(&inputs.session_id.to_string());
+    format!(
+        "{}{SEPARATOR}{info}",
+        pmt_core::provenance::guidance(&nonce)
+    )
 }
 
 fn section(layer: Layer, text: Option<String>) -> Option<Section> {

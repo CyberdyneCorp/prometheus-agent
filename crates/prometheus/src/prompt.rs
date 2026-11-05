@@ -69,6 +69,22 @@ pub fn confirm_typed(what: &str, expected: &str) -> Result<Option<bool>, Error> 
     Ok(Some(answer.trim() == expected))
 }
 
+/// Asks `question [y/N]` on the terminal (stdin must be one).
+///
+/// # Errors
+///
+/// `output.io` when reading the answer fails.
+pub fn confirm(question: &str) -> Result<bool, Error> {
+    eprint!("{question} [y/N] ");
+    let _ = io::stderr().flush();
+    let mut answer = String::new();
+    io::stdin()
+        .lock()
+        .read_line(&mut answer)
+        .map_err(|e| read_error(&e))?;
+    Ok(matches!(answer.trim(), "y" | "Y" | "yes"))
+}
+
 fn read_error(e: &io::Error) -> Error {
     Error::new(&codes::OUTPUT_IO, format!("cannot read from stdin: {e}"))
 }

@@ -24,4 +24,8 @@ pub struct DoctorArgs {
     /// Check every profile of the home.
     #[arg(long)]
     pub all_profiles: bool,
+    /// Silence the startup warning of a supply-chain advisory (added to
+    /// `security.acked_advisories`); `doctor security` still shows it.
+    #[arg(long, value_name = "ADVISORY_ID")]
+    pub ack: Option<String>,
 }

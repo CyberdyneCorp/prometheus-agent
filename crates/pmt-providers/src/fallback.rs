@@ -227,7 +227,7 @@ impl Fallback {
         walk: &Walk<'_>,
         now: Timestamp,
     ) -> Option<Activated> {
-        if !failure.class.is_fallback_eligible() {
+        if !failure.fallback_eligible() {
             return None;
         }
         let failed = self.current().clone();

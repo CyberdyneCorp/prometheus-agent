@@ -1,0 +1,14 @@
+/// Chooses the model, toolsets and context for a delegated subtask (spec:
+/// subagent-delegation).
+package prometheus:delegation-router@1.0.0;
+
+interface plugin {
+    /// `task` is the JSON delegation request; the answer is the JSON
+    /// routing decision.
+    route: func(task: string) -> result<string, string>;
+}
+
+world delegation-router {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

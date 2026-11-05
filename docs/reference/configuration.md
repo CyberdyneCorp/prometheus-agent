@@ -14,6 +14,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.empty_response_guard.cost_threshold_usd` | number | `0.25` | ≥ 0.0 | `next_session` | Estimated input cost (USD) of one empty attempt at which the retry budget drops to one. |
 | `agent.intent_continuation` | one of "auto" or boolean or array of string | `"auto"` | any | `next_session` | Nudge a model that announces an action without calling a tool: `"auto"` (Responses-wire models only), `true`, `false` or a list of model-name substrings. |
 | `agent.max_iterations` | integer | `500` | 0 to 100000 | `next_session` | Maximum model calls per turn; `0` means unlimited. |
+| `agent.max_verify_nudges` | integer | `3` | 0 to 100 | `next_session` | Most consecutive verification nudges (`pre_verify` hook continuations) in one turn; after that the turn finishes. |
 | `agent.personalities` | table | `{}` | any | `next_session` | Custom or overriding personalities: name to prompt text. |
 | `agent.personality` | string | `"none"` | any | `next_session` | Selected personality overlay (`none`, a built-in name or a key of `[agent.personalities]`). |
 | `agent.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort; unset means `medium`. |
@@ -22,6 +23,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `agent.run_budget_secs` | integer | unset | ≥ 0 | `next_session` | Optional per-turn wall-clock budget; unset means no budget. |
 | `agent.tool_concurrency` | integer | `8` | 1 to 64 | `next_session` | Tool calls of one batch that may run at once. |
 | `approvals.cron_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in cron jobs. |
+| `approvals.denial_breaker_threshold` | integer | `3` | ≥ 0 | `live` | In `smart` mode, after this many consecutive denials by the approval guardian the denial tells the model to stop trying variations (`0` disables); a human approval resets the count. |
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
 | `approvals.mode` | one of "manual", "smart", "off" | `"manual"` | `"manual"`, `"smart"`, `"off"` | `live` | Approval mode of interactive sessions. |
 | `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |
@@ -112,6 +114,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `compression.target_ratio` | number | `0.2` | 0.1 to 0.8 | `next_session` | Target size after compaction as a fraction of the input budget. |
 | `compression.threshold` | number | `0.5` | > 0.0, < 1.0 | `next_session` | Fraction of the input budget at which compaction triggers. |
 | `compression.threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Lower absolute trigger in tokens; `0` is off. |
+| `connectors.connect_timeout_secs` | integer | `300` | 1 to 3600 | `next_session` | How long a connection card or `connectors connect` waits for the user to finish signing in. |
+| `connectors.enabled` | boolean | `true` | any | `next_session` | Offer hosted connectors when the profile has a Nous sign-in. |
+| `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
 | `display.bell_on_complete` | boolean | `false` | any | `live` | Ring the terminal bell when a turn completes. |
@@ -288,7 +293,63 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.voice.echo_transcripts` | boolean | `true` | any | `live` | Echo a transcript back to the chat once. |
 | `gateway.voice.reply_mode` | one of "off", "mirror", "always" | `"mirror"` | `"off"`, `"mirror"`, `"always"` | `live` | When replies are spoken. |
 | `gateway.voice.stt_enabled` | boolean | `true` | any | `live` | Transcribe inbound voice and audio clips with the profile's speech-to-text provider. |
+| `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
+| `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `mcp.auto_reload_on_config_change` | boolean | `true` | any | `next_session` | The daemon applies `mcp.servers` edits within a minute (new sessions only). |
+| `mcp.call_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Bound on one tool call of a server that sets no `timeout_secs`. |
+| `mcp.connect_timeout_secs` | integer | `60` | 1 to 3600 | `next_session` | Bound on starting and initializing a server that sets no `connect_timeout_secs`. |
+| `mcp.discovery_concurrency` | integer | `4` | 1 to 64 | `next_session` | Servers connected at once when a session needs them. |
+| `mcp.discovery_wait_ms` | integer | `1500` | 0 to 600000 | `next_session` | How long an interactive session start waits for servers still connecting; later ones join later sessions. |
+| `mcp.servers.<name>.args` | array of string | `[]` | any | `next_session` | Its arguments. |
+| `mcp.servers.<name>.auth` | one of "header", "oauth" | unset | `"header"`, `"oauth"` | `next_session` | How an `http` server authenticates: `header` (the `auth_secret` bearer token) or `oauth` (OAuth 2.1 with PKCE, `prometheus mcp login`). |
+| `mcp.servers.<name>.auth_secret` | string | `""` | any | `next_session` | Secrets-store name of the bearer token sent to an `http` server. |
+| `mcp.servers.<name>.capabilities.fs_read` | array of string | `[]` | any | `next_session` | Paths it may read: absolute, or under `$workspace`. |
+| `mcp.servers.<name>.capabilities.fs_write` | array of string | `[]` | any | `next_session` | Paths it may write: absolute, or under `$workspace`. |
+| `mcp.servers.<name>.capabilities.network` | array of string | `[]` | any | `next_session` | Hosts it may connect to (`api.github.com`, `*.example.com`). |
+| `mcp.servers.<name>.client_cert` | string | `""` | any | `next_session` | A PEM file holding the client certificate (and its key unless `client_key` is set) presented to an `https` server. |
+| `mcp.servers.<name>.client_key` | string | `""` | any | `next_session` | The PEM file of the client certificate's private key. |
+| `mcp.servers.<name>.client_key_password_secret` | string | `""` | any | `next_session` | Secrets-store name of the password of an encrypted `client_key`. |
+| `mcp.servers.<name>.command` | string | `""` | any | `next_session` | The program of a `stdio` server (a bare name is looked up on `PATH`). |
+| `mcp.servers.<name>.connect_timeout_secs` | integer | unset | 1 to 3600 | `next_session` | Overrides `mcp.connect_timeout_secs` for this server. |
+| `mcp.servers.<name>.cost_unit` | string | `"credits"` | any | `next_session` | The unit of `tool_costs` and `spend_limit`. |
+| `mcp.servers.<name>.elicitation.enabled` | boolean | `true` | any | `next_session` | Route the server's form requests to the person. |
+| `mcp.servers.<name>.elicitation.timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Declined when unanswered this long. |
+| `mcp.servers.<name>.enabled` | boolean | `true` | any | `next_session` | `false` skips the server without connecting. |
+| `mcp.servers.<name>.env` | table | `{}` | any | `next_session` | Environment variables of a `stdio` server, literal values. A `stdio` server gets only these, `env_secrets` and `PATH`, `HOME`, `LANG`, `SYSTEMROOT` and `TMPDIR`. |
+| `mcp.servers.<name>.env_secrets` | array of string | `[]` | any | `next_session` | Secrets-store names passed to a `stdio` server as environment variables of the same name. |
+| `mcp.servers.<name>.headers` | table | `{}` | any | `next_session` | Headers sent with every request to an `http` server (`${NAME}` placeholders come from the secrets store). |
+| `mcp.servers.<name>.identity_header` | object | unset | any | `next_session` | `{ name, value_from = "static" \| "profile", value }`: a header sent with every request naming the caller (the literal `value` or the profile name); never overrides a same-named `headers` entry. An invalid block, or one on a `stdio` server, is warned and ignored. |
+| `mcp.servers.<name>.idle_timeout_secs` | integer | `0` | ≥ 0 | `next_session` | Stop a `stdio` server after this many idle seconds (0: never); it restarts on its next call. |
+| `mcp.servers.<name>.lazy` | boolean | `false` | any | `next_session` | Register the tools from the schema cache and start the server on its first call. |
+| `mcp.servers.<name>.max_lifetime_secs` | integer | `0` | ≥ 0 | `next_session` | Stop a `stdio` server this many seconds after it started (0: never); it restarts on its next call. |
+| `mcp.servers.<name>.oauth.client_id` | string | `""` | any | `next_session` | A client registered with the authorization server beforehand (for servers without dynamic client registration). |
+| `mcp.servers.<name>.oauth.client_name` | string | `""` | any | `next_session` | The client name sent at dynamic registration. |
+| `mcp.servers.<name>.oauth.client_secret_name` | string | `""` | any | `next_session` | Secrets-store name of that client's secret. |
+| `mcp.servers.<name>.oauth.flow` | one of "browser", "device" | `"browser"` | `"browser"`, `"device"` | `next_session` | `browser` (authorization code) or `device` (device code). |
+| `mcp.servers.<name>.oauth.redirect_host` | one of "127.0.0.1", "localhost" | `"127.0.0.1"` | `"127.0.0.1"`, `"localhost"` | `next_session` | The redirect host: `127.0.0.1` or `localhost`. |
+| `mcp.servers.<name>.oauth.redirect_port` | integer | `0` | 0 to 65535 | `next_session` | A fixed callback port (0: any free port). |
+| `mcp.servers.<name>.oauth.redirect_uri` | string | `""` | any | `next_session` | A full redirect URI registered with the client (overrides host and port). |
+| `mcp.servers.<name>.oauth.scopes` | array of string | `[]` | any | `next_session` | Requested scopes (default: what the server advertises). |
+| `mcp.servers.<name>.oauth.timeout_secs` | integer | `300` | 10 to 3600 | `next_session` | How long a login waits for the person. |
+| `mcp.servers.<name>.sampling.allowed_models` | array of string | `[]` | any | `next_session` | When not empty, `model` must be one of these. |
+| `mcp.servers.<name>.sampling.enabled` | boolean | unset | any | `next_session` | Default: on for `trust = "full"` servers, off for `untrusted` ones. |
+| `mcp.servers.<name>.sampling.max_rpm` | integer | `10` | ≥ 1 | `next_session` | Requests per sliding minute. |
+| `mcp.servers.<name>.sampling.max_tokens_cap` | integer | `4096` | ≥ 1 | `next_session` | Requested answer sizes are capped at this. |
+| `mcp.servers.<name>.sampling.max_tool_rounds` | integer | `5` | ≥ 0 | `next_session` | Tool rounds of one sampling exchange. |
+| `mcp.servers.<name>.sampling.model` | string | unset | any | `next_session` | The model answering instead of the session's. |
+| `mcp.servers.<name>.sampling.timeout_secs` | integer | `30` | 1 to 3600 | `next_session` | Bound on one sampling call. |
+| `mcp.servers.<name>.spend_limit` | number | `0.0` | ≥ 0.0 | `next_session` | The most one conversation may spend on this server's tools before each further costed call asks (0: no limit). |
+| `mcp.servers.<name>.timeout_secs` | integer | unset | 1 to 86400 | `next_session` | Overrides `mcp.call_timeout_secs` for this server. |
+| `mcp.servers.<name>.tool_costs` | table | `{}` | any | `next_session` | What the server's tools cost: a number, or `{ credits = [min, max], note = "..." }`, per tool name. A malformed entry skips the server. |
+| `mcp.servers.<name>.tools.exclude` | array of string | `[]` | any | `next_session` | Tool names (exact or globs) never registered. |
+| `mcp.servers.<name>.tools.include` | array | unset | any | `next_session` | Whitelist of the server's tool names (exact or case-sensitive globs); wins over `exclude`, and an empty list registers nothing. |
+| `mcp.servers.<name>.transport` | one of "stdio", "http" | `"stdio"` | `"stdio"`, `"http"` | `next_session` | How the server is reached. |
+| `mcp.servers.<name>.trust` | one of "full", "untrusted" | `"untrusted"` | `"full"`, `"untrusted"` | `next_session` | `untrusted` servers' tools need approval unless they declare `readOnlyHint`; `full` trusts them like built-in tools. |
+| `mcp.servers.<name>.url` | string | `""` | any | `next_session` | The endpoint of an `http` (streamable HTTP) server. |
+| `mcp.single_query_discovery_wait_ms` | integer | `15000` | 0 to 600000 | `next_session` | The same wait for one-shot `-q` runs. |
+| `mcp_server.allow_remote` | boolean | `false` | any | `restart` | Let `--http` bind an address that is not loopback. |
+| `mcp_server.expose_toolsets` | array of string | `["skills"]` | any | `restart` | Toolsets exposed as MCP tools; `skills` exposes only the read-only skill tools. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
@@ -314,6 +375,24 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
 | `observability.trajectories.max_bytes_per_session` | integer | `268435456` | ≥ 0 | `next_session` | Stop recording payload bodies of a session beyond this size. |
 | `observability.trajectories.retention_secs` | integer | `7776000` | ≥ 0 | `next_session` | Delete unpinned trajectories older than this; `0` keeps forever. |
+| `plugins.approval_transport` | string | `""` | any | `next_session` | The plugin approval transport that presents approval requests, `<plugin_id>:<name>`; empty asks on the session's own surface. |
+| `plugins.approval_transport_fallback` | one of "deny", "builtin" | `"deny"` | `"deny"`, `"builtin"` | `next_session` | What a failing, timed-out, unbound or missing approval transport leads to: `deny` the request, or ask on the session's own surface (`builtin`). |
+| `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |
+| `plugins.disabled` | array of string | `[]` | any | `next_session` | Ids never instantiated; wins over `enabled`. |
+| `plugins.enabled` | array of string | `[]` | any | `next_session` | Ids of the non-embedded plugins to instantiate; a discovered plugin stays disabled until listed here (`prometheus plugins enable <id>`). |
+| `plugins.entries` | table | `{}` | any | `next_session` | Each plugin's own settings, `plugins.entries.<id>.<key>`, read and written by the plugin through its `config` host interface. |
+| `plugins.hook_context_max_chars` | integer | `10000` | ≥ 1 | `next_session` | `pre_llm_call` context of one callback above this many characters is spilled to `hook_outputs/<session>/` and replaced by its head, tail and the spill path. |
+| `plugins.hook_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | Bound on one hook callback; a callback that overruns counts as no result and is suspended for 60 seconds. |
+| `plugins.load_timeout_ms` | integer | `10000` | 1 to 600000 | `next_session` | Bound on instantiating and registering one plugin; a plugin that overruns is skipped with `load timed out` while the others load. |
+| `plugins.safe_mode` | boolean | `false` | any | `next_session` | Skip every non-embedded plugin, MCP server and python-bridge sidecar (as `prometheus --safe-mode` does, without its other effects). |
+| `plugins.scan_on_install` | boolean | `true` | any | `next_session` | Statically scan every plugin install and update for threats (reverse shells, credential exfiltration, destructive commands, persistence, obfuscated execution, prompt injection); `false` skips the scan and the install record says so. |
+| `plugins.security_guidance.mode` | one of "warn", "block", "off" | `"warn"` | `"warn"`, `"block"`, `"off"` | `next_session` | `warn` (write, then report the matched rules), `block` (refuse the write with the guidance) or `off`. |
+| `plugins.signature_policy` | one of "require", "warn", "off" | `"require"` | `"require"`, `"warn"`, `"off"` | `next_session` | What installing an unsigned local `.pmtpkg` needs: `require` (only with `--allow-unsigned`), `warn` or `off`. Catalog installs always need a valid signature unless `--allow-unsigned` is given. |
+| `plugins.trusted_project_dirs` | array of string | `[]` | any | `next_session` | Project roots whose `.prometheus/plugins/` directory is scanned; any other project's plugins are never read. |
+| `plugins.wasm.call_timeout_ms` | integer | `30000` | 1 to 600000 | `next_session` | CPU bound of one call into a plugin (fuel and epoch interruption); an overrun fails the call with `plugin '<id>' exceeded call timeout`. |
+| `plugins.wasm.max_memory_bytes` | integer | `268435456` | ≥ 65536 | `next_session` | Linear memory cap of one plugin instance. |
+| `privacy.owner_emails` | array of string | `[]` | any | `next_session` | The profile owner's email addresses, which `redact_pii` keeps. |
+| `privacy.redact_pii` | boolean | `false` | any | `next_session` | Replace phone numbers, other people's email addresses and messaging user ids (with a stable `user_<hash>`) in what reaches model providers, logs, trajectories and telemetry. |
 | `prompt.context_file_max_chars` | integer | `0` | ≥ 0 | `next_session` | Character cap per context file; `0` derives it from the model's context window. |
 | `prompt.context_file_read_timeout_secs` | integer | `5` | ≥ 0 | `next_session` | Time allowed to read each context file. |
 | `prompt.include_session_id` | boolean | `false` | any | `next_session` | Add `Session ID: ses_<ULID>` to the session tier. |
@@ -353,15 +432,30 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `providers.<name>.supports_model_listing` | boolean | unset | any | `next_session` | Whether the provider lists its models; unset uses the provider default (true for custom providers). |
 | `providers.<name>.supports_prompt_cache` | boolean | unset | any | `next_session` | Whether the provider honours a prompt cache key; unset uses the provider default (false for custom providers). |
 | `providers.<name>.wire_format` | one of "chat_completions", "responses", "anthropic_messages" | unset | `"chat_completions"`, `"responses"`, `"anthropic_messages"` | `next_session` | Wire format; wins over host rules and the provider's own format. |
+| `python_bridge.allow_unbounded_requirements` | boolean | `false` | any | `next_session` | Accept requirements without an upper bound (`requests>=2`); by default they are refused so an install never picks up a new major. |
+| `python_bridge.call_timeout_ms` | integer | `30000` | 1 to 3600000 | `next_session` | Bound on one call into a sidecar (hook calls use `plugins.hook_timeout_ms`). |
+| `python_bridge.idle_shutdown_secs` | integer | `600` | ≥ 0 | `next_session` | Stop a sidecar that has no hooks or providers after this many idle seconds (`0` keeps it running). |
+| `python_bridge.max_memory_bytes` | integer | `1073741824` | ≥ 16777216 | `next_session` | Resident memory of one sidecar's process tree; above it the sidecar is terminated as a crash. |
+| `python_bridge.max_processes` | integer | `16` | 1 to 4096 | `next_session` | Processes in one sidecar's tree; above it the sidecar is terminated as a crash. |
+| `python_bridge.python_version` | one of "3.11", "3.12", "3.13" | `"3.12"` | `"3.11"`, `"3.12"`, `"3.13"` | `next_session` | The managed CPython every bridged plugin, skill environment and named environment runs on (`3.11`, `3.12` or `3.13`). |
 | `quick_commands.<name>.command` | string | unset | any | `live` | The shell command an `exec` entry runs, with every secret removed from its environment and its output redacted. |
 | `quick_commands.<name>.target` | string | unset | any | `live` | The slash command an `alias` runs (with or without the leading `/`); the user's arguments are appended. |
 | `quick_commands.<name>.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` command is killed after this many seconds. |
 | `quick_commands.<name>.type` | one of "alias", "exec" | unset | `"alias"`, `"exec"` | `live` | `alias` re-dispatches `target`; `exec` runs `command` in the local sandbox. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
+| `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |
+| `secrets.command.enabled` | boolean | `false` | any | `restart` | Run the helper (off by default; unsupported on Windows). |
+| `secrets.command.override_existing` | boolean | `false` | any | `restart` | Let helper values win over the secrets store and the environment. |
+| `secrets.command.timeout_secs` | integer | `3` | 1 to 300 | `restart` | Seconds before the helper's process group is killed. |
+| `security.acked_advisories` | array of string | `[]` | any | `next_session` | Supply-chain advisory ids whose startup warning is silenced (`prometheus doctor --ack <id>`); `doctor security` still shows them. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
+| `security.egress.allow` | array of string | `[]` | any | `next_session` | Host patterns `allowlist` admits: `host`, `host:port` or `*.suffix` (subdomains of `suffix`). |
 | `security.egress.allow_private` | boolean | `false` | any | `next_session` | Allow private destinations without a session grant. |
+| `security.egress.deny` | array of string | `[]` | any | `next_session` | Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g. `*.casino.example`); a session can add to them, never remove. |
+| `security.egress.deny_files` | array of string | `[]` | any | `next_session` | Absolute paths of shared blocklist files: one pattern per line, `#` comments; re-read when a file changes. |
 | `security.egress.fake_ip_ranges` | array of string | `[]` | any | `next_session` | CIDR ranges a local TUN proxy answers with (treated as public). |
+| `security.egress.mode` | one of "public", "allowlist", "none" | `"public"` | `"public"`, `"allowlist"`, `"none"` | `next_session` | Which hosts tools, sandboxed children, plugins and browsers may reach: any public address (`public`), only the `allow` patterns (`allowlist`) or nothing (`none`). A session can narrow or extend it (`chat --egress`, `/egress`, `egress.set`). |
 | `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
 | `security.protected_instruction_files` | boolean | `true` | any | `next_session` | Require human approval for agent writes to instruction files. |
 | `security.redact_secrets` | boolean | `true` | any | `next_session` | Redact every loaded secret value everywhere output is written. |
@@ -432,7 +526,21 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `tools.result_budget.default_chars` | integer | `100000` | ≥ 0 | `next_session` | Characters kept inline for tools without a declared cap. |
 | `tools.result_budget.mcp_chars` | integer | `50000` | ≥ 0 | `next_session` | Characters kept inline for MCP tools. |
 | `tools.result_budget.overrides` | table | `{}` | any | `next_session` | Per-tool overrides: tool name to characters. |
-| `toolsets.surfaces` | table | `{}` | any | `next_session` | Default toolsets per surface (otherwise `core`). |
+| `tools.tool_search.defer` | array | unset | any | `next_session` | Tools deferred besides MCP and plugin tools while tool search is active; unset defers `computer_use`, `session_search`, `image_generate`, `todo`, `process`, `cronjob` and `browser_vault`. |
+| `tools.tool_search.listing` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | Whether the `tool_search` description lists the deferred tools. |
+| `tools.tool_search.listing_max_tokens` | integer | `4000` | 200 to 60000 | `next_session` | Token budget (4 characters each) of the deferrable schemas, and of the deferred-tool manifest in the `tool_search` description. |
+| `tools.tool_search.max_search_limit` | integer | `25` | 1 to 50 | `next_session` | The most matches per query `tool_search` returns. |
+| `tools.tool_search.mode` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | `auto` defers MCP and plugin tools behind `tool_search`, `tool_describe` and `tool_call` when their schemas outgrow the thresholds below; `on` always does, `off` never. |
+| `tools.tool_search.search_default_limit` | integer | `5` | 1 to 50 | `next_session` | Matches per query when `tool_search` names no `limit`. |
+| `tools.tool_search.threshold_pct` | integer | `5` | 0 to 100 | `next_session` | Percent of the main model's context window the deferrable tools' schemas may take before `auto` defers them. |
+| `toolsets.surfaces.acp` | array | unset | any | `next_session` | ACP editor sessions (default `acp`). |
+| `toolsets.surfaces.acp_unattended` | array | unset | any | `next_session` | Unattended ACP sessions (default `acp_unattended`). |
+| `toolsets.surfaces.api` | array | unset | any | `next_session` | The OpenAI-compatible API server (default `api_server`). |
+| `toolsets.surfaces.cli` | array | unset | any | `next_session` | Line-mode chat and one-shot runs (default `core`). |
+| `toolsets.surfaces.cron` | array | unset | any | `next_session` | Scheduled jobs without per-job toolsets (default `core`). |
+| `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
+| `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
+| `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |
 | `ui.composer.paste_collapse_chars` | integer | `2000` | ≥ 0 | `next_session` | A paste of at least this many characters collapses into a chip; `0` disables the character threshold. |
 | `ui.composer.paste_collapse_lines` | integer | `5` | ≥ 0 | `next_session` | A paste of at least this many lines collapses into a chip; `0` disables the line threshold. |
 | `ui.interface` | one of "tui", "line" | `"tui"` | `"tui"`, `"line"` | `next_session` | Interactive interface when stdin and stdout are terminals: the full-screen `tui` or the `line` CLI (`--tui`/`--line` override it). |
@@ -461,6 +569,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `ui.tui.keys.submit` | string | unset | any | `next_session` | Send the composer (default `Enter`). |
 | `ui.tui.reduced_motion` | boolean | `false` | any | `next_session` | No spinners or animation: a static busy glyph. |
 | `ui.tui.theme` | one of "auto", "dark", "light" | `"auto"` | `"auto"`, `"dark"`, `"light"` | `next_session` | Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer to a background-colour query, else dark), `dark` or `light`; `NO_COLOR` turns colours off whatever it says. |
+| `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
+| `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
+| `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.extract_backend` | string | unset | any | `next_session` | Extract backend; unset uses `backend`. |

@@ -16,7 +16,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
 
 use crate::error::{Error, codes};
 use crate::private_fs;
@@ -117,6 +117,27 @@ pub fn process_start_time(pid: u32) -> Option<u64> {
         .process(pid)
         .filter(|process| process.status() != ProcessStatus::Zombie)
         .map(sysinfo::Process::start_time)
+}
+
+/// The command line of a running process, its arguments joined by spaces;
+/// `None` when no such process runs or the OS does not show its arguments
+/// (another user's process on macOS).
+#[must_use]
+pub fn process_command_line(pid: u32) -> Option<String> {
+    let pid = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always),
+    );
+    let args = system.process(pid)?.cmd();
+    (!args.is_empty()).then(|| {
+        args.iter()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    })
 }
 
 /// This machine's name, used to tell local lease holders (whose liveness

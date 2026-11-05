@@ -179,6 +179,17 @@ impl Provider {
     }
 }
 
+/// A model provider an enabled plugin registered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginProvider {
+    /// Its descriptor.
+    pub descriptor: Descriptor,
+    /// It replaces the built-in provider of the same id (the plugin holds
+    /// `providers_override` for it); otherwise a name clash refuses the
+    /// registry.
+    pub replaces_builtin: bool,
+}
+
 /// The profile's providers by canonical id, with every alias.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProviderRegistry {
@@ -196,7 +207,7 @@ impl ProviderRegistry {
     /// `provider.invalid_descriptor` for a malformed descriptor, a custom
     /// block without `base_url`, a block keyed by an alias, or a name
     /// claimed twice.
-    pub fn for_profile(config: &Config, plugins: Vec<Descriptor>) -> Result<Self, Error> {
+    pub fn for_profile(config: &Config, plugins: Vec<PluginProvider>) -> Result<Self, Error> {
         let mut registry = Self {
             providers: BTreeMap::new(),
             names: BTreeMap::new(),
@@ -204,14 +215,25 @@ impl ProviderRegistry {
         for descriptor in builtin::descriptors() {
             registry.insert(descriptor, Origin::Builtin)?;
         }
-        for descriptor in plugins {
-            descriptor.validate()?;
-            registry.insert(descriptor, Origin::Plugin)?;
+        for plugin in plugins {
+            plugin.descriptor.validate()?;
+            if plugin.replaces_builtin {
+                registry.remove(&plugin.descriptor.id);
+            }
+            registry.insert(plugin.descriptor, Origin::Plugin)?;
         }
         for (id, settings) in &config.providers {
             registry.configure(id, settings)?;
         }
         Ok(registry)
+    }
+
+    /// Drops provider `id` and its names (a plugin replacing a built-in
+    /// with the `providers_override` grant).
+    fn remove(&mut self, id: &str) {
+        if self.providers.remove(id).is_some() {
+            self.names.retain(|_, owner| owner != id);
+        }
     }
 
     fn insert(&mut self, descriptor: Descriptor, origin: Origin) -> Result<(), Error> {
@@ -387,6 +409,10 @@ mod tests {
             WireFormat::ChatCompletions,
             Some("https://acme.test/v1"),
         );
+        let acme = PluginProvider {
+            descriptor: acme,
+            replaces_builtin: false,
+        };
         let work = ProviderRegistry::for_profile(&Config::default(), vec![acme]).unwrap();
         let home = ProviderRegistry::for_profile(&Config::default(), Vec::new()).unwrap();
         assert_eq!(work.lookup("acme").unwrap().origin(), Origin::Plugin);
@@ -458,7 +484,30 @@ mod tests {
             ProviderRegistry::for_profile(&config("[providers.or]\nenabled = false\n"), Vec::new())
                 .unwrap_err();
         assert!(err.message().contains("alias of 'openrouter'"));
-        let clash = Descriptor::new("or", WireFormat::ChatCompletions, Some("https://x.test"));
+        let clash = PluginProvider {
+            descriptor: Descriptor::new("or", WireFormat::ChatCompletions, Some("https://x.test")),
+            replaces_builtin: false,
+        };
         assert!(ProviderRegistry::for_profile(&Config::default(), vec![clash]).is_err());
+    }
+
+    #[test]
+    fn a_granted_override_replaces_the_builtin_and_its_aliases() {
+        let ours = PluginProvider {
+            descriptor: Descriptor::new(
+                "openrouter",
+                WireFormat::ChatCompletions,
+                Some("https://ours.test/v1"),
+            ),
+            replaces_builtin: true,
+        };
+        let registry = ProviderRegistry::for_profile(&Config::default(), vec![ours]).unwrap();
+        let provider = registry.lookup("openrouter").unwrap();
+        assert_eq!(provider.origin(), Origin::Plugin);
+        assert_eq!(provider.base_url(), Some("https://ours.test/v1"));
+        assert!(
+            registry.lookup("or").is_err(),
+            "the built-in's alias went with it"
+        );
     }
 }

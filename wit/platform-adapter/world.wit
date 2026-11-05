@@ -1,0 +1,38 @@
+/// A messaging platform adapter (spec: platform-adapters). Structured
+/// values (descriptor, inbound and outgoing messages) are the JSON forms
+/// of the host's adapter types.
+package prometheus:platform-adapter@1.0.0;
+
+interface plugin {
+    record http-request {
+        method: string,
+        path: string,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    record http-response {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    /// The adapter descriptor (platform name, limits, capabilities).
+    descriptor: func() -> string;
+    /// Connects with the platform options (JSON).
+    start: func(options: string) -> result<_, string>;
+    stop: func();
+    /// Inbound messages received since the last poll (JSON list).
+    poll: func() -> result<string, string>;
+    /// Sends one outgoing message (JSON); returns the platform message id.
+    send: func(message: string) -> result<string, string>;
+    /// An inbound HTTP route on the shared listener.
+    handle-http: func(request: http-request) -> http-response;
+    /// `allow`, `deny` or anything else for "unknown".
+    authorize-sender: func(inbound: string) -> string;
+}
+
+world platform-adapter {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

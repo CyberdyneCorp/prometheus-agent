@@ -25,6 +25,10 @@ use crate::{build_info, output, prompt};
 ///
 /// See the module documentation; every error carries its exit code.
 pub fn run(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
+    crate::security_cmd::audit_signature(ctx, "prometheus release", run_update(args, ctx))
+}
+
+fn run_update(args: &UpdateArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let span = tracing::info_span!("update", component = "update");
     let _entered = span.enter();
     let channel = args

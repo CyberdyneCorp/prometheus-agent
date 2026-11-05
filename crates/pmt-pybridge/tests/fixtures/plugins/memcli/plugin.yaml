@@ -1,0 +1,3 @@
+name: memcli
+version: 1.0.0
+description: A Hermes memory provider with a cli.py command

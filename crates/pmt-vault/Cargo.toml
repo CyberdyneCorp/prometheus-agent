@@ -1,0 +1,29 @@
+[package]
+name = "pmt-vault"
+description = "Prometheus credential vault: encrypted logins, cards and addresses"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+chacha20poly1305.workspace = true
+# Base32 TOTP seeds.
+data-encoding.workspace = true
+getrandom.workspace = true
+pmt-config.workspace = true
+pmt-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# TOTP is HMAC-SHA1 (RFC 6238).
+sha1.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

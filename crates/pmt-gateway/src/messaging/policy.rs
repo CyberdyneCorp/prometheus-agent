@@ -25,14 +25,14 @@ pub fn session_setup(policy: &ChatPolicy, platform: &str) -> SessionSetup {
         ..SessionSetup::default()
     };
     if let Some(toolsets) = &policy.toolsets {
-        // Both the profile-wide list and the per-surface one, so the
-        // policy narrows whichever the profile uses.
-        setup
-            .set
-            .push(format!("tools.enabled_toolsets={}", list(toolsets)));
-        setup
-            .set
-            .push(format!("toolsets.surfaces.cli={}", list(toolsets)));
+        // The platform's surface list: the session starts from it instead
+        // of the platform bundle (spec: tool-system, Per-surface default
+        // toolsets).
+        setup.set.push(format!(
+            "toolsets.surfaces.gateway.{}={}",
+            platform.to_lowercase(),
+            list(toolsets)
+        ));
     }
     if let Some(text) = &policy.system_prompt_append {
         setup.set.push(format!(
@@ -68,5 +68,10 @@ mod tests {
         let overrides = pmt_config::Overrides::parse(&setup.set).unwrap();
         assert!(!overrides.is_empty());
         assert!(setup.set.contains(&"budgets.turn_usd=0.5".to_owned()));
+        assert!(
+            setup
+                .set
+                .contains(&"toolsets.surfaces.gateway.discord=[\"web\"]".to_owned())
+        );
     }
 }

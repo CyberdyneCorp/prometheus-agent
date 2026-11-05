@@ -68,7 +68,13 @@ pub struct SessionSetup {
     /// The surface's longest message (messaging adapters); long command
     /// output such as a pending diff is cut to it.
     pub message_limit: Option<usize>,
+    /// Told `(skill, action)` after each successful `skill_manage` create,
+    /// edit or delete (plugin `on_skill_lifecycle`).
+    pub lifecycle: Option<Lifecycle>,
 }
+
+/// The `on_skill_lifecycle` seam: skill name and action.
+pub type Lifecycle = Arc<dyn Fn(&str, &str) + Send + Sync>;
 
 impl SessionSetup {
     /// A setup with the built-in bundled tree and scanner, no cwd, no
@@ -90,6 +96,7 @@ impl SessionSetup {
             secret_prompt: None,
             review: false,
             message_limit: None,
+            lifecycle: None,
         }
     }
 }
@@ -203,7 +210,7 @@ impl SkillsSession {
         catalog
             .skills
             .iter()
-            .filter(|s| gates::hidden(&config.skills, &self.setup.view, s).is_none())
+            .filter(|s| gates::hidden(config, &self.setup.view, s).is_none())
             .map(AsRef::as_ref)
             .collect()
     }
@@ -309,9 +316,13 @@ impl SkillsSession {
                 return Vec::new();
             };
             let secrets = session.scope().secrets();
+            // A surface's credential never reaches a child, whatever a
+            // skill declares (such a skill is also hidden).
+            let only = pmt_config::secrets::surface::SurfaceOnly::of(session.scope().config());
             session
                 .granted_secrets()
                 .into_iter()
+                .filter(|name| !only.contains(name))
                 .filter_map(|name| secrets.resolve(&name).ok().map(|value| (name, value)))
                 .collect()
         })

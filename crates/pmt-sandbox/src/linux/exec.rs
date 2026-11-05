@@ -1,10 +1,11 @@
-//! Applies the Landlock ruleset and seccomp filters in the child, after
-//! `fork` and before `exec`. The only `unsafe` on Linux (health.toml
-//! allowlist): `pre_exec` closures run in a forked copy of a possibly
-//! multi-threaded process, so everything they do must be async-signal-safe.
-//! Both the ruleset and the BPF programs are built in the parent; the
-//! closure only issues `prctl`, `landlock_restrict_self` and `seccomp`
-//! system calls and reports failures through errno, never allocating.
+//! Applies the resource limits, the Landlock ruleset and seccomp filters in
+//! the child, after `fork` and before `exec`. The only `unsafe` on Linux
+//! (health.toml allowlist): `pre_exec` closures run in a forked copy of a
+//! possibly multi-threaded process, so everything they do must be
+//! async-signal-safe. The ruleset, the BPF programs and the limit values
+//! are built in the parent; the closure only issues `setrlimit`, `prctl`,
+//! `landlock_restrict_self` and `seccomp` system calls and reports failures
+//! through errno, never allocating.
 
 #![allow(unsafe_code)]
 
@@ -15,15 +16,42 @@ use std::process::Command;
 use landlock::{RulesetCreated, RulesetStatus};
 
 use super::seccomp::Program;
+use crate::policy::ResourceLimits;
 
-/// Makes `command` confine its child with `ruleset` and `filters`.
+/// Bounds the child: its data segment (heap and private writable
+/// mappings) to the memory limit, and it becomes the subreaper of its
+/// descendants, so an orphaned grandchild stays in its tree instead of
+/// moving to init (where tree sampling and reaping could not see it).
+fn bound(limits: ResourceLimits) -> io::Result<()> {
+    let memory = libc::rlimit {
+        rlim_cur: limits.memory_bytes,
+        rlim_max: limits.memory_bytes,
+    };
+    // SAFETY: setrlimit(2) and prctl(2) on plain values; async-signal-safe.
+    unsafe {
+        if libc::setrlimit(libc::RLIMIT_DATA, &raw const memory) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
+/// Makes `command` confine its child with `ruleset` and `filters`, within
+/// `limits` when set.
 pub(super) fn confine(
     command: &mut Command,
     ruleset: Option<RulesetCreated>,
     filters: Vec<Program>,
+    limits: Option<ResourceLimits>,
 ) {
     let mut ruleset = ruleset;
     let hook = move || -> io::Result<()> {
+        if let Some(limits) = limits {
+            bound(limits)?;
+        }
         if let Some(ruleset) = ruleset.take() {
             let status = ruleset
                 .restrict_self()
@@ -39,9 +67,10 @@ pub(super) fn confine(
         Ok(())
     };
     // SAFETY: the hook runs between fork and exec. It takes the ruleset out
-    // of its own state and issues only prctl(2), landlock_restrict_self(2)
-    // and seccomp(2) on data built before the fork; errors are raw errno
-    // values (no allocation, no locks), so it is async-signal-safe.
+    // of its own state and issues only setrlimit(2), prctl(2),
+    // landlock_restrict_self(2) and seccomp(2) on data built before the
+    // fork; errors are raw errno values (no allocation, no locks), so it is
+    // async-signal-safe.
     unsafe {
         command.pre_exec(hook);
     }

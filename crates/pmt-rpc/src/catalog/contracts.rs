@@ -77,8 +77,10 @@ macro_rules! event {
 }
 
 mod messaging;
+mod security;
 mod tui;
 pub use messaging::*;
+pub use security::*;
 pub use tui::*;
 
 /// A `<major>.<minor>` protocol version on the wire.
@@ -694,6 +696,9 @@ pub enum Decision {
     Always,
     /// Refuse.
     Deny,
+    /// Show the parsed command, the rule, the paths it touches and a
+    /// dry-run preview, then ask again; never an approval.
+    Explain,
 }
 
 /// The answer to `approval.request` (also `approval.respond` params,
@@ -759,6 +764,11 @@ pub struct ApprovalRequestParams {
     /// daemon when it sends the request).
     #[serde(default)]
     pub deadline_ms: Option<u64>,
+    /// What an `explain` answer produced: the parsed command, the rule,
+    /// the paths it touches and a dry-run preview (the request is asked
+    /// again with it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
 }
 
 /// `clarify.request` params.

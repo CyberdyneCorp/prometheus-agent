@@ -9,6 +9,8 @@ mod environment;
 #[cfg(unix)]
 mod foreground;
 #[cfg(unix)]
+mod preview;
+#[cfg(unix)]
 mod processes;
 #[cfg(unix)]
 mod startup;

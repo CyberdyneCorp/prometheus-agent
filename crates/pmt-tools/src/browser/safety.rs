@@ -20,6 +20,16 @@ pub const SECRET: &str = "Blocked: URL contains what appears to be an API key or
 pub const METADATA: &str = "Blocked: URL targets a cloud metadata endpoint";
 /// The refusal of a private address.
 pub const PRIVATE: &str = "Blocked: URL targets a private or internal address";
+/// The refusal of a host the session's egress policy does not admit.
+pub const EGRESS: &str = "Blocked: the session's egress policy does not allow this host";
+
+/// Finds the egress policy of a session by id, with where its refusals go
+/// (spec: security-boundaries, Per-session network egress policy).
+pub type EgressLookup = Arc<
+    dyn Fn(&str) -> Option<(Arc<pmt_net::egress::HostPolicy>, pmt_net::egress::Observer)>
+        + Send
+        + Sync,
+>;
 
 /// Well-known credential shapes.
 static SECRET_SHAPES: LazyLock<Regex> = LazyLock::new(|| {
@@ -42,6 +52,11 @@ pub struct UrlSafety {
     pub lookup: Arc<dyn Lookup>,
     /// The session's known secret values.
     pub secrets: Redactor,
+    /// The sessions' egress policies (`None`: no session policy applies).
+    pub egress: Option<EgressLookup>,
+    /// The browser session's key (`<session id>[/<name>]`), set when the
+    /// browser session is created for it.
+    pub session: Option<String>,
 }
 
 impl UrlSafety {
@@ -49,12 +64,13 @@ impl UrlSafety {
     ///
     /// # Errors
     ///
-    /// [`SECRET`], [`METADATA`] or [`PRIVATE`].
-    pub async fn check(&self, url: &str) -> Result<(), &'static str> {
+    /// [`SECRET`], [`METADATA`], [`PRIVATE`], [`EGRESS`] or `Blocked:
+    /// <host> is blocked by policy` for a blocklisted host.
+    pub async fn check(&self, url: &str) -> Result<(), String> {
         let decoded = percent_encoding::percent_decode_str(url).decode_utf8_lossy();
         for text in [url, decoded.as_ref()] {
             if SECRET_SHAPES.is_match(text) || self.secrets.redact(text) != text {
-                return Err(SECRET);
+                return Err(SECRET.to_owned());
             }
         }
         let Ok(parsed) = url::Url::parse(url) else {
@@ -68,11 +84,12 @@ impl UrlSafety {
         };
         let port = parsed.port_or_known_default();
         let literal = host.trim_start_matches('[').trim_end_matches(']');
+        self.check_session(literal, port.unwrap_or_default())?;
         if let Ok(ip) = literal.parse::<IpAddr>() {
             return verdict(self.destinations.check_addr(None, ip, port));
         }
         if self.destinations.check_host(host).is_err() {
-            return Err(METADATA);
+            return Err(METADATA.to_owned());
         }
         // An unresolvable host is left to the browser (it fails there).
         let Ok(addresses) = self.lookup.lookup(host).await else {
@@ -85,12 +102,39 @@ impl UrlSafety {
     }
 }
 
-fn verdict(checked: Result<(), pmt_net::destination::Refusal>) -> Result<(), &'static str> {
+impl UrlSafety {
+    /// The session egress check of a navigation to `host:port`.
+    fn check_session(&self, host: &str, port: u16) -> Result<(), String> {
+        let (Some(lookup), Some(key)) = (&self.egress, &self.session) else {
+            return Ok(());
+        };
+        let id = key.split('/').next().unwrap_or(key);
+        let Some((hosts, observer)) = lookup(id) else {
+            return Ok(());
+        };
+        let Err(reason) = hosts.check(host, port) else {
+            return Ok(());
+        };
+        observer(pmt_net::egress::Denial {
+            host: host.to_owned(),
+            port,
+            requester: "browser".to_owned(),
+            reason,
+        });
+        Err(if reason == pmt_net::egress::Reason::Denylist {
+            format!("Blocked: {host} is blocked by policy")
+        } else {
+            EGRESS.to_owned()
+        })
+    }
+}
+
+fn verdict(checked: Result<(), pmt_net::destination::Refusal>) -> Result<(), String> {
     match checked {
         Ok(()) => Ok(()),
         Err(refusal) => match refusal.reason {
-            RefusalReason::Metadata => Err(METADATA),
-            RefusalReason::Private => Err(PRIVATE),
+            RefusalReason::Metadata => Err(METADATA.to_owned()),
+            RefusalReason::Private => Err(PRIVATE.to_owned()),
             RefusalReason::Unresolved => Ok(()),
         },
     }
@@ -126,6 +170,8 @@ mod tests {
             destinations: DestinationPolicy::new(allow_private, &[]).unwrap(),
             lookup: Arc::new(Fixed),
             secrets: Redactor::new([&SecretString::new("hunter2-known-value")]),
+            egress: None,
+            session: None,
         }
     }
 
@@ -134,11 +180,11 @@ mod tests {
         let open = safety(true);
         assert_eq!(
             open.check("http://169.254.169.254/latest/meta-data").await,
-            Err(METADATA)
+            Err(METADATA.to_owned())
         );
         assert_eq!(
             open.check("http://metadata.google.internal/").await,
-            Err(METADATA)
+            Err(METADATA.to_owned())
         );
         assert_eq!(open.check("http://intranet.test/wiki").await, Ok(()));
         assert_eq!(open.check("http://127.0.0.1:3000/").await, Ok(()));
@@ -149,9 +195,12 @@ mod tests {
         let closed = safety(false);
         assert_eq!(
             closed.check("http://intranet.test/wiki").await,
-            Err(PRIVATE)
+            Err(PRIVATE.to_owned())
         );
-        assert_eq!(closed.check("http://192.168.1.1/").await, Err(PRIVATE));
+        assert_eq!(
+            closed.check("http://192.168.1.1/").await,
+            Err(PRIVATE.to_owned())
+        );
         assert_eq!(closed.check("https://public.test/").await, Ok(()));
         assert_eq!(closed.check("about:blank").await, Ok(()));
     }
@@ -166,8 +215,64 @@ mod tests {
             "https://public.test/p?q=hunter2%2Dknown%2Dvalue",
             "https://public.test/x/ghp_abcdefghijklmnopqrstuvwxyz0123456789",
         ] {
-            assert_eq!(s.check(url).await, Err(SECRET), "{url}");
+            assert_eq!(s.check(url).await, Err(SECRET.to_owned()), "{url}");
         }
         assert_eq!(s.check("https://public.test/search?q=rust").await, Ok(()));
+    }
+
+    /// Per-session network egress policy: a browser navigation of an
+    /// `allowlist` session to another host is refused and reported.
+    #[tokio::test]
+    async fn a_session_egress_policy_refuses_navigation_to_other_hosts() {
+        use std::sync::Mutex;
+
+        use pmt_net::egress::{Allowed, Denial, HostPolicy, Mode, Observer};
+
+        let hosts = Arc::new(HostPolicy::new(
+            Mode::Allowlist,
+            vec![Allowed::parse("public.test")],
+        ));
+        let seen: Arc<Mutex<Vec<Denial>>> = Arc::default();
+        let sink = Arc::clone(&seen);
+        let observer: Observer = Arc::new(move |d| sink.lock().unwrap().push(d));
+        let mut checked = safety(false);
+        checked.egress = Some(Arc::new(move |id| {
+            (id == "ses_1").then(|| (Arc::clone(&hosts), Arc::clone(&observer)))
+        }));
+        checked.session = Some("ses_1/main".to_owned());
+        assert_eq!(checked.check("https://public.test/").await, Ok(()));
+        assert_eq!(
+            checked.check("https://example.com/").await,
+            Err(super::EGRESS.to_owned())
+        );
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].host, "example.com");
+        assert_eq!(seen[0].requester, "browser");
+    }
+
+    /// Website blocklist: a navigation to a blocked host is refused in
+    /// public mode, naming the host, and reported with reason `denylist`.
+    #[tokio::test]
+    async fn a_blocklisted_navigation_is_refused_naming_the_host() {
+        use std::sync::Mutex;
+
+        use pmt_net::egress::{Denial, Denylist, HostPolicy, Mode, Observer};
+
+        let list = Arc::new(Denylist::new(&["*.casino.example".into()], &[]));
+        let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()).with_denylist(list));
+        let seen: Arc<Mutex<Vec<Denial>>> = Arc::default();
+        let sink = Arc::clone(&seen);
+        let observer: Observer = Arc::new(move |d| sink.lock().unwrap().push(d));
+        let mut checked = safety(false);
+        checked.egress = Some(Arc::new(move |_| {
+            Some((Arc::clone(&hosts), Arc::clone(&observer)))
+        }));
+        checked.session = Some("ses_1".to_owned());
+        assert_eq!(
+            checked.check("https://play.casino.example/").await,
+            Err("Blocked: play.casino.example is blocked by policy".to_owned())
+        );
+        assert_eq!(seen.lock().unwrap()[0].reason.as_str(), "denylist");
     }
 }

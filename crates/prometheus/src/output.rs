@@ -64,6 +64,18 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "grants list",
     },
     JsonShape {
+        schema: "prometheus.security_audit.v1",
+        command: "security audit verify",
+    },
+    JsonShape {
+        schema: "prometheus.plugins.v1",
+        command: "plugins list",
+    },
+    JsonShape {
+        schema: "prometheus.bridge_status.v1",
+        command: "bridge status",
+    },
+    JsonShape {
         schema: "prometheus.usage.v1",
         command: "usage",
     },
@@ -196,6 +208,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "tools explain",
     },
     JsonShape {
+        schema: "prometheus.tools_summary.v1",
+        command: "tools summary",
+    },
+    JsonShape {
         schema: "prometheus.toolsets.v1",
         command: "toolsets list",
     },
@@ -206,6 +222,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
     JsonShape {
         schema: "prometheus.approvals_test.v1",
         command: "approvals test",
+    },
+    JsonShape {
+        schema: "prometheus.approvals_suggest.v1",
+        command: "approvals suggest",
+    },
+    JsonShape {
+        schema: "prometheus.vault_list.v1",
+        command: "vault list",
     },
     JsonShape {
         schema: "prometheus.daemon_status.v1",

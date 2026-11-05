@@ -1,0 +1,14 @@
+/// A dashboard or desktop panel (spec: web-dashboard). The panel renders
+/// to a JSON view document; actions come back as JSON.
+package prometheus:ui-panel@1.0.0;
+
+interface plugin {
+    title: func() -> string;
+    render: func(state: string) -> result<string, string>;
+    on-action: func(action: string) -> result<string, string>;
+}
+
+world ui-panel {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

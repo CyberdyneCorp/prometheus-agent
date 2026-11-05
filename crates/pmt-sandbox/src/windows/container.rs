@@ -19,7 +19,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::acl;
 
-use windows_sys::Win32::Foundation::ERROR_ALREADY_EXISTS;
+use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, LocalFree};
+use windows_sys::Win32::Security::Authorization::ConvertStringSidToSidW;
 use windows_sys::Win32::Security::Isolation::{
     CreateAppContainerProfile, DeleteAppContainerProfile, DeriveAppContainerSidFromAppContainerName,
 };
@@ -150,6 +151,42 @@ impl Drop for AppContainer {
             FreeSid(self.sid);
         }
     }
+}
+
+/// `ALL APPLICATION PACKAGES`: every `AppContainer`.
+const ALL_PACKAGES: &str = "S-1-15-2-1";
+
+/// Lets every `AppContainer` read and run the file at `path` (the
+/// launcher's executable, which a proxied child's relay runs inside its
+/// container), as Windows does for the files below `Program Files`. The
+/// entry is never revoked: the executable holds nothing secret, and one
+/// entry for all containers keeps concurrent sandboxes from rewriting the
+/// file's DACL each time. Done once per path and process.
+pub(super) fn open_to_containers(path: &Path) -> Result<(), String> {
+    static DONE: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+    let mut done = DONE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if done.iter().any(|p| p == path) {
+        return Ok(());
+    }
+    let text = wide(OsStr::new(ALL_PACKAGES));
+    let mut sid: PSID = ptr::null_mut();
+    // SAFETY: NUL-terminated string; `sid` is freed with LocalFree below.
+    if unsafe { ConvertStringSidToSidW(text.as_ptr(), &raw mut sid) } == 0 {
+        return Err(format!("{ALL_PACKAGES}: not a SID"));
+    }
+    let granted = acl::grant(
+        path,
+        sid,
+        FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+        NO_INHERITANCE,
+    );
+    // SAFETY: allocated by ConvertStringSidToSidW, freed once.
+    unsafe { LocalFree(sid) };
+    granted.map_err(|code| format!("{}: ACL update failed (error {code})", path.display()))?;
+    done.push(path.to_path_buf());
+    Ok(())
 }
 
 /// `text` as a NUL-terminated UTF-16 string.

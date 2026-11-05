@@ -149,6 +149,7 @@ pub(crate) fn answer(
         ControlRequest::GatewaySend { .. }
         | ControlRequest::GatewayHandoff { .. }
         | ControlRequest::GatewayPlatform { .. }
+        | ControlRequest::PluginsReload { .. }
         | ControlRequest::ResolveRole { .. } => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,
             "this request is answered asynchronously",
@@ -300,6 +301,19 @@ async fn handle<S: AsyncRead + AsyncWrite + Unpin>(
             },
             ..ControlResponse::default()
         },
+        Ok(ControlRequest::PluginsReload { profile, plugin }) => {
+            match server
+                .host()
+                .reload_plugins(&profile, plugin.as_deref())
+                .await
+            {
+                Ok(report) => ControlResponse {
+                    reloaded: Some(report),
+                    ..ControlResponse::default()
+                },
+                Err(err) => failure(&err),
+            }
+        }
         Ok(request) => answer(&server, request, peer_pid),
         Err(e) => failure(&Error::new(
             &codes::RPC_INVALID_REQUEST,

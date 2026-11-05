@@ -22,6 +22,8 @@ use super::{Inventory, unknown_toolset};
 const EXPOSED: &str = "exposed";
 /// A toolset member this binary does not register (yet).
 const UNREGISTERED: &str = "unregistered";
+/// Exposure verdict of a tool reached through the tool-search bridge.
+const DEFERRED: &str = "deferred";
 
 /// One `tools list` row: the shape a session records, so the live listing
 /// and `--session` print the same columns.
@@ -34,7 +36,11 @@ pub type ToolRow = SurfaceTool;
 ///
 /// An unknown toolset in the configuration (exit 78).
 pub async fn list(inv: &Inventory<'_>) -> Result<Vec<ToolRow>, Error> {
-    let (_, surface) = inv.surface(&inv.config.tools.enabled_toolsets).await?;
+    let enabled = inv.opted_in(
+        inv.config.tools.enabled_toolsets.clone(),
+        &pmt_tools::SessionSurface::Cli,
+    );
+    let (_, surface) = inv.surface(&enabled).await?;
     Ok(surface_rows(inv.registry, &surface))
 }
 
@@ -55,6 +61,9 @@ pub fn surface_rows(registry: &ToolRegistry, surface: &ToolSurface) -> Vec<ToolR
 fn exposure(surface: &ToolSurface, name: &str) -> String {
     if surface.get(name).is_some() {
         return EXPOSED.to_owned();
+    }
+    if surface.deferred().iter().any(|t| t.name() == name) {
+        return DEFERRED.to_owned();
     }
     surface
         .excluded()
@@ -134,7 +143,11 @@ pub struct Explanation {
 /// toolset (exit 78).
 pub async fn explain(inv: &Inventory<'_>, name: &str) -> Result<Explanation, Error> {
     let tool = inv.registry.get(name)?;
-    let (_, surface) = inv.surface(&inv.config.tools.enabled_toolsets).await?;
+    let enabled = inv.opted_in(
+        inv.config.tools.enabled_toolsets.clone(),
+        &pmt_tools::SessionSurface::Cli,
+    );
+    let (_, surface) = inv.surface(&enabled).await?;
     let d = &tool.descriptor;
     let budget = ResultBudget::new(
         inv.config.tools.result_budget.clone(),

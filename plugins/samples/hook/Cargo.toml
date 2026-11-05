@@ -1,0 +1,22 @@
+[package]
+name = "sample-hook"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen-rt.workspace = true
+
+[package.metadata.component]
+package = "prometheus-samples:hook"
+
+[package.metadata.component.target]
+path = "../../../wit/hook"
+world = "hook"
+
+[package.metadata.component.target.dependencies]
+"prometheus:host" = { path = "../../../wit/host" }
+"prometheus:messaging" = { path = "../../../wit/messaging" }

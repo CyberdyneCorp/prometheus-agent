@@ -12,6 +12,7 @@
 
 pub mod budget;
 pub mod logs;
+pub mod redaction;
 pub mod telemetry;
 pub mod time;
 pub mod trajectory;

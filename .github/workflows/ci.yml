@@ -82,7 +82,7 @@ jobs:
 
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
-          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }},cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }},mdbook@${{ env.MDBOOK_VERSION }}
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }},cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }},mdbook@${{ env.MDBOOK_VERSION }},cargo-component@${{ env.CARGO_COMPONENT_VERSION }}
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -102,6 +102,11 @@ jobs:
       - name: Allow user namespaces for Chromium's sandbox
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # The python-bridge tests run real sidecars: the pinned uv and the
+      # CPython it provisions, installed before the tests so none downloads.
+      - name: Install uv and the python-bridge test interpreter
+        run: scripts/ci/install-uv "$RUNNER_TEMP/uv"
 
       - name: scripts/check
         # The budgets apply to the reference runner only; the perf job runs them.
@@ -168,6 +173,13 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo test -p prometheus --test terminal_windows --locked --target "${{ matrix.target }}"
 
+      # The AppContainer backend itself (security-boundaries, OS sandbox per
+      # platform; Egress enforcement for child processes): confinement,
+      # strength report, ACL revocation, and a proxied child's network.
+      - name: Windows sandbox tests
+        if: runner.os == 'Windows' && !cancelled()
+        run: cargo test -p pmt-sandbox --test sandbox --locked --target "${{ matrix.target }}" -- "windows::"
+
       # The offline smoke run of a Tier 2 target (spec: workspace-architecture,
       # Supported targets and support tiers): the demo's CLI tests, then
       # `prometheus demo` with the binary's outbound traffic blocked. The
@@ -204,7 +216,7 @@ jobs:
       # per platform): writes outside the workspace and credential reads
       # fail, ACL entries are revoked, strength is reported per feature.
       - name: Windows sandbox tests
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p pmt-sandbox --locked --target "${{ matrix.target }}"
 
       # The local terminal backend's shell resolution (execution-environments,

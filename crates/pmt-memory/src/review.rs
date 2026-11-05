@@ -99,6 +99,7 @@ impl ToolPort for ReviewTools {
     fn run<'a>(
         &'a self,
         calls: &'a [RequestedCall],
+        _: &'a str,
         _: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(async move {

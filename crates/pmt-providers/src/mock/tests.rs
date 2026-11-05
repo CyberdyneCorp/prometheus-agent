@@ -183,3 +183,28 @@ fn mock_models_are_free_and_take_tools_images_and_reasoning() {
     };
     assert!(meta.price.unwrap().cost(&tokens).abs() < f64::EPSILON);
 }
+
+/// `tools` / `tools_regex` match the offered tool array as JSON.
+#[test]
+fn a_rule_can_match_the_offered_tools() {
+    let script = parse(
+        "[[rule]]\ntools = \"\\\"v4a\\\"\"\ntext = \"a\"\n[[rule]]\ntools_regex = \"^\\\\[\\\\]$\"\ntext = \"b\"\n",
+    );
+    let call = |tools: &str| Call {
+        step: 0,
+        model: "m",
+        user: None,
+        tool_result: None,
+        tools: tools.to_owned(),
+    };
+    let [v4a, none] = script.rules.as_slice() else {
+        panic!("two rules")
+    };
+    assert!(call(r#"[{"name":"patch","enum":["replace","v4a"]}]"#).matches(v4a));
+    assert!(!call(r#"[{"name":"patch"}]"#).matches(v4a));
+    assert!(call("[]").matches(none) && !call("[{}]").matches(none));
+    assert!(
+        invalid("[[rule]]\ntools = \"a\"\ntools_regex = \"b\"\ntext = \"c\"\n")
+            .contains("exclusive")
+    );
+}

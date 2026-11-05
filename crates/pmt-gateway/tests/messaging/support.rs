@@ -40,6 +40,8 @@ use tokio_util::sync::CancellationToken;
 /// - `stream` streams its answer in pieces first;
 /// - `say:<text>` answers `<text>` verbatim;
 /// - `wait:<n>` announces a wait for a turn slot with `n` ahead first;
+/// - `compact` reports a loop step calling `terminal` and `read_file` and
+///   a committed compaction (epoch 2), then answers 600 `x`;
 /// - anything else answers `echo: <text>` at once.
 async fn script(
     text: &str,
@@ -56,6 +58,7 @@ async fn script(
             findings: Vec::new(),
             remember: None,
             deadline_ms: None,
+            explanation: None,
         };
         let answer = link.ask::<ApprovalAsk>(&params, Some(timeout)).await;
         let approved = answer.is_some_and(|a| a.decision != Decision::Deny);
@@ -110,6 +113,23 @@ async fn script(
             &serde_json::json!({"type": "turn.waiting", "payload": {"ahead": ahead}}),
         );
         return ("completed", Some(format!("echo: {text}")));
+    }
+    if text == "compact" {
+        let event = |kind: &str, payload: serde_json::Value| {
+            link.emit::<pmt_rpc::contracts::SessionEvent>(
+                &serde_json::json!({"type": kind, "payload": payload}),
+            );
+        };
+        event(
+            "turn.step",
+            serde_json::json!({"iteration": 1, "calls": [{"tool": "terminal"}, {"tool": "read_file"}]}),
+        );
+        event(
+            "compression.committed",
+            serde_json::json!({"trigger": "threshold", "epoch": 2, "tokens_before": 900,
+                "tokens_after": 300, "summary_tokens": 100, "duration_ms": 5}),
+        );
+        return ("completed", Some("x".repeat(600)));
     }
     if let Some(rest) = text.strip_prefix("say:") {
         return ("completed", Some(rest.to_owned()));

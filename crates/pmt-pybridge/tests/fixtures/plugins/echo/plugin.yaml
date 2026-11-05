@@ -1,0 +1,7 @@
+name: echo
+version: 1.0.0
+description: Bridge test plugin exercising every call kind
+requires_env:
+  - SPOTIFY_TOKEN
+provides_hooks:
+  - post_tool_call

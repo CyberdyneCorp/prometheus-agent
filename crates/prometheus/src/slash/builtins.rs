@@ -279,6 +279,33 @@ pub static BUILTINS: &[Command] = &[
         Effect::NextSession,
     ),
     command(
+        "plugins",
+        &[],
+        Tools,
+        "List plugins, or reload them (tools and prompt sections next session unless --now)",
+        &[
+            arg("action", ArgKind::Choice(&["list", "reload"]), false),
+            arg("id", ArgKind::Word, false),
+            NOW,
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
+        "mcp",
+        &[],
+        Tools,
+        "Show MCP servers, or reload them (tools next session unless --now)",
+        &[
+            arg("action", ArgKind::Choice(&["status", "reload"]), false),
+            NOW,
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
         "toolsets",
         &[],
         Tools,
@@ -366,6 +393,23 @@ pub static BUILTINS: &[Command] = &[
         &[arg("state", ArgKind::Choice(&["on", "off"]), false)],
         CHATS,
         BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
+        "egress",
+        &[],
+        Tools,
+        "Show or change this session's network egress (status | allow <host> | deny <host> | mode <public|allowlist|none>)",
+        &[
+            arg(
+                "action",
+                ArgKind::Choice(&["status", "allow", "deny", "mode"]),
+                false,
+            ),
+            text("value"),
+        ],
+        CHATS,
+        Immediate,
         Effect::Immediate,
     ),
     command(

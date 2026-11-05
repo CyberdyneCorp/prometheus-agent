@@ -47,7 +47,11 @@ impl Turn<'_> {
             .collect();
         let token = self.options.interrupt.token().child();
         let tools = self.agent.setup.tools.clone();
-        let batch = match self.race_tools(tools.run(&runnable, &token)).await {
+        let turn_id = self.id.to_string();
+        let batch = match self
+            .race_tools(tools.run(&runnable, &turn_id, &token))
+            .await
+        {
             Ok(batch) => batch,
             Err(end) => {
                 token.cancel();
@@ -120,7 +124,12 @@ impl Turn<'_> {
     ) -> Result<(), Error> {
         let mut steps = Vec::with_capacity(calls.len());
         for (call, outcome) in calls.iter().zip(outcomes) {
-            self.append(&transcript::tool_row(call, &outcome.result))?;
+            if matches!(outcome.result.status, Status::Ok | Status::Degraded) {
+                self.edited
+                    .extend(super::observe::edited_paths(&call.name, &call.arguments));
+            }
+            let nonce = pmt_core::provenance::nonce(&self.agent.setup.session.to_string());
+            self.append(&transcript::tool_row(call, &outcome.result, &nonce))?;
             self.emit(Event::ToolResult(result_event(call, outcome)))
                 .await;
             steps.push(StepCall {

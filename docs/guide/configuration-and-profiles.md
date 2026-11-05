@@ -165,7 +165,28 @@ A profile resolves a secret from, in order:
    secret and switches the backend;
 2. only for the profile the process was started for: the environment
    variables `PMT_SECRET_<NAME>`, then the provider's own variable (for
-   example `OPENAI_API_KEY`).
+   example `OPENAI_API_KEY`);
+3. a helper command you name, on Linux, macOS and other POSIX hosts:
+
+   ```toml
+   [secrets.command]
+   enabled = true
+   argv = ["/usr/local/bin/fetch-secrets", "--profile", "work"]
+   timeout_secs = 3
+   override_existing = false
+   ```
+
+   It runs once per process start, without a shell and in its own process
+   group, and prints `NAME=VALUE` lines (at most 1 MiB; a blank value
+   counts as unset; the first line naming a secret wins). Its stderr is
+   discarded and only its exit status is logged. A helper that fails, does
+   not finish within `timeout_secs` (its whole process group is killed) or
+   prints anything else contributes nothing and prints one warning
+   (`helper command failed (...)`, `helper output was not a NAME=VALUE
+   map` or `secrets.command.argv is empty`); startup goes on. With
+   `override_existing = true` its values come before the store and the
+   environment. `prometheus secrets list` shows them as `command`. Windows
+   has no command source.
 
 A gateway serving several profiles never hands one profile's launch
 environment to another. The environment is read for secrets only: any other

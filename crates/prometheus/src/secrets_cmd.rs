@@ -139,6 +139,7 @@ fn describe(row: &Listed) -> String {
         Source::Keychain => "keychain",
         Source::Env => "env",
         Source::Managed => "managed (read-only)",
+        Source::Command => "command (secrets.command)",
     };
     let variable = row
         .variable

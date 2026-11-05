@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::time::Duration;
 
 use pmt_config::schema::BrowserConfig;
+use pmt_net::egress::{HostPolicy, Mode, Proxy, Rules};
 use tokio::process::Child;
 use tokio::time::Instant;
 
@@ -75,6 +76,8 @@ struct LocalBrowser {
     profile_dir: PathBuf,
     temp_dir: PathBuf,
     pid: u32,
+    /// The egress proxy all its connections go through (stops on drop).
+    _proxy: Proxy,
 }
 
 impl LocalBrowser {
@@ -286,7 +289,9 @@ impl BrowserManager {
                 old.terminate().await;
             }
         }
-        let session = Arc::new(self.create(wanted).await?);
+        let mut created = self.create(wanted, key).await?;
+        created.safety.session = Some(key.to_owned());
+        let session = Arc::new(created);
         sessions.insert(key.to_owned(), Arc::clone(&session));
         drop(sessions);
         self.start_reaper();
@@ -358,14 +363,14 @@ impl BrowserManager {
         chosen.or_else(|| (self.setup.config)().cdp_url)
     }
 
-    async fn create(&self, explicit: Option<String>) -> Result<BrowserSession, String> {
+    async fn create(&self, explicit: Option<String>, key: &str) -> Result<BrowserSession, String> {
         if let Some(endpoint) = explicit {
             let cdp = Cdp::connect(&endpoint).await?;
             return Ok(self.session_over(cdp, Origin::Connected(endpoint), None, false));
         }
         let config = (self.setup.config)();
         if config.provider == "local" {
-            return self.local(false).await;
+            return self.local(false, key).await;
         }
         let cloud = match self.setup.providers.get(&config.provider) {
             Some(provider) => match provider.create().await {
@@ -379,7 +384,7 @@ impl BrowserManager {
         };
         match cloud {
             Ok(cdp) => Ok(self.session_over(cdp, Origin::Cloud(config.provider), None, false)),
-            Err(cloud_why) => self.local(true).await.map_err(|local_why| {
+            Err(cloud_why) => self.local(true, key).await.map_err(|local_why| {
                 format!(
                     "Cloud provider {} failed ({cloud_why}) and local fallback also failed ({local_why})",
                     config.provider
@@ -388,13 +393,15 @@ impl BrowserManager {
         }
     }
 
-    async fn local(&self, fallback_from_cloud: bool) -> Result<BrowserSession, String> {
+    async fn local(&self, fallback_from_cloud: bool, key: &str) -> Result<BrowserSession, String> {
         let executable = self.setup.runtime.executable("chromium").await?;
+        let proxy = self.egress_proxy(key)?;
         let launched = launch::launch(
             &executable,
             &self.setup.cache_dir.join("profiles"),
             &self.setup.env,
             launch::LAUNCH_TIMEOUT,
+            Some(&proxy.url()),
         )
         .await?;
         let record = self
@@ -407,9 +414,30 @@ impl BrowserManager {
             profile_dir: launched.profile_dir,
             temp_dir: launched.temp_dir,
             pid: launched.pid,
+            _proxy: proxy,
         };
         let cdp = Cdp::connect(&launched.endpoint).await?;
         Ok(self.session_over(cdp, Origin::Local, Some(local), fallback_from_cloud))
+    }
+
+    /// The egress proxy of session `key`'s local browser: the session's
+    /// egress policy (its refusals reported where the session's go) and the
+    /// destination checks, for every connection the page makes (subresources,
+    /// redirects, scripts), not only the navigations the tools ask for.
+    fn egress_proxy(&self, key: &str) -> Result<Proxy, String> {
+        let safety = &self.setup.safety;
+        let session = key.split('/').next().unwrap_or(key);
+        let found = safety.egress.as_ref().and_then(|lookup| lookup(session));
+        let (hosts, observer) = match found {
+            Some((hosts, observer)) => (hosts, Some(observer)),
+            None => (Arc::new(HostPolicy::new(Mode::Public, Vec::new())), None),
+        };
+        let mut rules = Rules::new(hosts, safety.destinations.clone(), "browser")
+            .with_lookup(Arc::clone(&safety.lookup));
+        if let Some(observer) = observer {
+            rules = rules.observed(observer);
+        }
+        Proxy::start(rules).map_err(|err| format!("cannot start the browser's egress proxy: {err}"))
     }
 
     fn session_over(

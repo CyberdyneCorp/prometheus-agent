@@ -75,8 +75,11 @@ pmt-adapters-signal = { workspace = true, optional = true }
 pmt-adapters-slack = { workspace = true, optional = true }
 pmt-adapters-webhook = { workspace = true, optional = true }
 pmt-adapters-whatsapp = { workspace = true, optional = true }
+pmt-mcp.workspace = true
 pmt-memory.workspace = true
 pmt-net.workspace = true
+pmt-plugins.workspace = true
+pmt-pybridge.workspace = true
 pmt-obs.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
@@ -86,6 +89,7 @@ pmt-store.workspace = true
 pmt-tools.workspace = true
 pmt-tui = { workspace = true, optional = true }
 pmt-update.workspace = true
+pmt-vault.workspace = true
 pulldown-cmark.workspace = true
 ratatui = { workspace = true, optional = true }
 # The terminal size for the line interface's bottom status line too.
@@ -93,6 +97,13 @@ crossterm.workspace = true
 # `/copy` in the TUI: the OSC 52 clipboard sequence carries base64.
 base64.workspace = true
 reqwest.workspace = true
+# Form bodies of MCP OAuth token requests.
+url.workspace = true
+# Shell hook and webhook matchers.
+regex.workspace = true
+# Webhook signatures (HMAC-SHA256).
+sha2.workspace = true
+semver.workspace = true
 rpassword.workspace = true
 rustyline.workspace = true
 serde.workspace = true
@@ -119,6 +130,13 @@ sha2.workspace = true
 
 [dev-dependencies]
 flate2.workspace = true
+pmt-mcp = { workspace = true, features = ["testkit"] }
+# The reference MCP client of the `mcp serve` conformance tests.
+rmcp = { workspace = true, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest"] }
+pmt-plugins = { workspace = true, features = ["testkit"] }
+pmt-pybridge = { workspace = true, features = ["testkit"] }
+# The fake Nous connector gateway of the connectors tests.
+pmt-tools = { workspace = true, features = ["connectors-fake"] }
 minisign.workspace = true
 tar.workspace = true
 rusqlite.workspace = true
@@ -127,6 +145,12 @@ tracing-subscriber.workspace = true
 url.workspace = true
 zstd.workspace = true
 wiremock.workspace = true
+# The mTLS front of the MCP client tests: certificates, an encrypted
+# PKCS#8 client key and a TLS server requiring a client certificate.
+rcgen.workspace = true
+pkcs8.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
 # SIGINT for the `logs --follow` exit-130 test.

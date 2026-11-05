@@ -119,6 +119,9 @@ jobs:
           done
           cargo xtask release manifest --dir dist --tag "$tag" --commit "$GITHUB_SHA"
           cargo xtask release installers --out dist
+          # The supply-chain advisory catalog this release embeds, published
+          # signed beside the channel indexes for installed builds to refresh.
+          cp crates/pmt-update/advisories/advisories.json dist/advisories.json
       - name: Sign
         env:
           RELEASE_KEY: ${{ secrets.PMT_RELEASE_SIGNING_KEY }}
@@ -138,7 +141,7 @@ jobs:
           cargo xtask release sign --key-env SIGNING_KEY $embedded \
             --public-key-out "$RUNNER_TEMP/signing.pub" \
             dist/prometheus-*.tar.gz dist/release-manifest.json dist/channel-*.json \
-            dist/install.sh dist/install.ps1
+            dist/advisories.json dist/install.sh dist/install.ps1
       - name: Verify every artifact
         run: cargo xtask release verify --dir dist --key "$RUNNER_TEMP/signing.pub"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -151,5 +154,6 @@ jobs:
             dist/*.spdx.json
             dist/release-manifest.json
             dist/channel-*.json
+            dist/advisories.json
             dist/install.sh
             dist/install.ps1

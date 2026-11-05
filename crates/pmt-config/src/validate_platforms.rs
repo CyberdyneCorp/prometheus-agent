@@ -39,6 +39,7 @@ fn table<'a>(node: &'a Node, key: &str) -> Option<&'a Node> {
 /// Adds the platform issues of `root` to `issues` (replacing the generic
 /// "unknown key" of an inline credential with the credential refusal).
 pub(crate) fn check(root: &Node, issues: &mut Vec<Issue>) {
+    check_surface_platforms(root, issues);
     let Some(Kind::Table(platforms)) = table(root, "gateway")
         .and_then(|g| table(g, "platforms"))
         .map(|n| &n.kind)
@@ -61,6 +62,32 @@ pub(crate) fn check(root: &Node, issues: &mut Vec<Issue>) {
         }
         if let Kind::Table(entries) = &node.kind {
             check_table(&lower, &key, entries, issues);
+        }
+    }
+}
+
+/// `toolsets.surfaces.gateway.<platform>` names a known platform (spec:
+/// tool-system, Per-surface default toolsets: an unknown surface key
+/// fails validation).
+fn check_surface_platforms(root: &Node, issues: &mut Vec<Issue>) {
+    let Some(Kind::Table(entries)) = table(root, "toolsets")
+        .and_then(|t| table(t, "surfaces"))
+        .and_then(|s| table(s, "gateway"))
+        .map(|n| &n.kind)
+    else {
+        return;
+    };
+    for (name, span, _) in entries {
+        if !platforms::is_known(name) {
+            let key = format!("toolsets.surfaces.gateway.{name}");
+            issues.push(Issue {
+                code: &codes::CONFIG_INVALID,
+                message: format!(
+                    "{key}: unknown surface: no platform '{name}'; install an adapter plugin that provides it"
+                ),
+                key,
+                span: span.clone(),
+            });
         }
     }
 }
@@ -162,6 +189,25 @@ mod tests {
             ]
         );
         assert!(issues("[gateway.platforms.Telegram]\nenabled = true\n").is_empty());
+    }
+
+    /// Scenario (tool-system, Per-surface default toolsets): an unknown
+    /// surface key fails validation; a platform's key is accepted.
+    #[test]
+    fn an_unknown_surface_key_fails_validation() {
+        let found = issues("[toolsets.surfaces.gateway]\nmyspace = [\"web\"]\n");
+        assert_eq!(
+            found,
+            vec![
+                "toolsets.surfaces.gateway.myspace: unknown surface: no platform 'myspace'; install an adapter plugin that provides it"
+            ]
+        );
+        assert!(
+            issues("[toolsets.surfaces.gateway]\ntelegram = [\"web\"]\nwebhook = []\n").is_empty()
+        );
+        let found = issues("[toolsets.surfaces]\ndesk = [\"web\"]\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].contains("toolsets.surfaces.desk"), "{}", found[0]);
     }
 
     #[test]

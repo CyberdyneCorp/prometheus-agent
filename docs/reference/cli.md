@@ -20,6 +20,8 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  vault        The credential vault: logins, cards and addresses the browser fills by handle
+  security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
@@ -40,7 +42,10 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -68,6 +73,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -V, --version
           Print version
@@ -109,6 +120,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn
@@ -215,6 +237,12 @@ Options:
       --prompt-file <PATH>
           Read the prompt verbatim from PATH (`-` for stdin)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
 
@@ -228,6 +256,17 @@ Options:
 
       --yolo
           Allow every approval-gated call for this session (deny rules and hardline blocks still apply)
+
+      --egress <MODE>
+          Network egress of this session: any public host, only allowed hosts, or none (`security.egress.mode` otherwise)
+
+          Possible values:
+          - public:    Any public host; private and metadata ranges denied
+          - allowlist: Only `security.egress.allow` and `--allow-host` patterns
+          - none:      No outbound connections
+
+      --allow-host <PATTERN>
+          Admit this host pattern (`host`, `host:port`, `*.suffix`) in this session, in addition to `security.egress.allow` (repeatable)
 
       --max-iterations <N>
           Model calls allowed per turn
@@ -310,6 +349,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -361,6 +406,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -401,6 +452,9 @@ Options:
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
+      --ack <ADVISORY_ID>
+          Silence the startup warning of a supply-chain advisory (added to `security.acked_advisories`); `doctor security` still shows it
+
   -v, --verbose...
           More detail; repeatable
 
@@ -409,6 +463,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -447,6 +507,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -482,6 +548,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -557,6 +629,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -589,6 +667,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -626,6 +710,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -662,6 +752,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -703,6 +799,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -740,6 +842,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -773,6 +881,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -805,6 +919,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -846,6 +966,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -879,6 +1005,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -911,6 +1043,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1062,6 +1200,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1099,6 +1243,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1131,6 +1281,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1172,6 +1328,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1208,6 +1370,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1248,6 +1416,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -1366,6 +1540,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1401,6 +1581,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1438,6 +1624,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1479,6 +1671,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1518,6 +1716,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1559,6 +1763,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1595,6 +1805,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1633,6 +1849,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1669,6 +1891,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1707,6 +1935,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1740,6 +1974,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1772,6 +2012,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1815,6 +2061,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1847,6 +2099,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1884,6 +2142,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -1934,6 +2198,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -1971,6 +2241,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2003,6 +2279,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2040,6 +2322,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2154,6 +2442,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2186,6 +2480,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2224,6 +2524,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2261,6 +2567,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2297,6 +2609,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2392,6 +2710,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2425,6 +2749,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2457,6 +2787,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2500,6 +2836,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2817,6 +3159,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -2849,6 +3197,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -2911,6 +3265,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -2947,6 +3307,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3016,6 +3382,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3052,6 +3424,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3090,6 +3468,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3126,6 +3510,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3166,6 +3556,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3218,6 +3614,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3272,6 +3674,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -3304,6 +3712,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3342,6 +3756,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3378,6 +3798,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3424,6 +3850,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -3608,6 +4040,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3643,6 +4081,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3680,6 +4124,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3722,6 +4172,662 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus grants help help
 ```
 
+## `prometheus vault`
+
+```text
+The credential vault: logins, cards and addresses the browser fills by handle
+
+Usage: prometheus vault [OPTIONS] <COMMAND>
+
+Commands:
+  list     List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+  add      Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+  rm       Delete an item after confirmation
+  sources  Show password-manager login sources, or enable or disable one
+  key      Show where the vault key lives and whether a keychain is reachable
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault list`
+
+```text
+List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+
+Usage: prometheus vault list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault add`
+
+```text
+Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+
+Usage: prometheus vault add [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --login
+          Add a login (default)
+
+      --card
+          Add a payment card
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --address
+          Add a postal address
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --label <LABEL>
+          A name for the item
+
+      --origin <ORIGINS>
+          A login's site, `https://host` (repeatable)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --identifier <IDENTIFIER>
+          A login's user name or email
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --with-totp
+          Ask for a TOTP seed too (a login)
+
+      --holder <HOLDER>
+          A card's holder name
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --expiry <EXPIRY>
+          A card's expiry, `MM/YY`
+
+      --name <NAME>
+          An address's full name
+
+      --line1 <LINE1>
+          An address's street line
+
+      --line2 <LINE2>
+          An address's second line
+
+      --city <CITY>
+          An address's city
+
+      --region <REGION>
+          An address's state or region
+
+      --postal-code <POSTAL_CODE>
+          An address's postal code
+
+      --country <COUNTRY>
+          An address's country
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault rm`
+
+```text
+Delete an item after confirmation
+
+Usage: prometheus vault rm [OPTIONS] <HANDLE>
+
+Arguments:
+  <HANDLE>
+          The item's handle (`prometheus vault list`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault sources`
+
+```text
+Show password-manager login sources, or enable or disable one
+
+Usage: prometheus vault sources [OPTIONS]
+
+Options:
+      --enable <ENABLE>
+          Enable a source
+
+          Possible values:
+          - onepassword: 1Password (`op`)
+          - bitwarden:   Bitwarden (`bw`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --disable <DISABLE>
+          Disable a source
+
+          Possible values:
+          - onepassword: 1Password (`op`)
+          - bitwarden:   Bitwarden (`bw`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus vault key`
+
+```text
+Show where the vault key lives and whether a keychain is reachable
+
+Usage: prometheus vault key [OPTIONS] [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus vault key migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus vault key migrate [OPTIONS] --to <TO>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          Where the key goes
+
+          Possible values:
+          - keychain: The OS keychain
+          - file:     `<profile>/vault/vault.key`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus vault key help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault key help [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus vault key help migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus vault key help migrate
+```
+
+## `prometheus vault key help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault key help help
+```
+
+## `prometheus vault help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault help [COMMAND]
+
+Commands:
+  list     List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+  add      Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+  rm       Delete an item after confirmation
+  sources  Show password-manager login sources, or enable or disable one
+  key      Show where the vault key lives and whether a keychain is reachable
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus vault help list`
+
+```text
+List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+
+Usage: prometheus vault help list
+```
+
+## `prometheus vault help add`
+
+```text
+Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+
+Usage: prometheus vault help add
+```
+
+## `prometheus vault help rm`
+
+```text
+Delete an item after confirmation
+
+Usage: prometheus vault help rm
+```
+
+## `prometheus vault help sources`
+
+```text
+Show password-manager login sources, or enable or disable one
+
+Usage: prometheus vault help sources
+```
+
+## `prometheus vault help key`
+
+```text
+Show where the vault key lives and whether a keychain is reachable
+
+Usage: prometheus vault help key [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+```
+
+## `prometheus vault help key migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus vault help key migrate
+```
+
+## `prometheus vault help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus vault help help
+```
+
+## `prometheus security`
+
+```text
+Security records of the profile: verify the tamper-evident audit log
+
+Usage: prometheus security [OPTIONS] <COMMAND>
+
+Commands:
+  audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus security audit`
+
+```text
+The security audit log (`<profile>/logs/security-audit.jsonl`)
+
+Usage: prometheus security audit [OPTIONS] <COMMAND>
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus security audit verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus security audit verify [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus security audit help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security audit help [COMMAND]
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus security audit help verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus security audit help verify
+```
+
+## `prometheus security audit help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security audit help help
+```
+
+## `prometheus security help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security help [COMMAND]
+
+Commands:
+  audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus security help audit`
+
+```text
+The security audit log (`<profile>/logs/security-audit.jsonl`)
+
+Usage: prometheus security help audit [COMMAND]
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+```
+
+## `prometheus security help audit verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus security help audit verify
+```
+
+## `prometheus security help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus security help help
+```
+
 ## `prometheus backup`
 
 ```text
@@ -3755,6 +4861,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3803,6 +4915,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3842,6 +4960,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3920,6 +5044,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -3952,6 +5082,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -3988,6 +5124,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4026,6 +5168,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4061,6 +5209,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4162,6 +5316,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4194,6 +5354,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4256,6 +5422,12 @@ Options:
       --no-alias
           Do not write the alias launcher `<name>` (see `profile alias`)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4295,6 +5467,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4342,6 +5520,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4382,6 +5566,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4419,6 +5609,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4455,6 +5651,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4496,6 +5698,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4535,6 +5743,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4689,6 +5903,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4727,6 +5947,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4773,6 +5999,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4809,6 +6041,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -4882,6 +6120,12 @@ Options:
       --before <TIME>
           Only messages before this time (RFC 3339 or YYYY-MM-DD)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
       --session <SESSION>
           Only this session (id, id prefix or title)
 
@@ -4934,6 +6178,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -4970,6 +6220,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5008,6 +6264,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5044,6 +6306,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5082,6 +6350,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5119,6 +6393,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5155,6 +6435,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5217,6 +6503,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5260,6 +6552,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5301,6 +6599,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5345,6 +6649,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5381,6 +6691,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5413,6 +6729,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5652,6 +6974,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5713,6 +7041,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -5750,6 +7084,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5766,7 +7106,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --platform <SURFACE>
-          Surface whose platform hint the prompt carries
+          Surface a new session starts on (`cli`, `cron`, `api`, a messaging platform such as `telegram` or `webhook`...): its platform hint and starting toolsets
 
           [default: cli]
 
@@ -5774,7 +7114,7 @@ Options:
           Profile to use (default: the home's active_profile, else default)
 
       --toolsets <A,B>
-          Comma-separated toolsets (default: `tools.enabled_toolsets`)
+          Comma-separated toolsets (default: the surface's starting toolsets)
 
       --model <ID>
           `<provider>/<model>` or a model of the configured provider (default: `model.default`)
@@ -5793,6 +7133,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5861,6 +7207,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -5897,6 +7249,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -5956,6 +7314,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -6025,6 +7389,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6069,6 +7439,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6118,6 +7494,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6160,6 +7542,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6192,6 +7580,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6288,6 +7682,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6320,6 +7720,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6358,6 +7764,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6395,6 +7807,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6427,6 +7845,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6524,6 +7948,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6577,6 +8007,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -6609,6 +8045,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6646,6 +8088,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6686,6 +8134,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6732,6 +8186,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help (see a summary with '-h')
@@ -6809,14 +8269,16 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus tools [OPTIONS] <COMMAND>
 
 Commands:
-  configure  Enable or disable toolsets per surface and choose tool providers, interactively
-  enable     Enable a toolset from the next session
-  disable    Disable a toolset from the next session
-  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
-  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
-  toolsets   The toolsets, as `prometheus toolsets list`
-  help       Print this message or the help of the given subcommand(s)
+  configure   Enable or disable toolsets per surface and choose tool providers, interactively
+  enable      Enable a toolset from the next session
+  disable     Disable a toolset from the next session
+  provider    Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list        Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain     A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it [alias: show]
+  toolsets    The toolsets, as `prometheus toolsets list`
+  summary     Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+  post-setup  Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -6839,6 +8301,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6856,7 +8324,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --surface <SURFACE>
-          The surface: cli, tui, cron, acp or gateway.<platform> (every surface when omitted)
+          The surface: `cli`, `tui`, `desktop`, `cron`, `api`, `acp`, `acp_unattended` or `gateway.<platform>` (every surface when omitted)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -6875,6 +8343,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6916,6 +8390,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -6955,6 +8435,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -6996,6 +8482,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7031,6 +8523,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7069,6 +8567,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7085,7 +8589,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --surface <SURFACE>
-          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets` with `core` standing for the surface's default)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -7105,6 +8609,97 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools summary`
+
+```text
+Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+
+Usage: prometheus tools summary [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus tools post-setup`
+
+```text
+Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+
+Usage: prometheus tools post-setup [OPTIONS] <TOOLSET>
+
+Arguments:
+  <TOOLSET>
+          The toolset (`browser`, or one including it such as `core`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Install without asking (needed without a terminal)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7117,14 +8712,16 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus tools help [COMMAND]
 
 Commands:
-  configure  Enable or disable toolsets per surface and choose tool providers, interactively
-  enable     Enable a toolset from the next session
-  disable    Disable a toolset from the next session
-  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
-  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
-  toolsets   The toolsets, as `prometheus toolsets list`
-  help       Print this message or the help of the given subcommand(s)
+  configure   Enable or disable toolsets per surface and choose tool providers, interactively
+  enable      Enable a toolset from the next session
+  disable     Disable a toolset from the next session
+  provider    Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list        Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain     A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets    The toolsets, as `prometheus toolsets list`
+  summary     Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+  post-setup  Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+  help        Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus tools help configure`
@@ -7183,6 +8780,22 @@ The toolsets, as `prometheus toolsets list`
 Usage: prometheus tools help toolsets
 ```
 
+## `prometheus tools help summary`
+
+```text
+Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+
+Usage: prometheus tools help summary
+```
+
+## `prometheus tools help post-setup`
+
+```text
+Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+
+Usage: prometheus tools help post-setup
+```
+
 ## `prometheus tools help help`
 
 ```text
@@ -7225,6 +8838,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7241,7 +8860,7 @@ Options:
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
       --surface <SURFACE>
-          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets`)
+          Mark the toolsets active on this surface (`toolsets.surfaces.<s>`, else `tools.enabled_toolsets` with `core` standing for the surface's default)
 
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
@@ -7260,6 +8879,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7297,6 +8922,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7347,8 +8978,9 @@ Check how the approval gate treats a command, without running it
 Usage: prometheus approvals [OPTIONS] <COMMAND>
 
 Commands:
-  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
-  help  Print this message or the help of the given subcommand(s)
+  test     Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  suggest  Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -7372,6 +9004,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7379,7 +9017,7 @@ Options:
 ## `prometheus approvals test`
 
 ```text
-Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
 
 Usage: prometheus approvals test [OPTIONS] <COMMAND>...
 
@@ -7399,7 +9037,7 @@ Options:
 
           Possible values:
           - manual: Ask for every dangerous call
-          - smart:  Pre-screen with the guardian model (asks like manual in M1)
+          - smart:  Pre-screen with the guardian model, asking a human when it cannot decide
           - off:    Bypass prompts; hardline and deny rules still block
 
   -p, --profile <NAME>
@@ -7431,8 +9069,71 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
+```
+
+## `prometheus approvals suggest`
+
+```text
+Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+
+Usage: prometheus approvals suggest [OPTIONS]
+
+Options:
+      --days <N>
+          Look at approvals from the last N days
+
+          [default: 90]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --min-count <N>
+          Propose only patterns approved at least N times
+
+          [default: 2]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --limit <N>
+          Show at most N proposals
+
+          [default: 20]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --apply <N,...>
+          Add the numbered proposals to `[approvals].allow` in `grants.toml`
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
 ```
 
 ## `prometheus approvals help`
@@ -7443,16 +9144,25 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus approvals help [COMMAND]
 
 Commands:
-  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
-  help  Print this message or the help of the given subcommand(s)
+  test     Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  suggest  Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+  help     Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus approvals help test`
 
 ```text
-Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
 
 Usage: prometheus approvals help test
+```
+
+## `prometheus approvals help suggest`
+
+```text
+Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+
+Usage: prometheus approvals help suggest
 ```
 
 ## `prometheus approvals help help`
@@ -7513,8 +9223,14 @@ Options:
       --restore-snapshots
           With `--rollback`: also restore the pre-update snapshots, losing the sessions created since the update (asks first)
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
   -y, --yes
           Confirm `--restore-snapshots` without asking
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
       --backup
           Also write a full home archive before the swap (`update.pre_update_backup = "full"` for this run)
@@ -7564,6 +9280,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7597,6 +9319,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7629,6 +9357,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7711,6 +9445,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7747,6 +9487,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7779,6 +9525,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7813,6 +9565,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7845,6 +9603,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7879,6 +9643,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7911,6 +9681,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -7954,6 +9730,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -7989,6 +9771,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8129,6 +9917,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8161,6 +9955,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8195,6 +9995,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8228,6 +10034,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8260,6 +10072,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8299,6 +10117,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8341,6 +10165,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8378,6 +10208,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8414,6 +10250,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8510,6 +10352,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8542,6 +10390,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8587,6 +10441,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8644,8 +10504,14 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
       --write [<PATH>]
           Write the manifest to PATH (default `<profile>/slack-manifest.json`)
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8684,6 +10550,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8719,6 +10591,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -8785,6 +10663,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -8821,6 +10705,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9029,6 +10919,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9064,6 +10960,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9105,6 +11007,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9145,6 +11053,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9184,6 +11098,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9244,16 +11164,20 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus pairing help help
 ```
 
-## `prometheus plugins`
+## `prometheus connectors`
 
 ```text
-Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
 
-Usage: prometheus plugins [OPTIONS] <COMMAND>
+Usage: prometheus connectors [OPTIONS] <COMMAND>
 
 Commands:
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
-  help          Print this message or the help of the given subcommand(s)
+  list        The connectors this account may use, with their connected state
+  accounts    Connector accounts with their names and states
+  connect     Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+  rename      Rename an account (by its name or label)
+  disconnect  Remove an account (asks for confirmation unless --yes)
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -9276,6 +11200,2799 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors list`
+
+```text
+The connectors this account may use, with their connected state
+
+Usage: prometheus connectors list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors accounts`
+
+```text
+Connector accounts with their names and states
+
+Usage: prometheus connectors accounts [OPTIONS] [APP]
+
+Arguments:
+  [APP]
+          Only this connector's accounts
+
+Options:
+      --all
+          Include retired accounts (replaced by a reconnect)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors connect`
+
+```text
+Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+
+Usage: prometheus connectors connect [OPTIONS] <APP>
+
+Arguments:
+  <APP>
+          The connector (`gmail`, `notion`...)
+
+Options:
+      --alias <ALIAS>
+          Name the account
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --reconnect
+          Repair an account that is not connected (expired, failed, revoked)
+
+      --force
+          With --reconnect: also replace a connected account
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors rename`
+
+```text
+Rename an account (by its name or label)
+
+Usage: prometheus connectors rename [OPTIONS] --to <TO> <APP> <ACCOUNT>
+
+Arguments:
+  <APP>
+          The connector
+
+  <ACCOUNT>
+          The account's current name or label
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --to <TO>
+          The new name
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors disconnect`
+
+```text
+Remove an account (asks for confirmation unless --yes)
+
+Usage: prometheus connectors disconnect [OPTIONS] <APP>
+
+Arguments:
+  <APP>
+          The connector
+
+Options:
+      --alias <ALIAS>
+          The account's name (needed when the connector has several)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Do not ask for confirmation
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus connectors help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus connectors help [COMMAND]
+
+Commands:
+  list        The connectors this account may use, with their connected state
+  accounts    Connector accounts with their names and states
+  connect     Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+  rename      Rename an account (by its name or label)
+  disconnect  Remove an account (asks for confirmation unless --yes)
+  help        Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus connectors help list`
+
+```text
+The connectors this account may use, with their connected state
+
+Usage: prometheus connectors help list
+```
+
+## `prometheus connectors help accounts`
+
+```text
+Connector accounts with their names and states
+
+Usage: prometheus connectors help accounts
+```
+
+## `prometheus connectors help connect`
+
+```text
+Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+
+Usage: prometheus connectors help connect
+```
+
+## `prometheus connectors help rename`
+
+```text
+Rename an account (by its name or label)
+
+Usage: prometheus connectors help rename
+```
+
+## `prometheus connectors help disconnect`
+
+```text
+Remove an account (asks for confirmation unless --yes)
+
+Usage: prometheus connectors help disconnect
+```
+
+## `prometheus connectors help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus connectors help help
+```
+
+## `prometheus bridge`
+
+```text
+The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+
+Usage: prometheus bridge [OPTIONS] <COMMAND>
+
+Commands:
+  status   Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+  logs     A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+  restart  Restart a plugin's sidecar, clearing a `failed` state
+  doctor   Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+  env      Materialize a named pinned environment and print only its interpreter's path on stdout
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge status`
+
+```text
+Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+
+Usage: prometheus bridge status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge logs`
+
+```text
+A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+
+Usage: prometheus bridge logs [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --follow
+          Keep printing what is appended
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge restart`
+
+```text
+Restart a plugin's sidecar, clearing a `failed` state
+
+Usage: prometheus bridge restart [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge doctor`
+
+```text
+Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+
+Usage: prometheus bridge doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge env`
+
+```text
+Materialize a named pinned environment and print only its interpreter's path on stdout
+
+Usage: prometheus bridge env [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          `^[a-z0-9][a-z0-9_-]{0,63}$`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -r, --requirement <FILE>
+          A requirements file (repeatable)
+
+      --extra <SPEC>
+          One requirement (repeatable), e.g. `pypdf>=4,<5`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus bridge help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus bridge help [COMMAND]
+
+Commands:
+  status   Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+  logs     A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+  restart  Restart a plugin's sidecar, clearing a `failed` state
+  doctor   Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+  env      Materialize a named pinned environment and print only its interpreter's path on stdout
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus bridge help status`
+
+```text
+Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+
+Usage: prometheus bridge help status
+```
+
+## `prometheus bridge help logs`
+
+```text
+A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+
+Usage: prometheus bridge help logs
+```
+
+## `prometheus bridge help restart`
+
+```text
+Restart a plugin's sidecar, clearing a `failed` state
+
+Usage: prometheus bridge help restart
+```
+
+## `prometheus bridge help doctor`
+
+```text
+Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+
+Usage: prometheus bridge help doctor
+```
+
+## `prometheus bridge help env`
+
+```text
+Materialize a named pinned environment and print only its interpreter's path on stdout
+
+Usage: prometheus bridge help env
+```
+
+## `prometheus bridge help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus bridge help help
+```
+
+## `prometheus mcp`
+
+```text
+MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+
+Usage: prometheus mcp [OPTIONS] [COMMAND]
+
+Commands:
+  add      Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+  list     Every configured server: transport, command or URL, trust and whether it is enabled
+  remove   Remove a server [alias: rm]
+  test     Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  tools    Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+  login    Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+  reauth   Forget a server's sign-in and sign in again
+  catalog  The MCP servers of the plugin catalog
+  install  Install an MCP server from the catalog (disabled until you enable it)
+  status   Start every enabled server and show its state, tool count and why it is unavailable
+  serve    Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp add`
+
+```text
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+
+Usage: prometheus mcp add [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name (letters, digits, `_` and `-`); its tools are named `mcp__<name>__<tool>`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --url <URL>
+          The streamable HTTP endpoint
+
+      --command <COMMAND>
+          The program of a local (stdio) server
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --args <ARGS>...
+          The program's arguments
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --preset <PRESET>
+          A transport preset (`codex`: `codex mcp-server`); explicit flags win over it
+
+          Possible values:
+          - codex: OpenAI Codex as an MCP server: `codex mcp-server`
+
+      --env <KEY=VALUE>
+          An environment variable of a stdio server (`KEY=value`; repeat)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --env-secret <NAME>
+          A secrets-store name passed to a stdio server as a variable of the same name (repeat)
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --auth <AUTH>
+          How an HTTP server authenticates: `header` (the `--auth-secret` bearer token) or `oauth` (sign in with `prometheus mcp login`)
+
+          Possible values:
+          - header: The `--auth-secret` bearer token
+          - oauth:  OAuth 2.1 (sign in with `prometheus mcp login <name>`)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --auth-secret <NAME>
+          The secrets-store name of an HTTP server's bearer token
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --trust <TRUST>
+          `untrusted` (default): tools that are not read-only need approval
+
+          Possible values:
+          - full:      Trusted like built-in tools
+          - untrusted: Tools that are not read-only need approval
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus mcp list`
+
+```text
+Every configured server: transport, command or URL, trust and whether it is enabled
+
+Usage: prometheus mcp list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp remove`
+
+```text
+Remove a server
+
+Usage: prometheus mcp remove [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp test`
+
+```text
+Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+
+Usage: prometheus mcp test [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp tools`
+
+```text
+Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+
+Usage: prometheus mcp tools [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp login`
+
+```text
+Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+
+Usage: prometheus mcp login [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --flow <FLOW>
+          `browser` (default) or `device`
+
+          Possible values:
+          - browser: Authorization code with PKCE in a browser
+          - device:  Device code
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus mcp reauth`
+
+```text
+Forget a server's sign-in and sign in again
+
+Usage: prometheus mcp reauth [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The server's name
+
+Options:
+      --flow <FLOW>
+          `browser` (default) or `device`
+
+          Possible values:
+          - browser: Authorization code with PKCE in a browser
+          - device:  Device code
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus mcp catalog`
+
+```text
+The MCP servers of the plugin catalog
+
+Usage: prometheus mcp catalog [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp install`
+
+```text
+Install an MCP server from the catalog (disabled until you enable it)
+
+Usage: prometheus mcp install [OPTIONS] <ENTRY>
+
+Arguments:
+  <ENTRY>
+          The catalog entry
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The server name (default: the entry id)
+
+      --field <NAME=VALUE>
+          A setup field's value (`NAME=VALUE`; repeat)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp status`
+
+```text
+Start every enabled server and show its state, tool count and why it is unavailable
+
+Usage: prometheus mcp status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp serve`
+
+```text
+Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+
+Usage: prometheus mcp serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --stdio
+          Serve on stdin and stdout (the default)
+
+      --http <ADDR>
+          Serve streamable HTTP on this address (`127.0.0.1:8765`); a non-loopback address needs `mcp_server.allow_remote = true`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus mcp help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus mcp help [COMMAND]
+
+Commands:
+  add      Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+  list     Every configured server: transport, command or URL, trust and whether it is enabled
+  remove   Remove a server
+  test     Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  tools    Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+  login    Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+  reauth   Forget a server's sign-in and sign in again
+  catalog  The MCP servers of the plugin catalog
+  install  Install an MCP server from the catalog (disabled until you enable it)
+  status   Start every enabled server and show its state, tool count and why it is unavailable
+  serve    Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus mcp help add`
+
+```text
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+
+Usage: prometheus mcp help add
+```
+
+## `prometheus mcp help list`
+
+```text
+Every configured server: transport, command or URL, trust and whether it is enabled
+
+Usage: prometheus mcp help list
+```
+
+## `prometheus mcp help remove`
+
+```text
+Remove a server
+
+Usage: prometheus mcp help remove
+```
+
+## `prometheus mcp help test`
+
+```text
+Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+
+Usage: prometheus mcp help test
+```
+
+## `prometheus mcp help tools`
+
+```text
+Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+
+Usage: prometheus mcp help tools
+```
+
+## `prometheus mcp help login`
+
+```text
+Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+
+Usage: prometheus mcp help login
+```
+
+## `prometheus mcp help reauth`
+
+```text
+Forget a server's sign-in and sign in again
+
+Usage: prometheus mcp help reauth
+```
+
+## `prometheus mcp help catalog`
+
+```text
+The MCP servers of the plugin catalog
+
+Usage: prometheus mcp help catalog
+```
+
+## `prometheus mcp help install`
+
+```text
+Install an MCP server from the catalog (disabled until you enable it)
+
+Usage: prometheus mcp help install
+```
+
+## `prometheus mcp help status`
+
+```text
+Start every enabled server and show its state, tool count and why it is unavailable
+
+Usage: prometheus mcp help status
+```
+
+## `prometheus mcp help serve`
+
+```text
+Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+
+Usage: prometheus mcp help serve
+```
+
+## `prometheus mcp help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus mcp help help
+```
+
+## `prometheus plugins`
+
+```text
+Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
+
+Usage: prometheus plugins [OPTIONS] <COMMAND>
+
+Commands:
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  search         Catalog entries matching a word
+  browse         Every catalog entry, by tier and category
+  show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+  list           Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+  enable         Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable        Disable a plugin (it keeps its grants)
+  update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+  check-updates  List the plugins whose catalog ref or package moved
+  run            Runs a command a plugin registered (`cli_commands`), or lists them
+  hooks          Shell hooks, gateway hook directories and outbound webhooks
+  diff-grants    The capabilities a staged update asks for beyond the current grant
+  remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+  grants         Show, approve or revoke a plugin's capability grants
+  capabilities   Declared versus granted capabilities, per plugin
+  adopt          Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+  validate       Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+  pack           Pack a plugin directory into a `.pmtpkg` package
+  sign           Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+  doctor         Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+  reload         Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+  test-adapter   Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins install`
+
+```text
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+
+Usage: prometheus plugins install [OPTIONS] <IDENTIFIER>
+
+Arguments:
+  <IDENTIFIER>
+          A catalog id, a `.pmtpkg` path or a Git URL
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --ref <SHA>
+          The full commit SHA of a Git install
+
+      --allow-unsigned
+          Install without a verified signature (recorded on the install record)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --allow-removed
+          Install although the catalog removed the plugin (recorded)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --enable
+          Enable it now (asks to approve its capabilities)
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --no-enable
+          Leave it disabled
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --grant <all|CAPABILITIES>
+          With `--enable`: approve `all` requested capabilities, or a list
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --force
+          Install although the threat scan graded it `caution` (recorded); a `dangerous` verdict is refused anyway
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins search`
+
+```text
+Catalog entries matching a word
+
+Usage: prometheus plugins search [OPTIONS] <QUERY>
+
+Arguments:
+  <QUERY>
+          Matched against id, category, description and capabilities
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins browse`
+
+```text
+Every catalog entry, by tier and category
+
+Usage: prometheus plugins browse [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins show`
+
+```text
+A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+
+Usage: prometheus plugins show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins list`
+
+```text
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+
+Usage: prometheus plugins list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins enable`
+
+```text
+Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+
+Usage: prometheus plugins enable [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --grant <all|CAPABILITIES>
+          Approve `all` requested capabilities, or a comma list (`network api.example.com`, `secrets.read:TOKEN`)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins disable`
+
+```text
+Disable a plugin (it keeps its grants)
+
+Usage: prometheus plugins disable [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins update`
+
+```text
+Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+
+Usage: prometheus plugins update [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The plugin id (every plugin when omitted)
+
+Options:
+      --grant <all|CAPABILITIES>
+          Approve the new capabilities (`all` or a comma list)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --allow-unsigned
+          Accept a package without a verified signature (recorded)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --force
+          Update although the threat scan graded the new version `caution`; a `dangerous` one is refused and the installed version stays active
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins check-updates`
+
+```text
+List the plugins whose catalog ref or package moved
+
+Usage: prometheus plugins check-updates [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins run`
+
+```text
+Runs a command a plugin registered (`cli_commands`), or lists them
+
+Usage: prometheus plugins run [OPTIONS] <ID> [COMMAND] [ARGS]...
+
+Arguments:
+  <ID>
+          The plugin id
+
+  [COMMAND]
+          The command (its list when omitted)
+
+  [ARGS]...
+          Its arguments
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks`
+
+```text
+Shell hooks, gateway hook directories and outbound webhooks
+
+Usage: prometheus plugins hooks [OPTIONS] <COMMAND>
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus plugins hooks list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus plugins hooks test [OPTIONS] <EVENT>
+
+Arguments:
+  <EVENT>
+          The hook event (`pre_tool_call`...)
+
+Options:
+      --for-tool <TOOL>
+          The tool name of a tool event (matchers apply to it)
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --payload-file <PATH>
+          A JSON object merged into the synthetic payload
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus plugins hooks allow [OPTIONS] [EVENT] [COMMAND]
+
+Arguments:
+  [EVENT]
+          The event
+
+  [COMMAND]
+          The command
+
+Options:
+      --dir <NAME>
+          A hook directory under `<profile_home>/hooks/`
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus plugins hooks revoke [OPTIONS] <COMMAND>
+
+Arguments:
+  <COMMAND>
+          The command, or the directory name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus plugins hooks doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins hooks help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins hooks help [COMMAND]
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins hooks help list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus plugins hooks help list
+```
+
+## `prometheus plugins hooks help test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus plugins hooks help test
+```
+
+## `prometheus plugins hooks help allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus plugins hooks help allow
+```
+
+## `prometheus plugins hooks help revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus plugins hooks help revoke
+```
+
+## `prometheus plugins hooks help doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus plugins hooks help doctor
+```
+
+## `prometheus plugins hooks help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins hooks help help
+```
+
+## `prometheus plugins diff-grants`
+
+```text
+The capabilities a staged update asks for beyond the current grant
+
+Usage: prometheus plugins diff-grants [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins remove`
+
+```text
+Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+
+Usage: prometheus plugins remove [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants`
+
+```text
+Show, approve or revoke a plugin's capability grants
+
+Usage: prometheus plugins grants [OPTIONS] <COMMAND>
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus plugins grants show [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The plugin id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus plugins grants approve [OPTIONS] <ID> [CAPABILITY]
+
+Arguments:
+  <ID>
+          The plugin id
+
+  [CAPABILITY]
+          One capability (`secrets GITHUB_TOKEN` or `secrets.read:GITHUB_TOKEN`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus plugins grants revoke [OPTIONS] <ID> [CAPABILITY]
+
+Arguments:
+  <ID>
+          The plugin id
+
+  [CAPABILITY]
+          One capability
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins grants help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins grants help [COMMAND]
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins grants help show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus plugins grants help show
+```
+
+## `prometheus plugins grants help approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus plugins grants help approve
+```
+
+## `prometheus plugins grants help revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus plugins grants help revoke
+```
+
+## `prometheus plugins grants help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins grants help help
+```
+
+## `prometheus plugins capabilities`
+
+```text
+Declared versus granted capabilities, per plugin
+
+Usage: prometheus plugins capabilities [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          One plugin (every plugin when omitted)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins adopt`
+
+```text
+Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+
+Usage: prometheus plugins adopt [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>
+          The directory (or the plugin id)
+
+Options:
+      --grant <all|CAPABILITIES>
+          Approve `all` requested capabilities, or a comma list
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins validate`
+
+```text
+Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+
+Usage: prometheus plugins validate [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins pack`
+
+```text
+Pack a plugin directory into a `.pmtpkg` package
+
+Usage: prometheus plugins pack [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>
+          The plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --out <FILE>
+          Where to write it (default: `<id>-<version>.pmtpkg` here)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins sign`
+
+```text
+Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+
+Usage: prometheus plugins sign [OPTIONS] --key <FILE> <PACKAGE>
+
+Arguments:
+  <PACKAGE>
+          The `.pmtpkg` file
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --key <FILE>
+          An unencrypted minisign secret key file
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins doctor`
+
+```text
+Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+
+Usage: prometheus plugins doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins reload`
+
+```text
+Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+
+Usage: prometheus plugins reload [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The plugin to report on (every plugin reloads)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9314,6 +14031,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9326,8 +14049,273 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins help [COMMAND]
 
 Commands:
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
-  help          Print this message or the help of the given subcommand(s)
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  search         Catalog entries matching a word
+  browse         Every catalog entry, by tier and category
+  show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+  list           Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+  enable         Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable        Disable a plugin (it keeps its grants)
+  update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+  check-updates  List the plugins whose catalog ref or package moved
+  run            Runs a command a plugin registered (`cli_commands`), or lists them
+  hooks          Shell hooks, gateway hook directories and outbound webhooks
+  diff-grants    The capabilities a staged update asks for beyond the current grant
+  remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+  grants         Show, approve or revoke a plugin's capability grants
+  capabilities   Declared versus granted capabilities, per plugin
+  adopt          Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+  validate       Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+  pack           Pack a plugin directory into a `.pmtpkg` package
+  sign           Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+  doctor         Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+  reload         Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+  test-adapter   Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins help install`
+
+```text
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+
+Usage: prometheus plugins help install
+```
+
+## `prometheus plugins help search`
+
+```text
+Catalog entries matching a word
+
+Usage: prometheus plugins help search
+```
+
+## `prometheus plugins help browse`
+
+```text
+Every catalog entry, by tier and category
+
+Usage: prometheus plugins help browse
+```
+
+## `prometheus plugins help show`
+
+```text
+A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+
+Usage: prometheus plugins help show
+```
+
+## `prometheus plugins help list`
+
+```text
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+
+Usage: prometheus plugins help list
+```
+
+## `prometheus plugins help enable`
+
+```text
+Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+
+Usage: prometheus plugins help enable
+```
+
+## `prometheus plugins help disable`
+
+```text
+Disable a plugin (it keeps its grants)
+
+Usage: prometheus plugins help disable
+```
+
+## `prometheus plugins help update`
+
+```text
+Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+
+Usage: prometheus plugins help update
+```
+
+## `prometheus plugins help check-updates`
+
+```text
+List the plugins whose catalog ref or package moved
+
+Usage: prometheus plugins help check-updates
+```
+
+## `prometheus plugins help run`
+
+```text
+Runs a command a plugin registered (`cli_commands`), or lists them
+
+Usage: prometheus plugins help run
+```
+
+## `prometheus plugins help hooks`
+
+```text
+Shell hooks, gateway hook directories and outbound webhooks
+
+Usage: prometheus plugins help hooks [COMMAND]
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+```
+
+## `prometheus plugins help hooks list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus plugins help hooks list
+```
+
+## `prometheus plugins help hooks test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus plugins help hooks test
+```
+
+## `prometheus plugins help hooks allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus plugins help hooks allow
+```
+
+## `prometheus plugins help hooks revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus plugins help hooks revoke
+```
+
+## `prometheus plugins help hooks doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus plugins help hooks doctor
+```
+
+## `prometheus plugins help diff-grants`
+
+```text
+The capabilities a staged update asks for beyond the current grant
+
+Usage: prometheus plugins help diff-grants
+```
+
+## `prometheus plugins help remove`
+
+```text
+Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+
+Usage: prometheus plugins help remove
+```
+
+## `prometheus plugins help grants`
+
+```text
+Show, approve or revoke a plugin's capability grants
+
+Usage: prometheus plugins help grants [COMMAND]
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+```
+
+## `prometheus plugins help grants show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus plugins help grants show
+```
+
+## `prometheus plugins help grants approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus plugins help grants approve
+```
+
+## `prometheus plugins help grants revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus plugins help grants revoke
+```
+
+## `prometheus plugins help capabilities`
+
+```text
+Declared versus granted capabilities, per plugin
+
+Usage: prometheus plugins help capabilities
+```
+
+## `prometheus plugins help adopt`
+
+```text
+Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+
+Usage: prometheus plugins help adopt
+```
+
+## `prometheus plugins help validate`
+
+```text
+Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+
+Usage: prometheus plugins help validate
+```
+
+## `prometheus plugins help pack`
+
+```text
+Pack a plugin directory into a `.pmtpkg` package
+
+Usage: prometheus plugins help pack
+```
+
+## `prometheus plugins help sign`
+
+```text
+Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+
+Usage: prometheus plugins help sign
+```
+
+## `prometheus plugins help doctor`
+
+```text
+Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+
+Usage: prometheus plugins help doctor
+```
+
+## `prometheus plugins help reload`
+
+```text
+Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+
+Usage: prometheus plugins help reload
 ```
 
 ## `prometheus plugins help test-adapter`
@@ -9390,6 +14378,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9429,6 +14423,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9461,6 +14461,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9502,6 +14508,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9540,6 +14552,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9631,6 +14649,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -9681,6 +14705,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help (see a summary with '-h')
 ```
@@ -9713,6 +14743,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9757,6 +14793,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9790,6 +14832,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9803,7 +14851,7 @@ Usage: prometheus runtimes install [OPTIONS] <NAME>...
 
 Arguments:
   <NAME>...
-          Runtime names (node, cpython, uv, chromium)
+          Runtime names (node, cpython, uv, chromium), or `python@<version>` for the python bridge's managed CPython (3.11, 3.12, 3.13)
 
 Options:
       --home <PATH>
@@ -9826,6 +14874,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9864,6 +14918,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9896,6 +14956,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -9930,6 +14996,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -9962,6 +15034,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10002,6 +15080,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10034,6 +15118,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10072,6 +15162,12 @@ Options:
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
   -h, --help
           Print help
 ```
@@ -10108,6 +15204,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10187,6 +15289,12 @@ Options:
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
 
   -h, --help
           Print help
@@ -10329,6 +15437,8 @@ Commands:
   skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
+  vault        The credential vault: logins, cards and addresses the browser fills by handle
+  security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
@@ -10349,7 +15459,10 @@ Commands:
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   gateway      Messaging adapters of the running daemon and the profile's delivery outbox
   pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  plugins      Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
   tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
   rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
   completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
@@ -10984,6 +16097,102 @@ Remove a grant; running sessions lose it at their next tool call
 Usage: prometheus help grants revoke
 ```
 
+## `prometheus help vault`
+
+```text
+The credential vault: logins, cards and addresses the browser fills by handle
+
+Usage: prometheus help vault [COMMAND]
+
+Commands:
+  list     List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+  add      Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+  rm       Delete an item after confirmation
+  sources  Show password-manager login sources, or enable or disable one
+  key      Show where the vault key lives and whether a keychain is reachable
+```
+
+## `prometheus help vault list`
+
+```text
+List the vault's items: handle, kind, label, origins and identifier (never a secret value)
+
+Usage: prometheus help vault list
+```
+
+## `prometheus help vault add`
+
+```text
+Add a login, card or address; secret values are asked with a masked prompt (or read from stdin, one per line), never taken from the command line
+
+Usage: prometheus help vault add
+```
+
+## `prometheus help vault rm`
+
+```text
+Delete an item after confirmation
+
+Usage: prometheus help vault rm
+```
+
+## `prometheus help vault sources`
+
+```text
+Show password-manager login sources, or enable or disable one
+
+Usage: prometheus help vault sources
+```
+
+## `prometheus help vault key`
+
+```text
+Show where the vault key lives and whether a keychain is reachable
+
+Usage: prometheus help vault key [COMMAND]
+
+Commands:
+  migrate  Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+```
+
+## `prometheus help vault key migrate`
+
+```text
+Move the key to the keychain or the file: written there, checked against the vault, and only then removed from where it was
+
+Usage: prometheus help vault key migrate
+```
+
+## `prometheus help security`
+
+```text
+Security records of the profile: verify the tamper-evident audit log
+
+Usage: prometheus help security [COMMAND]
+
+Commands:
+  audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+```
+
+## `prometheus help security audit`
+
+```text
+The security audit log (`<profile>/logs/security-audit.jsonl`)
+
+Usage: prometheus help security audit [COMMAND]
+
+Commands:
+  verify  Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+```
+
+## `prometheus help security audit verify`
+
+```text
+Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
+
+Usage: prometheus help security audit verify
+```
+
 ## `prometheus help backup`
 
 ```text
@@ -11529,13 +16738,15 @@ List the profile's tools and explain one (exposure, capabilities, approvals)
 Usage: prometheus help tools [COMMAND]
 
 Commands:
-  configure  Enable or disable toolsets per surface and choose tool providers, interactively
-  enable     Enable a toolset from the next session
-  disable    Disable a toolset from the next session
-  provider   Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
-  list       Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
-  explain    A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
-  toolsets   The toolsets, as `prometheus toolsets list`
+  configure   Enable or disable toolsets per surface and choose tool providers, interactively
+  enable      Enable a toolset from the next session
+  disable     Disable a toolset from the next session
+  provider    Choose the provider of a tool category (web search, web extract, browser, image generation, TTS, STT, video, X search)
+  list        Every registered tool with its toolset and exposure verdict (`exposed` or a reason code) for the profile's configured toolsets, or as a session froze them (`--session`)
+  explain     A tool's schema, owner, capabilities, effect, claims, timeout, result budget and the approval rules that apply to it
+  toolsets    The toolsets, as `prometheus toolsets list`
+  summary     Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+  post-setup  Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
 ```
 
 ## `prometheus help tools configure`
@@ -11594,6 +16805,22 @@ The toolsets, as `prometheus toolsets list`
 Usage: prometheus help tools toolsets
 ```
 
+## `prometheus help tools summary`
+
+```text
+Per surface: the toolsets its sessions start from, the provider of each tool category they use and every selected tool that is not available, with its reason
+
+Usage: prometheus help tools summary
+```
+
+## `prometheus help tools post-setup`
+
+```text
+Run the setup steps a toolset still needs: install the managed runtimes it uses (after confirmation) and point to the sign-ins it needs
+
+Usage: prometheus help tools post-setup
+```
+
 ## `prometheus help toolsets`
 
 ```text
@@ -11630,15 +16857,24 @@ Check how the approval gate treats a command, without running it
 Usage: prometheus help approvals [COMMAND]
 
 Commands:
-  test  Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  test     Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+  suggest  Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
 ```
 
 ## `prometheus help approvals test`
 
 ```text
-Run a command line through the approval gate order (hardline, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
+Run a command line through the approval gate order (hardline, self-termination, deny rules, bypass, allowlist, dangerous-pattern and content detectors) without executing it, asking anyone or saving anything
 
 Usage: prometheus help approvals test
+```
+
+## `prometheus help approvals suggest`
+
+```text
+Propose allow patterns from the commands you approved recently; nothing changes without `--apply`
+
+Usage: prometheus help approvals suggest
 ```
 
 ## `prometheus help update`
@@ -11963,15 +17199,499 @@ Remove an approved sender
 Usage: prometheus help pairing revoke
 ```
 
+## `prometheus help connectors`
+
+```text
+Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+
+Usage: prometheus help connectors [COMMAND]
+
+Commands:
+  list        The connectors this account may use, with their connected state
+  accounts    Connector accounts with their names and states
+  connect     Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+  rename      Rename an account (by its name or label)
+  disconnect  Remove an account (asks for confirmation unless --yes)
+```
+
+## `prometheus help connectors list`
+
+```text
+The connectors this account may use, with their connected state
+
+Usage: prometheus help connectors list
+```
+
+## `prometheus help connectors accounts`
+
+```text
+Connector accounts with their names and states
+
+Usage: prometheus help connectors accounts
+```
+
+## `prometheus help connectors connect`
+
+```text
+Connect an account: prints the link to open and waits until it is connected (or `connectors.connect_timeout_secs`; Ctrl-C stops waiting)
+
+Usage: prometheus help connectors connect
+```
+
+## `prometheus help connectors rename`
+
+```text
+Rename an account (by its name or label)
+
+Usage: prometheus help connectors rename
+```
+
+## `prometheus help connectors disconnect`
+
+```text
+Remove an account (asks for confirmation unless --yes)
+
+Usage: prometheus help connectors disconnect
+```
+
+## `prometheus help bridge`
+
+```text
+The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+
+Usage: prometheus help bridge [COMMAND]
+
+Commands:
+  status   Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+  logs     A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+  restart  Restart a plugin's sidecar, clearing a `failed` state
+  doctor   Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+  env      Materialize a named pinned environment and print only its interpreter's path on stdout
+```
+
+## `prometheus help bridge status`
+
+```text
+Every sidecar of the profile: plugin, profile, pid, state (`starting|running|idle|crashed|failed`), uptime, restarts, memory
+
+Usage: prometheus help bridge status
+```
+
+## `prometheus help bridge logs`
+
+```text
+A plugin's bridge log (`<profile>/logs/bridge/<id>.log`)
+
+Usage: prometheus help bridge logs
+```
+
+## `prometheus help bridge restart`
+
+```text
+Restart a plugin's sidecar, clearing a `failed` state
+
+Usage: prometheus help bridge restart
+```
+
+## `prometheus help bridge doctor`
+
+```text
+Check the managed runtime, every environment against its lock and the sandbox enforcement level (exit 1 when a check fails)
+
+Usage: prometheus help bridge doctor
+```
+
+## `prometheus help bridge env`
+
+```text
+Materialize a named pinned environment and print only its interpreter's path on stdout
+
+Usage: prometheus help bridge env
+```
+
+## `prometheus help mcp`
+
+```text
+MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+
+Usage: prometheus help mcp [COMMAND]
+
+Commands:
+  add      Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+  list     Every configured server: transport, command or URL, trust and whether it is enabled
+  remove   Remove a server
+  test     Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+  tools    Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+  login    Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+  reauth   Forget a server's sign-in and sign in again
+  catalog  The MCP servers of the plugin catalog
+  install  Install an MCP server from the catalog (disabled until you enable it)
+  status   Start every enabled server and show its state, tool count and why it is unavailable
+  serve    Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+```
+
+## `prometheus help mcp add`
+
+```text
+Add a server: `--command <program> [--args ...]` for a local (stdio) server run in the sandbox, `--url <url>` for a streamable HTTP server, or `--preset <name>`; the server is probed and, on a terminal, its tool checklist offered. Its tools join sessions started afterwards
+
+Usage: prometheus help mcp add
+```
+
+## `prometheus help mcp list`
+
+```text
+Every configured server: transport, command or URL, trust and whether it is enabled
+
+Usage: prometheus help mcp list
+```
+
+## `prometheus help mcp remove`
+
+```text
+Remove a server
+
+Usage: prometheus help mcp remove
+```
+
+## `prometheus help mcp test`
+
+```text
+Start a server and list its tools: handshake, tool count and latency (exit 69 when it does not answer)
+
+Usage: prometheus help mcp test
+```
+
+## `prometheus help mcp tools`
+
+```text
+Re-open a server's tool checklist; writes `tools.include` only when not every tool is selected
+
+Usage: prometheus help mcp tools
+```
+
+## `prometheus help mcp login`
+
+```text
+Sign in to an `auth = "oauth"` server (prints the authorization URL; paste the redirect URL when the browser cannot reach this machine)
+
+Usage: prometheus help mcp login
+```
+
+## `prometheus help mcp reauth`
+
+```text
+Forget a server's sign-in and sign in again
+
+Usage: prometheus help mcp reauth
+```
+
+## `prometheus help mcp catalog`
+
+```text
+The MCP servers of the plugin catalog
+
+Usage: prometheus help mcp catalog
+```
+
+## `prometheus help mcp install`
+
+```text
+Install an MCP server from the catalog (disabled until you enable it)
+
+Usage: prometheus help mcp install
+```
+
+## `prometheus help mcp status`
+
+```text
+Start every enabled server and show its state, tool count and why it is unavailable
+
+Usage: prometheus help mcp status
+```
+
+## `prometheus help mcp serve`
+
+```text
+Serve this profile's `mcp_server.expose_toolsets` (default: the read-only skill tools) as MCP tools and its skills as MCP prompts and resources, on stdio or streamable HTTP
+
+Usage: prometheus help mcp serve
+```
+
 ## `prometheus help plugins`
 
 ```text
-Plugin tools: `plugins test-adapter <platform|path>` runs the adapter conformance kit against a built-in mock of the platform
+Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
 
 Usage: prometheus help plugins [COMMAND]
 
 Commands:
-  test-adapter  Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  search         Catalog entries matching a word
+  browse         Every catalog entry, by tier and category
+  show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+  list           Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+  enable         Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+  disable        Disable a plugin (it keeps its grants)
+  update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+  check-updates  List the plugins whose catalog ref or package moved
+  run            Runs a command a plugin registered (`cli_commands`), or lists them
+  hooks          Shell hooks, gateway hook directories and outbound webhooks
+  diff-grants    The capabilities a staged update asks for beyond the current grant
+  remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+  grants         Show, approve or revoke a plugin's capability grants
+  capabilities   Declared versus granted capabilities, per plugin
+  adopt          Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+  validate       Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+  pack           Pack a plugin directory into a `.pmtpkg` package
+  sign           Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+  doctor         Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+  reload         Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+  test-adapter   Run the adapter conformance kit against a mock of the platform: a first-party platform name (`telegram`, `discord`, `slack`, `email`, `matrix`, `signal`, `whatsapp`, `webhook`; builds with the `adapter-kits` feature) or a `platform-adapter` plugin directory
+```
+
+## `prometheus help plugins install`
+
+```text
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+
+Usage: prometheus help plugins install
+```
+
+## `prometheus help plugins search`
+
+```text
+Catalog entries matching a word
+
+Usage: prometheus help plugins search
+```
+
+## `prometheus help plugins browse`
+
+```text
+Every catalog entry, by tier and category
+
+Usage: prometheus help plugins browse
+```
+
+## `prometheus help plugins show`
+
+```text
+A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
+
+Usage: prometheus help plugins show
+```
+
+## `prometheus help plugins list`
+
+```text
+Every discovered plugin: id, version, kind, source, state (`loaded`, `disabled`, `unadopted` or `error`) and why it does not load
+
+Usage: prometheus help plugins list
+```
+
+## `prometheus help plugins enable`
+
+```text
+Enable a plugin: shows its capabilities and asks you to approve them (non-interactively, `--grant all` or `--grant <cap>,...` approves; otherwise exits 4). It loads in sessions started afterwards
+
+Usage: prometheus help plugins enable
+```
+
+## `prometheus help plugins disable`
+
+```text
+Disable a plugin (it keeps its grants)
+
+Usage: prometheus help plugins disable
+```
+
+## `prometheus help plugins update`
+
+```text
+Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
+
+Usage: prometheus help plugins update
+```
+
+## `prometheus help plugins check-updates`
+
+```text
+List the plugins whose catalog ref or package moved
+
+Usage: prometheus help plugins check-updates
+```
+
+## `prometheus help plugins run`
+
+```text
+Runs a command a plugin registered (`cli_commands`), or lists them
+
+Usage: prometheus help plugins run
+```
+
+## `prometheus help plugins hooks`
+
+```text
+Shell hooks, gateway hook directories and outbound webhooks
+
+Usage: prometheus help plugins hooks [COMMAND]
+
+Commands:
+  list    Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+  test    Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+  allow   Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+  revoke  Removes the approvals of a shell hook command (every event) or of a hook directory name
+  doctor  Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+```
+
+## `prometheus help plugins hooks list`
+
+```text
+Shell hooks (matcher, timeout, consent), gateway hook directories and outbound webhooks (`signed` or `UNSIGNED`)
+
+Usage: prometheus help plugins hooks list
+```
+
+## `prometheus help plugins hooks test`
+
+```text
+Fires the shell hooks of `<event>` on a synthetic payload and prints each directive exactly as the dispatcher would receive it
+
+Usage: prometheus help plugins hooks test
+```
+
+## `prometheus help plugins hooks allow`
+
+```text
+Approves a shell hook (`<event> <command>`, the command as written in config.toml) or, with `--dir`, a gateway hook directory, at its current program or handler digest
+
+Usage: prometheus help plugins hooks allow
+```
+
+## `prometheus help plugins hooks revoke`
+
+```text
+Removes the approvals of a shell hook command (every event) or of a hook directory name
+
+Usage: prometheus help plugins hooks revoke
+```
+
+## `prometheus help plugins hooks doctor`
+
+```text
+Checks every hook: program present and executable, consent, digest drift, JSON on stdout and execution time; exit 1 on any failure
+
+Usage: prometheus help plugins hooks doctor
+```
+
+## `prometheus help plugins diff-grants`
+
+```text
+The capabilities a staged update asks for beyond the current grant
+
+Usage: prometheus help plugins diff-grants
+```
+
+## `prometheus help plugins remove`
+
+```text
+Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
+
+Usage: prometheus help plugins remove
+```
+
+## `prometheus help plugins grants`
+
+```text
+Show, approve or revoke a plugin's capability grants
+
+Usage: prometheus help plugins grants [COMMAND]
+
+Commands:
+  show     Requested capabilities, in plain language, and whether each is granted
+  approve  Approve every requested capability, or one, for the plugin as it is now (its content digest)
+  revoke   Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+```
+
+## `prometheus help plugins grants show`
+
+```text
+Requested capabilities, in plain language, and whether each is granted
+
+Usage: prometheus help plugins grants show
+```
+
+## `prometheus help plugins grants approve`
+
+```text
+Approve every requested capability, or one, for the plugin as it is now (its content digest)
+
+Usage: prometheus help plugins grants approve
+```
+
+## `prometheus help plugins grants revoke`
+
+```text
+Revoke the plugin's grants, or one; a running plugin is refused it from its next call
+
+Usage: prometheus help plugins grants revoke
+```
+
+## `prometheus help plugins capabilities`
+
+```text
+Declared versus granted capabilities, per plugin
+
+Usage: prometheus help plugins capabilities
+```
+
+## `prometheus help plugins adopt`
+
+```text
+Register a plugin directory placed by hand in the profile's `plugins/`: validate it, record it as `adopted` and approve its capabilities
+
+Usage: prometheus help plugins adopt
+```
+
+## `prometheus help plugins validate`
+
+```text
+Check a plugin directory: manifest, WIT world compatibility and capability declarations (exit 65 on any error)
+
+Usage: prometheus help plugins validate
+```
+
+## `prometheus help plugins pack`
+
+```text
+Pack a plugin directory into a `.pmtpkg` package
+
+Usage: prometheus help plugins pack
+```
+
+## `prometheus help plugins sign`
+
+```text
+Sign a package's digest with a minisign secret key: writes `<package>.minisig`
+
+Usage: prometheus help plugins sign
+```
+
+## `prometheus help plugins doctor`
+
+```text
+Problems of the profile's plugins: load errors, unsigned or unadopted plugins, plugins modified after install or removed from the catalog
+
+Usage: prometheus help plugins doctor
+```
+
+## `prometheus help plugins reload`
+
+```text
+Replace the profile's plugin instances (in the running daemon when there is one): hooks, slash commands and event subscribers change at once, tools and system-prompt sections in sessions started afterwards (`/plugins reload --now` applies them to a session)
+
+Usage: prometheus help plugins reload
 ```
 
 ## `prometheus help plugins test-adapter`
@@ -12184,6 +17904,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.runtimes_doctor.v1` | `prometheus runtimes doctor` |
 | `prometheus.runtimes_exclude.v1` | `prometheus runtimes exclude list` |
 | `prometheus.grants.v1` | `prometheus grants list` |
+| `prometheus.security_audit.v1` | `prometheus security audit verify` |
+| `prometheus.plugins.v1` | `prometheus plugins list` |
+| `prometheus.bridge_status.v1` | `prometheus bridge status` |
 | `prometheus.usage.v1` | `prometheus usage` |
 | `prometheus.prompt_size.v1` | `prometheus prompt size` |
 | `prometheus.config.v1` | `prometheus config show` |
@@ -12217,9 +17940,12 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.auth_status.v1` | `prometheus auth status` |
 | `prometheus.tools.v1` | `prometheus tools list` |
 | `prometheus.tool.v1` | `prometheus tools explain` |
+| `prometheus.tools_summary.v1` | `prometheus tools summary` |
 | `prometheus.toolsets.v1` | `prometheus toolsets list` |
 | `prometheus.toolset.v1` | `prometheus toolsets show` |
 | `prometheus.approvals_test.v1` | `prometheus approvals test` |
+| `prometheus.approvals_suggest.v1` | `prometheus approvals suggest` |
+| `prometheus.vault_list.v1` | `prometheus vault list` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |

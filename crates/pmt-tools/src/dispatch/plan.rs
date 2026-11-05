@@ -36,7 +36,7 @@ impl BatchPlan {
     pub fn of(calls: &[ToolCall], surface: &ToolSurface) -> Self {
         let footprints: Vec<Footprint> = calls
             .iter()
-            .map(|call| match surface.get(&call.name) {
+            .map(|call| match surface.resolve(&call.name) {
                 None => Footprint::Free,
                 Some(tool) => Footprint::of(tool.descriptor.claims.as_ref(), &call.arguments),
             })

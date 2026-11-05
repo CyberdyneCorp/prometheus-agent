@@ -4,6 +4,7 @@
 //! session state they need lives.
 
 pub mod clarify;
+pub mod connections;
 pub mod memory;
 pub mod messaging;
 pub mod session_search;
@@ -31,6 +32,7 @@ pub struct AgentTools {
     search: SessionSearch,
     memory: Option<Arc<dyn MemoryPort>>,
     messaging: Option<Arc<dyn MessagingPort>>,
+    connections: Option<Arc<pmt_tools::connectors::manage::Manager>>,
 }
 
 impl AgentTools {
@@ -55,6 +57,7 @@ impl AgentTools {
             search,
             memory: None,
             messaging: None,
+            connections: None,
         })
     }
 
@@ -66,10 +69,27 @@ impl AgentTools {
         self
     }
 
+    /// The session's human-input channel (also asked for MCP server
+    /// elicitations).
+    #[must_use]
+    pub fn clarifier(&self) -> &Clarifier {
+        &self.clarify
+    }
+
     /// Sends `send_message` calls through `port` (the daemon's gateway).
     #[must_use]
     pub fn with_messaging(mut self, port: Arc<dyn MessagingPort>) -> Self {
         self.messaging = Some(port);
+        self
+    }
+
+    /// Runs `manage_connections` through `manager`.
+    #[must_use]
+    pub fn with_connections(
+        mut self,
+        manager: Arc<pmt_tools::connectors::manage::Manager>,
+    ) -> Self {
+        self.connections = Some(manager);
         self
     }
 
@@ -84,6 +104,13 @@ impl AgentTools {
             "send_message" => match &self.messaging {
                 Some(port) => port.call(self.session, arguments).await,
                 None => ToolResult::error(messaging::NO_GATEWAY),
+            },
+            pmt_tools::connectors::manage::NAME => match &self.connections {
+                Some(manager) => {
+                    let card = connections::ClarifyCard::new(&self.clarify);
+                    manager.call(&arguments, Some(&card)).await
+                }
+                None => pmt_tools::connectors::manage::not_set_up(),
             },
             _ => return None,
         })

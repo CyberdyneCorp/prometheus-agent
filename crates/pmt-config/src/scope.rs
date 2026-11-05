@@ -107,7 +107,9 @@ impl ProfileScope {
             ),
             Launch::Other => None,
         };
-        let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env);
+        let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env).with_command(
+            crate::secrets::command::load(&config.config().secrets.command),
+        );
         crate::passthrough::check_with_secrets(&config.config().terminal, &secrets)?;
         crate::essential::semantic(config.config(), profile.path())?;
         Ok(Self {

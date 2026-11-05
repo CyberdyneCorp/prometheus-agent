@@ -18,17 +18,45 @@ pub const LAUNCH_FAILED: i32 = 125;
 #[must_use]
 pub fn run_if_requested() -> Option<i32> {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(OsString::from(LAUNCH_ARG).as_os_str()) {
-        return None;
-    }
+    let first = args.next()?;
     let rest: Vec<OsString> = args.collect();
-    Some(match launch(&rest) {
+    let result = if first == LAUNCH_ARG {
+        launch(&rest)
+    } else if is_relay(&first) {
+        relay(&rest)
+    } else {
+        return None;
+    };
+    Some(match result {
         Ok(code) => code,
         Err(err) => {
             eprintln!("prometheus sandbox launcher: {err}");
             LAUNCH_FAILED
         }
     })
+}
+
+#[cfg(windows)]
+fn is_relay(arg: &OsString) -> bool {
+    arg == crate::platform::relay::RELAY_ARG
+}
+
+#[cfg(not(windows))]
+fn is_relay(_arg: &OsString) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn relay(args: &[OsString]) -> Result<i32, String> {
+    match args {
+        [pipe] => crate::platform::relay::serve(pipe),
+        _ => Err("usage: __pmt-sandbox-relay <pipe>".to_owned()),
+    }
+}
+
+#[cfg(not(windows))]
+fn relay(_args: &[OsString]) -> Result<i32, String> {
+    Err("the egress relay is only used on Windows".to_owned())
 }
 
 #[cfg(windows)]
