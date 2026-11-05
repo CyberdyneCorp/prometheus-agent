@@ -23,6 +23,8 @@ mod ssh;
 #[cfg(unix)]
 mod startup;
 #[cfg(unix)]
+mod sudo;
+#[cfg(unix)]
 mod tool;
 #[cfg(windows)]
 mod windows;

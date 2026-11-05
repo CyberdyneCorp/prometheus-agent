@@ -53,7 +53,9 @@ pub fn flags(config: &ContainerConfig) -> Vec<Flag> {
         Flag {
             name: "tmpfs",
             args: vec![
-                "--tmpfs=/tmp:rw,nosuid,size=512m".to_owned(),
+                // Docker mounts a tmpfs `noexec` unless told otherwise; the
+                // scratch `/tmp` runs what commands build or upload there.
+                "--tmpfs=/tmp:rw,exec,nosuid,size=512m".to_owned(),
                 "--tmpfs=/var/tmp:rw,noexec,nosuid,size=256m".to_owned(),
             ],
             feature: DegradedFeature::All,

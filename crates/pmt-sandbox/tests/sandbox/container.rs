@@ -131,7 +131,7 @@ fn every_container_starts_with_the_full_hardening_and_labels() {
         "--cap-add=FOWNER",
         "--security-opt=no-new-privileges",
         "--read-only",
-        "--tmpfs=/tmp:rw,nosuid,size=512m",
+        "--tmpfs=/tmp:rw,exec,nosuid,size=512m",
         "--tmpfs=/var/tmp:rw,noexec,nosuid,size=256m",
         "--pids-limit=2048",
         "--cpus=1",

@@ -69,6 +69,9 @@ pub struct EnvInputs<'a> {
     pub processes: &'a super::processes::Wiring,
     /// Opens the file snapshots (undo and checkpoints), when on.
     pub snapshots: Option<super::snapshots::Opener<'a>>,
+    /// Host directories whose files a command on a backend without the
+    /// host filesystem may name (attachments, skills): uploaded on demand.
+    pub input_roots: Vec<std::path::PathBuf>,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -320,13 +323,17 @@ fn places(inputs: &EnvInputs<'_>, user_home: Option<&Path>, scratch: &Path) -> (
     (places, paths)
 }
 
+/// Where a remote backend keeps the session's uploaded inputs.
+const INPUTS_BASE: &str = "/tmp/.prometheus-inputs";
+
 /// The file backend of a remote session and where its relative paths
 /// start.
 type RemoteFiles = (Arc<dyn pmt_tools::files::FileBackend>, CwdSource);
 
 /// What a non-local backend adds: its file tools (relative paths follow the
-/// terminal's cwd inside that environment), its sync-back, and the
-/// container's idle reaper watching the terminal.
+/// terminal's cwd inside that environment), its sync-back, the upload of
+/// host inputs commands name, and the container's idle reaper watching the
+/// terminal.
 fn remote_parts(
     inputs: &EnvInputs<'_>,
     remote: &super::backend::Remote,
@@ -338,6 +345,17 @@ fn remote_parts(
     if let (Some(terminal), Some(container)) = (terminal, &remote.container) {
         let activity: Arc<dyn pmt_sandbox::container::Activity> = Arc::clone(terminal) as _;
         container.attach(Arc::downgrade(&activity));
+    }
+    if let Some(terminal) = terminal
+        && !remote.target.descriptor().uses_host_filesystem
+    {
+        let base = format!("{INPUTS_BASE}/{}", inputs.session_id);
+        terminal.set_inputs(Arc::new(pmt_tools::terminal::inputs::Inputs::new(
+            &inputs.scope.config().terminal.backend,
+            Arc::clone(&remote.exec),
+            &base,
+            &inputs.input_roots,
+        )));
     }
     let cwd: CwdSource = if let Some(terminal) = terminal {
         let terminal = Arc::clone(terminal);

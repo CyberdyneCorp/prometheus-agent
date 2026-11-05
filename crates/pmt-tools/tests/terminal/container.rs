@@ -331,3 +331,60 @@ async fn background_processes_run_and_stop_inside_the_container() {
     assert_eq!(left.trim(), "0");
     session.close().await;
 }
+
+/// Granted host inputs (an attached file, a skill script) a command names
+/// are uploaded on demand and the command runs on their copies (spec:
+/// execution-environments, Remote file sync and sync-back); an unchanged
+/// file is not sent again, a changed one is.
+#[tokio::test]
+async fn named_host_inputs_are_uploaded_on_demand() {
+    use pmt_tools::terminal::inputs::Inputs;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let Some(runtime) = runtime() else { return };
+    let config = ContainerConfig {
+        mount_workspace: false,
+        ..ContainerConfig::default()
+    };
+    let session = Session::new(runtime, "inputs", config);
+    let media = session.fixture.profile.join("cache/media");
+    let skills = session.fixture.profile.join("skills");
+    let skill = skills.join("devops/report");
+    std::fs::create_dir_all(skill.join("scripts")).unwrap();
+    std::fs::create_dir_all(&media).unwrap();
+    std::fs::write(skill.join("SKILL.md"), "---\nname: report\n---\n").unwrap();
+    std::fs::write(skill.join("data.txt"), "from the skill\n").unwrap();
+    let script = skill.join("scripts/run.sh");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\ncat \"$(dirname \"$0\")/../data.txt\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let attached = media.join("invoice.txt");
+    std::fs::write(&attached, "total 42\n").unwrap();
+    let exec: Arc<dyn RemoteExec> = Arc::new(Arc::clone(&session.transport) as Arc<dyn Transport>);
+    session.terminal.set_inputs(Arc::new(Inputs::new(
+        "container",
+        exec,
+        "/tmp/.prometheus-inputs/test",
+        &[media.clone(), skills.clone()],
+    )));
+
+    let ran = session.run(&script.display().to_string()).await;
+    assert_eq!(ran.exit_code, Some(0), "{ran:?}");
+    assert_eq!(ran.output.trim(), "from the skill");
+    let read = session.run(&format!("cat {}", attached.display())).await;
+    assert_eq!(read.output.trim(), "total 42", "{read:?}");
+    // Nothing of the host path is left in what ran on the container.
+    let echoed = session.run(&format!("echo {}", attached.display())).await;
+    assert!(
+        echoed.output.starts_with("/tmp/.prometheus-inputs/test/0/"),
+        "{}",
+        echoed.output
+    );
+    std::fs::write(&attached, "total 43, corrected\n").unwrap();
+    let again = session.run(&format!("cat {}", attached.display())).await;
+    assert_eq!(again.output.trim(), "total 43, corrected", "{again:?}");
+    session.close().await;
+}

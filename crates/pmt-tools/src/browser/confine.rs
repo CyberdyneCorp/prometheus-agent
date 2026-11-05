@@ -79,10 +79,18 @@ pub(super) fn sandbox(
     }
     let set: CapabilitySet = capabilities.into_iter().collect();
     let policy = pmt_sandbox::Policy::from_set(&set, &paths).for_browser();
-    let attacher = proxy.attacher();
-    let relay = pmt_sandbox::Relay::new(move |attached| {
-        attacher.serve(attached.listener, attached.alive);
-    });
+    // Linux serves the child's private listener from the proxy; on Windows
+    // the launcher runs a relay in the child's AppContainer and connects
+    // it to the proxy itself, so the callback is unused there.
+    #[cfg(unix)]
+    let relay = {
+        let attacher = proxy.attacher();
+        pmt_sandbox::Relay::new(move |attached| {
+            attacher.serve(attached.listener, attached.alive);
+        })
+    };
+    #[cfg(not(unix))]
+    let relay = pmt_sandbox::Relay::new(|_| {});
     let policy = policy.through_proxy(proxy.addr().port(), relay);
     let options = pmt_sandbox::Options {
         launcher: confinement.launcher.clone(),

@@ -28,7 +28,7 @@ use pmt_rpc::contracts::{
 use pmt_store::{NewSession, Source, Store, Visibility};
 use tracing::Instrument as _;
 
-use super::turn::{SecretsToClients, ToClients, approvals, clarify};
+use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
 mod commands;
 mod discovery;
@@ -276,6 +276,14 @@ impl DaemonHost {
             pmt_store::Origin::None if !oneshot => Some(notify::to_clients(link.clone())),
             _ => None,
         };
+        // Only a person at a client of an interactive session is asked
+        // for a sudo password.
+        let sudo = matches!(row.origin, pmt_store::Origin::None if !oneshot).then(|| {
+            Arc::new(SudoToClients {
+                link: link.clone(),
+                runtime: tokio::runtime::Handle::current(),
+            }) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
+        });
         let clients = Clients {
             events: Arc::new(ToClients { link: link.clone() }),
             secrets: Arc::new(SecretsToClients {
@@ -283,6 +291,7 @@ impl DaemonHost {
                 runtime: tokio::runtime::Handle::current(),
             }),
             completions,
+            sudo,
         };
         let mut live = factory.open_with(id, &target, Some(clients)).await?;
         if let Some(effective) = self.effective(profile, &setup, &live.scope) {

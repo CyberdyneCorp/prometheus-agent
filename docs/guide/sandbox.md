@@ -136,7 +136,7 @@ Desktop, whose daemon runs in its own VM, counts as rootless); a rootful
 daemon needs `security.sandbox.allow_degraded = ["all"]`. Every container
 starts with `--cap-drop ALL` plus only `CHOWN`, `DAC_OVERRIDE` and `FOWNER`,
 `--security-opt no-new-privileges`, a read-only root, tmpfs `/tmp`
-(`rw,nosuid,size=512m`) and `/var/tmp` (`rw,noexec,nosuid,size=256m`), the
+(`rw,exec,nosuid,size=512m`: Docker would mount it `noexec` otherwise) and `/var/tmp` (`rw,noexec,nosuid,size=256m`), the
 configured pids, CPU and memory limits, and the labels
 `prometheus.profile=<profile>` and `prometheus.session=<session>` (plus
 `prometheus.persistent=true` on a persistent container). A flag the
@@ -190,6 +190,15 @@ under `terminal.ssh.workspace` are copied back to the host workspace at
 session end and on `/sync`, up to `terminal.sync_back_max_bytes` (2 GiB) per
 sync; files over the budget are skipped and listed, and a host file edited
 since the previous sync is reported as a conflict, never overwritten.
+
+On every backend that does not use the host filesystem (container, SSH,
+plugin), a command that names a file of the profile's received attachments
+(`cache/media/`) or of a skill directory on this host gets that input
+uploaded first, to `/tmp/.prometheus-inputs/<session>/<n>/...` on the
+backend, and runs with the host path pointed at the copy. A file inside a
+skill brings its whole skill directory (the one holding `SKILL.md`);
+unchanged files are not sent again, executable bits are kept, and one
+command uploads at most 512 MiB (a notice lists what was left out).
 
 ### Plugin backends
 

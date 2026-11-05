@@ -2463,6 +2463,10 @@ capabilities = [
 [execution-environments."Remote file sync and sync-back"]
 "Sync-back cap" = ["crates/pmt-tools/tests/terminal/ssh.rs::sync_back_cap"]
 
+[execution-environments."Sudo password handling"]
+"Interactive sudo" = ["crates/pmt-tools/tests/terminal/sudo.rs::interactive_sudo", "crates/prometheus/tests/daemon_sudo.rs::an_interactive_daemon_session_asks_its_clients_once"]
+"Subagent sudo" = ["crates/pmt-tools/tests/terminal/sudo.rs::subagent_sudo"]
+
 # Group 35.5 (quiet-wait auto-notify, retained process receipts, read_file document extraction)
 [execution-environments."Quiet-wait auto-notify"]
 "Second unchanged poll" = ["crates/pmt-tools/tests/terminal/notifications.rs::a_second_silent_poll_switches_on_completion_notification", "crates/prometheus/tests/daemon_process_notices.rs::a_quiet_wait_exit_reaches_the_clients_of_an_interactive_session"]

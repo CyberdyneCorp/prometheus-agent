@@ -89,6 +89,30 @@ Secrets never enter the snapshot.
   (`environment_recreated`). `terminal.degraded_mode = "fail"` returns an
   error instead.
 
+## sudo
+
+A command whose program, after optional `env` options and `NAME=value`
+assignments, is literally `sudo` (bare, an absolute path, or quoted) gets
+its password from the session's cached password, else the `SUDO_PASSWORD`
+secret when the session holds `secrets.read:SUDO_PASSWORD`, else a masked
+prompt on an interactive session (the CLI's hidden line, or `sudo.request`
+to a daemon session's TUI or attached chat). A typed password is kept in
+memory for the session only and never stored. Shell payloads (`bash -c
+'sudo ...'`, `env -S`) and dynamic paths (`$SUDO`) are left alone.
+
+The password reaches sudo only through a hidden variable of that command
+and only for a credential check: the command first runs `sudo -S -p '' -v`
+with the password on its stdin, drops the variable, then runs as written
+with `-S` added, so a program that needs no password never reads the
+password line. With sudo's credential cache off (`timestamp_timeout=0`)
+the second `sudo` cannot reuse the check and fails. The password is
+scrubbed from results; a rejected one is forgotten and asked for again.
+
+Subagents, cron jobs, single-query runs and messaging sessions never
+prompt: a failing sudo command there says why, and points at
+`prometheus secrets set SUDO_PASSWORD` plus the
+`secrets.read:SUDO_PASSWORD` grant.
+
 ## Background processes
 
 The [`process`](../reference/tools.md#process) tool lists, polls, logs, waits for, kills and writes to a

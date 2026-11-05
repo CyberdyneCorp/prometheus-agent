@@ -25,6 +25,7 @@ use super::classify::{Plan, classify};
 use super::cwd::expand_home;
 use super::env::ChildEnv;
 use super::guard::{FnGuard, Guard, GuardChain, GuardRequest, Stop, WorkdirGuard};
+use super::inputs::Inputs;
 use super::process::{self, Clock, Notice, ProcessRegistry, Receipts, Tracking};
 use super::result::{Status, TerminalResult};
 use super::shape::{self, OutputHook};
@@ -33,6 +34,7 @@ use super::shell::{
 };
 use super::spawn::{self, GroupGuard, SpawnError};
 use super::spill::{self, Capture};
+use super::sudo::{Elevation, Sudo};
 use super::target::Target;
 
 /// How long output readers may lag behind a foreground exit.
@@ -115,6 +117,39 @@ enum Exec {
     Background { tracking: Tracking, promoted: bool },
 }
 
+impl Exec {
+    fn command(&self) -> &str {
+        match self {
+            Self::Foreground(command) => command,
+            Self::Background { tracking, .. } => &tracking.command,
+        }
+    }
+
+    fn set_command(&mut self, command: String) {
+        match self {
+            Self::Foreground(current) => *current = command,
+            Self::Background { tracking, .. } => tracking.command = command,
+        }
+    }
+}
+
+/// What [`Terminal::adapt`] did to a command.
+struct Adapted {
+    elevation: Elevation,
+    sudo: Option<Arc<Sudo>>,
+    notices: Vec<String>,
+}
+
+impl Default for Adapted {
+    fn default() -> Self {
+        Self {
+            elevation: Elevation::NotSudo,
+            sudo: None,
+            notices: Vec::new(),
+        }
+    }
+}
+
 /// How a background command came to be, for its result.
 #[derive(Debug, Clone, Copy)]
 struct Started {
@@ -136,6 +171,8 @@ pub struct Terminal {
     runs: AtomicU64,
     secret_source: std::sync::RwLock<Option<SecretSource>>,
     path_source: std::sync::RwLock<Option<PathSource>>,
+    sudo: std::sync::RwLock<Option<Arc<Sudo>>>,
+    inputs: std::sync::RwLock<Option<Arc<Inputs>>>,
 }
 
 /// Secrets added to every command's environment at spawn time (for
@@ -224,6 +261,8 @@ impl Terminal {
             runs: AtomicU64::new(0),
             secret_source: std::sync::RwLock::new(None),
             path_source: std::sync::RwLock::new(None),
+            sudo: std::sync::RwLock::new(None),
+            inputs: std::sync::RwLock::new(None),
             setup,
         })
     }
@@ -236,6 +275,18 @@ impl Terminal {
             .unwrap_or_else(PoisonError::into_inner) = Some(source);
     }
 
+    /// Handles literal `sudo` commands with `sudo` (spec:
+    /// execution-environments, Sudo password handling).
+    pub fn set_sudo(&self, sudo: Arc<Sudo>) {
+        *self.sudo.write().unwrap_or_else(PoisonError::into_inner) = Some(sudo);
+    }
+
+    /// Uploads the granted host inputs later commands name (a backend
+    /// without the host filesystem).
+    pub fn set_inputs(&self, inputs: Arc<Inputs>) {
+        *self.inputs.write().unwrap_or_else(PoisonError::into_inner) = Some(inputs);
+    }
+
     /// Puts `source`'s directories first on `PATH` of every later command
     /// it names them for.
     pub fn set_path_source(&self, source: PathSource) {
@@ -246,8 +297,13 @@ impl Terminal {
     }
 
     /// The environment of `command`: the session's plus the secret
-    /// source's, with the path source's directories first on `PATH`.
-    fn command_env(&self, command: &str) -> std::borrow::Cow<'_, ChildEnv> {
+    /// source's (and the sudo password of an elevated command), with the
+    /// path source's directories first on `PATH`.
+    fn command_env(
+        &self,
+        command: &str,
+        sudo: Option<&SecretString>,
+    ) -> std::borrow::Cow<'_, ChildEnv> {
         let source = self
             .secret_source
             .read()
@@ -260,7 +316,9 @@ impl Terminal {
             .clone()
             .map(|p| p(command))
             .unwrap_or_default();
-        let mut env = match source.map(|s| s()).filter(|secrets| !secrets.is_empty()) {
+        let mut secrets = source.map(|s| s()).unwrap_or_default();
+        secrets.extend(sudo.map(|p| (super::sudo::PASSWORD_VAR.to_owned(), p.clone())));
+        let mut env = match Some(secrets).filter(|secrets| !secrets.is_empty()) {
             None if paths.is_empty() => return std::borrow::Cow::Borrowed(&self.setup.env),
             None => self.setup.env.clone(),
             Some(secrets) => self.setup.env.with_secrets(secrets),
@@ -370,15 +428,40 @@ impl Terminal {
             return TerminalResult::refused(message);
         }
         self.before_command(&args.command, &cwd).await;
+        let (exec, adapted) = self.adapt(exec).await;
+        let password = match &adapted.elevation {
+            Elevation::Elevated { password, .. } => Some(password),
+            _ => None,
+        };
+        let mut result = self
+            .execute(exec, &args, &cwd, timeout_secs, password)
+            .await;
+        if let Some(sudo) = &adapted.sudo {
+            sudo.finish(&adapted.elevation, &mut result);
+        }
+        result.notices.extend(adapted.notices);
+        result
+    }
+
+    /// Runs a planned and adapted command on the session's backend.
+    async fn execute(
+        &self,
+        exec: Exec,
+        args: &TerminalArgs,
+        cwd: &Path,
+        timeout_secs: u64,
+        sudo: Option<&SecretString>,
+    ) -> TerminalResult {
         if let Some(plugin) = self.setup.target.plugin() {
             return match exec {
                 Exec::Foreground(command) => {
                     self.on_plugin(
                         &plugin,
                         &command,
-                        &cwd,
+                        cwd,
                         timeout_secs,
                         args.workdir.is_none(),
+                        sudo,
                     )
                     .await
                 }
@@ -388,7 +471,7 @@ impl Terminal {
                         promoted,
                         pty: args.pty,
                     };
-                    self.on_plugin_background(&plugin, &tracking, &cwd, bound, started)
+                    self.on_plugin_background(&plugin, &tracking, cwd, bound, started, sudo)
                 }
             };
         }
@@ -401,7 +484,7 @@ impl Terminal {
         let cwd = self.call_cwd(args.workdir.as_deref());
         let mut result = match exec {
             Exec::Foreground(command) => {
-                self.foreground(&command, &cwd, timeout_secs, args.workdir.is_none())
+                self.foreground(&command, &cwd, timeout_secs, args.workdir.is_none(), sudo)
                     .await
             }
             Exec::Background { tracking, promoted } => {
@@ -409,11 +492,60 @@ impl Terminal {
                     promoted,
                     pty: args.pty,
                 };
-                self.background(&tracking, &cwd, started).await
+                self.background(&tracking, &cwd, started, sudo).await
             }
         };
         result.environment_recreated |= prepared.recreated;
         result
+    }
+
+    /// The command as the backend runs it: granted host inputs it names
+    /// uploaded and pointed at (a backend without the host filesystem),
+    /// then a literal `sudo` given its password. Asking for the password
+    /// may prompt, so this runs on a blocking thread.
+    async fn adapt(&self, mut exec: Exec) -> (Exec, Adapted) {
+        let inputs = self
+            .inputs
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let sudo = self
+            .sudo
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if inputs.is_none() && sudo.is_none() {
+            return (exec, Adapted::default());
+        }
+        let command = exec.command().to_owned();
+        let sudo_for_call = sudo.clone();
+        let joined = tokio::task::spawn_blocking(move || {
+            let prepared = inputs.map_or_else(
+                || super::inputs::Prepared {
+                    command: command.clone(),
+                    notices: Vec::new(),
+                },
+                |inputs| inputs.prepare(&command),
+            );
+            let elevation =
+                sudo_for_call.map_or(Elevation::NotSudo, |sudo| sudo.elevate(&prepared.command));
+            (prepared, elevation)
+        })
+        .await;
+        let Ok((prepared, elevation)) = joined else {
+            return (exec, Adapted::default());
+        };
+        let command = match &elevation {
+            Elevation::Elevated { command, .. } => command.clone(),
+            _ => prepared.command,
+        };
+        exec.set_command(command);
+        let adapted = Adapted {
+            elevation,
+            sudo,
+            notices: prepared.notices,
+        };
+        (exec, adapted)
     }
 
     /// The [`BeforeCommand`] hook of a command, with the command's
@@ -435,8 +567,9 @@ impl Terminal {
         cwd: &Path,
         timeout_secs: u64,
         track: bool,
+        sudo: Option<&SecretString>,
     ) -> TerminalResult {
-        let env = self.command_env(command);
+        let env = self.command_env(command, sudo);
         let shaping = super::plugin::Shaping {
             spill_dir: &self.setup.spill_dir,
             max_chars: (self.setup.max_chars)(),
@@ -471,12 +604,13 @@ impl Terminal {
         cwd: &Path,
         timeout_secs: Option<u64>,
         started: Started,
+        sudo: Option<&SecretString>,
     ) -> TerminalResult {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
         }
         let command = tracking.command.as_str();
-        let env = self.command_env(command);
+        let env = self.command_env(command, sudo);
         let job = super::plugin::job(plugin, command, &cwd.to_string_lossy(), &env, timeout_secs);
         let id = self.processes.track_job(job, tracking);
         self.started(id, started)
@@ -638,6 +772,7 @@ impl Terminal {
         cwd: &Path,
         timeout_secs: u64,
         track: bool,
+        sudo: Option<&SecretString>,
     ) -> TerminalResult {
         let run = self.runs.fetch_add(1, Ordering::Relaxed);
         let state = self.state_files();
@@ -649,7 +784,7 @@ impl Terminal {
                 .join(format!("pmt-shell-cwd-{run}")),
             snapshot: state.snapshot,
         };
-        let env = self.command_env(command);
+        let env = self.command_env(command, sudo);
         let shell = self.shell();
         let script = RunScript {
             command,
@@ -791,12 +926,13 @@ impl Terminal {
         tracking: &Tracking,
         cwd: &Path,
         started: Started,
+        sudo: Option<&SecretString>,
     ) -> TerminalResult {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
         }
         let command = tracking.command.as_str();
-        let env = self.command_env(command);
+        let env = self.command_env(command, sudo);
         let shell = self.shell();
         let script = RunScript {
             command,

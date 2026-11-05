@@ -21,6 +21,7 @@ pub mod python;
 pub mod serve;
 pub mod skills;
 pub mod snapshots;
+pub mod sudo;
 pub mod summarize;
 mod tool_state;
 pub mod tools;
@@ -100,6 +101,9 @@ pub struct Clients {
     /// processes (a gateway session's chat).
     pub completions:
         Option<tokio::sync::mpsc::UnboundedSender<pmt_tools::terminal::process::Notice>>,
+    /// Asks the session's clients for the sudo password (`sudo.request`);
+    /// `None` where nobody can answer securely.
+    pub sudo: Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>>,
 }
 
 /// What every session of this process shares.
@@ -730,11 +734,18 @@ impl Factory {
             vault_prompt: self.vault_prompt(clients),
             processes: &processes,
             snapshots: snapshots::opener(&self.scope, &self.store, id),
+            input_roots: input_roots(&self.scope, skills),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
             terminal.set_secret_source(skills.secret_source());
             terminal.set_path_source(python::path_source(&self.scope, skills));
+            terminal.set_sudo(Arc::new(sudo::handling(
+                &self.scope,
+                capabilities,
+                &session.origin,
+                self.sudo_prompt(clients),
+            )));
         }
         Ok(environment)
     }
@@ -753,6 +764,24 @@ impl Factory {
             .map(|c| Arc::clone(&c.secrets))
             .or_else(|| self.secret_prompt.clone())?;
         Some(Arc::new(env::VaultPrompt(secrets)))
+    }
+
+    /// Where a sudo password is asked: the session's clients
+    /// (`sudo.request`) or the local terminal's hidden line, on an
+    /// interactive session only.
+    fn sudo_prompt(
+        &self,
+        clients: Option<&Clients>,
+    ) -> Option<Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>> {
+        if !self.options.interactive {
+            return None;
+        }
+        match clients {
+            Some(clients) => clients.sudo.clone(),
+            None => self.secret_prompt.clone().map(|p| {
+                Arc::new(sudo::HiddenLine(p)) as Arc<dyn pmt_tools::terminal::sudo::SudoPrompt>
+            }),
+        }
     }
 
     /// The baseline and granted capabilities, plus reads of the session's
@@ -1310,4 +1339,13 @@ fn own_processes(
             .map(|t| t.processes().running_pids())
             .unwrap_or_default()
     })
+}
+
+/// Host directories a remote command may name: the profile's received
+/// attachments (`cache/media/`) and every skill directory on disk.
+fn input_roots(scope: &ProfileScope, skills: &SkillsSession) -> Vec<std::path::PathBuf> {
+    let mut roots = vec![scope.dir().join("cache").join("media"), skills.skills_dir()];
+    roots.extend(skills.disk_roots());
+    roots.dedup();
+    roots
 }

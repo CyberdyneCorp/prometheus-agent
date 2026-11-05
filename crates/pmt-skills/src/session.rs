@@ -328,6 +328,20 @@ impl SkillsSession {
         })
     }
 
+    /// Every skill root directory on disk (bundled roots have none).
+    #[must_use]
+    pub fn disk_roots(&self) -> Vec<PathBuf> {
+        let config = self.config();
+        self.roots(&config)
+            .roots
+            .iter()
+            .filter_map(|root| match &root.dir {
+                RootDir::Disk(dir) => Some(dir.clone()),
+                RootDir::Bundled(_) => None,
+            })
+            .collect()
+    }
+
     /// Read grants the session sandbox needs for skill directories on
     /// disk (inline shell runs in the skill directory; scripts are read
     /// from it): the profile skills directory and every other disk root.
