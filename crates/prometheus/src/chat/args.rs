@@ -114,6 +114,13 @@ pub struct ChatArgs {
     /// Model calls allowed per turn.
     #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
     pub max_iterations: Option<u32>,
+    /// Record file snapshots and checkpoints for `/undo` and `/rollback`
+    /// this run, whatever `files.snapshot.enabled` says.
+    #[arg(long, conflicts_with = "no_checkpoints")]
+    pub checkpoints: bool,
+    /// Record no file snapshots or checkpoints this run.
+    #[arg(long)]
+    pub no_checkpoints: bool,
     /// Working directory of the session (also scopes `-c` and `latest`).
     #[arg(long, value_name = "DIR")]
     pub cwd: Option<PathBuf>,
@@ -275,6 +282,9 @@ impl ChatArgs {
         }
         if let Some(n) = self.max_iterations {
             set.push(format!("agent.max_iterations={n}"));
+        }
+        if self.checkpoints || self.no_checkpoints {
+            set.push(format!("files.snapshot.enabled={}", self.checkpoints));
         }
         if self.ignores_rules() {
             set.push("prompt.load_identity=false".to_owned());

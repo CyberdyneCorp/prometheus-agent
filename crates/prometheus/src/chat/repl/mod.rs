@@ -380,6 +380,7 @@ impl Repl {
             post: Arc::new(move |text| {
                 let _ = posted.send(text);
             }),
+            message_limit: None,
         }
     }
 

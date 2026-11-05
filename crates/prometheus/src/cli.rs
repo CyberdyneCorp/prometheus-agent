@@ -151,6 +151,15 @@ pub enum Command {
         #[command(subcommand)]
         command: BackupCommand,
     },
+    /// Undo a session's file changes, roll a workspace back to a
+    /// checkpoint, and manage the file snapshot store.
+    Files {
+        /// The files subcommand.
+        #[command(subcommand)]
+        command: crate::files_cmd::FilesCommand,
+    },
+    /// Detect a project's build/test/start recipe and run it.
+    Verify(crate::verify_cmd::VerifyArgs),
     /// Snapshot and restore the selected profile's critical state.
     Snapshots {
         /// The snapshots subcommand.

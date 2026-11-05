@@ -6,6 +6,7 @@
 //! it drives stays with that client.
 
 mod background;
+pub mod files;
 pub mod info;
 mod mcp;
 pub(crate) mod plugins;
@@ -46,6 +47,8 @@ pub struct Ctx<'a> {
     pub running: bool,
     /// Where `/refine` posts its summary.
     pub post: Post,
+    /// The messaging platform's message length (gateway surfaces).
+    pub message_limit: Option<usize>,
 }
 
 /// What a command produced.
@@ -94,7 +97,9 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
             ctx.scope.name(),
             ctx.scope.dir().display()
         )),
-        "undo" => session::undo(ctx),
+        "undo" => files::undo(ctx, args),
+        "rollback" => files::rollback(ctx, args),
+        "diff" => Ok(files::diff(ctx, args)),
         "sync" => Ok(ctx.live.sync_back().await.unwrap_or_else(|| {
             "nothing to sync: the terminal backend has no remote workspace or terminal.sync_back is off"
                 .to_owned()

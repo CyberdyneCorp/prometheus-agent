@@ -556,6 +556,57 @@ impl Host for DaemonHost {
         })
     }
 
+    fn files_undo<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesUndoParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesUndone> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let session = self.load(profile, id, &link).await?;
+            let report = crate::chat::commands::files::undo_files(
+                &profile.store,
+                &session.live,
+                params.turns.unwrap_or(1),
+                params.force,
+                params.dry_run,
+            )?;
+            let shown = |paths: Vec<std::path::PathBuf>| {
+                paths.iter().map(|p| p.display().to_string()).collect()
+            };
+            Ok(pmt_rpc::contracts::FilesUndone {
+                turns: report.turns,
+                restored: shown(report.restored),
+                removed: shown(report.removed),
+                conflicts: report.conflicts,
+            })
+        })
+    }
+
+    fn files_rollback<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesRollbackParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesRolledBack> {
+        Box::pin(async move {
+            let profile = &self.profile(profile)?;
+            let id = session_id(&params.session_id)?;
+            let session = self.load(profile, id, &link).await?;
+            let output = crate::chat::commands::files::rollback_live(
+                &profile.store,
+                &session.live,
+                params.checkpoint.map(|n| n as usize),
+                params.file.as_deref(),
+                params.diff,
+                params.all,
+            )?;
+            Ok(pmt_rpc::contracts::FilesRolledBack { output })
+        })
+    }
+
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(pmt_gateway::vault::VaultAccess {

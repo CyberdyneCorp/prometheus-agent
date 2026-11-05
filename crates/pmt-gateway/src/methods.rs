@@ -49,6 +49,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::SessionContextUsage, _, _>(catalog, context_usage)?
         .register::<c::SessionCompact, _, _>(catalog, compact)?
         .register::<c::EgressSet, _, _>(catalog, egress)?
+        .register::<c::FilesUndo, _, _>(catalog, files_undo)?
+        .register::<c::FilesRollback, _, _>(catalog, files_rollback)?
         .register::<c::PromptSubmit, _, _>(catalog, submit)?
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
@@ -351,6 +353,29 @@ async fn egress(call: Call, params: c::EgressSetParams) -> Result<c::EgressState
     call.server
         .host()
         .egress(&profile, params, link)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn files_undo(call: Call, params: c::FilesUndoParams) -> Result<c::FilesUndone, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
+    let link = call.server.link(&params.session_id);
+    call.server
+        .host()
+        .files_undo(&profile, params, link)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+async fn files_rollback(
+    call: Call,
+    params: c::FilesRollbackParams,
+) -> Result<c::FilesRolledBack, RpcError> {
+    let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
+    let link = call.server.link(&params.session_id);
+    call.server
+        .host()
+        .files_rollback(&profile, params, link)
         .await
         .map_err(|e| rpc(&e))
 }

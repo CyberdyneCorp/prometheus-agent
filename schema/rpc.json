@@ -1086,6 +1086,139 @@
       ],
       "type": "object"
     },
+    "FilesRollbackParams": {
+      "additionalProperties": false,
+      "description": "`files.rollback` params: no checkpoint lists them; `diff` previews.",
+      "properties": {
+        "all": {
+          "default": false,
+          "description": "Overwrite hand-edited files too.",
+          "type": "boolean"
+        },
+        "checkpoint": {
+          "default": null,
+          "description": "The checkpoint, 1 for the newest.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "diff": {
+          "default": false,
+          "description": "Show the diff to the current state; change nothing.",
+          "type": "boolean"
+        },
+        "file": {
+          "default": null,
+          "description": "Restore only this file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "description": "The session (its workspace).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "FilesRolledBack": {
+      "additionalProperties": false,
+      "description": "`files.rollback` result.",
+      "properties": {
+        "output": {
+          "description": "The listing, the diff or what was restored, as text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "output"
+      ],
+      "type": "object"
+    },
+    "FilesUndoParams": {
+      "additionalProperties": false,
+      "description": "`files.undo` params.",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "Report only; change nothing.",
+          "type": "boolean"
+        },
+        "force": {
+          "default": false,
+          "description": "Overwrite files changed since the session wrote them.",
+          "type": "boolean"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "turns": {
+          "default": null,
+          "description": "How many of its last turns (default 1).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "FilesUndone": {
+      "additionalProperties": false,
+      "description": "`files.undo` result.",
+      "properties": {
+        "conflicts": {
+          "description": "`conflict: <path> changed since turn <n>; use --force to overwrite`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "removed": {
+          "description": "Files the session had created, removed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "restored": {
+          "description": "Files given their prior content.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "turns": {
+          "description": "The turns undone.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "turns",
+        "restored",
+        "removed",
+        "conflicts"
+      ],
+      "type": "object"
+    },
     "ForkParams": {
       "additionalProperties": false,
       "description": "`session.fork` params.",
@@ -2838,13 +2971,23 @@
       "since": "1.0"
     },
     "files.rollback": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/FilesRollbackParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FilesRolledBack"
+      },
       "since": "1.0"
     },
     "files.undo": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/FilesUndoParams"
+      },
+      "result": {
+        "$ref": "#/$defs/FilesUndone"
+      },
       "since": "1.0"
     },
     "grants.list": {

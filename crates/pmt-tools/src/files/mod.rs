@@ -145,6 +145,20 @@ impl FileSession {
     fn generation(&self) -> u64 {
         self.generation.load(Ordering::SeqCst)
     }
+
+    /// Tells the edit recorder a file tool is about to change `path`.
+    pub(crate) fn before_change(&self, path: &Path) {
+        if let Some(edits) = &self.setup.edits {
+            edits.before_change(path, edits::current().as_ref());
+        }
+    }
+
+    /// Tells the edit recorder a file tool changed `path`.
+    pub(crate) fn changed(&self, path: &Path, before: Option<&[u8]>, after: Option<&[u8]>) {
+        if let Some(edits) = &self.setup.edits {
+            edits.changed(path, before, after, edits::current().as_ref());
+        }
+    }
 }
 
 /// A JSON object result of `status`.

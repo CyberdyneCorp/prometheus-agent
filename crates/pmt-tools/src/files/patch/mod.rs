@@ -132,9 +132,15 @@ impl FileSession {
             };
             updated.replace_range(start..end, &replacement);
         }
+        self.before_change(&target.path);
         if let Err(err) = self.backend().write(&target.path, updated.as_bytes()) {
             return io_failure(raw, &err);
         }
+        self.changed(
+            &target.path,
+            Some(content.as_bytes()),
+            Some(updated.as_bytes()),
+        );
         self.note_written(&target.path, &updated);
         let mut body = Map::new();
         body.insert("path".into(), json!(raw));
@@ -276,6 +282,9 @@ impl FileSession {
     /// Writes every planned file; on a failure restores the ones already
     /// written, so the patch lands whole or not at all.
     fn commit(&self, planned: &[Planned]) -> Result<(), String> {
+        for file in planned {
+            self.before_change(&file.path);
+        }
         for (index, file) in planned.iter().enumerate() {
             let outcome = match &file.new {
                 Some(new) => self.backend().write(&file.path, new.as_bytes()),
@@ -291,12 +300,22 @@ impl FileSession {
                 return Err(format!("{}: {err}", file.shown));
             }
         }
+        self.committed(planned);
+        Ok(())
+    }
+
+    /// Records a landed patch: the edit recorder and the read tracker.
+    fn committed(&self, planned: &[Planned]) {
         for file in planned {
+            self.changed(
+                &file.path,
+                file.old.as_deref().map(str::as_bytes),
+                file.new.as_deref().map(str::as_bytes),
+            );
             if let Some(new) = &file.new {
                 self.note_written(&file.path, new);
             }
         }
-        Ok(())
     }
 }
 

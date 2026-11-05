@@ -42,6 +42,7 @@ pub mod sanitize;
 pub mod search;
 pub mod selection;
 pub mod setting;
+pub mod snapshots;
 pub mod spillover;
 pub mod surface;
 pub mod terminal;

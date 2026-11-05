@@ -26,6 +26,8 @@ type Operation = fn(&FileSession, &Value) -> ToolResult;
 struct FileHandler {
     environments: Arc<Environments>,
     operation: Operation,
+    /// The tool's name (recorded with every change it makes).
+    tool: String,
 }
 
 impl ToolHandler for FileHandler {
@@ -33,9 +35,15 @@ impl ToolHandler for FileHandler {
         Box::pin(async move {
             let files = part(&self.environments, context, "file", |env| env.files.clone())?;
             let operation = self.operation;
-            tokio::task::spawn_blocking(move || operation(&files, &arguments))
-                .await
-                .map_err(|err| ToolFailure::new("panic", err.to_string()))
+            let call = super::edits::EditCall {
+                call_id: context.call_id.clone(),
+                tool: self.tool.clone(),
+            };
+            tokio::task::spawn_blocking(move || {
+                super::edits::with_call(call, || operation(&files, &arguments))
+            })
+            .await
+            .map_err(|err| ToolFailure::new("panic", err.to_string()))
         })
     }
 }
@@ -47,6 +55,7 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
         let handler = Arc::new(FileHandler {
             environments: Arc::clone(environments),
             operation,
+            tool: descriptor.name.clone(),
         });
         RegisteredTool::new(descriptor, Owner::Builtin, handler)
     };

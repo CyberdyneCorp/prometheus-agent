@@ -474,6 +474,16 @@ impl Gateway {
         menus::refresh(shared);
     }
 
+    /// The message length limit of `profile`'s running `platform`
+    /// adapter.
+    #[must_use]
+    pub fn max_message_length(&self, profile: &str, platform: &str) -> Option<usize> {
+        self.shared
+            .adapters
+            .descriptor(profile, platform)
+            .map(|d| d.max_message_length)
+    }
+
     /// Injects a background notification into a conversation (spec:
     /// messaging-gateway, Background and internal notifications); the
     /// admission says whether it was taken (`dropped`: retry later).

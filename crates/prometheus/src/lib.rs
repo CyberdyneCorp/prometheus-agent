@@ -27,6 +27,7 @@ pub mod demo_cmd;
 pub mod doctor_cmd;
 pub mod egress;
 pub mod fallback_cmd;
+pub mod files_cmd;
 pub mod grants_cmd;
 pub mod hooks_host;
 pub mod logs_cmd;
@@ -64,6 +65,7 @@ pub mod tui_cmd;
 pub mod update_cmd;
 pub mod usage_cmd;
 pub mod vault_cmd;
+pub mod verify_cmd;
 pub mod version;
 
 pub use cli::{

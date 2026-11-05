@@ -302,14 +302,64 @@ impl Default for ToolOutputConfig {
 pub struct FilesConfig {
     /// Formatted characters `read_file` returns per call.
     pub read_max_chars: u64,
+    /// File snapshots, undo and rollback checkpoints.
+    pub snapshot: SnapshotConfig,
 }
 
 impl Default for FilesConfig {
     fn default() -> Self {
         Self {
             read_max_chars: 100_000,
+            snapshot: SnapshotConfig::default(),
         }
     }
+}
+
+/// The `[files.snapshot]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SnapshotConfig {
+    /// Record file-tool changes (`/undo`) and checkpoints (`/rollback`);
+    /// `chat --checkpoints` / `--no-checkpoints` override it per run.
+    pub enabled: bool,
+    /// Also checkpoint before destructive terminal commands (`rm`, `mv`,
+    /// `sed -i`, `>`, `git reset`...).
+    pub terminal: SnapshotTerminal,
+    /// Larger files are listed as skipped instead of stored.
+    pub max_file_bytes: u64,
+    /// Checkpoints kept per workspace.
+    pub max_checkpoints: u64,
+    /// Snapshots unused this long are pruned.
+    pub retention_secs: u64,
+    /// The profile's snapshot store is pruned, oldest first, above this.
+    pub max_bytes: u64,
+    /// Least time between automatic prunes.
+    pub prune_interval_secs: u64,
+}
+
+impl Default for SnapshotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            terminal: SnapshotTerminal::Off,
+            max_file_bytes: 10_485_760,
+            max_checkpoints: 20,
+            retention_secs: 604_800,
+            max_bytes: 1_073_741_824,
+            prune_interval_secs: 86_400,
+        }
+    }
+}
+
+/// `files.snapshot.terminal`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotTerminal {
+    /// Terminal commands never checkpoint.
+    #[default]
+    Off,
+    /// Checkpoint the command's project before a destructive command.
+    Destructive,
 }
 
 /// The `[terminal]` section.

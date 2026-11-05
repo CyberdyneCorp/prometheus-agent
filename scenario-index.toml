@@ -2472,3 +2472,32 @@ capabilities = [
 [execution-environments."read_file document extraction"]
 "SQLite schema overview" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_live_sqlite_database_is_summarised_without_being_modified"]
 "Scanned PDF" = ["crates/pmt-tools/tests/file_tools/documents.rs::a_scanned_pdf_starts_with_the_coverage_warning", "crates/pmt-tools/src/files/documents/pdf.rs::a_scanned_range_is_reported_with_the_text_before_it", "crates/prometheus/tests/doc_converter.rs::a_converter_on_path_answers_with_pages"]
+
+# Groups 35.6 / 35.7 (snapshots, undo, rollback, store CLI, /diff, verify; notifications, handoff)
+[execution-environments."File snapshots and undo (upgrade)"]
+"Undo last turn" = ["crates/pmt-tools/tests/snapshots.rs::undo_restores_a_patched_file_and_removes_a_created_one", "crates/prometheus/tests/chat_undo.rs::undo_restores_the_patched_file_and_removes_the_created_one"]
+"Conflicting edit" = ["crates/pmt-tools/tests/snapshots.rs::a_file_edited_after_the_agent_is_not_undone_without_force"]
+
+[execution-environments."Snapshot triggers, caps and per-run toggle"]
+"One checkpoint per directory per turn" = ["crates/pmt-tools/tests/snapshots.rs::three_patches_in_one_turn_make_one_checkpoint"]
+"Large file" = ["crates/pmt-tools/tests/snapshots.rs::a_large_file_is_listed_as_skipped_by_a_destructive_command_checkpoint"]
+
+[execution-environments."Rollback listing, diff and selective restore"]
+"Hand-edit preserved" = ["crates/pmt-tools/tests/snapshots.rs::rollback_keeps_hand_edited_files_and_restores_the_rest"]
+"Preview only" = ["crates/pmt-tools/tests/snapshots.rs::a_rollback_diff_changes_nothing"]
+
+[execution-environments."Snapshot store management CLI"]
+"Unmounted volume" = ["crates/pmt-tools/tests/snapshots.rs::the_automatic_prune_keeps_a_missing_workspace"]
+
+[execution-environments."Working-tree diff command"]
+"Session diff" = ["crates/pmt-tools/tests/snapshots.rs::the_session_diff_lists_every_changed_file_with_counts"]
+
+[execution-environments."Project run-recipe verification"]
+"Detect only" = ["crates/prometheus/tests/verify_cli.rs::detect_only_prints_the_cargo_recipe_and_runs_nothing"]
+"Failing tests" = ["crates/prometheus/tests/verify_cli.rs::a_failing_test_phase_is_reported_with_its_output_tail_and_exit_1"]
+
+[execution-environments."Background notifications are throttled"]
+"Ninth match" = ["crates/pmt-tools/tests/terminal/notifications.rs::the_ninth_match_disables_watching_and_falls_back_to_completion"]
+
+[execution-environments."Subagent process handoff"]
+"Fourth handoff" = ["crates/pmt-tools/tests/terminal/notifications.rs::a_subagent_hands_off_at_most_three_processes"]

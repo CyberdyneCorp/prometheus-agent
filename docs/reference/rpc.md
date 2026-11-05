@@ -77,8 +77,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `experience.pin` | `experience-library` | 1.0 | not served yet | |
 | `experience.restore` | `experience-library` | 1.0 | not served yet | |
 | `experience.show` | `experience-library` | 1.0 | not served yet | |
-| `files.rollback` | `execution-environments` | 1.0 | not served yet | |
-| `files.undo` | `execution-environments` | 1.0 | not served yet | |
+| `files.rollback` | `execution-environments` | 1.0 | [`FilesRollbackParams`](#filesrollbackparams) | [`FilesRolledBack`](#filesrolledback) |
+| `files.undo` | `execution-environments` | 1.0 | [`FilesUndoParams`](#filesundoparams) | [`FilesUndone`](#filesundone) |
 | `grants.list` | `security-boundaries` | 1.0 | not served yet | |
 | `grants.revoke` | `security-boundaries` | 1.0 | not served yet | |
 | `groups.capabilities` | `bot-mode` | 1.0 | not served yet | |
@@ -531,6 +531,48 @@ One event frame: the notification params and the replay item.
 |---|---|---|---|
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
+
+### `FilesRollbackParams`
+
+`files.rollback` params: no checkpoint lists them; `diff` previews.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `all` | boolean | no | Overwrite hand-edited files too. |
+| `checkpoint` | integer or null | no | The checkpoint, 1 for the newest. |
+| `diff` | boolean | no | Show the diff to the current state; change nothing. |
+| `file` | string or null | no | Restore only this file. |
+| `session_id` | string | yes | The session (its workspace). |
+
+### `FilesRolledBack`
+
+`files.rollback` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `output` | string | yes | The listing, the diff or what was restored, as text. |
+
+### `FilesUndoParams`
+
+`files.undo` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `dry_run` | boolean | no | Report only; change nothing. |
+| `force` | boolean | no | Overwrite files changed since the session wrote them. |
+| `session_id` | string | yes | The session. |
+| `turns` | integer or null | no | How many of its last turns (default 1). |
+
+### `FilesUndone`
+
+`files.undo` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `conflicts` | array of string | yes | `conflict: <path> changed since turn <n>; use --force to overwrite`. |
+| `removed` | array of string | yes | Files the session had created, removed. |
+| `restored` | array of string | yes | Files given their prior content. |
+| `turns` | array of integer | yes | The turns undone. |
 
 ### `ForkParams`
 

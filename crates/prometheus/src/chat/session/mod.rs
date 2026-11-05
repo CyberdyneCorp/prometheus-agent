@@ -20,6 +20,7 @@ pub mod progress;
 pub mod python;
 pub mod serve;
 pub mod skills;
+pub mod snapshots;
 pub mod summarize;
 mod tool_state;
 pub mod tools;
@@ -181,7 +182,7 @@ pub struct Live {
     /// The profile's live plugin set (slash commands, reload).
     pub plugins: crate::plugins_host::ProfilePlugins,
     /// The session's working directory (plugin `session.info`).
-    cwd: PathBuf,
+    pub cwd: PathBuf,
     /// The surface that created the session (`cli`, `tui`, `gateway`...).
     surface: &'static str,
     /// The plugin system-prompt sections the session's prompt carries.
@@ -205,6 +206,8 @@ pub struct Live {
     pub egress: crate::egress::Running,
     /// Sync-back of a remote workspace (session end, `/sync`).
     pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
+    /// File snapshots, when on (`/undo`, `/rollback`, `/diff session`).
+    pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -439,7 +442,6 @@ impl Factory {
         clients: Option<Clients>,
     ) -> Result<Live, Error> {
         let scope = &self.scope;
-        let config = scope.config();
         let interactive = self.options.interactive;
         let model = Arc::new(SwitchableModel::new(
             target.clone(),
@@ -515,7 +517,7 @@ impl Factory {
             clarify,
             skills,
             memory,
-            skill_nudge: Mutex::new(Nudge::new(&config.skills, session.source)),
+            skill_nudge: Mutex::new(Nudge::new(&scope.config().skills, session.source)),
             tool_state,
             session_surface,
             plugins: self.plugins.clone(),
@@ -531,6 +533,7 @@ impl Factory {
             browser: environment.browser,
             egress: environment.egress,
             sync: environment.sync,
+            snapshots: environment.snapshots,
             _environment: environment.attachment,
             _skills: attached,
         };
@@ -704,6 +707,7 @@ impl Factory {
         let denials = env::Denials::default();
         let processes =
             processes::Wiring::of(self.scope.config(), &self.store, id, &session.origin);
+        let snapshots = snapshots::open(&self.scope, &self.store, id, &self.options.cwd);
         let environment = env::attach(&env::EnvInputs {
             scope: &self.scope,
             config,
@@ -724,6 +728,7 @@ impl Factory {
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
             processes: &processes,
+            snapshots: snapshots.clone(),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {

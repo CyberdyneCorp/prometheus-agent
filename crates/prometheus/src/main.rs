@@ -123,6 +123,8 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
         Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
         Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
+        Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
+        Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),
         Some(Command::Skills { command }) => skills_cmd::run(command, &ctx),
         Some(Command::Memory { command }) => memory_cmd::run(command, &ctx),
         Some(Command::Profile { command }) => profile_cmd::run(command, &ctx),

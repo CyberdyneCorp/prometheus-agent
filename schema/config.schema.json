@@ -1605,6 +1605,19 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/SnapshotConfig",
+          "default": {
+            "enabled": true,
+            "max_bytes": 1073741824,
+            "max_checkpoints": 20,
+            "max_file_bytes": 10485760,
+            "prune_interval_secs": 86400,
+            "retention_secs": 604800,
+            "terminal": "off"
+          },
+          "description": "File snapshots, undo and rollback checkpoints."
         }
       },
       "type": "object",
@@ -5727,6 +5740,73 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "SnapshotConfig": {
+      "additionalProperties": false,
+      "description": "The `[files.snapshot]` section.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Record file-tool changes (`/undo`) and checkpoints (`/rollback`);\n`chat --checkpoints` / `--no-checkpoints` override it per run.",
+          "type": "boolean"
+        },
+        "max_bytes": {
+          "default": 1073741824,
+          "description": "The profile's snapshot store is pruned, oldest first, above this.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_checkpoints": {
+          "default": 20,
+          "description": "Checkpoints kept per workspace.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_file_bytes": {
+          "default": 10485760,
+          "description": "Larger files are listed as skipped instead of stored.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prune_interval_secs": {
+          "default": 86400,
+          "description": "Least time between automatic prunes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retention_secs": {
+          "default": 604800,
+          "description": "Snapshots unused this long are pruned.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "terminal": {
+          "$ref": "#/$defs/SnapshotTerminal",
+          "default": "off",
+          "description": "Also checkpoint before destructive terminal commands (`rm`, `mv`,\n`sed -i`, `>`, `git reset`...)."
+        }
+      },
+      "type": "object"
+    },
+    "SnapshotTerminal": {
+      "description": "`files.snapshot.terminal`.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Terminal commands never checkpoint.",
+          "type": "string"
+        },
+        {
+          "const": "destructive",
+          "description": "Checkpoint the command's project before a destructive command.",
+          "type": "string"
+        }
+      ]
+    },
     "SnapshotsConfig": {
       "additionalProperties": false,
       "description": "The `[snapshots]` section.",
@@ -7573,7 +7653,16 @@
     "files": {
       "$ref": "#/$defs/FilesConfig",
       "default": {
-        "read_max_chars": 100000
+        "read_max_chars": 100000,
+        "snapshot": {
+          "enabled": true,
+          "max_bytes": 1073741824,
+          "max_checkpoints": 20,
+          "max_file_bytes": 10485760,
+          "prune_interval_secs": 86400,
+          "retention_secs": 604800,
+          "terminal": "off"
+        }
       },
       "description": "`read_file` limits."
     },

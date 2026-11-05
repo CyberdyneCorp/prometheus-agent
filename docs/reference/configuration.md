@@ -144,6 +144,13 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
+| `files.snapshot.enabled` | boolean | `true` | any | `live` | Record file-tool changes (`/undo`) and checkpoints (`/rollback`); `chat --checkpoints` / `--no-checkpoints` override it per run. |
+| `files.snapshot.max_bytes` | integer | `1073741824` | ≥ 0 | `live` | The profile's snapshot store is pruned, oldest first, above this. |
+| `files.snapshot.max_checkpoints` | integer | `20` | ≥ 0 | `live` | Checkpoints kept per workspace. |
+| `files.snapshot.max_file_bytes` | integer | `10485760` | ≥ 0 | `live` | Larger files are listed as skipped instead of stored. |
+| `files.snapshot.prune_interval_secs` | integer | `86400` | ≥ 0 | `live` | Least time between automatic prunes. |
+| `files.snapshot.retention_secs` | integer | `604800` | ≥ 0 | `live` | Snapshots unused this long are pruned. |
+| `files.snapshot.terminal` | one of "off", "destructive" | `"off"` | `"off"`, `"destructive"` | `live` | Also checkpoint before destructive terminal commands (`rm`, `mv`, `sed -i`, `>`, `git reset`...). |
 | `gateway.accept_routes_from` | array of string | `[]` | any | `live` | Profiles whose `profile_routes` may route events to this one. |
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |

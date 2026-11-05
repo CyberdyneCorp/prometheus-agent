@@ -82,6 +82,12 @@ Options:
       --max-iterations <N>
           Model calls allowed per turn
 
+      --checkpoints
+          Record file snapshots and checkpoints for `/undo` and `/rollback` this run, whatever `files.snapshot.enabled` says
+
+      --no-checkpoints
+          Record no file snapshots or checkpoints this run
+
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)
 

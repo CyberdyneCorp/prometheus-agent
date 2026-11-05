@@ -63,6 +63,8 @@ struct Run<'a> {
     /// Where the command was typed: a client (`Cli`) or a messaging
     /// platform (`Gateway`).
     surface: Surface,
+    /// The platform's message length limit (gateway commands).
+    message_limit: Option<usize>,
     /// The surface plugin commands see in `session.info`: `gateway`, or
     /// for a client the surface that created the session (`cli`, `tui`,
     /// `desktop`...).
@@ -85,6 +87,7 @@ impl DaemonHost {
             registry: &registry,
             link: &link,
             surface: Surface::Cli,
+            message_limit: None,
             caller: session.live.surface(),
         };
         Ok(run.line(line_of(&params), 0).await)
@@ -110,9 +113,23 @@ impl DaemonHost {
             registry: &registry,
             link: &link,
             surface: Surface::Gateway,
+            message_limit: self.message_limit(profile, id),
             caller: "gateway",
         };
         Ok(run.line(input.to_owned(), 0).await)
+    }
+}
+
+impl DaemonHost {
+    /// The message limit of the platform a gateway session talks on.
+    fn message_limit(&self, profile: &Profile, id: pmt_core::id::SessionId) -> Option<usize> {
+        let session = profile.store.session(id).ok()?;
+        let pmt_store::Origin::Gateway { platform, .. } = session.origin else {
+            return None;
+        };
+        self.gateway
+            .get()?
+            .max_message_length(&profile.scope().name().to_string(), &platform)
     }
 }
 
@@ -230,6 +247,7 @@ impl Run<'_> {
             timestamps: scope.config().display.timestamps,
             running: self.session.busy.load(Ordering::Acquire),
             post: Arc::new(move |text| notice(&link, &text)),
+            message_limit: self.message_limit,
         }
     }
 

@@ -24,6 +24,8 @@ A child never inherits Prometheus' environment. It gets:
   `SystemRoot`, `APPDATA`, `ProgramFiles`... on Windows), with their launch
   values;
 - `TMPDIR` pointing at the session scratch directory;
+- `PROMETHEUS_SESSION_ID`, the session's id (`prometheus verify` records its
+  outcome for that session);
 - the names in `terminal.env_passthrough`, with their launch values;
 - only the secrets the target declares AND the session holds a
   `secrets.read:<NAME>` grant for.

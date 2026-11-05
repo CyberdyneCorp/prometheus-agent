@@ -23,6 +23,8 @@ Commands:
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
@@ -134,6 +136,12 @@ Options:
 
       --max-iterations <N>
           Model calls allowed per turn
+
+      --checkpoints
+          Record file snapshots and checkpoints for `/undo` and `/rollback` this run, whatever `files.snapshot.enabled` says
+
+      --no-checkpoints
+          Record no file snapshots or checkpoints this run
 
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)
@@ -270,6 +278,12 @@ Options:
 
       --max-iterations <N>
           Model calls allowed per turn
+
+      --checkpoints
+          Record file snapshots and checkpoints for `/undo` and `/rollback` this run, whatever `files.snapshot.enabled` says
+
+      --no-checkpoints
+          Record no file snapshots or checkpoints this run
 
       --cwd <DIR>
           Working directory of the session (also scopes `-c` and `latest`)
@@ -5006,6 +5020,531 @@ Usage: prometheus backup help restore
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus backup help help
+```
+
+## `prometheus files`
+
+```text
+Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+
+Usage: prometheus files [OPTIONS] <COMMAND>
+
+Commands:
+  undo       Undo the file changes of a session's last turns
+  rollback   List a workspace's checkpoints, show one's diff, or restore it
+  snapshots  The snapshot store: status, prune, clear
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files undo`
+
+```text
+Undo the file changes of a session's last turns
+
+Usage: prometheus files undo [OPTIONS] --session <SESSION>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --session <SESSION>
+          The session whose changes are undone
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --turn <TURN>
+          How many of its last turns
+
+          [default: 1]
+
+      --dry-run
+          Show what would be restored without changing anything
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --force
+          Overwrite files changed since the session wrote them
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files rollback`
+
+```text
+List a workspace's checkpoints, show one's diff, or restore it
+
+Usage: prometheus files rollback [OPTIONS] [CHECKPOINT] [FILE]
+
+Arguments:
+  [CHECKPOINT]
+          The checkpoint (1 is the newest); none lists them
+
+  [FILE]
+          Restore only this file (relative to the project root)
+
+Options:
+      --diff
+          Show the diff between the checkpoint and now; change nothing
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --all
+          Overwrite files edited by hand after the agent's last write too
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --dir <DIR>
+          The workspace (default: the current directory)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files snapshots`
+
+```text
+The snapshot store: status, prune, clear
+
+Usage: prometheus files snapshots [OPTIONS] <COMMAND>
+
+Commands:
+  status  Total size, workspaces, and per workspace size, checkpoints, last use
+  prune   Delete unused workspaces and enforce the size cap
+  clear   Delete the whole store
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files snapshots status`
+
+```text
+Total size, workspaces, and per workspace size, checkpoints, last use
+
+Usage: prometheus files snapshots status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --limit <LIMIT>
+          Workspaces listed
+
+          [default: 20]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files snapshots prune`
+
+```text
+Delete unused workspaces and enforce the size cap
+
+Usage: prometheus files snapshots prune [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --retention-days <RETENTION_DAYS>
+          Delete workspaces unused for longer than this
+
+          [default: 7]
+
+      --max-mb <MAX_MB>
+          Size cap in MB (default `files.snapshot.max_bytes`)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --keep-orphans
+          Keep workspaces whose directory is missing
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files snapshots clear`
+
+```text
+Delete the whole store
+
+Usage: prometheus files snapshots clear [OPTIONS]
+
+Options:
+  -f, --force
+          Do not ask
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus files snapshots help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus files snapshots help [COMMAND]
+
+Commands:
+  status  Total size, workspaces, and per workspace size, checkpoints, last use
+  prune   Delete unused workspaces and enforce the size cap
+  clear   Delete the whole store
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus files snapshots help status`
+
+```text
+Total size, workspaces, and per workspace size, checkpoints, last use
+
+Usage: prometheus files snapshots help status
+```
+
+## `prometheus files snapshots help prune`
+
+```text
+Delete unused workspaces and enforce the size cap
+
+Usage: prometheus files snapshots help prune
+```
+
+## `prometheus files snapshots help clear`
+
+```text
+Delete the whole store
+
+Usage: prometheus files snapshots help clear
+```
+
+## `prometheus files snapshots help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus files snapshots help help
+```
+
+## `prometheus files help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus files help [COMMAND]
+
+Commands:
+  undo       Undo the file changes of a session's last turns
+  rollback   List a workspace's checkpoints, show one's diff, or restore it
+  snapshots  The snapshot store: status, prune, clear
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus files help undo`
+
+```text
+Undo the file changes of a session's last turns
+
+Usage: prometheus files help undo
+```
+
+## `prometheus files help rollback`
+
+```text
+List a workspace's checkpoints, show one's diff, or restore it
+
+Usage: prometheus files help rollback
+```
+
+## `prometheus files help snapshots`
+
+```text
+The snapshot store: status, prune, clear
+
+Usage: prometheus files help snapshots [COMMAND]
+
+Commands:
+  status  Total size, workspaces, and per workspace size, checkpoints, last use
+  prune   Delete unused workspaces and enforce the size cap
+  clear   Delete the whole store
+```
+
+## `prometheus files help snapshots status`
+
+```text
+Total size, workspaces, and per workspace size, checkpoints, last use
+
+Usage: prometheus files help snapshots status
+```
+
+## `prometheus files help snapshots prune`
+
+```text
+Delete unused workspaces and enforce the size cap
+
+Usage: prometheus files help snapshots prune
+```
+
+## `prometheus files help snapshots clear`
+
+```text
+Delete the whole store
+
+Usage: prometheus files help snapshots clear
+```
+
+## `prometheus files help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus files help help
+```
+
+## `prometheus verify`
+
+```text
+Detect a project's build/test/start recipe and run it
+
+Usage: prometheus verify [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]
+          The project directory (default: the current directory)
+
+Options:
+      --detect-only
+          Print the detected recipe as JSON and run nothing
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --save
+          Write the detected recipe to `.prometheus/environment.json`
+
+      --phase <PHASE>
+          Run only these phases (repeatable)
+
+          [possible values: bootstrap, build, test, start]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --skip-start
+          Skip the start phase
+
+      --port <PORT>
+          The port the start phase listens on
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --timeout <TIMEOUT>
+          Seconds each phase may run
+
+          [default: 600]
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --ready-timeout <READY_TIMEOUT>
+          Seconds the start phase may take to listen
+
+          [default: 60]
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
 ```
 
 ## `prometheus snapshots`
@@ -15440,6 +15979,8 @@ Commands:
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
+  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify       Detect a project's build/test/start recipe and run it
   snapshots    Snapshot and restore the selected profile's critical state
   profile      List, create, select, rename and delete profiles
   sessions     List, search, export and manage the profile's sessions
@@ -16219,6 +16760,80 @@ Usage: prometheus help backup create
 Restore an archive after verifying every member (-p/--profile NAME restores only that profile)
 
 Usage: prometheus help backup restore
+```
+
+## `prometheus help files`
+
+```text
+Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+
+Usage: prometheus help files [COMMAND]
+
+Commands:
+  undo       Undo the file changes of a session's last turns
+  rollback   List a workspace's checkpoints, show one's diff, or restore it
+  snapshots  The snapshot store: status, prune, clear
+```
+
+## `prometheus help files undo`
+
+```text
+Undo the file changes of a session's last turns
+
+Usage: prometheus help files undo
+```
+
+## `prometheus help files rollback`
+
+```text
+List a workspace's checkpoints, show one's diff, or restore it
+
+Usage: prometheus help files rollback
+```
+
+## `prometheus help files snapshots`
+
+```text
+The snapshot store: status, prune, clear
+
+Usage: prometheus help files snapshots [COMMAND]
+
+Commands:
+  status  Total size, workspaces, and per workspace size, checkpoints, last use
+  prune   Delete unused workspaces and enforce the size cap
+  clear   Delete the whole store
+```
+
+## `prometheus help files snapshots status`
+
+```text
+Total size, workspaces, and per workspace size, checkpoints, last use
+
+Usage: prometheus help files snapshots status
+```
+
+## `prometheus help files snapshots prune`
+
+```text
+Delete unused workspaces and enforce the size cap
+
+Usage: prometheus help files snapshots prune
+```
+
+## `prometheus help files snapshots clear`
+
+```text
+Delete the whole store
+
+Usage: prometheus help files snapshots clear
+```
+
+## `prometheus help verify`
+
+```text
+Detect a project's build/test/start recipe and run it
+
+Usage: prometheus help verify
 ```
 
 ## `prometheus help snapshots`

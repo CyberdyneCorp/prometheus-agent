@@ -20,6 +20,7 @@
 - [OS sandbox and terminal backends](guide/sandbox.md)
 - [The local terminal](guide/terminal.md)
 - [File and web tools](guide/files-and-web.md)
+- [Undo, checkpoints and verification](guide/snapshots.md)
 - [Browser automation](guide/browser.md)
 - [Tools and toolsets](guide/tools.md)
 - [Skills](guide/skills.md)

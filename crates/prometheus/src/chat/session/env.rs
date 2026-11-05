@@ -67,6 +67,8 @@ pub struct EnvInputs<'a> {
     pub vault_prompt: Option<Arc<dyn pmt_tools::browser::vault::MaskedPrompt>>,
     /// Receipts, quiet-wait and handoff of the background processes.
     pub processes: &'a super::processes::Wiring,
+    /// File snapshots (undo and checkpoints), when on.
+    pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -106,6 +108,8 @@ pub struct Attached {
     pub terminal: Option<Arc<Terminal>>,
     /// Sync-back of a remote workspace (session end, `/sync`).
     pub sync: Option<Arc<pmt_tools::terminal::sync::SyncBack>>,
+    /// File snapshots (`/undo`, `/rollback`, `/diff session`).
+    pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
     /// How the session runs a command: its sandbox, child environment and
     /// shell (skills' inline snippets run the same way).
     pub commands: Option<Commands>,
@@ -231,6 +235,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         browser,
         terminal,
         sync,
+        snapshots: inputs.snapshots.clone(),
         commands,
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
@@ -338,6 +343,7 @@ fn files(
     remote: Option<RemoteFiles>,
 ) -> FileSession {
     let host_cwd = inputs.cwd.to_path_buf();
+    let remote_files = remote.is_some();
     let (backend, cwd) = remote.unwrap_or_else(|| {
         let backend: Arc<dyn pmt_tools::files::FileBackend> =
             Arc::new(LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy));
@@ -353,7 +359,11 @@ fn files(
         read_max_chars: limit(inputs.config, |c| c.files.read_max_chars),
         linter: Linter::builtin(),
         documents: super::documents::converter(inputs.scope, inputs.launch),
-        edits: None,
+        edits: inputs
+            .snapshots
+            .clone()
+            .filter(|_| !remote_files)
+            .map(|s| s as Arc<dyn pmt_tools::files::edits::EditRecorder>),
     })
 }
 
@@ -387,6 +397,8 @@ fn processes(
         },
     );
     env.set_temp_dir(scratch);
+    // `prometheus verify` run by the session records its evidence here.
+    env.set("PROMETHEUS_SESSION_ID", inputs.session_id);
     if let Some(url) = proxy.map(pmt_net::egress::Proxy::url) {
         env.set_proxy(&url);
     }
@@ -434,7 +446,12 @@ fn terminal(
         notify: inputs.completions.clone(),
         auto_notify: inputs.processes.auto_notify,
         receipts: Some(Arc::clone(&inputs.processes.receipts)),
-        before_command: None,
+        // A remote backend's files are not on this host.
+        before_command: inputs.snapshots.clone().filter(|_| remote.is_none()).map(
+            |s| -> pmt_tools::terminal::BeforeCommand {
+                Arc::new(move |command: &str, cwd: &Path| s.before_command(command, cwd))
+            },
+        ),
         clock: None,
     })
     .map_err(|e| {

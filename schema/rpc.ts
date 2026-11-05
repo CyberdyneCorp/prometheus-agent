@@ -374,6 +374,50 @@ export interface EventsSinceParams {
   session_id: string;
 }
 
+/** `files.rollback` params: no checkpoint lists them; `diff` previews. */
+export interface FilesRollbackParams {
+  /** Overwrite hand-edited files too. */
+  all?: boolean;
+  /** The checkpoint, 1 for the newest. */
+  checkpoint?: number | null;
+  /** Show the diff to the current state; change nothing. */
+  diff?: boolean;
+  /** Restore only this file. */
+  file?: string | null;
+  /** The session (its workspace). */
+  session_id: string;
+}
+
+/** `files.rollback` result. */
+export interface FilesRolledBack {
+  /** The listing, the diff or what was restored, as text. */
+  output: string;
+}
+
+/** `files.undo` params. */
+export interface FilesUndoParams {
+  /** Report only; change nothing. */
+  dry_run?: boolean;
+  /** Overwrite files changed since the session wrote them. */
+  force?: boolean;
+  /** The session. */
+  session_id: string;
+  /** How many of its last turns (default 1). */
+  turns?: number | null;
+}
+
+/** `files.undo` result. */
+export interface FilesUndone {
+  /** `conflict: <path> changed since turn <n>; use --force to overwrite`. */
+  conflicts: Array<string>;
+  /** Files the session had created, removed. */
+  removed: Array<string>;
+  /** Files given their prior content. */
+  restored: Array<string>;
+  /** The turns undone. */
+  turns: Array<number>;
+}
+
 /** `session.fork` params. */
 export interface ForkParams {
   /** The last message the fork keeps (`msg_<ULID>`); default the session's last active message. */
@@ -884,6 +928,8 @@ export interface Methods {
   "complete.slash": { params: CompleteParams; result: Completions };
   "config.get": { params: ConfigGetParams; result: ConfigValue };
   "egress.set": { params: EgressSetParams; result: EgressState };
+  "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
+  "files.undo": { params: FilesUndoParams; result: FilesUndone };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -949,8 +995,6 @@ export const UNDECLARED = [
   "experience.pin",
   "experience.restore",
   "experience.show",
-  "files.rollback",
-  "files.undo",
   "grants.list",
   "grants.revoke",
   "groups.capabilities",

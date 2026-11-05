@@ -46,9 +46,15 @@ impl FileSession {
                 return stale_result(raw, stale);
             }
         }
+        self.before_change(&target.path);
         if let Err(err) = self.backend().write(&target.path, content.as_bytes()) {
             return io_failure(raw, &err);
         }
+        self.changed(
+            &target.path,
+            target.existing.as_deref(),
+            Some(content.as_bytes()),
+        );
         self.note_written(&target.path, content);
         let lint = self.setup.linter.check(&target.path, content);
         json_result(

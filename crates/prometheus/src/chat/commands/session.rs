@@ -30,15 +30,6 @@ pub(crate) fn take_now(args: &str) -> (String, bool) {
     (kept.join(" "), now)
 }
 
-/// `/undo`: the last exchange leaves the active transcript.
-pub(super) fn undo(ctx: &Ctx<'_>) -> Result<String, Error> {
-    let rewound = ctx.factory.store.undo_last_turn(ctx.live.id, None)?;
-    Ok(format!(
-        "undid the last exchange ({} messages)",
-        rewound.messages.len()
-    ))
-}
-
 /// `/retry`: the last user message again, with its attachments; what
 /// followed it leaves the active transcript. `None`: nothing to retry.
 ///

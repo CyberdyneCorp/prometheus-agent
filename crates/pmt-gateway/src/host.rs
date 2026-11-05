@@ -109,6 +109,40 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// Undoes a session's file changes (`files.undo`), loading the
+    /// session first. Hosts without file snapshots refuse.
+    fn files_undo<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesUndoParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesUndone> {
+        let _ = (profile, params, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no file snapshots",
+            ))
+        })
+    }
+
+    /// Lists, previews or restores a session workspace's checkpoints
+    /// (`files.rollback`). Hosts without file snapshots refuse.
+    fn files_rollback<'a>(
+        &'a self,
+        profile: &'a str,
+        params: pmt_rpc::contracts::FilesRollbackParams,
+        link: Link,
+    ) -> HostFuture<'a, pmt_rpc::contracts::FilesRolledBack> {
+        let _ = (profile, params, link);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no file snapshots",
+            ))
+        })
+    }
+
     /// The credential vault of `profile` and its scope (`vault.*`). Hosts
     /// without profiles on disk refuse.
     ///
