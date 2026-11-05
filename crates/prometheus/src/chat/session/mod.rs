@@ -13,6 +13,7 @@ pub mod env;
 mod guardian;
 mod lifecycle;
 mod mcp;
+pub mod modal;
 pub mod model;
 mod plugins;
 pub mod processes;

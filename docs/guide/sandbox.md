@@ -202,6 +202,15 @@ command uploads at most 512 MiB (a notice lists what was left out).
 
 ### Plugin backends
 
+`terminal.backend = "modal"` authenticates by `terminal.modal.mode`:
+`direct` (the `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` secrets),
+`managed` (the Nous subscription sign-in, billed as
+`subscription:nous`) or `auto` (default: direct when both secrets are
+stored, else managed when signed in). `prometheus doctor terminal` shows
+the chosen mode, or fails naming both missing options. The first-party
+`singularity`, `modal`, `daytona` and `vercel` plugins themselves are not
+published yet.
+
 A `terminal-backend` plugin (world 1.1) provides `name`, `descriptor`,
 `check`, `execute`, `upload`, `download`, `cancel` and `teardown`. Its name
 may not be `local`, `container`, `docker`, `podman` or `ssh` (any case), and

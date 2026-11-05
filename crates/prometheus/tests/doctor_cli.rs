@@ -239,3 +239,31 @@ mod repairs {
         );
     }
 }
+
+/// Scenario: Modal auto without credentials (execution-environments,
+/// First-party backend plugins): the backend is reported unavailable
+/// naming both missing options, and doctor exits 1.
+#[test]
+fn modal_auto_without_credentials() {
+    let home = mock_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "terminal.backend", "modal"],
+    ));
+    let out = run(home.path(), &["doctor", "terminal"]);
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    let text = stdout(&out);
+    let line = text
+        .lines()
+        .find(|l| l.starts_with("fail") && l.contains("modal backend unavailable"))
+        .unwrap_or_else(|| panic!("no modal line:\n{text}"));
+    assert!(line.contains("MODAL_TOKEN_ID"), "{line}");
+    assert!(line.contains("no subscription signed in"), "{line}");
+
+    // With the Modal secrets stored, direct mode is chosen and shown.
+    for name in ["MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET"] {
+        common::run_with_stdin(home.path(), &["secrets", "set", name], "value\n");
+    }
+    let text = stdout(&run(home.path(), &["doctor", "terminal"]));
+    assert!(text.contains("mode: direct"), "{text}");
+}
