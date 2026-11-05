@@ -137,7 +137,29 @@ pub(crate) fn profile(policy: &Policy) -> String {
     }
     filesystem(policy, &mut sbpl);
     network(policy, &mut sbpl);
+    if policy.is_browser() {
+        browser(policy, &mut sbpl);
+    }
     sbpl
+}
+
+/// What a Chromium-family browser needs beyond files and TCP: its child
+/// processes find the browser through a Mach rendezvous service it
+/// registers (`<bundle id>.MachPortRendezvousServer.<pid>`), its power
+/// monitor opens the power-management user client, and its process
+/// singleton binds a Unix socket in its temp directory (a writable root;
+/// `MAC_CHROMIUM_TMPDIR` points it there instead of the user's temp).
+fn browser(policy: &Policy, sbpl: &mut String) {
+    sbpl.push_str(
+        "(allow mach-register mach-lookup (global-name-regex #\"\\.MachPortRendezvousServer\\.[0-9]+$\"))\n(allow iokit-open (iokit-user-client-class \"RootDomainUserClient\"))\n",
+    );
+    for root in policy.write_roots() {
+        let _ = writeln!(
+            sbpl,
+            "(allow network-bind network-inbound network-outbound (local unix-socket (subpath {})))",
+            path(root)
+        );
+    }
 }
 
 fn filesystem(policy: &Policy, sbpl: &mut String) {

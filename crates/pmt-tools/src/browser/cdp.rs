@@ -1,4 +1,5 @@
-//! A minimal Chrome DevTools Protocol client over one WebSocket.
+//! A minimal Chrome DevTools Protocol client over one WebSocket, or over
+//! the pipe pair of a browser started with `--remote-debugging-pipe`.
 //!
 //! Commands are JSON `{id, method, params, sessionId?}`; replies carry the
 //! same `id`. Messages without an `id` are events, fanned out to every
@@ -60,36 +61,105 @@ impl Cdp {
         let (socket, _) = tokio_tungstenite::connect_async(endpoint)
             .await
             .map_err(|err| format!("cannot connect to {endpoint}: {err}"))?;
-        let (mut sink, mut stream) = socket.split();
-        let (outgoing, mut queue) = mpsc::unbounded_channel::<String>();
-        let pending: Pending = Arc::default();
-        let (events, _) = broadcast::channel(256);
-        let closed = Arc::new(tokio::sync::Notify::new());
-        let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        tokio::spawn(async move {
+        let (mut sink, stream) = socket.split();
+        let incoming = stream
+            .take_while(|message| std::future::ready(message.is_ok()))
+            .filter_map(|message| {
+                std::future::ready(match message {
+                    Ok(Message::Text(text)) => Some(text.as_str().to_owned()),
+                    _ => None,
+                })
+            });
+        let writer = |mut queue: mpsc::UnboundedReceiver<String>| async move {
             while let Some(text) = queue.recv().await {
                 if sink.send(Message::text(text)).await.is_err() {
                     break;
                 }
             }
             let _ = sink.close().await;
-        });
+        };
+        Ok(Self::assemble(endpoint, writer, incoming))
+    }
+
+    /// A connection over Chromium's `--remote-debugging-pipe`: messages
+    /// are JSON texts each ended by a NUL byte, written to the browser on
+    /// `to_browser` (its fd 3) and read from `from_browser` (its fd 4).
+    /// `label` stands in for the endpoint (a pipe cannot be reconnected).
+    ///
+    /// # Errors
+    ///
+    /// A descriptor cannot be registered with the runtime.
+    #[cfg(unix)]
+    pub fn over_pipe(
+        label: &str,
+        to_browser: std::os::fd::OwnedFd,
+        from_browser: std::os::fd::OwnedFd,
+    ) -> Result<Arc<Self>, String> {
+        use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _};
+        use tokio::net::unix::pipe;
+
+        let register = |err: std::io::Error| format!("cannot use the browser pipe: {err}");
+        let mut sender = pipe::Sender::from_owned_fd(to_browser).map_err(register)?;
+        let receiver = pipe::Receiver::from_owned_fd(from_browser).map_err(register)?;
+        let incoming = futures_util::stream::unfold(
+            tokio::io::BufReader::new(receiver),
+            |mut reader| async move {
+                let mut frame = Vec::new();
+                match reader.read_until(0, &mut frame).await {
+                    Ok(0) | Err(_) => None,
+                    Ok(_) => {
+                        if frame.last() == Some(&0) {
+                            frame.pop();
+                        }
+                        Some((String::from_utf8_lossy(&frame).into_owned(), reader))
+                    }
+                }
+            },
+        );
+        let writer = |mut queue: mpsc::UnboundedReceiver<String>| async move {
+            while let Some(text) = queue.recv().await {
+                let mut frame = text.into_bytes();
+                frame.push(0);
+                if sender.write_all(&frame).await.is_err() {
+                    break;
+                }
+            }
+        };
+        Ok(Self::assemble(label, writer, incoming))
+    }
+
+    /// Starts the writer (draining the outgoing queue) and the reader
+    /// (dispatching replies and events until the stream ends).
+    fn assemble<W, F>(
+        endpoint: &str,
+        writer: W,
+        incoming: impl futures_util::Stream<Item = String> + Send + 'static,
+    ) -> Arc<Self>
+    where
+        W: FnOnce(mpsc::UnboundedReceiver<String>) -> F,
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let (outgoing, queue) = mpsc::unbounded_channel::<String>();
+        let pending: Pending = Arc::default();
+        let (events, _) = broadcast::channel(256);
+        let closed = Arc::new(tokio::sync::Notify::new());
+        let alive = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        tokio::spawn(writer(queue));
         let reader = Reader {
             pending: Arc::clone(&pending),
             events: events.clone(),
         };
         let (reader_closed, reader_alive) = (Arc::clone(&closed), Arc::clone(&alive));
         tokio::spawn(async move {
-            while let Some(Ok(message)) = stream.next().await {
-                if let Message::Text(text) = message {
-                    reader.dispatch(text.as_str());
-                }
+            let mut incoming = std::pin::pin!(incoming);
+            while let Some(text) = incoming.next().await {
+                reader.dispatch(&text);
             }
             reader_alive.store(false, Ordering::SeqCst);
             reader.fail_all();
             reader_closed.notify_waiters();
         });
-        Ok(Arc::new(Self {
+        Arc::new(Self {
             endpoint: endpoint.to_owned(),
             next_id: AtomicU64::new(1),
             outgoing,
@@ -97,7 +167,7 @@ impl Cdp {
             events,
             closed,
             alive,
-        }))
+        })
     }
 
     /// The endpoint this connection is bound to.

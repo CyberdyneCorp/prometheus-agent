@@ -5,13 +5,16 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use pmt_config::schema::{BrowserConfig, SandboxConfig};
 use pmt_core::env::{EnvPolicy, LaunchEnv};
 use pmt_core::secret::{Redactor, SecretString};
 use pmt_net::DestinationPolicy;
+use pmt_net::egress::{HostPolicy, Mode, Proxy, Rules};
 use pmt_net::resolve::SystemLookup;
 use pmt_sandbox::{Options, Paths, Policy, Sandbox};
+use pmt_tools::browser::launch::{Confinement, Launched, launch};
 use pmt_tools::browser::safety::EgressLookup;
 use pmt_tools::browser::{
     BrowserExec, BrowserManager, BrowserSetup, CloudProvider, ExecArgs, ExecSetup, NoRuntimes,
@@ -122,7 +125,59 @@ impl Fixture {
                 session: None,
             },
             providers,
+            confinement: self.confinement(SandboxConfig::default()),
         })
+    }
+
+    /// Where local browsers are confined, with `sandbox` as
+    /// `security.sandbox`.
+    pub(crate) fn confinement(&self, sandbox: SandboxConfig) -> Confinement {
+        Confinement {
+            user_home: self.home.clone(),
+            prometheus_home: self.home.join(".prometheus"),
+            sandbox,
+        }
+    }
+
+    /// A local launch as a manager makes it: through an egress proxy that
+    /// admits public hosts, under the OS sandbox with `sandbox` as
+    /// `security.sandbox`. The proxy stops when dropped.
+    pub(crate) async fn launch(
+        &self,
+        executable: &Path,
+        profiles: &Path,
+        timeout: Duration,
+        sandbox: SandboxConfig,
+    ) -> Result<(Launched, Proxy), String> {
+        self.launch_with_env(executable, profiles, timeout, sandbox, &self.env())
+            .await
+    }
+
+    /// [`Fixture::launch`] with `env` as the browser's environment.
+    pub(crate) async fn launch_with_env(
+        &self,
+        executable: &Path,
+        profiles: &Path,
+        timeout: Duration,
+        sandbox: SandboxConfig,
+        env: &ChildEnv,
+    ) -> Result<(Launched, Proxy), String> {
+        let rules = Rules::new(
+            Arc::new(HostPolicy::new(Mode::Public, Vec::new())),
+            DestinationPolicy::new(true, &[]).unwrap(),
+            "browser",
+        );
+        let proxy = Proxy::start(rules).unwrap();
+        let launched = launch(
+            executable,
+            profiles,
+            env,
+            timeout,
+            &proxy,
+            &self.confinement(sandbox),
+        )
+        .await?;
+        Ok((launched, proxy))
     }
 
     pub(crate) fn exec(&self, manager: &Arc<BrowserManager>, image_input: bool) -> BrowserExec {
@@ -246,4 +301,52 @@ pub(crate) fn records(cache: &Path) -> Vec<PathBuf> {
     std::fs::read_dir(cache.join("records"))
         .map(|d| d.flatten().map(|e| e.path()).collect())
         .unwrap_or_default()
+}
+
+/// A browser of this host started outside any manager with a loopback
+/// DevTools port, standing in for a browser the user runs.
+pub(crate) struct External {
+    child: std::process::Child,
+    /// Its browser-level DevTools WebSocket URL.
+    pub(crate) endpoint: String,
+}
+
+impl External {
+    pub(crate) fn start(executable: &Path, dir: &Path) -> Self {
+        std::fs::create_dir_all(dir).unwrap();
+        let profile = tempfile::tempdir_in(dir).unwrap().keep();
+        let mut flag = OsString::from("--user-data-dir=");
+        flag.push(&profile);
+        let mut child = std::process::Command::new(executable)
+            .args([
+                "--headless=new",
+                "--remote-debugging-port=0",
+                "--no-first-run",
+            ])
+            .arg(flag)
+            .arg("about:blank")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let file = profile.join("DevToolsActivePort");
+        for _ in 0..600 {
+            if let Ok(text) = std::fs::read_to_string(&file) {
+                let mut lines = text.lines();
+                if let (Some(port), Some(path)) = (lines.next(), lines.next()) {
+                    let endpoint = format!("ws://127.0.0.1:{}{}", port.trim(), path.trim());
+                    return Self { child, endpoint };
+                }
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("{} published no DevTools port", executable.display());
+    }
+
+    pub(crate) fn stop(mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }

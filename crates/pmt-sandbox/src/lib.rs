@@ -21,6 +21,8 @@ pub mod backend;
 mod carve;
 pub mod console;
 pub mod container;
+#[cfg(unix)]
+pub mod fds;
 pub mod launcher;
 mod locations;
 pub mod policy;

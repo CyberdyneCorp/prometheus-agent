@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 use pmt_config::ProfileScope;
 use pmt_config::schema::SandboxConfig;
+use pmt_core::capability::{Capability, CapabilitySet};
 use pmt_core::env::LaunchEnv;
 use pmt_tools::browser::RuntimePolicy;
 use pmt_tools::files::documents::{ConvertError, Converted, DocConverter};
@@ -155,18 +156,23 @@ impl Job {
             workspace: self.dir.path().join("input"),
             scratch: vec![self.tmp()],
         };
-        let capabilities = [
-            "fs.read:<workspace>/**".to_owned(),
-            "fs.read:<scratch>/**".to_owned(),
-            "fs.write:<scratch>/**".to_owned(),
-            "fs.read:<toolchain>".to_owned(),
-            format!("fs.read:{}/**", runtime_dir.display()),
-            "process.spawn:*".to_owned(),
-        ];
         let sandbox_error =
             |e: pmt_core::error::Error| ConvertError::Failed(e.message().to_owned());
-        let policy =
-            pmt_sandbox::Policy::from_capabilities(&capabilities, &paths).map_err(sandbox_error)?;
+        let mut capabilities = [
+            "fs.read:<workspace>/**",
+            "fs.read:<scratch>/**",
+            "fs.write:<scratch>/**",
+            "fs.read:<toolchain>",
+            "process.spawn:*",
+        ]
+        .iter()
+        .map(|c| Capability::parse(c))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sandbox_error)?;
+        // The runtime's path may hold spaces: no capability-string form.
+        capabilities.push(Capability::read_under(&runtime_dir));
+        let set: CapabilitySet = capabilities.into_iter().collect();
+        let policy = pmt_sandbox::Policy::from_set(&set, &paths);
         pmt_sandbox::Sandbox::new(policy, &confinement.sandbox).map_err(sandbox_error)
     }
 

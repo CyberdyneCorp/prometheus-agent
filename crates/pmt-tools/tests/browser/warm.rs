@@ -15,7 +15,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use pmt_tools::browser::launch::launch;
+use pmt_config::schema::{DegradedFeature, SandboxConfig, SandboxMode};
 
 use crate::support::Fixture;
 
@@ -62,8 +62,17 @@ fn start(executable: PathBuf, timeout: Duration) {
         runtime.block_on(async {
             let fixture = Fixture::new();
             let profiles = fixture.browser_cache().join("profiles");
-            match launch(&executable, &profiles, &fixture.env(), timeout, None).await {
-                Ok(launched) => launched.terminate().await,
+            // The warm-up is about a cold disk, not isolation; the fake
+            // browsers of these tests log outside any sandbox.
+            let unconfined = SandboxConfig {
+                mode: SandboxMode::Off,
+                allow_degraded: vec![DegradedFeature::All],
+            };
+            match fixture
+                .launch(&executable, &profiles, timeout, unconfined)
+                .await
+            {
+                Ok((launched, _proxy)) => launched.terminate().await,
                 Err(why) => eprintln!("browser warm-up: {why}"),
             }
         });
@@ -81,7 +90,7 @@ fn fake_browser(dir: &Path, log: &Path) -> PathBuf {
         &fake,
         format!(
             "#!/bin/sh\nfor arg in \"$@\"; do\n  case \"$arg\" in --user-data-dir=*) dir=\"${{arg#--user-data-dir=}}\" ;; esac\ndone\n\
-             echo started >> '{}'\nprintf '1\\n/devtools/browser/fake\\n' > \"$dir/DevToolsActivePort\"\nexec sleep 600\n",
+             echo started >> '{}'\ndd bs=1 count=1 <&3 >/dev/null 2>&1\nprintf '{{\"id\":1,\"result\":{{}}}}\\000' >&4\nexec sleep 600\n",
             log.display()
         ),
     )

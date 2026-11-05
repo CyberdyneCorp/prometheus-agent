@@ -56,6 +56,8 @@ pub struct BrowserSetup {
     pub safety: UrlSafety,
     /// Cloud providers by `browser.provider` name (plugins).
     pub providers: BTreeMap<String, Arc<dyn CloudProvider>>,
+    /// The OS sandbox local browsers run under.
+    pub confinement: launch::Confinement,
 }
 
 /// Where a session's browser runs.
@@ -401,7 +403,8 @@ impl BrowserManager {
             &self.setup.cache_dir.join("profiles"),
             &self.setup.env,
             launch::LAUNCH_TIMEOUT,
-            Some(&proxy.url()),
+            &proxy,
+            &self.setup.confinement,
         )
         .await?;
         let record = self
@@ -416,8 +419,12 @@ impl BrowserManager {
             pid: launched.pid,
             _proxy: proxy,
         };
-        let cdp = Cdp::connect(&launched.endpoint).await?;
-        Ok(self.session_over(cdp, Origin::Local, Some(local), fallback_from_cloud))
+        Ok(self.session_over(
+            launched.cdp,
+            Origin::Local,
+            Some(local),
+            fallback_from_cloud,
+        ))
     }
 
     /// The egress proxy of session `key`'s local browser: the session's

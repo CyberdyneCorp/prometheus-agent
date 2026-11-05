@@ -2,7 +2,7 @@
 //! directory is gone even when a helper was still writing to it (spec:
 //! execution-environments, Browser supervision, dialogs and cleanup).
 //!
-//! A fake browser stands in for Chromium: it publishes a DevTools endpoint
+//! A fake browser stands in for Chromium: it answers the first DevTools call
 //! and forks a helper that keeps recreating files in the profile, the way
 //! Chromium's zygote, renderer and crashpad helpers do on Linux.
 
@@ -10,7 +10,8 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use pmt_tools::browser::launch::{Launched, launch};
+use pmt_config::schema::{DegradedFeature, SandboxConfig, SandboxMode};
+use pmt_tools::browser::launch::Launched;
 use pmt_tools::browser::records::{Record, Records};
 
 use crate::support::Fixture;
@@ -22,7 +23,8 @@ for arg in "$@"; do
 done
 (while :; do mkdir -p "$dir/Default" && : > "$dir/Default/Cookies-journal"; sleep 0.01; done) &
 echo $! > "$HOME/helper.pid"
-printf '1\n/devtools/browser/fake\n' > "$dir/DevToolsActivePort"
+dd bs=1 count=1 <&3 >/dev/null 2>&1
+printf '{"id":1,"result":{}}\000' >&4
 sleep 600
 "#;
 
@@ -30,15 +32,21 @@ async fn launch_fake(fixture: &Fixture) -> Launched {
     let fake = fixture.home.join("fake-browser");
     std::fs::write(&fake, FAKE_BROWSER).unwrap();
     std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-    launch(
-        &fake,
-        &fixture.browser_cache().join("profiles"),
-        &fixture.env(),
-        Duration::from_secs(10),
-        None,
-    )
-    .await
-    .unwrap()
+    // The fake writes its helper's pid outside its sandbox: unconfined.
+    let unconfined = SandboxConfig {
+        mode: SandboxMode::Off,
+        allow_degraded: vec![DegradedFeature::All],
+    };
+    fixture
+        .launch(
+            &fake,
+            &fixture.browser_cache().join("profiles"),
+            Duration::from_secs(10),
+            unconfined,
+        )
+        .await
+        .unwrap()
+        .0
 }
 
 /// The helper's pid; on drop the helper is killed, so a failing test does

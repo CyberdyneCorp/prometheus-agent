@@ -497,6 +497,9 @@ capabilities = [
 [execution-environments."Browser URL safety"]
 "Metadata endpoint locally" = ["crates/pmt-tools/src/browser/safety.rs::metadata_is_refused_even_where_private_addresses_are_allowed"]
 
+[execution-environments."Local browser isolation"]
+"No consent" = ["crates/pmt-tools/tests/browser/isolation.rs::no_consent", "crates/pmt-tools/tests/browser/isolation.rs::a_local_browser_writes_only_its_own_directories_and_goes_through_the_proxy"]
+
 [execution-environments."Browser supervision, dialogs and cleanup"]
 "Crashed browser" = ["crates/pmt-tools/tests/browser/main.rs::a_crashed_browser_is_replaced_and_its_record_removed"]
 

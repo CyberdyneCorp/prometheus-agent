@@ -11,6 +11,7 @@
 
 pub mod cdp;
 pub mod cleanup;
+pub mod confine;
 pub mod exec;
 pub mod launch;
 pub mod records;

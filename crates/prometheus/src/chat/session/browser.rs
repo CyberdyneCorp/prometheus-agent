@@ -85,6 +85,11 @@ impl Shared {
                 session: None,
             },
             providers: BTreeMap::new(),
+            confinement: pmt_tools::browser::launch::Confinement {
+                user_home: launch.user_home().cloned().unwrap_or_default(),
+                prometheus_home: scope.home().to_path_buf(),
+                sandbox: config.security.sandbox.clone(),
+            },
         });
         Ok(Self {
             manager,

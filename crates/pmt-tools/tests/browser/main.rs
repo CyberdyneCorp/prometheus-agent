@@ -11,6 +11,7 @@
 #![cfg(unix)]
 
 mod cleanup;
+mod isolation;
 mod support;
 mod vault;
 mod warm;
@@ -19,7 +20,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use pmt_config::schema::DialogPolicy;
+use pmt_config::schema::{DialogPolicy, SandboxConfig};
 use pmt_tools::browser::launch::{InstallFuture, Runtimes};
 use pmt_tools::browser::{CloudProvider, NoRuntimes, Origin, RuntimePolicy};
 use pmt_tools::result::{Content, Status};
@@ -386,27 +387,10 @@ async fn a_missing_chromium_is_installed_on_first_use_only_when_allowed() {
 #[tokio::test]
 async fn an_explicit_endpoint_is_used_and_rebinding_replaces_the_session() {
     let fixture = Fixture::new();
-    let env = fixture.env();
     let executable = support::browsers()[0].clone();
     let profiles = fixture.home.join("external");
-    let a = pmt_tools::browser::launch::launch(
-        &executable,
-        &profiles,
-        &env,
-        Duration::from_secs(30),
-        None,
-    )
-    .await
-    .unwrap();
-    let b = pmt_tools::browser::launch::launch(
-        &executable,
-        &profiles,
-        &env,
-        Duration::from_secs(30),
-        None,
-    )
-    .await
-    .unwrap();
+    let a = support::External::start(&executable, &profiles);
+    let b = support::External::start(&executable, &profiles);
     fixture.config.lock().unwrap().cdp_url = Some(a.endpoint.clone());
     let manager = fixture.manager();
     let first = manager.session("ses_b/default").await.unwrap();
@@ -416,11 +400,11 @@ async fn an_explicit_endpoint_is_used_and_rebinding_replaces_the_session() {
     let second = manager.session("ses_b/default").await.unwrap();
     assert_eq!(second.origin(), &Origin::Connected(b.endpoint.clone()));
     // The supervisor gives up on a browser that is gone for good.
-    b.terminate().await;
+    b.stop();
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert!(!second.is_alive());
     manager.shutdown().await;
-    a.terminate().await;
+    a.stop();
 }
 
 #[tokio::test]
@@ -428,15 +412,15 @@ async fn a_crashed_owners_browser_is_reaped_by_the_next_process() {
     let fixture = Fixture::new();
     let executable = support::browsers()[0].clone();
     let cache = fixture.browser_cache();
-    let mut launched = pmt_tools::browser::launch::launch(
-        &executable,
-        &cache.join("profiles"),
-        &fixture.env(),
-        Duration::from_secs(30),
-        None,
-    )
-    .await
-    .unwrap();
+    let (mut launched, _proxy) = fixture
+        .launch(
+            &executable,
+            &cache.join("profiles"),
+            Duration::from_secs(30),
+            SandboxConfig::default(),
+        )
+        .await
+        .unwrap();
     // A record written by an owner that has since exited.
     let gone = std::process::Command::new("true").spawn().unwrap();
     let owner = gone.id();
@@ -474,16 +458,16 @@ async fn a_failed_start_reports_what_the_browser_said() {
     )
     .unwrap();
     std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let err = pmt_tools::browser::launch::launch(
-        &fake,
-        &fixture.home.join("profiles"),
-        &fixture.env(),
-        Duration::from_secs(10),
-        None,
-    )
-    .await
-    .err()
-    .unwrap();
+    let err = fixture
+        .launch(
+            &fake,
+            &fixture.home.join("profiles"),
+            Duration::from_secs(10),
+            SandboxConfig::default(),
+        )
+        .await
+        .err()
+        .unwrap();
     assert!(err.starts_with("the browser exited during start"), "{err}");
     assert!(err.contains("No usable sandbox!"), "{err}");
 }

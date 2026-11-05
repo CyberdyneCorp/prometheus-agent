@@ -86,6 +86,31 @@ crash handler) before its directories are removed. A browser that died is replac
 idle longer than `browser.inactivity_timeout_secs` (default 120, read when
 checked) are closed.
 
+### Isolation
+
+On macOS and Linux a local browser runs under the OS sandbox of
+`security.sandbox` (Seatbelt; Landlock and seccomp). It reads the system
+toolchain and its own installation (the whole `.app` bundle on macOS; on
+Linux also `/proc` and `/sys`), writes only its throwaway profile directory
+and a private temp directory (removed with it), and connects only to the
+session's egress proxy: Seatbelt allows loopback to the proxy's port, and
+on Linux the browser runs in its own network namespace whose only way out
+is the proxy. Every connection it makes therefore follows the session's
+`/egress` policy, and credential stores stay unreadable. DevTools runs over
+a pipe (`--remote-debugging-pipe`), so the browser listens on no port that
+another local process could drive. Chromium's own sandbox cannot start
+inside the OS sandbox (nested Seatbelt profiles and user namespaces are
+refused), so the browser runs with `--no-sandbox` while the OS sandbox
+confines its whole process tree. A host whose sandbox is degraded follows
+`security.sandbox.allow_degraded` like any other confined child.
+
+On Windows the browser still starts unconfined with a loopback DevTools
+port; only its proxy settings route it through the egress proxy.
+
+A session browses with a throwaway profile: without the
+`browser.real_profile` grant in `grants.toml` the user's real browser
+profile is never used (this release has no real-profile mode yet).
+
 ## Safety
 
 Before every navigation (and any `url` parameter of `cdp`):

@@ -6,8 +6,9 @@
 //! `chromium`, else from a missing runtime installed on first use (when
 //! `runtimes.allow_lazy_install` permits), else from a Chromium-family
 //! browser on the host. Each launch gets a throwaway profile directory and
-//! `--remote-debugging-port=0`; the DevTools endpoint is read back from the
-//! profile's `DevToolsActivePort` file.
+//! runs under the OS sandbox ([`super::confine`]) with DevTools on a pipe
+//! (`--remote-debugging-pipe`); Windows publishes a loopback DevTools port
+//! read back from the profile's `DevToolsActivePort` file.
 
 use std::ffi::OsString;
 use std::future::Future;
@@ -19,7 +20,11 @@ use std::time::Duration;
 
 use tokio::process::{Child, Command};
 
+use pmt_net::egress::Proxy;
+
+use super::cdp::Cdp;
 use super::cleanup;
+pub use super::confine::Confinement;
 use crate::terminal::env::ChildEnv;
 
 /// Bound on a browser start (`browser.launch_timeout_secs` default).
@@ -168,8 +173,8 @@ pub struct Launched {
     pub child: Child,
     /// Its pid.
     pub pid: u32,
-    /// The browser-level DevTools WebSocket URL.
-    pub endpoint: String,
+    /// The DevTools connection.
+    pub cdp: Arc<Cdp>,
     /// The throwaway profile directory.
     pub profile_dir: PathBuf,
     /// The browser's short temporary directory.
@@ -188,46 +193,78 @@ impl Launched {
     }
 }
 
-/// Launches `executable` headless on a fresh profile directory under
-/// `profiles_root` with `env` as its whole environment. With `proxy`
-/// (`http://127.0.0.1:<port>`, the session's egress proxy) every
-/// connection the browser makes goes through it, loopback included
-/// (spec: security-boundaries, the egress policy covers every outbound
+/// Launches `executable` headless on a fresh throwaway profile directory
+/// under `profiles_root` with `env` as its whole environment, under the
+/// OS sandbox of `confinement` (spec: execution-environments, Local
+/// browser isolation). Every connection the browser makes goes through
+/// `proxy`, the session's egress proxy, loopback included (spec:
+/// security-boundaries, the egress policy covers every outbound
 /// connection made by browsers): Chromium's implicit bypass of
-/// `localhost` would otherwise reach local services unchecked.
+/// `localhost` would otherwise reach local services unchecked; where the
+/// sandbox confines the network the OS enforces it too.
 ///
 /// # Errors
 ///
-/// The spawn failed, or the browser exited or never published its
-/// DevTools endpoint within `timeout`.
+/// The sandbox cannot be built, the spawn failed, or the browser exited
+/// or did not answer over DevTools within `timeout`.
 pub async fn launch(
     executable: &Path,
     profiles_root: &Path,
     env: &ChildEnv,
     timeout: Duration,
-    proxy: Option<&str>,
+    proxy: &Proxy,
+    confinement: &Confinement,
 ) -> Result<Launched, String> {
     let profile_dir = profiles_root.join(ulid::Ulid::generate().to_string().to_lowercase());
     pmt_core::private_fs::create_dir(&profile_dir)
         .map_err(|err| format!("cannot create the browser profile: {err}"))?;
-    // Chromium puts its singleton socket under TMPDIR, and a Unix socket
-    // path must stay under about 100 bytes: a session scratch directory is
-    // too deep, so the browser gets a short directory in the host's temp.
+    // Chromium puts its singleton socket under its temp directory, and a
+    // Unix socket path must stay under about 100 bytes: a session scratch
+    // directory is too deep, so the browser gets a short directory in the
+    // host's temp.
     let temp_dir = std::env::temp_dir().join(format!(
         "pmt-browser-{}",
         &ulid::Ulid::generate().to_string().to_lowercase()[16..]
     ));
-    pmt_core::private_fs::create_dir(&temp_dir)
-        .map_err(|err| format!("cannot create the browser's temp directory: {err}"))?;
+    if let Err(err) = pmt_core::private_fs::create_dir(&temp_dir) {
+        cleanup::remove_dir_async(&profile_dir).await;
+        return Err(format!("cannot create the browser's temp directory: {err}"));
+    }
+    let dirs = Dirs {
+        profile: profile_dir.clone(),
+        temp: temp_dir.clone(),
+    };
+    match start(executable, &dirs, env, timeout, proxy, confinement).await {
+        Ok((child, pid, cdp)) => Ok(Launched {
+            child,
+            pid,
+            cdp,
+            profile_dir,
+            temp_dir,
+        }),
+        Err(why) => {
+            cleanup::remove_dir_async(&profile_dir).await;
+            cleanup::remove_dir_async(&temp_dir).await;
+            Err(why)
+        }
+    }
+}
+
+/// The browser's own directories.
+struct Dirs {
+    profile: PathBuf,
+    temp: PathBuf,
+}
+
+/// The browser command line shared by every platform.
+fn base_command(command: &mut std::process::Command, dirs: &Dirs, env: &ChildEnv, proxy: &Proxy) {
     let mut env = env.clone();
-    env.set_temp_dir(&temp_dir);
+    env.set_temp_dir(&dirs.temp);
+    env.apply(command);
     let mut flag = OsString::from("--user-data-dir=");
-    flag.push(&profile_dir);
-    let mut std_command = std::process::Command::new(executable);
-    env.apply(&mut std_command);
-    std_command
+    flag.push(&dirs.profile);
+    command
         .arg("--headless=new")
-        .arg("--remote-debugging-port=0")
         .arg(flag)
         .args([
             "--no-first-run",
@@ -237,43 +274,183 @@ pub async fn launch(
             "--disable-sync",
             "--password-store=basic",
             "--use-mock-keychain",
-        ]);
-    if let Some(proxy) = proxy {
-        std_command
-            .arg(format!("--proxy-server={proxy}"))
-            .arg("--proxy-bypass-list=<-loopback>");
-    }
-    std_command
-        .arg("about:blank")
+        ])
+        .arg(format!("--proxy-server={}", proxy.url()))
+        .arg("--proxy-bypass-list=<-loopback>")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
-    cleanup::new_group(&mut std_command);
-    let mut command = Command::from(std_command);
-    command.kill_on_drop(true);
-    let mut child = command.spawn().map_err(|err| {
-        let _ = std::fs::remove_dir_all(&temp_dir);
-        format!("cannot start {}: {err}", executable.display())
-    })?;
+    cleanup::new_group(command);
+}
+
+/// Spawns the browser and waits until it answers over DevTools, killing
+/// it when it does not.
+async fn start(
+    executable: &Path,
+    dirs: &Dirs,
+    env: &ChildEnv,
+    timeout: Duration,
+    proxy: &Proxy,
+    confinement: &Confinement,
+) -> Result<(Child, u32, Arc<Cdp>), String> {
+    let Spawned { mut child, connect } = spawn(executable, dirs, env, proxy, confinement)?;
     let pid = child.id().unwrap_or_default();
     let log = StderrTail::drain(child.stderr.take());
-    let endpoint = match wait_for_endpoint(&mut child, &profile_dir, timeout).await {
-        Ok(endpoint) => endpoint,
+    match connect.ready(&mut child, &dirs.profile, timeout).await {
+        Ok(cdp) => Ok((child, pid, cdp)),
         Err(why) => {
             cleanup::kill_group(pid);
             let _ = child.start_kill();
             let _ = child.wait().await;
-            cleanup::remove_dir_async(&profile_dir).await;
-            cleanup::remove_dir_async(&temp_dir).await;
-            return Err(log.explain(why).await);
+            Err(log.explain(why).await)
         }
-    };
-    Ok(Launched {
+    }
+}
+
+/// A started browser and how to reach its DevTools.
+struct Spawned {
+    child: Child,
+    connect: Connect,
+}
+
+/// How DevTools is reached.
+enum Connect {
+    /// `--remote-debugging-pipe` (Unix): no listening port at all, so a
+    /// browser in its own network namespace stays reachable.
+    #[cfg(unix)]
+    Pipe(Arc<Cdp>),
+    /// `--remote-debugging-port=0` (Windows): the endpoint is read back
+    /// from the profile's `DevToolsActivePort` file.
+    #[cfg(not(unix))]
+    Port,
+}
+
+impl Connect {
+    async fn ready(
+        self,
+        child: &mut Child,
+        profile_dir: &Path,
+        timeout: Duration,
+    ) -> Result<Arc<Cdp>, String> {
+        match self {
+            #[cfg(unix)]
+            Self::Pipe(cdp) => {
+                let _ = profile_dir;
+                let probe = Arc::clone(&cdp);
+                let answer = tokio::select! {
+                    answer = probe.call_within("Browser.getVersion", serde_json::json!({}), None, timeout) => answer,
+                    status = child.wait() => return Err(exited(status)),
+                };
+                match answer {
+                    Ok(_) => Ok(cdp),
+                    // A closed pipe is usually a browser that just exited.
+                    Err(why) => {
+                        match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
+                            Ok(status) => Err(exited(status)),
+                            Err(_) if why.contains("timed out") => Err(format!(
+                                "the browser did not start within {} s",
+                                timeout.as_secs()
+                            )),
+                            Err(_) => Err(format!("the browser did not start: {why}")),
+                        }
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            Self::Port => {
+                let endpoint = wait_for_endpoint(child, profile_dir, timeout).await?;
+                Cdp::connect(&endpoint).await
+            }
+        }
+    }
+}
+
+/// The start failure of a browser that exited.
+#[cfg(unix)]
+fn exited(status: std::io::Result<std::process::ExitStatus>) -> String {
+    match status {
+        Ok(status) => format!("the browser exited during start ({status})"),
+        Err(err) => format!("the browser exited during start ({err})"),
+    }
+}
+
+#[cfg(unix)]
+fn spawn(
+    executable: &Path,
+    dirs: &Dirs,
+    env: &ChildEnv,
+    proxy: &Proxy,
+    confinement: &Confinement,
+) -> Result<Spawned, String> {
+    let sandbox =
+        super::confine::sandbox(executable, &dirs.profile, &dirs.temp, proxy, confinement)?;
+    let mut std_command = sandbox
+        .command(executable)
+        .map_err(|err| err.message().to_owned())?;
+    base_command(&mut std_command, dirs, env, proxy);
+    // Chromium's own sandbox cannot start inside the OS sandbox (nested
+    // Seatbelt profiles and user namespaces are refused); the OS sandbox
+    // confines the whole process tree instead.
+    if sandbox.confines() {
+        std_command.arg("--no-sandbox");
+    }
+    std_command
+        .env("MAC_CHROMIUM_TMPDIR", &dirs.temp)
+        .args([
+            "--remote-debugging-pipe",
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--disable-crash-reporter",
+            "--disable-breakpad",
+        ])
+        .arg("about:blank");
+    let pipe = |err: std::io::Error| format!("cannot create the DevTools pipe: {err}");
+    let (to_browser_read, to_browser_write) = std::io::pipe().map_err(pipe)?;
+    let (from_browser_read, from_browser_write) = std::io::pipe().map_err(pipe)?;
+    pmt_sandbox::fds::pass(
+        &mut std_command,
+        vec![(to_browser_read.into(), 3), (from_browser_write.into(), 4)],
+    )
+    .map_err(pipe)?;
+    let mut command = Command::from(std_command);
+    command.kill_on_drop(true);
+    let child = command
+        .spawn()
+        .map_err(|err| format!("cannot start {}: {err}", executable.display()))?;
+    // The command holds the browser's ends of the pipes: drop it so the
+    // pipe reports the browser's exit.
+    drop(command);
+    let label = format!("pipe:{}", child.id().unwrap_or_default());
+    let cdp = Cdp::over_pipe(&label, to_browser_write.into(), from_browser_read.into())?;
+    Ok(Spawned {
         child,
-        pid,
-        endpoint,
-        profile_dir,
-        temp_dir,
+        connect: Connect::Pipe(cdp),
+    })
+}
+
+/// Windows has no descriptor passing to a child at fixed numbers: the
+/// browser publishes a loopback DevTools port and runs unconfined there.
+#[cfg(not(unix))]
+fn spawn(
+    executable: &Path,
+    dirs: &Dirs,
+    env: &ChildEnv,
+    proxy: &Proxy,
+    _confinement: &Confinement,
+) -> Result<Spawned, String> {
+    let mut std_command = std::process::Command::new(executable);
+    base_command(&mut std_command, dirs, env, proxy);
+    std_command
+        .arg("--remote-debugging-port=0")
+        .arg("about:blank");
+    let mut command = Command::from(std_command);
+    command.kill_on_drop(true);
+    let child = command
+        .spawn()
+        .map_err(|err| format!("cannot start {}: {err}", executable.display()))?;
+    Ok(Spawned {
+        child,
+        connect: Connect::Port,
     })
 }
 
@@ -350,6 +527,7 @@ impl StderrTail {
 }
 
 /// Polls `DevToolsActivePort` (port, then path) until the browser writes it.
+#[cfg(not(unix))]
 async fn wait_for_endpoint(
     child: &mut Child,
     profile_dir: &Path,
