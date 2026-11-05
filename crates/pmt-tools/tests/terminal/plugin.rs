@@ -288,5 +288,13 @@ async fn a_background_plugin_command_past_its_timeout_is_cancelled() {
     );
     let request = fake.seen.lock().unwrap()[0].clone();
     assert_eq!(request.timeout_ms, 1000);
-    assert!(fake.cancelled().contains(&request.id));
+    // The cancel is sent from its own thread so a slow plugin cannot hold up
+    // the timeout; it lands shortly after the job ends.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !fake.cancelled().contains(&request.id) {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the timeout asks the plugin to cancel the call");
 }
