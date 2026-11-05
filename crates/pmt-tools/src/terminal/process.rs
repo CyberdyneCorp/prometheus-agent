@@ -7,6 +7,12 @@
 //! [`EXPIRY`] after it *finished*. [`ProcessRegistry::close`] (session end)
 //! stops every process group, and dropping the registry kills whatever is
 //! left, so a closed session leaves no orphan behind.
+//!
+//! A process is a local child ([`ProcessRegistry::track`]) or a [`Job`]: a
+//! command a `terminal-backend` plugin runs in one blocking `execute` call
+//! ([`ProcessRegistry::track_job`]). A job's output arrives when the call
+//! returns; stopping it signals its [`Group`], whose remote side asks the
+//! plugin to `cancel`.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -50,6 +56,31 @@ pub struct Completion {
     pub command: String,
     /// Its exit code (128 + signal for a signal death).
     pub exit_code: i32,
+}
+
+/// How a [`Job`] ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobEnd {
+    /// Its exit code.
+    pub exit_code: i32,
+    /// Everything it printed (or why it has no result).
+    pub output: String,
+}
+
+/// A background command that is not a local child process.
+pub struct Job {
+    /// Completes when the command ended.
+    pub run: std::pin::Pin<Box<dyn std::future::Future<Output = JobEnd> + Send>>,
+    /// Stops it: [`Group::terminate`] on kill and session end.
+    pub group: Group,
+}
+
+impl std::fmt::Debug for Job {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Job")
+            .field("group", &self.group)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Registry settings.
@@ -249,27 +280,48 @@ impl ProcessRegistry {
         }
     }
 
-    /// Tracks a started process and returns its id. Call
-    /// [`ProcessRegistry::reserve`] before starting it.
-    pub fn track(&self, spawned: Spawned, command: &str, notify: bool) -> String {
-        let Spawned { mut child, group } = spawned;
-        let id = format!(
-            "{ID_PREFIX}{}",
-            ulid::Ulid::generate().to_string().to_lowercase()
-        );
+    fn entry(
+        &self,
+        command: &str,
+        notify: bool,
+        process: (Option<u32>, Group, Option<ChildStdin>),
+    ) -> (Arc<Entry>, oneshot::Receiver<()>) {
+        let (pid, group, stdin) = process;
         let (kill_tx, kill_rx) = oneshot::channel();
         let entry = Arc::new(Entry {
-            id: id.clone(),
+            id: format!(
+                "{ID_PREFIX}{}",
+                ulid::Ulid::generate().to_string().to_lowercase()
+            ),
             command: command.to_owned(),
             started: self.now(),
-            pid: child.id(),
+            pid,
             group,
             notify,
             output: Mutex::default(),
             state: watch::Sender::new(State::Running),
-            stdin: tokio::sync::Mutex::new(child.stdin.take()),
+            stdin: tokio::sync::Mutex::new(stdin),
             kill: Mutex::new(Some(kill_tx)),
         });
+        (entry, kill_rx)
+    }
+
+    fn register(&self, entry: Arc<Entry>, supervisor: JoinHandle<()>) -> String {
+        let id = entry.id.clone();
+        self.lock().push(entry);
+        self.supervisors
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(supervisor);
+        id
+    }
+
+    /// Tracks a started process and returns its id. Call
+    /// [`ProcessRegistry::reserve`] before starting it.
+    pub fn track(&self, spawned: Spawned, command: &str, notify: bool) -> String {
+        let Spawned { mut child, group } = spawned;
+        let process = (child.id(), group, child.stdin.take());
+        let (entry, kill_rx) = self.entry(command, notify, process);
         let readers: Vec<JoinHandle<()>> = [
             child.stdout.take().map(|r| reader(&entry, r)),
             child.stderr.take().map(|r| reader(&entry, r)),
@@ -284,12 +336,21 @@ impl ProcessRegistry {
             kill_rx,
             self.options.clone(),
         ));
-        self.lock().push(entry);
-        self.supervisors
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(supervisor);
-        id
+        self.register(entry, supervisor)
+    }
+
+    /// Tracks a started [`Job`] and returns its id (it has no pid and no
+    /// stdin). Call [`ProcessRegistry::reserve`] before starting it.
+    pub fn track_job(&self, job: Job, command: &str, notify: bool) -> String {
+        let Job { run, group } = job;
+        let (entry, kill_rx) = self.entry(command, notify, (None, group, None));
+        let supervisor = tokio::spawn(supervise_job(
+            Arc::clone(&entry),
+            run,
+            kill_rx,
+            self.options.clone(),
+        ));
+        self.register(entry, supervisor)
     }
 
     /// Runs one `process` call and returns its JSON result.
@@ -515,7 +576,36 @@ async fn supervise(
             abort.abort();
         }
     }
-    let exit_code = status.map_or(-1, spawn::exit_code);
+    finish(
+        &entry,
+        status.map_or(-1, spawn::exit_code),
+        killed,
+        &options,
+    );
+}
+
+async fn supervise_job(
+    entry: Arc<Entry>,
+    run: std::pin::Pin<Box<dyn std::future::Future<Output = JobEnd> + Send>>,
+    kill: oneshot::Receiver<()>,
+    options: Options,
+) {
+    let (exit_code, killed) = tokio::select! {
+        end = run => {
+            entry.output().push(end.output.as_bytes());
+            (end.exit_code, false)
+        }
+        Ok(()) = kill => {
+            // The call's result, if it ever comes, is dropped.
+            entry.group.terminate();
+            (-1, true)
+        }
+    };
+    finish(&entry, exit_code, killed, &options);
+}
+
+/// Records the end of a process and sends its completion notification.
+fn finish(entry: &Entry, exit_code: i32, killed: bool, options: &Options) {
     entry.state.send_replace(State::Finished {
         exit_code,
         at: (options.clock)(),

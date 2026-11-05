@@ -110,6 +110,15 @@ enum Exec {
     },
 }
 
+/// How a background command came to be, for its result.
+#[derive(Debug, Clone, Copy)]
+struct Started {
+    /// Promoted past `terminal.max_foreground_secs`.
+    promoted: bool,
+    /// Asked for a pty (not supported yet).
+    pty: bool,
+}
+
 /// One session on the local backend.
 pub struct Terminal {
     setup: TerminalSetup,
@@ -360,10 +369,18 @@ impl Terminal {
                     )
                     .await
                 }
-                Exec::Background { .. } => TerminalResult::refused(format!(
-                    "terminal backend '{}' runs foreground commands only; use a local, container or ssh backend for background processes",
-                    plugin.name()
-                )),
+                Exec::Background {
+                    command,
+                    notify,
+                    promoted,
+                } => {
+                    let bound = args.timeout.map(|_| timeout_secs);
+                    let started = Started {
+                        promoted,
+                        pty: args.pty,
+                    };
+                    self.on_plugin_background(&plugin, &command, &cwd, notify, bound, started)
+                }
             };
         }
         let prepared = match self.prepare().await {
@@ -383,8 +400,11 @@ impl Terminal {
                 notify,
                 promoted,
             } => {
-                self.background(&command, &cwd, notify, promoted, args.pty)
-                    .await
+                let started = Started {
+                    promoted,
+                    pty: args.pty,
+                };
+                self.background(&command, &cwd, notify, started).await
             }
         };
         result.environment_recreated |= prepared.recreated;
@@ -424,6 +444,26 @@ impl Terminal {
                 result
             }
         }
+    }
+
+    /// A background command on a plugin backend: the plugin's `execute`
+    /// runs as a tracked job, bounded only when the call gave a timeout.
+    fn on_plugin_background(
+        &self,
+        plugin: &Arc<dyn pmt_sandbox::backend::RemoteBackend>,
+        command: &str,
+        cwd: &Path,
+        notify: bool,
+        timeout_secs: Option<u64>,
+        started: Started,
+    ) -> TerminalResult {
+        if let Err(message) = self.processes.reserve() {
+            return TerminalResult::refused(message);
+        }
+        let env = self.command_env(command);
+        let job = super::plugin::job(plugin, command, &cwd.to_string_lossy(), &env, timeout_secs);
+        let id = self.processes.track_job(job, command, notify);
+        self.started(id, started)
     }
 
     fn plan(&self, args: &TerminalArgs, timeout_secs: u64) -> Result<Exec, String> {
@@ -733,8 +773,7 @@ impl Terminal {
         command: &str,
         cwd: &Path,
         notify: bool,
-        promoted: bool,
-        pty: bool,
+        started: Started,
     ) -> TerminalResult {
         if let Err(message) = self.processes.reserve() {
             return TerminalResult::refused(message);
@@ -760,19 +799,24 @@ impl Terminal {
             Err(SpawnError::Infrastructure(reason)) => return self.degraded(reason).await,
         };
         let id = self.processes.track(spawned, command, notify);
+        self.started(id, started)
+    }
+
+    /// The result of a call that started background process `id`.
+    fn started(&self, id: String, started: Started) -> TerminalResult {
         let mut result = TerminalResult::new(Status::Started);
         result.exit_code = None;
         result.hint = Some(format!(
             "running in the background; check it with process(action=\"poll\", process_id=\"{id}\")"
         ));
-        if promoted {
+        if started.promoted {
             result.promoted_from_foreground = true;
             result.notices.push(format!(
                 "promoted_from_foreground: the timeout exceeds terminal.max_foreground_secs ({}s), so the command runs as background process {id}; you will be notified when it finishes",
                 self.setup.terminal.max_foreground_secs
             ));
         }
-        if pty {
+        if started.pty {
             result
                 .notices
                 .push("pty is not supported yet; the process runs with pipes".to_owned());

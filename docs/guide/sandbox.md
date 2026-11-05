@@ -188,8 +188,17 @@ A `terminal-backend` plugin (world 1.1) provides `name`, `descriptor`,
 may not be `local`, `container`, `docker`, `podman` or `ssh` (any case), and
 a descriptor with a missing field or an invalid value (a relative
 `default_cwd`) rejects the backend at load. An `execute` reply without an
-exit code is a contract violation (an error result, never exit 0). Plugin
-backends run foreground commands only.
+exit code is a contract violation (an error result, never exit 0).
+
+Background commands work on plugin backends too (`background = true`, a
+trailing `&`, or a timeout above `terminal.max_foreground_secs`): the host
+makes the `execute` call from a task the [`process`](../reference/tools.md#process) tool tracks. Its output
+arrives when the call returns (`poll` shows nothing before that, and
+`write`/`submit` have no stdin to write to); `kill`, the end of the session
+and the call's timeout (plus 10 s grace) ask the plugin to `cancel` it, and
+`notify_on_complete` or a promotion reports its end. A background call
+without a timeout sends `timeout-ms = 18446744073709551615` (`u64::MAX`):
+no limit.
 
 ```console
 $ prometheus config set terminal.backend acmebox

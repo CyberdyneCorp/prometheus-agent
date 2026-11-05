@@ -19,7 +19,8 @@ pub struct ExecRequest {
     pub cwd: String,
     /// Its environment (no secret the session was not granted).
     pub env: Vec<(String, String)>,
-    /// Milliseconds before the backend stops it.
+    /// Milliseconds before the backend stops it; `u64::MAX` means no limit
+    /// (a background command without a timeout, stopped by `cancel`).
     pub timeout_ms: u64,
 }
 

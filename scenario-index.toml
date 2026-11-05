@@ -454,7 +454,7 @@ capabilities = [
 
 [execution-environments."Foreground cap, promotion and server guard"]
 "Dev server in foreground" = ["crates/pmt-tools/tests/terminal/foreground.rs::a_dev_server_in_the_foreground_is_refused"]
-"Long test run" = ["crates/pmt-tools/tests/terminal/foreground.rs::a_long_timeout_is_promoted_to_a_tracked_background_process"]
+"Long test run" = ["crates/pmt-tools/tests/terminal/foreground.rs::a_long_timeout_is_promoted_to_a_tracked_background_process", "crates/pmt-tools/tests/terminal/plugin.rs::a_long_test_run_on_a_plugin_backend_is_promoted_and_notifies"]
 
 [execution-environments."Pre-execution guards fail closed"]
 "Wedged guard" = ["crates/pmt-tools/tests/terminal/environment.rs::a_wedged_guard_fails_closed"]

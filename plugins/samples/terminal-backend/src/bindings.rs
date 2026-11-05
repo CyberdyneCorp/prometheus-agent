@@ -2655,6 +2655,8 @@ pub mod exports {
                     /// The directory it starts in, in the backend's namespace.
                     pub cwd: _rt::String,
                     pub env: _rt::Vec<(_rt::String, _rt::String)>,
+                    /// When to stop the command; the maximum u64 means no limit (a
+                    /// background command without a timeout, stopped by `cancel`).
                     pub timeout_ms: u64,
                 }
                 impl ::core::fmt::Debug for Request {
