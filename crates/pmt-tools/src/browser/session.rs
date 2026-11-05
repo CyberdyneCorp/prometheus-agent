@@ -294,6 +294,17 @@ impl BrowserManager {
         (self.setup.config)()
     }
 
+    /// The hardening downgrades every local browser starts with now
+    /// (`browser.chromium_args` switches `security.sandbox.allow_degraded`
+    /// allows); a session reports them like sandbox gaps.
+    #[must_use]
+    pub fn downgrades(&self) -> Vec<pmt_sandbox::Gap> {
+        options::downgrades(
+            &self.config(),
+            &self.setup.confinement.sandbox.allow_degraded,
+        )
+    }
+
     /// Sets (or clears) chat session `session`'s `/browser connect`
     /// endpoint; its browser sessions bound to another endpoint are
     /// replaced on their next use (a cleared one returns to the configured

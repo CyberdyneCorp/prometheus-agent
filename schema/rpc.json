@@ -336,6 +336,13 @@
       "additionalProperties": false,
       "description": "`session.banner` result: what the TUI's startup banner lists.",
       "properties": {
+        "degraded": {
+          "description": "The degraded marker while the session runs below full hardening,\nfor example `sandbox: partial:landlock_net` (spec:\nsecurity-boundaries, Hardening downgrades are never silent).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "mcp_servers": {
           "description": "The session's MCP servers.",
           "items": {

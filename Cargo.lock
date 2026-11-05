@@ -3337,6 +3337,7 @@ dependencies = [
  "tokio-tungstenite",
  "toml",
  "tracing",
+ "tracing-subscriber",
  "tree-sitter",
  "tree-sitter-javascript",
  "tree-sitter-python",

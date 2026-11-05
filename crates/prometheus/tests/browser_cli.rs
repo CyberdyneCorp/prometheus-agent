@@ -121,3 +121,55 @@ fn the_connected_browser_tools_are_offered_only_with_an_endpoint() {
         assert!(row(&text, tool).contains("exposed"), "{text}");
     }
 }
+
+/// Scenario: Explicit downgrade (an allowed browser switch): a session
+/// whose local browsers start with `--no-sandbox` under
+/// `allow_degraded = ["chromium_sandbox"]` records it in the audit log and
+/// as a `security.downgrade` trajectory event.
+#[test]
+fn an_allowed_browser_downgrade_is_audited_and_traced_per_session() {
+    let home = common::mock_home();
+    let home = home.path();
+    common::append_config(
+        home,
+        "\n[browser]\nchromium_args = [\"--no-sandbox\"]\n\n[security.sandbox]\nallow_degraded = [\"chromium_sandbox\"]\n",
+    );
+    let out = common::command(home)
+        .current_dir(home)
+        .args(["chat", "--in-process", "-z", "hello"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    let session = common::newest_session(home);
+    let events: Vec<Value> = ok(&run(
+        home,
+        &["trajectory", "show", &session, "--format", "jsonl"],
+    ))
+    .lines()
+    .map(|line| serde_json::from_str::<Value>(line).unwrap())
+    .filter(|event| event["type"] == "security.downgrade")
+    .map(|event| event["payload"].clone())
+    .collect();
+    let browser: Vec<&Value> = events
+        .iter()
+        .filter(|e| e["feature"] == "chromium_sandbox")
+        .collect();
+    assert_eq!(browser.len(), 1, "{events:?}");
+    assert!(
+        browser[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("--no-sandbox"),
+        "{events:?}"
+    );
+    let audit =
+        std::fs::read_to_string(home.join("profiles/default/logs/security-audit.jsonl")).unwrap();
+    let records: Vec<Value> = audit
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|r| r["kind"] == "downgrade" && r["subject"] == "chromium_sandbox")
+        .collect();
+    assert_eq!(records.len(), 1, "{audit}");
+    assert_eq!(records[0]["session"], session.as_str(), "{audit}");
+}

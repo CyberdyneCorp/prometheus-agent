@@ -393,7 +393,7 @@ capabilities = [
 "Broad read grant" = ["crates/pmt-sandbox/tests/sandbox/unix.rs::broad_read_grant_still_denies_credential_stores", "crates/pmt-sandbox/tests/sandbox/windows.rs::credential_stores_stay_denied_under_a_broad_read_grant"]
 
 [security-boundaries."Hardening downgrades are never silent"]
-"Explicit downgrade" = ["crates/pmt-sandbox/tests/sandbox/degrade.rs::allowed_downgrade_runs_and_warns_on_every_start"]
+"Explicit downgrade" = ["crates/pmt-sandbox/tests/sandbox/degrade.rs::allowed_downgrade_runs_and_warns_on_every_start", "crates/pmt-tools/tests/browser/local_options.rs::an_allowed_downgrade_warns_on_every_browser_start", "crates/prometheus/src/chat/session/downgrades.rs::an_allowed_browser_switch_is_marked_audited_and_traced", "crates/prometheus/tests/browser_cli.rs::an_allowed_browser_downgrade_is_audited_and_traced_per_session", "crates/pmt-tui/src/banner.rs::a_degraded_session_shows_its_marker_under_the_title"]
 
 [security-boundaries."Private and metadata destinations"]
 "Mapped metadata address" = ["crates/pmt-net/src/destination.rs::metadata_endpoints_and_their_mapped_forms", "crates/prometheus/src/plugins_host/ports.rs::metadata_and_private_addresses_are_refused_under_a_wildcard_grant"]

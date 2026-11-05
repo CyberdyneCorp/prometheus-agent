@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod documents;
+pub mod downgrades;
 pub mod env;
 mod guardian;
 mod lifecycle;
@@ -215,6 +216,8 @@ pub struct Live {
     pub snapshots: Option<Arc<pmt_tools::snapshots::SessionSnapshots>>,
     /// Where `/diff` runs git (the session's backend).
     pub worktree: pmt_tools::snapshots::worktree::Worktree,
+    /// Its allowed hardening downgrades (banner marker, `security.downgrade`).
+    pub downgrades: downgrades::Downgrades,
     _environment: pmt_tools::environments::Attachment,
     _skills: pmt_skills::session::Attachment,
 }
@@ -448,7 +451,6 @@ impl Factory {
         target: &pmt_providers::resolve::Target,
         clients: Option<Clients>,
     ) -> Result<Live, Error> {
-        let interactive = self.options.interactive;
         let model = Arc::new(SwitchableModel::new(
             target.clone(),
             self.models.port(target).await?,
@@ -477,7 +479,7 @@ impl Factory {
         )?;
         let memory = Arc::new(MemorySession::new(self.memory_setup(id)?));
         let summarizer = self.models.summarizer(&model, id);
-        let cards = shows_cards(interactive, &session_surface);
+        let cards = shows_cards(self.options.interactive, &session_surface);
         let (agent_tools, clarify) =
             self.agent_tools(id, &memory, &summarizer, &capabilities, cards)?;
         let gate = self.gate(id, Some(&model), Some(&environment))?;
@@ -502,7 +504,7 @@ impl Factory {
         let events = events_to(trajectory.clone(), clients.map(|c| c.events));
         let _ = environment.denials.set(Arc::downgrade(&events));
         let events = self.with_lifecycle_hooks(id, &session, events);
-        let (tee, progress) = progress::Tee::new(events, interactive);
+        let (tee, progress) = progress::Tee::new(events, self.options.interactive);
         self.observe_model(&model, id, tee.notices());
         let mcp = self.mcp_session(id, target, &model, tee.notices(), &agent_tools);
         setup.events = Arc::new(tee);
@@ -541,6 +543,7 @@ impl Factory {
             sync: environment.sync,
             snapshots: environment.snapshots,
             worktree: environment.worktree,
+            downgrades: environment.downgrades,
             _environment: environment.attachment,
             _skills: attached,
         };
@@ -1198,7 +1201,8 @@ impl Live {
         self.tool_state.selection()
     }
 
-    /// Records `session.start` for `session` on `target`'s route.
+    /// Records `session.start` for `session` on `target`'s route, then
+    /// one `security.downgrade` per allowed hardening downgrade.
     async fn emit_start(
         &self,
         session: &pmt_store::Session,
@@ -1211,6 +1215,9 @@ impl Live {
             parent_session_id: session.parent_session_id.map(|p| p.to_string()),
         }))
         .await;
+        for event in self.downgrades.events() {
+            self.emit(event).await;
+        }
         // The gateway fires its own sessions' start through its hooks.
         if self.surface() != "gateway" {
             let fields = lifecycle::session_start(&self.id.to_string(), self.surface());

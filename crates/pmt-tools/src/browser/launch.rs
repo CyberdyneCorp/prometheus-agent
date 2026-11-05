@@ -225,6 +225,7 @@ pub async fn launch(
     confinement: &Confinement,
     options: &LaunchOptions,
 ) -> Result<Launched, String> {
+    super::options::warn_downgrades(&options.downgrades);
     let keep_profile = options.user_data_dir.is_some();
     let profile_dir = options
         .user_data_dir

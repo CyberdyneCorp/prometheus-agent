@@ -144,6 +144,8 @@ export interface Attached {
 
 /** `session.banner` result: what the TUI's startup banner lists. */
 export interface BannerInfo {
+  /** The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). */
+  degraded?: string | null;
   /** The session's MCP servers. */
   mcp_servers: Array<McpServerState>;
   /** The installed skills the session can load. */

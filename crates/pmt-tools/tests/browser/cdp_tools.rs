@@ -68,6 +68,21 @@ async fn a_pending_confirm_is_accepted_and_the_page_resumes() {
         .cdp_call(&call("Page.bringToFront", json!({}), Some(&target)))
         .await
         .unwrap();
+    // `Target.createTarget` returns on the initial blank document: a dialog
+    // opened there is answered, then the page's navigation commits and
+    // drops `window.answer`. Wait for the page itself.
+    let loaded = format!(
+        "location.href === '{}/' && document.readyState === 'complete'",
+        page.uri()
+    );
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    while evaluate(&browser, &target, &loaded).await != json!(true) {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the page did not load"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     evaluate(
         &browser,
         &target,

@@ -144,6 +144,7 @@ impl Tui<'_> {
                 .into_iter()
                 .map(|s| format!("{} ({}, {} tools)", s.name, s.state, s.tools))
                 .collect(),
+            degraded: info.degraded,
         };
         self.app.banner = Some(Banner::new(title, contents));
     }

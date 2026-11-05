@@ -370,7 +370,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 36. M2 Browser upgrades
 
-- [ ] 36.1 Implement `browser_cdp` and `browser_dialog`, local browser options with headed mode (refused on a headless server) and connecting to the user's running browser (disconnect keeps it open); verify against a local Chromium (spec: execution-environments)
+- [x] 36.1 Implement `browser_cdp` and `browser_dialog`, local browser options with headed mode (refused on a headless server) and connecting to the user's running browser (disconnect keeps it open); verify against a local Chromium (spec: execution-environments)
 - [x] 36.2 Implement first-party cloud browser providers (used only when configured), routing of private URLs to a local browser, and real-profile browsing with pin and consent revocation; verify with mock provider endpoints (spec: execution-environments)
 
 ## 37. M2 LSP diagnostics

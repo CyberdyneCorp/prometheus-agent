@@ -6,15 +6,18 @@
 //! profile directory (empty: a throwaway one), `chromium_args` extra
 //! switches, `launch_timeout_secs` the start bound and `headed` a visible
 //! window. Extra switches that turn off Chromium's own sandbox or its web
-//! security are refused unless `security.sandbox.allow_degraded` names
-//! `chromium_sandbox` or `web_security` (or `all`): they weaken isolation
-//! as much as a missing OS sandbox feature does.
+//! security are hardening downgrades (spec: security-boundaries, Hardening
+//! downgrades are never silent): refused unless
+//! `security.sandbox.allow_degraded` names `chromium_sandbox` or
+//! `web_security` (or `all`), and when allowed logged at WARN on every
+//! browser start and reported by the session like a sandbox gap.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use pmt_config::schema::{BrowserConfig, DegradedFeature};
+use pmt_sandbox::Gap;
 
 /// What a local launch takes from the configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +30,9 @@ pub struct LaunchOptions {
     pub user_data_dir: Option<PathBuf>,
     /// Extra switches, already checked by [`check_args`].
     pub extra_args: Vec<String>,
+    /// The hardening those switches turn off, allowed by
+    /// `security.sandbox.allow_degraded` (logged at WARN on every start).
+    pub downgrades: Vec<Gap>,
     /// The display variables the browser needs for a window.
     pub display_env: Vec<(String, OsString)>,
 }
@@ -39,6 +45,7 @@ impl Default for LaunchOptions {
             headed: false,
             user_data_dir: None,
             extra_args: Vec::new(),
+            downgrades: Vec::new(),
             display_env: Vec::new(),
         }
     }
@@ -151,28 +158,40 @@ const OWNED_SWITCHES: &[&str] = &[
     "--headless",
 ];
 
-/// The feature an extra switch weakens, if any.
-fn weakens(arg: &str) -> Option<DegradedFeature> {
+/// The hardening an extra switch turns off, if any.
+fn weakens(arg: &str) -> Option<Gap> {
     let flag = arg.split_once('=').map_or(arg, |(flag, _)| flag);
     if SANDBOX_SWITCHES.contains(&flag) {
-        return Some(DegradedFeature::ChromiumSandbox);
+        return Some(Gap::new(
+            DegradedFeature::ChromiumSandbox,
+            format!("browser.chromium_args '{arg}' turns off Chromium's own sandbox"),
+        ));
     }
     let isolation_off = flag == "--disable-features"
         && arg.split_once('=').is_some_and(|(_, list)| {
             list.split(',')
                 .any(|f| f.starts_with("IsolateOrigins") || f == "site-per-process")
         });
-    (WEB_SECURITY_SWITCHES.contains(&flag) || isolation_off).then_some(DegradedFeature::WebSecurity)
+    (WEB_SECURITY_SWITCHES.contains(&flag) || isolation_off).then(|| {
+        Gap::new(
+            DegradedFeature::WebSecurity,
+            format!("browser.chromium_args '{arg}' turns off the browser's web security"),
+        )
+    })
 }
 
 /// Checks `browser.chromium_args` against `allowed`
-/// (`security.sandbox.allow_degraded`).
+/// (`security.sandbox.allow_degraded`) and returns the downgrades it
+/// allows, one per weakening switch.
 ///
 /// # Errors
 ///
-/// The first switch that weakens isolation without its entry, or one the
-/// launch owns (profile, DevTools transport, proxy, headless).
-pub fn check_args(args: &[String], allowed: &[DegradedFeature]) -> Result<(), String> {
+/// The first switch that weakens isolation without its entry, in the
+/// security-boundaries form `sandbox unavailable: <reason>; set
+/// security.sandbox.allow_degraded = ["<feature>"] to run without it`, or
+/// one the launch owns (profile, DevTools transport, proxy, headless).
+pub fn check_args(args: &[String], allowed: &[DegradedFeature]) -> Result<Vec<Gap>, String> {
+    let mut downgrades = Vec::new();
     for arg in args {
         let flag = arg.split_once('=').map_or(arg.as_str(), |(flag, _)| flag);
         if OWNED_SWITCHES.contains(&flag) {
@@ -180,17 +199,37 @@ pub fn check_args(args: &[String], allowed: &[DegradedFeature]) -> Result<(), St
                 "browser.chromium_args: '{arg}' is set by Prometheus itself (use browser.user_data_dir, browser.headed or browser.cdp_url)"
             ));
         }
-        if let Some(feature) = weakens(arg)
-            && !allowed.contains(&feature)
-            && !allowed.contains(&DegradedFeature::All)
-        {
+        let Some(gap) = weakens(arg) else { continue };
+        if !gap.is_allowed(allowed) {
             return Err(format!(
-                "browser.chromium_args: '{arg}' would weaken browser isolation; remove it, or set security.sandbox.allow_degraded = [\"{}\"]",
-                feature.as_str()
+                "sandbox unavailable: {}; set security.sandbox.allow_degraded = [\"{}\"] to run without it",
+                gap.reason,
+                gap.hardening.as_str()
             ));
         }
+        downgrades.push(gap);
     }
-    Ok(())
+    Ok(downgrades)
+}
+
+/// The downgrades `config`'s `chromium_args` make under `allowed`: what a
+/// session reports (audit record, `security.downgrade` event, banner
+/// marker) for the local browsers it may start. Empty when a switch is
+/// refused, since no browser then starts.
+#[must_use]
+pub fn downgrades(config: &BrowserConfig, allowed: &[DegradedFeature]) -> Vec<Gap> {
+    check_args(&config.chromium_args, allowed).unwrap_or_default()
+}
+
+/// Logs each allowed downgrade at WARN; called on every browser start.
+pub(crate) fn warn_downgrades(downgrades: &[Gap]) {
+    for gap in downgrades {
+        tracing::warn!(
+            feature = gap.hardening.as_str(),
+            "browser degraded: {}; allowed by security.sandbox.allow_degraded",
+            gap.reason
+        );
+    }
 }
 
 /// The launch options of `config` on `display`, and the notice to give
@@ -205,7 +244,7 @@ pub fn resolve(
     allowed: &[DegradedFeature],
     display: &Display,
 ) -> Result<(LaunchOptions, Option<&'static str>), String> {
-    check_args(&config.chromium_args, allowed)?;
+    let downgrades = check_args(&config.chromium_args, allowed)?;
     let headed = config.headed && display.available;
     let notice = (config.headed && !display.available).then_some(NO_DISPLAY_NOTICE);
     Ok((
@@ -214,6 +253,7 @@ pub fn resolve(
             headed,
             user_data_dir: user_data_dir(config, profile_dir),
             extra_args: config.chromium_args.clone(),
+            downgrades,
             display_env: if headed {
                 display.env.clone()
             } else {
@@ -235,19 +275,50 @@ mod tests {
     #[test]
     fn switches_that_weaken_isolation_need_their_downgrade() {
         let plain = args(&["--lang=fr", "--window-size=800,600"]);
-        assert!(check_args(&plain, &[]).is_ok());
+        assert_eq!(check_args(&plain, &[]), Ok(Vec::new()));
         let no_sandbox = args(&["--no-sandbox"]);
-        let refused = check_args(&no_sandbox, &[]).unwrap_err();
-        assert!(refused.contains("--no-sandbox"), "{refused}");
-        assert!(refused.contains("chromium_sandbox"), "{refused}");
-        assert!(check_args(&no_sandbox, &[DegradedFeature::ChromiumSandbox]).is_ok());
+        assert_eq!(
+            check_args(&no_sandbox, &[]).unwrap_err(),
+            "sandbox unavailable: browser.chromium_args '--no-sandbox' turns off Chromium's own sandbox; set security.sandbox.allow_degraded = [\"chromium_sandbox\"] to run without it"
+        );
+        let allowed = check_args(&no_sandbox, &[DegradedFeature::ChromiumSandbox]).unwrap();
+        assert_eq!(allowed.len(), 1);
+        assert_eq!(allowed[0].hardening, DegradedFeature::ChromiumSandbox);
         assert!(check_args(&no_sandbox, &[DegradedFeature::WebSecurity]).is_err());
         let web = args(&["--disable-web-security"]);
-        assert!(check_args(&web, &[]).unwrap_err().contains("web_security"));
-        assert!(check_args(&web, &[DegradedFeature::WebSecurity]).is_ok());
-        assert!(check_args(&web, &[DegradedFeature::All]).is_ok());
+        assert_eq!(
+            check_args(&web, &[]).unwrap_err(),
+            "sandbox unavailable: browser.chromium_args '--disable-web-security' turns off the browser's web security; set security.sandbox.allow_degraded = [\"web_security\"] to run without it"
+        );
+        assert_eq!(
+            check_args(&web, &[DegradedFeature::WebSecurity])
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(check_args(&web, &[DegradedFeature::All]).unwrap().len(), 1);
         let isolation = args(&["--disable-features=Translate,IsolateOrigins"]);
         assert!(check_args(&isolation, &[]).is_err());
+    }
+
+    #[test]
+    fn a_session_reports_only_allowed_downgrades() {
+        let config = BrowserConfig {
+            chromium_args: args(&["--lang=fr", "--no-sandbox", "--disable-web-security"]),
+            ..BrowserConfig::default()
+        };
+        let all = downgrades(&config, &[DegradedFeature::All]);
+        let features: Vec<_> = all.iter().map(|g| g.hardening).collect();
+        assert_eq!(
+            features,
+            [
+                DegradedFeature::ChromiumSandbox,
+                DegradedFeature::WebSecurity
+            ]
+        );
+        // A refused switch starts no browser: nothing is degraded.
+        assert!(downgrades(&config, &[DegradedFeature::ChromiumSandbox]).is_empty());
+        assert!(downgrades(&BrowserConfig::default(), &[DegradedFeature::All]).is_empty());
     }
 
     #[test]

@@ -1,6 +1,9 @@
 //! The local browser options of `[browser]` (spec: execution-environments,
 //! Local browser options and headed mode).
 
+use std::sync::{Arc, Mutex};
+
+use pmt_config::schema::DegradedFeature;
 use pmt_tools::browser::options::{Display, NO_DISPLAY_NOTICE};
 use pmt_tools::result::Status;
 
@@ -62,10 +65,69 @@ async fn arguments_that_weaken_isolation_need_their_downgrade() {
     assert_eq!(result.status, Status::Error);
     let text = result.text_content();
     assert!(
-        text.contains("--disable-web-security") && text.contains("web_security"),
+        text.contains(
+            "sandbox unavailable: browser.chromium_args '--disable-web-security' turns off the browser's web security; set security.sandbox.allow_degraded = [\"web_security\"] to run without it"
+        ),
         "{body}"
     );
     manager.shutdown().await;
+}
+
+/// An allowed downgrade is never silent: every browser start logs it at
+/// WARN (spec: security-boundaries, Hardening downgrades are never silent).
+#[tokio::test]
+async fn an_allowed_downgrade_warns_on_every_browser_start() {
+    let mut fixture = Fixture::new();
+    fixture.allow_degraded = vec![DegradedFeature::WebSecurity];
+    fixture.config.lock().unwrap().chromium_args = vec!["--disable-web-security".to_owned()];
+    let manager = fixture.manager();
+    let exec = fixture.exec(&manager, false);
+    let warnings = Warnings::default();
+    let _capture = warnings.capture();
+    for start in 1..=2 {
+        let (result, body) = run(&exec, "ensure_real_tab()\nprint(1)").await;
+        assert_eq!(result.status, Status::Ok, "{body}");
+        let text = warnings.text();
+        assert_eq!(
+            text.matches("browser degraded: browser.chromium_args '--disable-web-security'")
+                .count(),
+            start,
+            "{text}"
+        );
+        assert!(text.contains("feature=\"web_security\""), "{text}");
+        manager.close("ses_b/default").await;
+    }
+    manager.shutdown().await;
+}
+
+/// WARN lines logged on this thread while captured.
+#[derive(Clone, Default)]
+struct Warnings(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Warnings {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Warnings {
+    fn capture(&self) -> tracing::subscriber::DefaultGuard {
+        let writer = self.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::set_default(subscriber)
+    }
+
+    fn text(&self) -> String {
+        String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
+    }
 }
 
 #[tokio::test]

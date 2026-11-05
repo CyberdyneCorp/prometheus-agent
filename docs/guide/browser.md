@@ -148,7 +148,16 @@ not apply to cloud browsers. Switches that turn off Chromium's own sandbox
 `security.sandbox.allow_degraded = ["chromium_sandbox"]`; switches that
 turn off web security (`--disable-web-security`,
 `--disable-site-isolation-trials`, `--allow-running-insecure-content`)
-need `"web_security"`. Switches Prometheus sets itself (profile directory,
+need `"web_security"`. Without the entry the browser does not start:
+
+```text
+sandbox unavailable: browser.chromium_args '--no-sandbox' turns off Chromium's own sandbox; set security.sandbox.allow_degraded = ["chromium_sandbox"] to run without it
+```
+
+With it, like any sandbox downgrade, every browser start logs a WARN, the
+session banner shows `browser: degraded:chromium_sandbox`, and each session
+records one `security.downgrade` trajectory event and audit record per
+switch. Switches Prometheus sets itself (profile directory,
 DevTools transport, proxy, `--headless`) are refused. A browser on a kept
 profile is asked to close before it is ended, so it writes what it holds.
 
@@ -209,8 +218,10 @@ sends one raw DevTools command: page-level domains (`Page`, `Runtime`,
 `DOM`, `Emulation`, `Input`, `Network`) need `target_id`, a `frame_id` of
 an out-of-process frame goes to that frame's own session, `timeout_secs`
 defaults to 30 (at most 300), and `Browser.close`, `Browser.crash`,
-closing a target the session did not open and any `url` the safety rules
-refuse are refused. `browser_dialog(action, prompt_text?, dialog_id?)`
+closing a target the session did not open and any URL parameter the
+safety rules refuse (every string under a URL-named key such as `url`,
+`frameUrl`, `documentURL` or `urls`, at any depth of `params`) are
+refused. `browser_dialog(action, prompt_text?, dialog_id?)`
 accepts or dismisses the oldest pending dialog (or the one named) and
 answers `no pending dialog` when there is none.
 
@@ -239,7 +250,7 @@ keychain stay unreadable in the copy: the sandbox denies keychain access.
 
 ## Safety
 
-Before every navigation (and any `url` parameter of `cdp`):
+Before every navigation (and any URL parameter of `cdp` and [`browser_cdp`](../reference/tools.md#browser_cdp)):
 
 - a URL holding a secret-shaped value or a secret the session knows (raw
   or percent-decoded) is refused with `Blocked: URL contains what appears

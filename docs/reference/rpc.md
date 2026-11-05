@@ -277,6 +277,7 @@ What an attached connection may do in the session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `degraded` | string or null | no | The degraded marker while the session runs below full hardening, for example `sandbox: partial:landlock_net` (spec: security-boundaries, Hardening downgrades are never silent). |
 | `mcp_servers` | array of [`McpServerState`](#mcpserverstate) | yes | The session's MCP servers. |
 | `skills` | array of string | yes | The installed skills the session can load. |
 | `system_prompt` | [`FrozenPrompt`](#frozenprompt) or null | no | The frozen system prompt; none before the first turn. |

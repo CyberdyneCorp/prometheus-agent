@@ -124,6 +124,8 @@ pub struct Attached {
     pub denials: Denials,
     /// Runs approval `explain` previews (read-only, offline).
     pub previewer: Option<Previewer>,
+    /// The session's allowed hardening downgrades (sandbox, browser).
+    pub downgrades: super::downgrades::Downgrades,
 }
 
 /// The parts a session runs commands with.
@@ -175,6 +177,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let browser = process
         .as_ref()
         .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
+    let downgrades = downgrades(inputs, process.as_ref(), browser.as_deref());
     let commands = process.and_then(|(sandbox, env)| {
         let config = scope.config();
         pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
@@ -239,7 +242,26 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         egress: crate::egress::Running::new(inputs.session_id, inputs.egress, proxy),
         denials: Arc::clone(inputs.denials),
         previewer,
+        downgrades,
     })
+}
+
+/// The session's allowed hardening downgrades (its sandbox's, its local
+/// browsers'), recorded once in the audit log.
+fn downgrades(
+    inputs: &EnvInputs<'_>,
+    process: Option<&(Arc<Sandbox>, ChildEnv)>,
+    browser: Option<&BrowserExec>,
+) -> super::downgrades::Downgrades {
+    let downgrades = super::downgrades::Downgrades::of(
+        process.map(|(sandbox, _)| sandbox.as_ref()),
+        browser
+            .map(|exec| exec.manager().downgrades())
+            .unwrap_or_default(),
+    );
+    let audit = pmt_core::audit::AuditLog::of(inputs.scope.dir());
+    downgrades.record(&audit, inputs.session_id);
+    downgrades
 }
 
 /// The session's non-local terminal backend (`None`: the local one).
@@ -399,18 +421,6 @@ fn processes(
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
-    let audit = pmt_core::audit::AuditLog::of(inputs.scope.dir());
-    for gap in sandbox.downgrades() {
-        audit.record(
-            &pmt_core::audit::Event::new(
-                pmt_core::audit::Kind::Downgrade,
-                gap.hardening.as_str(),
-                "allowed",
-            )
-            .in_session(inputs.session_id)
-            .with_detail(gap.reason.clone()),
-        );
-    }
     let mut env = ChildEnv::build(
         inputs.launch,
         EnvRequest {

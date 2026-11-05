@@ -49,6 +49,29 @@ pub struct CdpCall {
     pub timeout_secs: Option<u64>,
 }
 
+/// Whether `key` names a URL or a list of them (`url`, `frameUrl`,
+/// `documentURL`, `urls`...).
+fn url_key(key: &str) -> bool {
+    let key = key.strip_suffix('s').unwrap_or(key);
+    key == "url" || key.ends_with("Url") || key.ends_with("URL")
+}
+
+/// Every string under a URL-named key of `params`, at any depth: the URLs
+/// browser URL safety checks before the command is sent.
+fn url_params(params: &Value) -> Vec<&str> {
+    let mut urls = Vec::new();
+    let mut stack = vec![(false, params)];
+    while let Some((under_url_key, value)) = stack.pop() {
+        match value {
+            Value::String(text) if under_url_key => urls.push(text.as_str()),
+            Value::Array(items) => stack.extend(items.iter().map(|v| (under_url_key, v))),
+            Value::Object(map) => stack.extend(map.iter().map(|(k, v)| (url_key(k), v))),
+            _ => {}
+        }
+    }
+    urls
+}
+
 /// Identifies a connection object (a reconnect makes a new one).
 fn generation(cdp: &Arc<Cdp>) -> usize {
     Arc::as_ptr(cdp) as usize
@@ -74,7 +97,7 @@ impl BrowserSession {
                 );
             }
         }
-        if let Some(url) = call.params.get("url").and_then(Value::as_str) {
+        for url in url_params(&call.params) {
             self.safety.check(url).await?;
         }
         let timeout =
@@ -339,4 +362,36 @@ fn dialog_descriptor() -> ToolDescriptor {
             "additionalProperties": false
         }),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::url_params;
+
+    #[test]
+    fn every_url_named_parameter_is_checked_at_any_depth() {
+        let params = json!({
+            "url": "https://a.example/",
+            "frameUrl": "http://169.254.169.254/",
+            "options": {"documentURL": "http://10.0.0.1/", "count": 2},
+            "entries": [{"baseURL": "https://b.example/"}],
+            "redirectUrls": ["http://127.0.0.1/"],
+            "expression": "fetch('http://not-a-url-param/')",
+            "urlFilter": "*"
+        });
+        let mut urls = url_params(&params);
+        urls.sort_unstable();
+        assert_eq!(
+            urls,
+            [
+                "http://10.0.0.1/",
+                "http://127.0.0.1/",
+                "http://169.254.169.254/",
+                "https://a.example/",
+                "https://b.example/"
+            ]
+        );
+    }
 }

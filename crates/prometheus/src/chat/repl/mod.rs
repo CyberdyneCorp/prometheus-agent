@@ -415,6 +415,10 @@ impl Repl {
             )
         };
         self.say(Role::Accent, &banner);
+        // Spec: security-boundaries, Hardening downgrades are never silent.
+        if let Some(marker) = self.live().downgrades.banner_marker() {
+            self.say(Role::Error, &format!("degraded: {marker}"));
+        }
         self.tip(
             "slash-help",
             "Tip: type /help for the commands, /status for this session",

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use pmt_config::schema::{BrowserConfig, SandboxConfig};
+use pmt_config::schema::{BrowserConfig, DegradedFeature, SandboxConfig};
 use pmt_core::env::{EnvPolicy, LaunchEnv};
 use pmt_core::secret::{Redactor, SecretString};
 use pmt_net::DestinationPolicy;
@@ -39,6 +39,8 @@ pub(crate) struct Fixture {
     pub(crate) config: Arc<Mutex<BrowserConfig>>,
     /// `security.egress.allow_private` of the managers it builds.
     pub(crate) allow_private: bool,
+    /// `security.sandbox.allow_degraded` of the managers it builds.
+    pub(crate) allow_degraded: Vec<DegradedFeature>,
     /// The display the managers it builds see.
     pub(crate) display: Display,
     /// The default browser the managers it builds detect.
@@ -62,6 +64,7 @@ impl Fixture {
             scratch,
             config: Arc::new(Mutex::new(BrowserConfig::default())),
             allow_private: true,
+            allow_degraded: Vec::new(),
             display: Display::none(),
             detect: Arc::new(NoDefaultBrowser),
         }
@@ -136,7 +139,10 @@ impl Fixture {
                 session: None,
             },
             providers,
-            confinement: self.confinement(SandboxConfig::default()),
+            confinement: self.confinement(SandboxConfig {
+                allow_degraded: self.allow_degraded.clone(),
+                ..SandboxConfig::default()
+            }),
             display: self.display.clone(),
             detect: Arc::clone(&self.detect),
             profile_dir: self.profile.clone(),

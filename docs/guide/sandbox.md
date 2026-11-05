@@ -101,8 +101,12 @@ To run anyway, name every missing feature (`landlock`, `landlock_net`,
 allow_degraded = ["landlock_net"]
 ```
 
-Every start then logs a WARN naming the feature, and the session banner shows
-the level, for example `sandbox: partial:landlock_net`.
+Every start then logs a WARN naming the feature, the session banner shows
+the level, for example `degraded: sandbox: partial:landlock_net`, and each
+session records one `security.downgrade` trajectory event and one audit
+record (`kind = "downgrade"`) per missing feature. Local browser switches
+that turn off Chromium's sandbox or web security (`chromium_sandbox`,
+`web_security`) are reported the same way (see the browser guide).
 `security.sandbox.mode = "off"` disables the sandbox and needs
 `allow_degraded = ["all"]`.
 
