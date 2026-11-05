@@ -1115,7 +1115,7 @@
         },
         "persistent": {
           "default": true,
-          "description": "Keep the container between sessions.",
+          "description": "One container per profile and workspace, reused by later sessions\nand stopped (never removed) when idle; `false` gives each session\nits own container.",
           "type": "boolean"
         },
         "pids_limit": {

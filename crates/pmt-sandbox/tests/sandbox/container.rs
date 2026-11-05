@@ -95,7 +95,9 @@ impl Fake {
             image: "alpine:3".to_owned(),
             config,
             allow_degraded: allow.to_vec(),
-            workspace: Some(PathBuf::from("/host/work")),
+            // A workspace per session: persistent containers are shared
+            // per workspace, and the pool is process-wide.
+            workspace: Some(PathBuf::from(format!("/host/{session}"))),
             volumes: Vec::new(),
             user: None,
             idle_lifetime: Duration::from_mins(5),
@@ -127,8 +129,9 @@ fn every_container_starts_with_the_full_hardening_and_labels() {
         "--memory=5368709120b",
         "--label=prometheus.profile=p1",
         "--label=prometheus.session=s-hard",
+        "--label=prometheus.persistent=true",
         "--network=none",
-        "--volume=/host/work:/workspace",
+        "--volume=/host/s-hard:/workspace",
     ] {
         assert!(
             create.split(' ').any(|a| a == arg),
@@ -236,6 +239,14 @@ fn other_profiles_container() {
     fs::write(fake.dir.join("inspect-b2"), "p2|false|2020-01-01T00:00:00Z").unwrap();
     let recent = jiff::Timestamp::now().to_string();
     fs::write(fake.dir.join("inspect-c3"), format!("p1|false|{recent}")).unwrap();
+    // A stopped persistent container is reused by the next session on its
+    // workspace, not an orphan.
+    fs::write(fake.dir.join("ps"), "a1\nb2\nc3\nd4\n").unwrap();
+    fs::write(
+        fake.dir.join("inspect-d4"),
+        "p1|false|2020-01-01T00:00:00Z|true",
+    )
+    .unwrap();
     let removed = container::reap_orphans(&fake.runtime(), "p1", Duration::from_mins(5)).unwrap();
     assert_eq!(removed, ["a1"]);
     let ps = &fake.calls_of("ps")[0];
@@ -307,8 +318,40 @@ fn sessions_with_one_shared_key_share_a_container() {
     let b = Pool::process().container(fake.spec("s-b", config, &[]));
     assert!(Arc::ptr_eq(&a, &b));
     assert_eq!(a.name(), "pmt-p1-k-team");
-    let other = Pool::process().container(fake.spec("s-c", ContainerConfig::default(), &[]));
+    let ephemeral = ContainerConfig {
+        persistent: false,
+        ..ContainerConfig::default()
+    };
+    let other = Pool::process().container(fake.spec("s-c", ephemeral, &[]));
     assert_eq!(other.name(), "pmt-p1-s-s-c");
+}
+
+#[test]
+fn a_persistent_container_is_kept_between_sessions_on_its_workspace() {
+    let fake = Fake::new();
+    let on = |session: &str, workspace: Option<&str>| {
+        let mut spec = fake.spec(session, ContainerConfig::default(), &[]);
+        spec.profile = "keep".to_owned();
+        spec.workspace = workspace.map(PathBuf::from);
+        spec
+    };
+    let first = Pool::process().container(on("s-1", Some("/host/project")));
+    first.ensure_running().unwrap();
+    first.release(None);
+    assert_eq!(fake.calls_of("stop").len(), 1, "stopped, not removed");
+    assert!(fake.calls_of("rm").is_empty());
+    let first_name = first.name().to_owned();
+    drop(first);
+    // A later session on the same workspace starts the same container.
+    let later = Pool::process().container(on("s-2", Some("/host/project")));
+    assert_eq!(later.name(), first_name);
+    later.ensure_running().unwrap();
+    assert_eq!(fake.calls_of("create").len(), 1, "{:#?}", fake.calls());
+    assert_eq!(fake.calls_of("start").len(), 2);
+    let elsewhere = Pool::process().container(on("s-3", Some("/host/other")));
+    assert_ne!(elsewhere.name(), first_name);
+    let unmounted = Pool::process().container(on("s-4", None));
+    assert_eq!(unmounted.name(), "pmt-keep-p");
 }
 
 fn wait_for(done: impl Fn() -> bool) {

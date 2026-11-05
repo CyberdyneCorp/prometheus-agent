@@ -138,7 +138,8 @@ starts with `--cap-drop ALL` plus only `CHOWN`, `DAC_OVERRIDE` and `FOWNER`,
 `--security-opt no-new-privileges`, a read-only root, tmpfs `/tmp`
 (`rw,nosuid,size=512m`) and `/var/tmp` (`rw,noexec,nosuid,size=256m`), the
 configured pids, CPU and memory limits, and the labels
-`prometheus.profile=<profile>` and `prometheus.session=<session>`. A flag the
+`prometheus.profile=<profile>` and `prometheus.session=<session>` (plus
+`prometheus.persistent=true` on a persistent container). A flag the
 runtime rejects fails creation with `container hardening '<flag>'
 unsupported by runtime` unless `allow_degraded` names its feature
 (`cap_drop`, `no_new_privileges`, `read_only_rootfs`; `all` for the tmpfs
@@ -153,15 +154,18 @@ start.
 | `network` | `true` | `false` runs the container with no network |
 | `run_as_host_user` | `false` | `--user <uid>:<gid>` |
 | `shared_key` | `""` | sessions of the profile with the same key share one container |
-| `persistent` | `true` | stop (keep) the container at session end instead of removing it |
+| `persistent` | `true` | one container per profile and workspace (per profile without a workspace mount), reused by later sessions and stopped, never removed; `false` gives each session its own container, removed at session end |
 | `extra_args` | `[]` | extra `create` arguments; `--privileged`, `--cap-add`, a weakening `--security-opt`, `--pid/--network/--userns=host` and runtime-socket mounts are refused unless `allow_degraded` covers them |
 
 A container idle longer than `idle_lifetime_secs` is torn down (stopped
 when persistent, removed otherwise) unless a foreground call is in flight or
 a background process runs; the next command starts it again. Once per
-gateway start, exited containers of the profile that finished more than
-twice the idle lifetime ago are removed; other profiles' containers are
-never touched. A runtime that stops answering turns the next command into a
+gateway start, exited non-persistent containers of the profile that
+finished more than twice the idle lifetime ago are removed; other profiles'
+containers and stopped persistent ones are never touched. The root
+filesystem is read-only and `/tmp` is a tmpfs, so what a persistent
+container keeps across a stop is the container itself and its volumes; use
+the workspace or a volume for files that must outlive it. A runtime that stops answering turns the next command into a
 `degraded` result and the call after it recreates the environment.
 
 ### SSH backend

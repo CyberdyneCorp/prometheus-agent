@@ -5,19 +5,22 @@
 //! flag the runtime rejects either fails creation naming it or, when
 //! `allow_degraded` waives it, is dropped with a WARN on every start. One
 //! process-wide [`Pool`] hands sessions that resolve to the same container
-//! name (a shared key, or a persistent session container) the same handle.
-//! The pool's reaper tears a container down once every session using it has
-//! been idle past `terminal.idle_lifetime_secs` with nothing in flight;
-//! persistent containers are stopped, the others removed, and the next
-//! command starts them again. [`reap_orphans`] runs once per gateway start.
+//! name (see [`ContainerSpec::name`]) the same handle. The pool's reaper
+//! tears a container down once every session using it has been idle past
+//! `terminal.idle_lifetime_secs` with nothing in flight; persistent
+//! containers are stopped, the others removed, and the next command starts
+//! them again. [`reap_orphans`] runs once per gateway start and spares the
+//! stopped persistent containers: they are reused, not orphans.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex, PoisonError, Weak};
 use std::time::Duration;
 
 use pmt_config::schema::{ContainerConfig, DegradedFeature};
 use pmt_core::error::{Error, codes};
+use sha2::{Digest, Sha256};
 
 use super::hardening::{self, Flag};
 use super::options::Volume;
@@ -27,6 +30,8 @@ use super::{Runtime, first_line};
 pub const PROFILE_LABEL: &str = "prometheus.profile";
 /// The label naming the creating session.
 pub const SESSION_LABEL: &str = "prometheus.session";
+/// The label marking a persistent container (value `true`).
+pub const PERSISTENT_LABEL: &str = "prometheus.persistent";
 
 /// Keeps a container alive: what a session reports to the reaper.
 pub trait Activity: Send + Sync {
@@ -63,13 +68,28 @@ pub struct ContainerSpec {
 }
 
 impl ContainerSpec {
-    /// The container's name: one per shared key, else one per session.
+    /// The container's name, which decides who shares it: every session
+    /// of the profile with the same `shared_key`; else, for a persistent
+    /// container, every session of the profile on the same mounted
+    /// workspace (or all of them without a workspace mount), so a later
+    /// session reuses it; else only this session.
     #[must_use]
     pub fn name(&self) -> String {
-        let owner = if self.config.shared_key.is_empty() {
-            format!("s-{}", self.session)
-        } else {
+        let owner = if !self.config.shared_key.is_empty() {
             format!("k-{}", self.config.shared_key)
+        } else if !self.config.persistent {
+            format!("s-{}", self.session)
+        } else if let Some(workspace) = &self.workspace {
+            // A digest keeps the name short and free of path characters;
+            // sha256 (not std's hasher) keeps it stable across releases.
+            let digest = Sha256::digest(workspace.as_os_str().as_encoded_bytes());
+            let hex = digest[..8].iter().fold(String::new(), |mut hex, b| {
+                let _ = write!(hex, "{b:02x}");
+                hex
+            });
+            format!("w-{hex}")
+        } else {
+            "p".to_owned()
         };
         let clean = |s: &str| -> String {
             s.chars()
@@ -94,6 +114,9 @@ impl ContainerSpec {
             format!("--label={SESSION_LABEL}={}", self.session),
             format!("--shm-size={}", self.config.shm_size),
         ];
+        if self.config.persistent {
+            args.push(format!("--label={PERSISTENT_LABEL}=true"));
+        }
         if !self.config.network {
             args.push("--network=none".to_owned());
         }
@@ -413,8 +436,10 @@ impl Pool {
 }
 
 /// Removes `profile`'s exited containers that finished more than twice
-/// `idle_lifetime` ago, and nothing else: another profile's containers and
-/// running ones are left alone. Returns the removed ids.
+/// `idle_lifetime` ago, and nothing else: another profile's containers,
+/// running ones and persistent ones (stopped on purpose, started again by
+/// the next session on their workspace) are left alone. Returns the
+/// removed ids.
 ///
 /// # Errors
 ///
@@ -437,16 +462,19 @@ pub fn reap_orphans(
         let inspected = runtime.run(&[
             "inspect".into(),
             "--type=container".into(),
-            format!("--format={{{{index .Config.Labels \"{PROFILE_LABEL}\"}}}}|{{{{.State.Running}}}}|{{{{.State.FinishedAt}}}}"),
+            format!("--format={{{{index .Config.Labels \"{PROFILE_LABEL}\"}}}}|{{{{.State.Running}}}}|{{{{.State.FinishedAt}}}}|{{{{index .Config.Labels \"{PERSISTENT_LABEL}\"}}}}"),
             id.to_owned(),
         ])?;
         let text = String::from_utf8_lossy(&inspected.stdout).trim().to_owned();
-        let mut parts = text.splitn(3, '|');
+        let mut parts = text.splitn(4, '|');
         let (Some(label), Some(running), Some(finished)) =
             (parts.next(), parts.next(), parts.next())
         else {
             continue;
         };
+        if parts.next() == Some("true") {
+            continue;
+        }
         let old_enough = finished_at(finished).is_some_and(|at| {
             now.duration_since(at).as_secs_f64() > 2.0 * idle_lifetime.as_secs_f64()
         });

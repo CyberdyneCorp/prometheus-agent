@@ -463,7 +463,9 @@ pub struct ContainerConfig {
     pub memory_bytes: u64,
     /// Disk limit.
     pub disk_bytes: u64,
-    /// Keep the container between sessions.
+    /// One container per profile and workspace, reused by later sessions
+    /// and stopped (never removed) when idle; `false` gives each session
+    /// its own container.
     pub persistent: bool,
     /// `/dev/shm` size in the runtime's syntax.
     pub shm_size: String,

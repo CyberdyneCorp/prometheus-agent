@@ -61,7 +61,22 @@ pub(crate) struct Session {
 }
 
 impl Session {
+    /// A session on a container of its own (never persistent).
     pub(crate) fn new(runtime: Runtime, name: &str, config: ContainerConfig) -> Self {
+        let config = ContainerConfig {
+            persistent: false,
+            ..config
+        };
+        Self::open(runtime, name, config, "pmt-test")
+    }
+
+    /// A session of `profile` on the container `config` resolves to.
+    pub(crate) fn open(
+        runtime: Runtime,
+        name: &str,
+        config: ContainerConfig,
+        profile: &str,
+    ) -> Self {
         let fixture = Fixture::new();
         let session = format!(
             "{name}-{}",
@@ -69,7 +84,7 @@ impl Session {
         );
         let spec = ContainerSpec {
             runtime,
-            profile: "pmt-test".to_owned(),
+            profile: profile.to_owned(),
             session: session.clone(),
             image: IMAGE.to_owned(),
             allow_degraded: Vec::new(),
@@ -77,16 +92,14 @@ impl Session {
             volumes: Vec::new(),
             user: None,
             idle_lifetime: Duration::from_mins(5),
-            config: ContainerConfig {
-                persistent: false,
-                ..config
-            },
+            config,
         };
         let mount = spec.config.mount_workspace;
+        let persistent = spec.config.persistent;
         let transport = Arc::new(ContainerTransport::new(Pool::process().container(spec)));
         let target = Arc::new(RemoteTarget::new(
             Arc::clone(&transport) as Arc<dyn Transport>,
-            Descriptor::container(mount, false),
+            Descriptor::container(mount, persistent),
             &session,
             CONTAINER_STATE,
         ));
@@ -118,18 +131,79 @@ impl Session {
 #[tokio::test(flavor = "multi_thread")]
 async fn container_backend() {
     let Some(runtime) = runtime() else { return };
-    let session = Session::new(runtime, "hostname", ContainerConfig::default());
-    let hostname = session.run("hostname").await;
+    let config = ContainerConfig {
+        mount_workspace: false,
+        ..ContainerConfig::default()
+    };
+    let session = Session::new(runtime, "hostname", config);
+    let hostname = session.run("hostname && pwd").await;
     assert_eq!(hostname.exit_code, Some(0), "{hostname:?}");
-    // Without a workspace mount too: the file tools read the container's
-    // own files, never the host's.
+    let mut lines = hostname.output.lines();
+    let (hostname, cwd) = (lines.next().unwrap_or_default(), lines.next());
+    // No workspace is mounted, so the shell starts at the container's root.
+    assert_eq!(cwd, Some("/"), "{hostname}");
+    let mounts = session.run("mount").await;
+    assert!(!mounts.output.contains("/workspace"), "{}", mounts.output);
+    // The file tools read the container's own files, never the host's.
     let read = session.files.read(Path::new("/etc/hostname")).unwrap();
     let read = String::from_utf8(read).unwrap();
-    assert_eq!(read.trim(), hostname.output.trim());
+    assert_eq!(read.trim(), hostname.trim());
     let host = std::fs::read_to_string("/etc/hostname").unwrap_or_default();
     assert_ne!(read.trim(), host.trim());
     assert!(!session.files.uses_host_filesystem());
     session.close().await;
+}
+
+/// Removes a container when dropped, so a failed assertion leaves nothing
+/// behind.
+struct Removed<'a>(&'a Runtime, String);
+
+impl Drop for Removed<'_> {
+    fn drop(&mut self) {
+        let _ = self.0.run(&["rm".into(), "--force".into(), self.1.clone()]);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_persistent_container_is_reused_by_a_later_session() {
+    let Some(runtime) = runtime() else { return };
+    let profile = format!(
+        "pmt-test-{}",
+        ulid::Ulid::generate().to_string().to_lowercase()
+    );
+    let config = ContainerConfig {
+        persistent: true,
+        mount_workspace: false,
+        ..ContainerConfig::default()
+    };
+    let first = Session::open(runtime.clone(), "keep-1", config.clone(), &profile);
+    let name = first.transport.container().name().to_owned();
+    let _cleanup = Removed(&runtime, name.clone());
+    let hostname = first.run("hostname").await;
+    assert_eq!(hostname.exit_code, Some(0), "{hostname:?}");
+    first.close().await;
+    drop(first);
+    let state = runtime
+        .run(&[
+            "inspect".into(),
+            "--format={{.State.Running}}".into(),
+            name.clone(),
+        ])
+        .unwrap();
+    let state = String::from_utf8_lossy(&state.stdout);
+    assert_eq!(state.trim(), "false", "stopped at session end, not removed");
+    // Even an orphan reaper with no grace period leaves it alone.
+    let reaped = pmt_sandbox::container::reap_orphans(&runtime, &profile, Duration::ZERO).unwrap();
+    assert!(reaped.is_empty(), "{reaped:?}");
+    let later = Session::open(runtime.clone(), "keep-2", config, &profile);
+    assert_eq!(later.transport.container().name(), name);
+    let again = later.run("hostname").await;
+    assert_eq!(
+        again.output.trim(),
+        hostname.output.trim(),
+        "the same container"
+    );
+    later.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

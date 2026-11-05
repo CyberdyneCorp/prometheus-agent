@@ -101,8 +101,13 @@ The `container` backend SHALL use a rootless Podman or Docker runtime and start 
 - **THEN** creation SHALL fail with `container hardening 'no_new_privileges' unsupported by runtime` and no container SHALL start
 
 ### Requirement: Container lifecycle and orphan reaping
-The system SHALL give each session its own container when `terminal.container.persistent = false`, SHALL tear down environments idle longer than `terminal.idle_lifetime_secs` except while a foreground call is in flight or a tracked background process is running, SHALL stop rather than remove persistent containers, and once per gateway start SHALL remove only exited containers labelled with the current profile that are older than twice the idle lifetime.
+The system SHALL give each session its own container when `terminal.container.persistent = false`; when it is true (default) and `terminal.container.shared_key` is empty, every session of the profile on the same mounted workspace (every session of the profile when the workspace is not mounted) SHALL use one container, so a later session reuses it. The system SHALL tear down environments idle longer than `terminal.idle_lifetime_secs` except while a foreground call is in flight or a tracked background process is running, SHALL stop rather than remove persistent containers, and once per gateway start SHALL remove only exited, non-persistent containers labelled with the current profile that are older than twice the idle lifetime.
 **Milestone:** M2
+
+#### Scenario: Persistent container is reused
+- **GIVEN** `terminal.container.persistent = true` and a session whose container was stopped at session end
+- **WHEN** a later session starts on the same workspace, after the orphan reaper has run
+- **THEN** it SHALL start that same container instead of creating a new one
 
 #### Scenario: Long foreground command
 - **GIVEN** a foreground command running longer than the idle lifetime

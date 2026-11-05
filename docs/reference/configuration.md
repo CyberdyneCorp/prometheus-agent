@@ -494,7 +494,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `terminal.container.memory_bytes` | integer | `5368709120` | ≥ 0 | `next_session` | Memory limit. |
 | `terminal.container.mount_workspace` | boolean | `true` | any | `next_session` | Mount the session workspace at `/workspace`. |
 | `terminal.container.network` | boolean | `true` | any | `next_session` | Give the container a network; `false` runs it with none. |
-| `terminal.container.persistent` | boolean | `true` | any | `next_session` | Keep the container between sessions. |
+| `terminal.container.persistent` | boolean | `true` | any | `next_session` | One container per profile and workspace, reused by later sessions and stopped (never removed) when idle; `false` gives each session its own container. |
 | `terminal.container.pids_limit` | integer | `2048` | ≥ 0 | `next_session` | Process limit. |
 | `terminal.container.run_as_host_user` | boolean | `false` | any | `next_session` | Run as the host user's uid and gid. |
 | `terminal.container.runtime` | string | `"auto"` | any | `next_session` | Runtime: `auto` (rootless Podman, else Docker), `podman`, `docker` or the path of either executable. |

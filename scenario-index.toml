@@ -2446,6 +2446,7 @@ capabilities = [
 [execution-environments."Container lifecycle and orphan reaping"]
 "Long foreground command" = ["crates/pmt-sandbox/tests/sandbox/container.rs::long_foreground_command"]
 "Other profile's container" = ["crates/pmt-sandbox/tests/sandbox/container.rs::other_profiles_container"]
+"Persistent container is reused" = ["crates/pmt-sandbox/tests/sandbox/container.rs::a_persistent_container_is_kept_between_sessions_on_its_workspace", "crates/pmt-tools/tests/terminal/container.rs::a_persistent_container_is_reused_by_a_later_session"]
 
 [execution-environments."Container backend options"]
 "Network off" = ["crates/pmt-tools/tests/terminal/container.rs::network_off"]
