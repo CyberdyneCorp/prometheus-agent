@@ -146,6 +146,16 @@ unsupported by runtime` unless `allow_degraded` names its feature
 mounts and the limits), in which case it is dropped with a WARN on every
 start.
 
+Each container also records how it was made: `prometheus.spec` is a digest
+of its `create` settings (image, volumes, network, user, limits, extra
+arguments, environment) and `prometheus.dropped` lists the flags dropped
+under `allow_degraded`. An existing container is reused only when its
+digest matches the current settings and every dropped flag is still
+waived; reusing it repeats the WARN for each dropped flag, in any process.
+Otherwise it is removed and created again, so a later configuration change
+(or a removed `allow_degraded` entry) always takes effect, and a flag the
+runtime still rejects then fails creation naming it.
+
 | Setting | Default | Meaning |
 |---|---|---|
 | `image` | the release's `prometheus-sandbox` image | the image |
@@ -199,6 +209,16 @@ and the call's timeout (plus 10 s grace) ask the plugin to `cancel` it, and
 `notify_on_complete` or a promotion reports its end. A background call
 without a timeout sends `timeout-ms = 18446744073709551615` (`u64::MAX`):
 no limit.
+
+Backend calls run side by side, each on an instance of its own: a running
+`execute` never holds up another command, an upload or a download, and
+`cancel` reaches the plugin while the `execute` it names still runs. The
+plugin's `plugins.wasm.call_timeout_ms` bounds only its own computation;
+time it spends waiting in host imports (HTTP to the remote sandbox) is not
+counted, so an `execute` lasts as long as its command's timeout (the host
+stops the call itself 30 s after that). Because instances do not share
+memory, a backend keeps what must outlive one call in `state` or in its
+remote service.
 
 ```console
 $ prometheus config set terminal.backend acmebox

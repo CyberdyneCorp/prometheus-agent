@@ -47,7 +47,7 @@ schemars = "1.2"
 rmcp = { version = "3.8.0", default-features = false }
 # WASM plugin host (design D7): the Component Model on Cranelift, with no
 # WASI (plugins get only the WIT host interfaces) and no on-disk code cache.
-wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std"] }
+wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "call-hook"] }
 # Test-only: turns the sample plugins' core modules into components.
 wit-component = "0.254.2"
 # `requires_prometheus` ranges and WIT world versions.

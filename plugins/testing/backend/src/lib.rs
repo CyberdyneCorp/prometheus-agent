@@ -1,7 +1,11 @@
 //! Test plugin: a `terminal-backend` whose name, descriptor and replies
 //! the test steers through its settings (`plugins.entries.<id>.*`):
 //! `name`, `default_cwd`, `check_error`; a command line containing
-//! `omit-exit-code` gets a reply without `exit_code`.
+//! `omit-exit-code` gets a reply without `exit_code`. A line containing
+//! `wait-for-cancel` is a long remote command: it polls
+//! `https://pause.example/<id>` (the test's port answers slowly) until
+//! `cancel(<id>)` records `cancelled_<id>` in its settings, then exits 130
+//! (it gives up after 60 s of polling).
 
 wit_bindgen::generate!({
     path: ["../../../wit/host", "../../../wit/terminal-backend"],
@@ -10,7 +14,7 @@ wit_bindgen::generate!({
 });
 
 use exports::prometheus::terminal_backend::plugin::{Command, Execution, Guest, Output, Request};
-use prometheus::host::config;
+use prometheus::host::{config, http};
 
 struct Backend;
 
@@ -46,6 +50,9 @@ impl Guest for Backend {
     }
 
     fn execute(request: Request) -> Result<Execution, String> {
+        if request.line.contains("wait-for-cancel") {
+            return wait_for_cancel(&request.id);
+        }
         let env: Vec<String> = request.env.iter().map(|(k, _)| k.clone()).collect();
         Ok(Execution {
             exit_code: (!request.line.contains("omit-exit-code")).then_some(3),
@@ -63,9 +70,44 @@ impl Guest for Backend {
         Ok(format!("contents of {path}").into_bytes())
     }
 
-    fn cancel(_: String) {}
+    fn cancel(id: String) {
+        let _ = config::set(&cancel_key(&id), "true");
+    }
 
     fn teardown() {}
+}
+
+/// The setting `cancel(id)` records (setting keys are `[a-z0-9_]`).
+fn cancel_key(id: &str) -> String {
+    let id: String = id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+        .collect();
+    format!("cancelled_{id}")
+}
+
+/// Waits on the "remote command" until it is cancelled.
+fn wait_for_cancel(id: &str) -> Result<Execution, String> {
+    let mut polls = 0_u32;
+    while config::get(&cancel_key(id)).ok().flatten().is_none() {
+        if polls >= 1200 {
+            return Err("never cancelled".to_owned());
+        }
+        http::send(&http::Request {
+            method: "GET".to_owned(),
+            url: format!("https://pause.example/{id}"),
+            headers: Vec::new(),
+            body: None,
+        })
+        .map_err(|e| format!("{e:?}"))?;
+        polls += 1;
+    }
+    Ok(Execution {
+        exit_code: Some(130),
+        stdout: format!("cancelled after {polls} polls\n"),
+        stderr: String::new(),
+        cwd_observed: None,
+    })
 }
 
 export!(Backend);

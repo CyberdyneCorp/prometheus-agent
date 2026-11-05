@@ -109,8 +109,8 @@ async fn call(
     }
 }
 
-/// Asks the plugin to stop command `id` without blocking the caller (a
-/// WASM plugin serves one call at a time).
+/// Asks the plugin to stop command `id` without blocking the caller (the
+/// plugin's `cancel` may itself wait on its remote service).
 fn cancel(plugin: &Arc<dyn RemoteBackend>, id: &str) {
     let plugin = Arc::clone(plugin);
     let id = id.to_owned();

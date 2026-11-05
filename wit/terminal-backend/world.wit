@@ -6,6 +6,14 @@
 /// `descriptor`, `check`, `execute`, `upload`, `download`, `cancel` and
 /// `teardown`. A 1.0 component (only `run`) declares no isolation
 /// descriptor, so the host refuses it at load.
+///
+/// Backend calls may run at the same time, each on its own instance:
+/// `cancel` arrives while the `execute` it names is still running, so keep
+/// what must outlive one call in `state` or in the remote service, never in
+/// guest memory. Time blocked in host imports (waiting on the remote
+/// service) does not count against `plugins.wasm.call_timeout_ms`, which
+/// bounds only the plugin's own computation; an `execute` is bounded by its
+/// `timeout-ms` instead.
 package prometheus:terminal-backend@1.1.0;
 
 interface plugin {

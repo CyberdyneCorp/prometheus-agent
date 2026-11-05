@@ -1,11 +1,22 @@
 //! Calls into the `terminal-backend` world (1.1: the typed backend
 //! contract). A 1.0 component exports none of them and is refused when its
 //! backend is read ([`crate::terminal::PluginBackend::read`]).
+//!
+//! Every call runs on a pooled store under a CPU budget (see the parent
+//! module): `cancel` reaches an `execute` in flight, and an `execute`
+//! waiting on its remote command is bounded by the command's own timeout,
+//! not by the plugin call timeout.
+
+use std::time::Duration;
 
 use pmt_core::error::Error;
 
 use super::super::terminal_backend_world::{Execution, Request};
 use super::{CallInfo, Instance};
+
+/// How long an `execute` may outlive its command's timeout before the host
+/// stops the call itself (the terminal cancels it after 10 s).
+const EXECUTE_GRACE: Duration = Duration::from_secs(30);
 
 impl Instance {
     /// `plugin.name()` and `plugin.descriptor()`.
@@ -19,7 +30,7 @@ impl Instance {
             .backend
             .as_ref()
             .ok_or_else(|| self.missing("terminal-backend@1.1"))?;
-        self.with_live(call, None, |store, instance| {
+        self.with_pooled(call, None, |store, instance| {
             let guest = indices.load(&mut *store, instance)?;
             let name = guest.call_name(&mut *store)?;
             let descriptor = guest.call_descriptor(&mut *store)?;
@@ -36,7 +47,9 @@ impl Instance {
         self.backend_call(call, |guest, store| guest.call_check(store))
     }
 
-    /// `plugin.execute(request)`.
+    /// `plugin.execute(request)`: besides the CPU budget, the call is
+    /// stopped once it outlives `request.timeout_ms` by
+    /// 30 s (the host cancels it before that).
     ///
     /// # Errors
     ///
@@ -46,7 +59,10 @@ impl Instance {
         call: &CallInfo,
         request: &Request,
     ) -> Result<Result<Execution, String>, Error> {
-        self.backend_call(call, |guest, store| guest.call_execute(store, request))
+        let wall = Duration::from_millis(request.timeout_ms).saturating_add(EXECUTE_GRACE);
+        self.backend_call_within(call, Some(wall), |guest, store| {
+            guest.call_execute(store, request)
+        })
     }
 
     /// `plugin.upload(path, contents)`.
@@ -104,11 +120,23 @@ impl Instance {
             &mut wasmtime::Store<super::super::imports::HostState>,
         ) -> wasmtime::Result<R>,
     ) -> Result<R, Error> {
+        self.backend_call_within(call, None, f)
+    }
+
+    fn backend_call_within<R>(
+        &self,
+        call: &CallInfo,
+        wall: Option<Duration>,
+        f: impl FnOnce(
+            &super::super::terminal_backend_world::Guest,
+            &mut wasmtime::Store<super::super::imports::HostState>,
+        ) -> wasmtime::Result<R>,
+    ) -> Result<R, Error> {
         let indices = self
             .backend
             .as_ref()
             .ok_or_else(|| self.missing("terminal-backend@1.1"))?;
-        self.with_live(call, None, |store, instance| {
+        self.with_pooled(call, wall, |store, instance| {
             let guest = indices.load(&mut *store, instance)?;
             f(&guest, store)
         })

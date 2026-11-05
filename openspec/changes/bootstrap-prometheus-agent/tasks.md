@@ -360,9 +360,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 35. M2 Execution environments: containers, SSH and remote
 
-- [ ] 35.1 Implement the `container` backend (rootless Podman/Docker, `--cap-drop ALL`, `no-new-privileges`, read-only root, tmpfs), hardening that is never silently dropped, and lifecycle with orphan reaping; verify with container integration tests (spec: execution-environments)
+- [x] 35.1 Implement the `container` backend (rootless Podman/Docker, `--cap-drop ALL`, `no-new-privileges`, read-only root, tmpfs), hardening that is never silently dropped, and lifecycle with orphan reaping; verify with container integration tests (spec: execution-environments)
 - [x] 35.2 Implement the `ssh` backend, reserved built-in names and the backend isolation descriptor; verify against an SSH server container (spec: execution-environments)
-- [ ] 35.3 Implement remote sandboxes as `terminal-backend` plugins; verify with a sample plugin backend (spec: execution-environments)
+- [x] 35.3 Implement remote sandboxes as `terminal-backend` plugins; verify with a sample plugin backend (spec: execution-environments)
 - [ ] 35.4 Implement container backend options (network off, privileged extra args refused), remote file sync with capped sync-back, first-party backend plugins (auto mode skips providers without credentials) and sudo password handling (interactive prompt, never for subagents); verify with container and SSH fixtures (spec: execution-environments)
 - [ ] 35.5 Implement quiet-wait auto-notify (second unchanged poll notifies; cron runs wait silently), retained process receipts readable after compression and scoped to their conversation, and `read_file` document extraction (PDF, Office, SQLite schema overview, scanned PDF notice); verify with fixtures (spec: execution-environments)
 - [ ] 35.6 Implement snapshot triggers, caps and the per-run toggle (one checkpoint per directory per turn, large files skipped), rollback listing, diff and selective restore (hand edits preserved, preview only), the snapshot store management CLI, the working-tree diff command and project run-recipe verification (detect-only and failing-test reporting); verify with workspace fixtures (spec: execution-environments)

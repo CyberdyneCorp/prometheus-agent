@@ -11,6 +11,15 @@
 //! containers are stopped, the others removed, and the next command starts
 //! them again. [`reap_orphans`] runs once per gateway start and spares the
 //! stopped persistent containers: they are reused, not orphans.
+//!
+//! A container records how it was made in two labels: [`SPEC_LABEL`], a
+//! digest of its `create` arguments, and [`DROPPED_LABEL`], the hardening
+//! flags dropped under `allow_degraded`. An existing container is reused
+//! only when it was made from the current settings and every flag it lacks
+//! is still waived (then the WARN is repeated on this start, even in a new
+//! process); otherwise it is removed and created again, so a reused
+//! container never runs with less hardening, or other settings, than the
+//! configuration asks for.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -32,6 +41,12 @@ pub const PROFILE_LABEL: &str = "prometheus.profile";
 pub const SESSION_LABEL: &str = "prometheus.session";
 /// The label marking a persistent container (value `true`).
 pub const PERSISTENT_LABEL: &str = "prometheus.persistent";
+/// The label holding a digest of the settings the container was created
+/// from (every `create` argument but its name and session).
+pub const SPEC_LABEL: &str = "prometheus.spec";
+/// The label listing the hardening flags dropped under `allow_degraded`
+/// (comma separated, empty when none).
+pub const DROPPED_LABEL: &str = "prometheus.dropped";
 
 /// Keeps a container alive: what a session reports to the reaper.
 pub trait Activity: Send + Sync {
@@ -83,11 +98,7 @@ impl ContainerSpec {
             // A digest keeps the name short and free of path characters;
             // sha256 (not std's hasher) keeps it stable across releases.
             let digest = Sha256::digest(workspace.as_os_str().as_encoded_bytes());
-            let hex = digest[..8].iter().fold(String::new(), |mut hex, b| {
-                let _ = write!(hex, "{b:02x}");
-                hex
-            });
-            format!("w-{hex}")
+            format!("w-{}", hex(&digest[..8]))
         } else {
             "p".to_owned()
         };
@@ -105,13 +116,11 @@ impl ContainerSpec {
         format!("pmt-{}-{}", clean(&self.profile), clean(&owner))
     }
 
-    /// The `create` arguments without the hardening flags.
-    fn base_args(&self, name: &str) -> Vec<String> {
+    /// The settings `create` arguments: no name, session, record labels or
+    /// hardening flags.
+    fn base_args(&self) -> Vec<String> {
         let mut args = vec![
-            "create".to_owned(),
-            format!("--name={name}"),
             format!("--label={PROFILE_LABEL}={}", self.profile),
-            format!("--label={SESSION_LABEL}={}", self.session),
             format!("--shm-size={}", self.config.shm_size),
         ];
         if self.config.persistent {
@@ -136,6 +145,28 @@ impl ContainerSpec {
         args
     }
 
+    /// A digest of everything the container is created from: the settings,
+    /// every hardening flag asked for (dropped or not), the extra arguments
+    /// and the image. Two specs with one digest create the same container.
+    fn digest(&self) -> String {
+        let mut hasher = Sha256::new();
+        let args = self
+            .base_args()
+            .into_iter()
+            .chain(
+                hardening::flags(&self.config)
+                    .into_iter()
+                    .flat_map(|f| f.args),
+            )
+            .chain(self.config.extra_args.iter().cloned())
+            .chain(self.command_args());
+        for arg in args {
+            hasher.update(arg.as_bytes());
+            hasher.update([0]);
+        }
+        hex(&hasher.finalize()[..16])
+    }
+
     /// The image and the idle keeper as PID 1 (exits on SIGTERM).
     fn command_args(&self) -> Vec<String> {
         vec![
@@ -147,11 +178,25 @@ impl ContainerSpec {
     }
 }
 
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().fold(String::new(), |mut hex, b| {
+        let _ = write!(hex, "{b:02x}");
+        hex
+    })
+}
+
 #[derive(Debug, Default)]
 struct State {
     running: bool,
-    /// Hardening flags dropped under `allow_degraded`.
-    dropped: Vec<&'static str>,
+}
+
+/// An existing container as `inspect` reports it.
+struct Existing {
+    running: bool,
+    /// Its [`SPEC_LABEL`].
+    spec: String,
+    /// Its [`DROPPED_LABEL`], split.
+    dropped: Vec<String>,
 }
 
 /// One container and the sessions using it.
@@ -203,8 +248,11 @@ impl Container {
         id
     }
 
-    /// Makes sure the container is running: started when it exists,
-    /// created with every hardening flag otherwise. Blocks on the runtime.
+    /// Makes sure the container is running: an existing one made from the
+    /// current settings is started (or used when running), anything else
+    /// is created with every hardening flag. Each dropped flag is logged
+    /// at WARN whenever this process starts using the container. Blocks on
+    /// the runtime.
     ///
     /// # Errors
     ///
@@ -216,43 +264,96 @@ impl Container {
         if state.running {
             return Ok(());
         }
-        match self.inspect_running()? {
-            Some(true) => {}
-            Some(false) => self.start(&state.dropped)?,
-            None => {
-                state.dropped = self.create()?;
-                self.start(&state.dropped)?;
+        let digest = self.spec.digest();
+        let dropped = match self.inspect()? {
+            Some(existing) if self.reusable(&existing, &digest) => {
+                if !existing.running {
+                    self.start()?;
+                }
+                existing.dropped
             }
+            outdated => {
+                if outdated.is_some() {
+                    tracing::info!(
+                        container = %self.name,
+                        "recreating container: it was made from other settings or with hardening no longer waived"
+                    );
+                    self.remove()?;
+                }
+                let dropped = self.create(&digest)?;
+                self.start()?;
+                dropped
+            }
+        };
+        for flag in &dropped {
+            tracing::warn!(
+                container = %self.name,
+                "container hardening '{flag}' unsupported by runtime; running without it (security.sandbox.allow_degraded)"
+            );
         }
         state.running = true;
         Ok(())
     }
 
-    /// `Some(running)` for an existing container, `None` when missing.
-    fn inspect_running(&self) -> Result<Option<bool>, Error> {
+    /// Whether `existing` was made from these settings and lacks only
+    /// flags `allow_degraded` still waives.
+    fn reusable(&self, existing: &Existing, digest: &str) -> bool {
+        let flags = hardening::flags(&self.spec.config);
+        existing.spec == digest
+            && existing.dropped.iter().all(|name| {
+                flags
+                    .iter()
+                    .any(|f| f.name == name && f.waived_by(&self.spec.allow_degraded))
+            })
+    }
+
+    /// The existing container, `None` when missing.
+    fn inspect(&self) -> Result<Option<Existing>, Error> {
         let runtime = &self.spec.runtime;
         let output = runtime.run(&[
             "inspect".into(),
             "--type=container".into(),
-            "--format={{.State.Running}}".into(),
+            format!("--format={{{{.State.Running}}}}|{{{{index .Config.Labels \"{SPEC_LABEL}\"}}}}|{{{{index .Config.Labels \"{DROPPED_LABEL}\"}}}}"),
             self.name.clone(),
         ])?;
         if !output.status.success() {
             return Ok(None);
         }
-        Ok(Some(
-            String::from_utf8_lossy(&output.stdout).trim() == "true",
-        ))
+        let text = String::from_utf8_lossy(&output.stdout);
+        let mut parts = text.trim().splitn(3, '|');
+        let running = parts.next() == Some("true");
+        // A missing label prints `<no value>` (Docker) or nothing (Podman):
+        // neither matches a digest, so such a container is recreated.
+        let spec = parts.next().unwrap_or_default().to_owned();
+        let dropped = parts
+            .next()
+            .unwrap_or_default()
+            .split(',')
+            .filter(|f| !f.is_empty() && *f != "<no value>")
+            .map(str::to_owned)
+            .collect();
+        Ok(Some(Existing {
+            running,
+            spec,
+            dropped,
+        }))
     }
 
     /// Creates the container, dropping only waived flags the runtime
     /// rejects; returns the dropped flags.
-    fn create(&self) -> Result<Vec<&'static str>, Error> {
+    fn create(&self, digest: &str) -> Result<Vec<String>, Error> {
         super::options::extra_args(&self.spec.config.extra_args, &self.spec.allow_degraded)?;
         let mut active: Vec<Flag> = hardening::flags(&self.spec.config);
-        let mut dropped = Vec::new();
+        let mut dropped: Vec<String> = Vec::new();
         loop {
-            let mut args = self.spec.base_args(&self.name);
+            let mut args = vec![
+                "create".to_owned(),
+                format!("--name={}", self.name),
+                format!("--label={SESSION_LABEL}={}", self.spec.session),
+                format!("--label={SPEC_LABEL}={digest}"),
+                format!("--label={DROPPED_LABEL}={}", dropped.join(",")),
+            ];
+            args.extend(self.spec.base_args());
             args.extend(active.iter().flat_map(|f| f.args.iter().cloned()));
             args.extend(self.spec.config.extra_args.iter().cloned());
             args.extend(self.spec.command_args());
@@ -277,28 +378,28 @@ impl Container {
             if !flag.waived_by(&self.spec.allow_degraded) {
                 return Err(hardening::unsupported(&flag));
             }
-            dropped.push(flag.name);
+            dropped.push(flag.name.to_owned());
         }
     }
 
-    fn start(&self, dropped: &[&'static str]) -> Result<(), Error> {
-        for flag in dropped {
-            tracing::warn!(
-                container = %self.name,
-                "container hardening '{flag}' unsupported by runtime; running without it (security.sandbox.allow_degraded)"
-            );
-        }
-        let output = self
-            .spec
-            .runtime
-            .run(&["start".into(), self.name.clone()])?;
+    fn start(&self) -> Result<(), Error> {
+        self.run_checked("start", &["start".into(), self.name.clone()])
+    }
+
+    /// Removes the existing container (running or not).
+    fn remove(&self) -> Result<(), Error> {
+        self.run_checked("rm", &["rm".into(), "--force".into(), self.name.clone()])
+    }
+
+    fn run_checked(&self, verb: &str, args: &[String]) -> Result<(), Error> {
+        let output = self.spec.runtime.run(args)?;
         if output.status.success() {
             Ok(())
         } else {
             Err(Error::new(
                 &codes::TERMINAL_CONTAINER_RUNTIME,
                 format!(
-                    "{} start failed: {}",
+                    "{} {verb} failed: {}",
                     self.spec.runtime.name(),
                     first_line(&output.stderr)
                 ),

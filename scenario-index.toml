@@ -2439,9 +2439,11 @@ capabilities = [
 
 [execution-environments."Remote sandboxes are plugins"]
 "Plugin omits exit code" = ["crates/pmt-tools/tests/terminal/plugin.rs::plugin_omits_exit_code", "crates/pmt-plugins/tests/terminal.rs::plugin_omits_exit_code_reaches_the_host_as_missing"]
+"Cancel reaches a running command" = ["crates/pmt-plugins/tests/terminal.rs::a_long_execute_outlives_the_call_timeout_and_cancel_reaches_it", "crates/pmt-plugins/tests/terminal.rs::killing_a_background_command_cancels_it_inside_the_plugin"]
 
 [execution-environments."Container hardening is never silently dropped"]
 "Runtime rejects no-new-privileges" = ["crates/pmt-sandbox/tests/sandbox/container.rs::runtime_rejects_no_new_privileges", "crates/pmt-sandbox/tests/sandbox/container.rs::an_allowed_rejection_drops_only_that_flag_and_warns_on_every_start"]
+"Reused container lost its waiver" = ["crates/pmt-sandbox/tests/sandbox/container.rs::a_reused_container_keeps_its_hardening_record", "crates/pmt-sandbox/tests/sandbox/container.rs::a_reused_container_made_from_other_settings_is_recreated"]
 
 [execution-environments."Container lifecycle and orphan reaping"]
 "Long foreground command" = ["crates/pmt-sandbox/tests/sandbox/container.rs::long_foreground_command"]

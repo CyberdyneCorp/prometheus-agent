@@ -203,7 +203,12 @@ Every call into a plugin is bounded by `plugins.wasm.call_timeout_ms`
 `plugins.wasm.max_memory_bytes` (256 MiB). A call that overruns fails with
 `plugin '<id>' exceeded call timeout` and the turn goes on. A plugin's
 HTTP request carries the same bound and fails with `request timed out`
-when the server does not answer in time. Three traps
+when the server does not answer in time. Calls into a `terminal-backend`
+plugin are the exception: the call timeout bounds only the time the plugin
+spends computing, not the time it waits in host imports (an `execute`
+waiting on its remote command is bounded by the command's timeout), and
+each call runs on an instance of its own so `cancel` reaches a running
+`execute`; such a plugin keeps cross-call data in `state`. Three traps
 within a minute suspend the plugin until it is loaded again. Each profile
 gets its own plugin instance; two profiles never share a plugin's state.
 

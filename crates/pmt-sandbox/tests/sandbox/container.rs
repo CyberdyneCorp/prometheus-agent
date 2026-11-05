@@ -22,12 +22,21 @@ case "$1" in
     if [ -f "$dir/reject.flag" ] && echo "$*" | grep -q -- "$(cat "$dir/reject.flag")"; then
       cat "$dir/reject.msg" >&2; exit 125
     fi
+    spec=; dropped=
+    for a; do
+      case "$a" in
+        --label=prometheus.spec=*) spec=${a#--label=prometheus.spec=} ;;
+        --label=prometheus.dropped=*) dropped=${a#--label=prometheus.dropped=} ;;
+      esac
+    done
+    echo "$spec|$dropped" > "$dir/labels"
     touch "$dir/exists"; echo id ;;
   inspect)
     for last; do :; done
     case "$*" in
-      *"{{.State.Running}} "*) [ -f "$dir/running" ] && echo true && exit 0
-         [ -f "$dir/exists" ] && echo false && exit 0; exit 1 ;;
+      *"--format={{.State.Running}}|"*) [ -f "$dir/exists" ] || exit 1
+         if [ -f "$dir/running" ]; then printf true; else printf false; fi
+         echo "|$(cat "$dir/labels")" ;;
       *) cat "$dir/inspect-$last" ;;
     esac ;;
   start) touch "$dir/running" ;;
@@ -352,6 +361,102 @@ fn a_persistent_container_is_kept_between_sessions_on_its_workspace() {
     assert_ne!(elsewhere.name(), first_name);
     let unmounted = Pool::process().container(on("s-4", None));
     assert_eq!(unmounted.name(), "pmt-keep-p");
+}
+
+/// A session on the shared workspace `/host/reused`; the session id's
+/// prefix names the profile, so tests never share a pooled handle.
+fn reused(
+    fake: &Fake,
+    session: &str,
+    config: ContainerConfig,
+    allow: &[DegradedFeature],
+) -> ContainerSpec {
+    let mut spec = fake.spec(session, config, allow);
+    session[..1].clone_into(&mut spec.profile);
+    spec.workspace = Some(PathBuf::from("/host/reused"));
+    spec
+}
+
+/// Runs a session's first command on the reused container and stops it
+/// at session end, as a later process would see it (a fresh handle: no
+/// in-memory state survives).
+fn session_on(fake: &Fake, spec: ContainerSpec) -> Result<String, pmt_core::error::Error> {
+    let container = Pool::process().container(spec);
+    let mut result = Ok(());
+    let logs = capture_warnings(|| result = container.ensure_running());
+    result?;
+    container.release(None);
+    assert!(fake.dir.join("exists").exists());
+    Ok(logs)
+}
+
+#[test]
+fn a_reused_container_keeps_its_hardening_record() {
+    let fake = Fake::new();
+    fake.reject("no-new-privileges", "unknown flag: no-new-privileges");
+    let nnp = [DegradedFeature::NoNewPrivileges];
+    let warning = "container hardening 'no_new_privileges' unsupported by runtime";
+
+    // Created without the flag under the waiver: WARN.
+    let logs = session_on(
+        &fake,
+        reused(&fake, "r-1", ContainerConfig::default(), &nnp),
+    )
+    .unwrap();
+    assert_eq!(logs.matches(warning).count(), 1, "{logs}");
+    // A later process reuses it and still warns on that start.
+    let logs = session_on(
+        &fake,
+        reused(&fake, "r-2", ContainerConfig::default(), &nnp),
+    )
+    .unwrap();
+    assert_eq!(logs.matches(warning).count(), 1, "{logs}");
+    assert_eq!(
+        fake.calls_of("create").len(),
+        2,
+        "one rejected, one created"
+    );
+    assert!(fake.calls_of("rm").is_empty());
+
+    // The waiver is gone: the container lacking the flag is not reused;
+    // creating it again fails naming the flag and nothing starts.
+    let starts = fake.calls_of("start").len();
+    let err = session_on(&fake, reused(&fake, "r-3", ContainerConfig::default(), &[])).unwrap_err();
+    assert_eq!(err.message(), warning);
+    let rm = fake.calls_of("rm");
+    assert_eq!(rm.len(), 1, "{rm:?}");
+    assert!(rm[0].starts_with("rm --force pmt-r-w-"), "{rm:?}");
+    assert_eq!(fake.calls_of("start").len(), starts);
+    assert!(!fake.dir.join("exists").exists());
+}
+
+#[test]
+fn a_reused_container_made_from_other_settings_is_recreated() {
+    let fake = Fake::new();
+    session_on(&fake, reused(&fake, "c-1", ContainerConfig::default(), &[])).unwrap();
+    // Same settings: started again, not recreated.
+    session_on(&fake, reused(&fake, "c-2", ContainerConfig::default(), &[])).unwrap();
+    assert_eq!(fake.calls_of("create").len(), 1);
+    assert!(fake.calls_of("rm").is_empty());
+    // Network turned off later: the container is recreated with it.
+    let offline = ContainerConfig {
+        network: false,
+        ..ContainerConfig::default()
+    };
+    session_on(&fake, reused(&fake, "c-3", offline, &[])).unwrap();
+    assert_eq!(fake.calls_of("rm").len(), 1, "{:#?}", fake.calls());
+    let creates = fake.calls_of("create");
+    assert_eq!(creates.len(), 2);
+    assert!(
+        creates[1].split(' ').any(|a| a == "--network=none"),
+        "{}",
+        creates[1]
+    );
+    // A container made before the record labels existed is recreated too.
+    fs::write(fake.dir.join("labels"), "|\n").unwrap();
+    session_on(&fake, reused(&fake, "c-4", ContainerConfig::default(), &[])).unwrap();
+    assert_eq!(fake.calls_of("rm").len(), 2);
+    assert_eq!(fake.calls_of("create").len(), 3);
 }
 
 fn wait_for(done: impl Fn() -> bool) {

@@ -74,9 +74,14 @@ impl Limits {
     }
 
     fn epoch_ticks(&self) -> u64 {
-        let tick = TICK.as_millis().max(1);
-        u64::try_from(self.call_timeout.as_millis().div_ceil(tick)).unwrap_or(u64::MAX) + 1
+        ticks(self.call_timeout)
     }
+}
+
+/// Epoch ticks covering `span`, plus one for the tick in progress.
+fn ticks(span: Duration) -> u64 {
+    let tick = TICK.as_millis().max(1);
+    u64::try_from(span.as_millis().div_ceil(tick)).unwrap_or(u64::MAX) + 1
 }
 
 /// The process's wasmtime engine and its epoch ticker.

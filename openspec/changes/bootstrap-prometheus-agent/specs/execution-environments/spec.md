@@ -42,13 +42,18 @@ Every backend SHALL declare a typed descriptor with `isolation` (`os_sandbox`, `
 - **THEN** the container's file SHALL be returned, not the host's
 
 ### Requirement: Remote sandboxes are plugins
-Remote execution providers (such as Modal, Daytona, E2B or Vercel-style sandboxes) SHALL be implemented as `terminal-backend` WASM plugins that receive only the network hosts and secrets granted in their manifest, and the host SHALL forward `execute`, `upload`, `download`, `cancel` and `teardown` calls to them; a plugin backend's `execute` result SHALL carry `exit_code`, `stdout`, `stderr` and `cwd_observed` as typed fields so a missing exit code is a contract error, not exit 0.
+Remote execution providers (such as Modal, Daytona, E2B or Vercel-style sandboxes) SHALL be implemented as `terminal-backend` WASM plugins that receive only the network hosts and secrets granted in their manifest, and the host SHALL forward `execute`, `upload`, `download`, `cancel` and `teardown` calls to them, SHALL deliver `cancel` while the `execute` it names is still running without holding up other calls to the backend, and SHALL count only the plugin's own computation, not time blocked in host imports, against `plugins.wasm.call_timeout_ms` for these calls; a plugin backend's `execute` result SHALL carry `exit_code`, `stdout`, `stderr` and `cwd_observed` as typed fields so a missing exit code is a contract error, not exit 0.
 **Milestone:** M2
 
 #### Scenario: Plugin omits exit code
 - **GIVEN** a backend plugin whose `execute` result has no `exit_code`
 - **WHEN** a command completes
 - **THEN** the result SHALL have `status = "error"` naming the contract violation
+
+#### Scenario: Cancel reaches a running command
+- **GIVEN** a backend plugin whose `execute` waits on its remote command longer than `plugins.wasm.call_timeout_ms`
+- **WHEN** the background process running it is killed
+- **THEN** the plugin SHALL receive `cancel` for that command while its `execute` still runs, the `execute` SHALL NOT fail with `exceeded call timeout`, and a foreground command on the same backend SHALL complete meanwhile
 
 ### Requirement: Backend readiness checks
 The system SHALL check the selected backend's requirements (container runtime reachable and rootless, SSH `terminal.ssh.host` and `terminal.ssh.user` set, plugin `check` call) as the `terminal` tool's availability probe, SHALL expose the failure reason through `prometheus doctor terminal`, and `prometheus doctor terminal` SHALL exit 0 when the backend is ready and 1 otherwise.
@@ -99,6 +104,11 @@ The `container` backend SHALL use a rootless Podman or Docker runtime and start 
 - **GIVEN** a container runtime that rejects `no-new-privileges` and no matching `allow_degraded` entry
 - **WHEN** a container is created
 - **THEN** creation SHALL fail with `container hardening 'no_new_privileges' unsupported by runtime` and no container SHALL start
+
+#### Scenario: Reused container lost its waiver
+- **GIVEN** a persistent container created without `no_new_privileges` under `allow_degraded = ["no_new_privileges"]`, and that entry since removed
+- **WHEN** a later session, in a new process, starts on the same workspace
+- **THEN** the container SHALL NOT be reused; it SHALL be removed and created again, which fails naming the flag, and while the entry is still present every start of the reused container SHALL log the WARN
 
 ### Requirement: Container lifecycle and orphan reaping
 The system SHALL give each session its own container when `terminal.container.persistent = false`; when it is true (default) and `terminal.container.shared_key` is empty, every session of the profile on the same mounted workspace (every session of the profile when the workspace is not mounted) SHALL use one container, so a later session reuses it. The system SHALL tear down environments idle longer than `terminal.idle_lifetime_secs` except while a foreground call is in flight or a tracked background process is running, SHALL stop rather than remove persistent containers, and once per gateway start SHALL remove only exited, non-persistent containers labelled with the current profile that are older than twice the idle lifetime.
