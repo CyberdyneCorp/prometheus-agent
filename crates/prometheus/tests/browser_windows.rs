@@ -9,7 +9,7 @@
 
 #![cfg(windows)]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -55,11 +55,12 @@ fn browser() -> PathBuf {
         .expect("no Chromium-family browser on this host (Chrome or Edge)")
 }
 
-fn child_env(home: &Path) -> ChildEnv {
-    let mut vars: Vec<_> = std::env::vars_os().collect();
-    vars.push(("USERPROFILE".into(), home.as_os_str().to_owned()));
+/// The browser's environment from this process's, as a session builds it.
+/// (The user profile stays the real one: creating an `AppContainer`
+/// process looks up the container's profile below it.)
+fn child_env() -> ChildEnv {
     let launch = LaunchEnv::from_vars(
-        vars,
+        std::env::vars_os(),
         &EnvPolicy {
             provider_secret_names: &[],
             replacements: &[],
@@ -124,7 +125,7 @@ async fn a_local_browser_runs_in_an_app_container_behind_the_proxy() {
     let launched = launch(
         &browser(),
         &profiles,
-        &child_env(&home),
+        &child_env(),
         Duration::from_secs(60),
         &proxy,
         &confinement,
