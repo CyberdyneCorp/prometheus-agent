@@ -42,6 +42,7 @@ pub fn tools() -> Vec<RegisteredTool> {
         RegisteredTool::agent_loop(send_message()),
         RegisteredTool::agent_loop(crate::agent_level_delegation::delegate_task()),
         RegisteredTool::agent_loop(crate::agent_level_delegation::execute_code()),
+        RegisteredTool::agent_loop(crate::agent_level_cron::cronjob()),
     ]
 }
 

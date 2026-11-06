@@ -79,6 +79,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
             )));
             let watcher = tokio::spawn(super::host::watch(Arc::clone(&host)));
             let sweeper = tokio::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
+            let scheduler = tokio::spawn(super::host::schedule_cron(Arc::clone(&host)));
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
             let mut messaging =
                 super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
@@ -92,6 +93,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
                     eprint!("{}", crate::output::render_error(&err, false));
                     watcher.abort();
                     sweeper.abort();
+                    scheduler.abort();
                     return Ok(pmt_core::exit::FAILURE);
                 }
             }
@@ -105,6 +107,7 @@ pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result
             super::inventory::unregister(home, ctx.launch);
             watcher.abort();
             sweeper.abort();
+            scheduler.abort();
             exit.map(exit_code)
         }
         .in_current_span(),

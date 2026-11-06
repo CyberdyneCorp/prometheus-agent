@@ -1337,18 +1337,120 @@
     },
     "CronConfig": {
       "additionalProperties": false,
-      "description": "The `[cron]` section. Only the profile time zone exists in M1; it is\nalso the zone daily and monthly budgets and `prometheus usage --by day`\nuse (the scheduler's keys arrive with M2).",
+      "description": "The `[cron]` section: the profile time zone (also the zone of daily\nbudgets and `usage --by day`) and the scheduled-job settings.",
       "properties": {
+        "agent_idle_timeout_secs": {
+          "default": 600,
+          "description": "Seconds an agent run may go without tokens or tool activity before\nit is interrupted (`0` = unlimited); a job's `timeout.idle` wins.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "allow_agent_scheduling": {
+          "default": false,
+          "description": "Offer the `cronjob` tool inside scheduled runs.",
+          "type": "boolean"
+        },
+        "catch_up_missed": {
+          "default": true,
+          "description": "Collapse missed occurrences of a job without an explicit `grace`\ninto one catch-up run (otherwise they are recorded `skipped_late`).",
+          "type": "boolean"
+        },
+        "completed_retention_secs": {
+          "default": 604800,
+          "description": "Seconds completed jobs are kept before deletion (`0` = never\ndeleted).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "default_toolsets": {
+          "description": "Toolsets of runs whose job names none; unset uses the cron\nsurface's default (`toolsets.surfaces.cron`, else the enabled\ntoolsets).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "max_parallel_jobs": {
+          "default": 4,
+          "description": "Runs executing at once per profile (1 = serial).",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_run_secs": {
+          "default": 3600,
+          "description": "Seconds a run may take in all (`0` = unlimited); a job's\n`timeout.wall` wins.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preflight": {
+          "default": true,
+          "description": "Check a job's credential, skills and delivery adapters before each\nrun; a failure is recorded `blocked_config` without a model call.",
+          "type": "boolean"
+        },
+        "provider": {
+          "$ref": "#/$defs/CronProvider",
+          "default": "builtin",
+          "description": "The trigger: `builtin` or `managed`."
+        },
+        "run_retention_secs": {
+          "default": 7776000,
+          "description": "Seconds run records are kept (`0` = forever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "script_timeout_secs": {
+          "default": 120,
+          "description": "Seconds a job script may run before it is killed.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "tick_interval_secs": {
+          "default": 30,
+          "description": "Seconds between the built-in trigger's evaluations of due jobs (it\nalso wakes at the earliest next run).",
+          "format": "uint64",
+          "maximum": 300,
+          "minimum": 10,
+          "type": "integer"
+        },
         "timezone": {
           "description": "IANA time zone of this profile (`Europe/Lisbon`); unset uses the\nhost's zone.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "wrap_response": {
+          "default": true,
+          "description": "Frame delivered output with the job name and a pause hint.",
+          "type": "boolean"
         }
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "CronProvider": {
+      "description": "Which trigger signals due occurrences (spec: scheduled-jobs, Pluggable\ntrigger provider).",
+      "oneOf": [
+        {
+          "const": "builtin",
+          "description": "The ticker inside the gateway daemon (or `prometheus cron tick`).",
+          "type": "string"
+        },
+        {
+          "const": "managed",
+          "description": "An external managed scheduler; falls back to `builtin` with a\nwarning while it is unavailable.",
+          "type": "string"
+        }
+      ]
     },
     "DedupConfig": {
       "additionalProperties": false,
@@ -8249,7 +8351,20 @@
     },
     "cron": {
       "$ref": "#/$defs/CronConfig",
-      "default": {},
+      "default": {
+        "agent_idle_timeout_secs": 600,
+        "allow_agent_scheduling": false,
+        "catch_up_missed": true,
+        "completed_retention_secs": 604800,
+        "max_parallel_jobs": 4,
+        "max_run_secs": 3600,
+        "preflight": true,
+        "provider": "builtin",
+        "run_retention_secs": 7776000,
+        "script_timeout_secs": 120,
+        "tick_interval_secs": 30,
+        "wrap_response": true
+      },
       "description": "Profile time zone (scheduler keys arrive with M2)."
     },
     "delegation": {

@@ -25,6 +25,6 @@ session_search         exposed
 clarify                exposed
 execute_code           exposed
 delegate_task          exposed
-cronjob                unregistered
+cronjob                exposed
 computer_use           unregistered
 manage_connections     exposed

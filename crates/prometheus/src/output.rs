@@ -248,6 +248,34 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "worktrees list",
     },
     JsonShape {
+        schema: "prometheus.cron_list.v1",
+        command: "cron list",
+    },
+    JsonShape {
+        schema: "prometheus.cron_job.v1",
+        command: "cron add",
+    },
+    JsonShape {
+        schema: "prometheus.cron_runs.v1",
+        command: "cron runs",
+    },
+    JsonShape {
+        schema: "prometheus.cron_run.v1",
+        command: "cron show-run",
+    },
+    JsonShape {
+        schema: "prometheus.cron_status.v1",
+        command: "cron status",
+    },
+    JsonShape {
+        schema: "prometheus.cron_doctor.v1",
+        command: "cron doctor",
+    },
+    JsonShape {
+        schema: "prometheus.cron_tick.v1",
+        command: "cron tick",
+    },
+    JsonShape {
         schema: "prometheus.worktrees_prune.v1",
         command: "worktrees prune",
     },

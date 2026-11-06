@@ -185,6 +185,7 @@ impl Factory {
                 cwd: &self.options.cwd,
                 user_home: self.launch.user_home().map(PathBuf::as_path),
                 interactive: true,
+                cron: false,
                 yolo: false,
                 hooks: None,
                 session_id: id.to_string(),

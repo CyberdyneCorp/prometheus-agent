@@ -133,7 +133,20 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `connectors.enabled` | boolean | `true` | any | `next_session` | Offer hosted connectors when the profile has a Nous sign-in. |
 | `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |
 | `context.engine` | string | `"builtin"` | any | `next_session` | Context engine: `builtin` or an installed `context-engine` plugin. |
+| `cron.agent_idle_timeout_secs` | integer | `600` | ≥ 0 | `live` | Seconds an agent run may go without tokens or tool activity before it is interrupted (`0` = unlimited); a job's `timeout.idle` wins. |
+| `cron.allow_agent_scheduling` | boolean | `false` | any | `live` | Offer the `cronjob` tool inside scheduled runs. |
+| `cron.catch_up_missed` | boolean | `true` | any | `live` | Collapse missed occurrences of a job without an explicit `grace` into one catch-up run (otherwise they are recorded `skipped_late`). |
+| `cron.completed_retention_secs` | integer | `604800` | ≥ 0 | `live` | Seconds completed jobs are kept before deletion (`0` = never deleted). |
+| `cron.default_toolsets` | array | unset | any | `live` | Toolsets of runs whose job names none; unset uses the cron surface's default (`toolsets.surfaces.cron`, else the enabled toolsets). |
+| `cron.max_parallel_jobs` | integer | `4` | 1 to 64 | `live` | Runs executing at once per profile (1 = serial). |
+| `cron.max_run_secs` | integer | `3600` | ≥ 0 | `live` | Seconds a run may take in all (`0` = unlimited); a job's `timeout.wall` wins. |
+| `cron.preflight` | boolean | `true` | any | `live` | Check a job's credential, skills and delivery adapters before each run; a failure is recorded `blocked_config` without a model call. |
+| `cron.provider` | one of "builtin", "managed" | `"builtin"` | `"builtin"`, `"managed"` | `live` | The trigger: `builtin` or `managed`. |
+| `cron.run_retention_secs` | integer | `7776000` | ≥ 0 | `live` | Seconds run records are kept (`0` = forever). |
+| `cron.script_timeout_secs` | integer | `120` | 1 to 86400 | `live` | Seconds a job script may run before it is killed. |
+| `cron.tick_interval_secs` | integer | `30` | 10 to 300 | `live` | Seconds between the built-in trigger's evaluations of due jobs (it also wakes at the earliest next run). |
 | `cron.timezone` | string | unset | any | `live` | IANA time zone of this profile (`Europe/Lisbon`); unset uses the host's zone. |
+| `cron.wrap_response` | boolean | `true` | any | `live` | Frame delivered output with the job name and a pause hint. |
 | `delegation.api_key_secret` | string | unset | a secret name | `next_session` | Name of the secret holding the direct endpoint's key. |
 | `delegation.background` | one of "auto", "never" | `"auto"` | `"auto"`, `"never"` | `next_session` | `auto` runs top-level spawns in the background where the session can receive later completions; `never` always waits. |
 | `delegation.base_url` | string | unset | any | `next_session` | A direct endpoint children call instead of a provider route (`model`, or the parent's model id, names the model there). |

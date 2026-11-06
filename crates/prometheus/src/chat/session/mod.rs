@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+pub mod cron;
 pub mod delegation;
 pub mod documents;
 pub mod downgrades;
@@ -95,6 +96,8 @@ pub struct Options {
     pub ignore_rules: bool,
     /// `--egress` and `--allow-host`.
     pub egress: crate::egress::Overrides,
+    /// A scheduled run's session (spec: scheduled-jobs).
+    pub cron: Option<cron::CronRun>,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -473,9 +476,12 @@ impl Factory {
         parent: Option<SessionId>,
         target: &pmt_providers::resolve::Target,
     ) -> Result<SessionId, Error> {
-        let mut new = match parent {
-            Some(parent) => NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork),
-            None => NewSession::new(Source::Cli),
+        let mut new = match (parent, &self.options.cron) {
+            (Some(parent), _) => {
+                NewSession::child(Source::Cli, parent, pmt_store::LineageKind::Fork)
+            }
+            (None, Some(run)) => run.new_session(),
+            (None, None) => NewSession::new(Source::Cli),
         };
         new.provider = Some(target.provider.clone());
         new.model.clone_from(&target.model);
@@ -675,7 +681,14 @@ impl Factory {
             &plugin_toolsets,
             &surface,
         )?;
-        let selection = self.with_browser_opt_ins(session.id, selection);
+        let selection = match &self.options.cron {
+            Some(run) => run.selection(
+                &registry,
+                &self.scope.config().tools.disabled_toolsets,
+                selection,
+            )?,
+            None => self.with_browser_opt_ins(session.id, selection),
+        };
         Ok((registry, selection, surface))
     }
 
@@ -722,6 +735,7 @@ impl Factory {
             cwd: &self.options.cwd,
             user_home: self.launch.user_home().map(PathBuf::as_path),
             interactive: self.options.interactive,
+            cron: self.options.cron.is_some(),
             yolo: self.options.yolo,
             hooks: Some(Arc::new(hooks)),
             session_id: id.to_string(),
@@ -920,7 +934,12 @@ impl Factory {
                 .with_summarizer(Arc::clone(summarizer) as _),
         )?
         .with_memory(Arc::clone(memory) as _)
-        .with_connections(crate::connectors_host::manager(&self.scope, cards));
+        .with_connections(crate::connectors_host::manager(&self.scope, cards))
+        .with_cron(crate::cron_host::tool::port(
+            &self.scope,
+            &self.launch,
+            &self.store,
+        ));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,

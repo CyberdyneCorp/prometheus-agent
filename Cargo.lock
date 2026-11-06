@@ -2996,6 +2996,22 @@ dependencies = [
 [[package]]
 name = "pmt-cron"
 version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "jiff",
+ "pmt-agent",
+ "pmt-config",
+ "pmt-core",
+ "pmt-store",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "ulid",
+]
 
 [[package]]
 name = "pmt-delegation"
@@ -3563,6 +3579,7 @@ dependencies = [
  "pmt-backup",
  "pmt-config",
  "pmt-core",
+ "pmt-cron",
  "pmt-delegation",
  "pmt-gateway",
  "pmt-mcp",

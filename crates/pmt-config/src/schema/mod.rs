@@ -18,6 +18,7 @@
 
 mod agent;
 mod connectors;
+mod cron;
 mod delegation;
 mod gateway;
 mod gateway_display;
@@ -47,6 +48,7 @@ pub use agent::{
     VisionConfig,
 };
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
+pub use cron::{CronConfig, CronProvider};
 pub use delegation::{
     BackgroundMode, CODE_EXECUTION_TOOLS, ChildApproval, CodeExecutionConfig, CodeExecutionMode,
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
@@ -83,11 +85,10 @@ pub use models::{
     PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, CronConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig,
-    LogLevel, LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig,
-    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
-    WorktreesConfig,
+    BudgetsConfig, DegradedFeature, EgressConfig, EgressMode, GatewayHealthConfig, LogLevel,
+    LoggingConfig, NetworkConfig, ObservabilityConfig, PrivacyConfig, SandboxConfig, SandboxMode,
+    SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig,
+    TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,

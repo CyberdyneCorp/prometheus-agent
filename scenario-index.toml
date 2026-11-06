@@ -2741,3 +2741,95 @@ capabilities = [
 [subagent-delegation."Worktree isolation for children"]
 "Clean child pruned" = ["crates/prometheus/tests/worktree_delegation.rs::a_child_that_changed_nothing_has_its_tree_and_branch_pruned"]
 "Failed probe keeps work" = ["crates/prometheus/tests/worktree_delegation.rs::a_tree_that_cannot_be_inspected_is_kept_in_place"]
+
+# Group 41 (scheduled jobs: grammar, next runs, at-most-once firing, the
+# daemon trigger and headless tick, runs, delivery, CLI and cronjob tool).
+[scheduled-jobs."Unambiguous schedule grammar"]
+"Bare duration is rejected, not guessed" = ["crates/pmt-cron/src/schedule/tests.rs::a_bare_duration_is_rejected_naming_both_readings", "crates/prometheus/tests/cron_cli.rs::saving_without_a_terminal_needs_yes"]
+"Explicit forms parse to their kinds" = ["crates/pmt-cron/src/schedule/tests.rs::explicit_forms_parse_to_their_kinds", "crates/pmt-cron/src/schedule/tests.rs::grammar_table"]
+"Sub-minute interval rejected" = ["crates/pmt-cron/src/schedule/tests.rs::a_sub_minute_interval_is_rejected"]
+
+[scheduled-jobs."Canonical schedule echo and confirmation (upgrade)"]
+"CLI echo before save" = ["crates/prometheus/tests/cron_cli.rs::a_terminal_sees_the_echo_and_saves_only_on_yes", "crates/pmt-cron/src/schedule/tests.rs::the_echo_shows_the_zone_and_the_next_three_instants"]
+"Non-TTY without --yes refused" = ["crates/prometheus/tests/cron_cli.rs::saving_without_a_terminal_needs_yes"]
+"Tool create needs a confirmation round-trip" = ["crates/prometheus/tests/cron_daemon.rs::a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_there"]
+
+[scheduled-jobs."Job payload validation"]
+"Unknown toolset is an error" = ["crates/pmt-cron/src/validate.rs::an_unknown_toolset_is_refused", "crates/prometheus/tests/cron_cli.rs::an_unknown_toolset_is_refused_at_create"]
+
+[scheduled-jobs."Job record and storage"]
+"Concurrent edits do not clobber each other" = ["crates/pmt-cron/tests/scheduler.rs::a_pause_and_an_advance_by_two_writers_both_land"]
+
+[scheduled-jobs."Job states and status literals"]
+"Uncomputable next run is an error, not completion" = ["crates/pmt-cron/tests/scheduler.rs::a_job_whose_zone_disappeared_enters_error_and_stays_listed"]
+
+[scheduled-jobs."Next-run computation"]
+"DST fall-back fires once" = ["crates/pmt-cron/src/schedule/tests.rs::a_fall_back_time_fires_once_at_its_first_occurrence"]
+"Interval does not drift with run length" = ["crates/pmt-cron/src/schedule/tests.rs::an_interval_counts_from_the_previous_scheduled_instant"]
+
+[scheduled-jobs."Grace and missed occurrences"]
+"Explicit zero grace means never catch up" = ["crates/pmt-cron/tests/scheduler.rs::an_explicit_zero_grace_skips_the_backlog_and_moves_to_the_next_hour", "crates/pmt-cron/src/grace.rs::an_explicit_zero_grace_records_the_backlog_skipped"]
+"Default policy collapses the backlog" = ["crates/pmt-cron/tests/scheduler.rs::the_default_policy_runs_one_catch_up_for_five_missed_hours", "crates/pmt-cron/src/grace.rs::the_default_policy_collapses_a_backlog_into_one_run"]
+
+[scheduled-jobs."At-most-once occurrence firing"]
+"Two triggers for one occurrence" = ["crates/pmt-cron/tests/scheduler.rs::two_triggers_racing_on_one_occurrence_fire_it_once"]
+"Crash mid-run is not retried" = ["crates/pmt-cron/tests/scheduler.rs::a_run_interrupted_by_a_crash_is_failed_on_restart_and_not_fired_again"]
+
+[scheduled-jobs."Built-in trigger inside the gateway daemon"]
+"Each profile ticked under its own scope" = ["crates/prometheus/tests/cron_daemon.rs::each_profile_runs_its_own_jobs_and_delivers_only_through_its_own_adapters"]
+"Emergency stop halts dispatch" = ["crates/pmt-cron/tests/scheduler.rs::nothing_is_dispatched_while_the_emergency_stop_is_on"]
+
+[scheduled-jobs."Headless tick without a daemon"]
+"Daemon present" = ["crates/prometheus/tests/cron_daemon.rs::a_tick_steps_aside_while_the_daemon_owns_scheduling"]
+
+[scheduled-jobs."Execution concurrency and timeouts"]
+"Idle run interrupted" = ["crates/prometheus/tests/cron_cli.rs::an_idle_run_is_interrupted_and_listed_by_its_status"]
+"Env var is not a knob" = ["crates/prometheus/tests/cron_cli.rs::an_environment_variable_does_not_set_the_idle_timeout"]
+
+[scheduled-jobs."Fresh isolated agent session per run"]
+"Cron cannot schedule more cron by default" = ["crates/prometheus/tests/cron_cli.rs::a_run_starts_a_fresh_cron_session_without_cronjob_clarify_or_memory_writes"]
+
+[scheduled-jobs."Memory policy for unattended runs"]
+"Default run cannot write memory" = ["crates/prometheus/tests/cron_cli.rs::a_run_starts_a_fresh_cron_session_without_cronjob_clarify_or_memory_writes"]
+
+[scheduled-jobs."Unattended approvals fail closed"]
+"Dangerous command denied without prompt" = ["crates/prometheus/tests/cron_cli.rs::an_approval_in_a_run_is_denied_at_once_and_the_run_goes_on"]
+
+[scheduled-jobs."Script-backed and no-agent jobs"]
+"Watchdog script with no agent" = ["crates/prometheus/tests/cron_cli.rs::a_no_agent_script_job_stores_its_output_verbatim_without_a_session", "crates/pmt-cron/tests/exec.rs::a_no_agent_script_is_delivered_verbatim_without_a_model_call"]
+
+[scheduled-jobs."Prompt and payload safety scan"]
+"Concealment directive refused" = ["crates/prometheus/tests/cron_cli.rs::a_concealment_directive_is_refused_at_create", "crates/pmt-cron/src/scan.rs::hostile_prompts_name_their_rule"]
+
+[scheduled-jobs."Pre-dispatch preflight"]
+"Revoked key blocks without spending" = ["crates/prometheus/tests/cron_cli.rs::a_missing_provider_secret_blocks_the_run_without_a_request", "crates/pmt-cron/tests/exec.rs::a_failed_preflight_records_blocked_config_and_alerts_once"]
+
+[scheduled-jobs."Delivery targets"]
+"Profile isolation of delivery" = ["crates/prometheus/tests/cron_daemon.rs::each_profile_runs_its_own_jobs_and_delivers_only_through_its_own_adapters"]
+
+[scheduled-jobs."Durable delivery outbox"]
+"Daemon restarts during send" = ["crates/pmt-cron/tests/exec.rs::a_row_left_sending_by_a_crash_becomes_unknown_and_is_not_resent"]
+
+[scheduled-jobs."Response framing and silence"]
+"Nothing to report" = ["crates/pmt-cron/tests/exec.rs::a_silent_answer_is_stored_and_not_delivered"]
+
+[scheduled-jobs."Run history (upgrade)"]
+"Inspect a failed night" = ["crates/prometheus/tests/cron_cli.rs::an_idle_run_is_interrupted_and_listed_by_its_status"]
+
+[scheduled-jobs."Lifecycle operations"]
+"Run-now is synchronous by default" = ["crates/prometheus/tests/cron_cli.rs::run_now_executes_a_paused_job_in_the_foreground_and_keeps_it_paused", "crates/pmt-cron/tests/exec.rs::a_manual_run_of_a_paused_job_keeps_it_paused"]
+
+[scheduled-jobs."Repeat limits and retention"]
+"Limit reached" = ["crates/pmt-cron/tests/exec.rs::a_job_reaching_its_repeat_limit_completes_and_stays_listed"]
+
+[scheduled-jobs."Pluggable trigger provider"]
+"Unknown provider name" = ["crates/pmt-config/src/validate.rs::an_unknown_cron_provider_names_the_accepted_ones"]
+
+[scheduled-jobs."CLI surface"]
+"Ambiguous name" = ["crates/prometheus/tests/cron_cli.rs::an_ambiguous_name_exits_2_listing_the_ids"]
+
+[scheduled-jobs."Model tool surface"]
+"Created from Telegram delivers back to Telegram" = { tests = ["crates/prometheus/tests/cron_daemon.rs::a_job_the_agent_creates_from_a_chat_needs_confirmation_and_delivers_back_there"], note = "proven on the debug-build file adapter's platform (`test`), the gateway path every adapter shares" }
+
+[scheduled-jobs."Cron doctor"]
+"Healthy profile" = ["crates/prometheus/tests/cron_cli.rs::the_doctor_exits_0_on_a_healthy_profile"]

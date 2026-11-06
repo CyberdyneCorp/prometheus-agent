@@ -402,10 +402,10 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 41. M2 Scheduled jobs
 
-- [ ] 41.1 Implement the schedule grammar (cron, interval, one-shot) with canonical echo and confirmation, payload validation, job records and state literals; verify with grammar table tests (spec: scheduled-jobs)
-- [ ] 41.2 Implement next-run computation, grace and missed occurrences, and at-most-once firing; verify with a fake clock across a daemon restart (spec: scheduled-jobs)
-- [ ] 41.3 Implement the built-in trigger in the daemon and the headless tick, execution concurrency and timeouts, fresh isolated sessions, the unattended memory policy and fail-closed approvals; verify with integration tests (spec: scheduled-jobs)
-- [ ] 41.4 Implement script-backed and no-agent jobs, the prompt safety scan, pre-dispatch preflight, delivery targets via the durable outbox, and response framing and silence; verify with a fake adapter (spec: scheduled-jobs)
+- [x] 41.1 Implement the schedule grammar (cron, interval, one-shot) with canonical echo and confirmation, payload validation, job records and state literals; verify with grammar table tests (spec: scheduled-jobs)
+- [x] 41.2 Implement next-run computation, grace and missed occurrences, and at-most-once firing; verify with a fake clock across a daemon restart (spec: scheduled-jobs)
+- [x] 41.3 Implement the built-in trigger in the daemon and the headless tick, execution concurrency and timeouts, fresh isolated sessions, the unattended memory policy and fail-closed approvals; verify with integration tests (spec: scheduled-jobs)
+- [x] 41.4 Implement script-backed and no-agent jobs, the prompt safety scan, pre-dispatch preflight, delivery targets via the durable outbox, and response framing and silence; verify with a fake adapter (spec: scheduled-jobs)
 - [ ] 41.5 Implement run history and replay, lifecycle ops, repeat limits and retention, the pluggable trigger provider, the `cron` CLI and model tools, and the cron doctor; verify with CLI tests and document cron (spec: scheduled-jobs)
 
 ## 42. M2 Scheduled job upgrades

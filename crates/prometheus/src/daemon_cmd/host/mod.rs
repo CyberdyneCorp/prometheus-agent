@@ -31,6 +31,7 @@ use tracing::Instrument as _;
 use super::turn::{SecretsToClients, SudoToClients, ToClients, approvals, clarify};
 
 mod commands;
+mod cron;
 mod delegations;
 mod discovery;
 mod gateway;
@@ -43,6 +44,7 @@ mod worktrees;
 
 use crate::chat::resume;
 use crate::chat::session::{Clients, Factory, Live};
+pub(super) use cron::schedule as schedule_cron;
 pub(super) use reload::watch;
 pub(super) use worktrees::sweep_worktrees;
 
