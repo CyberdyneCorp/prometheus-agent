@@ -133,7 +133,8 @@ pub(crate) async fn start(
         chat_id: routing.chat_id.clone(),
         thread_id: routing.thread_id.clone(),
         user_id: routing.sender_id.clone(),
-        parent: None,
+        parent: launcher.map(str::to_owned),
+        background: true,
         policy,
     };
     let session = match shared

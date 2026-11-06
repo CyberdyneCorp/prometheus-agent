@@ -251,3 +251,41 @@ fn message_ids_are_durable_and_kept_when_given() {
         imported.id
     );
 }
+
+/// A `/bg` task's session names the launching session for lineage only:
+/// it is the root of its own lineage (own usage, spawn tree and owed
+/// completions), shows in the launcher's tree, runs as the launcher's
+/// surface, and survives the launcher's deletion (spec: subagent-delegation,
+/// User-launched background sessions).
+#[test]
+fn a_background_task_session_links_its_launcher_for_lineage_only() {
+    let home = TestHome::new();
+    let store = home.store("default");
+    let launcher = store.create_session(&NewSession::new(Source::Tui)).unwrap();
+    let task = store
+        .create_session(&NewSession::child(
+            Source::Background,
+            launcher.id,
+            LineageKind::Background,
+        ))
+        .unwrap();
+
+    assert_eq!(task.source, Source::Background);
+    assert_eq!(task.parent_session_id, Some(launcher.id));
+    assert_eq!(task.lineage_kind, Some(LineageKind::Background));
+    assert_eq!(task.root_session_id, task.id);
+    assert_eq!(store.lineage(task.id).unwrap(), vec![launcher.id, task.id]);
+    let tree = store.tree(launcher.id).unwrap();
+    assert_eq!(tree.len(), 1);
+    assert_eq!(
+        (tree[0].id, tree[0].kind),
+        (task.id, LineageKind::Background)
+    );
+    assert_eq!(store.running_source(&task), Source::Tui);
+
+    store.delete_session(launcher.id, false).unwrap();
+    let orphan = store.session(task.id).unwrap();
+    assert!(orphan.parent_deleted);
+    assert_eq!(orphan.parent_session_id, None);
+    assert_eq!(store.running_source(&orphan), Source::Cli);
+}

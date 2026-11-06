@@ -256,7 +256,8 @@ pub(crate) fn load(conn: &Connection, id: SessionId) -> Result<Option<Session>, 
 
 impl Store {
     /// Creates a session: a root, or a child whose `root_session_id` is
-    /// its parent's root. A compression or fork child of a titled parent
+    /// its parent's root (a `background` child is its own root: its link
+    /// to the launching session is lineage only). A compression or fork child of a titled parent
     /// gets the next `<base> #<n>` title unless one is given.
     ///
     /// # Errors
@@ -297,7 +298,10 @@ impl Store {
             if let Some(title) = &title {
                 titles::ensure_unused(tx, title, None)?;
             }
-            let root = parent.as_ref().map_or(id, |(p, _)| p.root_session_id);
+            let root = match &parent {
+                Some((p, kind)) if *kind != LineageKind::Background => p.root_session_id,
+                _ => id,
+            };
             let now = now_ms();
             tx.execute(
                 "INSERT INTO sessions (id, profile_id, source, origin, model, provider, cwd, \
@@ -339,6 +343,31 @@ impl Store {
     /// `session.not_found`, `store.sqlite`.
     pub fn session(&self, id: SessionId) -> Result<Session, Error> {
         self.read(|conn| load(conn, id)?.ok_or_else(|| not_found(id)))
+    }
+
+    /// The surface `session` runs as: its own source, or for a `/bg`
+    /// task's session the source of the session that launched it (spec:
+    /// subagent-delegation, User-launched background sessions: the task
+    /// inherits the launching session's toolsets). A task whose launcher is
+    /// gone runs as `gateway` when it belongs to a chat, else as `cli`.
+    #[must_use]
+    pub fn running_source(&self, session: &Session) -> Source {
+        // The bound only guards against a corrupt parent cycle.
+        let mut current = session.clone();
+        for _ in 0..16 {
+            if current.source != Source::Background {
+                return current.source;
+            }
+            match current.parent_session_id.map(|p| self.session(p)) {
+                Some(Ok(parent)) => current = parent,
+                _ => break,
+            }
+        }
+        if matches!(session.origin, Origin::Gateway { .. }) {
+            Source::Gateway
+        } else {
+            Source::Cli
+        }
     }
 
     /// Ends a session unless it already ended: the first end reason wins.

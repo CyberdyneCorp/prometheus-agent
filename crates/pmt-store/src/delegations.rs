@@ -75,6 +75,9 @@ pub struct DelegationRow {
     pub attempts: i64,
     /// When the last child ended.
     pub completed_at: Option<i64>,
+    /// What heads its completion (`Review: <focus>`), when the dispatch
+    /// named one.
+    pub label: Option<String>,
 }
 
 /// A child row.
@@ -132,11 +135,12 @@ fn delegation_from_row(row: &Row<'_>) -> rusqlite::Result<DelegationRow> {
         delivery: Delivery::parse(&row.get::<_, String>(4)?),
         attempts: row.get(5)?,
         completed_at: row.get(6)?,
+        label: row.get(7)?,
     })
 }
 
 const DELEGATION_COLUMNS: &str =
-    "id, session_id, root_session_id, created_at, delivery, attempts, completed_at";
+    "id, session_id, root_session_id, created_at, delivery, attempts, completed_at, label";
 
 impl Store {
     /// Records a spawn call of `session` and its children (status
@@ -268,6 +272,24 @@ impl Store {
                 delegation_from_row,
             )
             .optional()
+            .map_err(sql)
+        })
+    }
+
+    /// Names what heads delegation `id`'s completion (`/review`'s
+    /// `Review: <focus>`), so a completion delivered after a restart keeps
+    /// it.
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn set_delegation_label(&self, id: &str, label: &str) -> Result<(), Error> {
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE delegations SET label = ?2 WHERE id = ?1",
+                params![id, label],
+            )
+            .map(drop)
             .map_err(sql)
         })
     }

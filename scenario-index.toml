@@ -2720,14 +2720,14 @@ capabilities = [
 # Group 40.1 / 40.2 (background sessions, agents monitor, review,
 # independent completions, request overrides, gateway delegation mode).
 [subagent-delegation."User-launched background sessions"]
-"Result delivered to the same chat" = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking"]
+"Result delivered to the same chat" = ["crates/prometheus/tests/delegation_gateway.rs::a_background_result_is_posted_to_the_chat_and_not_into_its_session", "crates/pmt-gateway/tests/messaging/chats.rs::a_background_task_reports_back_while_the_chat_keeps_talking", "crates/prometheus/tests/chat_background.rs::a_background_task_reports_while_the_chat_keeps_answering", "crates/pmt-store/tests/store/sessions.rs::a_background_task_session_links_its_launcher_for_lineage_only"]
 
 [subagent-delegation."Agents monitor and live transcripts"]
 "Stop one child" = ["crates/pmt-delegation/tests/host.rs::stopping_one_child_from_the_monitor_spares_its_siblings", "crates/prometheus/tests/delegation_review.rs::agents_lists_tails_and_stops_a_running_child"]
 "Tail a live transcript" = ["crates/pmt-delegation/tests/host.rs::a_childs_transcript_exists_before_its_first_model_call_and_logs_each_tool_call", "crates/prometheus/tests/delegation_review.rs::agents_lists_tails_and_stops_a_running_child"]
 
 [subagent-delegation."Review command"]
-"Review returns to the session" = ["crates/prometheus/tests/delegation_review.rs::a_review_runs_in_the_background_and_returns_to_the_session", "crates/pmt-delegation/tests/host.rs::a_labelled_dispatch_returns_as_a_labelled_completion"]
+"Review returns to the session" = ["crates/prometheus/tests/delegation_review.rs::a_review_runs_in_the_background_and_returns_to_the_session", "crates/pmt-delegation/tests/host.rs::a_labelled_dispatch_returns_as_a_labelled_completion", "crates/pmt-delegation/tests/host.rs::a_labelled_completion_delivered_after_a_restart_keeps_its_label"]
 
 [subagent-delegation."Independent completions"]
 "Ungrouped results arrive separately" = ["crates/pmt-delegation/tests/host.rs::ungrouped_results_arrive_separately_and_a_group_together"]

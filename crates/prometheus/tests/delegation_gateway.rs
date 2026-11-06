@@ -82,6 +82,20 @@ fn a_background_result_is_posted_to_the_chat_and_not_into_its_session() {
         !chat.iter().any(|c| c.contains("three errors")),
         "the chat's session never holds the task's answer: {chat:?}"
     );
+    // The task's own session: `source = background`, the chat's session
+    // as its parent for lineage only (the root of its own lineage).
+    let (id, parent, kind, root): (String, String, String, String) = db(home)
+        .query_row(
+            "SELECT id, parent_session_id, lineage_kind, root_session_id FROM sessions \
+             WHERE source = 'background'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        (parent.as_str(), kind.as_str(), root.as_str()),
+        (chat_session(home).as_str(), "background", id.as_str())
+    );
     daemon.stop(home);
 }
 

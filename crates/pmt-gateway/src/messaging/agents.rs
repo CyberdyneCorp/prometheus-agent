@@ -57,8 +57,13 @@ pub struct Conversation {
     pub thread_id: Option<String>,
     /// The sender who started it.
     pub user_id: String,
-    /// The session it replaces (`/new`, suspension).
+    /// The session it replaces (`/new`, suspension), or for a background
+    /// task the chat's session that launched it.
     pub parent: Option<String>,
+    /// A `/bg` task's own session (spec: subagent-delegation, User-launched
+    /// background sessions): recorded with `source = background`, its
+    /// `parent` linked for lineage only.
+    pub background: bool,
     /// The chat policy the session is created with (frozen with it).
     pub policy: Option<pmt_config::schema::ChatPolicy>,
 }

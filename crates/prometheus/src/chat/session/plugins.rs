@@ -83,11 +83,13 @@ impl PluginTools {
 }
 
 /// The surface that created session `id` (its stored source: `cli`,
-/// `tui`, `gateway`, `cron`...); `cli` when the store does not know it.
+/// `tui`, `gateway`, `cron`..., a `/bg` task's launching surface); `cli`
+/// when the store does not know it.
 pub(super) fn stored_surface(store: &Store, id: SessionId) -> String {
-    store
-        .session(id)
-        .map_or_else(|_| "cli".to_owned(), |s| s.source.as_str().to_owned())
+    store.session(id).map_or_else(
+        |_| "cli".to_owned(),
+        |s| store.running_source(&s).as_str().to_owned(),
+    )
 }
 
 /// What a plugin tool call reports as its session: the calling session's

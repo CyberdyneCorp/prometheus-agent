@@ -947,13 +947,16 @@ impl Factory {
     /// The stored row of session `id`, recorded for `--usage-file` with
     /// the launch flags; a gateway session's platform user id is hashed in
     /// every model request when PII is redacted (spec:
-    /// security-boundaries, Optional PII redaction).
+    /// security-boundaries, Optional PII redaction). A `/bg` task's session
+    /// is opened as the surface that launched it (its toolsets, hooks and
+    /// plugin calls); the stored row keeps `source = background`.
     fn session_row(
         &self,
         id: SessionId,
         target: &pmt_providers::resolve::Target,
     ) -> Result<pmt_store::Session, Error> {
-        let session = self.store.session(id)?;
+        let mut session = self.store.session(id)?;
+        session.source = self.store.running_source(&session);
         if let pmt_store::Origin::Gateway {
             user: Some(user), ..
         } = &session.origin

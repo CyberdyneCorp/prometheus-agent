@@ -185,7 +185,7 @@ pub async fn deliver_pending(
             .filter_map(|json| serde_json::from_str::<SubagentResult>(json).ok())
             .map(|result| capped(&result, cap, spill_dir))
             .collect();
-        let text = completion_text(&delegation.id, &results, None);
+        let text = completion_text(&delegation.id, &results, delegation.label.as_deref());
         deliver_one(store, &delegation.id, text, sink).await;
     }
 }

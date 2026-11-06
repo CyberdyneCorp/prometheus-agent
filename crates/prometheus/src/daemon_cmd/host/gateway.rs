@@ -199,11 +199,14 @@ impl Agents for DaemonHost {
                 .unwrap_or_default();
             let factory = self.factory(profile, cwd.clone(), &setup)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
+            let (source, kind) = if conversation.background {
+                (Source::Background, LineageKind::Background)
+            } else {
+                (Source::Gateway, LineageKind::Reset)
+            };
             let mut new = match &conversation.parent {
-                Some(parent) => {
-                    NewSession::child(Source::Gateway, session_id(parent)?, LineageKind::Reset)
-                }
-                None => NewSession::new(Source::Gateway),
+                Some(parent) => NewSession::child(source, session_id(parent)?, kind),
+                None => NewSession::new(source),
             };
             new.origin = Origin::Gateway {
                 platform: conversation.platform,

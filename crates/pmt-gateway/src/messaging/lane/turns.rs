@@ -131,6 +131,7 @@ impl Lane {
             thread_id: routing.thread_id.clone(),
             user_id: routing.sender_id.clone(),
             parent: parent.clone(),
+            background: false,
             policy: policy.clone(),
         };
         let agents = &self.shared.agents;
