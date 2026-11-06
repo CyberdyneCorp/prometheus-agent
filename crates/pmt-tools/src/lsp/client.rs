@@ -128,7 +128,12 @@ impl Client {
     ) -> Result<Self, String> {
         let deadline = Instant::now() + timeout;
         let params = json!({
-            "processId": std::process::id(),
+            // No parent pid: servers built on vscode-languageserver probe
+            // it with kill(pid, 0) and exit when the probe fails, which it
+            // always does under Seatbelt (signals stay inside the sandbox).
+            // A server still ends with us: its stdin closes and the child
+            // is killed on drop.
+            "processId": Value::Null,
             "rootUri": protocol::uri(root),
             "rootPath": root.display().to_string(),
             "workspaceFolders": [{"uri": protocol::uri(root), "name": folder_name(root)}],

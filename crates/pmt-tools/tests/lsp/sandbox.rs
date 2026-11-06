@@ -1,6 +1,8 @@
 //! Language servers run sandboxed (spec: lsp-diagnostics, Language
 //! servers run sandboxed): a server reads its workspace but cannot write
-//! it, and the edit's result does not depend on what it tried.
+//! it, and the edit's result does not depend on what it tried. The
+//! stand-in probes its client's pid like vscode-languageserver servers do,
+//! so a client that names one fails here under Seatbelt (macOS).
 
 use std::fs;
 use std::path::Path;

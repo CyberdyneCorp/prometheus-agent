@@ -93,6 +93,20 @@ def publish(uri, version, text):
           "params": {"uri": uri, "version": version, "diagnostics": diagnostics(text)}})
 
 
+def parent_watchdog(pid):
+    """Exits when the client's process cannot be probed, as servers built
+    on vscode-languageserver (pyright, typescript-language-server, ...) do
+    every 3 s: a sandbox that confines signals to itself (macOS Seatbelt)
+    makes the probe fail."""
+    if pid is None:
+        return
+    try:
+        os.kill(pid, 0)
+    except OSError as err:
+        log("parent probe failed: %s" % err.__class__.__name__)
+        sys.exit(1)
+
+
 def main():
     log("start " + os.getcwd())
     target = os.environ.get("FAKE_LSP_WRITE")
@@ -114,6 +128,7 @@ def main():
         if method == "initialize":
             if os.environ.get("FAKE_LSP_HANG"):
                 continue
+            parent_watchdog(params.get("processId"))
             log("options " + json.dumps(params.get("initializationOptions")))
             send({"jsonrpc": "2.0", "id": message["id"],
                   "result": {"capabilities": {"textDocumentSync": 1}}})
