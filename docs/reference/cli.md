@@ -21,6 +21,7 @@ Commands:
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -4347,6 +4348,376 @@ Usage: prometheus browser help close-profile
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus browser help help
+```
+
+## `prometheus lsp`
+
+```text
+Language servers behind the diagnostics of file edits: status, registry, installs, restart
+
+Usage: prometheus lsp [OPTIONS] <COMMAND>
+
+Commands:
+  status       Running language servers: workspace, pid, uptime and state
+  list         The server registry with install state
+  install      Install an npm, go or pip server (prints instructions for others)
+  install-all  Install every npm, go and pip server
+  restart      Stop running servers and clear broken marks (every server, or one)
+  which        Print the binary a server runs; exits 66 when there is none
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp status`
+
+```text
+Running language servers: workspace, pid, uptime and state
+
+Usage: prometheus lsp status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp list`
+
+```text
+The server registry with install state
+
+Usage: prometheus lsp list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --installed-only
+          Only servers whose binary is found
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp install`
+
+```text
+Install an npm, go or pip server (prints instructions for others)
+
+Usage: prometheus lsp install [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The server id (`prometheus lsp list`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp install-all`
+
+```text
+Install every npm, go and pip server
+
+Usage: prometheus lsp install-all [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp restart`
+
+```text
+Stop running servers and clear broken marks (every server, or one)
+
+Usage: prometheus lsp restart [OPTIONS] [ID]
+
+Arguments:
+  [ID]
+          The server id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp which`
+
+```text
+Print the binary a server runs; exits 66 when there is none
+
+Usage: prometheus lsp which [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The server id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus lsp help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus lsp help [COMMAND]
+
+Commands:
+  status       Running language servers: workspace, pid, uptime and state
+  list         The server registry with install state
+  install      Install an npm, go or pip server (prints instructions for others)
+  install-all  Install every npm, go and pip server
+  restart      Stop running servers and clear broken marks (every server, or one)
+  which        Print the binary a server runs; exits 66 when there is none
+  help         Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus lsp help status`
+
+```text
+Running language servers: workspace, pid, uptime and state
+
+Usage: prometheus lsp help status
+```
+
+## `prometheus lsp help list`
+
+```text
+The server registry with install state
+
+Usage: prometheus lsp help list
+```
+
+## `prometheus lsp help install`
+
+```text
+Install an npm, go or pip server (prints instructions for others)
+
+Usage: prometheus lsp help install
+```
+
+## `prometheus lsp help install-all`
+
+```text
+Install every npm, go and pip server
+
+Usage: prometheus lsp help install-all
+```
+
+## `prometheus lsp help restart`
+
+```text
+Stop running servers and clear broken marks (every server, or one)
+
+Usage: prometheus lsp help restart
+```
+
+## `prometheus lsp help which`
+
+```text
+Print the binary a server runs; exits 66 when there is none
+
+Usage: prometheus lsp help which
+```
+
+## `prometheus lsp help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus lsp help help
 ```
 
 ## `prometheus vault`
@@ -16140,6 +16511,7 @@ Commands:
   memory       Inspect, edit, export and import what the agent remembers (built-in memory)
   grants       List and revoke the profile's permanent capability grants and approvals
   browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
   backup       Back up the whole home to a .tar.zst archive, or restore one
@@ -16828,6 +17200,70 @@ Usage: prometheus help browser status
 End your real browser so real-profile browsing can copy its profile (asks first)
 
 Usage: prometheus help browser close-profile
+```
+
+## `prometheus help lsp`
+
+```text
+Language servers behind the diagnostics of file edits: status, registry, installs, restart
+
+Usage: prometheus help lsp [COMMAND]
+
+Commands:
+  status       Running language servers: workspace, pid, uptime and state
+  list         The server registry with install state
+  install      Install an npm, go or pip server (prints instructions for others)
+  install-all  Install every npm, go and pip server
+  restart      Stop running servers and clear broken marks (every server, or one)
+  which        Print the binary a server runs; exits 66 when there is none
+```
+
+## `prometheus help lsp status`
+
+```text
+Running language servers: workspace, pid, uptime and state
+
+Usage: prometheus help lsp status
+```
+
+## `prometheus help lsp list`
+
+```text
+The server registry with install state
+
+Usage: prometheus help lsp list
+```
+
+## `prometheus help lsp install`
+
+```text
+Install an npm, go or pip server (prints instructions for others)
+
+Usage: prometheus help lsp install
+```
+
+## `prometheus help lsp install-all`
+
+```text
+Install every npm, go and pip server
+
+Usage: prometheus help lsp install-all
+```
+
+## `prometheus help lsp restart`
+
+```text
+Stop running servers and clear broken marks (every server, or one)
+
+Usage: prometheus help lsp restart
+```
+
+## `prometheus help lsp which`
+
+```text
+Print the binary a server runs; exits 66 when there is none
+
+Usage: prometheus help lsp which
 ```
 
 ## `prometheus help vault`
@@ -18754,6 +19190,8 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.approvals_suggest.v1` | `prometheus approvals suggest` |
 | `prometheus.vault_list.v1` | `prometheus vault list` |
 | `prometheus.browser_status.v1` | `prometheus browser status` |
+| `prometheus.lsp_status.v1` | `prometheus lsp status` |
+| `prometheus.lsp_list.v1` | `prometheus lsp list` |
 | `prometheus.daemon_status.v1` | `prometheus daemon status` |
 | `prometheus.gateway_status.v1` | `prometheus gateway status` |
 | `prometheus.gateway_platforms.v1` | `prometheus gateway platforms` |

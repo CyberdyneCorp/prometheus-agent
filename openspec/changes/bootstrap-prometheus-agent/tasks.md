@@ -375,9 +375,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 37. M2 LSP diagnostics
 
-- [ ] 37.1 Implement workspace gating (no LSP for gateway sessions in the home directory), workspace trust (fresh clones untrusted until trusted explicitly), the built-in server registry, server installation through managed runtimes (package-manager policy respected) and server overrides with custom servers; verify with registry and trust tests (spec: lsp-diagnostics)
-- [ ] 37.2 Implement sandboxed language servers (read-only workspace), diagnostics introduced by an edit (only new diagnostics reported, cold servers awaited) and wait modes with timeouts and broken-server retry; verify with a rust-analyzer or pyright fixture that an undefined name is reported after a patch (spec: lsp-diagnostics)
-- [ ] 37.3 Implement `prometheus lsp status|list|install|install-all|…` and document LSP diagnostics; verify with CLI tests that a missing server is named (spec: lsp-diagnostics)
+- [x] 37.1 Implement workspace gating (no LSP for gateway sessions in the home directory), workspace trust (fresh clones untrusted until trusted explicitly), the built-in server registry, server installation through managed runtimes (package-manager policy respected) and server overrides with custom servers; verify with registry and trust tests (spec: lsp-diagnostics)
+- [x] 37.2 Implement sandboxed language servers (read-only workspace), diagnostics introduced by an edit (only new diagnostics reported, cold servers awaited) and wait modes with timeouts and broken-server retry; verify with a rust-analyzer or pyright fixture that an undefined name is reported after a patch (spec: lsp-diagnostics)
+- [x] 37.3 Implement `prometheus lsp status|list|install|install-all|…` and document LSP diagnostics; verify with CLI tests that a missing server is named (spec: lsp-diagnostics)
 
 ## 38. M2 Subagent delegation
 

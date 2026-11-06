@@ -72,6 +72,9 @@ pub struct EnvInputs<'a> {
     /// Host directories whose files a command on a backend without the
     /// host filesystem may name (attachments, skills): uploaded on demand.
     pub input_roots: Vec<std::path::PathBuf>,
+    /// The working directory's git root is trusted for language servers
+    /// (not for cron jobs and kanban workers).
+    pub automatic_trust: bool,
 }
 
 /// `browser_vault`'s masked prompt over a skill secret prompt (the CLI's
@@ -178,6 +181,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .as_ref()
         .and_then(|(sandbox, env)| browser_exec(inputs, sandbox, env, &scratch));
     let downgrades = downgrades(inputs, process.as_ref(), browser.as_deref());
+    let child_env = process.as_ref().map(|(_, env)| env.clone());
     let commands = process.and_then(|(sandbox, env)| {
         let config = scope.config();
         pmt_tools::terminal::doctor::local_shell(&config.terminal, inputs.launch, &sandbox)
@@ -216,6 +220,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .as_ref()
         .map(|r| remote_parts(inputs, r, terminal.as_ref()))
         .unwrap_or_default();
+    let lsp = super::lsp::diagnostics(inputs, remote.as_ref(), child_env.as_ref(), proxy.as_ref());
     let env = SessionEnv {
         files: Some(Arc::new(files(
             inputs,
@@ -224,7 +229,9 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
             policy,
             file_backend,
             snapshots.as_ref(),
+            lsp.as_ref(),
         ))),
+        lsp,
         terminal: terminal.clone(),
         web: web(scope, &inputs.providers, &inputs.plugin_call, inputs.egress).map(Arc::new),
         vision: None,
@@ -390,6 +397,7 @@ fn files(
     policy: Arc<Policy>,
     remote: Option<RemoteFiles>,
     snapshots: Option<&Arc<pmt_tools::snapshots::SessionSnapshots>>,
+    lsp: Option<&pmt_tools::lsp::SessionDiagnostics>,
 ) -> FileSession {
     let host_cwd = inputs.cwd.to_path_buf();
     let (backend, cwd) = remote.unwrap_or_else(|| {
@@ -397,7 +405,7 @@ fn files(
             Arc::new(LocalBackend::new(inputs.capabilities.clone(), places).denying_stores(policy));
         (backend, Arc::new(move || host_cwd.clone()))
     });
-    FileSession::new(FileSetup {
+    let files = FileSession::new(FileSetup {
         backend,
         cwd,
         user_home,
@@ -408,7 +416,11 @@ fn files(
         linter: Linter::builtin(),
         documents: super::documents::converter(inputs.scope, inputs.launch),
         edits: snapshots.map(|s| Arc::clone(s) as Arc<dyn pmt_tools::files::edits::EditRecorder>),
-    })
+    });
+    match lsp {
+        Some(lsp) => files.with_post_write(Arc::new(lsp.clone())),
+        None => files,
+    }
 }
 
 /// The session's OS sandbox and the environment of the processes it

@@ -156,8 +156,9 @@ with the parser's message and line, or `skipped`. Rust, Python,
 JavaScript, TypeScript (and JSX/TSX), JSON, TOML and YAML are checked. A
 checker never fails or undoes the write: a file type without a checker, a
 file over 2 MiB, a checker that crashes or runs past 2 seconds all report
-`skipped`. Language-server diagnostics arrive with the LSP integration in a
-later release.
+`skipped`. When the syntax is clean, the file's language server reports
+the diagnostics the edit introduced as `lsp_diagnostics` (see
+[LSP diagnostics](lsp.md)).
 
 ## Searching
 

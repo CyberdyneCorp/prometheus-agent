@@ -265,6 +265,27 @@ pub fn through(policy: pmt_sandbox::Policy, proxy: &pmt_net::egress::Proxy) -> p
     policy.through_proxy(proxy.addr().port(), relay)
 }
 
+/// [`through`] as a transform applied later, once per child started
+/// (each language server gets a policy of its own).
+#[must_use]
+pub fn through_later(proxy: &pmt_net::egress::Proxy) -> pmt_tools::lsp::launch::Egress {
+    let port = proxy.addr().port();
+    #[cfg(unix)]
+    let attacher = proxy.attacher();
+    std::sync::Arc::new(move |policy: pmt_sandbox::Policy| {
+        #[cfg(unix)]
+        let relay = {
+            let attacher = attacher.clone();
+            pmt_sandbox::Relay::new(move |attached| {
+                attacher.serve(attached.listener, attached.alive);
+            })
+        };
+        #[cfg(not(unix))]
+        let relay = pmt_sandbox::Relay::new(|_| {});
+        policy.through_proxy(port, relay)
+    })
+}
+
 /// One `/egress` (or `egress.set`) change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {

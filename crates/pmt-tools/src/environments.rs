@@ -36,6 +36,8 @@ pub struct SessionEnv {
     pub browser: Option<Arc<BrowserExec>>,
     /// `browser_vault`'s vault, browser and prompt.
     pub vault: Option<Arc<crate::browser::vault::VaultSession>>,
+    /// Language-server diagnostics after file edits (`None`: off).
+    pub lsp: Option<crate::lsp::SessionDiagnostics>,
 }
 
 /// Read grants for the files the session's own tools point the model at

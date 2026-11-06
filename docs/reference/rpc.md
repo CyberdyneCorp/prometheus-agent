@@ -89,7 +89,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.log` | `harness-evolution` | 1.0 | not served yet | |
 | `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
 | `journey.list` | `memory` | 1.0 | not served yet | |
-| `lsp.status` | `lsp-diagnostics` | 1.0 | not served yet | |
+| `lsp.status` | `lsp-diagnostics` | 1.0 | [`LspStatusParams`](#lspstatusparams) | [`LspStatus`](#lspstatus) |
 | `moa.presets.delete` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.list` | `mixture-of-agents` | 1.0 | not served yet | |
 | `moa.presets.put` | `mixture-of-agents` | 1.0 | not served yet | |
@@ -620,6 +620,36 @@ The system prompt a session froze on its first turn.
 | `profiles` | array of string | yes | The profiles the connection's ticket grants. |
 | `protocol` | [`Version`](#version) | yes | The protocol the daemon speaks. |
 | `server_version` | string | yes | The daemon's semantic version. |
+
+### `LspServerStatus`
+
+One running language server.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The server id (`pyright`, `rust-analyzer`...). |
+| `pid` | integer | yes | Its process id. |
+| `session_id` | string | yes | The session that started it. |
+| `state` | string | yes | `ready`. |
+| `trusted_only` | boolean | yes | It executes project code, so it starts only in trusted workspaces. |
+| `uptime_secs` | integer | yes | Seconds since it started. |
+| `workspace` | string | yes | Its workspace root. |
+
+### `LspStatus`
+
+`lsp.status` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `servers` | array of [`LspServerStatus`](#lspserverstatus) | yes | Every running server of the profile, by id and workspace. |
+
+### `LspStatusParams`
+
+`lsp.status` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `McpServerState`
 

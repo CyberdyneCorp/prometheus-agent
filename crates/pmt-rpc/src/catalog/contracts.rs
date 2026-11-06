@@ -77,10 +77,12 @@ macro_rules! event {
 }
 
 mod files;
+mod lsp;
 mod messaging;
 mod security;
 mod tui;
 pub use files::*;
+pub use lsp::*;
 pub use messaging::*;
 pub use security::*;
 pub use tui::*;

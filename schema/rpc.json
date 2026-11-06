@@ -1364,6 +1364,86 @@
       ],
       "type": "object"
     },
+    "LspServerStatus": {
+      "additionalProperties": false,
+      "description": "One running language server.",
+      "properties": {
+        "id": {
+          "description": "The server id (`pyright`, `rust-analyzer`...).",
+          "type": "string"
+        },
+        "pid": {
+          "description": "Its process id.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session that started it.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`ready`.",
+          "type": "string"
+        },
+        "trusted_only": {
+          "description": "It executes project code, so it starts only in trusted workspaces.",
+          "type": "boolean"
+        },
+        "uptime_secs": {
+          "description": "Seconds since it started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "workspace": {
+          "description": "Its workspace root.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "workspace",
+        "pid",
+        "uptime_secs",
+        "state",
+        "trusted_only",
+        "session_id"
+      ],
+      "type": "object"
+    },
+    "LspStatus": {
+      "additionalProperties": false,
+      "description": "`lsp.status` result.",
+      "properties": {
+        "servers": {
+          "description": "Every running server of the profile, by id and workspace.",
+          "items": {
+            "$ref": "#/$defs/LspServerStatus"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "servers"
+      ],
+      "type": "object"
+    },
+    "LspStatusParams": {
+      "additionalProperties": false,
+      "description": "`lsp.status` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "McpServerState": {
       "additionalProperties": false,
       "description": "One MCP server of a session.",
@@ -3048,8 +3128,13 @@
       "since": "1.0"
     },
     "lsp.status": {
-      "declared": false,
       "owner": "lsp-diagnostics",
+      "params": {
+        "$ref": "#/$defs/LspStatusParams"
+      },
+      "result": {
+        "$ref": "#/$defs/LspStatus"
+      },
       "since": "1.0"
     },
     "moa.presets.delete": {

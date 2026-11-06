@@ -2679,6 +2679,207 @@
       },
       "type": "object"
     },
+    "LspConfig": {
+      "additionalProperties": false,
+      "description": "The `[lsp]` section.",
+      "properties": {
+        "broken_retry_secs": {
+          "default": 0,
+          "description": "After a server fails to start or times out, skip it for its\nworkspace this long (`0` = until `prometheus lsp restart` or the\nprocess exits).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Run language servers after `write_file` and `patch`; `false` starts\nno server, watcher or background task.",
+          "type": "boolean"
+        },
+        "exclude_roots": {
+          "default": [],
+          "description": "Git roots where no server runs (globs, `~` expanded; a bare path\nalso matches everything below it).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idle_timeout_secs": {
+          "default": 600,
+          "description": "Shut down a server idle this long; it restarts on demand (`0` =\nnever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "install_strategy": {
+          "$ref": "#/$defs/LspInstallStrategy",
+          "default": "auto",
+          "description": "`auto` installs missing `npm`, `go` and `pip` servers on first use;\n`manual` uses only binaries on `PATH`."
+        },
+        "package_manager": {
+          "$ref": "#/$defs/LspPackageManager",
+          "default": "npm",
+          "description": "The package manager of `npm`-method installs; one that is not\ninstalled skips the install (never another manager)."
+        },
+        "servers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LspServerConfig"
+          },
+          "default": {},
+          "description": "Overrides of built-in servers by id, and custom servers under any\nother key.",
+          "type": "object"
+        },
+        "trusted_workspaces": {
+          "default": [],
+          "description": "Workspaces trusted beyond the one the session was pointed at\n(globs, `~` expanded; a bare path also matches everything below\nit). Servers that execute project code start only in trusted\nworkspaces.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "wait_mode": {
+          "$ref": "#/$defs/LspWaitMode",
+          "default": "document",
+          "description": "`document` checks the edited file; `full` also asks for workspace\ndiagnostics."
+        },
+        "wait_timeout_ms": {
+          "default": 5000,
+          "description": "Longest wait for a verdict before the turn's final answer is\naccepted, and the bound of one check.",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "warmup_timeout_ms": {
+          "default": 0,
+          "description": "Bound of the first check against a server that is not running yet\n(`0` = `wait_timeout_ms`).",
+          "format": "uint64",
+          "maximum": 600000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "LspInstallStrategy": {
+      "description": "How missing servers are obtained.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Install on first use into `<PROMETHEUS_HOME>/runtimes/lsp/`.",
+          "type": "string"
+        },
+        {
+          "const": "manual",
+          "description": "Only binaries on `PATH`.",
+          "type": "string"
+        }
+      ]
+    },
+    "LspPackageManager": {
+      "description": "The package manager of `npm`-method installs.",
+      "oneOf": [
+        {
+          "const": "npm",
+          "description": "npm (the managed Node's own when installed).",
+          "type": "string"
+        },
+        {
+          "const": "pnpm",
+          "description": "pnpm.",
+          "type": "string"
+        },
+        {
+          "const": "yarn",
+          "description": "Yarn.",
+          "type": "string"
+        }
+      ]
+    },
+    "LspServerConfig": {
+      "additionalProperties": false,
+      "description": "One `[lsp.servers.<id>]` entry: an override of a built-in server, or\na custom server (`command` and `extensions` required).",
+      "properties": {
+        "command": {
+          "default": null,
+          "description": "The server's argv; bypasses installation.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "description": {
+          "default": null,
+          "description": "Custom servers: what it is, for `prometheus lsp list`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "disabled": {
+          "default": false,
+          "description": "Never start this server.",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra environment of the server (non-secret values).",
+          "type": "object"
+        },
+        "extensions": {
+          "default": [],
+          "description": "Custom servers: the file extensions it checks (`.ml2`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "initialization_options": {
+          "additionalProperties": true,
+          "default": {},
+          "description": "Merged into the server's initialization options.",
+          "type": "object"
+        },
+        "language_id": {
+          "default": null,
+          "description": "Custom servers: the LSP language id (default: the extension).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_markers": {
+          "default": [],
+          "description": "Custom servers: files whose directory is the server's root.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "LspWaitMode": {
+      "description": "What a check asks the server for.",
+      "oneOf": [
+        {
+          "const": "document",
+          "description": "Diagnostics of the edited file.",
+          "type": "string"
+        },
+        {
+          "const": "full",
+          "description": "The edited file's and the workspace's.",
+          "type": "string"
+        }
+      ]
+    },
     "MarkdownMode": {
       "description": "Final response rendering.",
       "oneOf": [
@@ -7835,6 +8036,23 @@
         "level": "info"
       },
       "description": "Structured log files."
+    },
+    "lsp": {
+      "$ref": "#/$defs/LspConfig",
+      "default": {
+        "broken_retry_secs": 0,
+        "enabled": true,
+        "exclude_roots": [],
+        "idle_timeout_secs": 600,
+        "install_strategy": "auto",
+        "package_manager": "npm",
+        "servers": {},
+        "trusted_workspaces": [],
+        "wait_mode": "document",
+        "wait_timeout_ms": 5000,
+        "warmup_timeout_ms": 0
+      },
+      "description": "Language server diagnostics after file edits."
     },
     "mcp": {
       "$ref": "#/$defs/McpConfig",

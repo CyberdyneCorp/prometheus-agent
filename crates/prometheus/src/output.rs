@@ -236,6 +236,14 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "browser status",
     },
     JsonShape {
+        schema: "prometheus.lsp_status.v1",
+        command: "lsp status",
+    },
+    JsonShape {
+        schema: "prometheus.lsp_list.v1",
+        command: "lsp list",
+    },
+    JsonShape {
         schema: "prometheus.daemon_status.v1",
         command: "daemon status",
     },

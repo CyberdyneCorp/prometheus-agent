@@ -59,6 +59,9 @@ jobs:
       # The read_file document test installs the pinned doc-converter
       # runtime (a download per job) and converts real files with it.
       PMT_TEST_DOC_CONVERTER: require
+      # The LSP test installs the pinned pyright with npm (setup-node below)
+      # and checks a real undefined-name diagnostic.
+      PMT_TEST_LSP: require
     steps:
       # Full history: the health ratchet compares health.toml with the merge
       # base on origin/main.

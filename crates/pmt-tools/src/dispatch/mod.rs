@@ -132,6 +132,12 @@ impl Dispatcher {
         &self.setup.surface
     }
 
+    /// The session the dispatcher serves.
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        &self.setup.session_id
+    }
+
     /// Dispatches one call (a batch of one).
     pub async fn dispatch(&self, call: ToolCall, cancel: &CancelToken) -> ToolResult {
         self.run_batch(vec![call], cancel)
@@ -196,6 +202,7 @@ impl Dispatcher {
         setup
             .budget
             .apply(&call.call_id, tool.as_deref(), &mut result);
+        attach_late_diagnostics(&setup.session_id, &mut result);
         // A call stopped before it ran (a hook, a rule, an approval, the
         // user) holds only Prometheus' own words.
         let stopped = matches!(
@@ -354,6 +361,22 @@ impl Dispatcher {
             Ok(Ok(Err(failure))) => tool_error(name, &failure),
             Ok(Ok(Ok(result))) => result,
         }
+    }
+}
+
+/// Findings of earlier edits whose language-server verdict came after
+/// their write returned go with the session's next tool result (spec:
+/// lsp-diagnostics, Diagnostics introduced by an edit).
+fn attach_late_diagnostics(session_id: &str, result: &mut ToolResult) {
+    let late = crate::environments::Environments::process()
+        .session(session_id)
+        .and_then(|env| {
+            env.lsp
+                .as_ref()
+                .and_then(crate::lsp::SessionDiagnostics::take_late)
+        });
+    if let Some(text) = late {
+        result.content.push(Content::Text { text });
     }
 }
 

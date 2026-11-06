@@ -2536,3 +2536,32 @@ capabilities = [
 "Missing pin" = ["crates/pmt-tools/tests/browser/real_profile.rs::a_missing_pin_gives_a_throwaway_profile_and_says_why", "crates/pmt-tools/src/browser/real_profile/mod.rs::a_missing_pin_is_unavailable_naming_the_pin"]
 "Revoking consent" = ["crates/pmt-tools/tests/browser/real_profile.rs::turning_real_profile_browsing_off_deletes_the_snapshot_at_the_next_session", "crates/pmt-tools/src/browser/real_profile/mod.rs::turning_the_setting_off_deletes_the_snapshot"]
 "Closing the locked browser asks every time" = ["crates/pmt-tools/tests/browser/close_profile.rs::closing_the_users_browser_asks_every_time_and_ends_it_once_approved", "crates/pmt-tools/tests/browser/close_profile.rs::without_autoclose_the_users_browser_is_never_ended", "crates/pmt-tools/src/approval/tests.rs::closing_the_users_browser_from_a_shell_is_hardline"]
+
+[lsp-diagnostics."Workspace gating"]
+"Gateway session in the home directory" = ["crates/pmt-tools/tests/lsp/trust.rs::a_gateway_session_in_the_home_directory_starts_no_server", "crates/pmt-tools/src/lsp/workspace.rs::home_is_not_a_workspace_and_a_dotfiles_repo_is_not_trusted"]
+
+[lsp-diagnostics."Built-in server registry"]
+"Rust file" = ["crates/pmt-tools/tests/lsp/diagnostics.rs::a_rust_file_in_a_trusted_cargo_workspace_is_checked_by_rust_analyzer", "crates/pmt-tools/src/lsp/registry.rs::a_rust_file_goes_to_rust_analyzer"]
+
+[lsp-diagnostics."Workspace trust"]
+"Freshly cloned repository" = ["crates/pmt-tools/tests/lsp/trust.rs::a_fresh_clone_does_not_start_a_server_that_runs_project_code_and_says_why", "crates/pmt-tools/src/lsp/workspace.rs::the_session_root_is_trusted_and_other_checkouts_are_not"]
+"Explicit trust" = ["crates/pmt-tools/tests/lsp/trust.rs::an_explicitly_trusted_workspace_may_start_rust_analyzer"]
+
+[lsp-diagnostics."Language servers run sandboxed"]
+"Server tries to write the workspace" = ["crates/pmt-tools/tests/lsp/sandbox.rs::a_server_cannot_write_its_workspace_and_the_edit_is_unaffected", "crates/prometheus/tests/lsp_session.rs::a_slow_verdict_reaches_the_model_before_its_final_answer"]
+
+[lsp-diagnostics."Diagnostics introduced by an edit"]
+"Undefined name" = ["crates/pmt-tools/tests/lsp/diagnostics.rs::a_patch_reports_only_the_undefined_name_it_introduced", "crates/pmt-tools/tests/lsp/pyright.rs::pyright_reports_an_undefined_name_after_a_patch", "crates/pmt-tools/src/lsp/protocol.rs::only_new_diagnostics_are_introduced_even_when_old_ones_moved"]
+"Cold server" = ["crates/pmt-tools/tests/lsp/diagnostics.rs::a_cold_servers_verdict_reaches_the_next_tool_result_with_the_earlier_edit_label", "crates/prometheus/tests/lsp_session.rs::a_slow_verdict_reaches_the_model_before_its_final_answer"]
+
+[lsp-diagnostics."Wait modes and timeouts"]
+"Broken server retry" = ["crates/pmt-tools/src/lsp/pool.rs::a_broken_pair_is_retried_only_after_the_retry_delay", "crates/pmt-tools/tests/lsp/diagnostics.rs::a_server_that_times_out_is_skipped_until_a_restart"]
+
+[lsp-diagnostics."Server installation"]
+"pnpm policy" = ["crates/pmt-tools/tests/lsp/install.rs::a_missing_pnpm_skips_the_install_and_never_falls_back_to_npm"]
+
+[lsp-diagnostics."Server overrides and custom servers"]
+"Custom server" = ["crates/pmt-tools/tests/lsp/diagnostics.rs::a_custom_server_checks_its_extensions_before_the_builtins", "crates/pmt-config/src/lsp_check.rs::a_custom_server_needs_a_command_and_extensions"]
+
+[lsp-diagnostics."LSP CLI"]
+"Which missing server" = ["crates/prometheus/tests/lsp_cli.rs::which_names_a_missing_server_and_exits_66"]

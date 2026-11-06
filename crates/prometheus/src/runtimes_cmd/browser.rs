@@ -71,6 +71,8 @@ pub struct Policies {
     /// Runtime `doc-converter`, else `xberg` on `PATH` (`read_file`
     /// document extraction).
     pub documents: RuntimePolicy,
+    /// Runtime `node`, else `node` on `PATH` (npm language servers).
+    pub node: RuntimePolicy,
 }
 
 impl Policies {
@@ -119,6 +121,7 @@ fn over(
 ) -> Policies {
     let mut pythons = Vec::new();
     let mut converters = Vec::new();
+    let mut nodes = Vec::new();
     if let Some(path_var) = path_var {
         for name in ["python3", "python"] {
             pythons.extend(pmt_tools::terminal::shell::find_all(name, path_var, None));
@@ -128,6 +131,7 @@ fn over(
             path_var,
             None,
         ));
+        nodes.extend(pmt_tools::terminal::shell::find_all("node", path_var, None));
     }
     Policies {
         chromium: RuntimePolicy {
@@ -141,9 +145,14 @@ fn over(
             host_candidates: pythons,
         },
         documents: RuntimePolicy {
-            runtimes,
+            runtimes: Arc::clone(&runtimes),
             allow_lazy_install,
             host_candidates: converters,
+        },
+        node: RuntimePolicy {
+            runtimes,
+            allow_lazy_install,
+            host_candidates: nodes,
         },
     }
 }

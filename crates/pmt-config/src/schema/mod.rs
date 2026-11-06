@@ -26,6 +26,7 @@ mod gateway_policy;
 mod gateway_routes;
 mod hooks;
 mod interface;
+mod lsp;
 mod mcp;
 mod models;
 mod operations;
@@ -62,6 +63,9 @@ pub use interface::{
     AutoResume, BusyConfig, BusyIndicator, BusyInputMode, CliConfig, ComposerConfig, DisplayConfig,
     Interface, KeyChord, MarkdownMode, QuickCommand, QuickCommandKind, ResumeDisplay, ToolProgress,
     ToolProgressGrouping, TuiConfig, TuiKeys, TuiTheme, UiConfig,
+};
+pub use lsp::{
+    LSP_SERVER_IDS, LspConfig, LspInstallStrategy, LspPackageManager, LspServerConfig, LspWaitMode,
 };
 pub use mcp::{
     McpAuth, McpCapabilities, McpConfig, McpElicitationConfig, McpOAuthConfig, McpOAuthFlow,
@@ -147,6 +151,8 @@ pub struct Config {
     pub hooks: HooksConfig,
     /// Structured log files.
     pub logging: LoggingConfig,
+    /// Language server diagnostics after file edits.
+    pub lsp: LspConfig,
     /// External MCP servers.
     pub mcp: McpConfig,
     /// What `prometheus mcp serve` exposes.
@@ -235,6 +241,7 @@ impl Default for Config {
             gateway: GatewayConfig::default(),
             hooks: HooksConfig::default(),
             logging: LoggingConfig::default(),
+            lsp: LspConfig::default(),
             mcp: McpConfig::default(),
             mcp_server: McpServerModeConfig::default(),
             memory: MemoryConfig::default(),

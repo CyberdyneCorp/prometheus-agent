@@ -622,6 +622,11 @@ impl Host for DaemonHost {
         })
     }
 
+    fn lsp_status(&self, profile: &str) -> Result<pmt_rpc::contracts::LspStatus, Error> {
+        let scope = self.profile(profile)?.scope();
+        Ok(crate::lsp_cmd::status(&scope))
+    }
+
     fn vault(&self, profile: &str) -> Result<pmt_gateway::vault::VaultAccess, Error> {
         let scope = self.profile(profile)?.scope();
         Ok(pmt_gateway::vault::VaultAccess {

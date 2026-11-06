@@ -13,6 +13,7 @@ pub mod downgrades;
 pub mod env;
 mod guardian;
 mod lifecycle;
+mod lsp;
 mod mcp;
 pub mod modal;
 pub mod model;
@@ -757,6 +758,7 @@ impl Factory {
             processes: &processes,
             snapshots: snapshots::opener(&self.scope, &self.store, id),
             input_roots: input_roots(&self.scope, skills),
+            automatic_trust: automatic_trust(session),
         })?;
         // Skills pass their declared secrets to the terminal.
         if let Some(terminal) = &environment.terminal {
@@ -1185,6 +1187,20 @@ fn refresher(
 
 /// The `session.info` of a plugin call made for session `id` from
 /// `surface` in `cwd`.
+/// Whether a session's working directory earns language-server trust
+/// automatically: not for scheduled jobs or kanban workers (spec:
+/// lsp-diagnostics, Workspace trust).
+fn automatic_trust(session: &pmt_store::Session) -> bool {
+    session.source != pmt_store::Source::Cron
+        && !session
+            .source_tag
+            .as_deref()
+            .is_some_and(|tag| tag.starts_with(KANBAN_SOURCE_TAG))
+}
+
+/// The source tag kanban worker sessions carry.
+pub const KANBAN_SOURCE_TAG: &str = "kanban";
+
 fn session_call(id: SessionId, surface: &str, cwd: &Path) -> pmt_plugins::host::CallInfo {
     pmt_plugins::host::CallInfo {
         session_id: Some(id.to_string()),

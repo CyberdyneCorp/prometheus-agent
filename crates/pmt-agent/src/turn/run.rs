@@ -375,10 +375,10 @@ impl<'a> Turn<'a> {
         self.empty_streak = 0;
         let mut reply = reply;
         if reply.tool_calls.is_empty() {
-            if let Some(message) = self.verify_nudge(&reply, route).await {
+            if let Some((message, kind)) = self.before_final(&reply, route).await {
                 self.keep_reply(&reply).await?;
                 self.emit_step(Vec::new()).await;
-                self.append(&transcript::notice_row(&message, "pre_verify"))?;
+                self.append(&transcript::notice_row(&message, kind))?;
                 return Ok(Next::Continue);
             }
             reply.text = self.transform_final(reply.text, route).await;
@@ -405,6 +405,21 @@ impl<'a> Turn<'a> {
         let mut end = Ending::new(ExitReason::Completed);
         end.final_response = Some(reply.text);
         Ok(Next::End(end))
+    }
+
+    /// What the model must see before its final answer stands: findings
+    /// of edits still being checked (language-server diagnostics), else
+    /// a `pre_verify` nudge. Each arrives as a new message.
+    async fn before_final(
+        &mut self,
+        reply: &ModelReply,
+        route: &RouteInfo,
+    ) -> Option<(String, &'static str)> {
+        if let Some(findings) = self.agent.setup.tools.settle().await {
+            return Some((findings, "lsp_diagnostics"));
+        }
+        let message = self.verify_nudge(reply, route).await?;
+        Some((message, "pre_verify"))
     }
 
     /// The interrupt and run-budget check at the top of an iteration.

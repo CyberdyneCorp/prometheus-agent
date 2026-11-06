@@ -51,6 +51,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::EgressSet, _, _>(catalog, egress)?
         .register::<c::FilesUndo, _, _>(catalog, files_undo)?
         .register::<c::FilesRollback, _, _>(catalog, files_rollback)?
+        .register::<c::LspStatusCall, _, _>(catalog, lsp_status)?
         .register::<c::PromptSubmit, _, _>(catalog, submit)?
         .register::<c::CommandDispatch, _, _>(catalog, dispatch)?
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
@@ -355,6 +356,11 @@ async fn egress(call: Call, params: c::EgressSetParams) -> Result<c::EgressState
         .egress(&profile, params, link)
         .await
         .map_err(|e| rpc(&e))
+}
+
+async fn lsp_status(call: Call, params: c::LspStatusParams) -> Result<c::LspStatus, RpcError> {
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    call.server.host().lsp_status(&profile).map_err(|e| rpc(&e))
 }
 
 async fn files_undo(call: Call, params: c::FilesUndoParams) -> Result<c::FilesUndone, RpcError> {

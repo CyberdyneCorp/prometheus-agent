@@ -26,6 +26,7 @@ impl FileSession {
     /// changed since.
     #[must_use]
     pub fn write_file(&self, raw: &str, content: &str) -> ToolResult {
+        let started = std::time::Instant::now();
         let target = match self.write_target(raw) {
             Ok(target) => target,
             Err(result) => return *result,
@@ -57,15 +58,23 @@ impl FileSession {
         );
         self.note_written(&target.path, content);
         let lint = self.setup.linter.check(&target.path, content);
-        json_result(
-            Status::Ok,
-            &json!({
-                "path": raw,
-                "bytes_written": content.len(),
-                "created": target.existing.is_none(),
-                "lint": lint,
-            }),
-        )
+        let semantic = self.semantic(
+            &target.path,
+            target.existing.as_deref(),
+            content,
+            &lint,
+            started,
+        );
+        let mut body = json!({
+            "path": raw,
+            "bytes_written": content.len(),
+            "created": target.existing.is_none(),
+            "lint": lint,
+        });
+        if let Some(found) = semantic {
+            body["lsp_diagnostics"] = json!(found);
+        }
+        json_result(Status::Ok, &body)
     }
 
     /// Applies the write guards to `raw` and reads what is there now.

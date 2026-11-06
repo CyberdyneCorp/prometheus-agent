@@ -312,6 +312,24 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
 | `logging.level` | one of "error", "warn", "info", "debug", "trace" | `"info"` | `"error"`, `"warn"`, `"info"`, `"debug"`, `"trace"` | `restart` | Log level; `PMT_LOG` or `RUST_LOG` override it. |
+| `lsp.broken_retry_secs` | integer | `0` | ≥ 0 | `next_session` | After a server fails to start or times out, skip it for its workspace this long (`0` = until `prometheus lsp restart` or the process exits). |
+| `lsp.enabled` | boolean | `true` | any | `next_session` | Run language servers after `write_file` and `patch`; `false` starts no server, watcher or background task. |
+| `lsp.exclude_roots` | array of string | `[]` | any | `next_session` | Git roots where no server runs (globs, `~` expanded; a bare path also matches everything below it). |
+| `lsp.idle_timeout_secs` | integer | `600` | ≥ 0 | `next_session` | Shut down a server idle this long; it restarts on demand (`0` = never). |
+| `lsp.install_strategy` | one of "auto", "manual" | `"auto"` | `"auto"`, `"manual"` | `next_session` | `auto` installs missing `npm`, `go` and `pip` servers on first use; `manual` uses only binaries on `PATH`. |
+| `lsp.package_manager` | one of "npm", "pnpm", "yarn" | `"npm"` | `"npm"`, `"pnpm"`, `"yarn"` | `next_session` | The package manager of `npm`-method installs; one that is not installed skips the install (never another manager). |
+| `lsp.servers.<name>.command` | array | unset | any | `next_session` | The server's argv; bypasses installation. |
+| `lsp.servers.<name>.description` | string | unset | any | `next_session` | Custom servers: what it is, for `prometheus lsp list`. |
+| `lsp.servers.<name>.disabled` | boolean | `false` | any | `next_session` | Never start this server. |
+| `lsp.servers.<name>.env` | table | `{}` | any | `next_session` | Extra environment of the server (non-secret values). |
+| `lsp.servers.<name>.extensions` | array of string | `[]` | any | `next_session` | Custom servers: the file extensions it checks (`.ml2`). |
+| `lsp.servers.<name>.initialization_options` | table | `{}` | any | `next_session` | Merged into the server's initialization options. |
+| `lsp.servers.<name>.language_id` | string | unset | any | `next_session` | Custom servers: the LSP language id (default: the extension). |
+| `lsp.servers.<name>.root_markers` | array of string | `[]` | any | `next_session` | Custom servers: files whose directory is the server's root. |
+| `lsp.trusted_workspaces` | array of string | `[]` | any | `next_session` | Workspaces trusted beyond the one the session was pointed at (globs, `~` expanded; a bare path also matches everything below it). Servers that execute project code start only in trusted workspaces. |
+| `lsp.wait_mode` | one of "document", "full" | `"document"` | `"document"`, `"full"` | `next_session` | `document` checks the edited file; `full` also asks for workspace diagnostics. |
+| `lsp.wait_timeout_ms` | integer | `5000` | 1 to 600000 | `next_session` | Longest wait for a verdict before the turn's final answer is accepted, and the bound of one check. |
+| `lsp.warmup_timeout_ms` | integer | `0` | 0 to 600000 | `next_session` | Bound of the first check against a server that is not running yet (`0` = `wait_timeout_ms`). |
 | `mcp.auto_reload_on_config_change` | boolean | `true` | any | `next_session` | The daemon applies `mcp.servers` edits within a minute (new sessions only). |
 | `mcp.call_timeout_secs` | integer | `300` | 1 to 86400 | `next_session` | Bound on one tool call of a server that sets no `timeout_secs`. |
 | `mcp.connect_timeout_secs` | integer | `60` | 1 to 3600 | `next_session` | Bound on starting and initializing a server that sets no `connect_timeout_secs`. |

@@ -127,6 +127,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::VaultSources>()
         .method::<c::FilesUndo>()
         .method::<c::FilesRollback>()
+        .method::<c::LspStatusCall>()
         .server_request::<c::ApprovalAsk>()
         .server_request::<c::ClarifyAsk>()
         .server_request::<c::SecretAsk>()

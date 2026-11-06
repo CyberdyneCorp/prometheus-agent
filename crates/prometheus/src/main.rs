@@ -123,6 +123,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         Some(Command::Grants { command }) => grants_cmd::run(command, &ctx),
         Some(Command::Security { command }) => prometheus::security_cmd::run(command, &ctx),
         Some(Command::Browser { command }) => prometheus::browser_cmd::run(command, &ctx),
+        Some(Command::Lsp { command }) => prometheus::lsp_cmd::run(command, &ctx),
         Some(Command::Vault { command }) => prometheus::vault_cmd::run(command, &ctx),
         Some(Command::Files { command }) => prometheus::files_cmd::run(command, &ctx),
         Some(Command::Verify(args)) => prometheus::verify_cmd::run(args, &ctx),

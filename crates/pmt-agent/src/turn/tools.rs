@@ -59,6 +59,14 @@ pub trait ToolPort: Send + Sync {
         turn_id: &'a str,
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch>;
+
+    /// Findings that must reach the model before the turn's final answer
+    /// is accepted: language-server diagnostics of edits still being
+    /// checked, waited for within their own bound (spec: lsp-diagnostics,
+    /// Diagnostics introduced by an edit).
+    fn settle(&self) -> BoxFuture<'_, Option<String>> {
+        Box::pin(async { None })
+    }
 }
 
 /// Per-call wall times reported by the dispatcher (pass one as the
@@ -204,5 +212,17 @@ impl ToolPort for SessionTools {
         cancel: &'a CancelToken,
     ) -> BoxFuture<'a, ToolBatch> {
         Box::pin(self.run_all(calls, turn_id, cancel))
+    }
+
+    fn settle(&self) -> BoxFuture<'_, Option<String>> {
+        let lsp = pmt_tools::environments::Environments::process()
+            .session(self.dispatcher.session_id())
+            .and_then(|env| env.lsp.clone());
+        Box::pin(async move {
+            match lsp {
+                Some(lsp) => lsp.settle().await,
+                None => None,
+            }
+        })
     }
 }

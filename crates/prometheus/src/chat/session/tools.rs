@@ -345,4 +345,9 @@ impl ToolPort for SwappableTools {
         let tools = self.tools();
         Box::pin(async move { tools.run(calls, turn_id, cancel).await })
     }
+
+    fn settle(&self) -> BoxFuture<'_, Option<String>> {
+        let tools = self.tools();
+        Box::pin(async move { tools.settle().await })
+    }
 }

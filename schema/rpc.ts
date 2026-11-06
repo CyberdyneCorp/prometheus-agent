@@ -472,6 +472,36 @@ export interface HelloResult {
   server_version: string;
 }
 
+/** One running language server. */
+export interface LspServerStatus {
+  /** The server id (`pyright`, `rust-analyzer`...). */
+  id: string;
+  /** Its process id. */
+  pid: number;
+  /** The session that started it. */
+  session_id: string;
+  /** `ready`. */
+  state: string;
+  /** It executes project code, so it starts only in trusted workspaces. */
+  trusted_only: boolean;
+  /** Seconds since it started. */
+  uptime_secs: number;
+  /** Its workspace root. */
+  workspace: string;
+}
+
+/** `lsp.status` result. */
+export interface LspStatus {
+  /** Every running server of the profile, by id and workspace. */
+  servers: Array<LspServerStatus>;
+}
+
+/** `lsp.status` params. */
+export interface LspStatusParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** One MCP server of a session. */
 export interface McpServerState {
   /** Its configured name. */
@@ -932,6 +962,7 @@ export interface Methods {
   "egress.set": { params: EgressSetParams; result: EgressState };
   "files.rollback": { params: FilesRollbackParams; result: FilesRolledBack };
   "files.undo": { params: FilesUndoParams; result: FilesUndone };
+  "lsp.status": { params: LspStatusParams; result: LspStatus };
   "model.options": { params: SessionRef; result: ModelOptions };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
   "prompt.submit": { params: SubmitParams; result: Submitted };
@@ -1007,7 +1038,6 @@ export const UNDECLARED = [
   "harness.log",
   "harness.rollback",
   "journey.list",
-  "lsp.status",
   "moa.presets.delete",
   "moa.presets.list",
   "moa.presets.put",

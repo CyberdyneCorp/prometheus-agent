@@ -278,6 +278,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `runtime.not_installed` | `unavailable` | 69 | The runtime is not in the store and `runtimes.allow_lazy_install = false`; install it with `prometheus runtimes install <name>`. |
 | `runtime.declined` | `cancelled` | 130 | The install prompt was answered no; nothing was downloaded. |
 | `runtime.io` | `io` | 74 | A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed. |
+| `lsp.unknown_server` | `usage` | 2 | The id is not a built-in language server or a custom server under `lsp.servers`; `prometheus lsp list` shows the ids. |
+| `lsp.not_found` | `not_found` | 66 | The language server is neither in `<PROMETHEUS_HOME>/runtimes/lsp/` nor on `PATH`, and no `lsp.servers.<id>.command` names one; `prometheus lsp install <id>` installs `npm`, `go` and `pip` servers. |
+| `lsp.install` | `unavailable` | 69 | The server's installer (npm, pnpm, yarn, go or pip) is missing or failed; the message names it. A `manual` server is installed by following the printed instructions. |
 | `rpc.parse` | `invalid_input` | 65 | A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving. |
 | `rpc.invalid_request` | `invalid_input` | 65 | A client protocol frame is JSON but not a JSON-RPC 2.0 request object (JSON-RPC `-32600`). |
 | `rpc.unknown_method` | `usage` | 2 | The called method is not declared in the RPC catalog (`schema/rpc.json`); JSON-RPC `-32601`. |

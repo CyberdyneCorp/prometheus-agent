@@ -26,7 +26,8 @@ mod write;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::time::Instant;
 
 use serde_json::Value;
 
@@ -64,11 +65,27 @@ pub struct FileSetup {
     pub edits: Option<Arc<dyn edits::EditRecorder>>,
 }
 
+/// Semantic checks after a write (language-server diagnostics, spec:
+/// lsp-diagnostics): the rendered findings the edit introduced, when they
+/// arrive while the tool call that started at `started` is still within
+/// its budget.
+pub trait PostWrite: Send + Sync {
+    /// Checks `path`, now `after` (was `before`; `None` for a new file).
+    fn after_write(
+        &self,
+        path: &Path,
+        before: Option<&str>,
+        after: &str,
+        started: Instant,
+    ) -> Option<Vec<String>>;
+}
+
 /// One session's file tools.
 pub struct FileSession {
     setup: FileSetup,
     tracker: Mutex<Tracker>,
     generation: AtomicU64,
+    post_write: OnceLock<Arc<dyn PostWrite>>,
 }
 
 impl FileSession {
@@ -79,7 +96,33 @@ impl FileSession {
             setup,
             tracker: Mutex::default(),
             generation: AtomicU64::new(0),
+            post_write: OnceLock::new(),
         }
+    }
+
+    /// Adds semantic checks after writes whose syntax check is clean.
+    #[must_use]
+    pub fn with_post_write(self, check: Arc<dyn PostWrite>) -> Self {
+        let _ = self.post_write.set(check);
+        self
+    }
+
+    /// The semantic findings an edit of `path` introduced, unless its
+    /// syntax check failed (the model fixes the syntax first).
+    pub(crate) fn semantic(
+        &self,
+        path: &Path,
+        before: Option<&[u8]>,
+        after: &str,
+        lint: &lint::Lint,
+        started: Instant,
+    ) -> Option<Vec<String>> {
+        if lint.status == lint::LintStatus::Error {
+            return None;
+        }
+        let check = self.post_write.get()?;
+        let before = before.map(String::from_utf8_lossy);
+        check.after_write(path, before.as_deref(), after, started)
     }
 
     /// Context compaction happened: earlier read results may be gone from

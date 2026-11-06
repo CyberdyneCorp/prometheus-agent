@@ -33,6 +33,7 @@ pub mod environments;
 pub mod files;
 pub mod grants;
 pub mod guidance;
+pub mod lsp;
 pub mod probe;
 pub mod protected;
 pub mod provenance;

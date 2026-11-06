@@ -139,6 +139,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::browser_cmd::BrowserCommand,
     },
+    /// Language servers behind the diagnostics of file edits: status,
+    /// registry, installs, restart.
+    Lsp {
+        /// The lsp subcommand.
+        #[command(subcommand)]
+        command: crate::lsp_cmd::LspCommand,
+    },
     /// The credential vault: logins, cards and addresses the browser fills
     /// by handle.
     Vault {

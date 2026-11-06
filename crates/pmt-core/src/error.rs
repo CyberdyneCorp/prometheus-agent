@@ -839,6 +839,15 @@ error_codes! {
     /// A runtime store file could not be read or written.
     RUNTIME_IO = ("runtime.io", Io,
         "A file under `<PROMETHEUS_HOME>/runtimes/` could not be read, written or renamed.");
+    /// An id is neither a built-in nor a configured custom language server.
+    LSP_UNKNOWN_SERVER = ("lsp.unknown_server", Usage,
+        "The id is not a built-in language server or a custom server under `lsp.servers`; `prometheus lsp list` shows the ids.");
+    /// No binary of a language server was found.
+    LSP_NOT_FOUND = ("lsp.not_found", NotFound,
+        "The language server is neither in `<PROMETHEUS_HOME>/runtimes/lsp/` nor on `PATH`, and no `lsp.servers.<id>.command` names one; `prometheus lsp install <id>` installs `npm`, `go` and `pip` servers.");
+    /// A language server install failed or was skipped.
+    LSP_INSTALL = ("lsp.install", Unavailable,
+        "The server's installer (npm, pnpm, yarn, go or pip) is missing or failed; the message names it. A `manual` server is installed by following the printed instructions.");
     /// A client frame is not JSON (JSON-RPC -32700).
     RPC_PARSE = ("rpc.parse", InvalidInput,
         "A client protocol frame is not valid JSON (JSON-RPC `-32700`); the connection keeps serving.");

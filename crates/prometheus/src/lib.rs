@@ -32,6 +32,7 @@ pub mod files_cmd;
 pub mod grants_cmd;
 pub mod hooks_host;
 pub mod logs_cmd;
+pub mod lsp_cmd;
 #[cfg(feature = "mcp")]
 pub mod mcp_cmd;
 pub mod mcp_host;
