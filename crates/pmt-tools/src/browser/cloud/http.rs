@@ -10,6 +10,10 @@ use serde_json::Value;
 
 use super::Manifest;
 
+/// The providers' HTTP client, built by the first request: a session
+/// start wires every provider but rarely uses one.
+pub type HttpClient = Arc<pmt_net::LazyClient>;
+
 /// Reads the signed-in subscription's access token (`None`: not signed
 /// in).
 pub type TokenSource = Arc<dyn Fn() -> Option<SecretString> + Send + Sync>;
@@ -80,6 +84,17 @@ fn matches(pattern: &str, host: &str) -> bool {
             .is_some_and(|rest| rest.ends_with('.')),
         None => pattern == host,
     }
+}
+
+/// `client`'s HTTP client.
+///
+/// # Errors
+///
+/// It cannot be built (`network.extra_ca_file`, `network.proxy`).
+pub(super) fn http(client: &HttpClient) -> Result<&reqwest::Client, String> {
+    client
+        .get()
+        .map_err(|err| format!("no HTTP client: {}", err.message()))
 }
 
 /// A sent request's status and JSON body (`Null` when empty or not JSON).

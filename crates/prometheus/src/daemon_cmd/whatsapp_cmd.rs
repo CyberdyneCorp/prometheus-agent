@@ -156,7 +156,7 @@ fn bridge(ctx: &Context<'_>) -> Result<Bridge, Error> {
     let root = ctx.home()?.root().to_path_buf();
     let config = pmt_config::DaemonConfig::load(&root)?;
     let store = pmt_update::runtimes::Store::open(&root);
-    let installer = crate::runtimes_cmd::installer(ctx, store, &config)?;
+    let installer = crate::runtimes_cmd::installer(ctx, store, &config);
     let node = crate::model_cmd::block_on(installer.install("node"))??.exe();
     pmt_adapters_whatsapp::install::install(&root, &node, &|line| eprintln!("{line}"))?;
     Ok(Bridge::Managed {

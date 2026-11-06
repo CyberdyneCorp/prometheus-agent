@@ -92,7 +92,6 @@ impl Fixture {
             sources,
             Arc::new(|_| {}),
         )
-        .unwrap()
         .with_budget(Budget {
             max_stalled: 4,
             base: Duration::from_millis(5),
@@ -184,6 +183,31 @@ async fn a_digest_mismatch_deletes_the_download_and_installs_nothing() {
     assert_eq!(f.downloads_left(), 0, "the download is deleted");
     assert!(f.versions().is_empty(), "nothing is installed");
     assert!(f.store().installed("node").is_none());
+}
+
+/// An installer builds its HTTP client only when it downloads: every
+/// session start makes installers (browser, document tools) that rarely
+/// install anything, and a client build loads the system's root
+/// certificates. (nextest runs each test in its own process, so the
+/// process-wide count is this test's.)
+#[tokio::test]
+async fn an_installer_configures_its_http_client_only_when_it_downloads() {
+    let f = Fixture::new().await;
+    f.serve("/dist/node-v1.tar.gz", f.bytes.clone()).await;
+    let before = pmt_net::clients_built();
+    let installer = f.installer(Sources::default());
+    assert_eq!(
+        pmt_net::clients_built(),
+        before,
+        "no client before a download"
+    );
+    installer.install("node").await.unwrap();
+    installer.install("node").await.unwrap();
+    assert_eq!(
+        pmt_net::clients_built(),
+        before + 1,
+        "one client, built once"
+    );
 }
 
 #[tokio::test]

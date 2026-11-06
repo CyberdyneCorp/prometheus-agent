@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pmt_core::error::{Error, codes};
-use pmt_net::OutboundPolicy;
+use pmt_net::{LazyClient, OutboundPolicy};
 
 use super::index::{Pin, PinnedArtifact};
 use super::{Installed, RECORD_FILE, RECORD_SCHEMA, Record, Store, digest_tree, hash_file};
@@ -41,7 +41,9 @@ pub type Progress = Arc<dyn Fn(&str) + Send + Sync>;
 /// Installs runtimes into one store.
 pub struct Installer {
     store: Store,
-    client: reqwest::Client,
+    /// Built by the first download: most installers (one per session's
+    /// browser and document tools) never download anything.
+    client: LazyClient,
     sources: Sources,
     budget: Budget,
     progress: Progress,
@@ -57,30 +59,30 @@ impl std::fmt::Debug for Installer {
 }
 
 impl Installer {
-    /// An installer for `store`; progress lines go to `progress`.
-    ///
-    /// # Errors
-    ///
-    /// `net.client_init` / `net.extra_ca` when the HTTP client cannot be
-    /// built.
+    /// An installer for `store` downloading under `policy`; progress lines
+    /// go to `progress`. Its HTTP client is built by the first download.
+    #[must_use]
     pub fn new(
         store: Store,
         policy: &OutboundPolicy,
         sources: Sources,
         progress: Progress,
-    ) -> Result<Self, Error> {
-        let client = pmt_net::client_builder(policy)?
-            .connect_timeout(std::time::Duration::from_secs(15))
-            .read_timeout(std::time::Duration::from_mins(1))
-            .build()
-            .map_err(|e| Error::new(&codes::NET_CLIENT_INIT, e.to_string()))?;
-        Ok(Self {
+    ) -> Self {
+        let policy = policy.clone();
+        let client = LazyClient::new(move || {
+            pmt_net::client_builder(&policy)?
+                .connect_timeout(std::time::Duration::from_secs(15))
+                .read_timeout(std::time::Duration::from_mins(1))
+                .build()
+                .map_err(|e| Error::new(&codes::NET_CLIENT_INIT, e.to_string()))
+        });
+        Self {
             store,
             client,
             sources,
             budget: Budget::default(),
             progress,
-        })
+        }
     }
 
     /// Replaces the retry budget (tests use short delays).
@@ -108,7 +110,8 @@ impl Installer {
     ///
     /// `runtime.unknown` (2), `runtime.excluded` (1),
     /// `runtime.unsupported` (69), `runtime.download` (69),
-    /// `runtime.digest_mismatch` (77), `runtime.io` (74).
+    /// `runtime.digest_mismatch` (77), `runtime.io` (74); `net.client_init`
+    /// / `net.extra_ca` when the HTTP client cannot be built.
     pub async fn install(&self, name: &str) -> Result<Installed, Error> {
         let (pin, artifact) = self.store.pinned(name)?;
         if self.excluded(name) {
@@ -206,7 +209,7 @@ impl Installer {
                 "downloading {name} {} ({} bytes) from {url}",
                 pin.version, artifact.size
             ));
-            match download::fetch(&self.client, &url, &mut sink, &self.budget).await {
+            match download::fetch(self.client.get()?, &url, &mut sink, &self.budget).await {
                 Ok(stats) => {
                     sink.sync()
                         .map_err(|e| Error::io(&codes::RUNTIME_IO, partial, &e))?;

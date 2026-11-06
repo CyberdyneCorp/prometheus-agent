@@ -34,12 +34,14 @@ fn secrets(pairs: &[(&str, String)]) -> SecretLookup {
     })
 }
 
-fn client() -> reqwest::Client {
-    pmt_net::client_builder(&pmt_net::OutboundPolicy::default())
-        .unwrap()
-        .no_proxy()
-        .build()
-        .unwrap()
+fn client() -> pmt_tools::browser::cloud::HttpClient {
+    Arc::new(pmt_net::LazyClient::ready(
+        pmt_net::client_builder(&pmt_net::OutboundPolicy::default())
+            .unwrap()
+            .no_proxy()
+            .build()
+            .unwrap(),
+    ))
 }
 
 /// A mock Browserbase whose sessions are `browser`'s.
@@ -159,6 +161,45 @@ async fn a_plan_without_keep_alive_or_proxies_is_retried_without_them() {
     let created = provider.create().await.unwrap();
     assert_eq!(created.id, "bb-2");
     assert_eq!(api.received_requests().await.unwrap().len(), 3);
+}
+
+/// The providers a session start wires build no HTTP client until one of
+/// them sends a request (a client build loads the system's root
+/// certificates, which the startup budget cannot afford per provider).
+#[tokio::test]
+async fn the_providers_build_their_client_on_the_first_request() {
+    let builds = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = Arc::clone(&builds);
+    let lazy: pmt_tools::browser::cloud::HttpClient =
+        Arc::new(pmt_net::LazyClient::new(move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            pmt_net::client_builder(&pmt_net::OutboundPolicy::default())?
+                .no_proxy()
+                .build()
+                .map_err(|e| {
+                    pmt_core::error::Error::new(
+                        &pmt_core::error::codes::NET_CLIENT_INIT,
+                        e.to_string(),
+                    )
+                })
+        }));
+    let api = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sessions"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(
+            json!({"id": "bb-1", "connectUrl": format!("{}/connect", api.uri().replace("http", "ws"))}),
+        ))
+        .mount(&api)
+        .await;
+    let providers = pmt_tools::browser::cloud::first_party(
+        &lazy,
+        &browserbase_secrets(&api),
+        Arc::new(|| None),
+    );
+    assert_eq!(builds.load(std::sync::atomic::Ordering::SeqCst), 0);
+    providers["browserbase"].create().await.unwrap();
+    providers["browserbase"].create().await.unwrap();
+    assert_eq!(builds.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
 
 #[tokio::test]

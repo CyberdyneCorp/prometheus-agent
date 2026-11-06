@@ -6,6 +6,8 @@
 //!   `network.force_ipv4` ([`resolve`]) and platform-verified TLS ([`tls`]);
 //! - [`destination`] and [`fetch`]: the private/metadata destination policy
 //!   and the SSRF-safe fetcher for model- or remote-supplied URLs;
+//! - [`lazy`]: a client built on first use, for components a session
+//!   wires but may never use;
 //! - [`listen`]: loopback-first listeners and the fail-closed dispatch gate
 //!   of external surfaces;
 //! - [`doctor`]: the `network` doctor group's IPv6 reachability check.
@@ -21,6 +23,7 @@ pub mod egress;
 pub mod fetch;
 pub mod http;
 pub mod identity;
+pub mod lazy;
 pub mod listen;
 pub mod resolve;
 pub mod tls;
@@ -29,3 +32,4 @@ pub use destination::{DestinationPolicy, PrivateGrant};
 pub use fetch::Fetcher;
 pub use http::{OutboundPolicy, client, client_builder, client_with_identity, clients_built};
 pub use identity::ClientIdentity;
+pub use lazy::LazyClient;

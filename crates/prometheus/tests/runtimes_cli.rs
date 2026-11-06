@@ -243,7 +243,6 @@ impl Origin {
             sources,
             Arc::new(|_| {}),
         )
-        .unwrap()
         .with_budget(Budget::default())
     }
 

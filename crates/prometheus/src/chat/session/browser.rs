@@ -58,7 +58,7 @@ impl Shared {
     ///
     /// # Errors
     ///
-    /// An invalid `daemon.toml` or `security.egress`, or no HTTP client.
+    /// An invalid `daemon.toml` or `security.egress`.
     pub fn new(
         scope: &ProfileScope,
         current: &SharedScope,
@@ -75,7 +75,7 @@ impl Shared {
         )?;
         let egress = &config.security.egress;
         let destinations = DestinationPolicy::new(egress.allow_private, &egress.fake_ip_ranges)?;
-        let providers = cloud_providers(scope)?;
+        let providers = cloud_providers(scope);
         // `browser.inactivity_timeout_secs` is live: read at each use.
         let live = current.clone();
         let manager = BrowserManager::new(BrowserSetup {
@@ -148,17 +148,18 @@ const SUBSCRIPTION_PROVIDER: &str = "nous";
 /// The first-party cloud browser providers of `scope` (spec:
 /// execution-environments, First-party cloud browser providers): their
 /// keys come from the profile's secrets store and the `subscription`
-/// provider's token from its Nous sign-in, read at each use.
+/// provider's token from its Nous sign-in, read at each use. Their HTTP
+/// client is built by the first provider request.
 fn cloud_providers(
     scope: &ProfileScope,
-) -> Result<BTreeMap<String, Arc<dyn pmt_tools::browser::CloudProvider>>, Error> {
+) -> BTreeMap<String, Arc<dyn pmt_tools::browser::CloudProvider>> {
     let config = scope.config();
     let policy = pmt_net::OutboundPolicy {
         force_ipv4: config.network.force_ipv4,
         extra_ca_file: config.network.extra_ca_file.as_ref().map(Into::into),
         proxy: config.network.proxy.clone(),
     };
-    let client = pmt_net::client(&policy)?;
+    let client = Arc::new(pmt_net::LazyClient::new(move || pmt_net::client(&policy)));
     let secrets = scope.secrets().clone();
     let lookup: pmt_tools::web::SecretLookup =
         Arc::new(move |name: &str| secrets.resolve(name).ok());
@@ -169,7 +170,7 @@ fn cloud_providers(
             .flatten()
             .map(|signed_in| SecretString::new(signed_in.token.expose()))
     });
-    Ok(cloud::first_party(&client, &lookup, token))
+    cloud::first_party(&client, &lookup, token)
 }
 
 /// Install questions sent to the interactive surface; no answer (the

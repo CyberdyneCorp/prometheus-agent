@@ -18,7 +18,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-pub use http::{Endpoint, TokenSource};
+pub use http::{Endpoint, HttpClient, TokenSource};
 pub use vendors::{BrowserUse, Browserbase, Firecrawl, GATEWAY_ORIGIN, Subscription};
 
 use crate::web::SecretLookup;
@@ -133,26 +133,26 @@ pub fn suggestion(has_secret: &dyn Fn(&str) -> bool) -> Option<&'static str> {
 /// `secrets` and the subscription token with `token`.
 #[must_use]
 pub fn first_party(
-    client: &reqwest::Client,
+    client: &HttpClient,
     secrets: &SecretLookup,
     token: TokenSource,
 ) -> BTreeMap<String, Arc<dyn CloudProvider>> {
     let mut providers: BTreeMap<String, Arc<dyn CloudProvider>> = BTreeMap::new();
     providers.insert(
         "browserbase".to_owned(),
-        Arc::new(Browserbase::new(client.clone(), Arc::clone(secrets))),
+        Arc::new(Browserbase::new(Arc::clone(client), Arc::clone(secrets))),
     );
     providers.insert(
         "browser-use".to_owned(),
-        Arc::new(BrowserUse::new(client.clone(), Arc::clone(secrets))),
+        Arc::new(BrowserUse::new(Arc::clone(client), Arc::clone(secrets))),
     );
     providers.insert(
         "firecrawl".to_owned(),
-        Arc::new(Firecrawl::new(client.clone(), Arc::clone(secrets))),
+        Arc::new(Firecrawl::new(Arc::clone(client), Arc::clone(secrets))),
     );
     providers.insert(
         SUBSCRIPTION.to_owned(),
-        Arc::new(Subscription::new(client.clone(), token)),
+        Arc::new(Subscription::new(Arc::clone(client), token)),
     );
     providers
 }

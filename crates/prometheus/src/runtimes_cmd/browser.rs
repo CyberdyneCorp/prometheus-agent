@@ -181,8 +181,7 @@ pub fn policy(installer: Installer, config: &DaemonConfig) -> RuntimePolicy {
 ///
 /// # Errors
 ///
-/// An invalid `daemon.toml` (78), or `net.*` when no HTTP client can be
-/// built.
+/// An invalid `daemon.toml` (78).
 pub fn for_home(
     home: &Path,
     network: &NetworkConfig,
@@ -191,22 +190,19 @@ pub fn for_home(
 ) -> Result<Policies, Error> {
     let config = DaemonConfig::load(home)?;
     let progress: Progress = Arc::new(|line| eprintln!("{line}"));
-    let installer = installer(Store::open(home), &config, &outbound(network), progress)?;
+    let installer = installer(Store::open(home), &config, &outbound(network), progress);
     Ok(policies(installer, &config, confirm, path_var))
 }
 
 /// An installer for `store` with the home's sources (mirror, fallback,
 /// exclusions).
-///
-/// # Errors
-///
-/// `net.*` when the HTTP client cannot be built.
+#[must_use]
 pub fn installer(
     store: Store,
     config: &DaemonConfig,
     policy: &OutboundPolicy,
     progress: Progress,
-) -> Result<Installer, Error> {
+) -> Installer {
     let sources = Sources {
         mirror: config.runtimes.mirrors.runtimes.clone(),
         fallback: config.update.mirror_fallback,

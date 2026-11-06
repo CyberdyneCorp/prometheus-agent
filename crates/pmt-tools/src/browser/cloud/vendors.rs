@@ -4,7 +4,7 @@
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::{Value, json};
 
-use super::http::{Endpoint, TokenSource, failure, field, send};
+use super::http::{Endpoint, HttpClient, TokenSource, failure, field, http, send};
 use super::{CloudProvider, CloudSession, CreateFuture, Manifest, ReleaseFuture, manifest};
 use crate::web::SecretLookup;
 
@@ -41,14 +41,14 @@ fn created(
 /// keep-alive and proxies; a plan without them (HTTP 402) is retried
 /// without keep-alive, then without proxies.
 pub struct Browserbase {
-    client: reqwest::Client,
+    client: HttpClient,
     secrets: SecretLookup,
 }
 
 impl Browserbase {
     /// The provider over `client`.
     #[must_use]
-    pub fn new(client: reqwest::Client, secrets: SecretLookup) -> Self {
+    pub fn new(client: HttpClient, secrets: SecretLookup) -> Self {
         Self { client, secrets }
     }
 
@@ -88,7 +88,7 @@ impl Browserbase {
 
     async fn post(&self, url: &str, key: &str, body: &Value) -> Result<(u16, Value), String> {
         send(
-            self.client
+            http(&self.client)?
                 .post(url)
                 .header("X-BB-API-Key", key)
                 .header(CONTENT_TYPE, "application/json")
@@ -131,7 +131,7 @@ fn ok_or_failure(provider: &str, status: u16, body: &Value) -> Result<(), String
 /// The Browser Use API shared by `browser-use` (the user's key) and
 /// `subscription` (the tool gateway, billed to the subscription).
 struct BrowserUseApi {
-    client: reqwest::Client,
+    client: HttpClient,
     endpoint: Endpoint,
     manifest: &'static Manifest,
 }
@@ -145,8 +145,7 @@ impl BrowserUseApi {
     ) -> Result<CloudSession, String> {
         let url = self.endpoint.url("/browsers");
         self.endpoint.check(self.manifest, &url)?;
-        let mut request = self
-            .client
+        let mut request = http(&self.client)?
             .post(&url)
             .header("X-Browser-Use-API-Key", key)
             .header(CONTENT_TYPE, "application/json")
@@ -170,7 +169,7 @@ impl BrowserUseApi {
         let url = self.endpoint.url(&format!("/browsers/{id}"));
         self.endpoint.check(self.manifest, &url)?;
         let (status, answer) = send(
-            self.client
+            http(&self.client)?
                 .patch(&url)
                 .header("X-Browser-Use-API-Key", key)
                 .header(CONTENT_TYPE, "application/json")
@@ -190,7 +189,7 @@ pub struct BrowserUse {
 impl BrowserUse {
     /// The provider over `client`.
     #[must_use]
-    pub fn new(client: reqwest::Client, secrets: SecretLookup) -> Self {
+    pub fn new(client: HttpClient, secrets: SecretLookup) -> Self {
         Self::at(
             client,
             secrets,
@@ -200,7 +199,7 @@ impl BrowserUse {
 
     /// The provider of the API at `endpoint` (a test double's).
     #[must_use]
-    pub fn at(client: reqwest::Client, secrets: SecretLookup, endpoint: Endpoint) -> Self {
+    pub fn at(client: HttpClient, secrets: SecretLookup, endpoint: Endpoint) -> Self {
         Self {
             api: BrowserUseApi {
                 client,
@@ -241,14 +240,14 @@ pub struct Subscription {
 impl Subscription {
     /// The provider over `client` and the subscription's `token`.
     #[must_use]
-    pub fn new(client: reqwest::Client, token: TokenSource) -> Self {
+    pub fn new(client: HttpClient, token: TokenSource) -> Self {
         Self::at(client, token, Endpoint::of(GATEWAY_ORIGIN, None))
     }
 
     /// The provider of the gateway at `endpoint` (a self-hosted gateway or
     /// a test double).
     #[must_use]
-    pub fn at(client: reqwest::Client, token: TokenSource, endpoint: Endpoint) -> Self {
+    pub fn at(client: HttpClient, token: TokenSource, endpoint: Endpoint) -> Self {
         Self {
             api: BrowserUseApi {
                 client,
@@ -289,14 +288,14 @@ impl CloudProvider for Subscription {
 /// Firecrawl: `FIRECRAWL_API_KEY` (`FIRECRAWL_API_URL` overrides the
 /// API); sessions live 300 s unless released.
 pub struct Firecrawl {
-    client: reqwest::Client,
+    client: HttpClient,
     secrets: SecretLookup,
 }
 
 impl Firecrawl {
     /// The provider over `client`.
     #[must_use]
-    pub fn new(client: reqwest::Client, secrets: SecretLookup) -> Self {
+    pub fn new(client: HttpClient, secrets: SecretLookup) -> Self {
         Self { client, secrets }
     }
 
@@ -318,7 +317,7 @@ impl Firecrawl {
         let url = endpoint.url("/v2/browser");
         endpoint.check(manifest, &url)?;
         let (status, answer) = send(
-            self.client
+            http(&self.client)?
                 .post(&url)
                 .header(AUTHORIZATION, bearer)
                 .header(CONTENT_TYPE, "application/json")
@@ -337,7 +336,12 @@ impl Firecrawl {
         let endpoint = self.endpoint();
         let url = endpoint.url(&format!("/v2/browser/{id}"));
         endpoint.check(manifest, &url)?;
-        let (status, answer) = send(self.client.delete(&url).header(AUTHORIZATION, bearer)).await?;
+        let (status, answer) = send(
+            http(&self.client)?
+                .delete(&url)
+                .header(AUTHORIZATION, bearer),
+        )
+        .await?;
         ok_or_failure(manifest.id, status, &answer)
     }
 }
